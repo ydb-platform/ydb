@@ -31,10 +31,10 @@ target_link_options(test_import_udf.dyn PRIVATE
   -fPIC
 )
 target_sources(test_import_udf.dyn PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/test/test_import/test_import_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/test/test_import/test_import_udf.cpp
 )
 use_export_script(test_import_udf.dyn
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udfs_exports.exports
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udfs_exports.exports
 )
 vcs_info(test_import_udf.dyn)
 
@@ -59,5 +59,5 @@ target_link_libraries(test_import_udf.global PUBLIC
   public-udf-support
 )
 target_sources(test_import_udf.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/test/test_import/test_import_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/test/test_import/test_import_udf.cpp
 )

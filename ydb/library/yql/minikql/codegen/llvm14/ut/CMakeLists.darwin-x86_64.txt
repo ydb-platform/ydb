@@ -15,7 +15,7 @@ get_built_tool_path(
 
 add_executable(ydb-library-yql-minikql-codegen-llvm14-ut)
 target_include_directories(ydb-library-yql-minikql-codegen-llvm14-ut PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut
 )
 target_link_libraries(ydb-library-yql-minikql-codegen-llvm14-ut PUBLIC
   contrib-libs-cxxsupp
@@ -41,9 +41,9 @@ target_link_options(ydb-library-yql-minikql-codegen-llvm14-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-library-yql-minikql-codegen-llvm14-ut PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/codegen_ut_llvm_deps.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/codegen_ut.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/c2b0968de2dc7c0881b1dfb523b401f5.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/codegen_ut_llvm_deps.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/codegen_ut.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/c2b0968de2dc7c0881b1dfb523b401f5.cpp
 )
 set_property(
   TARGET
@@ -85,97 +85,97 @@ set_yunittest_property(
   ENVIRONMENT
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/codegen_ut.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/codegen_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/codegen/codegen_ut.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/codegen_ut.cpp
 )
 add_custom_command(
   OUTPUT
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/Funcs_optimized.14.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/Funcs_optimized.14.bc
   DEPENDS
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/Funcs_merged.14.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/Funcs_merged.14.bc
   COMMAND
   ${LLVMOPT}
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/Funcs_merged.14.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/Funcs_merged.14.bc
   -o
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/Funcs_optimized.14.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/Funcs_optimized.14.bc
   -internalize-public-api-list=fib#sum_sqr#sum_sqr2#sum_sqr_128#sum_sqr_128_ir#str_size
   -passes="default<O2>,globalopt,globaldce,internalize"
 )
 add_custom_command(
   OUTPUT
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/Funcs_merged.14.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/Funcs_merged.14.bc
   DEPENDS
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/fib.cpp.14.bc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr.cpp.14.bc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr2.cpp.14.bc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/str.cpp.14.bc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.cpp.14.bc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.ll.14.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/fib.cpp.14.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr.cpp.14.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr2.cpp.14.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/str.cpp.14.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.cpp.14.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.ll.14.bc
   COMMAND
   ${LLVMLINK}
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/fib.cpp.14.bc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr.cpp.14.bc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr2.cpp.14.bc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/str.cpp.14.bc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.cpp.14.bc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.ll.14.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/fib.cpp.14.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr.cpp.14.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr2.cpp.14.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/str.cpp.14.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.cpp.14.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.ll.14.bc
   -o
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/Funcs_merged.14.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/Funcs_merged.14.bc
 )
 add_custom_command(
   OUTPUT
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.ll.14.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.ll.14.bc
   DEPENDS
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.ll
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.ll
   COMMAND
   ${LLVMAS}
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.ll
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.ll
   -o
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.ll.14.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.ll.14.bc
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/codegen_ut_llvm_deps.h.txt
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/codegen_ut_llvm_deps.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/codegen/codegen_ut_llvm_deps.h.txt
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/codegen_ut_llvm_deps.h
 )
 llvm_compile_cxx(ydb-library-yql-minikql-codegen-llvm14-ut
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/ut/fib.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/fib.cpp.14.bc
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/codegen/ut/fib.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/fib.cpp.14.bc
   ${CLANGPLUSPLUS}
   -Wno-unknown-warning-option
   -emit-llvm
 )
 llvm_compile_cxx(ydb-library-yql-minikql-codegen-llvm14-ut
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr.cpp.14.bc
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr.cpp.14.bc
   ${CLANGPLUSPLUS}
   -Wno-unknown-warning-option
   -emit-llvm
 )
 llvm_compile_cxx(ydb-library-yql-minikql-codegen-llvm14-ut
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr2.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr2.cpp.14.bc
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr2.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr2.cpp.14.bc
   ${CLANGPLUSPLUS}
   -Wno-unknown-warning-option
   -emit-llvm
 )
 llvm_compile_cxx(ydb-library-yql-minikql-codegen-llvm14-ut
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/ut/str.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/str.cpp.14.bc
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/codegen/ut/str.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/str.cpp.14.bc
   ${CLANGPLUSPLUS}
   -Wno-unknown-warning-option
   -emit-llvm
 )
 llvm_compile_cxx(ydb-library-yql-minikql-codegen-llvm14-ut
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.cpp.14.bc
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.cpp.14.bc
   ${CLANGPLUSPLUS}
   -Wno-unknown-warning-option
   -emit-llvm
 )
 resources(ydb-library-yql-minikql-codegen-llvm14-ut
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/c2b0968de2dc7c0881b1dfb523b401f5.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/c2b0968de2dc7c0881b1dfb523b401f5.cpp
   INPUTS
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/Funcs_optimized.14.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/ut/Funcs_optimized.14.bc
   KEYS
   /llvm_bc/Funcs
 )

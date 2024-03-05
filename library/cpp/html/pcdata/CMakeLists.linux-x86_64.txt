@@ -14,6 +14,6 @@ target_link_libraries(cpp-html-pcdata PUBLIC
   yutil
 )
 target_sources(cpp-html-pcdata PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/html/pcdata/pcdata.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/html/pcdata/pcdata.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/html/pcdata/pcdata.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/html/pcdata/pcdata.cpp
 )

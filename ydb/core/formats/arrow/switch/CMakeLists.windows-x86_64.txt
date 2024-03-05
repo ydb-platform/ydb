@@ -16,5 +16,5 @@ target_link_libraries(formats-arrow-switch PUBLIC
   library-actors-core
 )
 target_sources(formats-arrow-switch PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/switch/switch_type.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/switch/switch_type.cpp
 )

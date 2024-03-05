@@ -16,14 +16,14 @@ target_link_libraries(library-actors-cppcoro PUBLIC
   library-actors-core
 )
 target_sources(library-actors-cppcoro PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/cppcoro/await_callback.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/cppcoro/task_actor.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/cppcoro/task_group.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/cppcoro/task_result.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/cppcoro/task.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/cppcoro/await_callback.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/cppcoro/task_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/cppcoro/task_group.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/cppcoro/task_result.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/cppcoro/task.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/cppcoro/await_callback.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/cppcoro/task_actor.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/cppcoro/task_group.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/cppcoro/task_result.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/cppcoro/task.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/cppcoro/await_callback.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/cppcoro/task_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/cppcoro/task_group.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/cppcoro/task_result.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/cppcoro/task.cpp
 )

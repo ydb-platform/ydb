@@ -27,7 +27,7 @@ target_link_options(yaml_config-validator-ut-validator_builder PRIVATE
   -ldl
 )
 target_sources(yaml_config-validator-ut-validator_builder PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/validator/ut/validator_builder/validator_builder_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yaml_config/validator/ut/validator_builder/validator_builder_ut.cpp
 )
 set_property(
   TARGET

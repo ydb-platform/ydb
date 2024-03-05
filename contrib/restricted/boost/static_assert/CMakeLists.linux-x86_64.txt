@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-static_assert INTERFACE)
 target_include_directories(restricted-boost-static_assert INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/static_assert/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/static_assert/include
 )
 target_link_libraries(restricted-boost-static_assert INTERFACE
   contrib-libs-linux-headers

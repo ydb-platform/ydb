@@ -29,7 +29,7 @@ target_link_libraries(mrjob PUBLIC
   minikql-comp_nodes-llvm14
 )
 target_sources(mrjob PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/mrjob/mrjob.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/mrjob/mrjob.cpp
 )
 target_allocator(mrjob
   system_allocator

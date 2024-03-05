@@ -90,7 +90,7 @@ target_link_options(dqrun PRIVATE
   CoreFoundation
 )
 target_sources(dqrun PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/dqrun/dqrun.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/dqrun/dqrun.cpp
 )
 target_allocator(dqrun
   cpp-malloc-jemalloc

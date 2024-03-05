@@ -16,12 +16,12 @@ target_link_libraries(clickhouse-client-columns PUBLIC
   clickhouse-client-types
 )
 target_sources(clickhouse-client-columns PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/clickhouse/client/columns/array.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/clickhouse/client/columns/date.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/clickhouse/client/columns/enum.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/clickhouse/client/columns/factory.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/clickhouse/client/columns/nullable.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/clickhouse/client/columns/numeric.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/clickhouse/client/columns/string.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/clickhouse/client/columns/tuple.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/clickhouse/client/columns/array.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/clickhouse/client/columns/date.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/clickhouse/client/columns/enum.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/clickhouse/client/columns/factory.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/clickhouse/client/columns/nullable.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/clickhouse/client/columns/numeric.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/clickhouse/client/columns/string.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/clickhouse/client/columns/tuple.cpp
 )

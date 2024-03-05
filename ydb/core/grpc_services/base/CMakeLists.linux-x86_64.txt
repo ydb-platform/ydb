@@ -23,6 +23,6 @@ target_link_libraries(core-grpc_services-base INTERFACE
   yql-public-issue
 )
 target_sources(core-grpc_services-base INTERFACE
-  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/base/base_service.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/base/base.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/base/base_service.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/base/base.h
 )

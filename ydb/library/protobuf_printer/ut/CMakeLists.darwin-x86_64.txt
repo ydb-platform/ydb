@@ -21,7 +21,7 @@ get_built_tool_path(
 
 add_executable(ydb-library-protobuf_printer-ut)
 target_include_directories(ydb-library-protobuf_printer-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/protobuf_printer
+  ${PROJECT_SOURCE_DIR}/ydb/library/protobuf_printer
 )
 target_link_libraries(ydb-library-protobuf_printer-ut PUBLIC
   contrib-libs-cxxsupp
@@ -39,11 +39,11 @@ target_link_options(ydb-library-protobuf_printer-ut PRIVATE
   CoreFoundation
 )
 target_proto_messages(ydb-library-protobuf_printer-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/protobuf_printer/ut/test_proto.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/protobuf_printer/ut/test_proto.proto
 )
 target_sources(ydb-library-protobuf_printer-ut PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/protobuf_printer/ut/test_proto.pb.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/protobuf_printer/protobuf_printer_ut.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/protobuf_printer/ut/test_proto.pb.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/protobuf_printer/protobuf_printer_ut.cpp
 )
 set_property(
   TARGET
@@ -89,16 +89,16 @@ target_allocator(ydb-library-protobuf_printer-ut
 )
 target_proto_addincls(ydb-library-protobuf_printer-ut
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/contrib/libs/googleapis-common-protos
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(ydb-library-protobuf_printer-ut
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )
 vcs_info(ydb-library-protobuf_printer-ut)

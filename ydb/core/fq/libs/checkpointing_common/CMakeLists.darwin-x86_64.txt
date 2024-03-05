@@ -21,10 +21,10 @@ target_link_libraries(fq-libs-checkpointing_common PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(fq-libs-checkpointing_common PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/checkpointing_common/defs.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpointing_common/defs.cpp
 )
 generate_enum_serilization(fq-libs-checkpointing_common
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/checkpointing_common/defs.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpointing_common/defs.h
   INCLUDE_HEADERS
   ydb/core/fq/libs/checkpointing_common/defs.h
 )

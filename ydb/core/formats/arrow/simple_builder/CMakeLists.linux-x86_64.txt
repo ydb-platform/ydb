@@ -15,7 +15,7 @@ target_link_libraries(formats-arrow-simple_builder PUBLIC
   libs-apache-arrow
 )
 target_sources(formats-arrow-simple_builder PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/simple_builder/filler.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/simple_builder/array.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/simple_builder/batch.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/simple_builder/filler.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/simple_builder/array.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/simple_builder/batch.cpp
 )

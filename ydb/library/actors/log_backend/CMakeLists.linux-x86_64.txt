@@ -16,5 +16,5 @@ target_link_libraries(library-actors-log_backend PUBLIC
   library-cpp-logger
 )
 target_sources(library-actors-log_backend PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/log_backend/actor_log_backend.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/log_backend/actor_log_backend.cpp
 )

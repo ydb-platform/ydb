@@ -13,7 +13,7 @@ target_compile_options(boost-context-impl_common PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(boost-context-impl_common PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/context/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/context/include
 )
 target_link_libraries(boost-context-impl_common PUBLIC
   contrib-libs-linux-headers
@@ -27,5 +27,5 @@ target_link_libraries(boost-context-impl_common PUBLIC
   restricted-boost-smart_ptr
 )
 target_sources(boost-context-impl_common PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/context/src/posix/stack_traits.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/context/src/posix/stack_traits.cpp
 )

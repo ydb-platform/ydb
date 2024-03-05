@@ -9,7 +9,7 @@
 
 add_executable(ydb-library-yql-utils-simd-ut)
 target_include_directories(ydb-library-yql-utils-simd-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/simd
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/simd
 )
 target_link_libraries(ydb-library-yql-utils-simd-ut PUBLIC
   contrib-libs-cxxsupp
@@ -23,7 +23,7 @@ target_link_options(ydb-library-yql-utils-simd-ut PRIVATE
   -fPIC
 )
 target_sources(ydb-library-yql-utils-simd-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/simd/simd_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/simd/simd_ut.cpp
 )
 set_property(
   TARGET

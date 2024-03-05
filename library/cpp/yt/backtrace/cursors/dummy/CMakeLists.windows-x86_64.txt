@@ -13,5 +13,5 @@ target_link_libraries(backtrace-cursors-dummy PUBLIC
   yutil
 )
 target_sources(backtrace-cursors-dummy PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/yt/backtrace/cursors/dummy/dummy_cursor.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/backtrace/cursors/dummy/dummy_cursor.cpp
 )

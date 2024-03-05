@@ -63,31 +63,31 @@ target_link_libraries(client-yc_public-events PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(client-yc_public-events PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_public/events/options.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_public/events/common.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_public/events/yq.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/yc_public/events/options.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/yc_public/events/common.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/yc_public/events/yq.proto
 )
 target_sources(client-yc_public-events PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_public/events/options.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_public/events/options.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_public/events/common.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_public/events/common.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_public/events/yq.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_public/events/yq.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_public/events/options.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_public/events/options.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_public/events/common.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_public/events/common.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_public/events/yq.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_public/events/yq.grpc.pb.h
 )
 target_proto_addincls(client-yc_public-events
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/googleapis-common-protos
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(client-yc_public-events
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )
 target_proto_plugin(client-yc_public-events
   grpc_cpp

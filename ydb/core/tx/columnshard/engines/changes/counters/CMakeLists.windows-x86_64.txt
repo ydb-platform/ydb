@@ -16,5 +16,5 @@ target_link_libraries(engines-changes-counters PUBLIC
   ydb-core-tablet_flat
 )
 target_sources(engines-changes-counters PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/counters/general.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/counters/general.cpp
 )

@@ -15,6 +15,6 @@ target_link_libraries(cpp-threading-equeue PUBLIC
   cpp-deprecated-atomic
 )
 target_sources(cpp-threading-equeue PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/threading/equeue/equeue.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/threading/equeue/equeue.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/threading/equeue/equeue.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/threading/equeue/equeue.cpp
 )

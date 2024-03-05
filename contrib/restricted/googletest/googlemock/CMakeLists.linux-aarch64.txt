@@ -12,12 +12,12 @@ target_compile_options(restricted-googletest-googlemock PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-googletest-googlemock PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googlemock/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/googletest/googlemock/include
 )
 target_include_directories(restricted-googletest-googlemock PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googlemock
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googletest
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googletest/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/googletest/googlemock
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/googletest/googletest
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/googletest/googletest/include
 )
 target_link_libraries(restricted-googletest-googlemock PUBLIC
   contrib-libs-linux-headers
@@ -25,5 +25,5 @@ target_link_libraries(restricted-googletest-googlemock PUBLIC
   restricted-googletest-googletest
 )
 target_sources(restricted-googletest-googlemock PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googlemock/src/gmock-all.cc
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/googletest/googlemock/src/gmock-all.cc
 )

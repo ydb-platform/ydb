@@ -21,72 +21,72 @@ target_compile_options(restricted-aws-aws-c-common PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-aws-aws-c-common PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/generated/include
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/generated/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/include
 )
 target_link_libraries(restricted-aws-aws-c-common PUBLIC
   contrib-libs-linux-headers
 )
 target_sources(restricted-aws-aws-c-common PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/allocator.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/allocator_sba.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/array_list.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/assert.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/byte_buf.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/cache.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/codegen.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/command_line_parser.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/common.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/condition_variable.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/date_time.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/device_random.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/encoding.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/error.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/cJSON.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/fifo_cache.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/file.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/hash_table.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/json.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/lifo_cache.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/linked_hash_table.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/log_channel.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/log_formatter.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/log_writer.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/logging.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/lru_cache.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/math.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/memtrace.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/priority_queue.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/process_common.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/promise.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/ref_count.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/ring_buffer.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/statistics.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/string.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/task_scheduler.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/thread_scheduler.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/thread_shared.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/uri.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/uuid.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/xml_parser.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/arch/intel/asm/cpuid.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/arch/intel/cpuid.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/clock.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/condition_variable.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/device_random.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/environment.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/file.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/mutex.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/process.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/rw_lock.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/system_info.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/thread.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/time.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/allocator.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/allocator_sba.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/array_list.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/assert.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/byte_buf.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/cache.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/codegen.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/command_line_parser.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/common.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/condition_variable.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/date_time.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/device_random.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/encoding.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/error.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/cJSON.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/fifo_cache.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/file.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/hash_table.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/json.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/lifo_cache.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/linked_hash_table.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/log_channel.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/log_formatter.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/log_writer.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/logging.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/lru_cache.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/math.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/memtrace.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/priority_queue.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/process_common.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/promise.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/ref_count.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/ring_buffer.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/statistics.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/string.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/task_scheduler.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/thread_scheduler.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/thread_shared.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/uri.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/uuid.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/xml_parser.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/arch/intel/asm/cpuid.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/arch/intel/cpuid.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/clock.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/condition_variable.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/device_random.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/environment.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/file.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/mutex.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/process.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/rw_lock.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/system_info.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/thread.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/time.c
 )
 target_sources_custom(restricted-aws-aws-c-common
   .avx2
   SRCS
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/arch/intel/encoding_avx2.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/arch/intel/encoding_avx2.c
   CUSTOM_FLAGS
   -mavx2
   -mfma

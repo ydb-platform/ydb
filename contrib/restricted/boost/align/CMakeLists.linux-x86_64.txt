@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-align INTERFACE)
 target_include_directories(restricted-boost-align INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/align/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/align/include
 )
 target_link_libraries(restricted-boost-align INTERFACE
   contrib-libs-linux-headers

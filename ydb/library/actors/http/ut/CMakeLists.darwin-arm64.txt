@@ -9,7 +9,7 @@
 
 add_executable(ydb-library-actors-http-ut)
 target_include_directories(ydb-library-actors-http-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/http
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http
 )
 target_link_libraries(ydb-library-actors-http-ut PUBLIC
   contrib-libs-cxxsupp
@@ -26,7 +26,7 @@ target_link_options(ydb-library-actors-http-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-library-actors-http-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/http/http_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_ut.cpp
 )
 set_property(
   TARGET

@@ -38,36 +38,36 @@ target_link_libraries(cpp-mapreduce-client PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(cpp-mapreduce-client PRIVATE
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/abortable_registry.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/batch_request_impl.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/client_reader.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/client_writer.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/client.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/file_reader.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/file_writer.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/format_hints.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/init.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/lock.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/operation_helpers.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/operation_preparer.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/operation_tracker.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/operation.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/prepare_operation.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/py_helpers.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/retry_heavy_write_request.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/retry_transaction.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/retryful_writer.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/retryful_writer_v2.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/retryless_writer.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/skiff.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/structured_table_formats.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/transaction.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/transaction_pinger.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/yt_poller.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/dummy_job_profiler.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/abortable_registry.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/batch_request_impl.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/client_reader.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/client_writer.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/client.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/file_reader.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/file_writer.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/format_hints.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/init.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/lock.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/operation_helpers.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/operation_preparer.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/operation_tracker.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/operation.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/prepare_operation.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/py_helpers.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/retry_heavy_write_request.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/retry_transaction.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/retryful_writer.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/retryful_writer_v2.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/retryless_writer.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/skiff.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/structured_table_formats.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/transaction.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/transaction_pinger.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/yt_poller.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/dummy_job_profiler.cpp
 )
 generate_enum_serilization(cpp-mapreduce-client
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/structured_table_formats.h
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/structured_table_formats.h
   INCLUDE_HEADERS
   yt/cpp/mapreduce/client/structured_table_formats.h
 )

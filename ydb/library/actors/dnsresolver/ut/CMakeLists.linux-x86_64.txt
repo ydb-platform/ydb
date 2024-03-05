@@ -9,8 +9,8 @@
 
 add_executable(ydb-library-actors-dnsresolver-ut)
 target_include_directories(ydb-library-actors-dnsresolver-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/dnsresolver
-  ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/include
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/dnsresolver
+  ${PROJECT_SOURCE_DIR}/contrib/libs/c-ares/include
 )
 target_link_libraries(ydb-library-actors-dnsresolver-ut PUBLIC
   contrib-libs-linux-headers
@@ -32,9 +32,9 @@ target_link_options(ydb-library-actors-dnsresolver-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-actors-dnsresolver-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/dnsresolver/dnsresolver_caching_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/dnsresolver/dnsresolver_ondemand_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/dnsresolver/dnsresolver_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/dnsresolver/dnsresolver_caching_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/dnsresolver/dnsresolver_ondemand_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/dnsresolver/dnsresolver_ut.cpp
 )
 set_property(
   TARGET

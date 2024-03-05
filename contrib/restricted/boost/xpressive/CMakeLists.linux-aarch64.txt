@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-xpressive INTERFACE)
 target_include_directories(restricted-boost-xpressive INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/xpressive/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/xpressive/include
 )
 target_link_libraries(restricted-boost-xpressive INTERFACE
   contrib-libs-linux-headers

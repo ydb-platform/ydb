@@ -109,8 +109,8 @@ target_compile_options(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include
 )
 target_link_libraries(ydb-library-yql-parser-pg_wrapper-ut PUBLIC
   contrib-libs-linux-headers
@@ -137,13 +137,13 @@ target_link_options(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/arrow_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/codegen_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/error_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/parser_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/sort_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/type_cache_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/ut/mkql_test_factory.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/arrow_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/codegen_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/error_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/parser_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/sort_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/type_cache_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/ut/mkql_test_factory.cpp
 )
 set_property(
   TARGET

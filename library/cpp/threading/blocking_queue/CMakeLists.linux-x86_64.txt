@@ -14,5 +14,5 @@ target_link_libraries(cpp-threading-blocking_queue PUBLIC
   yutil
 )
 target_sources(cpp-threading-blocking_queue PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/threading/blocking_queue/blocking_queue.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/threading/blocking_queue/blocking_queue.cpp
 )

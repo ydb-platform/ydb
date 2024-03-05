@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-smart_ptr INTERFACE)
 target_include_directories(restricted-boost-smart_ptr INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/smart_ptr/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/smart_ptr/include
 )
 target_link_libraries(restricted-boost-smart_ptr INTERFACE
   contrib-libs-linux-headers

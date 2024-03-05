@@ -14,7 +14,7 @@ target_compile_options(ydb-services-persqueue_v1-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-services-persqueue_v1-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1
+  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1
 )
 target_link_libraries(ydb-services-persqueue_v1-ut PUBLIC
   contrib-libs-linux-headers
@@ -48,24 +48,24 @@ target_link_options(ydb-services-persqueue_v1-ut PRIVATE
   -ldl
 )
 target_sources(ydb-services-persqueue_v1-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/test_utils.h
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/pq_data_writer.h
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/api_test_setup.h
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/rate_limiter_test_setup.h
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/functions_executor_wrapper.h
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/persqueue_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/persqueue_common_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/persqueue_compat_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/first_class_src_ids_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/topic_yql_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/rate_limiter_test_setup.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/functions_executor_wrapper.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/topic_service_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/demo_tx.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/partition_writer_cache_actor_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/pqtablet_mock.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/kqp_mock.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/partition_writer_cache_actor_fixture.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/ut/test_utils.h
+  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/ut/pq_data_writer.h
+  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/ut/api_test_setup.h
+  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/ut/rate_limiter_test_setup.h
+  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/ut/functions_executor_wrapper.h
+  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/persqueue_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/persqueue_common_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/persqueue_compat_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/first_class_src_ids_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/topic_yql_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/ut/rate_limiter_test_setup.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/ut/functions_executor_wrapper.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/ut/topic_service_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/ut/demo_tx.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/ut/partition_writer_cache_actor_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/ut/pqtablet_mock.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/ut/kqp_mock.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/ut/partition_writer_cache_actor_fixture.cpp
 )
 set_property(
   TARGET

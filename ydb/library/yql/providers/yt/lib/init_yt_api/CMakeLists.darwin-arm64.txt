@@ -17,5 +17,5 @@ target_link_libraries(yt-lib-init_yt_api PUBLIC
   cpp-yson-node
 )
 target_sources(yt-lib-init_yt_api PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/lib/init_yt_api/init.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/lib/init_yt_api/init.cpp
 )

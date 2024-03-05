@@ -17,6 +17,6 @@ target_link_libraries(library-actors-prof PUBLIC
   cpp-containers-atomizer
 )
 target_sources(library-actors-prof PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/prof/tag.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/prof/tcmalloc.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/prof/tag.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/prof/tcmalloc.cpp
 )

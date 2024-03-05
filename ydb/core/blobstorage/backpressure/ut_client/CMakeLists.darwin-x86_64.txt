@@ -32,10 +32,10 @@ target_link_options(ydb-core-blobstorage-backpressure-ut_client PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-blobstorage-backpressure-ut_client PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/ut_client/defs.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/ut_client/loader.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/ut_client/skeleton_front_mock.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/ut_client/backpressure_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/ut_client/defs.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/ut_client/loader.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/ut_client/skeleton_front_mock.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/ut_client/backpressure_ut.cpp
 )
 set_property(
   TARGET

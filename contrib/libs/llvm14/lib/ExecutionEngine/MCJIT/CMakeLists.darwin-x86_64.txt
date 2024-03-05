@@ -12,7 +12,7 @@ target_compile_options(lib-ExecutionEngine-MCJIT PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(lib-ExecutionEngine-MCJIT PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/MCJIT
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/MCJIT
 )
 target_link_libraries(lib-ExecutionEngine-MCJIT PUBLIC
   contrib-libs-cxxsupp
@@ -26,5 +26,5 @@ target_link_libraries(lib-ExecutionEngine-MCJIT PUBLIC
   llvm14-lib-Target
 )
 target_sources(lib-ExecutionEngine-MCJIT PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/MCJIT/MCJIT.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/MCJIT/MCJIT.cpp
 )

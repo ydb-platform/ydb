@@ -46,5 +46,5 @@ target_link_libraries(ydb-core-blobstorage INTERFACE
   core-blobstorage-vdisk
 )
 target_sources(ydb-core-blobstorage INTERFACE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/defs.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/defs.h
 )

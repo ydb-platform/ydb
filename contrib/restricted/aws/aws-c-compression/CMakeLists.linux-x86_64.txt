@@ -15,14 +15,14 @@ target_compile_options(restricted-aws-aws-c-compression PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-aws-aws-c-compression PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-compression/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-compression/include
 )
 target_link_libraries(restricted-aws-aws-c-compression PUBLIC
   contrib-libs-linux-headers
   restricted-aws-aws-c-common
 )
 target_sources(restricted-aws-aws-c-compression PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-compression/source/compression.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-compression/source/huffman.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-compression/source/huffman_testing.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-compression/source/compression.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-compression/source/huffman.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-compression/source/huffman_testing.c
 )

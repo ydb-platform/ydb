@@ -29,23 +29,23 @@ target_link_libraries(yql-core-type_ann PUBLIC
   parser-pg_wrapper-interface
 )
 target_sources(yql-core-type_ann PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_blocks.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_columnorder.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_core.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_expr.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_impl.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_list.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_pg.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_types.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_wide.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_blocks.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_columnorder.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_core.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_expr.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_join.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_list.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_pg.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_types.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_wide.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_match_recognize.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_blocks.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_columnorder.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_core.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_expr.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_impl.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_list.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_pg.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_types.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_wide.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_blocks.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_columnorder.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_core.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_expr.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_join.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_list.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_pg.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_types.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_wide.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_match_recognize.cpp
 )

@@ -18,6 +18,6 @@ target_link_libraries(vdisk-hulldb-recovery PUBLIC
   ydb-core-protos
 )
 target_sources(vdisk-hulldb-recovery PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/recovery/hulldb_recovery.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/recovery/hulldb_recovery.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/recovery/hulldb_recovery.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/recovery/hulldb_recovery.cpp
 )

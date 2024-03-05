@@ -19,7 +19,7 @@ target_link_libraries(blobsan PUBLIC
   blobstorage-vdisk-query
 )
 target_sources(blobsan PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/tools/blobsan/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/tools/blobsan/main.cpp
 )
 target_allocator(blobsan
   system_allocator

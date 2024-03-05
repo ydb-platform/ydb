@@ -14,40 +14,40 @@ target_compile_options(contrib-libs-nghttp2 PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(contrib-libs-nghttp2 PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/includes
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/includes
 )
 target_include_directories(contrib-libs-nghttp2 PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib
 )
 target_link_libraries(contrib-libs-nghttp2 PUBLIC
   contrib-libs-linux-headers
 )
 target_sources(contrib-libs-nghttp2 PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_alpn.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_buf.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_callbacks.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_debug.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_extpri.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_frame.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_hd.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_hd_huffman.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_hd_huffman_data.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_helper.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_http.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_map.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_mem.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_option.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_outbound_item.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_pq.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_priority_spec.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_queue.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_ratelim.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_rcbuf.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_session.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_stream.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_submit.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_time.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_version.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/sfparse.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_alpn.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_buf.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_callbacks.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_debug.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_extpri.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_frame.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_hd.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_hd_huffman.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_hd_huffman_data.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_helper.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_http.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_map.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_mem.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_option.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_outbound_item.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_pq.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_priority_spec.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_queue.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_ratelim.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_rcbuf.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_session.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_stream.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_submit.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_time.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_version.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/sfparse.c
 )

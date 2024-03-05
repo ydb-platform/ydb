@@ -25,14 +25,14 @@ target_link_libraries(yql-core-spilling PUBLIC
   core-spilling-storage
 )
 target_sources(yql-core-spilling PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/spilling/spilling_imp.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/spilling/namespaces_list.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/spilling/namespace_cache.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/spilling/interface/spilling.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/spilling/storage/storage.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/spilling/spilling_imp.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/spilling/namespaces_list.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/spilling/namespace_cache.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/spilling/storage/file_storage/file_storage.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/spilling/storage/storage.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/spilling_imp.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/namespaces_list.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/namespace_cache.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/interface/spilling.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/storage/storage.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/spilling_imp.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/namespaces_list.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/namespace_cache.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/storage/file_storage/file_storage.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/storage/storage.cpp
 )

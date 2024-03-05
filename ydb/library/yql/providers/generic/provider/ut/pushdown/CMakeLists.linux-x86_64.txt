@@ -12,7 +12,7 @@ target_compile_options(yql-providers-generic-provider-ut-pushdown PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(yql-providers-generic-provider-ut-pushdown PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider
 )
 target_link_libraries(yql-providers-generic-provider-ut-pushdown PUBLIC
   contrib-libs-linux-headers
@@ -47,7 +47,7 @@ target_link_options(yql-providers-generic-provider-ut-pushdown PRIVATE
   -ldl
 )
 target_sources(yql-providers-generic-provider-ut-pushdown PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/ut/pushdown/pushdown_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/ut/pushdown/pushdown_ut.cpp
 )
 set_property(
   TARGET

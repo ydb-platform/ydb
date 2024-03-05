@@ -25,7 +25,7 @@ target_link_libraries(scheme-indexes-bloom.global PUBLIC
   core-formats-arrow
 )
 target_sources(scheme-indexes-bloom.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/bloom/constructor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/bloom/meta.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/bloom/checker.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/bloom/constructor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/bloom/meta.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/bloom/checker.cpp
 )

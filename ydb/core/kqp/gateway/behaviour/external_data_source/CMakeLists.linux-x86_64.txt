@@ -22,7 +22,7 @@ target_link_libraries(gateway-behaviour-external_data_source PUBLIC
   behaviour-tablestore-operations
 )
 target_sources(gateway-behaviour-external_data_source PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/external_data_source/manager.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/external_data_source/manager.cpp
 )
 
 add_global_library_for(gateway-behaviour-external_data_source.global gateway-behaviour-external_data_source)
@@ -40,5 +40,5 @@ target_link_libraries(gateway-behaviour-external_data_source.global PUBLIC
   behaviour-tablestore-operations
 )
 target_sources(gateway-behaviour-external_data_source.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/external_data_source/behaviour.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/external_data_source/behaviour.cpp
 )

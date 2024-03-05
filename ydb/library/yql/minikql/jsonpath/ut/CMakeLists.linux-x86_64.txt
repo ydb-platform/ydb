@@ -12,7 +12,7 @@ target_compile_options(ydb-library-yql-minikql-jsonpath-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-library-yql-minikql-jsonpath-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath
 )
 target_link_libraries(ydb-library-yql-minikql-jsonpath-ut PUBLIC
   contrib-libs-linux-headers
@@ -42,12 +42,12 @@ target_link_options(ydb-library-yql-minikql-jsonpath-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-minikql-jsonpath-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ut/common_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ut/examples_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ut/lax_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ut/strict_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ut/test_base.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ut/lib_id_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ut/common_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ut/examples_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ut/lax_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ut/strict_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ut/test_base.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ut/lib_id_ut.cpp
 )
 set_property(
   TARGET

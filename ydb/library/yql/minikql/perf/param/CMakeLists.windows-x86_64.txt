@@ -21,7 +21,7 @@ target_link_libraries(param PUBLIC
   yql-sql-pg_dummy
 )
 target_sources(param PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/perf/param/param.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/perf/param/param.cpp
 )
 target_allocator(param
   system_allocator

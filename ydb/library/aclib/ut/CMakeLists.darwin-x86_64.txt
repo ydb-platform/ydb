@@ -9,7 +9,7 @@
 
 add_executable(ydb-library-aclib-ut)
 target_include_directories(ydb-library-aclib-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/aclib
+  ${PROJECT_SOURCE_DIR}/ydb/library/aclib
 )
 target_link_libraries(ydb-library-aclib-ut PUBLIC
   contrib-libs-cxxsupp
@@ -24,7 +24,7 @@ target_link_options(ydb-library-aclib-ut PRIVATE
   -fPIC
 )
 target_sources(ydb-library-aclib-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/aclib/aclib_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/aclib/aclib_ut.cpp
 )
 set_property(
   TARGET

@@ -9,7 +9,7 @@
 
 add_executable(ydb-library-yql-core-cbo-ut)
 target_include_directories(ydb-library-yql-core-cbo-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/cbo
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/cbo
 )
 target_link_libraries(ydb-library-yql-core-cbo-ut PUBLIC
   contrib-libs-cxxsupp
@@ -21,7 +21,7 @@ target_link_libraries(ydb-library-yql-core-cbo-ut PUBLIC
   udf-service-stub
 )
 target_sources(ydb-library-yql-core-cbo-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/cbo/cbo_optimizer_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/cbo/cbo_optimizer_ut.cpp
 )
 set_property(
   TARGET

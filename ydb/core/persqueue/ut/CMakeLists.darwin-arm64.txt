@@ -20,7 +20,7 @@ target_compile_options(ydb-core-persqueue-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-core-persqueue-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue
 )
 target_link_libraries(ydb-core-persqueue-ut PUBLIC
   contrib-libs-cxxsupp
@@ -45,26 +45,26 @@ target_link_options(ydb-core-persqueue-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-persqueue-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/counters_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/pqtablet_mock.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/internals_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/make_config.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/metering_sink_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/mirrorer_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/partition_chooser_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/pq_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/partition_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/partitiongraph_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/pqtablet_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/quota_tracker_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/sourceid_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/autoscaling_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/type_codecs_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/user_info_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/pqrb_describes_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/microseconds_sliding_window_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/fetch_request_ut.cpp
-  ${CMAKE_BINARY_DIR}/ydb/core/persqueue/ut/20fb34d39c23be7518eb4226481d815e.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/counters_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/pqtablet_mock.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/internals_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/make_config.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/metering_sink_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/mirrorer_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/partition_chooser_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/pq_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/partition_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/partitiongraph_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/pqtablet_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/quota_tracker_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/sourceid_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/autoscaling_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/type_codecs_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/user_info_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/pqrb_describes_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/microseconds_sliding_window_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/fetch_request_ut.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/persqueue/ut/20fb34d39c23be7518eb4226481d815e.cpp
 )
 set_property(
   TARGET
@@ -113,13 +113,13 @@ set_yunittest_property(
   600
 )
 resources(ydb-core-persqueue-ut
-  ${CMAKE_BINARY_DIR}/ydb/core/persqueue/ut/20fb34d39c23be7518eb4226481d815e.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/persqueue/ut/20fb34d39c23be7518eb4226481d815e.cpp
   INPUTS
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/resources/counters_datastreams.html
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/resources/counters_pqproxy_firstclass.html
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/resources/counters_topics.html
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/resources/counters_pqproxy.html
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/resources/counters_labeled.json
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/resources/counters_datastreams.html
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/resources/counters_pqproxy_firstclass.html
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/resources/counters_topics.html
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/resources/counters_pqproxy.html
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/resources/counters_labeled.json
   KEYS
   counters_datastreams.html
   counters_pqproxy_firstclass.html

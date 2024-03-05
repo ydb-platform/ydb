@@ -12,7 +12,7 @@ target_compile_options(ydb-core-cms-ut_sentinel PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-core-cms-ut_sentinel PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms
 )
 target_link_libraries(ydb-core-cms-ut_sentinel PUBLIC
   contrib-libs-linux-headers
@@ -35,9 +35,9 @@ target_link_options(ydb-core-cms-ut_sentinel PRIVATE
   -ldl
 )
 target_sources(ydb-core-cms-ut_sentinel PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_ut_common.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_ut_common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/sentinel_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/cms_ut_common.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/cms_ut_common.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/sentinel_ut.cpp
 )
 set_property(
   TARGET

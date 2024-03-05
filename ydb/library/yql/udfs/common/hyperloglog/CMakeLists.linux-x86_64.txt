@@ -32,7 +32,7 @@ target_link_libraries(hyperloglog_udf.global PUBLIC
   library-cpp-hyperloglog
 )
 target_sources(hyperloglog_udf.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/hyperloglog/hyperloglog_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/hyperloglog/hyperloglog_udf.cpp
 )
 
 add_shared_library(hyperloglog_udf.dyn)
@@ -66,9 +66,9 @@ target_link_options(hyperloglog_udf.dyn PRIVATE
   -ldl
 )
 target_sources(hyperloglog_udf.dyn PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/hyperloglog/hyperloglog_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/hyperloglog/hyperloglog_udf.cpp
 )
 use_export_script(hyperloglog_udf.dyn
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udfs_exports.exports
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udfs_exports.exports
 )
 vcs_info(hyperloglog_udf.dyn)

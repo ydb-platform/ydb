@@ -21,14 +21,14 @@ target_link_libraries(core-sys_view-storage PUBLIC
   core-sys_view-common
 )
 target_sources(core-sys_view-storage PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/storage/groups.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/storage/pdisks.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/storage/storage_pools.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/storage/storage_stats.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/storage/vslots.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/storage/groups.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/storage/pdisks.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/storage/storage_pools.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/storage/storage_stats.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/storage/vslots.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/storage/groups.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/storage/pdisks.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/storage/storage_pools.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/storage/storage_stats.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/storage/vslots.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/storage/groups.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/storage/pdisks.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/storage/storage_pools.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/storage/storage_stats.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/storage/vslots.cpp
 )

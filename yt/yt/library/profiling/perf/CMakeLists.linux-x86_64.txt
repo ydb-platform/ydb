@@ -19,5 +19,5 @@ target_link_libraries(library-profiling-perf PUBLIC
   yt-yt-core
 )
 target_sources(library-profiling-perf PRIVATE
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/profiling/perf/counters.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/perf/counters.cpp
 )

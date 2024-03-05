@@ -12,7 +12,7 @@ target_compile_options(yql-providers-dq-global_worker_manager-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(yql-providers-dq-global_worker_manager-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/global_worker_manager
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/global_worker_manager
 )
 target_link_libraries(yql-providers-dq-global_worker_manager-ut PUBLIC
   contrib-libs-linux-headers
@@ -47,8 +47,8 @@ target_link_options(yql-providers-dq-global_worker_manager-ut PRIVATE
   -lutil
 )
 target_sources(yql-providers-dq-global_worker_manager-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/global_worker_manager/global_worker_manager_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/global_worker_manager/workers_storage_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/global_worker_manager/global_worker_manager_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/global_worker_manager/workers_storage_ut.cpp
 )
 set_property(
   TARGET

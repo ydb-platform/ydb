@@ -20,6 +20,6 @@ target_link_libraries(ydb-library-table_creator PUBLIC
   library-actors-core
 )
 target_sources(ydb-library-table_creator PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/table_creator/table_creator.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/table_creator/table_creator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/table_creator/table_creator.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/table_creator/table_creator.cpp
 )

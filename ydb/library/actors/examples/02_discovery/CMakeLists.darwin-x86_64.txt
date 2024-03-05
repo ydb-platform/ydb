@@ -38,32 +38,32 @@ target_link_options(example_02_discovery PRIVATE
   CoreFoundation
 )
 target_proto_messages(example_02_discovery PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/examples/02_discovery/protocol.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/examples/02_discovery/protocol.proto
 )
 target_sources(example_02_discovery PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/actors/examples/02_discovery/protocol.pb.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/examples/02_discovery/services.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/examples/02_discovery/endpoint.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/examples/02_discovery/lookup.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/examples/02_discovery/main.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/examples/02_discovery/publish.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/examples/02_discovery/replica.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/actors/examples/02_discovery/protocol.pb.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/examples/02_discovery/services.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/examples/02_discovery/endpoint.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/examples/02_discovery/lookup.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/examples/02_discovery/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/examples/02_discovery/publish.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/examples/02_discovery/replica.cpp
 )
 target_allocator(example_02_discovery
   library-cpp-lfalloc
 )
 target_proto_addincls(example_02_discovery
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_SOURCE_DIR}/contrib/libs/opentelemetry-proto
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(example_02_discovery
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )
 vcs_info(example_02_discovery)

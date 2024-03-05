@@ -12,7 +12,7 @@ target_compile_options(ydb-core-tx-schemeshard-ut_view PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-core-tx-schemeshard-ut_view PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard
 )
 target_link_libraries(ydb-core-tx-schemeshard-ut_view PUBLIC
   contrib-libs-cxxsupp
@@ -31,7 +31,7 @@ target_link_options(ydb-core-tx-schemeshard-ut_view PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-tx-schemeshard-ut_view PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_view/ut_view.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_view/ut_view.cpp
 )
 set_property(
   TARGET

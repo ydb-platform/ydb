@@ -23,7 +23,7 @@ target_link_options(add_columns PRIVATE
   -fPIC
 )
 target_sources(add_columns PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/simd/exec/add_columns/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/simd/exec/add_columns/main.cpp
 )
 target_allocator(add_columns
   system_allocator

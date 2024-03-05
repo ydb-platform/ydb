@@ -15,6 +15,6 @@ target_link_libraries(library-yaml_config-static_validator PUBLIC
   library-yaml_config-validator
 )
 target_sources(library-yaml_config-static_validator PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/static_validator/builders.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/static_validator/builders.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yaml_config/static_validator/builders.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yaml_config/static_validator/builders.cpp
 )

@@ -23,10 +23,10 @@ target_link_libraries(data_sharing-initiator-status PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(data_sharing-initiator-status PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/initiator/status/abstract.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/initiator/status/abstract.cpp
 )
 generate_enum_serilization(data_sharing-initiator-status
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/initiator/status/abstract.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/initiator/status/abstract.h
   INCLUDE_HEADERS
   ydb/core/tx/columnshard/data_sharing/initiator/status/abstract.h
 )

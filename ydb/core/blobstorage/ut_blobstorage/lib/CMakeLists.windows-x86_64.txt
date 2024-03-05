@@ -35,14 +35,14 @@ target_link_libraries(blobstorage-ut_blobstorage-lib PUBLIC
   yql-sql-pg_dummy
 )
 target_sources(blobstorage-ut_blobstorage-lib PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/activity.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/common.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/defs.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/env.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock_state.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock_vdisk.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock_bsc.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock_pipe.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock_state.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/activity.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/common.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/defs.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/env.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock_state.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock_vdisk.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock_bsc.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock_pipe.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock_state.cpp
 )

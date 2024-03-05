@@ -9,7 +9,7 @@
 
 add_executable(ydb-library-yql-providers-s3-object_listers-ut)
 target_include_directories(ydb-library-yql-providers-s3-object_listers-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/object_listers
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/object_listers
 )
 target_link_libraries(ydb-library-yql-providers-s3-object_listers-ut PUBLIC
   contrib-libs-cxxsupp
@@ -26,7 +26,7 @@ target_link_options(ydb-library-yql-providers-s3-object_listers-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-library-yql-providers-s3-object_listers-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/object_listers/yql_s3_path_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/object_listers/yql_s3_path_ut.cpp
 )
 set_property(
   TARGET

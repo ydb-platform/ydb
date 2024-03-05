@@ -17,7 +17,7 @@ target_link_libraries(static_validator-ut-example_configs PUBLIC
   library-yaml_config-validator
 )
 target_sources(static_validator-ut-example_configs PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/static_validator/ut/example_configs/test.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yaml_config/static_validator/ut/example_configs/test.cpp
 )
 set_property(
   TARGET

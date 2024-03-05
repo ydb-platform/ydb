@@ -12,7 +12,7 @@ target_compile_options(ydb-services-dynamic_config-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-services-dynamic_config-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/dynamic_config
+  ${PROJECT_SOURCE_DIR}/ydb/services/dynamic_config
 )
 target_link_libraries(ydb-services-dynamic_config-ut PUBLIC
   contrib-libs-cxxsupp
@@ -28,7 +28,7 @@ target_link_libraries(ydb-services-dynamic_config-ut PUBLIC
   ydb-services-cms
 )
 target_sources(ydb-services-dynamic_config-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/dynamic_config/dynamic_config_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/dynamic_config/dynamic_config_ut.cpp
 )
 set_property(
   TARGET

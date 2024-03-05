@@ -16,11 +16,11 @@ target_link_libraries(library-actors-helpers PUBLIC
   cpp-monlib-dynamic_counters
 )
 target_sources(library-actors-helpers PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/helpers/activeactors.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/helpers/flow_controlled_queue.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/helpers/future_callback.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/helpers/mon_histogram_helper.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/helpers/activeactors.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/helpers/flow_controlled_queue.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/helpers/selfping_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/helpers/activeactors.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/helpers/flow_controlled_queue.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/helpers/future_callback.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/helpers/mon_histogram_helper.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/helpers/activeactors.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/helpers/flow_controlled_queue.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/helpers/selfping_actor.cpp
 )

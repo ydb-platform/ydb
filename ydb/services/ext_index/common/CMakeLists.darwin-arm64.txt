@@ -17,7 +17,7 @@ target_link_libraries(services-ext_index-common PUBLIC
   libs-apache-arrow
 )
 target_sources(services-ext_index-common PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/ext_index/common/service.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ext_index/common/config.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ext_index/common/events.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ext_index/common/service.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ext_index/common/config.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ext_index/common/events.cpp
 )

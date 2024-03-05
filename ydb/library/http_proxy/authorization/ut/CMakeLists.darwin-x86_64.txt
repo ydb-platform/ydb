@@ -9,7 +9,7 @@
 
 add_executable(ydb-library-http_proxy-authorization-ut)
 target_include_directories(ydb-library-http_proxy-authorization-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/http_proxy/authorization
+  ${PROJECT_SOURCE_DIR}/ydb/library/http_proxy/authorization
 )
 target_link_libraries(ydb-library-http_proxy-authorization-ut PUBLIC
   contrib-libs-cxxsupp
@@ -25,8 +25,8 @@ target_link_options(ydb-library-http_proxy-authorization-ut PRIVATE
   -fPIC
 )
 target_sources(ydb-library-http_proxy-authorization-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/http_proxy/authorization/ut/auth_helpers_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/http_proxy/authorization/ut/signature_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/http_proxy/authorization/ut/auth_helpers_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/http_proxy/authorization/ut/signature_ut.cpp
 )
 set_property(
   TARGET

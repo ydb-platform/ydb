@@ -21,7 +21,7 @@ target_link_options(yaml_config-validator-ut-validator_checks PRIVATE
   -fPIC
 )
 target_sources(yaml_config-validator-ut-validator_checks PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/validator/ut/validator_checks/validator_checks_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yaml_config/validator/ut/validator_checks/validator_checks_ut.cpp
 )
 set_property(
   TARGET

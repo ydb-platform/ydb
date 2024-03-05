@@ -13,11 +13,11 @@ target_compile_options(src-compiler-grpc_plugin_support PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(src-compiler-grpc_plugin_support PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/include
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/include
 )
 target_include_directories(src-compiler-grpc_plugin_support PRIVATE
-  ${CMAKE_BINARY_DIR}/contrib/libs/grpc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc
+  ${PROJECT_BINARY_DIR}/contrib/libs/grpc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc
 )
 target_link_libraries(src-compiler-grpc_plugin_support PUBLIC
   contrib-libs-linux-headers
@@ -27,12 +27,12 @@ target_link_libraries(src-compiler-grpc_plugin_support PUBLIC
   contrib-libs-protoc
 )
 target_sources(src-compiler-grpc_plugin_support PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/compiler/cpp_generator.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/compiler/csharp_generator.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/compiler/node_generator.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/compiler/objective_c_generator.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/compiler/php_generator.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/compiler/proto_parser_helper.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/compiler/python_generator.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/compiler/ruby_generator.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/src/compiler/cpp_generator.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/src/compiler/csharp_generator.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/src/compiler/node_generator.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/src/compiler/objective_c_generator.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/src/compiler/php_generator.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/src/compiler/proto_parser_helper.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/src/compiler/python_generator.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/src/compiler/ruby_generator.cc
 )

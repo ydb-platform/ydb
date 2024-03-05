@@ -27,25 +27,25 @@ target_link_libraries(cpp-http-fetch PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(cpp-http-fetch PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/http/fetch/httpagent.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/http/fetch/httpfetcher.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/http/fetch/httpheader.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/http/fetch/httpparser.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/http/fetch/httpzreader.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/http/fetch/sockhandler.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/http/fetch/http_digest.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/http/fetch/http_socket.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/http/fetch/httpheader.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/http/fetch/httpload.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/http/fetch/exthttpcodes.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/httpagent.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/httpfetcher.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/httpheader.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/httpparser.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/httpzreader.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/sockhandler.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/http_digest.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/http_socket.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/httpheader.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/httpload.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/exthttpcodes.cpp
 )
 generate_enum_serilization(cpp-http-fetch
-  ${CMAKE_SOURCE_DIR}/library/cpp/http/fetch/httpheader.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/httpheader.h
   INCLUDE_HEADERS
   library/cpp/http/fetch/httpheader.h
 )
 target_ragel_lexers(cpp-http-fetch
   PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/http/fetch/httpfsm.rl6
+  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/httpfsm.rl6
   -CG1
 )

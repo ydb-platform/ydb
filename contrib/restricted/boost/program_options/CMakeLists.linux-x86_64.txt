@@ -12,7 +12,7 @@ target_compile_options(restricted-boost-program_options PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-boost-program_options PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/include
 )
 target_link_libraries(restricted-boost-program_options PUBLIC
   contrib-libs-linux-headers
@@ -32,15 +32,15 @@ target_link_libraries(restricted-boost-program_options PUBLIC
   restricted-boost-type_traits
 )
 target_sources(restricted-boost-program_options PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/cmdline.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/config_file.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/convert.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/options_description.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/parsers.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/positional_options.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/split.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/utf8_codecvt_facet.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/value_semantic.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/variables_map.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/winmain.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/src/cmdline.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/src/config_file.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/src/convert.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/src/options_description.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/src/parsers.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/src/positional_options.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/src/split.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/src/utf8_codecvt_facet.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/src/value_semantic.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/src/variables_map.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/src/winmain.cpp
 )

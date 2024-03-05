@@ -19,20 +19,20 @@ target_link_libraries(core-blobstorage-base PUBLIC
   ydb-core-protos
 )
 target_sources(core-blobstorage-base PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/batched_vec.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/blobstorage_events.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/blobstorage_oos_defs.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/blobstorage_vdiskid.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/blobstorage_syncstate.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/defs.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/html.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/ptr.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/vdisk_lsn.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/vdisk_sync_common.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/vdisk_priorities.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/utility.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/blobstorage_events.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/blobstorage_vdiskid.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/blobstorage_syncstate.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/html.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/batched_vec.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/blobstorage_events.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/blobstorage_oos_defs.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/blobstorage_vdiskid.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/blobstorage_syncstate.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/defs.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/html.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/ptr.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/vdisk_lsn.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/vdisk_sync_common.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/vdisk_priorities.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/utility.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/blobstorage_events.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/blobstorage_vdiskid.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/blobstorage_syncstate.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/html.cpp
 )

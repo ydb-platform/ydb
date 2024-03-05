@@ -24,8 +24,8 @@ target_link_libraries(yql-minikql-protobuf_udf PUBLIC
   yt_proto-yt-formats
 )
 target_sources(yql-minikql-protobuf_udf PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/protobuf_udf/proto_builder.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/protobuf_udf/module.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/protobuf_udf/type_builder.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/protobuf_udf/value_builder.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/protobuf_udf/proto_builder.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/protobuf_udf/module.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/protobuf_udf/type_builder.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/protobuf_udf/value_builder.cpp
 )

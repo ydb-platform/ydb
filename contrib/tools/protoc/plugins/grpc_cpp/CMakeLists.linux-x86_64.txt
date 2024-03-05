@@ -13,8 +13,8 @@ target_compile_options(grpc_cpp PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(grpc_cpp PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/include
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/include
 )
 target_link_libraries(grpc_cpp PUBLIC
   contrib-libs-linux-headers
@@ -34,7 +34,7 @@ target_link_options(grpc_cpp PRIVATE
   -ldl
 )
 target_sources(grpc_cpp PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/compiler/cpp_plugin.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/src/compiler/cpp_plugin.cc
 )
 target_allocator(grpc_cpp
   cpp-malloc-tcmalloc

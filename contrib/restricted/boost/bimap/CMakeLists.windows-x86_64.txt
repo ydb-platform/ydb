@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-bimap INTERFACE)
 target_include_directories(restricted-boost-bimap INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/bimap/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/bimap/include
 )
 target_link_libraries(restricted-boost-bimap INTERFACE
   contrib-libs-cxxsupp

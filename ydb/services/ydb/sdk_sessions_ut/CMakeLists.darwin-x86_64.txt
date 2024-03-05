@@ -12,7 +12,7 @@ target_compile_options(ydb-services-ydb-sdk_sessions_ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-services-ydb-sdk_sessions_ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb
 )
 target_link_libraries(ydb-services-ydb-sdk_sessions_ut PUBLIC
   contrib-libs-cxxsupp
@@ -33,7 +33,7 @@ target_link_options(ydb-services-ydb-sdk_sessions_ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-services-ydb-sdk_sessions_ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/sdk_sessions_ut/sdk_sessions_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb/sdk_sessions_ut/sdk_sessions_ut.cpp
 )
 set_property(
   TARGET

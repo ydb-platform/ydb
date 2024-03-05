@@ -27,7 +27,7 @@ target_link_options(yaml-to-proto-dump-ds-init PRIVATE
   -ldl
 )
 target_sources(yaml-to-proto-dump-ds-init PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/tools/dump_ds_init/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yaml_config/tools/dump_ds_init/main.cpp
 )
 target_allocator(yaml-to-proto-dump-ds-init
   cpp-malloc-jemalloc

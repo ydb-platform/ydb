@@ -20,5 +20,5 @@ target_link_libraries(client-iam-impl INTERFACE
   client-iam-common
 )
 target_sources(client-iam-impl INTERFACE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/iam/impl/iam_impl.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/iam/impl/iam_impl.h
 )

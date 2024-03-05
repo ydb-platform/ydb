@@ -9,7 +9,7 @@
 
 add_executable(ydb-library-keys-ut)
 target_include_directories(ydb-library-keys-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/keys
+  ${PROJECT_SOURCE_DIR}/ydb/library/keys
 )
 target_link_libraries(ydb-library-keys-ut PUBLIC
   contrib-libs-linux-headers
@@ -29,7 +29,7 @@ target_link_options(ydb-library-keys-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-keys-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/keys/default_keys_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/keys/default_keys_ut.cpp
 )
 set_property(
   TARGET

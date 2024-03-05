@@ -24,7 +24,7 @@ target_link_options(astdiff PRIVATE
   CoreFoundation
 )
 target_sources(astdiff PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/astdiff/astdiff.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/astdiff/astdiff.cpp
 )
 target_allocator(astdiff
   system_allocator

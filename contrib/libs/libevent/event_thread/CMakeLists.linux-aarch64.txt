@@ -14,13 +14,13 @@ target_compile_options(libs-libevent-event_thread PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(libs-libevent-event_thread PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/include
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/include
 )
 target_link_libraries(libs-libevent-event_thread PUBLIC
   contrib-libs-linux-headers
   contrib-libs-libc_compat
 )
 target_sources(libs-libevent-event_thread PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/evthread_pthread.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/evthread_pthread.c
 )

@@ -41,23 +41,23 @@ target_link_libraries(providers-common-proto PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(providers-common-proto PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/proto/gateways_config.proto
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/proto/udf_resolver.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/proto/gateways_config.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/proto/udf_resolver.proto
 )
 target_sources(providers-common-proto PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/common/proto/gateways_config.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/common/proto/udf_resolver.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/common/proto/gateways_config.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/common/proto/udf_resolver.pb.h
 )
 target_proto_addincls(providers-common-proto
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(providers-common-proto
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )

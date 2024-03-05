@@ -17,5 +17,5 @@ target_link_libraries(data_sharing-modification-tasks PUBLIC
   data_sharing-destination-transactions
 )
 target_sources(data_sharing-modification-tasks PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/modification/tasks/modification.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/modification/tasks/modification.cpp
 )

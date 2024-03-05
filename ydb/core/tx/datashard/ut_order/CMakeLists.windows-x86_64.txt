@@ -12,7 +12,7 @@ target_compile_options(ydb-core-tx-datashard-ut_order PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-core-tx-datashard-ut_order PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard
 )
 target_link_libraries(ydb-core-tx-datashard-ut_order PUBLIC
   contrib-libs-cxxsupp
@@ -32,7 +32,7 @@ target_link_libraries(ydb-core-tx-datashard-ut_order PUBLIC
   cpp-client-ydb_result
 )
 target_sources(ydb-core-tx-datashard-ut_order PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_order.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_order.cpp
 )
 set_property(
   TARGET

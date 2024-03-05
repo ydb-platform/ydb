@@ -12,7 +12,7 @@ target_compile_options(ydb-public-sdk-cpp-client-ydb_federated_topic-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-public-sdk-cpp-client-ydb_federated_topic-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_federated_topic
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_federated_topic
 )
 target_link_libraries(ydb-public-sdk-cpp-client-ydb_federated_topic-ut PUBLIC
   contrib-libs-cxxsupp
@@ -34,7 +34,7 @@ target_link_libraries(ydb-public-sdk-cpp-client-ydb_federated_topic-ut PUBLIC
   client-ydb_federated_topic-impl
 )
 target_sources(ydb-public-sdk-cpp-client-ydb_federated_topic-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_federated_topic/ut/basic_usage_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_federated_topic/ut/basic_usage_ut.cpp
 )
 set_property(
   TARGET

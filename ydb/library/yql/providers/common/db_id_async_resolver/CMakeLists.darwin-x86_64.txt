@@ -26,11 +26,11 @@ target_link_libraries(providers-common-db_id_async_resolver PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(providers-common-db_id_async_resolver PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/db_id_async_resolver/mdb_endpoint_generator.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/db_id_async_resolver/mdb_endpoint_generator.h
 )
 generate_enum_serilization(providers-common-db_id_async_resolver
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h
   INCLUDE_HEADERS
   ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h
 )

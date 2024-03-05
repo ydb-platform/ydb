@@ -19,5 +19,5 @@ target_link_libraries(yt-library-tvm PUBLIC
   cpp-yt-memory
 )
 target_sources(yt-library-tvm PRIVATE
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/tvm/tvm_base.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/tvm/tvm_base.cpp
 )

@@ -19,5 +19,5 @@ target_link_libraries(yt-lib-yson_helpers PUBLIC
   providers-yt-common
 )
 target_sources(yt-lib-yson_helpers PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/lib/yson_helpers/yson_helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/lib/yson_helpers/yson_helpers.cpp
 )

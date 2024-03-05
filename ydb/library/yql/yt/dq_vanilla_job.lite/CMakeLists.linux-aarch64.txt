@@ -46,7 +46,7 @@ target_link_options(dq_vanilla_job.lite PRIVATE
   -lutil
 )
 target_sources(dq_vanilla_job.lite PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/yt/dq_vanilla_job.lite/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/yt/dq_vanilla_job.lite/main.cpp
 )
 target_allocator(dq_vanilla_job.lite
   cpp-malloc-jemalloc

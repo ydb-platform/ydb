@@ -29,7 +29,7 @@ target_link_options(sql2yql PRIVATE
   CoreFoundation
 )
 target_sources(sql2yql PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/sql2yql/sql2yql.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/sql2yql/sql2yql.cpp
 )
 target_allocator(sql2yql
   system_allocator

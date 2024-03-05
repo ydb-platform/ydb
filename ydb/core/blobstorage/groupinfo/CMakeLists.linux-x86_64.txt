@@ -23,13 +23,13 @@ target_link_libraries(core-blobstorage-groupinfo PUBLIC
   ydb-core-protos
 )
 target_sources(core-blobstorage-groupinfo PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_blobmap.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/defs.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_blobmap.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_blobmap.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/defs.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_blobmap.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.cpp
 )

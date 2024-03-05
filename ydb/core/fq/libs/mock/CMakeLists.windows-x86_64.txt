@@ -49,5 +49,5 @@ target_link_libraries(fq-libs-mock PUBLIC
   cpp-client-ydb_table
 )
 target_sources(fq-libs-mock PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/mock/yql_mock.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/mock/yql_mock.cpp
 )

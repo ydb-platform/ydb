@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-interprocess INTERFACE)
 target_include_directories(restricted-boost-interprocess INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/interprocess/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/interprocess/include
 )
 target_link_libraries(restricted-boost-interprocess INTERFACE
   contrib-libs-linux-headers

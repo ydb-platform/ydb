@@ -29,13 +29,13 @@ target_link_libraries(ydb-core-local_pgwire PUBLIC
   lib-operation_id-protos
 )
 target_sources(ydb-core-local_pgwire PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/local_pgwire/local_pgwire.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/local_pgwire/local_pgwire_util.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/local_pgwire/log_impl.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/local_pgwire/sql_parser.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/local_pgwire/local_pgwire_connection.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/local_pgwire/local_pgwire.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/local_pgwire/local_pgwire_util.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/local_pgwire/pgwire_kqp_proxy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/local_pgwire/sql_parser.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/local_pgwire/local_pgwire.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/local_pgwire/local_pgwire_util.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/local_pgwire/log_impl.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/local_pgwire/sql_parser.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/local_pgwire/local_pgwire_connection.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/local_pgwire/local_pgwire.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/local_pgwire/local_pgwire_util.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/local_pgwire/pgwire_kqp_proxy.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/local_pgwire/sql_parser.cpp
 )

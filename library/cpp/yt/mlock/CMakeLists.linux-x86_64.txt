@@ -17,5 +17,5 @@ target_link_libraries(cpp-yt-mlock PUBLIC
   yutil
 )
 target_sources(cpp-yt-mlock PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/yt/mlock/mlock_linux.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/mlock/mlock_linux.cpp
 )

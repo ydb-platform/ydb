@@ -22,5 +22,5 @@ target_link_libraries(providers-yt-mkql_dq PUBLIC
   library-yql-utils
 )
 target_sources(providers-yt-mkql_dq PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/mkql_dq/yql_yt_dq_transform.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/mkql_dq/yql_yt_dq_transform.cpp
 )

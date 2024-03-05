@@ -13,6 +13,6 @@ target_link_libraries(yql_udf_dep_stub PUBLIC
   yutil
 )
 target_sources(yql_udf_dep_stub PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/udf_dep_stub/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/udf_dep_stub/main.cpp
 )
 vcs_info(yql_udf_dep_stub)

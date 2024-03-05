@@ -15,7 +15,7 @@ target_compile_options(restricted-aws-aws-c-cal PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-aws-aws-c-cal PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/include
 )
 target_link_libraries(restricted-aws-aws-c-cal PUBLIC
   contrib-libs-linux-headers
@@ -23,15 +23,15 @@ target_link_libraries(restricted-aws-aws-c-cal PUBLIC
   restricted-aws-aws-c-common
 )
 target_sources(restricted-aws-aws-c-cal PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/cal.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/der.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/ecc.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/hash.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/hmac.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/symmetric_cipher.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/openssl_aes.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/openssl_platform_init.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/opensslcrypto_ecc.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/opensslcrypto_hash.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/opensslcrypto_hmac.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/cal.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/der.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/ecc.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/hash.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/hmac.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/symmetric_cipher.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/openssl_aes.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/openssl_platform_init.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/opensslcrypto_ecc.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/opensslcrypto_hash.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/opensslcrypto_hmac.c
 )

@@ -12,8 +12,8 @@ add_subdirectory(utils)
 
 add_library(contrib-libs-llvm14 INTERFACE)
 target_include_directories(contrib-libs-llvm14 INTERFACE
-  ${CMAKE_BINARY_DIR}/contrib/libs/llvm14/include
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/include
+  ${PROJECT_BINARY_DIR}/contrib/libs/llvm14/include
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/include
 )
 target_link_libraries(contrib-libs-llvm14 INTERFACE
   contrib-libs-cxxsupp

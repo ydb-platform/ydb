@@ -14,5 +14,5 @@ target_link_libraries(ydb-library-time_series_vec INTERFACE
   yutil
 )
 target_sources(ydb-library-time_series_vec INTERFACE
-  ${CMAKE_SOURCE_DIR}/ydb/library/time_series_vec/time_series_vec.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/time_series_vec/time_series_vec.h
 )

@@ -31,7 +31,7 @@ target_compile_options(restricted-aws-aws-c-http PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-aws-aws-c-http PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/include
 )
 target_link_libraries(restricted-aws-aws-c-http PUBLIC
   contrib-libs-linux-headers
@@ -41,31 +41,31 @@ target_link_libraries(restricted-aws-aws-c-http PUBLIC
   restricted-aws-aws-c-io
 )
 target_sources(restricted-aws-aws-c-http PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/connection.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/connection_manager.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/connection_monitor.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h1_connection.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h1_decoder.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h1_encoder.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h1_stream.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h2_connection.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h2_decoder.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h2_frames.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h2_stream.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/hpack.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/hpack_decoder.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/hpack_encoder.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/hpack_huffman_static.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/http.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/http2_stream_manager.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/proxy_connection.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/proxy_strategy.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/random_access_set.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/request_response.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/statistics.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/strutil.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/websocket.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/websocket_bootstrap.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/websocket_decoder.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/websocket_encoder.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/connection.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/connection_manager.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/connection_monitor.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h1_connection.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h1_decoder.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h1_encoder.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h1_stream.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h2_connection.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h2_decoder.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h2_frames.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h2_stream.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/hpack.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/hpack_decoder.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/hpack_encoder.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/hpack_huffman_static.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/http.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/http2_stream_manager.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/proxy_connection.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/proxy_strategy.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/random_access_set.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/request_response.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/statistics.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/strutil.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/websocket.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/websocket_bootstrap.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/websocket_decoder.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/websocket_encoder.c
 )

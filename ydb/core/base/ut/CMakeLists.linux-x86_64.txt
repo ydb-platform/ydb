@@ -9,7 +9,7 @@
 
 add_executable(ydb-core-base-ut)
 target_include_directories(ydb-core-base-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/base
+  ${PROJECT_SOURCE_DIR}/ydb/core/base
 )
 target_link_libraries(ydb-core-base-ut PUBLIC
   contrib-libs-linux-headers
@@ -32,12 +32,12 @@ target_link_options(ydb-core-base-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-base-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/ut/path_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/blobstorage_grouptype_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/localdb_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/logoblob_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/statestorage_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/statestorage_guardian_impl_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/ut/path_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/blobstorage_grouptype_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/localdb_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/logoblob_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/statestorage_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/statestorage_guardian_impl_ut.cpp
 )
 set_property(
   TARGET

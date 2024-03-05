@@ -16,7 +16,7 @@ target_compile_options(restricted-boost-coroutine PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-boost-coroutine PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/coroutine/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/coroutine/include
 )
 target_link_libraries(restricted-boost-coroutine PUBLIC
   contrib-libs-linux-headers
@@ -33,7 +33,7 @@ target_link_libraries(restricted-boost-coroutine PUBLIC
   restricted-boost-utility
 )
 target_sources(restricted-boost-coroutine PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/coroutine/src/posix/stack_traits.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/coroutine/src/detail/coroutine_context.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/coroutine/src/exceptions.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/coroutine/src/posix/stack_traits.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/coroutine/src/detail/coroutine_context.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/coroutine/src/exceptions.cpp
 )

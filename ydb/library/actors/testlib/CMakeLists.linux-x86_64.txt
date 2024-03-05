@@ -22,5 +22,5 @@ target_link_libraries(library-actors-testlib PUBLIC
   library-cpp-time_provider
 )
 target_sources(library-actors-testlib PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/testlib/test_runtime.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/testlib/test_runtime.cpp
 )

@@ -16,10 +16,10 @@ target_compile_options(contrib-libs-libxml PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(contrib-libs-libxml PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/include
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/include
 )
 target_include_directories(contrib-libs-libxml PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml
 )
 target_link_libraries(contrib-libs-libxml PUBLIC
   contrib-libs-linux-headers
@@ -29,49 +29,49 @@ target_link_libraries(contrib-libs-libxml PUBLIC
   library-cpp-charset
 )
 target_sources(contrib-libs-libxml PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/HTMLparser.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/HTMLtree.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/SAX.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/SAX2.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/buf.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/c14n.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/catalog.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/chvalid.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/debugXML.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/dict.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/encoding.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/entities.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/error.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/globals.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/hash.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/legacy.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/list.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/nanoftp.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/nanohttp.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/parser.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/parserInternals.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/pattern.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/relaxng.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/schematron.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/threads.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/tree.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/uri.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/valid.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/xinclude.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/xlink.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/xmlIO.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/xmlmemory.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/xmlmodule.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/xmlreader.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/xmlregexp.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/xmlsave.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/xmlschemas.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/xmlschemastypes.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/xmlstring.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/xmlunicode.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/xmlwriter.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/xpath.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/xpointer.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/xzlib.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/yencoding.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/HTMLparser.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/HTMLtree.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/SAX.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/SAX2.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/buf.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/c14n.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/catalog.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/chvalid.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/debugXML.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/dict.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/encoding.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/entities.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/error.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/globals.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/hash.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/legacy.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/list.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/nanoftp.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/nanohttp.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/parser.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/parserInternals.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/pattern.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/relaxng.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/schematron.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/threads.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/tree.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/uri.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/valid.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/xinclude.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/xlink.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/xmlIO.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/xmlmemory.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/xmlmodule.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/xmlreader.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/xmlregexp.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/xmlsave.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/xmlschemas.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/xmlschemastypes.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/xmlstring.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/xmlunicode.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/xmlwriter.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/xpath.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/xpointer.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/xzlib.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libxml/yencoding.cpp
 )

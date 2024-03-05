@@ -22,7 +22,7 @@ target_link_libraries(providers-common-pushdown PUBLIC
   yql-utils-log
 )
 target_sources(providers-common-pushdown PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/pushdown/collection.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/pushdown/predicate_node.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/pushdown/settings.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/pushdown/collection.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/pushdown/predicate_node.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/pushdown/settings.cpp
 )

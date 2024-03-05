@@ -13,34 +13,34 @@ target_compile_options(contrib-libs-libfyaml PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(contrib-libs-libfyaml PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/include
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib
-  ${CMAKE_SOURCE_DIR}/contrib/libs/xxhash
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/include
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib
+  ${PROJECT_SOURCE_DIR}/contrib/libs/xxhash
 )
 target_link_libraries(contrib-libs-libfyaml PUBLIC
   contrib-libs-linux-headers
   contrib-libs-xxhash
 )
 target_sources(contrib-libs-libfyaml PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-accel.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-atom.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-composer.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-ctype.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-diag.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-doc.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-docbuilder.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-docstate.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-dump.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-emit.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-event.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-input.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-parse.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-path.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-token.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-types.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-utf8.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-utils.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-walk.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-accel.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-atom.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-composer.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-ctype.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-diag.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-doc.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-docbuilder.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-docstate.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-dump.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-emit.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-event.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-input.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-parse.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-path.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-token.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-types.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-utf8.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-utils.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-walk.c
 )

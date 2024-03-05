@@ -12,7 +12,7 @@ target_compile_options(ydb-services-ydb-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-services-ydb-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb
 )
 target_link_libraries(ydb-services-ydb-ut PUBLIC
   contrib-libs-linux-headers
@@ -56,22 +56,22 @@ target_link_options(ydb-services-ydb-ut PRIVATE
   -ldl
 )
 target_sources(ydb-services-ydb-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_bulk_upsert_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_bulk_upsert_olap_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_coordination_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_index_table_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_import_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_client_certs_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_scripting_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_table_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_stats_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_logstore_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_olapstore_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_monitoring_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/cert_gen.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_query_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_ldap_login_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_bulk_upsert_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_bulk_upsert_olap_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_coordination_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_index_table_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_import_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_client_certs_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_scripting_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_table_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_stats_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_logstore_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_olapstore_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_monitoring_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb/cert_gen.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_query_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_ldap_login_ut.cpp
 )
 set_property(
   TARGET

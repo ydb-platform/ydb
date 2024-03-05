@@ -25,6 +25,6 @@ target_link_libraries(fq-libs-read_rule PUBLIC
   providers-pq-proto
 )
 target_sources(fq-libs-read_rule PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/read_rule/read_rule_creator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/read_rule/read_rule_deleter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/read_rule/read_rule_creator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/read_rule/read_rule_deleter.cpp
 )

@@ -15,14 +15,14 @@ target_compile_options(restricted-aws-aws-checksums PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-aws-aws-checksums PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-checksums/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-checksums/include
 )
 target_link_libraries(restricted-aws-aws-checksums PUBLIC
   contrib-libs-linux-headers
   restricted-aws-aws-c-common
 )
 target_sources(restricted-aws-aws-checksums PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-checksums/source/crc.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-checksums/source/crc_sw.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-checksums/source/intel/asm/crc32c_sse42_asm.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-checksums/source/crc.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-checksums/source/crc_sw.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-checksums/source/intel/asm/crc32c_sse42_asm.c
 )

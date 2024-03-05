@@ -21,8 +21,8 @@ target_compile_options(core-formats-arrow PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(core-formats-arrow PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base
-  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base
+  ${PROJECT_SOURCE_DIR}/ydb/library/arrow_clickhouse
 )
 target_link_libraries(core-formats-arrow PUBLIC
   contrib-libs-cxxsupp
@@ -43,22 +43,22 @@ target_link_libraries(core-formats-arrow PUBLIC
   core-arrow_kernels-request
 )
 target_sources(core-formats-arrow PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/converter.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/input_stream.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/merging_sorted_input_stream.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/one_batch_input_stream.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/sort_cursor.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/arrow_batch_builder.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/arrow_filter.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/arrow_helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/converter.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/custom_registry.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/merging_sorted_input_stream.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/permutations.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/program.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/replace_key.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/size_calcer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ssa_program_optimizer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/special_keys.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/simple_arrays_cache.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/converter.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/input_stream.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/merging_sorted_input_stream.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/one_batch_input_stream.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/sort_cursor.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/arrow_batch_builder.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/arrow_filter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/arrow_helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/converter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/custom_registry.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/merging_sorted_input_stream.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/permutations.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/replace_key.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/size_calcer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/ssa_program_optimizer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/special_keys.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/simple_arrays_cache.cpp
 )

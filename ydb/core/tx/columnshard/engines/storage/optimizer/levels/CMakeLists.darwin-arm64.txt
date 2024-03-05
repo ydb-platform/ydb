@@ -17,6 +17,6 @@ target_link_libraries(storage-optimizer-levels PUBLIC
   engines-changes-abstract
 )
 target_sources(storage-optimizer-levels PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/levels/optimizer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/levels/counters.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/levels/optimizer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/levels/counters.cpp
 )

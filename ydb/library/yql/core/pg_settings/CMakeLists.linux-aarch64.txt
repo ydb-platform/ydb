@@ -14,5 +14,5 @@ target_link_libraries(yql-core-pg_settings PUBLIC
   yutil
 )
 target_sources(yql-core-pg_settings PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/pg_settings/guc_settings.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/pg_settings/guc_settings.cpp
 )

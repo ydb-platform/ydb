@@ -26,5 +26,5 @@ target_link_libraries(providers-dq-scheduler PUBLIC
   library-actors-protos
 )
 target_sources(providers-dq-scheduler PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/scheduler/dq_scheduler.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/scheduler/dq_scheduler.cpp
 )

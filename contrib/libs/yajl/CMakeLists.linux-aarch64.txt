@@ -17,14 +17,14 @@ target_link_libraries(contrib-libs-yajl PUBLIC
   yutil
 )
 target_sources(contrib-libs-yajl PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/yajl/yajl.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/yajl/yajl_buf.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/yajl/yajl_gen.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/yajl/yajl_parser.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/yajl/yajl_version.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/yajl/yajl_alloc.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/yajl/yajl_encode.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/yajl/yajl_lex.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/yajl/yajl_tree.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/yajl/yajl_parser.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/yajl.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/yajl_buf.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/yajl_gen.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/yajl_parser.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/yajl_version.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/yajl_alloc.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/yajl_encode.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/yajl_lex.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/yajl_tree.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/yajl_parser.cpp
 )

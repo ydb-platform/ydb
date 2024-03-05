@@ -21,5 +21,5 @@ target_link_libraries(library-ytprof-http PUBLIC
   yt-library-process
 )
 target_sources(library-ytprof-http PRIVATE
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/ytprof/http/handler.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/ytprof/http/handler.cpp
 )

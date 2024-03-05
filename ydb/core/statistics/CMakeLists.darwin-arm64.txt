@@ -19,9 +19,9 @@ target_link_libraries(ydb-core-statistics PUBLIC
   ydb-core-scheme
 )
 target_sources(ydb-core-statistics PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/events.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/stat_service.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/save_load_stats.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/stat_service.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/save_load_stats.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/events.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/stat_service.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/save_load_stats.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/stat_service.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/save_load_stats.cpp
 )

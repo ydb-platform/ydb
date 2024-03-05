@@ -18,7 +18,7 @@ target_link_libraries(ydb-core-ymq-http-ut PUBLIC
   udf-service-exception_policy
 )
 target_sources(ydb-core-ymq-http-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/http/ut/xml_builder_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/ymq/http/ut/xml_builder_ut.cpp
 )
 set_property(
   TARGET

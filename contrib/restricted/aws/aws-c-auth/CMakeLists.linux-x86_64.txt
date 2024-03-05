@@ -34,7 +34,7 @@ target_compile_options(restricted-aws-aws-c-auth PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-aws-aws-c-auth PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/include
 )
 target_link_libraries(restricted-aws-aws-c-auth PUBLIC
   contrib-libs-linux-headers
@@ -45,34 +45,34 @@ target_link_libraries(restricted-aws-aws-c-auth PUBLIC
   restricted-aws-aws-c-sdkutils
 )
 target_sources(restricted-aws-aws-c-auth PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/auth.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/aws_imds_client.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/aws_profile.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/aws_signing.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_anonymous.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_cached.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_chain.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_cognito.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_default_chain.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_delegate.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_ecs.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_environment.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_imds.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_process.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_profile.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_static.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_sts.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_sts_web_identity.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_x509.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_utils.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/key_derivation.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/signable.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/signable_chunk.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/signable_http_request.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/signable_trailer.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/signing.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/signing_config.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/signing_result.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/sigv4_http_request.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/auth.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/aws_imds_client.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/aws_profile.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/aws_signing.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_anonymous.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_cached.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_chain.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_cognito.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_default_chain.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_delegate.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_ecs.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_environment.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_imds.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_process.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_profile.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_static.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_sts.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_sts_web_identity.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_x509.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_utils.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/key_derivation.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/signable.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/signable_chunk.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/signable_http_request.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/signable_trailer.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/signing.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/signing_config.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/signing_result.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/sigv4_http_request.c
 )

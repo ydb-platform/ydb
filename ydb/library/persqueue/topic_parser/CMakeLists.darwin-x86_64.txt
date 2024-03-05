@@ -17,9 +17,9 @@ target_link_libraries(library-persqueue-topic_parser PUBLIC
   api-protos
 )
 target_sources(library-persqueue-topic_parser PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/persqueue/topic_parser/topic_parser.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/persqueue/topic_parser/counters.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/persqueue/topic_parser/type_definitions.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/persqueue/topic_parser/topic_parser.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/persqueue/topic_parser/counters.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/persqueue/topic_parser/topic_parser.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/persqueue/topic_parser/counters.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/persqueue/topic_parser/type_definitions.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/persqueue/topic_parser/topic_parser.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/persqueue/topic_parser/counters.cpp
 )

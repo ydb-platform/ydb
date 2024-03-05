@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-multi_index INTERFACE)
 target_include_directories(restricted-boost-multi_index INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/multi_index/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/multi_index/include
 )
 target_link_libraries(restricted-boost-multi_index INTERFACE
   contrib-libs-linux-headers

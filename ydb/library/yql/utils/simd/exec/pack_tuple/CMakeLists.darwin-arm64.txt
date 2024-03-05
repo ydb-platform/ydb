@@ -22,7 +22,7 @@ target_link_options(pack_tuple PRIVATE
   -fPIC
 )
 target_sources(pack_tuple PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/simd/exec/pack_tuple/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/simd/exec/pack_tuple/main.cpp
 )
 target_allocator(pack_tuple
   system_allocator

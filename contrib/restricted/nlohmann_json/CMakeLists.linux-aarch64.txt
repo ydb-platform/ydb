@@ -9,7 +9,7 @@
 
 add_library(contrib-restricted-nlohmann_json INTERFACE)
 target_include_directories(contrib-restricted-nlohmann_json INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/nlohmann_json/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/nlohmann_json/include
 )
 target_link_libraries(contrib-restricted-nlohmann_json INTERFACE
   contrib-libs-linux-headers

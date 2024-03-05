@@ -21,6 +21,6 @@ target_link_libraries(engines-writer-buffer PUBLIC
   columnshard-blobs_action-protos
 )
 target_sources(engines-writer-buffer PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/writer/buffer/actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/writer/buffer/events.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/writer/buffer/actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/writer/buffer/events.cpp
 )

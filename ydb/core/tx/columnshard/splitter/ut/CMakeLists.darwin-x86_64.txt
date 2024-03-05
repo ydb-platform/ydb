@@ -13,8 +13,8 @@ target_compile_options(ydb-core-tx-columnshard-splitter-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-core-tx-columnshard-splitter-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/splitter
-  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/splitter
+  ${PROJECT_SOURCE_DIR}/ydb/library/arrow_clickhouse
 )
 target_link_libraries(ydb-core-tx-columnshard-splitter-ut PUBLIC
   contrib-libs-cxxsupp
@@ -51,7 +51,7 @@ target_link_options(ydb-core-tx-columnshard-splitter-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-tx-columnshard-splitter-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/ut/ut_splitter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/ut/ut_splitter.cpp
 )
 set_property(
   TARGET

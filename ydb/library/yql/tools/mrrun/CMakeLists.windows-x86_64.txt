@@ -74,8 +74,8 @@ target_link_libraries(mrrun PUBLIC
   yql-parser-pg_wrapper
 )
 target_sources(mrrun PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/mrrun/mrrun.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/mrrun/mrrun.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/mrrun/mrrun.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/mrrun/mrrun.cpp
 )
 target_allocator(mrrun
   system_allocator

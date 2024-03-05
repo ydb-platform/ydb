@@ -18,7 +18,7 @@ target_link_libraries(pack_tuple PUBLIC
   yql-utils-simd
 )
 target_sources(pack_tuple PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/simd/exec/pack_tuple/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/simd/exec/pack_tuple/main.cpp
 )
 target_allocator(pack_tuple
   system_allocator

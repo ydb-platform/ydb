@@ -18,7 +18,7 @@ target_link_libraries(add_columns PUBLIC
   yql-utils-simd
 )
 target_sources(add_columns PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/simd/exec/add_columns/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/simd/exec/add_columns/main.cpp
 )
 target_allocator(add_columns
   system_allocator

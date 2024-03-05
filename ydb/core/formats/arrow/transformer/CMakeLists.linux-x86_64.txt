@@ -16,7 +16,7 @@ target_link_libraries(formats-arrow-transformer PUBLIC
   formats-arrow-dictionary
 )
 target_sources(formats-arrow-transformer PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/transformer/abstract.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/transformer/dictionary.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/transformer/composite.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/transformer/abstract.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/transformer/dictionary.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/transformer/composite.cpp
 )

@@ -24,16 +24,16 @@ target_link_libraries(core-blobstorage-backpressure PUBLIC
   ydb-core-protos
 )
 target_sources(core-blobstorage-backpressure PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/common.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/defs.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/event.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue_backpressure_client.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue_backpressure_common.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue_backpressure_server.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/unisched.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/event.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue_backpressure_client.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/unisched.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/common.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/defs.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/event.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue_backpressure_client.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue_backpressure_common.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue_backpressure_server.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/unisched.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/event.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue_backpressure_client.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/unisched.cpp
 )

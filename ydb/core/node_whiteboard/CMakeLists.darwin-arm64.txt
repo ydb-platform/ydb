@@ -29,5 +29,5 @@ target_link_libraries(ydb-core-node_whiteboard INTERFACE
   ydb-core-protos
 )
 target_sources(ydb-core-node_whiteboard INTERFACE
-  ${CMAKE_SOURCE_DIR}/ydb/core/node_whiteboard/node_whiteboard.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/node_whiteboard/node_whiteboard.h
 )

@@ -15,5 +15,5 @@ target_link_libraries(core-grpc_services-auth_processor PUBLIC
   contrib-libs-openssl
 )
 target_sources(core-grpc_services-auth_processor PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/auth_processor/dynamic_node_auth_processor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/auth_processor/dynamic_node_auth_processor.cpp
 )

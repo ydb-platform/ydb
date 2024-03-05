@@ -12,7 +12,7 @@ target_compile_options(ydb-library-yql-core-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-library-yql-core-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core
 )
 target_link_libraries(ydb-library-yql-core-ut PUBLIC
   contrib-libs-cxxsupp
@@ -40,16 +40,16 @@ target_link_libraries(ydb-library-yql-core-ut PUBLIC
   yql-sql-pg
 )
 target_sources(ydb-library-yql-core-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/ut/yql_csv_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/ut/yql_execution_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/ut/yql_expr_constraint_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/ut/yql_expr_discover_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/ut/yql_expr_optimize_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/ut/yql_expr_providers_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/ut/yql_expr_type_annotation_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/ut/yql_library_compiler_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/ut/yql_opt_utils_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/ut/yql_udf_index_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/ut/yql_csv_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/ut/yql_execution_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/ut/yql_expr_constraint_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/ut/yql_expr_discover_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/ut/yql_expr_optimize_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/ut/yql_expr_providers_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/ut/yql_expr_type_annotation_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/ut/yql_library_compiler_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/ut/yql_opt_utils_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/ut/yql_udf_index_ut.cpp
 )
 set_property(
   TARGET

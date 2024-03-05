@@ -12,7 +12,7 @@ target_compile_options(restricted-boost-chrono PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-boost-chrono PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/chrono/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/chrono/include
 )
 target_link_libraries(restricted-boost-chrono PUBLIC
   contrib-libs-linux-headers
@@ -34,7 +34,7 @@ target_link_libraries(restricted-boost-chrono PUBLIC
   restricted-boost-winapi
 )
 target_sources(restricted-boost-chrono PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/chrono/src/chrono.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/chrono/src/process_cpu_clocks.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/chrono/src/thread_clock.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/chrono/src/chrono.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/chrono/src/process_cpu_clocks.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/chrono/src/thread_clock.cpp
 )

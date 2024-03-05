@@ -15,6 +15,6 @@ target_link_libraries(library-cpp-sighandler PUBLIC
   cpp-deprecated-atomic
 )
 target_sources(library-cpp-sighandler PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/sighandler/async_signals_handler.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/sighandler/async_signals_handler.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/sighandler/async_signals_handler.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/sighandler/async_signals_handler.cpp
 )

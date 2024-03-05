@@ -17,7 +17,7 @@ target_link_libraries(sql_formatter PUBLIC
   sql-v1-format
 )
 target_sources(sql_formatter PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/sql_formatter/sql_formatter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/sql_formatter/sql_formatter.cpp
 )
 target_allocator(sql_formatter
   system_allocator

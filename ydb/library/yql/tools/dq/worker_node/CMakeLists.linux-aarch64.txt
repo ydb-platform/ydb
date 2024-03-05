@@ -63,7 +63,7 @@ target_link_options(worker_node PRIVATE
   -lutil
 )
 target_sources(worker_node PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/dq/worker_node/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/dq/worker_node/main.cpp
 )
 target_allocator(worker_node
   cpp-malloc-jemalloc

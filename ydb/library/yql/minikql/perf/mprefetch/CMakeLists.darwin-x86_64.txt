@@ -24,7 +24,7 @@ target_link_options(mprefetch PRIVATE
   -fPIC
 )
 target_sources(mprefetch PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/perf/mprefetch/mprefetch.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/perf/mprefetch/mprefetch.cpp
 )
 target_allocator(mprefetch
   system_allocator

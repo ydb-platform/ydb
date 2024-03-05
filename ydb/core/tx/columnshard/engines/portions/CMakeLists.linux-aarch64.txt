@@ -26,15 +26,15 @@ target_link_libraries(columnshard-engines-portions PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(columnshard-engines-portions PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/portion_info.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/column_record.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/with_blobs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/meta.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/index_chunk.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/portion_info.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/column_record.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/with_blobs.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/meta.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/common.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/index_chunk.cpp
 )
 generate_enum_serilization(columnshard-engines-portions
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/portion_info.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/portion_info.h
   INCLUDE_HEADERS
   ydb/core/tx/columnshard/engines/portions/portion_info.h
 )

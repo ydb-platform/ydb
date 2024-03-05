@@ -12,12 +12,12 @@ target_compile_options(dragonbox PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(dragonbox PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/dragonbox/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/dragonbox/include
 )
 target_link_libraries(dragonbox PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
 )
 target_sources(dragonbox PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/dragonbox/source/dragonbox_to_chars.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/dragonbox/source/dragonbox_to_chars.cpp
 )

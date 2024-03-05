@@ -19,5 +19,5 @@ target_link_libraries(farmhash-arch-sse42_aesni PUBLIC
   yutil
 )
 target_sources(farmhash-arch-sse42_aesni PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/farmhash/farmhashsu.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/farmhash/farmhashsu.cc
 )

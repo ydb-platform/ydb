@@ -12,7 +12,7 @@ target_compile_options(lib-CodeGen-AsmPrinter PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(lib-CodeGen-AsmPrinter PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter
 )
 target_link_libraries(lib-CodeGen-AsmPrinter PUBLIC
   contrib-libs-linux-headers
@@ -33,31 +33,31 @@ target_link_libraries(lib-CodeGen-AsmPrinter PUBLIC
   llvm14-lib-Target
 )
 target_sources(lib-CodeGen-AsmPrinter PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/AIXException.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/ARMException.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/AccelTable.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/AddressPool.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/AsmPrinter.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/AsmPrinterDwarf.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/AsmPrinterInlineAsm.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/CodeViewDebug.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DIE.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DIEHash.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DbgEntityHistoryCalculator.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DebugHandlerBase.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DebugLocStream.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DwarfCFIException.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DwarfCompileUnit.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DwarfDebug.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DwarfExpression.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DwarfFile.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DwarfStringPool.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DwarfUnit.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/EHStreamer.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/ErlangGCPrinter.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/OcamlGCPrinter.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/PseudoProbePrinter.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/WasmException.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/WinCFGuard.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/WinException.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/AIXException.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/ARMException.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/AccelTable.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/AddressPool.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/AsmPrinter.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/AsmPrinterDwarf.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/AsmPrinterInlineAsm.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/CodeViewDebug.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DIE.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DIEHash.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DbgEntityHistoryCalculator.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DebugHandlerBase.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DebugLocStream.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DwarfCFIException.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DwarfCompileUnit.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DwarfDebug.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DwarfExpression.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DwarfFile.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DwarfStringPool.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/DwarfUnit.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/EHStreamer.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/ErlangGCPrinter.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/OcamlGCPrinter.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/PseudoProbePrinter.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/WasmException.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/WinCFGuard.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/AsmPrinter/WinException.cpp
 )

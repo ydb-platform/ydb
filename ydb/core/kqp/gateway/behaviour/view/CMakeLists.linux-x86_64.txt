@@ -22,7 +22,7 @@ target_link_libraries(gateway-behaviour-view PUBLIC
   services-metadata-manager
 )
 target_sources(gateway-behaviour-view PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/view/manager.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/view/manager.cpp
 )
 
 add_global_library_for(gateway-behaviour-view.global gateway-behaviour-view)
@@ -40,5 +40,5 @@ target_link_libraries(gateway-behaviour-view.global PUBLIC
   services-metadata-manager
 )
 target_sources(gateway-behaviour-view.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/view/behaviour.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/view/behaviour.cpp
 )

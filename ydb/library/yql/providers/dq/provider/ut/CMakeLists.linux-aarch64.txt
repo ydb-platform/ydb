@@ -12,7 +12,7 @@ target_compile_options(ydb-library-yql-providers-dq-provider-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-library-yql-providers-dq-provider-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider
 )
 target_link_libraries(ydb-library-yql-providers-dq-provider-ut PUBLIC
   contrib-libs-linux-headers
@@ -35,7 +35,7 @@ target_link_options(ydb-library-yql-providers-dq-provider-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-providers-dq-provider-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_provider_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_provider_ut.cpp
 )
 set_property(
   TARGET

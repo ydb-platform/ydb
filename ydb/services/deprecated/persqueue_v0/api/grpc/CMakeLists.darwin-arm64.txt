@@ -38,24 +38,24 @@ target_link_libraries(api-grpc-persqueue-deprecated PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(api-grpc-persqueue-deprecated PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/deprecated/persqueue_v0/api/grpc/persqueue.proto
+  ${PROJECT_SOURCE_DIR}/ydb/services/deprecated/persqueue_v0/api/grpc/persqueue.proto
 )
 target_sources(api-grpc-persqueue-deprecated PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/services/deprecated/persqueue_v0/api/grpc/persqueue.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/services/deprecated/persqueue_v0/api/grpc/persqueue.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/services/deprecated/persqueue_v0/api/grpc/persqueue.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/services/deprecated/persqueue_v0/api/grpc/persqueue.grpc.pb.h
 )
 target_proto_addincls(api-grpc-persqueue-deprecated
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(api-grpc-persqueue-deprecated
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )
 target_proto_plugin(api-grpc-persqueue-deprecated
   grpc_cpp

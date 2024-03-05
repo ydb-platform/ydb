@@ -31,18 +31,18 @@ target_link_libraries(fq-libs-common PUBLIC
   api-protos
 )
 target_sources(fq-libs-common PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common/cache.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common/compression.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common/entity_id.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common/rows_proto_splitter.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common/compression.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common/debug_info.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common/entity_id.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common/util.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common/rows_proto_splitter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/cache.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/compression.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/entity_id.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/rows_proto_splitter.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/compression.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/debug_info.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/entity_id.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/util.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/rows_proto_splitter.cpp
 )
 generate_enum_serilization(fq-libs-common
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common/util.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/util.h
   INCLUDE_HEADERS
   ydb/core/fq/libs/common/util.h
 )

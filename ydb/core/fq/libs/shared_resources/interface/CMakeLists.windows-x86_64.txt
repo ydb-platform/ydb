@@ -17,5 +17,5 @@ target_link_libraries(libs-shared_resources-interface PUBLIC
   library-actors-core
 )
 target_sources(libs-shared_resources-interface PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/shared_resources/interface/shared_resources.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/shared_resources/interface/shared_resources.cpp
 )

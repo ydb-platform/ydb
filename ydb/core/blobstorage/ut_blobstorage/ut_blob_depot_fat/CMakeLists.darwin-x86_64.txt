@@ -9,7 +9,7 @@
 
 add_executable(blobstorage-ut_blobstorage-ut_blob_depot_fat)
 target_include_directories(blobstorage-ut_blobstorage-ut_blob_depot_fat PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage
 )
 target_link_libraries(blobstorage-ut_blobstorage-ut_blob_depot_fat PUBLIC
   contrib-libs-cxxsupp
@@ -26,9 +26,9 @@ target_link_options(blobstorage-ut_blobstorage-ut_blob_depot_fat PRIVATE
   CoreFoundation
 )
 target_sources(blobstorage-ut_blobstorage-ut_blob_depot_fat PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/blob_depot_fat.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/blob_depot_test_functions.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/blob_depot_event_managers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/blob_depot_fat.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/blob_depot_test_functions.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/blob_depot_event_managers.cpp
 )
 set_property(
   TARGET

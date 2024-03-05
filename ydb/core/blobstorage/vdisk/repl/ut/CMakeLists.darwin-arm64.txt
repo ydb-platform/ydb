@@ -9,7 +9,7 @@
 
 add_executable(ydb-core-blobstorage-vdisk-repl-ut)
 target_include_directories(ydb-core-blobstorage-vdisk-repl-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl
 )
 target_link_libraries(ydb-core-blobstorage-vdisk-repl-ut PUBLIC
   contrib-libs-cxxsupp
@@ -30,8 +30,8 @@ target_link_options(ydb-core-blobstorage-vdisk-repl-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-blobstorage-vdisk-repl-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_hullreplwritesst_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_replrecoverymachine_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_hullreplwritesst_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_replrecoverymachine_ut.cpp
 )
 set_property(
   TARGET

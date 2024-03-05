@@ -15,5 +15,5 @@ target_link_libraries(core-grpc_services-local_rpc INTERFACE
   core-grpc_services-base
 )
 target_sources(core-grpc_services-local_rpc INTERFACE
-  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/local_rpc/local_rpc.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/local_rpc/local_rpc.h
 )

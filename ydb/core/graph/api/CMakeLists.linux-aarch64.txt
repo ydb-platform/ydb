@@ -15,7 +15,7 @@ target_link_libraries(core-graph-api INTERFACE
   core-graph-protos
 )
 target_sources(core-graph-api INTERFACE
-  ${CMAKE_SOURCE_DIR}/ydb/core/graph/api/events.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/graph/api/service.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/graph/api/shard.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/graph/api/events.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/graph/api/service.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/graph/api/shard.h
 )

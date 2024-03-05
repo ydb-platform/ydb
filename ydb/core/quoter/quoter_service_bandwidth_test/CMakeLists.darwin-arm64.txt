@@ -29,9 +29,9 @@ target_link_options(quoter_service_bandwidth_test PRIVATE
   CoreFoundation
 )
 target_sources(quoter_service_bandwidth_test PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/quoter/quoter_service_bandwidth_test/main.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/quoter/quoter_service_bandwidth_test/quota_requester.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/quoter/quoter_service_bandwidth_test/server.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/quoter/quoter_service_bandwidth_test/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/quoter/quoter_service_bandwidth_test/quota_requester.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/quoter/quoter_service_bandwidth_test/server.cpp
 )
 target_allocator(quoter_service_bandwidth_test
   system_allocator

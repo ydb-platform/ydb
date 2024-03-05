@@ -12,7 +12,7 @@ target_compile_options(abseil-cpp-tstring-y_absl-types PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(abseil-cpp-tstring-y_absl-types PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )
 target_link_libraries(abseil-cpp-tstring-y_absl-types PUBLIC
   contrib-libs-linux-headers
@@ -22,7 +22,7 @@ target_link_libraries(abseil-cpp-tstring-y_absl-types PUBLIC
   abseil-cpp-tstring-y_absl-memory
 )
 target_sources(abseil-cpp-tstring-y_absl-types PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/types/bad_any_cast.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/types/bad_optional_access.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/types/bad_variant_access.cc
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/types/bad_any_cast.cc
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/types/bad_optional_access.cc
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/types/bad_variant_access.cc
 )

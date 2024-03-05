@@ -15,5 +15,5 @@ target_link_libraries(contrib-libs-utf8proc PUBLIC
   contrib-libs-linux-headers
 )
 target_sources(contrib-libs-utf8proc PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/utf8proc/utf8proc.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/utf8proc/utf8proc.c
 )

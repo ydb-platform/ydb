@@ -9,7 +9,7 @@
 
 add_executable(ydb-library-yql-sql-v1-format-ut)
 target_include_directories(ydb-library-yql-sql-v1-format-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/format
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/format
 )
 target_link_libraries(ydb-library-yql-sql-v1-format-ut PUBLIC
   contrib-libs-cxxsupp
@@ -26,7 +26,7 @@ target_link_options(ydb-library-yql-sql-v1-format-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-library-yql-sql-v1-format-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/format/sql_format_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/format/sql_format_ut.cpp
 )
 set_property(
   TARGET

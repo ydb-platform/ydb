@@ -9,7 +9,7 @@
 
 add_executable(ydb-library-persqueue-topic_parser-ut)
 target_include_directories(ydb-library-persqueue-topic_parser-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/persqueue/topic_parser
+  ${PROJECT_SOURCE_DIR}/ydb/library/persqueue/topic_parser
 )
 target_link_libraries(ydb-library-persqueue-topic_parser-ut PUBLIC
   contrib-libs-linux-headers
@@ -32,7 +32,7 @@ target_link_options(ydb-library-persqueue-topic_parser-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-persqueue-topic_parser-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/persqueue/topic_parser/ut/topic_names_converter_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/persqueue/topic_parser/ut/topic_names_converter_ut.cpp
 )
 set_property(
   TARGET

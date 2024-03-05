@@ -35,23 +35,23 @@ target_link_libraries(yaml-config-protos PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(yaml-config-protos PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/protos/config.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/yaml_config/protos/config.proto
 )
 target_sources(yaml-config-protos PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yaml_config/protos/config.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yaml_config/protos/config.pb.h
 )
 target_proto_addincls(yaml-config-protos
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(yaml-config-protos
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )
 target_proto_plugin(yaml-config-protos
   config_proto_plugin

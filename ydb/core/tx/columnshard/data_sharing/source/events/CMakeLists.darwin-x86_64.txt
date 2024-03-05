@@ -14,6 +14,6 @@ target_link_libraries(data_sharing-source-events PUBLIC
   data_sharing-source-session
 )
 target_sources(data_sharing-source-events PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/source/events/transfer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/source/events/control.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/source/events/transfer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/source/events/control.cpp
 )

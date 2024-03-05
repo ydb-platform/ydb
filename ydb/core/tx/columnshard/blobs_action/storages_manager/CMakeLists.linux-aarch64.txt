@@ -17,5 +17,5 @@ target_link_libraries(columnshard-blobs_action-storages_manager PUBLIC
   columnshard-blobs_action-tier
 )
 target_sources(columnshard-blobs_action-storages_manager PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/storages_manager/manager.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/storages_manager/manager.cpp
 )

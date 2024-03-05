@@ -12,7 +12,7 @@ target_compile_options(ydb-core-tx-columnshard-engines-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-core-tx-columnshard-engines-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines
 )
 target_link_libraries(ydb-core-tx-columnshard-engines-ut PUBLIC
   contrib-libs-cxxsupp
@@ -34,11 +34,11 @@ target_link_libraries(ydb-core-tx-columnshard-engines-ut PUBLIC
   json2_udf
 )
 target_sources(ydb-core-tx-columnshard-engines-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut/ut_insert_table.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut/ut_logs_engine.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut/ut_program.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut/helper.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_ut_common.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut/ut_insert_table.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut/ut_logs_engine.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut/ut_program.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut/helper.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_ut_common.cpp
 )
 set_property(
   TARGET

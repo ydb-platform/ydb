@@ -15,5 +15,5 @@ target_link_libraries(cpp-testing-gtest_main PUBLIC
   cpp-testing-gtest
 )
 target_sources(cpp-testing-gtest_main PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/testing/gtest_main/main.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/testing/gtest_main/main.cpp
 )

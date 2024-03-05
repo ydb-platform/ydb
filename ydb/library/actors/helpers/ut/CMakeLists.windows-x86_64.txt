@@ -9,7 +9,7 @@
 
 add_executable(ydb-library-actors-helpers-ut)
 target_include_directories(ydb-library-actors-helpers-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/helpers
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/helpers
 )
 target_link_libraries(ydb-library-actors-helpers-ut PUBLIC
   contrib-libs-cxxsupp
@@ -22,7 +22,7 @@ target_link_libraries(ydb-library-actors-helpers-ut PUBLIC
   library-actors-core
 )
 target_sources(ydb-library-actors-helpers-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/helpers/selfping_actor_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/helpers/selfping_actor_ut.cpp
 )
 set_property(
   TARGET

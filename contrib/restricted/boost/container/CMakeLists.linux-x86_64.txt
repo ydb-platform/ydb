@@ -12,7 +12,7 @@ target_compile_options(restricted-boost-container PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-boost-container PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/container/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/container/include
 )
 target_link_libraries(restricted-boost-container PUBLIC
   contrib-libs-linux-headers
@@ -24,11 +24,11 @@ target_link_libraries(restricted-boost-container PUBLIC
   restricted-boost-static_assert
 )
 target_sources(restricted-boost-container PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/container/src/alloc_lib.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/container/src/dlmalloc.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/container/src/global_resource.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/container/src/monotonic_buffer_resource.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/container/src/pool_resource.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/container/src/synchronized_pool_resource.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/container/src/unsynchronized_pool_resource.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/container/src/alloc_lib.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/container/src/dlmalloc.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/container/src/global_resource.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/container/src/monotonic_buffer_resource.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/container/src/pool_resource.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/container/src/synchronized_pool_resource.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/container/src/unsynchronized_pool_resource.cpp
 )

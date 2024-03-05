@@ -22,17 +22,17 @@ target_link_libraries(blobstorage-vdisk-handoff PUBLIC
   ydb-core-protos
 )
 target_sources(blobstorage-vdisk-handoff PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/defs.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_basic.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_delegate.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_map.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_mon.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_proxy.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_synclogproxy.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_basic.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_delegate.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_map.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_mon.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_proxy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_synclogproxy.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/defs.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_basic.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_delegate.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_map.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_mon.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_proxy.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_synclogproxy.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_basic.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_delegate.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_map.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_mon.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_proxy.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_synclogproxy.cpp
 )

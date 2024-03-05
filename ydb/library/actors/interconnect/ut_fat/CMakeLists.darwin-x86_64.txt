@@ -29,7 +29,7 @@ target_link_options(ydb-library-actors-interconnect-ut_fat PRIVATE
   CoreFoundation
 )
 target_sources(ydb-library-actors-interconnect-ut_fat PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/ut_fat/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/ut_fat/main.cpp
 )
 set_property(
   TARGET

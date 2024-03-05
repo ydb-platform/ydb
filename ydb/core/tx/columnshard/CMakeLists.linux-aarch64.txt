@@ -81,40 +81,40 @@ target_link_libraries(core-tx-columnshard PUBLIC
   ydb-library-chunks_limiter
 )
 target_sources(core-tx-columnshard PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/background_controller.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blob.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blob_cache.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__init.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__notify_tx_completion.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__plan_step.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__progress_tx.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__propose_cancel.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__propose_transaction.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__read_base.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__scan.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__index_scan.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__stats_scan.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__write.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__write_index.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_private_events.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_view.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/defs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/inflight_request_tracker.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/write_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/tables_manager.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/background_controller.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blob.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blob_cache.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__init.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__notify_tx_completion.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__plan_step.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__progress_tx.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__propose_cancel.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__propose_transaction.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__read_base.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__scan.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__index_scan.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__stats_scan.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__write.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__write_index.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_impl.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_common.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_private_events.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_schema.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_view.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/defs.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/inflight_request_tracker.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/write_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/tables_manager.cpp
 )
 generate_enum_serilization(core-tx-columnshard
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard.h
   INCLUDE_HEADERS
   ydb/core/tx/columnshard/columnshard.h
 )
 generate_enum_serilization(core-tx-columnshard
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_impl.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_impl.h
   INCLUDE_HEADERS
   ydb/core/tx/columnshard/columnshard_impl.h
 )

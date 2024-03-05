@@ -12,7 +12,7 @@ target_compile_options(ydb-core-kesus-proxy-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-core-kesus-proxy-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/proxy
+  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/proxy
 )
 target_link_libraries(ydb-core-kesus-proxy-ut PUBLIC
   contrib-libs-linux-headers
@@ -33,8 +33,8 @@ target_link_options(ydb-core-kesus-proxy-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-kesus-proxy-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/proxy/proxy_actor_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/proxy/ut_helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/proxy/proxy_actor_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/proxy/ut_helpers.cpp
 )
 set_property(
   TARGET

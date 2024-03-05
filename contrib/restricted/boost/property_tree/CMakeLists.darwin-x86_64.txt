@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-property_tree INTERFACE)
 target_include_directories(restricted-boost-property_tree INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/property_tree/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/property_tree/include
 )
 target_link_libraries(restricted-boost-property_tree INTERFACE
   contrib-libs-cxxsupp

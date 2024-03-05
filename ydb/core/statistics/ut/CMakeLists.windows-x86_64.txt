@@ -12,7 +12,7 @@ target_compile_options(ydb-core-statistics-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-core-statistics-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/statistics
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics
 )
 target_link_libraries(ydb-core-statistics-ut PUBLIC
   contrib-libs-cxxsupp
@@ -24,10 +24,10 @@ target_link_libraries(ydb-core-statistics-ut PUBLIC
   core-testlib-default
 )
 target_sources(ydb-core-statistics-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/ut/ut_common.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/ut/ut_common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/ut/ut_statistics.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/ut/ut_save_load_stats.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/ut/ut_common.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/ut/ut_common.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/ut/ut_statistics.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/ut/ut_save_load_stats.cpp
 )
 set_property(
   TARGET

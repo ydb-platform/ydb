@@ -18,5 +18,5 @@ target_link_libraries(yql-sql-pg_dummy PUBLIC
   library-yql-minikql
 )
 target_sources(yql-sql-pg_dummy PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/pg_dummy/pg_sql_dummy.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/pg_dummy/pg_sql_dummy.cpp
 )

@@ -9,7 +9,7 @@
 
 add_executable(ut_blobstorage-ut_read_only_vdisk)
 target_include_directories(ut_blobstorage-ut_read_only_vdisk PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage
 )
 target_link_libraries(ut_blobstorage-ut_read_only_vdisk PUBLIC
   contrib-libs-cxxsupp
@@ -26,7 +26,7 @@ target_link_options(ut_blobstorage-ut_read_only_vdisk PRIVATE
   CoreFoundation
 )
 target_sources(ut_blobstorage-ut_read_only_vdisk PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/read_only_vdisk.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/read_only_vdisk.cpp
 )
 set_property(
   TARGET

@@ -165,7 +165,7 @@ get_built_tool_path(
 
 add_library(yt_proto-yt-core)
 target_include_directories(yt_proto-yt-core PUBLIC
-  ${CMAKE_BINARY_DIR}/yt
+  ${PROJECT_BINARY_DIR}/yt
 )
 target_link_libraries(yt_proto-yt-core PUBLIC
   contrib-libs-linux-headers
@@ -174,46 +174,46 @@ target_link_libraries(yt_proto-yt-core PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(yt_proto-yt-core PRIVATE
-  ${CMAKE_SOURCE_DIR}/yt/yt_proto/yt/core/crypto/proto/crypto.proto
-  ${CMAKE_SOURCE_DIR}/yt/yt_proto/yt/core/misc/proto/bloom_filter.proto
-  ${CMAKE_SOURCE_DIR}/yt/yt_proto/yt/core/misc/proto/error.proto
-  ${CMAKE_SOURCE_DIR}/yt/yt_proto/yt/core/misc/proto/guid.proto
-  ${CMAKE_SOURCE_DIR}/yt/yt_proto/yt/core/misc/proto/protobuf_helpers.proto
-  ${CMAKE_SOURCE_DIR}/yt/yt_proto/yt/core/tracing/proto/span.proto
-  ${CMAKE_SOURCE_DIR}/yt/yt_proto/yt/core/tracing/proto/tracing_ext.proto
-  ${CMAKE_SOURCE_DIR}/yt/yt_proto/yt/core/bus/proto/bus.proto
-  ${CMAKE_SOURCE_DIR}/yt/yt_proto/yt/core/rpc/proto/rpc.proto
-  ${CMAKE_SOURCE_DIR}/yt/yt_proto/yt/core/yson/proto/protobuf_interop.proto
-  ${CMAKE_SOURCE_DIR}/yt/yt_proto/yt/core/ytree/proto/attributes.proto
-  ${CMAKE_SOURCE_DIR}/yt/yt_proto/yt/core/ytree/proto/request_complexity_limits.proto
-  ${CMAKE_SOURCE_DIR}/yt/yt_proto/yt/core/ytree/proto/ypath.proto
+  ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/core/crypto/proto/crypto.proto
+  ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/core/misc/proto/bloom_filter.proto
+  ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/core/misc/proto/error.proto
+  ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/core/misc/proto/guid.proto
+  ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/core/misc/proto/protobuf_helpers.proto
+  ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/core/tracing/proto/span.proto
+  ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/core/tracing/proto/tracing_ext.proto
+  ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/core/bus/proto/bus.proto
+  ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/core/rpc/proto/rpc.proto
+  ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/core/yson/proto/protobuf_interop.proto
+  ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/core/ytree/proto/attributes.proto
+  ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/core/ytree/proto/request_complexity_limits.proto
+  ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/core/ytree/proto/ypath.proto
 )
 target_sources(yt_proto-yt-core PRIVATE
-  ${CMAKE_BINARY_DIR}/yt/yt_proto/yt/core/crypto/proto/crypto.pb.h
-  ${CMAKE_BINARY_DIR}/yt/yt_proto/yt/core/misc/proto/bloom_filter.pb.h
-  ${CMAKE_BINARY_DIR}/yt/yt_proto/yt/core/misc/proto/error.pb.h
-  ${CMAKE_BINARY_DIR}/yt/yt_proto/yt/core/misc/proto/guid.pb.h
-  ${CMAKE_BINARY_DIR}/yt/yt_proto/yt/core/misc/proto/protobuf_helpers.pb.h
-  ${CMAKE_BINARY_DIR}/yt/yt_proto/yt/core/tracing/proto/span.pb.h
-  ${CMAKE_BINARY_DIR}/yt/yt_proto/yt/core/tracing/proto/tracing_ext.pb.h
-  ${CMAKE_BINARY_DIR}/yt/yt_proto/yt/core/bus/proto/bus.pb.h
-  ${CMAKE_BINARY_DIR}/yt/yt_proto/yt/core/rpc/proto/rpc.pb.h
-  ${CMAKE_BINARY_DIR}/yt/yt_proto/yt/core/yson/proto/protobuf_interop.pb.h
-  ${CMAKE_BINARY_DIR}/yt/yt_proto/yt/core/ytree/proto/attributes.pb.h
-  ${CMAKE_BINARY_DIR}/yt/yt_proto/yt/core/ytree/proto/request_complexity_limits.pb.h
-  ${CMAKE_BINARY_DIR}/yt/yt_proto/yt/core/ytree/proto/ypath.pb.h
+  ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/core/crypto/proto/crypto.pb.h
+  ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/core/misc/proto/bloom_filter.pb.h
+  ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/core/misc/proto/error.pb.h
+  ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/core/misc/proto/guid.pb.h
+  ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/core/misc/proto/protobuf_helpers.pb.h
+  ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/core/tracing/proto/span.pb.h
+  ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/core/tracing/proto/tracing_ext.pb.h
+  ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/core/bus/proto/bus.pb.h
+  ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/core/rpc/proto/rpc.pb.h
+  ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/core/yson/proto/protobuf_interop.pb.h
+  ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/core/ytree/proto/attributes.pb.h
+  ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/core/ytree/proto/request_complexity_limits.pb.h
+  ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/core/ytree/proto/ypath.pb.h
 )
 target_proto_addincls(yt_proto-yt-core
   ./yt
-  ${CMAKE_SOURCE_DIR}/yt
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/yt
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/yt
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/yt
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(yt_proto-yt-core
-  --cpp_out=${CMAKE_BINARY_DIR}/yt
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/yt
+  --cpp_out=${PROJECT_BINARY_DIR}/yt
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/yt
 )

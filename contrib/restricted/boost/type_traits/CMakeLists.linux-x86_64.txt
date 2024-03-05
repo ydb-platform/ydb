@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-type_traits INTERFACE)
 target_include_directories(restricted-boost-type_traits INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/type_traits/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/type_traits/include
 )
 target_link_libraries(restricted-boost-type_traits INTERFACE
   contrib-libs-linux-headers

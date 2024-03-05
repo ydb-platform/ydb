@@ -18,5 +18,5 @@ target_link_libraries(farmhash-arch-sse41 PUBLIC
   yutil
 )
 target_sources(farmhash-arch-sse41 PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/farmhash/farmhashnt.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/farmhash/farmhashnt.cc
 )

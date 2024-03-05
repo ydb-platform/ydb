@@ -27,21 +27,21 @@ target_link_libraries(lib-operation_id-protos PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(lib-operation_id-protos PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/operation_id/protos/operation_id.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/operation_id/protos/operation_id.proto
 )
 target_sources(lib-operation_id-protos PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/public/lib/operation_id/protos/operation_id.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/lib/operation_id/protos/operation_id.pb.h
 )
 target_proto_addincls(lib-operation_id-protos
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(lib-operation_id-protos
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )

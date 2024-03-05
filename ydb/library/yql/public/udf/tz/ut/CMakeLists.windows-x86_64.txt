@@ -9,7 +9,7 @@
 
 add_executable(ydb-library-yql-public-udf-tz-ut)
 target_include_directories(ydb-library-yql-public-udf-tz-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/tz
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/tz
 )
 target_link_libraries(ydb-library-yql-public-udf-tz-ut PUBLIC
   contrib-libs-cxxsupp
@@ -19,7 +19,7 @@ target_link_libraries(ydb-library-yql-public-udf-tz-ut PUBLIC
   public-udf-tz
 )
 target_sources(ydb-library-yql-public-udf-tz-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/tz/udf_tz_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/tz/udf_tz_ut.cpp
 )
 set_property(
   TARGET

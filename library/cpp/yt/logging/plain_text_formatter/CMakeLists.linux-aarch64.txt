@@ -21,5 +21,5 @@ target_link_libraries(yt-logging-plain_text_formatter PUBLIC
   cpp-yt-misc
 )
 target_sources(yt-logging-plain_text_formatter PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/yt/logging/plain_text_formatter/formatter.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/logging/plain_text_formatter/formatter.cpp
 )

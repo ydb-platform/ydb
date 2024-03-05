@@ -21,13 +21,13 @@ target_link_libraries(core-sys_view-service PUBLIC
   library-aclib-protos
 )
 target_sources(core-sys_view-service PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/service/db_counters.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/service/ext_counters.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/service/query_history.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/service/query_interval.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/service/sysview_service.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/service/db_counters.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/service/ext_counters.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/service/query_interval.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/service/sysview_service.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/service/db_counters.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/service/ext_counters.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/service/query_history.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/service/query_interval.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/service/sysview_service.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/service/db_counters.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/service/ext_counters.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/service/query_interval.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/service/sysview_service.cpp
 )

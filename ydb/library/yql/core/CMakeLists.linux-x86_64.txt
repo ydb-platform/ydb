@@ -86,78 +86,78 @@ target_link_libraries(library-yql-core PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(library-yql-core PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_atom_enums.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_callable_transform.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_csv.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_data_provider.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_execution.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_expr_constraint.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_expr_csee.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_expr_optimize.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_expr_type_annotation.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_gc_transformer.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_graph_transformer.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_holding_file_storage.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_join.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_match_recognize.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_proposed_by_data.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_range.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_rewrite_io.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_utils.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_window.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_type_annotation.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_type_helpers.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_udf_index.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_udf_index_package_set.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_udf_resolver.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_user_data.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_user_data_storage.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_aggregate_expander.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_callable_transform.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_cost_function.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_csv.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_execution.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_expr_constraint.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_expr_csee.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_expr_optimize.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_expr_type_annotation.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_gc_transformer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_graph_transformer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_holding_file_storage.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_join.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_library_compiler.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_match_recognize.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_proposed_by_data.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_range.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_rewrite_io.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_utils.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_window.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_statistics.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_type_annotation.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_type_helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_udf_index.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_udf_index_package_set.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_udf_resolver.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_user_data.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_user_data_storage.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_atom_enums.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_callable_transform.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_csv.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_data_provider.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_execution.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_expr_constraint.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_expr_csee.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_expr_optimize.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_expr_type_annotation.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_gc_transformer.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_graph_transformer.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_holding_file_storage.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_join.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_opt_match_recognize.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_opt_proposed_by_data.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_opt_range.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_opt_rewrite_io.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_opt_utils.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_opt_window.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_type_annotation.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_type_helpers.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_udf_index.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_udf_index_package_set.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_udf_resolver.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_user_data.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_user_data_storage.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_aggregate_expander.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_callable_transform.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_cost_function.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_csv.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_execution.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_expr_constraint.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_expr_csee.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_expr_optimize.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_expr_type_annotation.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_gc_transformer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_graph_transformer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_holding_file_storage.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_join.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_library_compiler.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_opt_match_recognize.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_opt_proposed_by_data.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_opt_range.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_opt_rewrite_io.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_opt_utils.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_opt_window.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_statistics.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_type_annotation.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_type_helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_udf_index.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_udf_index_package_set.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_udf_resolver.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_user_data.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_user_data_storage.cpp
 )
 generate_enum_serilization(library-yql-core
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_data_provider.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_data_provider.h
   INCLUDE_HEADERS
   ydb/library/yql/core/yql_data_provider.h
 )
 generate_enum_serilization(library-yql-core
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_user_data.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_user_data.h
   INCLUDE_HEADERS
   ydb/library/yql/core/yql_user_data.h
 )
 generate_enum_serilization(library-yql-core
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_atom_enums.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_atom_enums.h
   INCLUDE_HEADERS
   ydb/library/yql/core/yql_atom_enums.h
 )
 generate_enum_serilization(library-yql-core
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_type_annotation.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_type_annotation.h
   INCLUDE_HEADERS
   ydb/library/yql/core/yql_type_annotation.h
 )

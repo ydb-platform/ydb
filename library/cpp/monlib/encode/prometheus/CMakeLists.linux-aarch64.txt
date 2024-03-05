@@ -16,6 +16,6 @@ target_link_libraries(monlib-encode-prometheus PUBLIC
   monlib-encode-buffered
 )
 target_sources(monlib-encode-prometheus PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/encode/prometheus/prometheus_decoder.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/encode/prometheus/prometheus_encoder.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/encode/prometheus/prometheus_decoder.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/encode/prometheus/prometheus_encoder.cpp
 )

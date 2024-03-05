@@ -15,5 +15,5 @@ target_link_libraries(formats-arrow-common PUBLIC
   library-actors-core
 )
 target_sources(formats-arrow-common PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/common/validation.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/common/validation.cpp
 )

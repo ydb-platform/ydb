@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-range INTERFACE)
 target_include_directories(restricted-boost-range INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/range/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/range/include
 )
 target_link_libraries(restricted-boost-range INTERFACE
   contrib-libs-linux-headers

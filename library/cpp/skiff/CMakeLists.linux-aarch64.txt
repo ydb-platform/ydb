@@ -21,13 +21,13 @@ target_link_libraries(library-cpp-skiff PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(library-cpp-skiff PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/skiff/skiff.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/skiff/skiff_schema.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/skiff/skiff_validator.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/skiff/zerocopy_output_writer.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/skiff/skiff.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/skiff/skiff_schema.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/skiff/skiff_validator.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/skiff/zerocopy_output_writer.cpp
 )
 generate_enum_serilization(library-cpp-skiff
-  ${CMAKE_SOURCE_DIR}/library/cpp/skiff/public.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/skiff/public.h
   INCLUDE_HEADERS
   library/cpp/skiff/public.h
 )

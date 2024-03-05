@@ -12,7 +12,7 @@ target_compile_options(ydb-library-yql-minikql-invoke_builtins-llvm14-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-library-yql-minikql-invoke_builtins-llvm14-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins
 )
 target_link_libraries(ydb-library-yql-minikql-invoke_builtins-llvm14-ut PUBLIC
   contrib-libs-cxxsupp
@@ -40,7 +40,7 @@ target_link_options(ydb-library-yql-minikql-invoke_builtins-llvm14-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-library-yql-minikql-invoke_builtins-llvm14-ut PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/invoke_builtins/llvm14/ut/mkql_builtins_ut.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/invoke_builtins/llvm14/ut/mkql_builtins_ut.cpp
 )
 set_property(
   TARGET
@@ -89,8 +89,8 @@ set_yunittest_property(
   600
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_ut.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/invoke_builtins/llvm14/ut/mkql_builtins_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_ut.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/invoke_builtins/llvm14/ut/mkql_builtins_ut.cpp
 )
 target_allocator(ydb-library-yql-minikql-invoke_builtins-llvm14-ut
   system_allocator

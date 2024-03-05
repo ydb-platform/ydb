@@ -32,10 +32,10 @@ target_link_libraries(providers-yt-codec PUBLIC
   yt-lib-skiff
 )
 target_sources(providers-yt-codec PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec_io.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec_job.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec_io.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec_job.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec_io.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec_job.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec_io.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec_job.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec.cpp
 )

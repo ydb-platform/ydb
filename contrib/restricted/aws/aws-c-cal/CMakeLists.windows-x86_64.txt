@@ -15,17 +15,17 @@ target_compile_options(restricted-aws-aws-c-cal PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-aws-aws-c-cal PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/include
 )
 target_link_libraries(restricted-aws-aws-c-cal PUBLIC
   contrib-libs-openssl
   restricted-aws-aws-c-common
 )
 target_sources(restricted-aws-aws-c-cal PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/cal.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/der.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/ecc.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/hash.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/hmac.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/symmetric_cipher.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/cal.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/der.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/ecc.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/hash.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/hmac.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/symmetric_cipher.c
 )

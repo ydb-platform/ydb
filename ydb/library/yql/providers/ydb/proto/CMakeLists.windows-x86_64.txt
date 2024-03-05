@@ -38,23 +38,23 @@ target_link_libraries(providers-ydb-proto PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(providers-ydb-proto PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/proto/range.proto
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/proto/source.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/ydb/proto/range.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/ydb/proto/source.proto
 )
 target_sources(providers-ydb-proto PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/ydb/proto/range.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/ydb/proto/source.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/ydb/proto/range.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/ydb/proto/source.pb.h
 )
 target_proto_addincls(providers-ydb-proto
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(providers-ydb-proto
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )

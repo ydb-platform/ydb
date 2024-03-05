@@ -9,7 +9,7 @@
 
 add_executable(ydb-core-tx-scheme_board-ut_double_indexed)
 target_include_directories(ydb-core-tx-scheme_board-ut_double_indexed PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/scheme_board
 )
 target_link_libraries(ydb-core-tx-scheme_board-ut_double_indexed PUBLIC
   contrib-libs-cxxsupp
@@ -28,7 +28,7 @@ target_link_options(ydb-core-tx-scheme_board-ut_double_indexed PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-tx-scheme_board-ut_double_indexed PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/double_indexed_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/scheme_board/double_indexed_ut.cpp
 )
 set_property(
   TARGET

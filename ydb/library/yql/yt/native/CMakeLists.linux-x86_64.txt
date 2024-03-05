@@ -73,9 +73,9 @@ target_link_libraries(yql-yt-native PUBLIC
   library-yql-yt
 )
 target_sources(yql-yt-native PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/yt/native/error_helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/yt/native/progress_merger.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/yt/native/dq_manager.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/yt/native/error_helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/yt/native/progress_merger.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/yt/native/dq_manager.cpp
 )
 
 add_global_library_for(yql-yt-native.global yql-yt-native)
@@ -144,5 +144,5 @@ target_link_libraries(yql-yt-native.global PUBLIC
   library-yql-yt
 )
 target_sources(yql-yt-native.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/yt/native/plugin.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/yt/native/plugin.cpp
 )

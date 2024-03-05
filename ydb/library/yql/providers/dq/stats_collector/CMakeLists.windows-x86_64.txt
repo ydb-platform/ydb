@@ -19,5 +19,5 @@ target_link_libraries(providers-dq-stats_collector PUBLIC
   cpp-monlib-dynamic_counters
 )
 target_sources(providers-dq-stats_collector PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/stats_collector/pool_stats_collector.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/stats_collector/pool_stats_collector.cpp
 )

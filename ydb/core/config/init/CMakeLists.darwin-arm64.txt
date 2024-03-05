@@ -28,8 +28,8 @@ target_link_libraries(core-config-init PUBLIC
   cpp-client-ydb_driver
 )
 target_sources(core-config-init PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/config/init/init.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/config/init/dummy.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/config/init/init.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/config/init/dummy.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/config/init/init.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/config/init/dummy.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/config/init/init.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/config/init/dummy.cpp
 )

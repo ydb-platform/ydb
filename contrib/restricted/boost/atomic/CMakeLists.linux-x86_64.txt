@@ -14,10 +14,10 @@ target_compile_options(restricted-boost-atomic PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-boost-atomic PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/atomic/include
 )
 target_include_directories(restricted-boost-atomic PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/src
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/atomic/src
 )
 target_link_libraries(restricted-boost-atomic PUBLIC
   contrib-libs-linux-headers
@@ -31,7 +31,7 @@ target_link_libraries(restricted-boost-atomic PUBLIC
   restricted-boost-winapi
 )
 target_sources(restricted-boost-atomic PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/src/find_address_sse2.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/src/lock_pool.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/src/find_address_sse41.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/atomic/src/find_address_sse2.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/atomic/src/lock_pool.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/atomic/src/find_address_sse41.cpp
 )

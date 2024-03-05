@@ -31,7 +31,7 @@ target_link_libraries(core-tx-data_events PUBLIC
   blobstorage-vdisk-protos
 )
 target_sources(core-tx-data_events PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/data_events/shard_writer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/data_events/shards_splitter.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/data_events/write_data.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/data_events/shard_writer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/data_events/shards_splitter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/data_events/write_data.cpp
 )

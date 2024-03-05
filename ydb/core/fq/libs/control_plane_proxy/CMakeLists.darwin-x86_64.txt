@@ -37,7 +37,7 @@ target_link_libraries(fq-libs-control_plane_proxy PUBLIC
   library-ycloud-impl
 )
 target_sources(fq-libs-control_plane_proxy PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_proxy/config.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_proxy/control_plane_proxy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_proxy/probes.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_proxy/config.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_proxy/control_plane_proxy.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_proxy/probes.cpp
 )

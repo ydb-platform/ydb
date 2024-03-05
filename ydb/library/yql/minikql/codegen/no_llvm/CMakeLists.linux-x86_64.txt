@@ -9,7 +9,7 @@
 
 add_library(minikql-codegen-no_llvm)
 target_include_directories(minikql-codegen-no_llvm PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/codegen
 )
 target_link_libraries(minikql-codegen-no_llvm PUBLIC
   contrib-libs-linux-headers
@@ -17,5 +17,5 @@ target_link_libraries(minikql-codegen-no_llvm PUBLIC
   yutil
 )
 target_sources(minikql-codegen-no_llvm PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/no_llvm/codegen_dummy.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/codegen/no_llvm/codegen_dummy.cpp
 )

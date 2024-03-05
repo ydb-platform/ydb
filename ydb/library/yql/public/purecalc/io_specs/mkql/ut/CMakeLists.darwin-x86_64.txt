@@ -30,7 +30,7 @@ target_link_options(ydb-library-yql-public-purecalc-io_specs-mkql-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-library-yql-public-purecalc-io_specs-mkql-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/io_specs/mkql/ut/test_spec.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/io_specs/mkql/ut/test_spec.cpp
 )
 set_property(
   TARGET

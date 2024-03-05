@@ -12,7 +12,7 @@ target_compile_options(ydb-library-yql-core-arrow_kernels-registry-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-library-yql-core-arrow_kernels-registry-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/arrow_kernels/registry
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/arrow_kernels/registry
 )
 target_link_libraries(ydb-library-yql-core-arrow_kernels-registry-ut PUBLIC
   contrib-libs-linux-headers
@@ -40,7 +40,7 @@ target_link_options(ydb-library-yql-core-arrow_kernels-registry-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-core-arrow_kernels-registry-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/arrow_kernels/registry/ut/registry_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/arrow_kernels/registry/ut/registry_ut.cpp
 )
 set_property(
   TARGET

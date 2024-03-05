@@ -26,21 +26,21 @@ target_link_libraries(services-bg_tasks-protos PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(services-bg_tasks-protos PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/protos/container.proto
+  ${PROJECT_SOURCE_DIR}/ydb/services/bg_tasks/protos/container.proto
 )
 target_sources(services-bg_tasks-protos PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/services/bg_tasks/protos/container.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/services/bg_tasks/protos/container.pb.h
 )
 target_proto_addincls(services-bg_tasks-protos
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(services-bg_tasks-protos
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )

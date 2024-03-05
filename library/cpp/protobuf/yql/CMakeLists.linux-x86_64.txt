@@ -19,5 +19,5 @@ target_link_libraries(cpp-protobuf-yql PUBLIC
   cpp-string_utils-base64
 )
 target_sources(cpp-protobuf-yql PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/yql/descriptor.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/protobuf/yql/descriptor.cpp
 )

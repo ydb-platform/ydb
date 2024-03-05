@@ -9,7 +9,7 @@
 
 add_executable(ydb-library-actors-prof-ut)
 target_include_directories(ydb-library-actors-prof-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/prof
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/prof
 )
 target_link_libraries(ydb-library-actors-prof-ut PUBLIC
   contrib-libs-linux-headers
@@ -30,7 +30,7 @@ target_link_options(ydb-library-actors-prof-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-actors-prof-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/prof/ut/tag_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/prof/ut/tag_ut.cpp
 )
 set_property(
   TARGET

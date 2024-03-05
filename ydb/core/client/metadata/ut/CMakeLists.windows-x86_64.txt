@@ -12,7 +12,7 @@ target_compile_options(ydb-core-client-metadata-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-core-client-metadata-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/client/metadata
+  ${PROJECT_SOURCE_DIR}/ydb/core/client/metadata
 )
 target_link_libraries(ydb-core-client-metadata-ut PUBLIC
   contrib-libs-cxxsupp
@@ -25,7 +25,7 @@ target_link_libraries(ydb-core-client-metadata-ut PUBLIC
   yql-sql-pg_dummy
 )
 target_sources(ydb-core-client-metadata-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/client/metadata/ut/functions_metadata_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/client/metadata/ut/functions_metadata_ut.cpp
 )
 set_property(
   TARGET

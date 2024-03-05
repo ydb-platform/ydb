@@ -29,11 +29,11 @@ target_link_libraries(providers-s3-object_listers PUBLIC
   yql-utils-threading
 )
 target_sources(providers-s3-object_listers PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/object_listers/yql_s3_list.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/object_listers/yql_s3_path.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/object_listers/yql_s3_list.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/object_listers/yql_s3_path.cpp
 )
 generate_enum_serilization(providers-s3-object_listers
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/object_listers/yql_s3_list.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/object_listers/yql_s3_list.h
   INCLUDE_HEADERS
   ydb/library/yql/providers/s3/object_listers/yql_s3_list.h
 )

@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-describe INTERFACE)
 target_include_directories(restricted-boost-describe INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/describe/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/describe/include
 )
 target_link_libraries(restricted-boost-describe INTERFACE
   contrib-libs-linux-headers

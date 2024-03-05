@@ -12,8 +12,8 @@ target_compile_options(ydb-library-yql-minikql-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-library-yql-minikql-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include
 )
 target_link_libraries(ydb-library-yql-minikql-ut PUBLIC
   contrib-libs-cxxsupp
@@ -33,21 +33,21 @@ target_link_options(ydb-library-yql-minikql-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-library-yql-minikql-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/aligned_page_pool_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/compact_hash_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_alloc_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_builder_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_cast_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_printer_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_opt_literal_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_stats_registry_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_string_util_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_type_builder_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_type_ops_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_unboxed_value_stream_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/pack_num_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/watermark_tracker_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/aligned_page_pool_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/compact_hash_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/mkql_alloc_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_builder_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_cast_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_printer_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/mkql_opt_literal_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/mkql_stats_registry_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/mkql_string_util_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/mkql_type_builder_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/mkql_type_ops_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/mkql_unboxed_value_stream_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/pack_num_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/watermark_tracker_ut.cpp
 )
 set_property(
   TARGET

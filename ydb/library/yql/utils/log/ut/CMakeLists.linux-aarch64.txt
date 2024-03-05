@@ -9,7 +9,7 @@
 
 add_executable(ydb-library-yql-utils-log-ut)
 target_include_directories(ydb-library-yql-utils-log-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/log
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/log
 )
 target_link_libraries(ydb-library-yql-utils-log-ut PUBLIC
   contrib-libs-linux-headers
@@ -29,8 +29,8 @@ target_link_options(ydb-library-yql-utils-log-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-utils-log-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/log/log_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/log/tls_backend_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/log/log_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/log/tls_backend_ut.cpp
 )
 set_property(
   TARGET

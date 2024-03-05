@@ -14,7 +14,7 @@ target_compile_options(purecalc-io_specs-mkql PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(purecalc-io_specs-mkql PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/io_specs/mkql
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/io_specs/mkql
 )
 target_link_libraries(purecalc-io_specs-mkql PUBLIC
   contrib-libs-linux-headers
@@ -28,6 +28,6 @@ target_link_libraries(purecalc-io_specs-mkql PUBLIC
   public-purecalc-common
 )
 target_sources(purecalc-io_specs-mkql PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/io_specs/mkql/spec.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/io_specs/mkql/spec.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/io_specs/mkql/spec.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/io_specs/mkql/spec.cpp
 )

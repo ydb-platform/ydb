@@ -13,6 +13,6 @@ target_link_libraries(public-lib-stat_visualization PUBLIC
   yutil
 )
 target_sources(public-lib-stat_visualization PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/stat_visualization/flame_graph_builder.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/stat_visualization/flame_graph_entry.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/stat_visualization/flame_graph_builder.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/stat_visualization/flame_graph_entry.cpp
 )

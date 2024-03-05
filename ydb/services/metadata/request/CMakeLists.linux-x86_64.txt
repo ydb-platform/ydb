@@ -19,8 +19,8 @@ target_link_libraries(services-metadata-request PUBLIC
   ydb-core-grpc_services
 )
 target_sources(services-metadata-request PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/request/request_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/request/request_actor_cb.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/request/config.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/request/common.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/request/request_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/request/request_actor_cb.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/request/config.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/request/common.cpp
 )

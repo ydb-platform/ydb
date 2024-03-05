@@ -12,7 +12,7 @@ target_compile_options(ydb-core-kqp-ut-effects PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-core-kqp-ut-effects PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp
 )
 target_link_libraries(ydb-core-kqp-ut-effects PUBLIC
   contrib-libs-linux-headers
@@ -35,10 +35,10 @@ target_link_options(ydb-core-kqp-ut-effects PRIVATE
   -ldl
 )
 target_sources(ydb-core-kqp-ut-effects PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/effects/kqp_effects_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/effects/kqp_immediate_effects_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/effects/kqp_inplace_update_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/effects/kqp_write_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/effects/kqp_effects_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/effects/kqp_immediate_effects_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/effects/kqp_inplace_update_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/effects/kqp_write_ut.cpp
 )
 set_property(
   TARGET

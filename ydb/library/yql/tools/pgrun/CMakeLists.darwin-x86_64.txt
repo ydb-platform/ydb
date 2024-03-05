@@ -56,7 +56,7 @@ target_link_options(pgrun PRIVATE
   CoreFoundation
 )
 target_sources(pgrun PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/pgrun/pgrun.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/pgrun/pgrun.cpp
 )
 target_allocator(pgrun
   cpp-malloc-jemalloc

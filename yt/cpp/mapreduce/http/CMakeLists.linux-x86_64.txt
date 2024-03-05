@@ -27,12 +27,12 @@ target_link_libraries(cpp-mapreduce-http PUBLIC
   yt-core-https
 )
 target_sources(cpp-mapreduce-http PRIVATE
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/http/abortable_http_response.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/http/context.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/http/helpers.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/http/host_manager.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/http/http.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/http/http_client.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/http/requests.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/http/retry_request.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/http/abortable_http_response.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/http/context.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/http/helpers.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/http/host_manager.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/http/http.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/http/http_client.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/http/requests.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/http/retry_request.cpp
 )

@@ -15,5 +15,5 @@ target_link_libraries(persqueue-deprecated-read_batch_converter PUBLIC
   api-protos-persqueue-deprecated
 )
 target_sources(persqueue-deprecated-read_batch_converter PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/persqueue/deprecated/read_batch_converter/read_batch_converter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/persqueue/deprecated/read_batch_converter/read_batch_converter.cpp
 )

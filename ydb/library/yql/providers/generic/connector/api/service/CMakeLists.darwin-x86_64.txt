@@ -38,24 +38,24 @@ target_link_libraries(connector-api-service PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(connector-api-service PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/api/service/connector.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/api/service/connector.proto
 )
 target_sources(connector-api-service PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/generic/connector/api/service/connector.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/generic/connector/api/service/connector.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/generic/connector/api/service/connector.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/generic/connector/api/service/connector.grpc.pb.h
 )
 target_proto_addincls(connector-api-service
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(connector-api-service
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )
 target_proto_plugin(connector-api-service
   grpc_cpp

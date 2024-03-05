@@ -9,7 +9,7 @@
 
 add_executable(ydb-library-yql-utils-backtrace-ut)
 target_include_directories(ydb-library-yql-utils-backtrace-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/backtrace
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/backtrace
 )
 target_link_libraries(ydb-library-yql-utils-backtrace-ut PUBLIC
   contrib-libs-linux-headers
@@ -30,7 +30,7 @@ target_link_options(ydb-library-yql-utils-backtrace-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-utils-backtrace-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/backtrace/backtrace_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/backtrace/backtrace_ut.cpp
 )
 set_property(
   TARGET

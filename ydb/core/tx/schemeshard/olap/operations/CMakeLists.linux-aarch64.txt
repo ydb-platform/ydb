@@ -19,10 +19,10 @@ target_link_libraries(schemeshard-olap-operations PUBLIC
   ydb-services-bg_tasks
 )
 target_sources(schemeshard-olap-operations PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/operations/create_table.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/operations/drop_table.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/operations/alter_table.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/operations/create_store.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/operations/drop_store.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/operations/alter_store.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/operations/create_table.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/operations/drop_table.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/operations/alter_table.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/operations/create_store.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/operations/drop_store.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/operations/alter_store.cpp
 )

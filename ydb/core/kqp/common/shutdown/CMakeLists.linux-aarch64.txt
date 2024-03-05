@@ -19,7 +19,7 @@ target_link_libraries(kqp-common-shutdown PUBLIC
   library-actors-core
 )
 target_sources(kqp-common-shutdown PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/shutdown/controller.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/shutdown/state.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/shutdown/events.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/shutdown/controller.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/shutdown/state.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/shutdown/events.cpp
 )

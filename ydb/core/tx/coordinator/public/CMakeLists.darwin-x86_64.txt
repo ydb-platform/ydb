@@ -15,5 +15,5 @@ target_link_libraries(tx-coordinator-public PUBLIC
   tx-coordinator-protos
 )
 target_sources(tx-coordinator-public PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/public/events.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/coordinator/public/events.cpp
 )

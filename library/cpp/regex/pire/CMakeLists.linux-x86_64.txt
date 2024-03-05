@@ -12,7 +12,7 @@ target_compile_options(cpp-regex-pire PRIVATE
   -DPIRE_NO_CONFIG
 )
 target_include_directories(cpp-regex-pire PUBLIC
-  ${CMAKE_BINARY_DIR}/library/cpp/regex/pire/__/__/__/__/contrib/libs/pire/pire
+  ${PROJECT_BINARY_DIR}/library/cpp/regex/pire/__/__/__/__/contrib/libs/pire/pire
 )
 target_link_libraries(cpp-regex-pire PUBLIC
   contrib-libs-linux-headers
@@ -22,25 +22,25 @@ target_link_libraries(cpp-regex-pire PUBLIC
   bison-bison-induced
 )
 target_sources(cpp-regex-pire PRIVATE
-  ${CMAKE_BINARY_DIR}/library/cpp/regex/pire/__/__/__/__/contrib/libs/pire/pire/re_parser.h
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/minimize.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/regex/pire/pcre2pire.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/classes.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/encoding.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/fsm.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/scanner_io.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/easy.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/scanners/null.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/extra/capture.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/extra/count.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/extra/glyphs.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/re_lexer.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/read_unicode.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/regex/pire/extraencodings.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/approx_matching.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/half_final_fsm.cpp
+  ${PROJECT_BINARY_DIR}/library/cpp/regex/pire/__/__/__/__/contrib/libs/pire/pire/re_parser.h
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pire/pire/minimize.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/regex/pire/pcre2pire.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pire/pire/classes.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pire/pire/encoding.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pire/pire/fsm.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pire/pire/scanner_io.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pire/pire/easy.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pire/pire/scanners/null.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pire/pire/extra/capture.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pire/pire/extra/count.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pire/pire/extra/glyphs.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pire/pire/re_lexer.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pire/pire/read_unicode.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/regex/pire/extraencodings.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pire/pire/approx_matching.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pire/pire/half_final_fsm.cpp
 )
 target_bison_parser(cpp-regex-pire
   PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/re_parser.y
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pire/pire/re_parser.y
 )

@@ -19,32 +19,32 @@ target_compile_options(contrib-libs-pcre PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(contrib-libs-pcre PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pcre
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre
 )
 target_link_libraries(contrib-libs-pcre PUBLIC
   contrib-libs-linux-headers
 )
 target_sources(contrib-libs-pcre PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pcre/pcre_byte_order.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pcre/pcre_chartables.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pcre/pcre_compile.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pcre/pcre_config.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pcre/pcre_dfa_exec.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pcre/pcre_exec.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pcre/pcre_fullinfo.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pcre/pcre_get.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pcre/pcre_globals.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pcre/pcre_jit_compile.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pcre/pcre_maketables.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pcre/pcre_newline.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pcre/pcre_ord2utf8.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pcre/pcre_refcount.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pcre/pcre_string_utils.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pcre/pcre_study.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pcre/pcre_tables.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pcre/pcre_ucd.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pcre/pcre_valid_utf8.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pcre/pcre_version.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pcre/pcre_xclass.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pcre/pcreposix.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre_byte_order.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre_chartables.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre_compile.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre_config.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre_dfa_exec.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre_exec.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre_fullinfo.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre_get.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre_globals.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre_jit_compile.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre_maketables.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre_newline.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre_ord2utf8.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre_refcount.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre_string_utils.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre_study.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre_tables.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre_ucd.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre_valid_utf8.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre_version.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre_xclass.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcreposix.c
 )

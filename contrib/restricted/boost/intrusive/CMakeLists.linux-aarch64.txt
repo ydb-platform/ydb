@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-intrusive INTERFACE)
 target_include_directories(restricted-boost-intrusive INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/intrusive/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/intrusive/include
 )
 target_link_libraries(restricted-boost-intrusive INTERFACE
   contrib-libs-linux-headers

@@ -9,7 +9,7 @@
 
 add_executable(ydb-library-yql-sql-v1-ut)
 target_include_directories(ydb-library-yql-sql-v1-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1
 )
 target_link_libraries(ydb-library-yql-sql-v1-ut PUBLIC
   contrib-libs-cxxsupp
@@ -24,8 +24,8 @@ target_link_libraries(ydb-library-yql-sql-v1-ut PUBLIC
   sql-v1-format
 )
 target_sources(ydb-library-yql-sql-v1-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_match_recognize_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_match_recognize_ut.cpp
 )
 set_property(
   TARGET

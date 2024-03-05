@@ -34,16 +34,16 @@ target_link_options(ydb-library-yql-public-purecalc-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-public-purecalc-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/empty_stream.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/fake_spec.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/fake_spec.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_sexpr.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_sql.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_udf.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_user_data.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_eval.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_pool.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/empty_stream.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/fake_spec.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/fake_spec.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_schema.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_sexpr.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_sql.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_user_data.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_eval.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_pool.cpp
 )
 set_property(
   TARGET

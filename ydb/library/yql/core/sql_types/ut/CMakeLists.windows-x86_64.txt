@@ -9,7 +9,7 @@
 
 add_executable(ydb-library-yql-core-sql_types-ut)
 target_include_directories(ydb-library-yql-core-sql_types-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/sql_types
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/sql_types
 )
 target_link_libraries(ydb-library-yql-core-sql_types-ut PUBLIC
   contrib-libs-cxxsupp
@@ -19,7 +19,7 @@ target_link_libraries(ydb-library-yql-core-sql_types-ut PUBLIC
   yql-core-sql_types
 )
 target_sources(ydb-library-yql-core-sql_types-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/sql_types/match_recognize_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/sql_types/match_recognize_ut.cpp
 )
 set_property(
   TARGET

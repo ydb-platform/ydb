@@ -12,7 +12,7 @@ target_compile_options(ydb-library-yql-providers-dq-scheduler-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-library-yql-providers-dq-scheduler-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/scheduler
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/scheduler
 )
 target_link_libraries(ydb-library-yql-providers-dq-scheduler-ut PUBLIC
   contrib-libs-cxxsupp
@@ -24,7 +24,7 @@ target_link_libraries(ydb-library-yql-providers-dq-scheduler-ut PUBLIC
   yql-utils-log
 )
 target_sources(ydb-library-yql-providers-dq-scheduler-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/scheduler/ut/dq_scheduler_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/scheduler/ut/dq_scheduler_ut.cpp
 )
 set_property(
   TARGET

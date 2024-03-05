@@ -12,7 +12,7 @@ target_compile_options(ydb-services-ext_index-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-services-ext_index-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/ext_index
+  ${PROJECT_SOURCE_DIR}/ydb/services/ext_index
 )
 target_link_libraries(ydb-services-ext_index-ut PUBLIC
   contrib-libs-cxxsupp
@@ -35,7 +35,7 @@ target_link_options(ydb-services-ext_index-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-services-ext_index-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/ext_index/ut/ut_ext_index.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ext_index/ut/ut_ext_index.cpp
 )
 set_property(
   TARGET

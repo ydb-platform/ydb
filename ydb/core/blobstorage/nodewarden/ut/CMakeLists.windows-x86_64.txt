@@ -12,7 +12,7 @@ target_compile_options(ydb-core-blobstorage-nodewarden-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-core-blobstorage-nodewarden-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden
 )
 target_link_libraries(ydb-core-blobstorage-nodewarden-ut PUBLIC
   contrib-libs-cxxsupp
@@ -23,8 +23,8 @@ target_link_libraries(ydb-core-blobstorage-nodewarden-ut PUBLIC
   core-testlib-default
 )
 target_sources(ydb-core-blobstorage-nodewarden-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/blobstorage_node_warden_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/bind_queue_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/blobstorage_node_warden_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/bind_queue_ut.cpp
 )
 set_property(
   TARGET

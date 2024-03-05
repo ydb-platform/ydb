@@ -18,7 +18,7 @@ target_link_libraries(storage-optimizer-intervals PUBLIC
   engines-changes-abstract
 )
 target_sources(storage-optimizer-intervals PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/intervals/optimizer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/intervals/blob_size.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/intervals/counters.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/intervals/optimizer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/intervals/blob_size.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/intervals/counters.cpp
 )

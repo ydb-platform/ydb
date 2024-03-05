@@ -24,7 +24,7 @@ target_link_options(sqs PRIVATE
   CoreFoundation
 )
 target_sources(sqs PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/client/bin/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/ymq/client/bin/main.cpp
 )
 target_allocator(sqs
   system_allocator

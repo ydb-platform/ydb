@@ -14,8 +14,8 @@ target_link_libraries(interconnect-ut-lib INTERFACE
   yutil
 )
 target_sources(interconnect-ut-lib INTERFACE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/ut/lib/node.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/ut/lib/test_events.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/ut/lib/test_actors.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/ut/lib/ic_test_cluster.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/ut/lib/node.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/ut/lib/test_events.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/ut/lib/test_actors.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/ut/lib/ic_test_cluster.h
 )

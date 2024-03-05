@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-date_time INTERFACE)
 target_include_directories(restricted-boost-date_time INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/date_time/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/date_time/include
 )
 target_link_libraries(restricted-boost-date_time INTERFACE
   contrib-libs-linux-headers

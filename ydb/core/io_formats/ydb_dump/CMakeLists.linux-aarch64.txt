@@ -20,5 +20,5 @@ target_link_libraries(core-io_formats-ydb_dump PUBLIC
   core-io_formats-cell_maker
 )
 target_sources(core-io_formats-ydb_dump PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/io_formats/ydb_dump/csv_ydb_dump.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/io_formats/ydb_dump/csv_ydb_dump.cpp
 )

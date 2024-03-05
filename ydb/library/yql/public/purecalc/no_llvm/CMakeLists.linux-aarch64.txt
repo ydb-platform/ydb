@@ -12,7 +12,7 @@ target_compile_options(public-purecalc-no_llvm PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(public-purecalc-no_llvm PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc
 )
 target_link_libraries(public-purecalc-no_llvm PUBLIC
   contrib-libs-linux-headers
@@ -27,5 +27,5 @@ target_link_libraries(public-purecalc-no_llvm PUBLIC
   minikql-comp_nodes-no_llvm
 )
 target_sources(public-purecalc-no_llvm PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/purecalc.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/purecalc.cpp
 )

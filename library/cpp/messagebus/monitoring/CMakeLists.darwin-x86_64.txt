@@ -27,21 +27,21 @@ target_link_libraries(cpp-messagebus-monitoring PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(cpp-messagebus-monitoring PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/monitoring/mon_proto.proto
+  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/monitoring/mon_proto.proto
 )
 target_sources(cpp-messagebus-monitoring PRIVATE
-  ${CMAKE_BINARY_DIR}/library/cpp/messagebus/monitoring/mon_proto.pb.h
+  ${PROJECT_BINARY_DIR}/library/cpp/messagebus/monitoring/mon_proto.pb.h
 )
 target_proto_addincls(cpp-messagebus-monitoring
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(cpp-messagebus-monitoring
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )

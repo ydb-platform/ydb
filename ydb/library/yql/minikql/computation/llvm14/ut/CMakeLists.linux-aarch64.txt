@@ -42,14 +42,14 @@ target_link_options(ydb-library-yql-minikql-computation-llvm14-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-minikql-computation-llvm14-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_pack_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_list_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_dict_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_graph_saveload_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_pattern_cache_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_validate_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_value_builder_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/presort_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_pack_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_list_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_dict_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_graph_saveload_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_pattern_cache_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_validate_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_value_builder_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/presort_ut.cpp
 )
 set_property(
   TARGET

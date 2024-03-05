@@ -20,5 +20,5 @@ target_link_libraries(blobstorage-vdisk-balance PUBLIC
   blobstorage-vdisk-repl
 )
 target_sources(blobstorage-vdisk-balance PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/balance/balancing_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/balance/balancing_actor.cpp
 )

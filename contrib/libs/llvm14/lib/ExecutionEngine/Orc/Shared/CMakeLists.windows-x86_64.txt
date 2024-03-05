@@ -12,7 +12,7 @@ target_compile_options(ExecutionEngine-Orc-Shared PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(ExecutionEngine-Orc-Shared PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/Orc/Shared
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/Orc/Shared
 )
 target_link_libraries(ExecutionEngine-Orc-Shared PUBLIC
   contrib-libs-cxxsupp
@@ -20,8 +20,8 @@ target_link_libraries(ExecutionEngine-Orc-Shared PUBLIC
   llvm14-lib-Support
 )
 target_sources(ExecutionEngine-Orc-Shared PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/Orc/Shared/AllocationActions.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/Orc/Shared/OrcError.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/Orc/Shared/OrcRTBridge.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/Orc/Shared/SimpleRemoteEPCUtils.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/Orc/Shared/AllocationActions.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/Orc/Shared/OrcError.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/Orc/Shared/OrcRTBridge.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/Orc/Shared/SimpleRemoteEPCUtils.cpp
 )

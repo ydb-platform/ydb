@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-crc INTERFACE)
 target_include_directories(restricted-boost-crc INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/crc/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/crc/include
 )
 target_link_libraries(restricted-boost-crc INTERFACE
   contrib-libs-linux-headers

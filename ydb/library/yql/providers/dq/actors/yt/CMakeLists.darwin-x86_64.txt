@@ -28,20 +28,20 @@ target_link_libraries(dq-actors-yt PUBLIC
   yt-yt-client
 )
 target_sources(dq-actors-yt PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/nodeid_assigner.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/resource_manager.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/nodeid_cleaner.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/worker_registrator.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/lock.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/yt_wrapper.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/nodeid_assigner.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/resource_manager.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/nodeid_cleaner.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/worker_registrator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/lock.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/resource_uploader.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/resource_downloader.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/resource_cleaner.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/yt_wrapper.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/yt_resource_manager.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/nodeid_assigner.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/resource_manager.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/nodeid_cleaner.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/worker_registrator.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/lock.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/yt_wrapper.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/nodeid_assigner.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/resource_manager.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/nodeid_cleaner.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/worker_registrator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/lock.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/resource_uploader.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/resource_downloader.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/resource_cleaner.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/yt_wrapper.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/yt_resource_manager.cpp
 )

@@ -23,8 +23,8 @@ target_link_options(pack_num PRIVATE
   CoreFoundation
 )
 target_sources(pack_num PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/benchmark/pack_num/pack.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/benchmark/pack_num/pack_num_bench.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/benchmark/pack_num/pack.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/benchmark/pack_num/pack_num_bench.cpp
 )
 target_allocator(pack_num
   library-cpp-balloc

@@ -39,7 +39,7 @@ target_compile_options(restricted-aws-aws-crt-cpp PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-aws-aws-crt-cpp PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/include
 )
 target_link_libraries(restricted-aws-aws-crt-cpp PUBLIC
   contrib-libs-linux-headers
@@ -55,37 +55,37 @@ target_link_libraries(restricted-aws-aws-crt-cpp PUBLIC
   restricted-aws-aws-c-sdkutils
 )
 target_sources(restricted-aws-aws-crt-cpp PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/Allocator.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/Api.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/DateTime.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/ImdsClient.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/JsonObject.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/StringUtils.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/Types.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/UUID.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/auth/Credentials.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/auth/Sigv4Signing.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/crypto/HMAC.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/crypto/Hash.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/endpoints/RuleEngine.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/external/cJSON.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/http/HttpConnection.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/http/HttpConnectionManager.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/http/HttpProxyStrategy.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/http/HttpRequestResponse.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/io/Bootstrap.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/io/ChannelHandler.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/io/EventLoopGroup.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/io/HostResolver.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/io/Pkcs11.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/io/SocketOptions.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/io/Stream.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/io/TlsOptions.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/io/Uri.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/iot/Mqtt5Client.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/iot/MqttClient.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/iot/MqttCommon.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/mqtt/Mqtt5Client.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/mqtt/Mqtt5Packets.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/mqtt/MqttClient.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/Allocator.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/Api.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/DateTime.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/ImdsClient.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/JsonObject.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/StringUtils.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/Types.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/UUID.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/auth/Credentials.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/auth/Sigv4Signing.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/crypto/HMAC.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/crypto/Hash.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/endpoints/RuleEngine.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/external/cJSON.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/http/HttpConnection.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/http/HttpConnectionManager.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/http/HttpProxyStrategy.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/http/HttpRequestResponse.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/io/Bootstrap.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/io/ChannelHandler.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/io/EventLoopGroup.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/io/HostResolver.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/io/Pkcs11.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/io/SocketOptions.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/io/Stream.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/io/TlsOptions.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/io/Uri.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/iot/Mqtt5Client.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/iot/MqttClient.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/iot/MqttCommon.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/mqtt/Mqtt5Client.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/mqtt/Mqtt5Packets.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-crt-cpp/source/mqtt/MqttClient.cpp
 )

@@ -21,26 +21,26 @@ target_link_libraries(cpp-monlib-metrics PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(cpp-monlib-metrics PRIVATE
-  ${CMAKE_BINARY_DIR}/library/cpp/monlib/metrics/metric_value_type.h_serialized.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/ewma.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/fake.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/histogram_collector_explicit.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/histogram_collector_exponential.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/histogram_collector_linear.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/histogram_snapshot.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/log_histogram_snapshot.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/labels.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/metric_registry.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/metric_consumer.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/metric_type.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/metric_value.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/summary_collector.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/summary_snapshot.cpp
+  ${PROJECT_BINARY_DIR}/library/cpp/monlib/metrics/metric_value_type.h_serialized.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/metrics/ewma.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/metrics/fake.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/metrics/histogram_collector_explicit.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/metrics/histogram_collector_exponential.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/metrics/histogram_collector_linear.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/metrics/histogram_snapshot.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/metrics/log_histogram_snapshot.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/metrics/labels.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/metrics/metric_registry.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/metrics/metric_consumer.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/metrics/metric_type.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/metrics/metric_value.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/metrics/summary_collector.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/metrics/summary_snapshot.cpp
 )
 generate_enum_serilization(cpp-monlib-metrics
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/metric_value_type.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/metrics/metric_value_type.h
   GEN_HEADER
-  ${CMAKE_BINARY_DIR}/library/cpp/monlib/metrics/metric_value_type.h_serialized.h
+  ${PROJECT_BINARY_DIR}/library/cpp/monlib/metrics/metric_value_type.h_serialized.h
   INCLUDE_HEADERS
   library/cpp/monlib/metrics/metric_value_type.h
 )

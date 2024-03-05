@@ -29,7 +29,7 @@ target_link_options(ydb-tests-functional-kqp-kqp_query_session PRIVATE
   -ldl
 )
 target_sources(ydb-tests-functional-kqp-kqp_query_session PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/tests/functional/kqp/kqp_query_session/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/tests/functional/kqp/kqp_query_session/main.cpp
 )
 set_property(
   TARGET

@@ -17,5 +17,5 @@ target_link_libraries(data_sharing-destination-session PUBLIC
   data_sharing-destination-transactions
 )
 target_sources(data_sharing-destination-session PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/destination/session/destination.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/destination/session/destination.cpp
 )

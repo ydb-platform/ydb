@@ -34,10 +34,10 @@ target_link_options(file_udf.dyn PRIVATE
   CoreFoundation
 )
 target_sources(file_udf.dyn PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/file/file_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/file/file_udf.cpp
 )
 use_export_script(file_udf.dyn
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udfs_exports.exports
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udfs_exports.exports
 )
 vcs_info(file_udf.dyn)
 
@@ -64,5 +64,5 @@ target_link_libraries(file_udf.global PUBLIC
   library-yql-core
 )
 target_sources(file_udf.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/file/file_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/file/file_udf.cpp
 )

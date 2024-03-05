@@ -12,7 +12,7 @@ target_compile_options(ydb-core-tx-tx_allocator_client-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-core-tx-tx_allocator_client-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_allocator_client
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_allocator_client
 )
 target_link_libraries(ydb-core-tx-tx_allocator_client-ut PUBLIC
   contrib-libs-cxxsupp
@@ -33,8 +33,8 @@ target_link_options(ydb-core-tx-tx_allocator_client-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-tx-tx_allocator_client-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_allocator_client/actor_client_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_allocator_client/ut_helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_allocator_client/actor_client_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_allocator_client/ut_helpers.cpp
 )
 set_property(
   TARGET

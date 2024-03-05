@@ -19,11 +19,11 @@ target_link_libraries(columnshard-blobs_action-bs PUBLIC
   columnshard-blobs_action-abstract
 )
 target_sources(columnshard-blobs_action-bs PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/bs/gc.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/bs/gc_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/bs/write.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/bs/read.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/bs/storage.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/bs/remove.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/bs/blob_manager.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/bs/gc.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/bs/gc_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/bs/write.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/bs/read.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/bs/storage.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/bs/remove.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/bs/blob_manager.cpp
 )

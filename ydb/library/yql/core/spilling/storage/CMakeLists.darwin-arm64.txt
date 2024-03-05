@@ -20,6 +20,6 @@ target_link_libraries(core-spilling-storage PUBLIC
   spilling-storage-file_storage
 )
 target_sources(core-spilling-storage PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/spilling/storage/storage.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/spilling/storage/storage.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/storage/storage.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/storage/storage.cpp
 )

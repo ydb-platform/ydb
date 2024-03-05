@@ -19,5 +19,5 @@ target_link_libraries(library-profiling-tcmalloc PUBLIC
   libs-tcmalloc-malloc_extension
 )
 target_sources(library-profiling-tcmalloc PRIVATE
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/profiling/tcmalloc/profiler.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/tcmalloc/profiler.cpp
 )

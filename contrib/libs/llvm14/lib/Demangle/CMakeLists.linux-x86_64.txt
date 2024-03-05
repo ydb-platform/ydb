@@ -12,7 +12,7 @@ target_compile_options(llvm14-lib-Demangle PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(llvm14-lib-Demangle PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/Demangle
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Demangle
 )
 target_link_libraries(llvm14-lib-Demangle PUBLIC
   contrib-libs-linux-headers
@@ -20,10 +20,10 @@ target_link_libraries(llvm14-lib-Demangle PUBLIC
   contrib-libs-llvm14
 )
 target_sources(llvm14-lib-Demangle PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/Demangle/DLangDemangle.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/Demangle/Demangle.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/Demangle/ItaniumDemangle.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/Demangle/MicrosoftDemangle.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/Demangle/MicrosoftDemangleNodes.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/Demangle/RustDemangle.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Demangle/DLangDemangle.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Demangle/Demangle.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Demangle/ItaniumDemangle.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Demangle/MicrosoftDemangle.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Demangle/MicrosoftDemangleNodes.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Demangle/RustDemangle.cpp
 )

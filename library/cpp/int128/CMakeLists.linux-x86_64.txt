@@ -14,6 +14,6 @@ target_link_libraries(library-cpp-int128 PUBLIC
   yutil
 )
 target_sources(library-cpp-int128 PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/int128/int128.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/int128/int128.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/int128/int128.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/int128/int128.cpp
 )

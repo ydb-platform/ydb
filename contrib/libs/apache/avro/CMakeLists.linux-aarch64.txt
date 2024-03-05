@@ -15,7 +15,7 @@ target_compile_options(libs-apache-avro PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(libs-apache-avro PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/api
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/api
 )
 target_link_libraries(libs-apache-avro PUBLIC
   contrib-libs-linux-headers
@@ -29,29 +29,29 @@ target_link_libraries(libs-apache-avro PUBLIC
   restricted-boost-math
 )
 target_sources(libs-apache-avro PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/BinaryDecoder.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/BinaryEncoder.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/Compiler.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/CustomAttributes.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/DataFile.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/FileStream.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/Generic.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/GenericDatum.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/LogicalType.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/Node.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/NodeImpl.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/Resolver.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/ResolverSchema.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/Schema.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/Stream.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/Types.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/ValidSchema.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/Validator.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/Zigzag.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/json/JsonDom.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/json/JsonIO.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/parsing/JsonCodec.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/parsing/ResolvingDecoder.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/parsing/Symbol.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/parsing/ValidatingCodec.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/BinaryDecoder.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/BinaryEncoder.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/Compiler.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/CustomAttributes.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/DataFile.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/FileStream.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/Generic.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/GenericDatum.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/LogicalType.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/Node.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/NodeImpl.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/Resolver.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/ResolverSchema.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/Schema.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/Stream.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/Types.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/ValidSchema.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/Validator.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/Zigzag.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/json/JsonDom.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/json/JsonIO.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/parsing/JsonCodec.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/parsing/ResolvingDecoder.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/parsing/Symbol.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/avro/impl/parsing/ValidatingCodec.cc
 )

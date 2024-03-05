@@ -17,11 +17,12 @@ target_link_libraries(behaviour-tablestore-operations PUBLIC
   yutil
   services-metadata-manager
   formats-arrow-serializer
+  scheme-statistics-abstract
   kqp-gateway-utils
   ydb-core-protos
 )
 target_sources(behaviour-tablestore-operations PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/abstract.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/abstract.cpp
 )
 
 add_global_library_for(behaviour-tablestore-operations.global behaviour-tablestore-operations)
@@ -34,15 +35,16 @@ target_link_libraries(behaviour-tablestore-operations.global PUBLIC
   yutil
   services-metadata-manager
   formats-arrow-serializer
+  scheme-statistics-abstract
   kqp-gateway-utils
   ydb-core-protos
 )
 target_sources(behaviour-tablestore-operations.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/add_column.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/alter_column.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/drop_column.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/upsert_index.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/drop_index.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/upsert_stat.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/drop_stat.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/add_column.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/alter_column.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/drop_column.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/upsert_index.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/drop_index.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/upsert_stat.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/drop_stat.cpp
 )

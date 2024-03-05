@@ -14,29 +14,29 @@ target_compile_options(contrib-restricted-uriparser PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(contrib-restricted-uriparser PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/uriparser/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/uriparser/include
 )
 target_include_directories(contrib-restricted-uriparser PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/uriparser
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/uriparser
 )
 target_link_libraries(contrib-restricted-uriparser PUBLIC
   contrib-libs-linux-headers
   contrib-libs-libc_compat
 )
 target_sources(contrib-restricted-uriparser PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/uriparser/src/UriCommon.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/uriparser/src/UriCompare.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/uriparser/src/UriEscape.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/uriparser/src/UriFile.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/uriparser/src/UriIp4.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/uriparser/src/UriIp4Base.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/uriparser/src/UriMemory.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/uriparser/src/UriNormalize.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/uriparser/src/UriNormalizeBase.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/uriparser/src/UriParse.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/uriparser/src/UriParseBase.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/uriparser/src/UriQuery.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/uriparser/src/UriRecompose.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/uriparser/src/UriResolve.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/uriparser/src/UriShorten.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/uriparser/src/UriCommon.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/uriparser/src/UriCompare.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/uriparser/src/UriEscape.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/uriparser/src/UriFile.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/uriparser/src/UriIp4.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/uriparser/src/UriIp4Base.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/uriparser/src/UriMemory.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/uriparser/src/UriNormalize.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/uriparser/src/UriNormalizeBase.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/uriparser/src/UriParse.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/uriparser/src/UriParseBase.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/uriparser/src/UriQuery.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/uriparser/src/UriRecompose.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/uriparser/src/UriResolve.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/uriparser/src/UriShorten.c
 )

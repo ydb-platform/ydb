@@ -14,6 +14,6 @@ target_link_libraries(clickhouse-client-types PUBLIC
   yutil
 )
 target_sources(clickhouse-client-types PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/clickhouse/client/types/type_parser.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/clickhouse/client/types/types.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/clickhouse/client/types/type_parser.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/clickhouse/client/types/types.cpp
 )

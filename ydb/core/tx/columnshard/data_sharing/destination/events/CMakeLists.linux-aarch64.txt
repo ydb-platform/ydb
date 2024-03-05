@@ -18,7 +18,7 @@ target_link_libraries(data_sharing-destination-events PUBLIC
   library-actors-core
 )
 target_sources(data_sharing-destination-events PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/destination/events/transfer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/destination/events/status.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/destination/events/control.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/destination/events/transfer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/destination/events/status.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/destination/events/control.cpp
 )

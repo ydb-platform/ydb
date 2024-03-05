@@ -29,7 +29,7 @@ target_link_options(blobsan PRIVATE
   -ldl
 )
 target_sources(blobsan PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/tools/blobsan/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/tools/blobsan/main.cpp
 )
 target_allocator(blobsan
   cpp-malloc-jemalloc

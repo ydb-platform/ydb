@@ -28,7 +28,7 @@ target_link_options(sqs PRIVATE
   -ldl
 )
 target_sources(sqs PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/client/bin/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/ymq/client/bin/main.cpp
 )
 target_allocator(sqs
   cpp-malloc-tcmalloc

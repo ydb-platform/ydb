@@ -12,7 +12,7 @@ target_compile_options(ydb-core-client-minikql_compile-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-core-client-minikql_compile-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_compile
+  ${PROJECT_SOURCE_DIR}/ydb/core/client/minikql_compile
 )
 target_link_libraries(ydb-core-client-minikql_compile-ut PUBLIC
   contrib-libs-linux-headers
@@ -41,7 +41,7 @@ target_link_options(ydb-core-client-minikql_compile-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-client-minikql_compile-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_compile/yql_expr_minikql_compile_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/client/minikql_compile/yql_expr_minikql_compile_ut.cpp
 )
 set_property(
   TARGET

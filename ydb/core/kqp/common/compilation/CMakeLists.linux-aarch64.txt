@@ -20,6 +20,6 @@ target_link_libraries(kqp-common-compilation PUBLIC
   yql-public-issue
 )
 target_sources(kqp-common-compilation PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/compilation/result.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/compilation/events.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/compilation/result.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/compilation/events.cpp
 )

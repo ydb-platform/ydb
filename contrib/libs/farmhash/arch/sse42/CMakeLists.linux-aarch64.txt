@@ -18,6 +18,6 @@ target_link_libraries(farmhash-arch-sse42 PUBLIC
   yutil
 )
 target_sources(farmhash-arch-sse42 PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/farmhash/farmhashsa.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/farmhash/farmhashte.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/farmhash/farmhashsa.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/farmhash/farmhashte.cc
 )

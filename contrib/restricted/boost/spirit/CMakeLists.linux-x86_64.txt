@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-spirit INTERFACE)
 target_include_directories(restricted-boost-spirit INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/spirit/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/spirit/include
 )
 target_link_libraries(restricted-boost-spirit INTERFACE
   contrib-libs-linux-headers

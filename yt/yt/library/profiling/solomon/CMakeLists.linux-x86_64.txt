@@ -39,32 +39,32 @@ target_link_libraries(library-profiling-solomon PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(library-profiling-solomon PRIVATE
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/profiling/solomon/sensor_dump.proto
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/solomon/sensor_dump.proto
 )
 target_sources(library-profiling-solomon PRIVATE
-  ${CMAKE_BINARY_DIR}/yt/yt/library/profiling/solomon/sensor_dump.pb.h
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/profiling/solomon/cube.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/profiling/solomon/exporter.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/profiling/solomon/percpu.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/profiling/solomon/producer.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/profiling/solomon/registry.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/profiling/solomon/remote.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/profiling/solomon/sensor.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/profiling/solomon/sensor_service.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/profiling/solomon/sensor_set.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/profiling/solomon/tag_registry.cpp
+  ${PROJECT_BINARY_DIR}/yt/yt/library/profiling/solomon/sensor_dump.pb.h
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/solomon/cube.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/solomon/exporter.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/solomon/percpu.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/solomon/producer.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/solomon/registry.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/solomon/remote.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/solomon/sensor.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/solomon/sensor_service.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/solomon/sensor_set.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/solomon/tag_registry.cpp
 )
 target_proto_addincls(library-profiling-solomon
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/yt
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/yt
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(library-profiling-solomon
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )

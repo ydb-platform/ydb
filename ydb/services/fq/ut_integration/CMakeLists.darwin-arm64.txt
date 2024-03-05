@@ -12,7 +12,7 @@ target_compile_options(ydb-services-fq-ut_integration PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-services-fq-ut_integration PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/fq
+  ${PROJECT_SOURCE_DIR}/ydb/services/fq
 )
 target_link_libraries(ydb-services-fq-ut_integration PUBLIC
   contrib-libs-cxxsupp
@@ -42,8 +42,8 @@ target_link_options(ydb-services-fq-ut_integration PRIVATE
   CoreFoundation
 )
 target_sources(ydb-services-fq-ut_integration PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/fq/ut_integration/ut_utils.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/fq/ut_integration/fq_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/fq/ut_integration/ut_utils.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/fq/ut_integration/fq_ut.cpp
 )
 set_property(
   TARGET

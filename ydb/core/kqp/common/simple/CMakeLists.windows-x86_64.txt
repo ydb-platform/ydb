@@ -19,10 +19,10 @@ target_link_libraries(kqp-common-simple PUBLIC
   api-protos
 )
 target_sources(kqp-common-simple PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/simple/helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/simple/query_id.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/simple/settings.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/simple/services.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/simple/kqp_event_ids.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/simple/temp_tables.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/simple/helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/simple/query_id.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/simple/settings.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/simple/services.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/simple/kqp_event_ids.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/simple/temp_tables.cpp
 )

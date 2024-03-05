@@ -20,7 +20,7 @@ target_link_libraries(benchmark PUBLIC
   core-testlib-default
 )
 target_sources(benchmark PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/benchmark/b_part.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/benchmark/b_part.cpp
 )
 add_test(
   NAME

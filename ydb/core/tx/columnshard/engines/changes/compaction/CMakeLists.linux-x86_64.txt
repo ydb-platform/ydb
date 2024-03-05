@@ -15,8 +15,8 @@ target_link_libraries(engines-changes-compaction PUBLIC
   core-tx-tiering
 )
 target_sources(engines-changes-compaction PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/compaction/merge_context.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/compaction/column_cursor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/compaction/column_portion_chunk.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/compaction/merged_column.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/compaction/merge_context.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/compaction/column_cursor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/compaction/column_portion_chunk.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/compaction/merged_column.cpp
 )

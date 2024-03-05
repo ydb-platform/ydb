@@ -33,7 +33,7 @@ target_compile_options(restricted-aws-aws-c-mqtt PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-aws-aws-c-mqtt PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/include
 )
 target_link_libraries(restricted-aws-aws-c-mqtt PUBLIC
   contrib-libs-linux-headers
@@ -42,21 +42,21 @@ target_link_libraries(restricted-aws-aws-c-mqtt PUBLIC
   restricted-aws-aws-c-io
 )
 target_sources(restricted-aws-aws-c-mqtt PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/client.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/client_channel_handler.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/fixed_header.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/mqtt.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/packets.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/shared_constants.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/topic_tree.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_callbacks.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_client.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_decoder.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_encoder.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_listener.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_options_storage.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_topic_alias.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_types.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_utils.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/rate_limiters.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/client.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/client_channel_handler.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/fixed_header.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/mqtt.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/packets.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/shared_constants.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/topic_tree.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_callbacks.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_client.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_decoder.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_encoder.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_listener.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_options_storage.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_topic_alias.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_types.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_utils.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/rate_limiters.c
 )

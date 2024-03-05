@@ -31,7 +31,7 @@ target_link_libraries(ip_udf.global PUBLIC
   common-ip_base-lib
 )
 target_sources(ip_udf.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/ip_base/ip_base.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/ip_base/ip_base.cpp
 )
 
 add_shared_library(ip_udf.dyn)
@@ -52,9 +52,9 @@ target_link_libraries(ip_udf.dyn PUBLIC
   common-ip_base-lib
 )
 target_sources(ip_udf.dyn PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/ip_base/ip_base.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/ip_base/ip_base.cpp
 )
 use_export_script(ip_udf.dyn
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udfs_exports.exports
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udfs_exports.exports
 )
 vcs_info(ip_udf.dyn)

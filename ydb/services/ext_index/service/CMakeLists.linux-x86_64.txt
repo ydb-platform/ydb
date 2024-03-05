@@ -19,9 +19,9 @@ target_link_libraries(services-ext_index-service PUBLIC
   api-protos
 )
 target_sources(services-ext_index-service PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/ext_index/service/add_data.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ext_index/service/add_index.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ext_index/service/executor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ext_index/service/activation.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ext_index/service/deleting.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ext_index/service/add_data.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ext_index/service/add_index.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ext_index/service/executor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ext_index/service/activation.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ext_index/service/deleting.cpp
 )

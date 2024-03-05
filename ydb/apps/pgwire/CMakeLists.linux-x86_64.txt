@@ -34,16 +34,16 @@ target_link_options(pgwire PRIVATE
   -ldl
 )
 target_sources(pgwire PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/apps/pgwire/appdata.h
-  ${CMAKE_SOURCE_DIR}/ydb/apps/pgwire/log_impl.h
-  ${CMAKE_SOURCE_DIR}/ydb/apps/pgwire/pg_ydb_connection.h
-  ${CMAKE_SOURCE_DIR}/ydb/apps/pgwire/pg_ydb_proxy.h
-  ${CMAKE_SOURCE_DIR}/ydb/apps/pgwire/pgwire.h
-  ${CMAKE_SOURCE_DIR}/ydb/apps/pgwire/signals.h
-  ${CMAKE_SOURCE_DIR}/ydb/apps/pgwire/main.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/apps/pgwire/pg_ydb_connection.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/apps/pgwire/pg_ydb_proxy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/apps/pgwire/pgwire.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/apps/pgwire/appdata.h
+  ${PROJECT_SOURCE_DIR}/ydb/apps/pgwire/log_impl.h
+  ${PROJECT_SOURCE_DIR}/ydb/apps/pgwire/pg_ydb_connection.h
+  ${PROJECT_SOURCE_DIR}/ydb/apps/pgwire/pg_ydb_proxy.h
+  ${PROJECT_SOURCE_DIR}/ydb/apps/pgwire/pgwire.h
+  ${PROJECT_SOURCE_DIR}/ydb/apps/pgwire/signals.h
+  ${PROJECT_SOURCE_DIR}/ydb/apps/pgwire/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/apps/pgwire/pg_ydb_connection.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/apps/pgwire/pg_ydb_proxy.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/apps/pgwire/pgwire.cpp
 )
 target_allocator(pgwire
   cpp-malloc-tcmalloc

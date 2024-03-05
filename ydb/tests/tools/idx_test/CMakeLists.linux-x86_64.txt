@@ -37,13 +37,13 @@ target_link_options(idx_test PRIVATE
   -ldl
 )
 target_sources(idx_test PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/tests/tools/idx_test/main.cpp
-  ${CMAKE_BINARY_DIR}/ydb/tests/tools/idx_test/5f46adc80fd9bb1406279a9088a76e67.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/tests/tools/idx_test/main.cpp
+  ${PROJECT_BINARY_DIR}/ydb/tests/tools/idx_test/5f46adc80fd9bb1406279a9088a76e67.cpp
 )
 resources(idx_test
-  ${CMAKE_BINARY_DIR}/ydb/tests/tools/idx_test/5f46adc80fd9bb1406279a9088a76e67.cpp
+  ${PROJECT_BINARY_DIR}/ydb/tests/tools/idx_test/5f46adc80fd9bb1406279a9088a76e67.cpp
   INPUTS
-  ${CMAKE_SOURCE_DIR}/ydb/tests/tools/idx_test/sql/create_table1.sql
+  ${PROJECT_SOURCE_DIR}/ydb/tests/tools/idx_test/sql/create_table1.sql
   KEYS
   create_table1
 )

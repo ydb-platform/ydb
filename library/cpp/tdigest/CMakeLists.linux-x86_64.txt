@@ -27,22 +27,22 @@ target_link_libraries(library-cpp-tdigest PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(library-cpp-tdigest PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/tdigest/tdigest.proto
+  ${PROJECT_SOURCE_DIR}/library/cpp/tdigest/tdigest.proto
 )
 target_sources(library-cpp-tdigest PRIVATE
-  ${CMAKE_BINARY_DIR}/library/cpp/tdigest/tdigest.pb.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/tdigest/tdigest.cpp
+  ${PROJECT_BINARY_DIR}/library/cpp/tdigest/tdigest.pb.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/tdigest/tdigest.cpp
 )
 target_proto_addincls(library-cpp-tdigest
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(library-cpp-tdigest
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )

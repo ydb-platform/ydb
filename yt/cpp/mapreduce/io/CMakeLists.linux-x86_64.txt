@@ -25,18 +25,18 @@ target_link_libraries(cpp-mapreduce-io PUBLIC
   cpp-mapreduce-skiff
 )
 target_sources(cpp-mapreduce-io PRIVATE
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/io/counting_raw_reader.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/io/job_reader.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/io/job_writer.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/io/lenval_table_reader.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/io/node_table_reader.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/io/node_table_writer.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/io/proto_helpers.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/io/proto_table_reader.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/io/proto_table_writer.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/io/skiff_row_table_reader.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/io/skiff_table_reader.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/io/stream_raw_reader.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/io/yamr_table_reader.cpp
-  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/io/yamr_table_writer.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/io/counting_raw_reader.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/io/job_reader.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/io/job_writer.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/io/lenval_table_reader.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/io/node_table_reader.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/io/node_table_writer.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/io/proto_helpers.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/io/proto_table_reader.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/io/proto_table_writer.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/io/skiff_row_table_reader.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/io/skiff_table_reader.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/io/stream_raw_reader.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/io/yamr_table_reader.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/io/yamr_table_writer.cpp
 )

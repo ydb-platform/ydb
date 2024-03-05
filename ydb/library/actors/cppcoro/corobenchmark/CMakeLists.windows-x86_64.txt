@@ -16,7 +16,7 @@ target_link_libraries(corobenchmark PUBLIC
   library-actors-cppcoro
 )
 target_sources(corobenchmark PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/cppcoro/corobenchmark/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/cppcoro/corobenchmark/main.cpp
 )
 target_allocator(corobenchmark
   system_allocator

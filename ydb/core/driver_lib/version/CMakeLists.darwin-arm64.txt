@@ -20,6 +20,6 @@ target_link_libraries(version PUBLIC
   core-viewer-json
 )
 target_sources(version PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/version/version.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/version/version.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/version/version.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/version/version.cpp
 )

@@ -29,7 +29,7 @@ target_compile_options(restricted-aws-aws-c-io PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-aws-aws-c-io PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/include
 )
 target_link_libraries(restricted-aws-aws-c-io PUBLIC
   contrib-libs-linux-headers
@@ -38,29 +38,29 @@ target_link_libraries(restricted-aws-aws-c-io PUBLIC
   restricted-aws-s2n
 )
 target_sources(restricted-aws-aws-c-io PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/alpn_handler.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/channel.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/channel_bootstrap.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/event_loop.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/exponential_backoff_retry_strategy.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/host_resolver.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/io.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/message_pool.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/pem_utils.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/pkcs11_lib.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/pkcs11_tls_op_handler.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/pki_utils.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/retry_strategy.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/socket_channel_handler.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/standard_retry_strategy.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/statistics.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/stream.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/tls_channel_handler.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/tls_channel_handler_shared.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/linux/epoll_event_loop.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/posix/host_resolver.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/posix/pipe.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/posix/shared_library.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/posix/socket.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/s2n/s2n_tls_channel_handler.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/alpn_handler.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/channel.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/channel_bootstrap.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/event_loop.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/exponential_backoff_retry_strategy.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/host_resolver.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/io.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/message_pool.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/pem_utils.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/pkcs11_lib.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/pkcs11_tls_op_handler.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/pki_utils.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/retry_strategy.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/socket_channel_handler.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/standard_retry_strategy.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/statistics.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/stream.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/tls_channel_handler.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/tls_channel_handler_shared.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/linux/epoll_event_loop.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/posix/host_resolver.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/posix/pipe.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/posix/shared_library.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/posix/socket.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/s2n/s2n_tls_channel_handler.c
 )

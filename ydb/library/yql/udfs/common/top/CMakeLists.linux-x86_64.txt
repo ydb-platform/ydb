@@ -32,7 +32,7 @@ target_link_libraries(top_udf.global PUBLIC
   cpp-containers-top_keeper
 )
 target_sources(top_udf.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/top/top_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/top/top_udf.cpp
 )
 
 add_shared_library(top_udf.dyn)
@@ -66,9 +66,9 @@ target_link_options(top_udf.dyn PRIVATE
   -ldl
 )
 target_sources(top_udf.dyn PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/top/top_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/top/top_udf.cpp
 )
 use_export_script(top_udf.dyn
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udfs_exports.exports
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udfs_exports.exports
 )
 vcs_info(top_udf.dyn)

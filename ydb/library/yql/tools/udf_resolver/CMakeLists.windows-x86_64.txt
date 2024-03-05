@@ -27,8 +27,8 @@ target_link_libraries(udf_resolver PUBLIC
   yql-sql-pg_dummy
 )
 target_sources(udf_resolver PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/udf_resolver/udf_resolver.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/udf_resolver/discover.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/udf_resolver/udf_resolver.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/udf_resolver/discover.cpp
 )
 target_allocator(udf_resolver
   system_allocator

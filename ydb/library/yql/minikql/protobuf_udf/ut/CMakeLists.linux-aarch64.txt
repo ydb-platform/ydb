@@ -24,7 +24,7 @@ target_compile_options(ydb-library-yql-minikql-protobuf_udf-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-library-yql-minikql-protobuf_udf-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/protobuf_udf
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/protobuf_udf
 )
 target_link_libraries(ydb-library-yql-minikql-protobuf_udf-ut PUBLIC
   contrib-libs-linux-headers
@@ -52,11 +52,11 @@ target_link_options(ydb-library-yql-minikql-protobuf_udf-ut PRIVATE
   -ldl
 )
 target_proto_messages(ydb-library-yql-minikql-protobuf_udf-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/protobuf_udf/ut/protobuf_ut.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/protobuf_udf/ut/protobuf_ut.proto
 )
 target_sources(ydb-library-yql-minikql-protobuf_udf-ut PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/protobuf_udf/ut/protobuf_ut.pb.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/protobuf_udf/ut/type_builder_ut.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/protobuf_udf/ut/protobuf_ut.pb.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/protobuf_udf/ut/type_builder_ut.cpp
 )
 set_property(
   TARGET
@@ -102,15 +102,15 @@ target_allocator(ydb-library-yql-minikql-protobuf_udf-ut
 )
 target_proto_addincls(ydb-library-yql-minikql-protobuf_udf-ut
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(ydb-library-yql-minikql-protobuf_udf-ut
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )
 vcs_info(ydb-library-yql-minikql-protobuf_udf-ut)

@@ -17,6 +17,6 @@ target_link_libraries(storage-optimizer-lbuckets PUBLIC
   engines-changes-abstract
 )
 target_sources(storage-optimizer-lbuckets PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets/optimizer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets/counters.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets/optimizer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets/counters.cpp
 )

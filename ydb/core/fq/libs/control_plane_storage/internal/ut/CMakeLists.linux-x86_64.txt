@@ -18,7 +18,7 @@ target_compile_options(core-fq-libs-control_plane_storage-internal-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(core-fq-libs-control_plane_storage-internal-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal
 )
 target_link_libraries(core-fq-libs-control_plane_storage-internal-ut PUBLIC
   contrib-libs-linux-headers
@@ -43,8 +43,8 @@ target_link_options(core-fq-libs-control_plane_storage-internal-ut PRIVATE
   -ldl
 )
 target_sources(core-fq-libs-control_plane_storage-internal-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/utils_ut.cpp
-  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/047a4c3f0575d8af7f0dc67f808daaba.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/utils_ut.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/047a4c3f0575d8af7f0dc67f808daaba.cpp
 )
 set_property(
   TARGET
@@ -86,14 +86,14 @@ set_yunittest_property(
   ENVIRONMENT
 )
 resources(core-fq-libs-control_plane_storage-internal-ut
-  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/047a4c3f0575d8af7f0dc67f808daaba.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/047a4c3f0575d8af7f0dc67f808daaba.cpp
   INPUTS
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/resources/v1_output.json
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/resources/v2_output.json
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/resources/v1_s3source.json
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/resources/v2_s3source.json
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/resources/v1_two_results.json
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/resources/v2_two_results.json
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/resources/v1_output.json
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/resources/v2_output.json
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/resources/v1_s3source.json
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/resources/v2_s3source.json
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/resources/v1_two_results.json
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/resources/v2_two_results.json
   KEYS
   v1_output.json
   v2_output.json

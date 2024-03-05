@@ -18,8 +18,8 @@ target_link_libraries(ydb-core-log_backend PUBLIC
   ydb-core-base
 )
 target_sources(ydb-core-log_backend PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/log_backend/log_backend.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/log_backend/log_backend_build.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/log_backend/log_backend.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/log_backend/log_backend_build.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/log_backend/log_backend.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/log_backend/log_backend_build.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/log_backend/log_backend.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/log_backend/log_backend_build.cpp
 )

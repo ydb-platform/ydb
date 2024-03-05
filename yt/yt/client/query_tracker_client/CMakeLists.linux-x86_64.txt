@@ -18,5 +18,5 @@ target_link_libraries(yt-client-query_tracker_client PUBLIC
   yt-yt-core
 )
 target_sources(yt-client-query_tracker_client PRIVATE
-  ${CMAKE_SOURCE_DIR}/yt/yt/client/query_tracker_client/public.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/client/query_tracker_client/public.cpp
 )

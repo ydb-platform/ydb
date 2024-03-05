@@ -18,9 +18,9 @@ target_link_libraries(formats-arrow-serializer PUBLIC
   ydb-core-protos
 )
 target_sources(formats-arrow-serializer PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/serializer/abstract.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/serializer/stream.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/serializer/parsing.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/serializer/abstract.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/serializer/stream.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/serializer/parsing.cpp
 )
 
 add_global_library_for(formats-arrow-serializer.global formats-arrow-serializer)
@@ -34,5 +34,5 @@ target_link_libraries(formats-arrow-serializer.global PUBLIC
   ydb-core-protos
 )
 target_sources(formats-arrow-serializer.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/serializer/native.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/serializer/native.cpp
 )

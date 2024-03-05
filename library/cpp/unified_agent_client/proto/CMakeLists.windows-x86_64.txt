@@ -43,29 +43,29 @@ target_link_libraries(cpp-unified_agent_client-proto PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(cpp-unified_agent_client-proto PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/unified_agent_client/proto/unified_agent.proto
+  ${PROJECT_SOURCE_DIR}/library/cpp/unified_agent_client/proto/unified_agent.proto
 )
 target_sources(cpp-unified_agent_client-proto PRIVATE
-  ${CMAKE_BINARY_DIR}/library/cpp/unified_agent_client/proto/unified_agent.pb.h
-  ${CMAKE_BINARY_DIR}/library/cpp/unified_agent_client/proto/unified_agent.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/library/cpp/unified_agent_client/proto/unified_agent.pb.h
+  ${PROJECT_BINARY_DIR}/library/cpp/unified_agent_client/proto/unified_agent.grpc.pb.h
 )
 generate_enum_serilization(cpp-unified_agent_client-proto
-  ${CMAKE_BINARY_DIR}/library/cpp/unified_agent_client/proto/unified_agent.pb.h
+  ${PROJECT_BINARY_DIR}/library/cpp/unified_agent_client/proto/unified_agent.pb.h
   INCLUDE_HEADERS
   library/cpp/unified_agent_client/proto/unified_agent.pb.h
 )
 target_proto_addincls(cpp-unified_agent_client-proto
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(cpp-unified_agent_client-proto
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )
 target_proto_plugin(cpp-unified_agent_client-proto
   grpc_cpp

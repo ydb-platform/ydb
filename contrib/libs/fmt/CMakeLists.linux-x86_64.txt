@@ -15,13 +15,13 @@ target_compile_options(contrib-libs-fmt PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(contrib-libs-fmt PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/libs/fmt/include
+  ${PROJECT_SOURCE_DIR}/contrib/libs/fmt/include
 )
 target_link_libraries(contrib-libs-fmt PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
 )
 target_sources(contrib-libs-fmt PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/fmt/src/format.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/fmt/src/os.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/fmt/src/format.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/fmt/src/os.cc
 )

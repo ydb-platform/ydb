@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-winapi INTERFACE)
 target_include_directories(restricted-boost-winapi INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/winapi/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/winapi/include
 )
 target_link_libraries(restricted-boost-winapi INTERFACE
   contrib-libs-linux-headers

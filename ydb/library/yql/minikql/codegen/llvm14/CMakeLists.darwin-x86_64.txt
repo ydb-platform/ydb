@@ -10,8 +10,8 @@ add_subdirectory(ut)
 
 add_library(minikql-codegen-llvm14)
 target_include_directories(minikql-codegen-llvm14 PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/codegen
 )
 target_link_libraries(minikql-codegen-llvm14 PUBLIC
   contrib-libs-cxxsupp
@@ -28,14 +28,14 @@ target_link_libraries(minikql-codegen-llvm14 PUBLIC
   contrib-libs-re2
 )
 target_sources(minikql-codegen-llvm14 PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/codegen_llvm_deps.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/codegen.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/codegen_llvm_deps.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/codegen.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/codegen_llvm_deps.h.txt
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/codegen_llvm_deps.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/codegen/codegen_llvm_deps.h.txt
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/codegen_llvm_deps.h
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/codegen.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/codegen.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/codegen/codegen.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/codegen/llvm14/codegen.cpp
 )

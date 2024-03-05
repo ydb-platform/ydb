@@ -19,7 +19,7 @@ target_compile_options(public-purecalc-common PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(public-purecalc-common PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/common
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/common
 )
 target_link_libraries(public-purecalc-common PUBLIC
   contrib-libs-linux-headers
@@ -49,26 +49,26 @@ target_link_libraries(public-purecalc-common PUBLIC
   parser-pg_wrapper-interface
 )
 target_sources(public-purecalc-common PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/compile_mkql.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/fwd.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/inspect_input.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/interface.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/logger_init.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/names.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/processor_mode.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/program_factory.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/transformations/align_output_schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/transformations/extract_used_columns.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/transformations/output_columns_filter.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/transformations/replace_table_reads.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/transformations/type_annotation.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/type_from_schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/worker.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/worker_factory.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/wrappers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/compile_mkql.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/fwd.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/inspect_input.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/interface.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/logger_init.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/names.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/processor_mode.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/program_factory.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/transformations/align_output_schema.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/transformations/extract_used_columns.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/transformations/output_columns_filter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/transformations/replace_table_reads.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/transformations/type_annotation.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/type_from_schema.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/worker.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/worker_factory.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/wrappers.cpp
 )
 generate_enum_serilization(public-purecalc-common
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/interface.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/common/interface.h
   INCLUDE_HEADERS
   ydb/library/yql/public/purecalc/common/interface.h
 )

@@ -21,8 +21,8 @@ target_link_libraries(yql-utils-signals PUBLIC
   yt-lib-log
 )
 target_sources(yql-utils-signals PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/signals/signals.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/signals/utils.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/signals/signals.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/signals/utils.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/signals/signals.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/signals/utils.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/signals/signals.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/signals/utils.cpp
 )

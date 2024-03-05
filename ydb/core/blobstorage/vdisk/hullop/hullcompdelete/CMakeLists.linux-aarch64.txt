@@ -16,6 +16,6 @@ target_link_libraries(vdisk-hullop-hullcompdelete PUBLIC
   ydb-core-protos
 )
 target_sources(vdisk-hullop-hullcompdelete PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/hullcompdelete/blobstorage_hullcompdelete.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/hullcompdelete/blobstorage_hullcompdelete.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/hullcompdelete/blobstorage_hullcompdelete.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/hullcompdelete/blobstorage_hullcompdelete.cpp
 )

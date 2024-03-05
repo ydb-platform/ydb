@@ -18,5 +18,5 @@ target_link_libraries(core-blobstorage-storagepoolmon INTERFACE
   core-blobstorage-base
 )
 target_sources(core-blobstorage-storagepoolmon INTERFACE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/storagepoolmon/storagepool_counters.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/storagepoolmon/storagepool_counters.h
 )

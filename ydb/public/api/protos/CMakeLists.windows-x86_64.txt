@@ -444,107 +444,107 @@ target_link_libraries(api-protos PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(api-protos PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/datastreams.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/fq.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/persqueue_common.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/persqueue_error_codes.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_maintenance.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_logstore.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_dynamic_config.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_federation_discovery.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/persqueue_error_codes_v1.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_auth.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_persqueue_v1.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_persqueue_cluster_discovery.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_clickhouse_internal.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_cms.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_common.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_coordination.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_discovery.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_export.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_formats.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_import.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_issue_message.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_monitoring.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_operation.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_query_stats.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_query.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_rate_limiter.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_scheme.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_scripting.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_status_codes.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_table.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_topic.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_value.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_keyvalue.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/draft/datastreams.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/draft/fq.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/draft/persqueue_common.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/draft/persqueue_error_codes.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_maintenance.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_logstore.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_dynamic_config.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_federation_discovery.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/persqueue_error_codes_v1.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_auth.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_persqueue_v1.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_persqueue_cluster_discovery.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_clickhouse_internal.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_cms.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_common.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_coordination.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_discovery.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_export.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_formats.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_import.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_issue_message.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_monitoring.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_operation.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_query_stats.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_query.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_rate_limiter.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_scheme.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_scripting.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_status_codes.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_table.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_topic.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_value.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_keyvalue.proto
 )
 target_sources(api-protos PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/draft/datastreams.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/draft/fq.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/draft/persqueue_common.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/draft/persqueue_error_codes.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/draft/ydb_maintenance.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/draft/ydb_logstore.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/draft/ydb_dynamic_config.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_federation_discovery.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/persqueue_error_codes_v1.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_auth.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_persqueue_v1.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_persqueue_cluster_discovery.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_clickhouse_internal.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_cms.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_common.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_coordination.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_discovery.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_export.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_formats.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_import.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_issue_message.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_monitoring.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_operation.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_query_stats.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_query.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_rate_limiter.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_scheme.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_scripting.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_status_codes.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_table.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_topic.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_value.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_keyvalue.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/datastreams.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/fq.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/persqueue_common.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/persqueue_error_codes.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/ydb_maintenance.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/ydb_logstore.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/ydb_dynamic_config.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_federation_discovery.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/persqueue_error_codes_v1.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_auth.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_persqueue_v1.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_persqueue_cluster_discovery.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_clickhouse_internal.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_cms.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_common.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_coordination.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_discovery.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_export.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_formats.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_import.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_issue_message.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_monitoring.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_operation.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_query_stats.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_query.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_rate_limiter.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_scheme.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_scripting.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_status_codes.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_table.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_topic.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_value.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_keyvalue.pb.h
 )
 generate_enum_serilization(api-protos
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/draft/persqueue_common.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/persqueue_common.pb.h
   INCLUDE_HEADERS
   ydb/public/api/protos/draft/persqueue_common.pb.h
 )
 generate_enum_serilization(api-protos
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_persqueue_cluster_discovery.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_persqueue_cluster_discovery.pb.h
   INCLUDE_HEADERS
   ydb/public/api/protos/ydb_persqueue_cluster_discovery.pb.h
 )
 generate_enum_serilization(api-protos
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/draft/datastreams.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/datastreams.pb.h
   INCLUDE_HEADERS
   ydb/public/api/protos/draft/datastreams.pb.h
 )
 generate_enum_serilization(api-protos
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_topic.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_topic.pb.h
   INCLUDE_HEADERS
   ydb/public/api/protos/ydb_topic.pb.h
 )
 target_proto_addincls(api-protos
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(api-protos
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )
 target_proto_plugin(api-protos
   validation

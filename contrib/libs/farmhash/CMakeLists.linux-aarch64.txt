@@ -13,7 +13,7 @@ target_compile_options(contrib-libs-farmhash PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(contrib-libs-farmhash PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/libs/farmhash/include
+  ${PROJECT_SOURCE_DIR}/contrib/libs/farmhash/include
 )
 target_link_libraries(contrib-libs-farmhash PUBLIC
   contrib-libs-linux-headers
@@ -24,10 +24,10 @@ target_link_libraries(contrib-libs-farmhash PUBLIC
   farmhash-arch-sse42_aesni
 )
 target_sources(contrib-libs-farmhash PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/farmhash/farmhashuo.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/farmhash/farmhashxo.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/farmhash/farmhashna.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/farmhash/farmhashmk.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/farmhash/farmhashcc.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/farmhash/farmhash_iface.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/farmhash/farmhashuo.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/farmhash/farmhashxo.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/farmhash/farmhashna.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/farmhash/farmhashmk.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/farmhash/farmhashcc.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/farmhash/farmhash_iface.cc
 )

@@ -17,5 +17,5 @@ target_link_libraries(ydb-core-docapi PUBLIC
   yutil
 )
 target_sources(ydb-core-docapi PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/docapi/traits.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/docapi/traits.cpp
 )

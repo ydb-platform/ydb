@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-conversion INTERFACE)
 target_include_directories(restricted-boost-conversion INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/conversion/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/conversion/include
 )
 target_link_libraries(restricted-boost-conversion INTERFACE
   contrib-libs-linux-headers

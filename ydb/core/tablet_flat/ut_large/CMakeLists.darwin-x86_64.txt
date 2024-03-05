@@ -9,7 +9,7 @@
 
 add_executable(ydb-core-tablet_flat-ut_large)
 target_include_directories(ydb-core-tablet_flat-ut_large PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat
 )
 target_link_libraries(ydb-core-tablet_flat-ut_large PUBLIC
   contrib-libs-cxxsupp
@@ -31,8 +31,8 @@ target_link_options(ydb-core-tablet_flat-ut_large PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-tablet_flat-ut_large PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_ut_large.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut_large/ut_btree_index_large.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_ut_large.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut_large/ut_btree_index_large.cpp
 )
 set_property(
   TARGET

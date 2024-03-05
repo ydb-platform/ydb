@@ -21,7 +21,7 @@ target_link_libraries(kqp-opt-peephole PUBLIC
   kqp-opt-physical
 )
 target_sources(kqp-opt-peephole PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/peephole/kqp_opt_peephole_wide_read.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/peephole/kqp_opt_peephole_write_constraint.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/peephole/kqp_opt_peephole.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/peephole/kqp_opt_peephole_wide_read.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/peephole/kqp_opt_peephole_write_constraint.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/peephole/kqp_opt_peephole.cpp
 )

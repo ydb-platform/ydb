@@ -18,7 +18,7 @@ target_link_libraries(formats-arrow-dictionary PUBLIC
   library-actors-core
 )
 target_sources(formats-arrow-dictionary PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/dictionary/conversion.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/dictionary/object.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/dictionary/diff.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/dictionary/conversion.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/dictionary/object.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/dictionary/diff.cpp
 )

@@ -13,13 +13,13 @@ target_compile_options(minikql-comp_nodes-llvm14 PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(minikql-comp_nodes-llvm14 PUBLIC
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/computation
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/computation
 )
 target_include_directories(minikql-comp_nodes-llvm14 PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/invoke_builtins
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/invoke_builtins
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes
 )
 target_link_libraries(minikql-comp_nodes-llvm14 PUBLIC
   contrib-libs-cxxsupp
@@ -43,659 +43,659 @@ target_link_libraries(minikql-comp_nodes-llvm14 PUBLIC
   public-issue-protos
 )
 target_sources(minikql-comp_nodes-llvm14 PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/computation/mkql_llvm_base.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_codegen.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_codegen_llvm.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_impl.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_decimal.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_addmember.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_aggrcount.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_append.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_apply.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg_count.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg_factory.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg_minmax.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg_some.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg_sum.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_coalesce.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_if.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_just.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_logical.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_compress.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_func.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_skiptake.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_top.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_tuple.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_blocks.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_callable.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_chain_map.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_chain1_map.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_check_args.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_chopper.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_coalesce.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_collect.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_combine.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_contains.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_decimal_div.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_decimal_mod.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_decimal_mul.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_dictitems.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_discard.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_element.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_ensure.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_enumerate.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_exists.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_extend.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_factory.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_filter.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_flatmap.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_flow.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_fold.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_fold1.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_frombytes.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_fromstring.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_fromyson.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_group.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_grace_join.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_grace_join_imp.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_guess.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_hasitems.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_heap.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_hopping.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_if.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_ifpresent.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_invoke.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_iterable.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_iterator.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_join.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_join_dict.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_lazy_list.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_length.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_listfromrange.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_logical.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_lookup.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_map.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_mapnext.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_map_join.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_match_recognize.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_multihopping.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_multimap.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_next_value.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_nop.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_now.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_null.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_pickle.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_prepend.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_queue.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_random.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_range.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_reduce.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_removemember.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_replicate.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_reverse.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_rh_hash.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_round.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_safe_circular_buffer.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_scalar_apply.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_seq.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_size.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_skip.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_sort.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_source.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_squeeze_state.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_squeeze_to_list.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_condense.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_condense1.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_switch.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_take.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_time_order_recover.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_timezone.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_tobytes.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_todict.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_toindexdict.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_tooptional.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_tostring.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_udf.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_unwrap.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_varitem.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_visitall.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_way.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_weakmember.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_while.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_chain_map.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_chopper.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_combine.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_condense.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_filter.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_map.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_top_sort.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_withcontext.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_zip.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/computation/mkql_llvm_base.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_codegen.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_codegen_llvm.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_impl.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_decimal.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_addmember.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_aggrcount.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_append.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_apply.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg_count.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg_factory.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg_minmax.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg_some.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg_sum.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_coalesce.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_if.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_just.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_logical.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_compress.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_func.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_skiptake.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_top.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_tuple.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_blocks.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_callable.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_chain_map.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_chain1_map.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_check_args.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_chopper.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_coalesce.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_collect.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_combine.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_contains.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_decimal_div.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_decimal_mod.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_decimal_mul.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_dictitems.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_discard.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_element.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_ensure.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_enumerate.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_exists.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_extend.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_factory.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_filter.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_flatmap.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_flow.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_fold.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_fold1.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_frombytes.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_fromstring.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_fromyson.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_group.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_grace_join.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_grace_join_imp.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_guess.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_hasitems.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_heap.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_hopping.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_if.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_ifpresent.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_invoke.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_iterable.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_iterator.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_join.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_join_dict.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_lazy_list.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_length.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_listfromrange.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_logical.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_lookup.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_map.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_mapnext.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_map_join.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_match_recognize.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_multihopping.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_multimap.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_next_value.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_nop.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_now.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_null.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_pickle.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_prepend.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_queue.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_random.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_range.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_reduce.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_removemember.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_replicate.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_reverse.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_rh_hash.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_round.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_safe_circular_buffer.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_scalar_apply.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_seq.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_size.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_skip.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_sort.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_source.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_squeeze_state.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_squeeze_to_list.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_condense.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_condense1.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_switch.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_take.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_time_order_recover.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_timezone.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_tobytes.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_todict.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_toindexdict.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_tooptional.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_tostring.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_udf.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_unwrap.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_varitem.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_visitall.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_way.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_weakmember.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_while.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_chain_map.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_chopper.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_combine.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_condense.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_filter.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_map.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_top_sort.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_withcontext.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_zip.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_addmember.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_addmember.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_addmember.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_addmember.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_aggrcount.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_aggrcount.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_aggrcount.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_aggrcount.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_append.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_append.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_append.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_append.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_apply.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_apply.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_apply.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_apply.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_agg.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_agg.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_agg_count.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg_count.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_agg_count.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg_count.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_agg_factory.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg_factory.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_agg_factory.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg_factory.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_agg_minmax.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg_minmax.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_agg_minmax.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg_minmax.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_agg_some.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg_some.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_agg_some.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg_some.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_agg_sum.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg_sum.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_agg_sum.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_agg_sum.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_coalesce.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_coalesce.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_coalesce.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_coalesce.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_if.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_if.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_if.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_if.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_just.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_just.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_just.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_just.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_logical.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_logical.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_logical.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_logical.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_compress.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_compress.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_compress.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_compress.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_func.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_func.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_func.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_func.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_skiptake.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_skiptake.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_skiptake.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_skiptake.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_top.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_top.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_top.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_top.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_tuple.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_tuple.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_block_tuple.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_block_tuple.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_blocks.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_blocks.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_blocks.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_blocks.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_callable.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_callable.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_callable.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_callable.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_chain_map.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_chain_map.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_chain_map.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_chain_map.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_chain1_map.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_chain1_map.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_chain1_map.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_chain1_map.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_check_args.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_check_args.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_check_args.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_check_args.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_chopper.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_chopper.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_chopper.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_chopper.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_coalesce.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_coalesce.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_coalesce.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_coalesce.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_collect.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_collect.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_collect.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_collect.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_combine.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_combine.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_combine.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_combine.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_contains.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_contains.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_contains.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_contains.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_decimal_div.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_decimal_div.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_decimal_div.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_decimal_div.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_decimal_mod.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_decimal_mod.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_decimal_mod.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_decimal_mod.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_decimal_mul.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_decimal_mul.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_decimal_mul.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_decimal_mul.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_dictitems.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_dictitems.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_dictitems.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_dictitems.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_discard.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_discard.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_discard.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_discard.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_element.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_element.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_element.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_element.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_ensure.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_ensure.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_ensure.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_ensure.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_enumerate.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_enumerate.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_enumerate.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_enumerate.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_exists.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_exists.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_exists.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_exists.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_extend.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_extend.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_extend.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_extend.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_factory.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_factory.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_factory.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_factory.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_filter.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_filter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_filter.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_filter.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_flatmap.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_flatmap.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_flatmap.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_flatmap.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_flow.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_flow.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_flow.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_flow.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_fold.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_fold.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_fold.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_fold.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_fold1.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_fold1.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_fold1.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_fold1.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_frombytes.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_frombytes.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_frombytes.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_frombytes.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_fromstring.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_fromstring.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_fromstring.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_fromstring.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_fromyson.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_fromyson.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_fromyson.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_fromyson.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_group.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_group.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_group.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_group.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_grace_join.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_grace_join.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_grace_join.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_grace_join.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_grace_join_imp.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_grace_join_imp.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_grace_join_imp.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_grace_join_imp.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_guess.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_guess.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_guess.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_guess.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_hasitems.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_hasitems.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_hasitems.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_hasitems.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_heap.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_heap.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_heap.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_heap.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_hopping.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_hopping.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_hopping.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_hopping.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_if.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_if.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_if.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_if.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_ifpresent.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_ifpresent.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_ifpresent.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_ifpresent.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_invoke.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_invoke.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_invoke.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_invoke.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_iterable.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_iterable.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_iterable.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_iterable.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_iterator.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_iterator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_iterator.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_iterator.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_join.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_join.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_join.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_join.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_join_dict.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_join_dict.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_join_dict.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_join_dict.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_lazy_list.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_lazy_list.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_lazy_list.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_lazy_list.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_length.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_length.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_length.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_length.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_listfromrange.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_listfromrange.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_listfromrange.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_listfromrange.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_logical.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_logical.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_logical.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_logical.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_lookup.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_lookup.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_lookup.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_lookup.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_map.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_map.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_map.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_map.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_mapnext.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_mapnext.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_mapnext.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_mapnext.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_map_join.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_map_join.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_map_join.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_map_join.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_match_recognize.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_match_recognize.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_match_recognize.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_match_recognize.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_multihopping.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_multihopping.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_multihopping.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_multihopping.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_multimap.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_multimap.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_multimap.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_multimap.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_next_value.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_next_value.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_next_value.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_next_value.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_nop.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_nop.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_nop.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_nop.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_now.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_now.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_now.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_now.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_null.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_null.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_null.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_null.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_pickle.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_pickle.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_pickle.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_pickle.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_prepend.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_prepend.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_prepend.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_prepend.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_queue.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_queue.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_queue.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_queue.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_random.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_random.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_random.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_random.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_range.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_range.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_range.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_range.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_reduce.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_reduce.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_reduce.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_reduce.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_removemember.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_removemember.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_removemember.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_removemember.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_replicate.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_replicate.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_replicate.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_replicate.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_reverse.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_reverse.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_reverse.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_reverse.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_rh_hash.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_rh_hash.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_rh_hash.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_rh_hash.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_round.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_round.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_round.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_round.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_safe_circular_buffer.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_safe_circular_buffer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_safe_circular_buffer.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_safe_circular_buffer.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_scalar_apply.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_scalar_apply.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_scalar_apply.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_scalar_apply.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_seq.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_seq.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_seq.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_seq.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_size.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_size.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_size.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_size.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_skip.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_skip.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_skip.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_skip.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_sort.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_sort.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_sort.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_sort.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_source.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_source.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_source.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_source.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_squeeze_state.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_squeeze_state.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_squeeze_state.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_squeeze_state.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_squeeze_to_list.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_squeeze_to_list.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_squeeze_to_list.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_squeeze_to_list.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_condense.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_condense.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_condense.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_condense.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_condense1.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_condense1.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_condense1.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_condense1.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_switch.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_switch.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_switch.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_switch.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_take.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_take.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_take.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_take.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_time_order_recover.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_time_order_recover.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_time_order_recover.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_time_order_recover.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_timezone.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_timezone.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_timezone.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_timezone.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_tobytes.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_tobytes.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_tobytes.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_tobytes.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_todict.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_todict.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_todict.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_todict.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_toindexdict.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_toindexdict.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_toindexdict.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_toindexdict.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_tooptional.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_tooptional.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_tooptional.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_tooptional.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_tostring.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_tostring.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_tostring.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_tostring.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_udf.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_udf.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_udf.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_unwrap.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_unwrap.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_unwrap.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_unwrap.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_varitem.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_varitem.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_varitem.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_varitem.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_visitall.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_visitall.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_visitall.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_visitall.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_way.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_way.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_way.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_way.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_weakmember.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_weakmember.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_weakmember.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_weakmember.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_while.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_while.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_while.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_while.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_wide_chain_map.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_chain_map.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_wide_chain_map.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_chain_map.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_wide_chopper.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_chopper.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_wide_chopper.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_chopper.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_wide_combine.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_combine.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_wide_combine.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_combine.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_wide_condense.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_condense.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_wide_condense.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_condense.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_wide_filter.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_filter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_wide_filter.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_filter.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_wide_map.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_map.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_wide_map.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_map.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_wide_top_sort.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_top_sort.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_wide_top_sort.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_wide_top_sort.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_withcontext.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_withcontext.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_withcontext.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_withcontext.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_zip.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_zip.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_zip.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_zip.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h.txt
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h.txt
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_llvm_base.h.txt
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/computation/mkql_llvm_base.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_llvm_base.h.txt
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/computation/mkql_llvm_base.h
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h.txt
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h.txt
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_codegen.h.txt
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_codegen.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_codegen.h.txt
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_codegen.h
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_codegen_llvm.h.txt
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_codegen_llvm.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_codegen_llvm.h.txt
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_codegen_llvm.h
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_impl.h.txt
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_impl.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_impl.h.txt
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_impl.h
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_decimal.h.txt
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_decimal.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_decimal.h.txt
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_decimal.h
 )

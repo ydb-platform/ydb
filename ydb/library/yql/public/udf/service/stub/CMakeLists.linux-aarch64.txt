@@ -26,5 +26,5 @@ target_link_libraries(udf-service-stub.global PUBLIC
   yql-public-udf
 )
 target_sources(udf-service-stub.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/service/stub/udf_service.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/service/stub/udf_service.cpp
 )

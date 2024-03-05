@@ -9,7 +9,7 @@
 
 add_executable(ydb-core-testlib-actors-ut)
 target_include_directories(ydb-core-testlib-actors-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/actors
+  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/actors
 )
 target_link_libraries(ydb-core-testlib-actors-ut PUBLIC
   contrib-libs-linux-headers
@@ -33,7 +33,7 @@ target_link_options(ydb-core-testlib-actors-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-testlib-actors-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/actors/test_runtime_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/actors/test_runtime_ut.cpp
 )
 set_property(
   TARGET

@@ -20,5 +20,5 @@ target_link_libraries(public-lib-value PUBLIC
   cpp-client-ydb_value
 )
 target_sources(public-lib-value PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/value/value.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/value/value.cpp
 )

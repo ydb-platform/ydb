@@ -14,30 +14,30 @@ target_compile_options(libs-libevent-event_core PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(libs-libevent-event_core PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/include
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/include
 )
 target_link_libraries(libs-libevent-event_core PUBLIC
   contrib-libs-linux-headers
   contrib-libs-libc_compat
 )
 target_sources(libs-libevent-event_core PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/buffer.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/bufferevent.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/bufferevent_filter.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/bufferevent_pair.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/bufferevent_ratelim.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/bufferevent_sock.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/event.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/evmap.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/evthread.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/evutil.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/evutil_rand.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/evutil_time.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/listener.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/log.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/signal.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/poll.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/select.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/epoll.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/buffer.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/bufferevent.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/bufferevent_filter.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/bufferevent_pair.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/bufferevent_ratelim.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/bufferevent_sock.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/event.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/evmap.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/evthread.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/evutil.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/evutil_rand.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/evutil_time.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/listener.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/log.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/signal.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/poll.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/select.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/epoll.c
 )

@@ -27,7 +27,7 @@ target_link_options(tsserver PRIVATE
   -ldl
 )
 target_sources(tsserver PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/tools/tsserver/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/tools/tsserver/main.cpp
 )
 target_allocator(tsserver
   cpp-malloc-tcmalloc

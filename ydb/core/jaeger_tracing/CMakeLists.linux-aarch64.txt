@@ -16,16 +16,16 @@ target_link_libraries(ydb-core-jaeger_tracing PUBLIC
   ydb-core-protos
 )
 target_sources(ydb-core-jaeger_tracing PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/jaeger_tracing/request_discriminator.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/jaeger_tracing/sampler.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/jaeger_tracing/sampling_throttling_configurator.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/jaeger_tracing/sampling_throttling_control.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/jaeger_tracing/sampling_throttling_control_internals.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/jaeger_tracing/settings.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/jaeger_tracing/throttler.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/jaeger_tracing/request_discriminator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/jaeger_tracing/sampling_throttling_configurator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/jaeger_tracing/sampling_throttling_control.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/jaeger_tracing/sampling_throttling_control_internals.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/jaeger_tracing/throttler.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/request_discriminator.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/sampler.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/sampling_throttling_configurator.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/sampling_throttling_control.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/sampling_throttling_control_internals.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/settings.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/throttler.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/request_discriminator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/sampling_throttling_configurator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/sampling_throttling_control.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/sampling_throttling_control_internals.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/throttler.cpp
 )

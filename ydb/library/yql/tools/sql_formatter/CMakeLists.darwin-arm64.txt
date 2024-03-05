@@ -23,7 +23,7 @@ target_link_options(sql_formatter PRIVATE
   CoreFoundation
 )
 target_sources(sql_formatter PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/sql_formatter/sql_formatter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/sql_formatter/sql_formatter.cpp
 )
 target_allocator(sql_formatter
   system_allocator

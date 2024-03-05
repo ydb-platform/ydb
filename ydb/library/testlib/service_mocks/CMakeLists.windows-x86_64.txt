@@ -19,11 +19,11 @@ target_link_libraries(library-testlib-service_mocks INTERFACE
   client-yc_private-iam
 )
 target_sources(library-testlib-service_mocks INTERFACE
-  ${CMAKE_SOURCE_DIR}/ydb/library/testlib/service_mocks/access_service_mock.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/testlib/service_mocks/datastreams_service_mock.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/testlib/service_mocks/folder_service_transitional_mock.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/testlib/service_mocks/folder_service_mock.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/testlib/service_mocks/iam_token_service_mock.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/testlib/service_mocks/service_account_service_mock.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/testlib/service_mocks/user_account_service_mock.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/testlib/service_mocks/access_service_mock.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/testlib/service_mocks/datastreams_service_mock.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/testlib/service_mocks/folder_service_transitional_mock.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/testlib/service_mocks/folder_service_mock.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/testlib/service_mocks/iam_token_service_mock.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/testlib/service_mocks/service_account_service_mock.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/testlib/service_mocks/user_account_service_mock.h
 )

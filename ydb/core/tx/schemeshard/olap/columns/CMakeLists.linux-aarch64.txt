@@ -21,6 +21,6 @@ target_link_libraries(schemeshard-olap-columns PUBLIC
   schemeshard-olap-common
 )
 target_sources(schemeshard-olap-columns PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/columns/schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/columns/update.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/columns/schema.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/columns/update.cpp
 )

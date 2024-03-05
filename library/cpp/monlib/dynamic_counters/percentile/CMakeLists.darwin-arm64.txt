@@ -15,6 +15,6 @@ target_link_libraries(monlib-dynamic_counters-percentile INTERFACE
   cpp-monlib-dynamic_counters
 )
 target_sources(monlib-dynamic_counters-percentile INTERFACE
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/dynamic_counters/percentile/percentile.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/dynamic_counters/percentile/percentile.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h
 )

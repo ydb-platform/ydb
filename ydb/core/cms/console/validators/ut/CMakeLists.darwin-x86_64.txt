@@ -9,7 +9,7 @@
 
 add_executable(ydb-core-cms-console-validators-ut)
 target_include_directories(ydb-core-cms-console-validators-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators
 )
 target_link_libraries(ydb-core-cms-console-validators-ut PUBLIC
   contrib-libs-cxxsupp
@@ -27,10 +27,10 @@ target_link_options(ydb-core-cms-console-validators-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-cms-console-validators-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator_ut_common.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/registry_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator_bootstrap_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator_nameservice_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/validator_ut_common.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/registry_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/validator_bootstrap_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/validator_nameservice_ut.cpp
 )
 set_property(
   TARGET

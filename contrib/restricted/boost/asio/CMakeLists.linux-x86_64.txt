@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-asio INTERFACE)
 target_include_directories(restricted-boost-asio INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/asio/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/asio/include
 )
 target_link_libraries(restricted-boost-asio INTERFACE
   contrib-libs-linux-headers

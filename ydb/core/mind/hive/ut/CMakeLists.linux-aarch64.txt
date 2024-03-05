@@ -12,7 +12,7 @@ target_compile_options(ydb-core-mind-hive-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-core-mind-hive-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive
 )
 target_link_libraries(ydb-core-mind-hive-ut PUBLIC
   contrib-libs-linux-headers
@@ -38,11 +38,11 @@ target_link_options(ydb-core-mind-hive-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-mind-hive-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/object_distribution_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/sequencer_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/storage_pool_info_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/hive_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/hive_impl_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/object_distribution_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/sequencer_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/storage_pool_info_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/hive_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/hive_impl_ut.cpp
 )
 set_property(
   TARGET

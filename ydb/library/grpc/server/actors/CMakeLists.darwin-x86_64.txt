@@ -14,5 +14,5 @@ target_link_libraries(grpc-server-actors PUBLIC
   library-actors-core
 )
 target_sources(grpc-server-actors PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/grpc/server/actors/logger.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/grpc/server/actors/logger.cpp
 )

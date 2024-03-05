@@ -12,9 +12,9 @@ target_compile_options(providers-s3-actors PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(providers-s3-actors PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base/pcg-random
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base/pcg-random
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src
 )
 target_link_libraries(providers-s3-actors PUBLIC
   contrib-libs-cxxsupp
@@ -45,9 +45,9 @@ target_link_libraries(providers-s3-actors PUBLIC
   common-clickhouse-client
 )
 target_sources(providers-s3-actors PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_actors_util.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_applicator_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_sink_factory.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_source_factory.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_write_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_actors_util.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_applicator_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_sink_factory.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_source_factory.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_write_actor.cpp
 )

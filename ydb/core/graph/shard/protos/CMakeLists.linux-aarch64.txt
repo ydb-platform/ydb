@@ -28,21 +28,21 @@ target_link_libraries(graph-shard-protos PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(graph-shard-protos PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/graph/shard/protos/counters_shard.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/graph/shard/protos/counters_shard.proto
 )
 target_sources(graph-shard-protos PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/core/graph/shard/protos/counters_shard.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/graph/shard/protos/counters_shard.pb.h
 )
 target_proto_addincls(graph-shard-protos
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(graph-shard-protos
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )

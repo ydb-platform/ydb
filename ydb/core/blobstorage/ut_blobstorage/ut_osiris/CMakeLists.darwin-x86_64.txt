@@ -9,7 +9,7 @@
 
 add_executable(ydb-core-blobstorage-ut_blobstorage-ut_osiris)
 target_include_directories(ydb-core-blobstorage-ut_blobstorage-ut_osiris PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage
 )
 target_link_libraries(ydb-core-blobstorage-ut_blobstorage-ut_osiris PUBLIC
   contrib-libs-cxxsupp
@@ -26,7 +26,7 @@ target_link_options(ydb-core-blobstorage-ut_blobstorage-ut_osiris PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-blobstorage-ut_blobstorage-ut_osiris PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/osiris.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/osiris.cpp
 )
 set_property(
   TARGET

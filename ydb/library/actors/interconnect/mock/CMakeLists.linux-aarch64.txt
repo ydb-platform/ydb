@@ -15,6 +15,6 @@ target_link_libraries(actors-interconnect-mock PUBLIC
   library-actors-interconnect
 )
 target_sources(actors-interconnect-mock PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/mock/ic_mock.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/mock/ic_mock.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/mock/ic_mock.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/mock/ic_mock.cpp
 )

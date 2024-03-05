@@ -18,5 +18,5 @@ target_link_libraries(cpp-openssl-io PUBLIC
   cpp-openssl-method
 )
 target_sources(cpp-openssl-io PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/openssl/io/stream.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/openssl/io/stream.cpp
 )

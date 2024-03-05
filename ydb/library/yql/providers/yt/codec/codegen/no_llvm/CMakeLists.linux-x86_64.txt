@@ -12,7 +12,7 @@ target_compile_options(codec-codegen-no_llvm PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(codec-codegen-no_llvm PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/codegen
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/codegen
 )
 target_link_libraries(codec-codegen-no_llvm PUBLIC
   contrib-libs-linux-headers
@@ -20,5 +20,5 @@ target_link_libraries(codec-codegen-no_llvm PUBLIC
   yutil
 )
 target_sources(codec-codegen-no_llvm PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/codegen/yt_codec_cg_dummy.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/codegen/yt_codec_cg_dummy.cpp
 )

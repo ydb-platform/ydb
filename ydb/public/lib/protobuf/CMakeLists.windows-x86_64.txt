@@ -14,5 +14,5 @@ target_link_libraries(public-lib-protobuf PUBLIC
   contrib-libs-protoc
 )
 target_sources(public-lib-protobuf PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/protobuf/helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/protobuf/helpers.cpp
 )

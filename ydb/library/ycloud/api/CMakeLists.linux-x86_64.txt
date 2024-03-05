@@ -22,9 +22,9 @@ target_link_libraries(library-ycloud-api INTERFACE
   ydb-core-grpc_caching
 )
 target_sources(library-ycloud-api INTERFACE
-  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/api/access_service.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/api/folder_service.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/api/folder_service_transitional.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/api/iam_token_service.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/api/user_account_service.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/ycloud/api/access_service.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/ycloud/api/folder_service.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/ycloud/api/folder_service_transitional.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/ycloud/api/iam_token_service.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/ycloud/api/user_account_service.h
 )

@@ -29,7 +29,7 @@ target_link_options(skiff_pull_list PRIVATE
   -ldl
 )
 target_sources(skiff_pull_list PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/examples/skiff_pull_list/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/examples/skiff_pull_list/main.cpp
 )
 target_allocator(skiff_pull_list
   cpp-malloc-jemalloc

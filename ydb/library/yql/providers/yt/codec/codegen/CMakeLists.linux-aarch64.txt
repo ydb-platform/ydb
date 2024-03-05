@@ -31,8 +31,8 @@ target_link_libraries(yt-codec-codegen PUBLIC
   minikql-codegen-llvm14
 )
 target_sources(yt-codec-codegen PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/codegen/yt_codec_cg.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/codegen/yt_codec_cg.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/codegen/yt_codec_cg.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/codegen/yt_codec_cg.cpp
 )
 
 add_global_library_for(yt-codec-codegen.global yt-codec-codegen)
@@ -51,43 +51,43 @@ target_link_libraries(yt-codec-codegen.global PUBLIC
   minikql-codegen-llvm14
 )
 target_sources(yt-codec-codegen.global PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/12ec3101983db48f6ee4095b4f5fb784.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/12ec3101983db48f6ee4095b4f5fb784.cpp
 )
 add_custom_command(
   OUTPUT
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_optimized.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_optimized.bc
   DEPENDS
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_merged.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_merged.bc
   COMMAND
   ${LLVMOPT}
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_merged.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_merged.bc
   -o
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_optimized.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_optimized.bc
   -internalize-public-api-list=WriteJust#WriteNothing#WriteBool#Write8#Write16#Write32#Write64#Write120#WriteDecimal32#WriteDecimal64#WriteDecimal128#WriteFloat#WriteDouble#WriteString#ReadBool#ReadInt8#ReadUint8#ReadInt16#ReadUint16#ReadInt32#ReadUint32#ReadInt64#ReadUint64#ReadInt120#ReadDecimal32#ReadDecimal64#ReadDecimal128#ReadFloat#ReadDouble#ReadOptional#ReadVariantData#SkipFixedData#SkipVarData#ReadTzDate#ReadTzDatetime#ReadTzTimestamp#WriteTzDate#WriteTzDatetime#WriteTzTimestamp#GetWrittenBytes#FillZero
   -passes="default<O2>,globalopt,globaldce,internalize"
 )
 add_custom_command(
   OUTPUT
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_merged.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_merged.bc
   DEPENDS
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/yt_codec_bc.cpp.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/yt_codec_bc.cpp.bc
   COMMAND
   ${LLVMLINK}
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/yt_codec_bc.cpp.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/yt_codec_bc.cpp.bc
   -o
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_merged.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_merged.bc
 )
 llvm_compile_cxx(yt-codec-codegen.global
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/codegen/yt_codec_bc.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/yt_codec_bc.cpp.bc
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/codegen/yt_codec_bc.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/yt_codec_bc.cpp.bc
   ${CLANGPLUSPLUS}
   -Wno-unknown-warning-option
   -emit-llvm
 )
 resources(yt-codec-codegen.global
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/12ec3101983db48f6ee4095b4f5fb784.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/12ec3101983db48f6ee4095b4f5fb784.cpp
   INPUTS
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_optimized.bc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_optimized.bc
   KEYS
   /llvm_bc/YtCodecFuncs
 )

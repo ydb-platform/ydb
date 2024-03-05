@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-numeric_conversion INTERFACE)
 target_include_directories(restricted-boost-numeric_conversion INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/numeric_conversion/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/numeric_conversion/include
 )
 target_link_libraries(restricted-boost-numeric_conversion INTERFACE
   contrib-libs-linux-headers

@@ -15,7 +15,7 @@ get_built_tool_path(
 
 add_executable(ydb-core-tablet_flat-ut)
 target_include_directories(ydb-core-tablet_flat-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat
 )
 target_link_libraries(ydb-core-tablet_flat-ut PUBLIC
   contrib-libs-linux-headers
@@ -42,49 +42,49 @@ target_link_options(ydb-core-tablet_flat-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-tablet_flat-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/flat_test_db.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/flat_test_db_helpers.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/datetime_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/decimal_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_cxx_database_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_db_iface.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_db_scheme.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_database_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_gclogic_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_leases_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_range_cache_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_row_versions_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_part_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/flat_test_db.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/shared_handle_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_btree_index_nodes.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_btree_index_iter_charge.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_self.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_iterator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_memtable.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_sausage.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_stat.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_comp_gen.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_compaction.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_compaction_multi.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_charge.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_part.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_part_multi.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_proto.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_pages.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_redo.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_rename_table_column.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_other.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_forward.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_screen.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_bloom.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_shared_sausagecache.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_shared_sausagecache_memtable.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_slice.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_slice_loader.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_versions.cpp
-  ${CMAKE_BINARY_DIR}/ydb/core/tablet_flat/ut/6cf77686c9ddf4f7a8a150d2405a77e7.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/flat_test_db.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/flat_test_db_helpers.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/datetime_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/decimal_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_cxx_database_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_db_iface.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_db_scheme.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_database_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_gclogic_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_leases_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_range_cache_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_row_versions_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_part_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/flat_test_db.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/shared_handle_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_btree_index_nodes.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_btree_index_iter_charge.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_self.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_iterator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_memtable.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_sausage.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_stat.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_comp_gen.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_compaction.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_compaction_multi.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_charge.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_part.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_part_multi.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_proto.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_pages.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_redo.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_rename_table_column.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_other.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_forward.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_screen.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_bloom.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_shared_sausagecache.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_shared_sausagecache_memtable.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_slice.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_slice_loader.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_versions.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/tablet_flat/ut/6cf77686c9ddf4f7a8a150d2405a77e7.cpp
 )
 set_property(
   TARGET
@@ -133,10 +133,10 @@ set_yunittest_property(
   600
 )
 resources(ydb-core-tablet_flat-ut
-  ${CMAKE_BINARY_DIR}/ydb/core/tablet_flat/ut/6cf77686c9ddf4f7a8a150d2405a77e7.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/tablet_flat/ut/6cf77686c9ddf4f7a8a150d2405a77e7.cpp
   INPUTS
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/test/data/002_full_part.pages
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/test/data/008_basics_db.redo
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/test/data/002_full_part.pages
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/test/data/008_basics_db.redo
   KEYS
   abi/002_full_part.pages
   abi/008_basics_db.redo

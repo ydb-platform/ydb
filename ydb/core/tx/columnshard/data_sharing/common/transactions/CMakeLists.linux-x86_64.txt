@@ -20,5 +20,5 @@ target_link_libraries(data_sharing-common-transactions PUBLIC
   ydb-core-base
 )
 target_sources(data_sharing-common-transactions PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/common/transactions/tx_extension.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/common/transactions/tx_extension.cpp
 )

@@ -14,7 +14,7 @@ target_link_libraries(clickhouse-client-base PUBLIC
   yutil
 )
 target_sources(clickhouse-client-base PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/clickhouse/client/base/wire_format.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/clickhouse/client/base/coded.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/clickhouse/client/base/compressed.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/clickhouse/client/base/wire_format.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/clickhouse/client/base/coded.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/clickhouse/client/base/compressed.cpp
 )

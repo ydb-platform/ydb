@@ -12,7 +12,7 @@ target_compile_options(ydb-core-tx-schemeshard-ut_compaction PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-core-tx-schemeshard-ut_compaction PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard
 )
 target_link_libraries(ydb-core-tx-schemeshard-ut_compaction PUBLIC
   contrib-libs-linux-headers
@@ -39,7 +39,7 @@ target_link_options(ydb-core-tx-schemeshard-ut_compaction PRIVATE
   -ldl
 )
 target_sources(ydb-core-tx-schemeshard-ut_compaction PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_compaction/ut_compaction.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_compaction/ut_compaction.cpp
 )
 set_property(
   TARGET

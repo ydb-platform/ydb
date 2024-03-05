@@ -13,8 +13,8 @@ target_compile_options(ydb-core-kqp-ut-opt PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(ydb-core-kqp-ut-opt PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include
 )
 target_link_libraries(ydb-core-kqp-ut-opt PUBLIC
   contrib-libs-linux-headers
@@ -38,15 +38,15 @@ target_link_options(ydb-core-kqp-ut-opt PRIVATE
   -ldl
 )
 target_sources(ydb-core-kqp-ut-opt PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_agg_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_extract_predicate_unpack_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_kv_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_merge_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_ne_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_not_null_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_ranges_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_sort_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_sqlin_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_agg_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_extract_predicate_unpack_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_kv_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_merge_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_ne_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_not_null_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_ranges_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_sort_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_sqlin_ut.cpp
 )
 set_property(
   TARGET

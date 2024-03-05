@@ -81,8 +81,8 @@ target_link_options(mrrun PRIVATE
   CoreFoundation
 )
 target_sources(mrrun PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/mrrun/mrrun.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/mrrun/mrrun.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/mrrun/mrrun.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/mrrun/mrrun.cpp
 )
 target_allocator(mrrun
   cpp-malloc-jemalloc

@@ -9,7 +9,7 @@
 
 add_executable(ydb-core-blobstorage-vdisk-hulldb-cache_block-ut)
 target_include_directories(ydb-core-blobstorage-vdisk-hulldb-cache_block-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/cache_block
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/cache_block
 )
 target_link_libraries(ydb-core-blobstorage-vdisk-hulldb-cache_block-ut PUBLIC
   contrib-libs-linux-headers
@@ -35,7 +35,7 @@ target_link_options(ydb-core-blobstorage-vdisk-hulldb-cache_block-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-vdisk-hulldb-cache_block-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/cache_block/cache_block_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/cache_block/cache_block_ut.cpp
 )
 set_property(
   TARGET

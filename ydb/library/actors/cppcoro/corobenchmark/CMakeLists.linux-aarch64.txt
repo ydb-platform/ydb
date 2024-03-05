@@ -26,7 +26,7 @@ target_link_options(corobenchmark PRIVATE
   -ldl
 )
 target_sources(corobenchmark PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/cppcoro/corobenchmark/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/cppcoro/corobenchmark/main.cpp
 )
 target_allocator(corobenchmark
   cpp-malloc-jemalloc

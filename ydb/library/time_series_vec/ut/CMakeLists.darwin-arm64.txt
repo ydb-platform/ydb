@@ -9,7 +9,7 @@
 
 add_executable(ydb-library-time_series_vec-ut)
 target_include_directories(ydb-library-time_series_vec-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/time_series_vec
+  ${PROJECT_SOURCE_DIR}/ydb/library/time_series_vec
 )
 target_link_libraries(ydb-library-time_series_vec-ut PUBLIC
   contrib-libs-cxxsupp
@@ -26,7 +26,7 @@ target_link_options(ydb-library-time_series_vec-ut PRIVATE
   -fPIC
 )
 target_sources(ydb-library-time_series_vec-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/time_series_vec/time_series_vec_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/time_series_vec/time_series_vec_ut.cpp
 )
 set_property(
   TARGET

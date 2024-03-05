@@ -22,20 +22,20 @@ target_link_libraries(library-actors-http PUBLIC
   cpp-string_utils-quote
 )
 target_sources(library-actors-http PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/http/http_cache.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/http/http_config.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/http/http_proxy_sock_impl.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/http/http_proxy_sock64.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/http/http_proxy_ssl.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/http/http_proxy.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/http/http_static.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/http/http.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/http/http_cache.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/http/http_compress.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/http/http_proxy_acceptor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/http/http_proxy_incoming.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/http/http_proxy_outgoing.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/http/http_proxy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/http/http_static.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/http/http.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_cache.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_config.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_proxy_sock_impl.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_proxy_sock64.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_proxy_ssl.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_proxy.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_static.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_cache.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_compress.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_proxy_acceptor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_proxy_incoming.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_proxy_outgoing.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_proxy.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_static.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http.cpp
 )

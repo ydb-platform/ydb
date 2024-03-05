@@ -15,6 +15,6 @@ target_link_libraries(tx-tracing-service PUBLIC
   tx-tracing-usage
 )
 target_sources(tx-tracing-service PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tracing/service/global.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tracing/service/actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tracing/service/global.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tracing/service/actor.cpp
 )

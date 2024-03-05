@@ -18,7 +18,7 @@ target_link_libraries(surg PUBLIC
   udf-service-exception_policy
 )
 target_sources(surg PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/test/tool/surg/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/test/tool/surg/main.cpp
 )
 target_allocator(surg
   system_allocator

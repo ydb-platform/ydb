@@ -30,24 +30,24 @@ target_link_libraries(library-yql-ast PUBLIC
   api-protos
 )
 target_sources(library-yql-ast PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_ast.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_constraint.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_ast_annotation.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_ast_escaping.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_errors.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_builder.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_types.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_gc_nodes.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_type_string.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_ast.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_constraint.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_ast_annotation.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_ast_escaping.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_errors.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_builder.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_types.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_gc_nodes.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_type_string.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_ast.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_constraint.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_ast_annotation.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_ast_escaping.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_errors.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_expr.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_builder.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_types.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_gc_nodes.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_type_string.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_ast.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_constraint.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_ast_annotation.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_ast_escaping.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_errors.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_expr.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_builder.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_types.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_gc_nodes.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_type_string.cpp
 )

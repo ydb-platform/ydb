@@ -14,9 +14,9 @@ target_link_libraries(library-cpp-compproto PUBLIC
   yutil
 )
 target_sources(library-cpp-compproto PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/compproto/bit.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/compproto/compressor.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/compproto/huff.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/compproto/metainfo.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/compproto/lib.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/compproto/bit.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/compproto/compressor.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/compproto/huff.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/compproto/metainfo.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/compproto/lib.cpp
 )

@@ -39,21 +39,21 @@ target_link_libraries(ydb-core-http_proxy PUBLIC
   api-protos
 )
 target_sources(ydb-core-http_proxy PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/auth_factory.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/custom_metrics.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/discovery_actor.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/events.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/exceptions_mapping.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/grpc_service.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/http_req.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/http_service.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/json_proto_conversion.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/metrics_actor.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/auth_factory.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/discovery_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/exceptions_mapping.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/grpc_service.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/http_req.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/http_service.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/metrics_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/auth_factory.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/custom_metrics.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/discovery_actor.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/events.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/exceptions_mapping.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/grpc_service.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/http_req.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/http_service.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/json_proto_conversion.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/metrics_actor.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/auth_factory.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/discovery_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/exceptions_mapping.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/grpc_service.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/http_req.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/http_service.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/metrics_actor.cpp
 )

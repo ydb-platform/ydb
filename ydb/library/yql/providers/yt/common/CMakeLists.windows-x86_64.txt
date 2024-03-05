@@ -31,12 +31,12 @@ target_link_libraries(providers-yt-common PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(providers-yt-common PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/common/yql_configuration.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/common/yql_names.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/common/yql_yt_settings.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/common/yql_configuration.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/common/yql_names.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/common/yql_yt_settings.cpp
 )
 generate_enum_serilization(providers-yt-common
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/common/yql_yt_settings.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/common/yql_yt_settings.h
   INCLUDE_HEADERS
   ydb/library/yql/providers/yt/common/yql_yt_settings.h
 )

@@ -9,7 +9,7 @@
 
 add_executable(ydb-core-blobstorage-groupinfo-ut)
 target_include_directories(ydb-core-blobstorage-groupinfo-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo
 )
 target_link_libraries(ydb-core-blobstorage-groupinfo-ut PUBLIC
   contrib-libs-cxxsupp
@@ -24,10 +24,10 @@ target_link_libraries(ydb-core-blobstorage-groupinfo-ut PUBLIC
   ydb-core-erasure
 )
 target_sources(ydb-core-blobstorage-groupinfo-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_blobmap_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_blobmap_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout_ut.cpp
 )
 set_property(
   TARGET

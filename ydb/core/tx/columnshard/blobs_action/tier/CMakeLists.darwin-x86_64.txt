@@ -19,12 +19,12 @@ target_link_libraries(columnshard-blobs_action-tier PUBLIC
   columnshard-blobs_action-abstract
 )
 target_sources(columnshard-blobs_action-tier PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/adapter.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/gc.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/gc_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/gc_info.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/write.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/read.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/storage.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/remove.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/adapter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/gc.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/gc_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/gc_info.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/write.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/read.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/storage.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/remove.cpp
 )

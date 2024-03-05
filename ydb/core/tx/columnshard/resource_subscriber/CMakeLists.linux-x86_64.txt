@@ -17,8 +17,8 @@ target_link_libraries(tx-columnshard-resource_subscriber PUBLIC
   ydb-core-tablet_flat
 )
 target_sources(tx-columnshard-resource_subscriber PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/resource_subscriber/actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/resource_subscriber/counters.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/resource_subscriber/task.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/resource_subscriber/events.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/resource_subscriber/actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/resource_subscriber/counters.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/resource_subscriber/task.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/resource_subscriber/events.cpp
 )

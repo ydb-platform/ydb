@@ -17,9 +17,9 @@ target_link_libraries(columnshard-counters-common PUBLIC
   ydb-core-base
 )
 target_sources(columnshard-counters-common PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/common/agent.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/common/client.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/common/owner.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/common/private.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/common/object_counter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/common/agent.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/common/client.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/common/owner.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/common/private.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/common/object_counter.cpp
 )

@@ -33,23 +33,23 @@ target_link_libraries(validation-ut-protos PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(validation-ut-protos PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/validation/ut/protos/validation_test.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/validation/ut/protos/validation_test.proto
 )
 target_sources(validation-ut-protos PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/public/lib/validation/ut/protos/validation_test.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/lib/validation/ut/protos/validation_test.pb.h
 )
 target_proto_addincls(validation-ut-protos
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(validation-ut-protos
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )
 target_proto_plugin(validation-ut-protos
   validation

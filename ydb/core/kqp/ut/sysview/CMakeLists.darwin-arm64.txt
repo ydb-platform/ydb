@@ -12,7 +12,7 @@ target_compile_options(ydb-core-kqp-ut-sysview PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-core-kqp-ut-sysview PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp
 )
 target_link_libraries(ydb-core-kqp-ut-sysview PUBLIC
   contrib-libs-cxxsupp
@@ -30,8 +30,8 @@ target_link_options(ydb-core-kqp-ut-sysview PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-kqp-ut-sysview PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/sysview/kqp_sys_col_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/sysview/kqp_sys_view_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/sysview/kqp_sys_col_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/sysview/kqp_sys_view_ut.cpp
 )
 set_property(
   TARGET

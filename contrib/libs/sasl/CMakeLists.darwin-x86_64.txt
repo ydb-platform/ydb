@@ -17,36 +17,36 @@ target_compile_options(contrib-libs-sasl PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(contrib-libs-sasl PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/common
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/include
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/lib
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/plugins
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/sasldb
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/common
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/include
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/plugins
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/sasldb
 )
 target_link_libraries(contrib-libs-sasl PUBLIC
   contrib-libs-openssl
 )
 target_sources(contrib-libs-sasl PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/common/plugin_common.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/lib/auxprop.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/lib/canonusr.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/lib/checkpw.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/lib/client.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/lib/common.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/lib/config.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/lib/dlopen.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/lib/external.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/lib/md5.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/lib/saslutil.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/lib/server.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/lib/seterror.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/plugins/anonymous.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/plugins/cram.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/plugins/digestmd5.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/plugins/otp.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/plugins/plain.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/plugins/sasldb.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/plugins/scram.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/sasldb/db_none.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/common/plugin_common.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/auxprop.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/canonusr.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/checkpw.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/client.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/common.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/config.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/dlopen.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/external.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/md5.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/saslutil.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/server.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/seterror.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/plugins/anonymous.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/plugins/cram.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/plugins/digestmd5.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/plugins/otp.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/plugins/plain.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/plugins/sasldb.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/plugins/scram.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/sasldb/db_none.c
 )

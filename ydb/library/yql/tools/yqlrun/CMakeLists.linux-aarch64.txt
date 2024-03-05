@@ -57,18 +57,18 @@ target_link_options(yqlrun PRIVATE
   -lutil
 )
 target_sources(yqlrun PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/tools/yqlrun/ui.sh
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/tools/yqlrun/uig.sh
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/yqlrun.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/gateway_spec.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/ui.sh
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/uig.sh
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/yqlrun.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/gateway_spec.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/ui.sh
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/tools/yqlrun/ui.sh
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/ui.sh
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/ui.sh
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/uig.sh
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/tools/yqlrun/uig.sh
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/uig.sh
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/uig.sh
 )
 target_allocator(yqlrun
   cpp-malloc-jemalloc

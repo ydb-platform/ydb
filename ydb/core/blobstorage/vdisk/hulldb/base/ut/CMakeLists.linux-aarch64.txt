@@ -9,7 +9,7 @@
 
 add_executable(ydb-core-blobstorage-vdisk-hulldb-base-ut)
 target_include_directories(ydb-core-blobstorage-vdisk-hulldb-base-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base
 )
 target_link_libraries(ydb-core-blobstorage-vdisk-hulldb-base-ut PUBLIC
   contrib-libs-linux-headers
@@ -34,11 +34,11 @@ target_link_options(ydb-core-blobstorage-vdisk-hulldb-base-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-vdisk-hulldb-base-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullsatisfactionrank_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullstorageratio_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullds_generic_it_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullsatisfactionrank_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullstorageratio_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullds_generic_it_ut.cpp
 )
 set_property(
   TARGET

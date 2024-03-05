@@ -16,5 +16,5 @@ target_link_libraries(common-arrow-interface PUBLIC
   providers-common-http_gateway
 )
 target_sources(common-arrow-interface PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/arrow/interface/arrow_reader.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/arrow/interface/arrow_reader.cpp
 )

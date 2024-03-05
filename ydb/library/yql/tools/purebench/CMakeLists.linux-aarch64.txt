@@ -37,7 +37,7 @@ target_link_options(purebench PRIVATE
   -ldl
 )
 target_sources(purebench PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/purebench/purebench.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/purebench/purebench.cpp
 )
 target_allocator(purebench
   cpp-malloc-jemalloc

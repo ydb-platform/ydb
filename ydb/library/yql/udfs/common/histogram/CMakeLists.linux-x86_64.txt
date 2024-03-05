@@ -32,7 +32,7 @@ target_link_libraries(histogram_udf.global PUBLIC
   cpp-histogram-adaptive
 )
 target_sources(histogram_udf.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/histogram/histogram_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/histogram/histogram_udf.cpp
 )
 
 add_shared_library(histogram_udf.dyn)
@@ -66,9 +66,9 @@ target_link_options(histogram_udf.dyn PRIVATE
   -ldl
 )
 target_sources(histogram_udf.dyn PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/histogram/histogram_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/histogram/histogram_udf.cpp
 )
 use_export_script(histogram_udf.dyn
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udfs_exports.exports
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udfs_exports.exports
 )
 vcs_info(histogram_udf.dyn)

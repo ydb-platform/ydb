@@ -14,8 +14,8 @@ target_compile_options(libs-libevent-event_openssl PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(libs-libevent-event_openssl PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/include
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/include
 )
 target_link_libraries(libs-libevent-event_openssl PUBLIC
   contrib-libs-linux-headers
@@ -23,5 +23,5 @@ target_link_libraries(libs-libevent-event_openssl PUBLIC
   contrib-libs-openssl
 )
 target_sources(libs-libevent-event_openssl PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/bufferevent_openssl.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/bufferevent_openssl.c
 )

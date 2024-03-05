@@ -14,5 +14,5 @@ target_link_libraries(actors-testlib-common PUBLIC
   library-actors-core
 )
 target_sources(actors-testlib-common PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/testlib/common/events_scheduling.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/testlib/common/events_scheduling.cpp
 )

@@ -15,8 +15,8 @@ target_link_libraries(columnshard-data_locks-locks PUBLIC
   columnshard-engines-storage
 )
 target_sources(columnshard-data_locks-locks PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/data_locks/locks/abstract.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/data_locks/locks/list.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/data_locks/locks/snapshot.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/data_locks/locks/composite.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_locks/locks/abstract.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_locks/locks/list.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_locks/locks/snapshot.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_locks/locks/composite.cpp
 )

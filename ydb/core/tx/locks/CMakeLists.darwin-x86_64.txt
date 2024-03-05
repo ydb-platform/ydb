@@ -18,8 +18,8 @@ target_link_libraries(core-tx-locks PUBLIC
   ydb-core-tablet_flat
 )
 target_sources(core-tx-locks PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/locks/locks.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/locks/locks_db.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/locks/time_counters.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/locks/range_treap.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/locks/locks.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/locks/locks_db.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/locks/time_counters.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/locks/range_treap.cpp
 )

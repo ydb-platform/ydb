@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-foreach INTERFACE)
 target_include_directories(restricted-boost-foreach INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/foreach/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/foreach/include
 )
 target_link_libraries(restricted-boost-foreach INTERFACE
   contrib-libs-cxxsupp

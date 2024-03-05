@@ -18,5 +18,5 @@ target_link_libraries(columnshard-common-tests PUBLIC
   core-kqp-compute_actor
 )
 target_sources(columnshard-common-tests PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/common/tests/shard_reader.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/common/tests/shard_reader.cpp
 )

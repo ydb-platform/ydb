@@ -62,27 +62,27 @@ target_link_libraries(library-actors-protos PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(library-actors-protos PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/protos/actors.proto
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/protos/interconnect.proto
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/protos/services_common.proto
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/protos/unittests.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/protos/actors.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/protos/interconnect.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/protos/services_common.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/protos/unittests.proto
 )
 target_sources(library-actors-protos PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/actors/protos/actors.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/library/actors/protos/interconnect.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/library/actors/protos/services_common.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/library/actors/protos/unittests.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/actors/protos/actors.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/actors/protos/interconnect.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/actors/protos/services_common.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/actors/protos/unittests.pb.h
 )
 target_proto_addincls(library-actors-protos
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(library-actors-protos
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )

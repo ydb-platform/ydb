@@ -25,17 +25,17 @@ target_link_libraries(tx-columnshard-counters PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(tx-columnshard-counters PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/indexation.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/scan.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/engine_logs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/blobs_manager.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/columnshard.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/insert_table.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/common_data.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/splitter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/indexation.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/scan.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/engine_logs.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/blobs_manager.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/columnshard.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/insert_table.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/common_data.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/splitter.cpp
 )
 generate_enum_serilization(tx-columnshard-counters
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/columnshard.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/columnshard.h
   INCLUDE_HEADERS
   ydb/core/tx/columnshard/counters/columnshard.h
 )

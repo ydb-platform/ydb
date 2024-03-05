@@ -12,7 +12,7 @@ target_compile_options(ydb-core-tx-replication-ydb_proxy-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-core-tx-replication-ydb_proxy-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/ydb_proxy
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/ydb_proxy
 )
 target_link_libraries(ydb-core-tx-replication-ydb_proxy-ut PUBLIC
   contrib-libs-linux-headers
@@ -35,7 +35,7 @@ target_link_options(ydb-core-tx-replication-ydb_proxy-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-tx-replication-ydb_proxy-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/ydb_proxy/ydb_proxy_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/ydb_proxy/ydb_proxy_ut.cpp
 )
 set_property(
   TARGET

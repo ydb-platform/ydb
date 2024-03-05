@@ -12,7 +12,7 @@ target_compile_options(ydb-library-table_creator-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-library-table_creator-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/table_creator
+  ${PROJECT_SOURCE_DIR}/ydb/library/table_creator
 )
 target_link_libraries(ydb-library-table_creator-ut PUBLIC
   contrib-libs-cxxsupp
@@ -33,7 +33,7 @@ target_link_options(ydb-library-table_creator-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-library-table_creator-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/table_creator/table_creator_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/table_creator/table_creator_ut.cpp
 )
 set_property(
   TARGET

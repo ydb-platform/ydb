@@ -15,9 +15,9 @@ target_link_libraries(blobstorage-testing-group_overseer PUBLIC
   contrib-libs-t1ha
 )
 target_sources(blobstorage-testing-group_overseer PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/testing/group_overseer/defs.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/testing/group_overseer/group_overseer.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/testing/group_overseer/group_state.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/testing/group_overseer/group_overseer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/testing/group_overseer/group_state.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/testing/group_overseer/defs.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/testing/group_overseer/group_overseer.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/testing/group_overseer/group_state.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/testing/group_overseer/group_overseer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/testing/group_overseer/group_state.cpp
 )

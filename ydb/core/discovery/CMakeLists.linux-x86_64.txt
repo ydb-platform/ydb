@@ -17,5 +17,5 @@ target_link_libraries(ydb-core-discovery PUBLIC
   library-actors-core
 )
 target_sources(ydb-core-discovery PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/discovery/discovery.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/discovery/discovery.cpp
 )

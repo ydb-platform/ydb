@@ -32,11 +32,11 @@ target_link_libraries(services-deprecated-persqueue_v0 PUBLIC
   ydb-services-metadata
 )
 target_sources(services-deprecated-persqueue_v0 PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/deprecated/persqueue_v0/grpc_pq_clusters_updater_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/deprecated/persqueue_v0/grpc_pq_read.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/deprecated/persqueue_v0/grpc_pq_read_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/deprecated/persqueue_v0/grpc_pq_write.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/deprecated/persqueue_v0/grpc_pq_write_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/deprecated/persqueue_v0/move_topic_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/deprecated/persqueue_v0/persqueue.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/deprecated/persqueue_v0/grpc_pq_clusters_updater_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/deprecated/persqueue_v0/grpc_pq_read.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/deprecated/persqueue_v0/grpc_pq_read_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/deprecated/persqueue_v0/grpc_pq_write.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/deprecated/persqueue_v0/grpc_pq_write_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/deprecated/persqueue_v0/move_topic_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/deprecated/persqueue_v0/persqueue.cpp
 )

@@ -14,6 +14,6 @@ target_link_libraries(cpp-protobuf-dynamic_prototype PUBLIC
   contrib-libs-protobuf
 )
 target_sources(cpp-protobuf-dynamic_prototype PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/dynamic_prototype/dynamic_prototype.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/dynamic_prototype/generate_file_descriptor_set.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/protobuf/dynamic_prototype/dynamic_prototype.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/protobuf/dynamic_prototype/generate_file_descriptor_set.cpp
 )

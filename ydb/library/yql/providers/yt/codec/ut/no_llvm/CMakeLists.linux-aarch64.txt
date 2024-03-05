@@ -12,7 +12,7 @@ target_compile_options(ydb-library-yql-providers-yt-codec-ut-no_llvm PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-library-yql-providers-yt-codec-ut-no_llvm PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/codec
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec
 )
 target_link_libraries(ydb-library-yql-providers-yt-codec-ut-no_llvm PUBLIC
   contrib-libs-linux-headers
@@ -42,7 +42,7 @@ target_link_options(ydb-library-yql-providers-yt-codec-ut-no_llvm PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-providers-yt-codec-ut-no_llvm PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec_io_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec_io_ut.cpp
 )
 set_property(
   TARGET

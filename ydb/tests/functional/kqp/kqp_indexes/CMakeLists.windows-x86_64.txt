@@ -18,7 +18,7 @@ target_link_libraries(ydb-tests-functional-kqp-kqp_indexes PUBLIC
   cpp-client-draft
 )
 target_sources(ydb-tests-functional-kqp-kqp_indexes PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/tests/functional/kqp/kqp_indexes/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/tests/functional/kqp/kqp_indexes/main.cpp
 )
 set_property(
   TARGET

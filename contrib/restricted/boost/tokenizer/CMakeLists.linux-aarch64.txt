@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-tokenizer INTERFACE)
 target_include_directories(restricted-boost-tokenizer INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/tokenizer/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/tokenizer/include
 )
 target_link_libraries(restricted-boost-tokenizer INTERFACE
   contrib-libs-linux-headers

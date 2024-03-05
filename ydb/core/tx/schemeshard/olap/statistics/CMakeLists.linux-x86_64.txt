@@ -15,6 +15,6 @@ target_link_libraries(schemeshard-olap-statistics PUBLIC
   services-bg_tasks-abstract
 )
 target_sources(schemeshard-olap-statistics PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/statistics/schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/statistics/update.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/statistics/schema.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/statistics/update.cpp
 )

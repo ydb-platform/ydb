@@ -9,7 +9,7 @@
 
 add_executable(ydb-core-blobstorage-vdisk-syncer-ut)
 target_include_directories(ydb-core-blobstorage-vdisk-syncer-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer
 )
 target_link_libraries(ydb-core-blobstorage-vdisk-syncer-ut PUBLIC
   contrib-libs-cxxsupp
@@ -23,9 +23,9 @@ target_link_libraries(ydb-core-blobstorage-vdisk-syncer-ut PUBLIC
   ydb-core-blobstorage
 )
 target_sources(ydb-core-blobstorage-vdisk-syncer-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncquorum_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncquorum_ut.cpp
 )
 set_property(
   TARGET

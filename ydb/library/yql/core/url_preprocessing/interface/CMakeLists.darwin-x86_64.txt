@@ -13,5 +13,5 @@ target_link_libraries(core-url_preprocessing-interface PUBLIC
   yutil
 )
 target_sources(core-url_preprocessing-interface PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/url_preprocessing/interface/url_preprocessing.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/url_preprocessing/interface/url_preprocessing.cpp
 )

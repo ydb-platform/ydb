@@ -19,5 +19,5 @@ target_link_libraries(kqp-gateway-local_rpc PUBLIC
   ydb-library-ydb_issue
 )
 target_sources(kqp-gateway-local_rpc PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/local_rpc/helper.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/local_rpc/helper.cpp
 )

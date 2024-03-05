@@ -31,5 +31,5 @@ target_link_libraries(tx-columnshard-blobs_action PUBLIC
   columnshard-blobs_action-protos
 )
 target_sources(tx-columnshard-blobs_action PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/blob_manager_db.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/blob_manager_db.cpp
 )

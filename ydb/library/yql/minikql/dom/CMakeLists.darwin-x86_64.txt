@@ -24,10 +24,10 @@ target_link_libraries(yql-minikql-dom PUBLIC
   library-yql-utils
 )
 target_sources(yql-minikql-dom PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/dom/node.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/dom/json.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/dom/yson.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/dom/make.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/dom/peel.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/dom/hash.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/dom/node.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/dom/json.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/dom/yson.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/dom/make.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/dom/peel.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/dom/hash.cpp
 )

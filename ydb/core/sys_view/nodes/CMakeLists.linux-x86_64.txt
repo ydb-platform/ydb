@@ -21,6 +21,6 @@ target_link_libraries(core-sys_view-nodes PUBLIC
   core-sys_view-common
 )
 target_sources(core-sys_view-nodes PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/nodes/nodes.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/nodes/nodes.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/nodes/nodes.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/nodes/nodes.cpp
 )

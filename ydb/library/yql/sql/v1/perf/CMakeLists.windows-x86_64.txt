@@ -18,7 +18,7 @@ target_link_libraries(perf PUBLIC
   yql-sql-pg_dummy
 )
 target_sources(perf PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/perf/parse.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/perf/parse.cpp
 )
 target_allocator(perf
   system_allocator

@@ -9,7 +9,7 @@
 
 add_executable(ydb-library-yql-public-fastcheck-ut)
 target_include_directories(ydb-library-yql-public-fastcheck-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/fastcheck
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/fastcheck
 )
 target_link_libraries(ydb-library-yql-public-fastcheck-ut PUBLIC
   contrib-libs-linux-headers
@@ -30,7 +30,7 @@ target_link_options(ydb-library-yql-public-fastcheck-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-public-fastcheck-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/fastcheck/fastcheck_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/fastcheck/fastcheck_ut.cpp
 )
 set_property(
   TARGET

@@ -21,11 +21,11 @@ target_link_libraries(providers-common-provider PUBLIC
   library-yql-core
 )
 target_sources(providers-common-provider PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/provider/yql_data_provider_impl.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/provider/yql_provider.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/provider/yql_provider_names.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/provider/yql_table_lookup.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/provider/yql_data_provider_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/provider/yql_provider.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/provider/yql_table_lookup.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/provider/yql_data_provider_impl.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/provider/yql_provider.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/provider/yql_provider_names.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/provider/yql_table_lookup.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/provider/yql_data_provider_impl.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/provider/yql_provider.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/provider/yql_table_lookup.cpp
 )

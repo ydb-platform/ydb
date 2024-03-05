@@ -16,9 +16,9 @@ target_link_libraries(columnshard-blobs_action-counters PUBLIC
   ydb-core-tablet_flat
 )
 target_sources(columnshard-blobs_action-counters PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/counters/read.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/counters/storage.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/counters/write.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/counters/remove_declare.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/counters/remove_gc.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/counters/read.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/counters/storage.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/counters/write.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/counters/remove_declare.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/counters/remove_gc.cpp
 )

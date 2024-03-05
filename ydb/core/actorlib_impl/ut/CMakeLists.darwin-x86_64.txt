@@ -12,7 +12,7 @@ target_compile_options(ydb-core-actorlib_impl-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-core-actorlib_impl-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl
+  ${PROJECT_SOURCE_DIR}/ydb/core/actorlib_impl
 )
 target_link_libraries(ydb-core-actorlib_impl-ut PUBLIC
   contrib-libs-cxxsupp
@@ -36,11 +36,11 @@ target_link_options(ydb-core-actorlib_impl-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-actorlib_impl-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/actor_activity_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/actor_bootstrapped_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/actor_tracker_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/test_interconnect_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/test_protocols_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/actorlib_impl/actor_activity_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/actorlib_impl/actor_bootstrapped_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/actorlib_impl/actor_tracker_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/actorlib_impl/test_interconnect_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/actorlib_impl/test_protocols_ut.cpp
 )
 set_property(
   TARGET

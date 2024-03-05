@@ -17,5 +17,5 @@ target_link_libraries(purecalc-helpers-protobuf PUBLIC
   yt_proto-yt-formats
 )
 target_sources(purecalc-helpers-protobuf PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/helpers/protobuf/schema_from_proto.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/helpers/protobuf/schema_from_proto.cpp
 )

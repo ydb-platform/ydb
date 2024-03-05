@@ -30,5 +30,5 @@ target_link_libraries(core-kqp-node_service PUBLIC
   providers-common-http_gateway
 )
 target_sources(core-kqp-node_service PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/node_service/kqp_node_service.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/node_service/kqp_node_service.cpp
 )

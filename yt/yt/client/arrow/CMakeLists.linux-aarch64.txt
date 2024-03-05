@@ -20,7 +20,7 @@ target_link_libraries(yt-client-arrow PUBLIC
   client-arrow-fbs
 )
 target_sources(yt-client-arrow PRIVATE
-  ${CMAKE_SOURCE_DIR}/yt/yt/client/arrow/arrow_row_stream_encoder.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/client/arrow/arrow_row_stream_decoder.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/client/arrow/public.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/client/arrow/arrow_row_stream_encoder.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/client/arrow/arrow_row_stream_decoder.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/client/arrow/public.cpp
 )

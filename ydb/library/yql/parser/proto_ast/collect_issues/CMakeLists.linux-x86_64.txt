@@ -16,5 +16,5 @@ target_link_libraries(parser-proto_ast-collect_issues INTERFACE
   yql-parser-proto_ast
 )
 target_sources(parser-proto_ast-collect_issues INTERFACE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/collect_issues/collect_issues.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/collect_issues/collect_issues.h
 )

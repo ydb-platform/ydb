@@ -18,5 +18,5 @@ target_link_libraries(core-base-services INTERFACE
   library-actors-helpers
 )
 target_sources(core-base-services INTERFACE
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/services/blobstorage_service_id.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/services/blobstorage_service_id.h
 )

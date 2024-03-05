@@ -22,14 +22,14 @@ target_link_libraries(parser-pg_wrapper-interface PUBLIC
   library-cpp-disjoint_sets
 )
 target_sources(parser-pg_wrapper-interface PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/codec.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/compare.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/context.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/interface.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/pack.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/parser.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/type_desc.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/utils.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/interface.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/codec.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/compare.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/context.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/interface.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/pack.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/parser.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/type_desc.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/utils.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/interface.cpp
 )

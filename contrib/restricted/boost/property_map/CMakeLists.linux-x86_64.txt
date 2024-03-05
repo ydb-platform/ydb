@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-property_map INTERFACE)
 target_include_directories(restricted-boost-property_map INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/property_map/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/property_map/include
 )
 target_link_libraries(restricted-boost-property_map INTERFACE
   contrib-libs-linux-headers

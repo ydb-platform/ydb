@@ -18,5 +18,5 @@ target_link_libraries(cpp-yt-cpu_clock PUBLIC
   cpp-yt-assert
 )
 target_sources(cpp-yt-cpu_clock PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/yt/cpu_clock/clock.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/cpu_clock/clock.cpp
 )

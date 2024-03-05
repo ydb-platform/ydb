@@ -12,7 +12,7 @@ target_compile_options(ydb-library-yql-providers-dq-runtime-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-library-yql-providers-dq-runtime-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/runtime
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/runtime
 )
 target_link_libraries(ydb-library-yql-providers-dq-runtime-ut PUBLIC
   contrib-libs-cxxsupp
@@ -28,7 +28,7 @@ target_link_options(ydb-library-yql-providers-dq-runtime-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-library-yql-providers-dq-runtime-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/runtime/ut/file_cache_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/runtime/ut/file_cache_ut.cpp
 )
 set_property(
   TARGET

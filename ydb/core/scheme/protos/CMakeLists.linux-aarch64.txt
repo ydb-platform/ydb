@@ -61,30 +61,30 @@ target_link_libraries(core-scheme-protos PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(core-scheme-protos PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/scheme/protos/type_info.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/scheme/protos/key_range.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/scheme/protos/pathid.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/scheme/protos/type_info.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/scheme/protos/key_range.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/scheme/protos/pathid.proto
 )
 target_sources(core-scheme-protos PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/core/scheme/protos/type_info.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/scheme/protos/type_info.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/scheme/protos/key_range.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/scheme/protos/key_range.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/scheme/protos/pathid.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/scheme/protos/pathid.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/scheme/protos/type_info.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/scheme/protos/type_info.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/scheme/protos/key_range.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/scheme/protos/key_range.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/scheme/protos/pathid.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/scheme/protos/pathid.grpc.pb.h
 )
 target_proto_addincls(core-scheme-protos
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(core-scheme-protos
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )
 target_proto_plugin(core-scheme-protos
   grpc_cpp

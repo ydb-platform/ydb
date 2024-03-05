@@ -32,14 +32,14 @@ target_link_options(ydb-core-mind-bscontroller-ut_selfheal PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-mind-bscontroller-ut_selfheal PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_selfheal/defs.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_selfheal/env.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_selfheal/events.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_selfheal/node_warden_mock.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_selfheal/timer_actor.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_selfheal/vdisk_mock.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_selfheal/main.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_selfheal/self_heal_actor_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_selfheal/defs.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_selfheal/env.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_selfheal/events.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_selfheal/node_warden_mock.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_selfheal/timer_actor.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_selfheal/vdisk_mock.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_selfheal/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_selfheal/self_heal_actor_ut.cpp
 )
 set_property(
   TARGET

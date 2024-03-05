@@ -19,11 +19,11 @@ target_link_libraries(scheme-indexes-abstract PUBLIC
   core-formats-arrow
 )
 target_sources(scheme-indexes-abstract PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/constructor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/meta.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/checker.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/program.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/simple.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/constructor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/meta.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/checker.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/program.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/simple.cpp
 )
 
 add_global_library_for(scheme-indexes-abstract.global scheme-indexes-abstract)
@@ -38,5 +38,5 @@ target_link_libraries(scheme-indexes-abstract.global PUBLIC
   core-formats-arrow
 )
 target_sources(scheme-indexes-abstract.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/composite.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/composite.cpp
 )

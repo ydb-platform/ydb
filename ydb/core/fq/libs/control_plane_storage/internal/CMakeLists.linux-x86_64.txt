@@ -39,11 +39,11 @@ target_link_libraries(libs-control_plane_storage-internal PUBLIC
   cpp-client-ydb_value
 )
 target_sources(libs-control_plane_storage-internal PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/nodes_health_check.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/rate_limiter_resources.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/response_tasks.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/task_get.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/task_ping.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/task_result_write.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/utils.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/nodes_health_check.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/rate_limiter_resources.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/response_tasks.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/task_get.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/task_ping.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/task_result_write.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/utils.cpp
 )

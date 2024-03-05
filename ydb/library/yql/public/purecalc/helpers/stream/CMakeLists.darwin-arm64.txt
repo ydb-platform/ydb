@@ -17,5 +17,5 @@ target_link_libraries(purecalc-helpers-stream PUBLIC
   public-purecalc-common
 )
 target_sources(purecalc-helpers-stream PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/helpers/stream/stream_from_vector.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/helpers/stream/stream_from_vector.cpp
 )

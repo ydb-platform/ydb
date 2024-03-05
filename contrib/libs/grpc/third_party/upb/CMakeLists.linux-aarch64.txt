@@ -13,36 +13,36 @@ target_compile_options(grpc-third_party-upb PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(grpc-third_party-upb PRIVATE
-  ${CMAKE_BINARY_DIR}/contrib/libs/grpc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upb-generated
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb
+  ${PROJECT_BINARY_DIR}/contrib/libs/grpc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upb-generated
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/upb
 )
 target_link_libraries(grpc-third_party-upb PUBLIC
   contrib-libs-linux-headers
 )
 target_sources(grpc-third_party-upb PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upb-generated/google/protobuf/descriptor.upb.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/google/protobuf/descriptor.upbdefs.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/third_party/utf8_range/naive.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/third_party/utf8_range/range2-neon.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/third_party/utf8_range/range2-sse.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/arena.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/array.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/decode.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/decode_fast.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/def.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/encode.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/extension_registry.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/json_decode.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/json_encode.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/map.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/mini_table.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/msg.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/reflection.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/status.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/table.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/text_encode.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/upb.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upb-generated/google/protobuf/descriptor.upb.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/google/protobuf/descriptor.upbdefs.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/third_party/utf8_range/naive.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/third_party/utf8_range/range2-neon.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/third_party/utf8_range/range2-sse.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/arena.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/array.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/decode.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/decode_fast.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/def.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/encode.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/extension_registry.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/json_decode.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/json_encode.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/map.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/mini_table.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/msg.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/reflection.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/status.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/table.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/text_encode.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/upb.c
 )

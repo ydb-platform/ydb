@@ -23,7 +23,7 @@ target_link_libraries(kqprun PUBLIC
   yson2_udf
 )
 target_sources(kqprun PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/tests/tools/kqprun/kqprun.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/tests/tools/kqprun/kqprun.cpp
 )
 target_allocator(kqprun
   system_allocator

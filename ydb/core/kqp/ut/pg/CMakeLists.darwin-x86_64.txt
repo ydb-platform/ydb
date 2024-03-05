@@ -13,8 +13,8 @@ target_compile_options(ydb-core-kqp-ut-pg PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(ydb-core-kqp-ut-pg PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include
 )
 target_link_libraries(ydb-core-kqp-ut-pg PUBLIC
   contrib-libs-cxxsupp
@@ -36,8 +36,8 @@ target_link_options(ydb-core-kqp-ut-pg PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-kqp-ut-pg PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/pg/kqp_pg_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/pg/pg_catalog_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/pg/kqp_pg_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/pg/pg_catalog_ut.cpp
 )
 set_property(
   TARGET

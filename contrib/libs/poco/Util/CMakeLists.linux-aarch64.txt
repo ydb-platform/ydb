@@ -18,14 +18,14 @@ target_compile_options(libs-poco-Util PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(libs-poco-Util PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/include
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/include
 )
 target_include_directories(libs-poco-Util PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/expat
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Foundation/include
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/include
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/XML/include
+  ${PROJECT_SOURCE_DIR}/contrib/libs/expat
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Foundation/include
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/JSON/include
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/XML/include
 )
 target_link_libraries(libs-poco-Util PUBLIC
   contrib-libs-linux-headers
@@ -36,31 +36,31 @@ target_link_libraries(libs-poco-Util PUBLIC
   libs-poco-XML
 )
 target_sources(libs-poco-Util PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/AbstractConfiguration.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/Application.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/ConfigurationMapper.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/ConfigurationView.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/FilesystemConfiguration.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/HelpFormatter.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/IniFileConfiguration.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/IntValidator.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/JSONConfiguration.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/LayeredConfiguration.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/LoggingConfigurator.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/LoggingSubsystem.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/MapConfiguration.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/Option.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/OptionCallback.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/OptionException.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/OptionProcessor.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/OptionSet.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/PropertyFileConfiguration.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/RegExpValidator.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/ServerApplication.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/Subsystem.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/SystemConfiguration.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/Timer.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/TimerTask.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/Validator.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/src/XMLConfiguration.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/AbstractConfiguration.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/Application.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/ConfigurationMapper.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/ConfigurationView.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/FilesystemConfiguration.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/HelpFormatter.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/IniFileConfiguration.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/IntValidator.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/JSONConfiguration.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/LayeredConfiguration.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/LoggingConfigurator.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/LoggingSubsystem.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/MapConfiguration.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/Option.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/OptionCallback.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/OptionException.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/OptionProcessor.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/OptionSet.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/PropertyFileConfiguration.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/RegExpValidator.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/ServerApplication.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/Subsystem.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/SystemConfiguration.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/Timer.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/TimerTask.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/Validator.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/XMLConfiguration.cpp
 )

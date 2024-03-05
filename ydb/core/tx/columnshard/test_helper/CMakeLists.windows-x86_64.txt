@@ -19,5 +19,5 @@ target_link_libraries(tx-columnshard-test_helper PUBLIC
   ydb-core-wrappers
 )
 target_sources(tx-columnshard-test_helper PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/test_helper/helper.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/test_helper/helper.cpp
 )

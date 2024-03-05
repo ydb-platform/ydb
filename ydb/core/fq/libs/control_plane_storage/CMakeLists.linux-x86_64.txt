@@ -43,17 +43,17 @@ target_link_libraries(fq-libs-control_plane_storage PUBLIC
   yql-public-issue
 )
 target_sources(fq-libs-control_plane_storage PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/config.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/control_plane_storage_counters.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/in_memory_control_plane_storage.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/probes.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/request_validators.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/util.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/validators.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_bindings.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_compute_database.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_connections.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_queries.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_quotas.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/config.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/control_plane_storage_counters.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/in_memory_control_plane_storage.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/probes.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/request_validators.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/util.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/validators.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_bindings.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_compute_database.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_connections.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_queries.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_quotas.cpp
 )

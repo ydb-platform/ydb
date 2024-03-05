@@ -23,17 +23,17 @@ target_link_libraries(core-graph-shard PUBLIC
   graph-shard-protos
 )
 target_sources(core-graph-shard PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/graph/shard/backends.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/graph/shard/log.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/graph/shard/schema.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/graph/shard/shard_impl.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/graph/shard/backends.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/graph/shard/shard_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/graph/shard/tx_aggregate_data.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/graph/shard/tx_change_backend.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/graph/shard/tx_get_metrics.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/graph/shard/tx_init_schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/graph/shard/tx_monitoring.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/graph/shard/tx_startup.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/graph/shard/tx_store_metrics.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/graph/shard/backends.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/graph/shard/log.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/graph/shard/schema.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/graph/shard/shard_impl.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/graph/shard/backends.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/graph/shard/shard_impl.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/graph/shard/tx_aggregate_data.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/graph/shard/tx_change_backend.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/graph/shard/tx_get_metrics.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/graph/shard/tx_init_schema.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/graph/shard/tx_monitoring.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/graph/shard/tx_startup.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/graph/shard/tx_store_metrics.cpp
 )

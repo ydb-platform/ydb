@@ -9,7 +9,7 @@
 
 add_executable(ydb-library-actors-util-ut)
 target_include_directories(ydb-library-actors-util-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util
 )
 target_link_libraries(ydb-library-actors-util-ut PUBLIC
   contrib-libs-cxxsupp
@@ -25,15 +25,15 @@ target_link_options(ydb-library-actors-util-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-library-actors-util-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/cpu_load_log_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/memory_tracker_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/thread_load_log_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/rope_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/rc_buf_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/shared_data_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/shared_data_rope_backend_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/shared_data_native_rope_backend_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/util/unordered_cache_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/cpu_load_log_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/memory_tracker_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/thread_load_log_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/rope_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/rc_buf_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/shared_data_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/shared_data_rope_backend_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/shared_data_native_rope_backend_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/unordered_cache_ut.cpp
 )
 set_property(
   TARGET

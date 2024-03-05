@@ -15,10 +15,10 @@ target_link_libraries(library-cpp-packedtypes PUBLIC
   cpp-streams-zc_memory_input
 )
 target_sources(library-cpp-packedtypes PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/packedtypes/fixed_point.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/packedtypes/packed.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/packedtypes/packedfloat.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/packedtypes/zigzag.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/packedtypes/longs.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/packedtypes/packedfloat.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/packedtypes/fixed_point.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/packedtypes/packed.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/packedtypes/packedfloat.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/packedtypes/zigzag.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/packedtypes/longs.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/packedtypes/packedfloat.cpp
 )

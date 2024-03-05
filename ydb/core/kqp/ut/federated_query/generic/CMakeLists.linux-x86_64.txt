@@ -12,7 +12,7 @@ target_compile_options(ydb-core-kqp-ut-federated_query-generic PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-core-kqp-ut-federated_query-generic PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp
 )
 target_link_libraries(ydb-core-kqp-ut-federated_query-generic PUBLIC
   contrib-libs-linux-headers
@@ -40,11 +40,11 @@ target_link_options(ydb-core-kqp-ut-federated_query-generic PRIVATE
   -ldl
 )
 target_sources(ydb-core-kqp-ut-federated_query-generic PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/federated_query/generic/ch_recipe_ut_helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/federated_query/generic/connector_recipe_ut_helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/federated_query/generic/kqp_generic_plan_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/federated_query/generic/kqp_generic_provider_join_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/federated_query/generic/pg_recipe_ut_helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/federated_query/generic/ch_recipe_ut_helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/federated_query/generic/connector_recipe_ut_helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/federated_query/generic/kqp_generic_plan_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/federated_query/generic/kqp_generic_provider_join_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/federated_query/generic/pg_recipe_ut_helpers.cpp
 )
 set_property(
   TARGET

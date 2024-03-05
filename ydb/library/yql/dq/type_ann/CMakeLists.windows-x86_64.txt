@@ -29,10 +29,10 @@ target_link_libraries(yql-dq-type_ann PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(yql-dq-type_ann PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/type_ann/dq_type_ann.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/type_ann/dq_type_ann.cpp
 )
 generate_enum_serilization(yql-dq-type_ann
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/type_ann/dq_type_ann.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/type_ann/dq_type_ann.h
   INCLUDE_HEADERS
   ydb/library/yql/dq/type_ann/dq_type_ann.h
 )

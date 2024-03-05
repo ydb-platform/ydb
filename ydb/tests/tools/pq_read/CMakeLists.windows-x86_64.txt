@@ -18,7 +18,7 @@ target_link_libraries(pq_read PUBLIC
   cpp-client-ydb_persqueue_public
 )
 target_sources(pq_read PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/tests/tools/pq_read/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/tests/tools/pq_read/main.cpp
 )
 target_allocator(pq_read
   system_allocator

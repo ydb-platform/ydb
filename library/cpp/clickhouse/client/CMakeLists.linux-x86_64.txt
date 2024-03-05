@@ -23,7 +23,7 @@ target_link_libraries(cpp-clickhouse-client PUBLIC
   cpp-openssl-io
 )
 target_sources(cpp-clickhouse-client PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/clickhouse/client/block.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/clickhouse/client/client.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/clickhouse/client/query.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/clickhouse/client/block.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/clickhouse/client/client.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/clickhouse/client/query.cpp
 )

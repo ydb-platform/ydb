@@ -14,5 +14,5 @@ target_link_libraries(columnshard-normalizer-granule PUBLIC
   columnshard-normalizer-abstract
 )
 target_sources(columnshard-normalizer-granule PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/granule/normalizer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/granule/normalizer.cpp
 )

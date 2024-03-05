@@ -18,5 +18,5 @@ target_link_libraries(library-ytprof-api PUBLIC
   cpp-yt-memory
 )
 target_sources(library-ytprof-api PRIVATE
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/ytprof/api/api.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/ytprof/api/api.cpp
 )

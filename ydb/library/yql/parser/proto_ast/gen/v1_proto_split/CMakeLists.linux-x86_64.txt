@@ -26,7 +26,7 @@ set(
 
 add_library(proto_ast-gen-v1_proto_split)
 target_include_directories(proto_ast-gen-v1_proto_split PUBLIC
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/org/antlr/codegen/templates/protobuf
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/org/antlr/codegen/templates/protobuf
 )
 target_link_libraries(proto_ast-gen-v1_proto_split PUBLIC
   contrib-libs-linux-headers
@@ -35,91 +35,91 @@ target_link_libraries(proto_ast-gen-v1_proto_split PUBLIC
   contrib-libs-protobuf
 )
 target_sources(proto_ast-gen-v1_proto_split PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/org/antlr/codegen/templates/protobuf/protobuf.stg
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.classes.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code0.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.classes.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code1.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code2.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code3.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code4.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code5.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code6.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code7.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code8.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code9.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.data.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/org/antlr/codegen/templates/protobuf/protobuf.stg
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.classes.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code0.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.classes.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code1.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code2.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code3.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code4.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code5.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code6.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code7.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code8.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code9.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.data.cc
 )
 add_custom_command(
   OUTPUT
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code0.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code1.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code2.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code3.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code4.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code5.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code6.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code7.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code8.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code9.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.data.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.classes.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code0.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code1.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code2.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code3.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code4.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code5.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code6.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code7.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code8.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.code9.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.data.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.classes.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h
   DEPENDS
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.cc
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/gen/multiproto.py
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.cc
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/gen/multiproto.py
   WORKING_DIRECTORY
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split
   COMMAND
   Python3::Interpreter
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/gen/multiproto.py
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/gen/multiproto.py
   SQLv1Parser
 )
 add_custom_command(
   OUTPUT
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.cc
   DEPENDS
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.proto
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.proto
   ${TOOL_protoc_bin}
   ${TOOL_cpp_styleguide_bin}
   WORKING_DIRECTORY
-  ${CMAKE_BINARY_DIR}
+  ${PROJECT_BINARY_DIR}
   COMMAND
   ${TOOL_protoc_bin}
-  -I=${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split
-  -I=${CMAKE_SOURCE_DIR}
-  -I=${CMAKE_BINARY_DIR}
-  -I=${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  --cpp_out=${CMAKE_BINARY_DIR}
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}
-  --plugin=protoc-gen-cpp_styleguide=${CMAKE_BINARY_DIR}/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.proto
+  -I=${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split
+  -I=${PROJECT_SOURCE_DIR}
+  -I=${PROJECT_BINARY_DIR}
+  -I=${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  --cpp_out=${PROJECT_BINARY_DIR}
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}
+  --plugin=protoc-gen-cpp_styleguide=${PROJECT_BINARY_DIR}/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.proto
 )
 run_antlr(
   OUTPUT
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.proto
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.proto
   DEPENDS
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1.g
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/org/antlr/codegen/templates/protobuf/protobuf.stg
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1.g
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/org/antlr/codegen/templates/protobuf/protobuf.stg
   WORKING_DIRECTORY
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split
   ANTLER_ARGS
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1.g
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1.g
   -lib
   .
   -fo
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split
   -language
   protobuf
 )
 configure_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/org/antlr/codegen/templates/protobuf/protobuf.stg
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split/org/antlr/codegen/templates/protobuf/protobuf.stg
 )
 if(NOT CMAKE_CROSSCOMPILING)
   add_dependencies(proto_ast-gen-v1_proto_split

@@ -35,19 +35,19 @@ target_link_libraries(core-tx-scheme_board PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(core-tx-scheme_board PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/cache.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/events.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/load_test.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/monitoring.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/populator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/replica.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/subscriber.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/two_part_description.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/opaque_path_description.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/scheme_board/cache.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/scheme_board/events.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/scheme_board/helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/scheme_board/load_test.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/scheme_board/monitoring.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/scheme_board/populator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/scheme_board/replica.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/scheme_board/subscriber.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/scheme_board/two_part_description.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/scheme_board/opaque_path_description.cpp
 )
 generate_enum_serilization(core-tx-scheme_board
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/subscriber.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/scheme_board/subscriber.h
   INCLUDE_HEADERS
   ydb/core/tx/scheme_board/subscriber.h
 )

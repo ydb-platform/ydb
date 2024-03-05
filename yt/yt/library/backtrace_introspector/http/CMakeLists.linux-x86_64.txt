@@ -20,5 +20,5 @@ target_link_libraries(library-backtrace_introspector-http PUBLIC
   yt-library-backtrace_introspector
 )
 target_sources(library-backtrace_introspector-http PRIVATE
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/backtrace_introspector/http/handler.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/backtrace_introspector/http/handler.cpp
 )

@@ -13,7 +13,7 @@ target_compile_options(llvm14-lib-Target PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(llvm14-lib-Target PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/Target
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target
 )
 target_link_libraries(llvm14-lib-Target PUBLIC
   contrib-libs-cxxsupp
@@ -25,9 +25,9 @@ target_link_libraries(llvm14-lib-Target PUBLIC
   llvm14-lib-Support
 )
 target_sources(llvm14-lib-Target PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/Target.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/TargetIntrinsicInfo.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/TargetLoweringObjectFile.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/TargetMachine.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/TargetMachineC.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/Target.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/TargetIntrinsicInfo.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/TargetLoweringObjectFile.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/TargetMachine.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/TargetMachineC.cpp
 )

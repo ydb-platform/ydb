@@ -15,20 +15,20 @@ target_compile_options(restricted-aws-aws-c-sdkutils PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-aws-aws-c-sdkutils PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/include
 )
 target_link_libraries(restricted-aws-aws-c-sdkutils PUBLIC
   contrib-libs-linux-headers
   restricted-aws-aws-c-common
 )
 target_sources(restricted-aws-aws-c-sdkutils PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/aws_profile.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/endpoints_rule_engine.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/endpoints_ruleset.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/endpoints_standard_lib.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/endpoints_types_impl.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/endpoints_util.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/partitions.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/resource_name.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/sdkutils.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/aws_profile.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/endpoints_rule_engine.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/endpoints_ruleset.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/endpoints_standard_lib.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/endpoints_types_impl.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/endpoints_util.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/partitions.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/resource_name.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/sdkutils.c
 )

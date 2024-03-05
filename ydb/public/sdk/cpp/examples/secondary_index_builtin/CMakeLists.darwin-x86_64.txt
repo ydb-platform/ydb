@@ -23,13 +23,13 @@ target_link_options(secondary_index_builtin PRIVATE
   CoreFoundation
 )
 target_sources(secondary_index_builtin PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/main.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/secondary_index.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/secondary_index_create.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/secondary_index_fill.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/secondary_index_select.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/secondary_index_drop.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/secondary_index_select_join.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/secondary_index.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/secondary_index_create.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/secondary_index_fill.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/secondary_index_select.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/secondary_index_drop.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/secondary_index_select_join.cpp
 )
 target_allocator(secondary_index_builtin
   system_allocator

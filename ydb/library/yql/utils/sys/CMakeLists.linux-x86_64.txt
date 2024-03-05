@@ -15,9 +15,9 @@ target_link_libraries(yql-utils-sys PUBLIC
   contrib-libs-libcap
 )
 target_sources(yql-utils-sys PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/sys/become_user.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/sys/linux_version.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/sys/become_user_dummy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/sys/linux_version.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/sys/become_user.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/sys/become_user.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/sys/linux_version.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/sys/become_user_dummy.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/sys/linux_version.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/sys/become_user.cpp
 )

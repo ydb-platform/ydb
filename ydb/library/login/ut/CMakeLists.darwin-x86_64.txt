@@ -9,7 +9,7 @@
 
 add_executable(ydb-library-login-ut)
 target_include_directories(ydb-library-login-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/login
+  ${PROJECT_SOURCE_DIR}/ydb/library/login
 )
 target_link_libraries(ydb-library-login-ut PUBLIC
   contrib-libs-cxxsupp
@@ -24,7 +24,7 @@ target_link_options(ydb-library-login-ut PRIVATE
   -fPIC
 )
 target_sources(ydb-library-login-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/login/login_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/login/login_ut.cpp
 )
 set_property(
   TARGET

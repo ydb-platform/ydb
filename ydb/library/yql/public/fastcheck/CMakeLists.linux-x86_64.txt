@@ -23,5 +23,5 @@ target_link_libraries(yql-public-fastcheck PUBLIC
   providers-common-provider
 )
 target_sources(yql-public-fastcheck PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/fastcheck/fastcheck.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/fastcheck/fastcheck.cpp
 )

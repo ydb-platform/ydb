@@ -12,7 +12,7 @@ target_compile_options(public-embedded-no_llvm PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(public-embedded-no_llvm PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/embedded
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/embedded
 )
 target_link_libraries(public-embedded-no_llvm PUBLIC
   contrib-libs-linux-headers
@@ -56,5 +56,5 @@ target_link_libraries(public-embedded-no_llvm PUBLIC
   yt-comp_nodes-no_llvm
 )
 target_sources(public-embedded-no_llvm PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/embedded/yql_embedded.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/embedded/yql_embedded.cpp
 )

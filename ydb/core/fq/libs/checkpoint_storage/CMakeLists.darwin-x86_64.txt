@@ -33,9 +33,9 @@ target_link_libraries(fq-libs-checkpoint_storage PUBLIC
   cpp-client-ydb_table
 )
 target_sources(fq-libs-checkpoint_storage PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/checkpoint_storage/gc.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/checkpoint_storage/storage_proxy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/checkpoint_storage/storage_service.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/checkpoint_storage/ydb_checkpoint_storage.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/checkpoint_storage/ydb_state_storage.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpoint_storage/gc.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpoint_storage/storage_proxy.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpoint_storage/storage_service.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpoint_storage/ydb_checkpoint_storage.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpoint_storage/ydb_state_storage.cpp
 )

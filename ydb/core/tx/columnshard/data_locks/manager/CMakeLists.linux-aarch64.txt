@@ -15,5 +15,5 @@ target_link_libraries(columnshard-data_locks-manager PUBLIC
   columnshard-data_locks-locks
 )
 target_sources(columnshard-data_locks-manager PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/data_locks/manager/manager.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_locks/manager/manager.cpp
 )

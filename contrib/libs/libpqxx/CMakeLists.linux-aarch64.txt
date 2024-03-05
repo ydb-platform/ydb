@@ -13,11 +13,11 @@ target_compile_options(contrib-libs-libpqxx PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(contrib-libs-libpqxx PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/include
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/include
 )
 target_include_directories(contrib-libs-libpqxx PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpq
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpq/src/interfaces/libpq
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpq
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpq/src/interfaces/libpq
 )
 target_link_libraries(contrib-libs-libpqxx PUBLIC
   contrib-libs-linux-headers
@@ -25,36 +25,36 @@ target_link_libraries(contrib-libs-libpqxx PUBLIC
   contrib-libs-libpq
 )
 target_sources(contrib-libs-libpqxx PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/array.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/binarystring.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/connection.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/connection_base.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/cursor.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/dbtransaction.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/encodings.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/errorhandler.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/except.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/field.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/largeobject.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/nontransaction.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/notification.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/pipeline.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/prepared_statement.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/result.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/robusttransaction.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/row.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/sql_cursor.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/statement_parameters.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/strconv.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/stream_base.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/stream_from.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/stream_to.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/subtransaction.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/tablereader.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/tablestream.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/tablewriter.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/transaction.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/transaction_base.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/util.cxx
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libpqxx/src/version.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/array.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/binarystring.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/connection.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/connection_base.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/cursor.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/dbtransaction.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/encodings.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/errorhandler.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/except.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/field.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/largeobject.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/nontransaction.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/notification.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/pipeline.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/prepared_statement.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/result.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/robusttransaction.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/row.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/sql_cursor.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/statement_parameters.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/strconv.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/stream_base.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/stream_from.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/stream_to.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/subtransaction.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/tablereader.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/tablestream.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/tablewriter.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/transaction.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/transaction_base.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/util.cxx
+  ${PROJECT_SOURCE_DIR}/contrib/libs/libpqxx/src/version.cxx
 )

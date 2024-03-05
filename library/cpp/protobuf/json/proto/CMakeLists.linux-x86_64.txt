@@ -27,21 +27,21 @@ target_link_libraries(protobuf-json-proto PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(protobuf-json-proto PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/json/proto/enum_options.proto
+  ${PROJECT_SOURCE_DIR}/library/cpp/protobuf/json/proto/enum_options.proto
 )
 target_sources(protobuf-json-proto PRIVATE
-  ${CMAKE_BINARY_DIR}/library/cpp/protobuf/json/proto/enum_options.pb.h
+  ${PROJECT_BINARY_DIR}/library/cpp/protobuf/json/proto/enum_options.pb.h
 )
 target_proto_addincls(protobuf-json-proto
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(protobuf-json-proto
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )

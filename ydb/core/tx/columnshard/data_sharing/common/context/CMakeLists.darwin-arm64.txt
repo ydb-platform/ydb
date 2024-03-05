@@ -16,5 +16,5 @@ target_link_libraries(data_sharing-common-context PUBLIC
   ydb-library-conclusion
 )
 target_sources(data_sharing-common-context PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/common/context/context.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/common/context/context.cpp
 )

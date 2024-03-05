@@ -26,7 +26,7 @@ target_link_options(stream_store PRIVATE
   -ldl
 )
 target_sources(stream_store PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/simd/exec/stream_store/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/simd/exec/stream_store/main.cpp
 )
 target_allocator(stream_store
   cpp-malloc-tcmalloc

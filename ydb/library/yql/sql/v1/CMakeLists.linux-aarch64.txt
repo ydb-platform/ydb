@@ -61,41 +61,41 @@ target_link_libraries(yql-sql-v1 PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(yql-sql-v1 PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/aggregation.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/builtin.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/context.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/join.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/insert.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/list_builtin.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/match_recognize.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/node.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/select.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/source.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_call_expr.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_expression.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_group_by.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_match_recognize.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_into_tables.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_query.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_select.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_translation.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_values.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/query.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/object_processing.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/aggregation.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/builtin.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/context.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/join.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/insert.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/list_builtin.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/match_recognize.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/node.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/select.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/source.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/sql.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_call_expr.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_expression.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_group_by.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_match_recognize.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_into_tables.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_query.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_select.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_translation.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_values.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/query.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/object_processing.cpp
 )
 generate_enum_serilization(yql-sql-v1
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/match_recognize.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/match_recognize.h
   INCLUDE_HEADERS
   ydb/library/yql/sql/v1/match_recognize.h
 )
 generate_enum_serilization(yql-sql-v1
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/node.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/node.h
   INCLUDE_HEADERS
   ydb/library/yql/sql/v1/node.h
 )
 generate_enum_serilization(yql-sql-v1
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_call_param.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_call_param.h
   INCLUDE_HEADERS
   ydb/library/yql/sql/v1/sql_call_param.h
 )

@@ -20,12 +20,12 @@ target_link_libraries(ydb-core-control PUBLIC
   cpp-deprecated-atomic
 )
 target_sources(ydb-core-control PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/control/defs.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_actor.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_control.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_impl.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_wrapper.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_control.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_impl.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/control/defs.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/control/immediate_control_board_actor.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/control/immediate_control_board_control.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/control/immediate_control_board_impl.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/control/immediate_control_board_wrapper.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/control/immediate_control_board_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/control/immediate_control_board_control.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/control/immediate_control_board_impl.cpp
 )

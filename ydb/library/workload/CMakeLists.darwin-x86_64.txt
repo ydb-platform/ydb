@@ -29,21 +29,21 @@ target_link_libraries(ydb-library-workload PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(ydb-library-workload PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/workload/kv_workload.h_serialized.h
-  ${CMAKE_BINARY_DIR}/ydb/library/workload/stock_workload.h_serialized.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/workload/workload_factory.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/kv_workload.h_serialized.h
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/stock_workload.h_serialized.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/workload_factory.cpp
 )
 generate_enum_serilization(ydb-library-workload
-  ${CMAKE_SOURCE_DIR}/ydb/library/workload/kv_workload.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/kv_workload.h
   GEN_HEADER
-  ${CMAKE_BINARY_DIR}/ydb/library/workload/kv_workload.h_serialized.h
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/kv_workload.h_serialized.h
   INCLUDE_HEADERS
   ydb/library/workload/kv_workload.h
 )
 generate_enum_serilization(ydb-library-workload
-  ${CMAKE_SOURCE_DIR}/ydb/library/workload/stock_workload.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/stock_workload.h
   GEN_HEADER
-  ${CMAKE_BINARY_DIR}/ydb/library/workload/stock_workload.h_serialized.h
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/stock_workload.h_serialized.h
   INCLUDE_HEADERS
   ydb/library/workload/stock_workload.h
 )
@@ -58,6 +58,6 @@ target_link_libraries(ydb-library-workload.global PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(ydb-library-workload.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/workload/stock_workload.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/workload/kv_workload.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/stock_workload.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/kv_workload.cpp
 )

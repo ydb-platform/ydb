@@ -9,7 +9,7 @@
 
 add_executable(ydb-core-blobstorage-ut_blobstorage-ut_balancing)
 target_include_directories(ydb-core-blobstorage-ut_blobstorage-ut_balancing PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage
 )
 target_link_libraries(ydb-core-blobstorage-ut_blobstorage-ut_balancing PUBLIC
   contrib-libs-cxxsupp
@@ -26,7 +26,7 @@ target_link_options(ydb-core-blobstorage-ut_blobstorage-ut_balancing PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-blobstorage-ut_blobstorage-ut_balancing PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/balancing.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/balancing.cpp
 )
 set_property(
   TARGET

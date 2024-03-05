@@ -88,20 +88,20 @@ target_link_libraries(fq-libs-actors PUBLIC
   cpp-client-ydb_table
 )
 target_sources(fq-libs-actors PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/clusters_from_connections.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/database_resolver.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/error.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/nodes_health_check.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/nodes_manager.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/pending_fetcher.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/proxy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/proxy_private.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/rate_limiter.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/rate_limiter_resources.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/result_writer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/run_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/table_bindings_from_bindings.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/task_get.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/task_ping.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/task_result_write.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/clusters_from_connections.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/database_resolver.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/error.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/nodes_health_check.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/nodes_manager.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/pending_fetcher.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/proxy.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/proxy_private.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/rate_limiter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/rate_limiter_resources.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/result_writer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/run_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/table_bindings_from_bindings.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/task_get.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/task_ping.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/task_result_write.cpp
 )

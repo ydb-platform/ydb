@@ -9,7 +9,7 @@
 
 add_executable(ydb-library-naming_conventions-ut)
 target_include_directories(ydb-library-naming_conventions-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/naming_conventions
+  ${PROJECT_SOURCE_DIR}/ydb/library/naming_conventions
 )
 target_link_libraries(ydb-library-naming_conventions-ut PUBLIC
   contrib-libs-linux-headers
@@ -29,7 +29,7 @@ target_link_options(ydb-library-naming_conventions-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-naming_conventions-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/naming_conventions/ut/naming_conventions_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/naming_conventions/ut/naming_conventions_ut.cpp
 )
 set_property(
   TARGET

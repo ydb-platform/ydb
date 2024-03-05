@@ -14,6 +14,6 @@ target_link_libraries(schemeshard-olap-indexes PUBLIC
   services-bg_tasks-abstract
 )
 target_sources(schemeshard-olap-indexes PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/indexes/schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/indexes/update.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/indexes/schema.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/indexes/update.cpp
 )

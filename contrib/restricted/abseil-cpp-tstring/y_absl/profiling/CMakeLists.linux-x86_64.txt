@@ -12,7 +12,7 @@ target_compile_options(abseil-cpp-tstring-y_absl-profiling PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(abseil-cpp-tstring-y_absl-profiling PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )
 target_link_libraries(abseil-cpp-tstring-y_absl-profiling PUBLIC
   contrib-libs-linux-headers
@@ -20,6 +20,6 @@ target_link_libraries(abseil-cpp-tstring-y_absl-profiling PUBLIC
   yutil
 )
 target_sources(abseil-cpp-tstring-y_absl-profiling PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/profiling/internal/exponential_biased.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/profiling/internal/periodic_sampler.cc
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/profiling/internal/exponential_biased.cc
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/profiling/internal/periodic_sampler.cc
 )

@@ -18,5 +18,5 @@ target_link_libraries(spilling-storage-file_storage PUBLIC
   yql-utils-log
 )
 target_sources(spilling-storage-file_storage PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/spilling/storage/file_storage/file_storage.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/storage/file_storage/file_storage.cpp
 )

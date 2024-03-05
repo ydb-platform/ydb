@@ -24,7 +24,7 @@ target_link_libraries(block_groupby PUBLIC
   library-cpp-getopt
 )
 target_sources(block_groupby PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/perf/block_groupby/block_groupby.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/perf/block_groupby/block_groupby.cpp
 )
 target_allocator(block_groupby
   system_allocator

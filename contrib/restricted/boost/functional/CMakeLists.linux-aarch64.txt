@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-functional INTERFACE)
 target_include_directories(restricted-boost-functional INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/functional/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/functional/include
 )
 target_link_libraries(restricted-boost-functional INTERFACE
   contrib-libs-linux-headers

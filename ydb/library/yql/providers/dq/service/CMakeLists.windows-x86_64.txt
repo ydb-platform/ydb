@@ -34,8 +34,8 @@ target_link_libraries(providers-dq-service PUBLIC
   dq-worker_manager-interface
 )
 target_sources(providers-dq-service PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/service/grpc_service.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/service/grpc_session.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/service/service_node.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/service/interconnect_helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/service/grpc_service.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/service/grpc_session.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/service/service_node.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/service/interconnect_helpers.cpp
 )

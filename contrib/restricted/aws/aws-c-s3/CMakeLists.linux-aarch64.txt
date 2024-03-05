@@ -36,7 +36,7 @@ target_compile_options(restricted-aws-aws-c-s3 PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-aws-aws-c-s3 PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/include
 )
 target_link_libraries(restricted-aws-aws-c-s3 PUBLIC
   contrib-libs-linux-headers
@@ -49,21 +49,21 @@ target_link_libraries(restricted-aws-aws-c-s3 PUBLIC
   restricted-aws-aws-checksums
 )
 target_sources(restricted-aws-aws-c-s3 PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_auto_ranged_get.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_auto_ranged_put.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_checksum_stream.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_checksums.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_chunk_stream.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_client.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_copy_object.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_default_meta_request.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_endpoint.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_list_objects.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_list_parts.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_meta_request.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_paginator.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_request.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_request_messages.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_util.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_auto_ranged_get.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_auto_ranged_put.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_checksum_stream.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_checksums.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_chunk_stream.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_client.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_copy_object.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_default_meta_request.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_endpoint.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_list_objects.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_list_parts.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_meta_request.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_paginator.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_request.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_request_messages.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_util.c
 )

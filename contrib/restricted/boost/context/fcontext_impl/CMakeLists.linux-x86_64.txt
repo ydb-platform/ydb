@@ -17,7 +17,7 @@ target_link_libraries(boost-context-fcontext_impl PUBLIC
   boost-context-impl_common
 )
 target_sources(boost-context-fcontext_impl PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/context/src/asm/jump_x86_64_sysv_elf_gas.S
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/context/src/asm/make_x86_64_sysv_elf_gas.S
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/context/src/asm/ontop_x86_64_sysv_elf_gas.S
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/context/src/asm/jump_x86_64_sysv_elf_gas.S
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/context/src/asm/make_x86_64_sysv_elf_gas.S
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/context/src/asm/ontop_x86_64_sysv_elf_gas.S
 )

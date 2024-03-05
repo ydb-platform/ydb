@@ -24,12 +24,12 @@ target_link_libraries(cpp-client-ydb_query PUBLIC
   client-ydb_types-operation
 )
 target_sources(cpp-client-ydb_query PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_query/client.h
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_query/query.h
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_query/stats.h
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_query/tx.h
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_query/client.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_query/query.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_query/stats.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_query/tx.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_query/client.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_query/query.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_query/stats.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_query/tx.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_query/client.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_query/query.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_query/stats.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_query/tx.cpp
 )

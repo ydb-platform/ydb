@@ -49,7 +49,7 @@ target_link_libraries(pgrun PUBLIC
   yql-parser-pg_wrapper
 )
 target_sources(pgrun PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/pgrun/pgrun.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/pgrun/pgrun.cpp
 )
 target_allocator(pgrun
   system_allocator

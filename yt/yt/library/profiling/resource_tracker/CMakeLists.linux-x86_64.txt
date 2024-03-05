@@ -19,5 +19,5 @@ target_link_libraries(library-profiling-resource_tracker PUBLIC
   yt_proto-yt-core
 )
 target_sources(library-profiling-resource_tracker PRIVATE
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/profiling/resource_tracker/resource_tracker.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/resource_tracker/resource_tracker.cpp
 )

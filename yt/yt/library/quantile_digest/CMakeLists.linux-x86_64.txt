@@ -33,24 +33,24 @@ target_link_libraries(yt-library-quantile_digest PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(yt-library-quantile_digest PRIVATE
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/quantile_digest/proto/quantile_digest.proto
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/quantile_digest/proto/quantile_digest.proto
 )
 target_sources(yt-library-quantile_digest PRIVATE
-  ${CMAKE_BINARY_DIR}/yt/yt/library/quantile_digest/proto/quantile_digest.pb.h
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/quantile_digest/config.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/quantile_digest/quantile_digest.cpp
+  ${PROJECT_BINARY_DIR}/yt/yt/library/quantile_digest/proto/quantile_digest.pb.h
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/quantile_digest/config.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/quantile_digest/quantile_digest.cpp
 )
 target_proto_addincls(yt-library-quantile_digest
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_SOURCE_DIR}/yt
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/yt
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(yt-library-quantile_digest
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )

@@ -9,7 +9,7 @@
 
 add_executable(ydb-core-blobstorage-vdisk-hulldb-generic-ut)
 target_include_directories(ydb-core-blobstorage-vdisk-hulldb-generic-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic
 )
 target_link_libraries(ydb-core-blobstorage-vdisk-hulldb-generic-ut PUBLIC
   contrib-libs-cxxsupp
@@ -31,8 +31,8 @@ target_link_options(ydb-core-blobstorage-vdisk-hulldb-generic-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-blobstorage-vdisk-hulldb-generic-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sst_it_all_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullwritesst_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sst_it_all_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullwritesst_ut.cpp
 )
 set_property(
   TARGET

@@ -12,7 +12,7 @@ target_compile_options(ydb-library-yql-dq-state-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-library-yql-dq-state-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/state
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/state
 )
 target_link_libraries(ydb-library-yql-dq-state-ut PUBLIC
   contrib-libs-cxxsupp
@@ -22,7 +22,7 @@ target_link_libraries(ydb-library-yql-dq-state-ut PUBLIC
   yql-dq-state
 )
 target_sources(ydb-library-yql-dq-state-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/state/ut/dq_state_load_plan_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/state/ut/dq_state_load_plan_ut.cpp
 )
 set_property(
   TARGET

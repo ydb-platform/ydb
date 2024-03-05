@@ -12,7 +12,7 @@ target_compile_options(ydb-core-tx-schemeshard-ut_olap PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-core-tx-schemeshard-ut_olap PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard
 )
 target_link_libraries(ydb-core-tx-schemeshard-ut_olap PUBLIC
   contrib-libs-cxxsupp
@@ -32,8 +32,8 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_olap PUBLIC
   udf-service-exception_policy
 )
 target_sources(ydb-core-tx-schemeshard-ut_olap PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_olap/ut_olap.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_ut_common.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_olap/ut_olap.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_ut_common.cpp
 )
 set_property(
   TARGET

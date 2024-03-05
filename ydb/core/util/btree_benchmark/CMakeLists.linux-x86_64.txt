@@ -28,7 +28,7 @@ target_link_options(btree_benchmark PRIVATE
   -ldl
 )
 target_sources(btree_benchmark PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/btree_benchmark/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/util/btree_benchmark/main.cpp
 )
 target_allocator(btree_benchmark
   library-cpp-lfalloc

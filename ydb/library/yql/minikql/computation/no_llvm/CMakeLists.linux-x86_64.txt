@@ -13,12 +13,12 @@ target_compile_options(minikql-computation-no_llvm PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(minikql-computation-no_llvm PUBLIC
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/llvm_stub
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/ydb/library/yql/minikql/computation
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/codegen/llvm_stub
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/ydb/library/yql/minikql/computation
 )
 target_include_directories(minikql-computation-no_llvm PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation
 )
 target_link_libraries(minikql-computation-no_llvm PUBLIC
   contrib-libs-linux-headers
@@ -40,44 +40,44 @@ target_link_libraries(minikql-computation-no_llvm PUBLIC
   cpp-threading-future
 )
 target_sources(minikql-computation-no_llvm PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/ydb/library/yql/minikql/computation/mkql_llvm_base.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_codegen.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_graph.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_graph_saveload.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_holders_codegen.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_llvm_base.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/ydb/library/yql/minikql/computation/mkql_llvm_base.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_codegen.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_graph.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_graph_saveload.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_holders_codegen.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_llvm_base.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_codegen.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_codegen.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_graph.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_graph.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_graph.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_graph.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_graph_saveload.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_graph_saveload.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_graph_saveload.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_graph_saveload.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_holders_codegen.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_holders_codegen.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_holders_codegen.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_computation_node_holders_codegen.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_llvm_base.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_llvm_base.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_llvm_base.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/mkql_llvm_base.cpp
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h.txt
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h.txt
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_llvm_base.h.txt
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/ydb/library/yql/minikql/computation/mkql_llvm_base.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_llvm_base.h.txt
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/ydb/library/yql/minikql/computation/mkql_llvm_base.h
 )
 copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h.txt
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h.txt
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/computation/no_llvm/ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h
 )

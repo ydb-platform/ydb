@@ -9,7 +9,7 @@
 
 add_executable(ydb-core-erasure-ut_rope)
 target_include_directories(ydb-core-erasure-ut_rope PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/erasure
+  ${PROJECT_SOURCE_DIR}/ydb/core/erasure
 )
 target_link_libraries(ydb-core-erasure-ut_rope PUBLIC
   contrib-libs-linux-headers
@@ -31,7 +31,7 @@ target_link_options(ydb-core-erasure-ut_rope PRIVATE
   -ldl
 )
 target_sources(ydb-core-erasure-ut_rope PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/erasure/erasure_rope_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/erasure/erasure_rope_ut.cpp
 )
 set_property(
   TARGET

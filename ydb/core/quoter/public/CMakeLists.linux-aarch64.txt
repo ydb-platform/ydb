@@ -26,11 +26,11 @@ target_link_libraries(core-quoter-public PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(core-quoter-public PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/quoter/public/quoter.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/quoter/public/quoter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/quoter/public/quoter.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/quoter/public/quoter.cpp
 )
 generate_enum_serilization(core-quoter-public
-  ${CMAKE_SOURCE_DIR}/ydb/core/quoter/public/quoter.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/quoter/public/quoter.h
   INCLUDE_HEADERS
   ydb/core/quoter/public/quoter.h
 )

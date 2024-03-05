@@ -13,6 +13,6 @@ target_link_libraries(cpp-string_utils-parse_size PUBLIC
   yutil
 )
 target_sources(cpp-string_utils-parse_size PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/string_utils/parse_size/parse_size.h
-  ${CMAKE_SOURCE_DIR}/library/cpp/string_utils/parse_size/parse_size.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/string_utils/parse_size/parse_size.h
+  ${PROJECT_SOURCE_DIR}/library/cpp/string_utils/parse_size/parse_size.cpp
 )

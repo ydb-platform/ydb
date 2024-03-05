@@ -13,7 +13,8 @@ target_link_libraries(scheme-statistics-max INTERFACE
   contrib-libs-cxxsupp
   yutil
   scheme-statistics-abstract
-  schemeshard-olap-schema
+  engines-scheme-abstract
+  columnshard-splitter-abstract
   core-formats-arrow
 )
 
@@ -23,10 +24,11 @@ target_link_libraries(scheme-statistics-max.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   scheme-statistics-abstract
-  schemeshard-olap-schema
+  engines-scheme-abstract
+  columnshard-splitter-abstract
   core-formats-arrow
 )
 target_sources(scheme-statistics-max.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/statistics/max/constructor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/statistics/max/operator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/statistics/max/constructor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/statistics/max/operator.cpp
 )

@@ -31,7 +31,7 @@ target_link_options(ydb-core-blobstorage-dsproxy-ut_ftol PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-dsproxy-ut_ftol PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut_ftol/dsproxy_fault_tolerance_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut_ftol/dsproxy_fault_tolerance_ut.cpp
 )
 set_property(
   TARGET

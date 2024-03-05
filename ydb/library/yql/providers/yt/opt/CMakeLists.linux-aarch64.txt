@@ -21,6 +21,6 @@ target_link_libraries(providers-yt-opt PUBLIC
   library-yql-ast
 )
 target_sources(providers-yt-opt PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/opt/yql_yt_join.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/opt/yql_yt_key_selector.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/opt/yql_yt_join.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/opt/yql_yt_key_selector.cpp
 )

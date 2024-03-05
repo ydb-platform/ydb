@@ -12,7 +12,7 @@ target_compile_options(lib-ExecutionEngine-PerfJITEvents PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(lib-ExecutionEngine-PerfJITEvents PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/PerfJITEvents
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/PerfJITEvents
 )
 target_link_libraries(lib-ExecutionEngine-PerfJITEvents PUBLIC
   contrib-libs-linux-headers
@@ -27,5 +27,5 @@ target_link_libraries(lib-ExecutionEngine-PerfJITEvents PUBLIC
   llvm14-lib-Support
 )
 target_sources(lib-ExecutionEngine-PerfJITEvents PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/PerfJITEvents/PerfJITEventListener.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/PerfJITEvents/PerfJITEventListener.cpp
 )

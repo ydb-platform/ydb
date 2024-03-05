@@ -9,7 +9,7 @@
 
 add_executable(ydb-core-blobstorage-ut_blobstorage-ut_donor)
 target_include_directories(ydb-core-blobstorage-ut_blobstorage-ut_donor PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage
 )
 target_link_libraries(ydb-core-blobstorage-ut_blobstorage-ut_donor PUBLIC
   contrib-libs-cxxsupp
@@ -19,7 +19,7 @@ target_link_libraries(ydb-core-blobstorage-ut_blobstorage-ut_donor PUBLIC
   blobstorage-ut_blobstorage-lib
 )
 target_sources(ydb-core-blobstorage-ut_blobstorage-ut_donor PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/donor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/donor.cpp
 )
 set_property(
   TARGET

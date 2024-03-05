@@ -32,7 +32,7 @@ target_link_options(jsonpath-benchmark PRIVATE
   CoreFoundation
 )
 target_sources(jsonpath-benchmark PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/benchmark/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/benchmark/main.cpp
 )
 target_allocator(jsonpath-benchmark
   system_allocator

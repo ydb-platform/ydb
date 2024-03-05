@@ -12,7 +12,7 @@ target_compile_options(ydb-core-sys_view-query_stats-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-core-sys_view-query_stats-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/query_stats
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/query_stats
 )
 target_link_libraries(ydb-core-sys_view-query_stats-ut PUBLIC
   contrib-libs-cxxsupp
@@ -24,7 +24,7 @@ target_link_libraries(ydb-core-sys_view-query_stats-ut PUBLIC
   core-testlib-default
 )
 target_sources(ydb-core-sys_view-query_stats-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/query_stats/query_stats_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/query_stats/query_stats_ut.cpp
 )
 set_property(
   TARGET

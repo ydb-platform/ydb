@@ -77,116 +77,116 @@ target_link_libraries(ydb-core-tablet_flat PUBLIC
   library-mkql_proto-protos
 )
 target_proto_messages(ydb-core-tablet_flat PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor.proto
 )
 target_sources(ydb-core-tablet_flat PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/core/tablet_flat/flat_executor.pb.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/defs.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_cxx_database.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_database.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_bootlogic.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_borrowlogic.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_compaction_logic.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_counters.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_gclogic.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_tx_env.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_txloglogic.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_iterator.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_sausagecache.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_stat_part.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_stat_table.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_table.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_part.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_observer.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_update_op.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/shared_sausagecache.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/shared_cache_memtable.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/tablet_flat_executor.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/tablet_flat_executed.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_boot_lease.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_boot_misc.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_comp.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_comp_create.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_comp_gen.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_database.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_dbase_scheme.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_dbase_apply.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_exec_broker.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_exec_commit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_exec_commit_mgr.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_exec_seat.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_bootlogic.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_borrowlogic.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_compaction_logic.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_counters.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_db_mon.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_gclogic.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_bio_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_snapshot.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_tx_env.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_txloglogic.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_load_blob_queue.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_mem_warm.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_sausagecache.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_sausage_meta.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_charge_create.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_charge_range.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_page_label.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_dump.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_iter_multi.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_index_iter_create.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_loader.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_overlay.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_outset.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_slice.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_range_cache.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_row_versions.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_stat_table.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_stat_part_group_iter_create.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_store_hotdog.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_table.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_part.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_misc.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_observer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/probes.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/shared_handle.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/shared_sausagecache.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/tablet_flat_executor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/tablet_flat_executed.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/tablet_flat/flat_executor.pb.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/defs.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_cxx_database.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_database.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_bootlogic.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_borrowlogic.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_compaction_logic.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_counters.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_gclogic.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_tx_env.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_txloglogic.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_iterator.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_sausagecache.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_stat_part.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_stat_table.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_table.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_part.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_observer.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_update_op.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/shared_sausagecache.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/shared_cache_memtable.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/tablet_flat_executor.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/tablet_flat_executed.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_boot_lease.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_boot_misc.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_comp.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_comp_create.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_comp_gen.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_database.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_dbase_scheme.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_dbase_apply.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_exec_broker.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_exec_commit.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_exec_commit_mgr.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_exec_seat.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_bootlogic.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_borrowlogic.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_compaction_logic.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_counters.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_db_mon.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_gclogic.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_bio_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_snapshot.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_tx_env.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_txloglogic.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_load_blob_queue.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_mem_warm.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_sausagecache.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_sausage_meta.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_charge_create.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_charge_range.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_page_label.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_dump.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_iter_multi.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_index_iter_create.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_loader.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_overlay.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_outset.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_slice.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_range_cache.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_row_versions.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_stat_table.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_stat_part_group_iter_create.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_store_hotdog.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_table.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_part.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_misc.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_observer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/probes.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/shared_handle.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/shared_sausagecache.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/tablet_flat_executor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/tablet_flat_executed.cpp
 )
 generate_enum_serilization(ydb-core-tablet_flat
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_comp_gen.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_comp_gen.h
   INCLUDE_HEADERS
   ydb/core/tablet_flat/flat_comp_gen.h
 )
 generate_enum_serilization(ydb-core-tablet_flat
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_loader.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_loader.h
   INCLUDE_HEADERS
   ydb/core/tablet_flat/flat_part_loader.h
 )
 generate_enum_serilization(ydb-core-tablet_flat
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_compaction_logic.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_compaction_logic.h
   INCLUDE_HEADERS
   ydb/core/tablet_flat/flat_executor_compaction_logic.h
 )
 generate_enum_serilization(ydb-core-tablet_flat
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_row_eggs.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_row_eggs.h
   INCLUDE_HEADERS
   ydb/core/tablet_flat/flat_row_eggs.h
 )
 target_proto_addincls(ydb-core-tablet_flat
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_SOURCE_DIR}/contrib/libs/opentelemetry-proto
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(ydb-core-tablet_flat
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )

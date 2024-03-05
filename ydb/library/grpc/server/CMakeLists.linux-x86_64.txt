@@ -25,13 +25,13 @@ target_link_libraries(library-grpc-server PUBLIC
   monlib-dynamic_counters-percentile
 )
 target_sources(library-grpc-server PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/grpc/server/event_callback.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/grpc/server/grpc_request.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/grpc/server/grpc_server.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/grpc/server/grpc_counters.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/grpc/server/event_callback.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/grpc/server/grpc_request.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/grpc/server/grpc_server.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/grpc/server/grpc_counters.cpp
 )
 generate_enum_serilization(library-grpc-server
-  ${CMAKE_SOURCE_DIR}/ydb/library/grpc/server/grpc_request_base.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/grpc/server/grpc_request_base.h
   INCLUDE_HEADERS
   ydb/library/grpc/server/grpc_request_base.h
 )

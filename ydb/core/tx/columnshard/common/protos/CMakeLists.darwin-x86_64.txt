@@ -38,23 +38,23 @@ target_link_libraries(columnshard-common-protos PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(columnshard-common-protos PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/common/protos/snapshot.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/common/protos/blob_range.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/common/protos/snapshot.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/common/protos/blob_range.proto
 )
 target_sources(columnshard-common-protos PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/core/tx/columnshard/common/protos/snapshot.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/tx/columnshard/common/protos/blob_range.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/common/protos/snapshot.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/common/protos/blob_range.pb.h
 )
 target_proto_addincls(columnshard-common-protos
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(columnshard-common-protos
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )

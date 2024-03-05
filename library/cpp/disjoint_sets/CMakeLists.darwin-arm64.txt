@@ -13,5 +13,5 @@ target_link_libraries(library-cpp-disjoint_sets PUBLIC
   yutil
 )
 target_sources(library-cpp-disjoint_sets PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/disjoint_sets/disjoint_sets.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/disjoint_sets/disjoint_sets.cpp
 )

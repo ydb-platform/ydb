@@ -29,7 +29,7 @@ target_link_options(dq_cli PRIVATE
   CoreFoundation
 )
 target_sources(dq_cli PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/dq/dq_cli/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/dq/dq_cli/main.cpp
 )
 target_allocator(dq_cli
   system_allocator

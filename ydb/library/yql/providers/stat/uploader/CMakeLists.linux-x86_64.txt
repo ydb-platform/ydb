@@ -15,5 +15,5 @@ target_link_libraries(providers-stat-uploader PUBLIC
   cpp-threading-future
 )
 target_sources(providers-stat-uploader PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/stat/uploader/yql_stat_uploader.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/stat/uploader/yql_stat_uploader.cpp
 )

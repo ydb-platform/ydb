@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-move INTERFACE)
 target_include_directories(restricted-boost-move INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/move/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/move/include
 )
 target_link_libraries(restricted-boost-move INTERFACE
   contrib-libs-linux-headers

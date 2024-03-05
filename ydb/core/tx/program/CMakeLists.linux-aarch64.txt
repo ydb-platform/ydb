@@ -22,6 +22,6 @@ target_link_libraries(core-tx-program PUBLIC
   core-arrow_kernels-registry
 )
 target_sources(core-tx-program PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/program/registry.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/program/program.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/program/registry.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/program/program.cpp
 )

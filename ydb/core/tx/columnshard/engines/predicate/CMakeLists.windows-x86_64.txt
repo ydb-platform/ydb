@@ -19,8 +19,8 @@ target_link_libraries(columnshard-engines-predicate PUBLIC
   core-formats-arrow
 )
 target_sources(columnshard-engines-predicate PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/predicate/container.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/predicate/range.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/predicate/filter.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/predicate/predicate.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/predicate/container.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/predicate/range.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/predicate/filter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/predicate/predicate.cpp
 )

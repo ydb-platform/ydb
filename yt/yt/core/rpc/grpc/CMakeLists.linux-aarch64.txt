@@ -24,10 +24,10 @@ target_compile_options(core-rpc-grpc PRIVATE
   -Wdeprecated-this-capture
 )
 target_include_directories(core-rpc-grpc PUBLIC
-  ${CMAKE_BINARY_DIR}/yt
+  ${PROJECT_BINARY_DIR}/yt
 )
 target_include_directories(core-rpc-grpc PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc
 )
 target_link_libraries(core-rpc-grpc PUBLIC
   contrib-libs-linux-headers
@@ -39,29 +39,29 @@ target_link_libraries(core-rpc-grpc PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(core-rpc-grpc PRIVATE
-  ${CMAKE_SOURCE_DIR}/yt/yt/core/rpc/grpc/proto/grpc.proto
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/grpc/proto/grpc.proto
 )
 target_sources(core-rpc-grpc PRIVATE
-  ${CMAKE_BINARY_DIR}/yt/yt/core/rpc/grpc/proto/grpc.pb.h
-  ${CMAKE_SOURCE_DIR}/yt/yt/core/rpc/grpc/config.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/core/rpc/grpc/public.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/core/rpc/grpc/dispatcher.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/core/rpc/grpc/server.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/core/rpc/grpc/helpers.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/core/rpc/grpc/channel.cpp
+  ${PROJECT_BINARY_DIR}/yt/yt/core/rpc/grpc/proto/grpc.pb.h
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/grpc/config.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/grpc/public.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/grpc/dispatcher.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/grpc/server.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/grpc/helpers.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/grpc/channel.cpp
 )
 target_proto_addincls(core-rpc-grpc
   ./yt
-  ${CMAKE_SOURCE_DIR}/yt
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/yt
-  ${CMAKE_SOURCE_DIR}/yt
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/yt
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/yt
+  ${PROJECT_SOURCE_DIR}/yt
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(core-rpc-grpc
-  --cpp_out=${CMAKE_BINARY_DIR}/yt
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/yt
+  --cpp_out=${PROJECT_BINARY_DIR}/yt
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/yt
 )

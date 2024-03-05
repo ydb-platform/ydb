@@ -31,7 +31,7 @@ target_link_options(ydb-library-yql-public-embedded-ut-no_llvm PRIVATE
   -lutil
 )
 target_sources(ydb-library-yql-public-embedded-ut-no_llvm PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/embedded/ut/yql_embedded_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/embedded/ut/yql_embedded_ut.cpp
 )
 set_property(
   TARGET

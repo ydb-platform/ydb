@@ -24,7 +24,7 @@ target_link_options(ydb-tests-functional-kqp-kqp_indexes PRIVATE
   CoreFoundation
 )
 target_sources(ydb-tests-functional-kqp-kqp_indexes PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/tests/functional/kqp/kqp_indexes/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/tests/functional/kqp/kqp_indexes/main.cpp
 )
 set_property(
   TARGET

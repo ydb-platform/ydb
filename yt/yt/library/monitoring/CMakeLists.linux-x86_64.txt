@@ -25,6 +25,6 @@ target_link_libraries(yt-library-monitoring PUBLIC
   library-backtrace_introspector-http
 )
 target_sources(yt-library-monitoring PRIVATE
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/monitoring/http_integration.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/monitoring/monitoring_manager.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/monitoring/http_integration.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/monitoring/monitoring_manager.cpp
 )

@@ -9,7 +9,7 @@
 
 add_executable(ydb-library-actors-core-ut)
 target_include_directories(ydb-library-actors-core-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core
 )
 target_link_libraries(ydb-library-actors-core-ut PUBLIC
   contrib-libs-cxxsupp
@@ -28,18 +28,18 @@ target_link_options(ydb-library-actors-core-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-library-actors-core-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/actor_coroutine_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/benchmark_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/actor_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/actorsystem_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/performance_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/ask_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/event_pb_payload_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/event_pb_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/executor_pool_basic_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/log_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/mon_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/scheduler_actor_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/actor_coroutine_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/benchmark_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/actor_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/actorsystem_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/performance_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/ask_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/event_pb_payload_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/event_pb_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/executor_pool_basic_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/log_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/mon_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/scheduler_actor_ut.cpp
 )
 set_property(
   TARGET

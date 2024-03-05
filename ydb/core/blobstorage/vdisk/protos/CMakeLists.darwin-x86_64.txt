@@ -26,21 +26,21 @@ target_link_libraries(blobstorage-vdisk-protos PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(blobstorage-vdisk-protos PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/protos/events.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/protos/events.proto
 )
 target_sources(blobstorage-vdisk-protos PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/core/blobstorage/vdisk/protos/events.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/blobstorage/vdisk/protos/events.pb.h
 )
 target_proto_addincls(blobstorage-vdisk-protos
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(blobstorage-vdisk-protos
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )

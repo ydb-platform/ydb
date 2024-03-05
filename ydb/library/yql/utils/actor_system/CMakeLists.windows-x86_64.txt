@@ -17,6 +17,6 @@ target_link_libraries(yql-utils-actor_system PUBLIC
   library-yql-utils
 )
 target_sources(yql-utils-actor_system PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/actor_system/manager.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/actor_system/manager.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/actor_system/manager.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/actor_system/manager.cpp
 )

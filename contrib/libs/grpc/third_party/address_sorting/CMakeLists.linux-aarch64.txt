@@ -13,15 +13,15 @@ target_compile_options(grpc-third_party-address_sorting PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(grpc-third_party-address_sorting PRIVATE
-  ${CMAKE_BINARY_DIR}/contrib/libs/grpc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/address_sorting/include
+  ${PROJECT_BINARY_DIR}/contrib/libs/grpc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/address_sorting/include
 )
 target_link_libraries(grpc-third_party-address_sorting PUBLIC
   contrib-libs-linux-headers
 )
 target_sources(grpc-third_party-address_sorting PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/address_sorting/address_sorting.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/address_sorting/address_sorting_posix.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/address_sorting/address_sorting_windows.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/address_sorting/address_sorting.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/address_sorting/address_sorting_posix.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/third_party/address_sorting/address_sorting_windows.c
 )

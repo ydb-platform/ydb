@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-tti INTERFACE)
 target_include_directories(restricted-boost-tti INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/tti/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/tti/include
 )
 target_link_libraries(restricted-boost-tti INTERFACE
   contrib-libs-linux-headers

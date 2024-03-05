@@ -12,7 +12,7 @@ target_compile_options(ydb-core-tx-datashard-ut_background_compaction PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-core-tx-datashard-ut_background_compaction PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard
 )
 target_link_libraries(ydb-core-tx-datashard-ut_background_compaction PUBLIC
   contrib-libs-cxxsupp
@@ -39,7 +39,7 @@ target_link_options(ydb-core-tx-datashard-ut_background_compaction PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-tx-datashard-ut_background_compaction PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_background_compaction.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_background_compaction.cpp
 )
 set_property(
   TARGET

@@ -23,5 +23,5 @@ target_link_libraries(ydb-services-bg_tasks PUBLIC
   ydb-library-services
 )
 target_sources(ydb-services-bg_tasks PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/service.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/bg_tasks/service.cpp
 )

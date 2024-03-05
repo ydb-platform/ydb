@@ -13,22 +13,22 @@ target_compile_options(contrib-libs-backtrace PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(contrib-libs-backtrace PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/backtrace
+  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace
 )
 target_link_libraries(contrib-libs-backtrace PUBLIC
   contrib-libs-linux-headers
 )
 target_sources(contrib-libs-backtrace PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/backtrace/atomic.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/backtrace/backtrace.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/backtrace/dwarf.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/backtrace/fileline.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/backtrace/mmap.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/backtrace/mmapio.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/backtrace/posix.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/backtrace/print.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/backtrace/simple.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/backtrace/sort.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/backtrace/state.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/backtrace/elf.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/atomic.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/backtrace.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/dwarf.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/fileline.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/mmap.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/mmapio.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/posix.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/print.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/simple.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/sort.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/state.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/elf.c
 )

@@ -31,7 +31,7 @@ target_link_options(ydb-library-actors-interconnect-ut_huge_cluster PRIVATE
   -ldl
 )
 target_sources(ydb-library-actors-interconnect-ut_huge_cluster PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/ut_huge_cluster/huge_cluster.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/ut_huge_cluster/huge_cluster.cpp
 )
 set_property(
   TARGET

@@ -9,7 +9,7 @@
 
 add_executable(ydb-core-jaeger_tracing-ut)
 target_include_directories(ydb-core-jaeger_tracing-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/jaeger_tracing
+  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing
 )
 target_link_libraries(ydb-core-jaeger_tracing-ut PUBLIC
   contrib-libs-cxxsupp
@@ -26,8 +26,8 @@ target_link_options(ydb-core-jaeger_tracing-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-jaeger_tracing-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/jaeger_tracing/sampler_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/jaeger_tracing/throttler_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/sampler_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/throttler_ut.cpp
 )
 set_property(
   TARGET

@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-tuple INTERFACE)
 target_include_directories(restricted-boost-tuple INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/tuple/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/tuple/include
 )
 target_link_libraries(restricted-boost-tuple INTERFACE
   contrib-libs-linux-headers

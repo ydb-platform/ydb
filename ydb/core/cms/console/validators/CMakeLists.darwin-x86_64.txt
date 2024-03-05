@@ -19,14 +19,14 @@ target_link_libraries(cms-console-validators PUBLIC
   cpp-deprecated-atomic
 )
 target_sources(cms-console-validators PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/core_validators.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/registry.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator_bootstrap.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator_nameservice.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/core_validators.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/registry.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator_bootstrap.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator_nameservice.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/core_validators.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/registry.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/validator.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/validator_bootstrap.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/validator_nameservice.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/core_validators.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/registry.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/validator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/validator_bootstrap.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/validator_nameservice.cpp
 )

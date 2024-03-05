@@ -19,7 +19,7 @@ target_link_libraries(yql-core-url_preprocessing PUBLIC
   cpp-regex-pcre
 )
 target_sources(yql-core-url_preprocessing PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/url_preprocessing/url_mapper.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/url_preprocessing/pattern_group.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/url_preprocessing/url_preprocessing.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/url_preprocessing/url_mapper.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/url_preprocessing/pattern_group.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/url_preprocessing/url_preprocessing.cpp
 )

@@ -100,11 +100,11 @@ target_link_options(ydb_query_replay PRIVATE
   -ldl
 )
 target_sources(ydb_query_replay PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/tools/query_replay/query_replay.h
-  ${CMAKE_SOURCE_DIR}/ydb/tools/query_replay/query_compiler.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/tools/query_replay/query_replay.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/tools/query_replay/query_proccessor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/tools/query_replay/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/tools/query_replay/query_replay.h
+  ${PROJECT_SOURCE_DIR}/ydb/tools/query_replay/query_compiler.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/tools/query_replay/query_replay.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/tools/query_replay/query_proccessor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/tools/query_replay/main.cpp
 )
 target_allocator(ydb_query_replay
   library-cpp-lfalloc

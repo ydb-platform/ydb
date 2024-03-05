@@ -26,7 +26,7 @@ target_link_options(ydb-core-blobstorage-dsproxy-ut_strategy PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-blobstorage-dsproxy-ut_strategy PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut_strategy/strategy_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut_strategy/strategy_ut.cpp
 )
 set_property(
   TARGET

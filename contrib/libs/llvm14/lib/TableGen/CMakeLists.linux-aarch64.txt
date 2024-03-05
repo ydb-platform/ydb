@@ -12,7 +12,7 @@ target_compile_options(llvm14-lib-TableGen PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(llvm14-lib-TableGen PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen
 )
 target_link_libraries(llvm14-lib-TableGen PUBLIC
   contrib-libs-linux-headers
@@ -21,15 +21,15 @@ target_link_libraries(llvm14-lib-TableGen PUBLIC
   llvm14-lib-Support
 )
 target_sources(llvm14-lib-TableGen PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/DetailedRecordsBackend.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/Error.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/JSONBackend.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/Main.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/Record.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/SetTheory.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/StringMatcher.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/TGLexer.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/TGParser.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/TableGenBackend.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/TableGenBackendSkeleton.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/DetailedRecordsBackend.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/Error.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/JSONBackend.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/Main.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/Record.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/SetTheory.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/StringMatcher.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/TGLexer.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/TGParser.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/TableGenBackend.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/TableGenBackendSkeleton.cpp
 )

@@ -9,7 +9,7 @@
 
 add_library(contrib-libs-pfr INTERFACE)
 target_include_directories(contrib-libs-pfr INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/pfr/include
+  ${PROJECT_SOURCE_DIR}/contrib/libs/pfr/include
 )
 target_link_libraries(contrib-libs-pfr INTERFACE
   contrib-libs-linux-headers

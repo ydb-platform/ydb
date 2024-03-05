@@ -16,5 +16,5 @@ target_link_libraries(tx-columnshard-resources PUBLIC
   core-formats-arrow
 )
 target_sources(tx-columnshard-resources PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/resources/memory.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/resources/memory.cpp
 )

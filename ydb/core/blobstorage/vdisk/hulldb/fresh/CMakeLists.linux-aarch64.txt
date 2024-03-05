@@ -19,15 +19,15 @@ target_link_libraries(vdisk-hulldb-fresh PUBLIC
   ydb-core-protos
 )
 target_sources(vdisk-hulldb-fresh PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/defs.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_appendix.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_data.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_datasnap.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_segment.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_segment_impl.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/snap_vec.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_appendix.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_data.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_datasnap.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_segment.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/defs.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_appendix.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_data.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_datasnap.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_segment.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_segment_impl.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/snap_vec.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_appendix.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_data.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_datasnap.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_segment.cpp
 )

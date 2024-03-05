@@ -31,20 +31,20 @@ target_link_libraries(providers-common-codec PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(providers-common-codec PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec_buf.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec_results.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_restricted_yson.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec_type_flags.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec_buf.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec_results.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_restricted_yson.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec_type_flags.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_json_codec.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec_buf.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec_results.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_restricted_yson.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec_type_flags.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec_buf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec_results.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_restricted_yson.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec_type_flags.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_json_codec.cpp
 )
 generate_enum_serilization(providers-common-codec
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec_type_flags.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_codec_type_flags.h
   INCLUDE_HEADERS
   ydb/library/yql/providers/common/codec/yql_codec_type_flags.h
 )

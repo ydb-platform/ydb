@@ -14,11 +14,11 @@ target_compile_options(contrib-restricted-http-parser PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(contrib-restricted-http-parser PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/http-parser
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/http-parser
 )
 target_link_libraries(contrib-restricted-http-parser PUBLIC
   contrib-libs-linux-headers
 )
 target_sources(contrib-restricted-http-parser PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/http-parser/http_parser.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/http-parser/http_parser.c
 )

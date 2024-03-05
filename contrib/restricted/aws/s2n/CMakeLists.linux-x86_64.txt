@@ -34,203 +34,203 @@ target_compile_options(restricted-aws-s2n PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-aws-s2n PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/api
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/api
 )
 target_link_libraries(restricted-aws-s2n PUBLIC
   contrib-libs-linux-headers
   contrib-libs-openssl
 )
 target_sources(restricted-aws-s2n PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_basemul_avx2.S
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_fq_avx2.S
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_invntt_avx2.S
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_ntt_avx2.S
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_shuffle_avx2.S
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_aead_cipher_aes_gcm.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_aead_cipher_chacha20_poly1305.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_cbc_cipher_3des.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_cbc_cipher_aes.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_certificate.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_cipher.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_composite_cipher_aes_sha.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_crypto.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_dhe.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_drbg.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_ecc_evp.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_ecdsa.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_evp.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_evp_signing.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_fips.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_hash.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_hkdf.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_hmac.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_libcrypto.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_locking.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_openssl_x509.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_pkey.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_rsa.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_rsa_pss.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_rsa_signing.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_sequence.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_stream_cipher_null.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_stream_cipher_rc4.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_tls13_keys.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/error/s2n_errno.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_cbd.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_fips202.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_indcpa.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_kem.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_ntt.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_poly.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_polyvec.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_reduce.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_symmetric-shake.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/s2n_kyber_evp.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/s2n_pq.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/s2n_pq_random.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/stuffer/s2n_stuffer.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/stuffer/s2n_stuffer_base64.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/stuffer/s2n_stuffer_file.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/stuffer/s2n_stuffer_network_order.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/stuffer/s2n_stuffer_pem.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/stuffer/s2n_stuffer_text.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_cert_status.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_cert_status_response.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_alpn.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_cert_status_request.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_cookie.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_early_data_indication.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_ems.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_key_share.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_max_frag_len.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_pq_kem.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_psk.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_renegotiation_info.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_sct_list.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_server_name.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_session_ticket.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_signature_algorithms.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_supported_groups.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_supported_versions.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_ec_point_format.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_extension_list.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_extension_type.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_extension_type_lists.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_key_share.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_npn.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_nst_early_data_indication.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_psk_key_exchange_modes.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_quic_transport_params.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_alpn.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_cert_status_request.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_cookie.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_early_data_indication.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_ems.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_key_share.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_max_fragment_length.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_psk.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_renegotiation_info.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_sct_list.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_server_name.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_session_ticket.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_signature_algorithms.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_supported_versions.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_supported_versions.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_aead.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_alerts.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_async_pkey.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_auth_selection.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_cbc.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_change_cipher_spec.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_cipher_preferences.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_cipher_suites.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_client_cert.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_client_cert_verify.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_client_finished.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_client_hello.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_client_hello_request.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_client_key_exchange.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_config.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_connection.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_crl.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_crypto.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_early_data.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_early_data_io.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_ecc_preferences.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_encrypted_extensions.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_establish_session.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_fingerprint.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_handshake.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_handshake_hashes.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_handshake_io.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_handshake_transcript.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_handshake_type.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_kem.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_kem_preferences.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_kex.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_key_log.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_key_update.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_ktls.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_ktls_io.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_next_protocol.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_ocsp_stapling.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_post_handshake.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_prf.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_protocol_preferences.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_psk.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_quic_support.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_record_read.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_record_read_aead.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_record_read_cbc.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_record_read_composite.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_record_read_stream.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_record_write.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_recv.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_renegotiate.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_resume.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_security_policies.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_send.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_server_cert.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_server_cert_request.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_server_done.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_server_extensions.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_server_finished.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_server_hello.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_server_hello_retry.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_server_key_exchange.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_server_new_session_ticket.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_shutdown.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_signature_algorithms.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_signature_scheme.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_tls.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_tls13.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_tls13_certificate_verify.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_tls13_handshake.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_tls13_key_schedule.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_tls13_secrets.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_x509_validator.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_array.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_atomic.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_blob.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_ensure.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_fork_detection.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_init.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_io.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_map.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_mem.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_random.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_result.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_rfc5952.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_safety.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_set.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_socket.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_timer.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_basemul_avx2.S
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_fq_avx2.S
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_invntt_avx2.S
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_ntt_avx2.S
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_shuffle_avx2.S
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_aead_cipher_aes_gcm.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_aead_cipher_chacha20_poly1305.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_cbc_cipher_3des.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_cbc_cipher_aes.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_certificate.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_cipher.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_composite_cipher_aes_sha.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_crypto.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_dhe.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_drbg.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_ecc_evp.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_ecdsa.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_evp.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_evp_signing.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_fips.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_hash.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_hkdf.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_hmac.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_libcrypto.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_locking.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_openssl_x509.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_pkey.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_rsa.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_rsa_pss.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_rsa_signing.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_sequence.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_stream_cipher_null.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_stream_cipher_rc4.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_tls13_keys.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/error/s2n_errno.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_cbd.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_fips202.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_indcpa.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_kem.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_ntt.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_poly.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_polyvec.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_reduce.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_symmetric-shake.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/s2n_kyber_evp.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/s2n_pq.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/s2n_pq_random.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/stuffer/s2n_stuffer.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/stuffer/s2n_stuffer_base64.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/stuffer/s2n_stuffer_file.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/stuffer/s2n_stuffer_network_order.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/stuffer/s2n_stuffer_pem.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/stuffer/s2n_stuffer_text.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_cert_status.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_cert_status_response.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_alpn.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_cert_status_request.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_cookie.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_early_data_indication.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_ems.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_key_share.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_max_frag_len.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_pq_kem.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_psk.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_renegotiation_info.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_sct_list.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_server_name.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_session_ticket.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_signature_algorithms.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_supported_groups.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_supported_versions.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_ec_point_format.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_extension_list.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_extension_type.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_extension_type_lists.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_key_share.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_npn.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_nst_early_data_indication.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_psk_key_exchange_modes.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_quic_transport_params.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_alpn.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_cert_status_request.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_cookie.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_early_data_indication.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_ems.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_key_share.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_max_fragment_length.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_psk.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_renegotiation_info.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_sct_list.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_server_name.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_session_ticket.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_signature_algorithms.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_supported_versions.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_supported_versions.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_aead.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_alerts.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_async_pkey.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_auth_selection.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_cbc.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_change_cipher_spec.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_cipher_preferences.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_cipher_suites.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_client_cert.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_client_cert_verify.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_client_finished.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_client_hello.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_client_hello_request.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_client_key_exchange.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_config.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_connection.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_crl.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_crypto.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_early_data.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_early_data_io.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_ecc_preferences.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_encrypted_extensions.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_establish_session.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_fingerprint.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_handshake.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_handshake_hashes.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_handshake_io.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_handshake_transcript.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_handshake_type.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_kem.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_kem_preferences.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_kex.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_key_log.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_key_update.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_ktls.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_ktls_io.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_next_protocol.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_ocsp_stapling.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_post_handshake.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_prf.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_protocol_preferences.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_psk.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_quic_support.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_record_read.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_record_read_aead.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_record_read_cbc.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_record_read_composite.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_record_read_stream.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_record_write.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_recv.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_renegotiate.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_resume.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_security_policies.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_send.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_server_cert.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_server_cert_request.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_server_done.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_server_extensions.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_server_finished.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_server_hello.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_server_hello_retry.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_server_key_exchange.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_server_new_session_ticket.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_shutdown.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_signature_algorithms.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_signature_scheme.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_tls.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_tls13.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_tls13_certificate_verify.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_tls13_handshake.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_tls13_key_schedule.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_tls13_secrets.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_x509_validator.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_array.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_atomic.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_blob.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_ensure.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_fork_detection.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_init.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_io.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_map.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_mem.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_random.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_result.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_rfc5952.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_safety.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_set.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_socket.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_timer.c
 )
 target_sources_custom(restricted-aws-s2n
   .avx2
   SRCS
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/KeccakP-1600-times4-SIMD256_avx2.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/KeccakP-1600-times4-SIMD256_avx2.c
   CUSTOM_FLAGS
   -mavx2
   -mfma
@@ -240,7 +240,7 @@ target_sources_custom(restricted-aws-s2n
 target_sources_custom(restricted-aws-s2n
   .avx2
   SRCS
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_cbd_avx2.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_cbd_avx2.c
   CUSTOM_FLAGS
   -mavx2
   -mfma
@@ -250,7 +250,7 @@ target_sources_custom(restricted-aws-s2n
 target_sources_custom(restricted-aws-s2n
   .avx2
   SRCS
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_consts_avx2.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_consts_avx2.c
   CUSTOM_FLAGS
   -mavx2
   -mfma
@@ -260,7 +260,7 @@ target_sources_custom(restricted-aws-s2n
 target_sources_custom(restricted-aws-s2n
   .avx2
   SRCS
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_fips202x4_avx2.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_fips202x4_avx2.c
   CUSTOM_FLAGS
   -mavx2
   -mfma
@@ -270,7 +270,7 @@ target_sources_custom(restricted-aws-s2n
 target_sources_custom(restricted-aws-s2n
   .avx2
   SRCS
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_indcpa_avx2.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_indcpa_avx2.c
   CUSTOM_FLAGS
   -mavx2
   -mfma
@@ -280,7 +280,7 @@ target_sources_custom(restricted-aws-s2n
 target_sources_custom(restricted-aws-s2n
   .avx2
   SRCS
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_poly_avx2.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_poly_avx2.c
   CUSTOM_FLAGS
   -mavx2
   -mfma
@@ -290,7 +290,7 @@ target_sources_custom(restricted-aws-s2n
 target_sources_custom(restricted-aws-s2n
   .avx2
   SRCS
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_polyvec_avx2.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_polyvec_avx2.c
   CUSTOM_FLAGS
   -mavx2
   -mfma
@@ -300,7 +300,7 @@ target_sources_custom(restricted-aws-s2n
 target_sources_custom(restricted-aws-s2n
   .avx2
   SRCS
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_rejsample_avx2.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_rejsample_avx2.c
   CUSTOM_FLAGS
   -mavx2
   -mfma

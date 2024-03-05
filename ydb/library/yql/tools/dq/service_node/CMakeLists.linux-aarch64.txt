@@ -49,7 +49,7 @@ target_link_options(service_node PRIVATE
   -lutil
 )
 target_sources(service_node PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/dq/service_node/main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/dq/service_node/main.cpp
 )
 target_allocator(service_node
   cpp-malloc-jemalloc

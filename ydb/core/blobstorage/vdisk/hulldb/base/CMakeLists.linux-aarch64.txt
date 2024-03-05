@@ -19,19 +19,19 @@ target_link_libraries(vdisk-hulldb-base PUBLIC
   blobstorage-vdisk-protos
 )
 target_sources(vdisk-hulldb-base PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hulldefs.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullsatisfactionrank.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullstorageratio.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/defs.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullbase_block.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullbase_logoblob.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullds_arena.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullds_generic_it.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullds_glue.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullds_settings.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hulldefs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullsatisfactionrank.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hulldefs.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullsatisfactionrank.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullstorageratio.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/defs.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullbase_block.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullbase_logoblob.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullds_arena.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullds_generic_it.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullds_glue.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullds_settings.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hulldefs.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullsatisfactionrank.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.cpp
 )

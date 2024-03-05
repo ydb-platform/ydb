@@ -26,5 +26,5 @@ target_link_libraries(gateway-behaviour-table.global PUBLIC
   gateway-behaviour-tablestore
 )
 target_sources(gateway-behaviour-table.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/table/behaviour.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/table/behaviour.cpp
 )

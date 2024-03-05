@@ -19,5 +19,5 @@ target_link_libraries(backtrace-cursors-interop PUBLIC
   contrib-libs-libunwind
 )
 target_sources(backtrace-cursors-interop PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/yt/backtrace/cursors/interop/interop.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/backtrace/cursors/interop/interop.cpp
 )

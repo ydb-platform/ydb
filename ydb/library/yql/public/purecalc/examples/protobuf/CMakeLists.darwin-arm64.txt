@@ -39,26 +39,26 @@ target_link_options(protobuf PRIVATE
   CoreFoundation
 )
 target_proto_messages(protobuf PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/examples/protobuf/main.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/examples/protobuf/main.proto
 )
 target_sources(protobuf PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/public/purecalc/examples/protobuf/main.pb.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/examples/protobuf/main.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/public/purecalc/examples/protobuf/main.pb.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/examples/protobuf/main.cpp
 )
 target_allocator(protobuf
   system_allocator
 )
 target_proto_addincls(protobuf
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(protobuf
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )
 vcs_info(protobuf)

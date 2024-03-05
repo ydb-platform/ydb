@@ -18,6 +18,6 @@ target_link_libraries(cpp-regex-pcre PUBLIC
   cpp-containers-stack_array
 )
 target_sources(cpp-regex-pcre PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/regex/pcre/pcre.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/regex/pcre/regexp.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/regex/pcre/pcre.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/regex/pcre/regexp.cpp
 )

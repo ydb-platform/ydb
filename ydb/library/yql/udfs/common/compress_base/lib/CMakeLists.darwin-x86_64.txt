@@ -25,5 +25,5 @@ target_link_libraries(common-compress_base-lib PUBLIC
   cpp-streams-zstd
 )
 target_sources(common-compress_base-lib PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/compress_base/lib/compress_base_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/compress_base/lib/compress_base_udf.cpp
 )

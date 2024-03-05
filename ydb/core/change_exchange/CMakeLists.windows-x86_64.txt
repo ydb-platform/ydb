@@ -28,13 +28,13 @@ target_link_libraries(ydb-core-change_exchange PUBLIC
   monlib-service-pages
 )
 target_sources(ydb-core-change_exchange PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/change_exchange/change_exchange.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/change_exchange/change_record.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/change_exchange/change_sender_common_ops.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/change_exchange/change_sender_monitoring.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/change_exchange/change_exchange.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/change_exchange/change_record.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/change_exchange/change_sender_common_ops.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/change_exchange/change_sender_monitoring.cpp
 )
 generate_enum_serilization(ydb-core-change_exchange
-  ${CMAKE_SOURCE_DIR}/ydb/core/change_exchange/change_record.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/change_exchange/change_record.h
   INCLUDE_HEADERS
   ydb/core/change_exchange/change_record.h
 )

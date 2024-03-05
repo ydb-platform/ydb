@@ -26,5 +26,5 @@ target_link_libraries(providers-dq-local_gateway PUBLIC
   providers-dq-stats_collector
 )
 target_sources(providers-dq-local_gateway PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/local_gateway/yql_dq_gateway_local.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/local_gateway/yql_dq_gateway_local.cpp
 )

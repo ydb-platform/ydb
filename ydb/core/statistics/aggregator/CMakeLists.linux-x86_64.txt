@@ -22,14 +22,14 @@ target_link_libraries(core-statistics-aggregator PUBLIC
   ydb-core-tablet_flat
 )
 target_sources(core-statistics-aggregator PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/aggregator/aggregator.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/aggregator/aggregator_impl.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/aggregator/schema.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/aggregator/aggregator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/aggregator/aggregator_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/aggregator/schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_configure.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_init.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_init_schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_schemeshard_stats.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/aggregator.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/aggregator_impl.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/schema.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/aggregator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/aggregator_impl.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/schema.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_configure.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_init.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_init_schema.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_schemeshard_stats.cpp
 )

@@ -37,14 +37,14 @@ target_link_libraries(yt-gateway-lib PUBLIC
   yt-lib-yson_helpers
 )
 target_sources(yt-gateway-lib PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/lib/query_cache.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/lib/temp_files.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/lib/transaction_cache.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/lib/user_files.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/lib/yt_helpers.h
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/lib/query_cache.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/lib/temp_files.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/lib/transaction_cache.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/lib/user_files.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/lib/yt_helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/lib/query_cache.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/lib/temp_files.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/lib/transaction_cache.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/lib/user_files.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/lib/yt_helpers.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/lib/query_cache.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/lib/temp_files.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/lib/transaction_cache.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/lib/user_files.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/lib/yt_helpers.cpp
 )

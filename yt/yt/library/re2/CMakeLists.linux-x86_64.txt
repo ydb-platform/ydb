@@ -19,5 +19,5 @@ target_link_libraries(yt-library-re2 PUBLIC
   contrib-libs-re2
 )
 target_sources(yt-library-re2 PRIVATE
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/re2/re2.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/re2/re2.cpp
 )

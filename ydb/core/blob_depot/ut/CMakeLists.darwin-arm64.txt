@@ -9,7 +9,7 @@
 
 add_executable(ydb-core-blob_depot-ut)
 target_include_directories(ydb-core-blob_depot-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot
+  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot
 )
 target_link_libraries(ydb-core-blob_depot-ut PUBLIC
   contrib-libs-cxxsupp
@@ -25,8 +25,8 @@ target_link_options(ydb-core-blob_depot-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-blob_depot-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/closed_interval_set_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/given_id_range_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/closed_interval_set_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/given_id_range_ut.cpp
 )
 set_property(
   TARGET

@@ -29,5 +29,5 @@ target_link_libraries(core-io_formats-cell_maker PUBLIC
   cpp-string_utils-quote
 )
 target_sources(core-io_formats-cell_maker PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/io_formats/cell_maker/cell_maker.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/io_formats/cell_maker/cell_maker.cpp
 )

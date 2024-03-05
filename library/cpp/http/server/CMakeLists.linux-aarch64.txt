@@ -18,9 +18,9 @@ target_link_libraries(cpp-http-server PUBLIC
   cpp-deprecated-atomic
 )
 target_sources(cpp-http-server PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/http/server/conn.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/http/server/http.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/http/server/http_ex.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/http/server/options.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/http/server/response.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/http/server/conn.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/http/server/http.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/http/server/http_ex.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/http/server/options.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/http/server/response.cpp
 )

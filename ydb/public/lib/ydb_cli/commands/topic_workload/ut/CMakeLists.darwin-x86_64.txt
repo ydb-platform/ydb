@@ -9,7 +9,7 @@
 
 add_executable(ydb-public-lib-ydb_cli-commands-topic_workload-ut)
 target_include_directories(ydb-public-lib-ydb_cli-commands-topic_workload-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_workload
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_workload
 )
 target_link_libraries(ydb-public-lib-ydb_cli-commands-topic_workload-ut PUBLIC
   contrib-libs-cxxsupp
@@ -28,7 +28,7 @@ target_link_options(ydb-public-lib-ydb_cli-commands-topic_workload-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-public-lib-ydb_cli-commands-topic_workload-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_params_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_params_ut.cpp
 )
 set_property(
   TARGET

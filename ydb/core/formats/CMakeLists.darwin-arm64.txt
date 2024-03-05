@@ -18,7 +18,7 @@ target_link_libraries(ydb-core-formats PUBLIC
   ydb-core-scheme
 )
 target_sources(ydb-core-formats PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/clickhouse_block.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/factory.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/clickhouse_block.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/clickhouse_block.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/factory.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/clickhouse_block.cpp
 )

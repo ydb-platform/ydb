@@ -38,13 +38,13 @@ target_link_libraries(tx-schemeshard-ut_helpers PUBLIC
   cpp-client-ydb_driver
 )
 target_sources(tx-schemeshard-ut_helpers PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/helpers.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/ls_checks.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/test_env.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/export_reboots_common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/failing_mtpq.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/ls_checks.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/test_env.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/helpers.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/ls_checks.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/test_env.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/export_reboots_common.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/failing_mtpq.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/ls_checks.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/test_env.cpp
 )

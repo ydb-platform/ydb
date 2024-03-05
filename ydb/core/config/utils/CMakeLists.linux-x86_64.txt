@@ -16,5 +16,5 @@ target_link_libraries(core-config-utils PUBLIC
   cpp-protobuf-json
 )
 target_sources(core-config-utils PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/config/utils/config_traverse.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/config/utils/config_traverse.cpp
 )

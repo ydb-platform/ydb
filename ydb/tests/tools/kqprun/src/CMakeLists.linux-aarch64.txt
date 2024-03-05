@@ -20,7 +20,7 @@ target_link_libraries(tools-kqprun-src PUBLIC
   yql-sql-pg
 )
 target_sources(tools-kqprun-src PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/tests/tools/kqprun/src/actors.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/tests/tools/kqprun/src/kqp_runner.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/tests/tools/kqprun/src/ydb_setup.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/tests/tools/kqprun/src/actors.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/tests/tools/kqprun/src/kqp_runner.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/tests/tools/kqprun/src/ydb_setup.cpp
 )

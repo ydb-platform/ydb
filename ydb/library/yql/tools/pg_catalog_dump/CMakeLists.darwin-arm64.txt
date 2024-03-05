@@ -24,7 +24,7 @@ target_link_options(pg_catalog_dump PRIVATE
   CoreFoundation
 )
 target_sources(pg_catalog_dump PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/pg_catalog_dump/pg_catalog_dump.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/pg_catalog_dump/pg_catalog_dump.cpp
 )
 target_allocator(pg_catalog_dump
   system_allocator

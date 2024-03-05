@@ -35,14 +35,14 @@ target_link_options(ydb-library-actors-interconnect-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-actors-interconnect-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/ut/channel_scheduler_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/ut/event_holder_pool_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/ut/interconnect_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/ut/large.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/ut/outgoing_stream_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/ut/poller_actor_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/ut/dynamic_proxy_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/ut/sticking_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/ut/channel_scheduler_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/ut/event_holder_pool_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/ut/interconnect_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/ut/large.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/ut/outgoing_stream_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/ut/poller_actor_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/ut/dynamic_proxy_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/ut/sticking_ut.cpp
 )
 set_property(
   TARGET

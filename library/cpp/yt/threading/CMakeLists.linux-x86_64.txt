@@ -21,19 +21,19 @@ target_link_libraries(cpp-yt-threading PUBLIC
   cpp-yt-memory
 )
 target_sources(cpp-yt-threading PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/yt/threading/at_fork.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/yt/threading/count_down_latch.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/yt/threading/event_count.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/yt/threading/fork_aware_spin_lock.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/yt/threading/fork_aware_rw_spin_lock.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/yt/threading/futex.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/yt/threading/notification_handle.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/yt/threading/public.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/yt/threading/recursive_spin_lock.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/yt/threading/rw_spin_lock.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/yt/threading/spin_lock_base.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/yt/threading/spin_lock_count.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/yt/threading/spin_lock.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/yt/threading/spin_wait.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/yt/threading/spin_wait_hook.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/at_fork.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/count_down_latch.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/event_count.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/fork_aware_spin_lock.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/fork_aware_rw_spin_lock.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/futex.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/notification_handle.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/public.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/recursive_spin_lock.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/rw_spin_lock.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/spin_lock_base.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/spin_lock_count.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/spin_lock.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/spin_wait.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/spin_wait_hook.cpp
 )

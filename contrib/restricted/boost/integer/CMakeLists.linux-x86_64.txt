@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-integer INTERFACE)
 target_include_directories(restricted-boost-integer INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/integer/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/integer/include
 )
 target_link_libraries(restricted-boost-integer INTERFACE
   contrib-libs-linux-headers

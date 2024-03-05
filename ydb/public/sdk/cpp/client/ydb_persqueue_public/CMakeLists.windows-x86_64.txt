@@ -16,5 +16,5 @@ target_link_libraries(cpp-client-ydb_persqueue_public INTERFACE
   client-ydb_persqueue_public-codecs
 )
 target_sources(cpp-client-ydb_persqueue_public INTERFACE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h
 )

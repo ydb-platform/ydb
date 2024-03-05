@@ -78,29 +78,29 @@ target_link_libraries(columnshard-data_sharing-protos PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(columnshard-data_sharing-protos PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/protos/data.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/protos/events.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/protos/sessions.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/protos/initiator.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/protos/links.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/protos/data.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/protos/events.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/protos/sessions.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/protos/initiator.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/protos/links.proto
 )
 target_sources(columnshard-data_sharing-protos PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/core/tx/columnshard/data_sharing/protos/data.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/tx/columnshard/data_sharing/protos/events.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/tx/columnshard/data_sharing/protos/sessions.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/tx/columnshard/data_sharing/protos/initiator.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/core/tx/columnshard/data_sharing/protos/links.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/data_sharing/protos/data.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/data_sharing/protos/events.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/data_sharing/protos/sessions.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/data_sharing/protos/initiator.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/data_sharing/protos/links.pb.h
 )
 target_proto_addincls(columnshard-data_sharing-protos
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(columnshard-data_sharing-protos
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )

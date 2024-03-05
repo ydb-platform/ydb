@@ -76,7 +76,7 @@ target_compile_options(yt-yt-build PRIVATE
   -Wdeprecated-this-capture
 )
 target_include_directories(yt-yt-build PUBLIC
-  ${CMAKE_BINARY_DIR}/yt/yt/build
+  ${PROJECT_BINARY_DIR}/yt/yt/build
 )
 target_link_libraries(yt-yt-build PUBLIC
   contrib-libs-linux-headers
@@ -84,16 +84,16 @@ target_link_libraries(yt-yt-build PUBLIC
   yutil
 )
 target_sources(yt-yt-build PRIVATE
-  ${CMAKE_BINARY_DIR}/yt/yt/build/config.h
-  ${CMAKE_SOURCE_DIR}/yt/yt/build/build.h
-  ${CMAKE_SOURCE_DIR}/yt/yt/build/ya_version.cpp
-  ${CMAKE_BINARY_DIR}/yt/yt/build/build.cpp
+  ${PROJECT_BINARY_DIR}/yt/yt/build/config.h
+  ${PROJECT_SOURCE_DIR}/yt/yt/build/build.h
+  ${PROJECT_SOURCE_DIR}/yt/yt/build/ya_version.cpp
+  ${PROJECT_BINARY_DIR}/yt/yt/build/build.cpp
 )
 configure_file(
-  ${CMAKE_SOURCE_DIR}/yt/yt/build/config.h.in
-  ${CMAKE_BINARY_DIR}/yt/yt/build/config.h
+  ${PROJECT_SOURCE_DIR}/yt/yt/build/config.h.in
+  ${PROJECT_BINARY_DIR}/yt/yt/build/config.h
 )
 configure_file(
-  ${CMAKE_SOURCE_DIR}/yt/yt/build/build.cpp.in
-  ${CMAKE_BINARY_DIR}/yt/yt/build/build.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/build/build.cpp.in
+  ${PROJECT_BINARY_DIR}/yt/yt/build/build.cpp
 )

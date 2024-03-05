@@ -17,5 +17,5 @@ target_link_libraries(yql-core-url_lister PUBLIC
   yql-utils-fetch
 )
 target_sources(yql-core-url_lister PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/url_lister/url_lister_manager.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/url_lister/url_lister_manager.cpp
 )

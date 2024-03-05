@@ -46,46 +46,46 @@ target_link_libraries(ydb-core-persqueue PUBLIC
   cpp-client-ydb_persqueue_core
 )
 target_sources(ydb-core-persqueue PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/actor_persqueue_client_iface.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/mirrorer.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/blob.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/cluster_tracker.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/event_helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/fetch_request_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/header.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/heartbeat.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/metering_sink.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/mirrorer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ownerinfo.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/partition_init.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/partition_monitoring.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/partition_read.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/partition_sourcemanager.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/partition_write.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/partition.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/percentile_counter.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/pq.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/pq_database.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/pq_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/pq_l2_cache.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/pq_rl_helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/quota_tracker.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/read_balancer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/account_read_quoter.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/read_quoter.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/sourceid.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/subscriber.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/transaction.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/type_codecs_defs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/user_info.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/utils.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/write_meta.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/write_quoter.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/microseconds_sliding_window.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/dread_cache_service/caching_service.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/actor_persqueue_client_iface.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/mirrorer.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/blob.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/cluster_tracker.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/event_helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/fetch_request_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/header.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/heartbeat.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/metering_sink.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/mirrorer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ownerinfo.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/partition_init.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/partition_monitoring.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/partition_read.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/partition_sourcemanager.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/partition_write.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/partition.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/percentile_counter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/pq.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/pq_database.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/pq_impl.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/pq_l2_cache.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/pq_rl_helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/quota_tracker.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/read_balancer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/account_read_quoter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/read_quoter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/sourceid.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/subscriber.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/transaction.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/type_codecs_defs.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/user_info.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/utils.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/write_meta.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/write_quoter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/microseconds_sliding_window.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/dread_cache_service/caching_service.cpp
 )
 generate_enum_serilization(ydb-core-persqueue
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/sourceid_info.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/sourceid_info.h
   INCLUDE_HEADERS
   ydb/core/persqueue/sourceid_info.h
 )

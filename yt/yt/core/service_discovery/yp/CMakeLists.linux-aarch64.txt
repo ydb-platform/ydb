@@ -19,6 +19,6 @@ target_link_libraries(core-service_discovery-yp PUBLIC
   core-rpc-grpc
 )
 target_sources(core-service_discovery-yp PRIVATE
-  ${CMAKE_SOURCE_DIR}/yt/yt/core/service_discovery/yp/config.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/core/service_discovery/yp/service_discovery_dummy.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/service_discovery/yp/config.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/service_discovery/yp/service_discovery_dummy.cpp
 )

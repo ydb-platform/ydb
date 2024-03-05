@@ -27,12 +27,12 @@ target_link_libraries(fq-libs-checkpointing PUBLIC
   dq-api-protos
 )
 target_sources(fq-libs-checkpointing PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/checkpoint_id_generator.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/pending_checkpoint.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/utils.h
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/checkpoint_coordinator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/checkpoint_id_generator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/pending_checkpoint.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/utils.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/checkpoint_id_generator.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/pending_checkpoint.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/utils.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/checkpoint_coordinator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/checkpoint_id_generator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/pending_checkpoint.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/utils.cpp
 )

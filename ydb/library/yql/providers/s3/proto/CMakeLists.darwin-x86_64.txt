@@ -88,31 +88,31 @@ target_link_libraries(providers-s3-proto PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(providers-s3-proto PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/proto/credentials.proto
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/proto/file_queue.proto
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/proto/range.proto
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/proto/retry_config.proto
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/proto/sink.proto
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/proto/source.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/proto/credentials.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/proto/file_queue.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/proto/range.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/proto/retry_config.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/proto/sink.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/proto/source.proto
 )
 target_sources(providers-s3-proto PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/proto/credentials.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/proto/file_queue.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/proto/range.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/proto/retry_config.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/proto/sink.pb.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/proto/source.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/s3/proto/credentials.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/s3/proto/file_queue.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/s3/proto/range.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/s3/proto/retry_config.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/s3/proto/sink.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/s3/proto/source.pb.h
 )
 target_proto_addincls(providers-s3-proto
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(providers-s3-proto
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )

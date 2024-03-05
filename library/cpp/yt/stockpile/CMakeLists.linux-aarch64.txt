@@ -17,5 +17,5 @@ target_link_libraries(cpp-yt-stockpile PUBLIC
   yutil
 )
 target_sources(cpp-yt-stockpile PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/yt/stockpile/stockpile_linux.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/stockpile/stockpile_linux.cpp
 )

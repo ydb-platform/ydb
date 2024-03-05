@@ -16,5 +16,5 @@ target_link_libraries(cpp-client-helpers PUBLIC
   public-issue-protos
 )
 target_sources(cpp-client-helpers PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/helpers/helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/helpers/helpers.cpp
 )

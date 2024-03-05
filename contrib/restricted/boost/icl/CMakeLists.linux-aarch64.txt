@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-icl INTERFACE)
 target_include_directories(restricted-boost-icl INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/icl/include
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/icl/include
 )
 target_link_libraries(restricted-boost-icl INTERFACE
   contrib-libs-linux-headers

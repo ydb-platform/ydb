@@ -9,7 +9,7 @@
 
 add_executable(ydb-library-yql-parser-lexer_common-ut)
 target_include_directories(ydb-library-yql-parser-lexer_common-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/lexer_common
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/lexer_common
 )
 target_link_libraries(ydb-library-yql-parser-lexer_common-ut PUBLIC
   contrib-libs-linux-headers
@@ -30,8 +30,8 @@ target_link_options(ydb-library-yql-parser-lexer_common-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-parser-lexer_common-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/lexer_common/ut/hints_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/lexer_common/ut/parse_hints_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/lexer_common/ut/hints_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/lexer_common/ut/parse_hints_ut.cpp
 )
 set_property(
   TARGET

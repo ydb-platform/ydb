@@ -15,9 +15,9 @@ target_link_libraries(library-cpp-charset PUBLIC
   cpp-charset-lite
 )
 target_sources(library-cpp-charset PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/charset/recyr.hh
-  ${CMAKE_SOURCE_DIR}/library/cpp/charset/recyr_int.hh
-  ${CMAKE_SOURCE_DIR}/library/cpp/charset/decodeunknownplane.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/charset/wide.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/charset/iconv.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/charset/recyr.hh
+  ${PROJECT_SOURCE_DIR}/library/cpp/charset/recyr_int.hh
+  ${PROJECT_SOURCE_DIR}/library/cpp/charset/decodeunknownplane.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/charset/wide.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/charset/iconv.cpp
 )

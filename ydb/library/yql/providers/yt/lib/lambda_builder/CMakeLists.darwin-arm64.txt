@@ -23,5 +23,5 @@ target_link_libraries(yt-lib-lambda_builder PUBLIC
   providers-common-mkql
 )
 target_sources(yt-lib-lambda_builder PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/lib/lambda_builder/lambda_builder.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/lib/lambda_builder/lambda_builder.cpp
 )

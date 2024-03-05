@@ -117,7 +117,7 @@ set_property(TARGET contrib-libs-opentelemetry-proto PROPERTY
   PROTO_NAMESPACE contrib/libs/opentelemetry-proto
 )
 target_include_directories(contrib-libs-opentelemetry-proto PUBLIC
-  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto
+  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto
 )
 target_link_libraries(contrib-libs-opentelemetry-proto PUBLIC
   contrib-libs-linux-headers
@@ -127,46 +127,46 @@ target_link_libraries(contrib-libs-opentelemetry-proto PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(contrib-libs-opentelemetry-proto PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/logs/v1/logs_service.proto
-  ${CMAKE_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/metrics/v1/metrics_service.proto
-  ${CMAKE_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/trace/v1/trace_service.proto
-  ${CMAKE_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/common/v1/common.proto
-  ${CMAKE_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/logs/v1/logs.proto
-  ${CMAKE_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/metrics/v1/metrics.proto
-  ${CMAKE_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/resource/v1/resource.proto
-  ${CMAKE_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/trace/v1/trace.proto
+  ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/logs/v1/logs_service.proto
+  ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/metrics/v1/metrics_service.proto
+  ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/trace/v1/trace_service.proto
+  ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/common/v1/common.proto
+  ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/logs/v1/logs.proto
+  ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/metrics/v1/metrics.proto
+  ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/resource/v1/resource.proto
+  ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/trace/v1/trace.proto
 )
 target_sources(contrib-libs-opentelemetry-proto PRIVATE
-  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/logs/v1/logs_service.pb.h
-  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/logs/v1/logs_service.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/metrics/v1/metrics_service.pb.h
-  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/metrics/v1/metrics_service.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/trace/v1/trace_service.pb.h
-  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/trace/v1/trace_service.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/common/v1/common.pb.h
-  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/common/v1/common.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/logs/v1/logs.pb.h
-  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/logs/v1/logs.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/metrics/v1/metrics.pb.h
-  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/metrics/v1/metrics.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/resource/v1/resource.pb.h
-  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/resource/v1/resource.grpc.pb.h
-  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/trace/v1/trace.pb.h
-  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/trace/v1/trace.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/logs/v1/logs_service.pb.h
+  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/logs/v1/logs_service.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/metrics/v1/metrics_service.pb.h
+  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/metrics/v1/metrics_service.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/trace/v1/trace_service.pb.h
+  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/trace/v1/trace_service.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/common/v1/common.pb.h
+  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/common/v1/common.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/logs/v1/logs.pb.h
+  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/logs/v1/logs.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/metrics/v1/metrics.pb.h
+  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/metrics/v1/metrics.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/resource/v1/resource.pb.h
+  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/resource/v1/resource.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/trace/v1/trace.pb.h
+  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/trace/v1/trace.grpc.pb.h
 )
 target_proto_addincls(contrib-libs-opentelemetry-proto
   ./contrib/libs/opentelemetry-proto
-  ${CMAKE_SOURCE_DIR}/contrib/libs/opentelemetry-proto
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/opentelemetry-proto
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(contrib-libs-opentelemetry-proto
-  --cpp_out=${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto
+  --cpp_out=${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto
 )
 target_proto_plugin(contrib-libs-opentelemetry-proto
   grpc_cpp

@@ -24,13 +24,13 @@ target_compile_options(libs-apache-orc PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(libs-apache-orc PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/include
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/include
 )
 target_include_directories(libs-apache-orc PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/proto
-  ${CMAKE_SOURCE_DIR}/contrib/libs/lz4
-  ${CMAKE_SOURCE_DIR}/contrib/libs/zstd/include
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/proto
+  ${PROJECT_SOURCE_DIR}/contrib/libs/lz4
+  ${PROJECT_SOURCE_DIR}/contrib/libs/zstd/include
 )
 target_link_libraries(libs-apache-orc PUBLIC
   contrib-libs-linux-headers
@@ -42,55 +42,55 @@ target_link_libraries(libs-apache-orc PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(libs-apache-orc PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/proto/orc_proto.proto
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/proto/orc_proto.proto
 )
 target_sources(libs-apache-orc PRIVATE
-  ${CMAKE_BINARY_DIR}/contrib/libs/apache/orc/proto/orc_proto.pb.h
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Adaptor.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/BloomFilter.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/ByteRLE.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/ColumnPrinter.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/ColumnReader.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/ColumnWriter.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Common.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Compression.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Exceptions.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Int128.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/LzoDecompressor.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/MemoryPool.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Murmur3.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/OrcFile.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/RLE.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/RLEV2Util.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/RLEv1.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Reader.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/RleDecoderV2.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/RleEncoderV2.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Statistics.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/StripeStream.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Timezone.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/TypeImpl.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Vector.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Writer.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/io/InputStream.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/io/OutputStream.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/sargs/ExpressionTree.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/sargs/Literal.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/sargs/PredicateLeaf.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/sargs/SargsApplier.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/sargs/SearchArgument.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/sargs/TruthValue.cc
+  ${PROJECT_BINARY_DIR}/contrib/libs/apache/orc/proto/orc_proto.pb.h
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Adaptor.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/BloomFilter.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/ByteRLE.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/ColumnPrinter.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/ColumnReader.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/ColumnWriter.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Common.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Compression.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Exceptions.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Int128.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/LzoDecompressor.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/MemoryPool.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Murmur3.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/OrcFile.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/RLE.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/RLEV2Util.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/RLEv1.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Reader.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/RleDecoderV2.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/RleEncoderV2.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Statistics.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/StripeStream.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Timezone.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/TypeImpl.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Vector.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Writer.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/io/InputStream.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/io/OutputStream.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/sargs/ExpressionTree.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/sargs/Literal.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/sargs/PredicateLeaf.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/sargs/SargsApplier.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/sargs/SearchArgument.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/sargs/TruthValue.cc
 )
 target_proto_addincls(libs-apache-orc
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(libs-apache-orc
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )

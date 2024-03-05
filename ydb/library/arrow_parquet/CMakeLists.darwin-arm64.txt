@@ -15,5 +15,5 @@ target_link_libraries(ydb-library-arrow_parquet PUBLIC
   libs-apache-arrow
 )
 target_sources(ydb-library-arrow_parquet PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_parquet/result_set_parquet_printer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/arrow_parquet/result_set_parquet_printer.cpp
 )

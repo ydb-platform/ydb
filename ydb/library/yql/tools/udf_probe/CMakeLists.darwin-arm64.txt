@@ -26,7 +26,7 @@ target_link_options(udf_probe PRIVATE
   CoreFoundation
 )
 target_sources(udf_probe PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/udf_probe/udf_probe.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/udf_probe/udf_probe.cpp
 )
 target_allocator(udf_probe
   system_allocator

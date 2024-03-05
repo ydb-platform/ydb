@@ -134,7 +134,7 @@ bool TUploader::Push(TParams params) {
 
         auto settings = NYdb::NTable::TRetryOperationSettings()
             .MaxRetries(Opts.RetryOperaionMaxRetries)
-            .FastBackoffSettings(NRetry::TBackoffSettings().SlotDuration(TDuration::MicroSeconds(10)).Ceiling(10))
+            .FastBackoffSettings(NRetry::TBackoffSettings().SlotDuration(TDuration::MilliSeconds(10)).Ceiling(10))
             .SlowBackoffSettings(NRetry::TBackoffSettings().SlotDuration(TDuration::Seconds(2)).Ceiling(6))
             .Idempotent(true);
 

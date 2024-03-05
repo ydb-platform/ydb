@@ -163,6 +163,7 @@ class TListClusterNodes: public TAdapterActor<
         out.set_host(in.Host);
         out.set_port(in.IcPort);
         out.set_state(ConvertNodeState(in.State));
+        *out.mutable_start_time() = TimeUtil::MicrosecondsToTimestamp(in.StartTime.GetValue());
 
         auto& location = *out.mutable_location();
         location.set_data_center(in.Location.GetDataCenterId());

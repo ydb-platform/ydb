@@ -1160,6 +1160,7 @@ void TCms::AddHostState(const TClusterInfoPtr &clusterInfo, const TNodeInfo &nod
     host->SetNodeId(node.NodeId);
     host->SetInterconnectPort(node.IcPort);
     host->SetTimestamp(timestamp.GetValue());
+    host->SetStartTimeSeconds(node.StartTime.Seconds());
     node.Location.Serialize(host->MutableLocation(), false);
     for (auto marker : node.Markers) {
         host->AddMarkers(marker);

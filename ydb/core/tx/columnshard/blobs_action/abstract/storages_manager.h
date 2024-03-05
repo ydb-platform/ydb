@@ -9,6 +9,7 @@ class IStoragesManager {
 private:
     TRWMutex RWMutex;
     bool Initialized = false;
+    bool Finished = false;
 protected:
     virtual std::shared_ptr<IBlobsStorageOperator> DoBuildOperator(const TString& storageId) = 0;
     THashMap<TString, std::shared_ptr<IBlobsStorageOperator>> Constructed;

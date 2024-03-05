@@ -84,7 +84,7 @@ YT_DEFINE_ERROR_ENUM(
     ((NoInSyncReplicas)                       (1736))
     ((CellHasNoAssignedPeers)                 (1737))
     ((TableSchemaIncompatible)                (1738))
-    ((BundleIsBanned)                           (1739))
+    ((BundleIsBanned)                         (1739))
 );
 
 DEFINE_ENUM(EInMemoryMode,

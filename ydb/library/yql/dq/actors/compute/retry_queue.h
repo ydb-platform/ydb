@@ -121,7 +121,7 @@ public:
         return false;
     }
     
-    bool HasPendingEvents() {
+    bool RemoveConfirmedEvents() {
         RemoveConfirmedEvents(MyConfirmedSeqNo);
         return !Events.empty();
     }
@@ -129,6 +129,7 @@ public:
     void OnNewRecipientId(const NActors::TActorId& recipientId, bool unsubscribe = true);
     void HandleNodeConnected(ui32 nodeId);
     void HandleNodeDisconnected(ui32 nodeId);
+    bool HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev);
     void Retry();
     void Unsubscribe();
 
@@ -165,7 +166,7 @@ private:
             THolder<T> ev = MakeHolder<T>();
             ev->Record = Event->Record;
             ev->Record.MutableTransportMeta()->SetConfirmedSeqNo(confirmedSeqNo);
-            return MakeHolder<NActors::IEventHandle>(Recipient, Sender, ev.Release(), 0, Cookie);
+            return MakeHolder<NActors::IEventHandle>(Recipient, Sender, ev.Release(), NActors::IEventHandle::FlagTrackDelivery, Cookie);
         }
 
     private:

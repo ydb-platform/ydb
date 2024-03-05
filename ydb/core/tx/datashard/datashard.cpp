@@ -9,6 +9,7 @@
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/query_stats.pb.h>
 
 #include <ydb/library/actors/core/monotonic_provider.h>
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -398,8 +399,23 @@ void TDataShard::SendRegistrationRequestTimeCast(const TActorContext &ctx) {
     if (RegistrationSended)
         return;
 
-    if (!ProcessingParams)
+    if (!ProcessingParams) {
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, TabletID()
+            << " not sending time cast registration request in state "
+            << DatashardStateName(State)
+            << ": missing processing params");
         return;
+    }
+
+    if (State == TShardState::WaitScheme ||
+        State == TShardState::SplitDstReceivingSnapshot)
+    {
+        // We don't have all the necessary info yet
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, TabletID()
+            << " not sending time cast registration request in state "
+            << DatashardStateName(State));
+        return;
+    }
 
     LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "Send registration request to time cast "
          << DatashardStateName(State) << " tabletId " << TabletID()
@@ -582,11 +598,18 @@ public:
     { }
 
     void OnCommit(ui64) override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+        TString error = Result->GetError();
+        if (error) {
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                    "Complete [" << Step << " : " << TxId << "] from " << Self->TabletID()
+                    << " at tablet " << Self->TabletID() << ", error: " << error);
+        } else {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
                     "Complete [" << Step << " : " << TxId << "] from " << Self->TabletID()
                     << " at tablet " << Self->TabletID() << " send result to client "
                     << Target <<  ", exec latency: " << Result->Record.GetExecLatency()
                     << " ms, propose latency: " << Result->Record.GetProposeLatency() << " ms");
+        }
 
         ui64 resultSize = Result->GetTxResult().size();
         ui32 flags = IEventHandle::MakeFlags(TInterconnectChannels::GetTabletChannel(resultSize), 0);
@@ -604,6 +627,49 @@ public:
 private:
     TDataShard* Self;
     TOutputOpData::TResultPtr Result;
+    TActorId Target;
+    ui64 Step;
+    ui64 TxId;
+};
+
+class TDataShard::TSendVolatileWriteResult final: public IVolatileTxCallback {
+public:
+    TSendVolatileWriteResult(
+        TDataShard* self, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> writeResult,
+        const TActorId& target,
+        ui64 step, ui64 txId
+    )
+        : Self(self)
+        , WriteResult(std::move(writeResult))
+        , Target(target)
+        , Step(step)
+        , TxId(txId)
+    {
+    }
+
+    void OnCommit(ui64) override {
+        if (WriteResult->IsError()) {
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, 
+                "Complete volatile write [" << Step << " : " << TxId << "] from " << Self->TabletID() 
+                << " at tablet " << Self->TabletID() << ", error:  " << WriteResult->GetError());
+        } else {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, 
+                "Complete volatile write [" << Step << " : " << TxId << "] from " << Self->TabletID() 
+                << " at tablet " << Self->TabletID() << " send result to client " << Target);
+        }
+
+        LWTRACK(ProposeTransactionSendResult, WriteResult->GetOrbit());
+        Self->Send(Target, WriteResult.release(), 0);
+    }
+
+    void OnAbort(ui64 txId) override {
+        WriteResult = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), txId, NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED, "Distributed transaction aborted due to commit failure");
+        OnCommit(txId);
+    }
+
+private:
+    TDataShard* Self;
+    std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> WriteResult;
     TActorId Target;
     ui64 Step;
     ui64 TxId;
@@ -637,14 +703,30 @@ void TDataShard::SendResult(const TActorContext &ctx,
     ctx.Send(target, res.Release(), flags);
 }
 
-void TDataShard::FillExecutionStats(const TExecutionProfile& execProfile, TEvDataShard::TEvProposeTransactionResult& result) const {
+void TDataShard::SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& result, const TActorId& target, ui64 step, ui64 txId) {
+    Y_ABORT_UNLESS(txId == result->Record.GetTxId(), "%" PRIu64 " vs %" PRIu64, txId, result->Record.GetTxId());
+
+    if (VolatileTxManager.FindByTxId(txId)) {
+        // This is a volatile transaction, and we need to wait until it is resolved
+        bool ok = VolatileTxManager.AttachVolatileTxCallback(txId, new TSendVolatileWriteResult(this, std::move(result), target, step, txId));
+        Y_ABORT_UNLESS(ok);
+        return;
+    }
+
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Complete write [" << step << " : " << txId << "] from " << TabletID() << " at tablet " << TabletID() << " send result to client " << target);
+
+    LWTRACK(ProposeTransactionSendResult, result->GetOrbit());
+    ctx.Send(target, result.release(), 0);
+}
+
+void TDataShard::FillExecutionStats(const TExecutionProfile& execProfile, NKikimrQueryStats::TTxStats& txStats) const {
     TDuration totalCpuTime;
     for (const auto& unit : execProfile.UnitProfiles) {
         totalCpuTime += unit.second.ExecuteTime;
         totalCpuTime += unit.second.CompleteTime;
     }
-    result.Record.MutableTxStats()->MutablePerShardStats()->Clear();
-    auto& stats = *result.Record.MutableTxStats()->AddPerShardStats();
+    txStats.MutablePerShardStats()->Clear();
+    auto& stats = *txStats.AddPerShardStats();
     stats.SetShardId(TabletID());
     stats.SetCpuTimeUsec(totalCpuTime.MicroSeconds());
 }
@@ -1961,68 +2043,81 @@ TRowVersion TDataShard::GetMvccTxVersion(EMvccTxMode mode, TOperation* op) const
         }
     }
 
-    TRowVersion edge;
-    TRowVersion readEdge = Max(
-            SnapshotManager.GetCompleteEdge(),
-            SnapshotManager.GetUnprotectedReadEdge());
-    TRowVersion writeEdge = Max(readEdge, SnapshotManager.GetIncompleteEdge());
-    switch (mode) {
-        case EMvccTxMode::ReadOnly:
-            // With read-only transactions we don't need reads to include
-            // changes made at the incomplete edge, as that is a point where
-            // distributed transactions performed some reads, not writes.
-            // Since incomplete transactions are still inflight, the actual
-            // version will stick to the first incomplete transaction is queue,
-            // effectively reading non-repeatable state before that transaction.
-            edge = readEdge;
-            break;
-        case EMvccTxMode::ReadWrite:
-            // With read-write transactions we must choose a point that is
-            // greater than both complete and incomplete edges. The reason
-            // is that incomplete transactions performed some reads at that
-            // point and these snapshot points must be repeatable.
-            // Note that as soon as the first write past the IncompleteEdge
-            // happens it cements all distributed transactions up to that point
-            // as complete, so all future reads and writes are guaranteed to
-            // include that point as well.
-            edge = writeEdge;
-            break;
-    }
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "GetMvccTxVersion at " << TabletID()
+        << " CompleteEdge# " << SnapshotManager.GetCompleteEdge()
+        << " IncompleteEdge# " << SnapshotManager.GetIncompleteEdge()
+        << " UnprotectedReadEdge# " << SnapshotManager.GetUnprotectedReadEdge()
+        << " ImmediateWriteEdge# " << SnapshotManager.GetImmediateWriteEdge()
+        << " ImmediateWriteEdgeReplied# " << SnapshotManager.GetImmediateWriteEdgeReplied());
 
-    // If there's any planned operation that is above our edge, it would be a
-    // suitable version for a new immediate operation. We effectively try to
-    // execute "before" that point if possible.
-    if (auto nextOp = Pipeline.GetNextPlannedOp(edge.Step, edge.TxId))
-        return TRowVersion(nextOp->GetStep(), nextOp->GetTxId());
+    TRowVersion version = [&]() {
+        TRowVersion edge;
+        TRowVersion readEdge = Max(
+                SnapshotManager.GetCompleteEdge(),
+                SnapshotManager.GetUnprotectedReadEdge());
+        TRowVersion writeEdge = Max(readEdge, SnapshotManager.GetIncompleteEdge());
+        switch (mode) {
+            case EMvccTxMode::ReadOnly:
+                // With read-only transactions we don't need reads to include
+                // changes made at the incomplete edge, as that is a point where
+                // distributed transactions performed some reads, not writes.
+                // Since incomplete transactions are still inflight, the actual
+                // version will stick to the first incomplete transaction is queue,
+                // effectively reading non-repeatable state before that transaction.
+                edge = readEdge;
+                break;
+            case EMvccTxMode::ReadWrite:
+                // With read-write transactions we must choose a point that is
+                // greater than both complete and incomplete edges. The reason
+                // is that incomplete transactions performed some reads at that
+                // point and these snapshot points must be repeatable.
+                // Note that as soon as the first write past the IncompleteEdge
+                // happens it cements all distributed transactions up to that point
+                // as complete, so all future reads and writes are guaranteed to
+                // include that point as well.
+                edge = writeEdge;
+                break;
+        }
 
-    // Normally we stick transactions to the end of the last known mediator step
-    // Note this calculations only happen when we don't have distributed
-    // transactions left in queue, and we won't have any more transactions
-    // up to the current mediator time. The mediator time itself may be stale,
-    // in which case we may have evidence of its higher value via complete and
-    // incomplete edges above.
-    const ui64 mediatorStep = Max(MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0, writeEdge.Step);
-    TRowVersion mediatorEdge(mediatorStep, ::Max<ui64>());
+        // If there's any planned operation that is above our edge, it would be a
+        // suitable version for a new immediate operation. We effectively try to
+        // execute "before" that point if possible.
+        if (auto nextOp = Pipeline.GetNextPlannedOp(edge.Step, edge.TxId))
+            return TRowVersion(nextOp->GetStep(), nextOp->GetTxId());
+
+        // Normally we stick transactions to the end of the last known mediator step
+        // Note this calculations only happen when we don't have distributed
+        // transactions left in queue, and we won't have any more transactions
+        // up to the current mediator time. The mediator time itself may be stale,
+        // in which case we may have evidence of its higher value via complete and
+        // incomplete edges above.
+        const ui64 mediatorStep = Max(MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0, writeEdge.Step);
+        TRowVersion mediatorEdge(mediatorStep, ::Max<ui64>());
+
+        switch (mode) {
+            case EMvccTxMode::ReadOnly: {
+                // We read at the end of the current step
+                return mediatorEdge;
+            }
+
+            case EMvccTxMode::ReadWrite: {
+                // We write at the end of the current step, or the start of the next step when that's protected
+                return Max(mediatorEdge, writeEdge.Next());
+            }
+        }
+
+        Y_ABORT("unreachable");
+    }();
 
     switch (mode) {
         case EMvccTxMode::ReadOnly: {
-            // We want to include everything that was potentially confirmed to
-            // users, but we don't want to include anything that is not replied
-            // at the start of this read.
-            // Note it's only possible to have ImmediateWriteEdge > mediatorEdge
-            // when ImmediateWriteEdge == mediatorEdge + 1
-            return Max(mediatorEdge, SnapshotManager.GetImmediateWriteEdgeReplied());
+            // We must read all writes we have replied to already
+            return Max(version, SnapshotManager.GetImmediateWriteEdgeReplied());
         }
 
         case EMvccTxMode::ReadWrite: {
-            // We must use at least a previously used immediate write edge
-            // But we must also avoid trumpling over any unprotected mvcc
-            // snapshot reads that have occurred.
-            // Note it's only possible to go past the last known mediator step
-            // when we had an unprotected read, which itself happens at the
-            // last mediator step. So we may only ever have a +1 step, never
-            // anything more.
-            return Max(mediatorEdge, writeEdge.Next(), SnapshotManager.GetImmediateWriteEdge());
+            // We must never go backwards in our single-shard writes
+            return Max(version, SnapshotManager.GetImmediateWriteEdge());
         }
     }
 
@@ -2075,6 +2170,8 @@ TDataShard::TPromotePostExecuteEdges TDataShard::PromoteImmediatePostExecuteEdge
                 // We need to wait for completion until the flag is committed
                 res.WaitCompletion = true;
             }
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "PromoteImmediatePostExecuteEdges at " << TabletID()
+                << " promoting UnprotectedReadEdge to " << version);
             SnapshotManager.PromoteUnprotectedReadEdge(version);
 
             // We want to promote the complete edge when protected reads are
@@ -2237,6 +2334,19 @@ void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorCo
     for (auto it = MediatorDelayedReplies.begin(); it != MediatorDelayedReplies.end();) {
         const ui64 step = it->first.Step;
 
+        if (SrcSplitDescription) {
+            if (State == TShardState::SplitSrcSendingSnapshot ||
+                State == TShardState::SplitSrcWaitForPartitioningChanged ||
+                State == TShardState::PreOffline ||
+                State == TShardState::Offline)
+            {
+                // We cannot send replies, since dst shard is now in charge
+                // of keeping track of acknowledged writes. So we expect
+                // split src logic to reboot this shard later.
+                break;
+            }
+        }
+
         if (step <= mediatorStep) {
             SnapshotManager.PromoteImmediateWriteEdgeReplied(it->first);
             Send(it->second.Target, it->second.Event.Release(), 0, it->second.Cookie);
@@ -2304,13 +2414,16 @@ void TDataShard::CheckMediatorStateRestored() {
     // HEAD reads must include that in their results.
     const ui64 waitStep = CoordinatorPrevReadStepMax;
     const ui64 readStep = CoordinatorPrevReadStepMax;
-
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "CheckMediatorStateRestored: waitStep# " << waitStep << " readStep# " << readStep);
+    const ui64 observedStep = GetMaxObservedStep();
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "CheckMediatorStateRestored at " << TabletID() << ":"
+        << " waitStep# " << waitStep
+        << " readStep# " << readStep
+        << " observedStep# " << observedStep);
 
     // WARNING: we must perform this check BEFORE we update unprotected read edge
     // We may enter this code path multiple times, and we expect that the above
     // read step may be refined while we wait based on pessimistic backup step.
-    if (GetMaxObservedStep() < waitStep) {
+    if (observedStep < waitStep) {
         // We need to wait until we observe mediator step that is at least
         // as large as the step we found.
         if (MediatorTimeCastWaitingSteps.insert(waitStep).second) {
@@ -2331,7 +2444,10 @@ void TDataShard::CheckMediatorStateRestored() {
             SnapshotManager.GetImmediateWriteEdge().Step > SnapshotManager.GetCompleteEdge().Step
             ? SnapshotManager.GetImmediateWriteEdge().Prev()
             : TRowVersion::Min();
-        SnapshotManager.PromoteUnprotectedReadEdge(Max(lastReadEdge, preImmediateWriteEdge));
+        const TRowVersion edge = Max(lastReadEdge, preImmediateWriteEdge);
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "CheckMediatorStateRestored at " << TabletID()
+            << " promoting UnprotectedReadEdge to " << edge);
+        SnapshotManager.PromoteUnprotectedReadEdge(edge);
     }
 
     // Promote the replied immediate write edge up to the currently observed step
@@ -2340,7 +2456,7 @@ void TDataShard::CheckMediatorStateRestored() {
     // data that is definitely not replied yet.
     if (SnapshotManager.GetImmediateWriteEdgeReplied() < SnapshotManager.GetImmediateWriteEdge()) {
         const ui64 writeStep = SnapshotManager.GetImmediateWriteEdge().Step;
-        const TRowVersion edge(GetMaxObservedStep(), Max<ui64>());
+        const TRowVersion edge(observedStep, Max<ui64>());
         SnapshotManager.PromoteImmediateWriteEdgeReplied(
             Min(edge, SnapshotManager.GetImmediateWriteEdge()));
         // Try to ensure writes become visible sooner rather than later
@@ -2477,6 +2593,10 @@ bool TDataShard::CheckDataTxReject(const TString& opDescr,
         rejectDescriptions.push_back(TStringBuilder()
             << "is in process of split opId " << DstSplitOpId
             << " state " << DatashardStateName(State));
+    } else if (State == TShardState::WaitScheme) {
+        reject = true;
+        rejectReasons |= ERejectReasons::WrongState;
+        rejectDescriptions.push_back("is not created yet");
     } else if (State == TShardState::PreOffline || State == TShardState::Offline) {
         reject = true;
         rejectStatus = NKikimrTxDataShard::TEvProposeTransactionResult::ERROR;
@@ -2622,6 +2742,11 @@ bool TDataShard::CheckDataTxRejectAndReply(const NEvents::TDataEvents::TEvWrite:
 
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, rejectDescription);
 
+        if (status == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED) {
+            std::optional<ui64> overloadSubscribe = ev->Get()->Record.HasOverloadSubscribe() ? ev->Get()->Record.GetOverloadSubscribe() : std::optional<ui64>{};
+            SetOverloadSubscribed(overloadSubscribe, ev->Recipient, ev->Sender, rejectReasons, result->Record);
+        }
+
         ctx.Send(ev->Sender, result.release());
         IncCounter(COUNTER_WRITE_OVERLOADED);
         IncCounter(COUNTER_WRITE_COMPLETE);
@@ -2638,6 +2763,11 @@ void TDataShard::UpdateProposeQueueSize() const {
 void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
     auto* msg = ev->Get();
     LWTRACK(ProposeTransactionRequest, msg->Orbit);
+
+    if (CheckDataTxRejectAndReply(ev, ctx)) {
+        IncCounter(COUNTER_PREPARE_REQUEST);
+        return;
+    }
 
     // Check if we need to delay an immediate transaction
     if (MediatorStateWaiting &&
@@ -2670,10 +2800,6 @@ void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TAc
     }
 
     IncCounter(COUNTER_PREPARE_REQUEST);
-
-    if (CheckDataTxRejectAndReply(ev, ctx)) {
-        return;
-    }
 
     switch (ev->Get()->GetTxKind()) {
     case NKikimrTxDataShard::TX_KIND_DATA:

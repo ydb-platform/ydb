@@ -671,7 +671,7 @@ public:
                             TString(dataSink.Cluster()),
                             key.GetTablePath(), node->Pos(), ctx);
 
-                        returningColumns = BuildColumnsList(*table, node->Pos(), ctx, sysColumnsEnabled);
+                        returningColumns = BuildColumnsList(*table, node->Pos(), ctx, sysColumnsEnabled, true /*ignoreWriteOnlyColumns*/);
 
                         break;
                     } else {

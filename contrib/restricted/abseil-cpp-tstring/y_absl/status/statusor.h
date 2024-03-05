@@ -39,15 +39,20 @@
 #include <exception>
 #include <initializer_list>
 #include <new>
+#include <ostream>
 #include <util/generic/string.h>
 #include <type_traits>
 #include <utility>
 
 #include "y_absl/base/attributes.h"
+#include "y_absl/base/nullability.h"
 #include "y_absl/base/call_once.h"
 #include "y_absl/meta/type_traits.h"
 #include "y_absl/status/internal/statusor_internal.h"
 #include "y_absl/status/status.h"
+#include "y_absl/strings/has_absl_stringify.h"
+#include "y_absl/strings/has_ostream_operator.h"
+#include "y_absl/strings/str_format.h"
 #include "y_absl/types/variant.h"
 #include "y_absl/utility/utility.h"
 
@@ -88,7 +93,7 @@ class BadStatusOrAccess : public std::exception {
   //
   // The pointer of this string is guaranteed to be valid until any non-const
   // function is invoked on the exception object.
-  const char* what() const noexcept override;
+  y_absl::Nonnull<const char*> what() const noexcept override;
 
   // BadStatusOrAccess::status()
   //
@@ -650,6 +655,41 @@ bool operator!=(const StatusOr<T>& lhs, const StatusOr<T>& rhs) {
   return !(lhs == rhs);
 }
 
+// Prints the `value` or the status in brackets to `os`.
+//
+// Requires `T` supports `operator<<`.  Do not rely on the output format which
+// may change without notice.
+template <typename T, typename std::enable_if<
+                          y_absl::HasOstreamOperator<T>::value, int>::type = 0>
+std::ostream& operator<<(std::ostream& os, const StatusOr<T>& status_or) {
+  if (status_or.ok()) {
+    os << status_or.value();
+  } else {
+    os << internal_statusor::StringifyRandom::OpenBrackets()
+       << status_or.status()
+       << internal_statusor::StringifyRandom::CloseBrackets();
+  }
+  return os;
+}
+
+// As above, but supports `StrCat`, `StrFormat`, etc.
+//
+// Requires `T` has `AbslStringify`.  Do not rely on the output format which
+// may change without notice.
+template <
+    typename Sink, typename T,
+    typename std::enable_if<y_absl::HasAbslStringify<T>::value, int>::type = 0>
+void AbslStringify(Sink& sink, const StatusOr<T>& status_or) {
+  if (status_or.ok()) {
+    y_absl::Format(&sink, "%v", status_or.value());
+  } else {
+    y_absl::Format(&sink, "%s%v%s",
+                 internal_statusor::StringifyRandom::OpenBrackets(),
+                 status_or.status(),
+                 internal_statusor::StringifyRandom::CloseBrackets());
+  }
+}
+
 //------------------------------------------------------------------------------
 // Implementation details for StatusOr<T>
 //------------------------------------------------------------------------------
@@ -750,13 +790,13 @@ T&& StatusOr<T>::operator*() && {
 }
 
 template <typename T>
-const T* StatusOr<T>::operator->() const {
+y_absl::Nonnull<const T*> StatusOr<T>::operator->() const {
   this->EnsureOk();
   return &this->data_;
 }
 
 template <typename T>
-T* StatusOr<T>::operator->() {
+y_absl::Nonnull<T*> StatusOr<T>::operator->() {
   this->EnsureOk();
   return &this->data_;
 }

@@ -7,7 +7,7 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1, yq_all
 
 import ydb.public.api.protos.draft.fq_pb2 as fq
 import ydb.public.api.protos.ydb_value_pb2 as ydb
-
+from google.protobuf.struct_pb2 import NullValue
 
 class TestSelect1(object):
     @yq_all
@@ -93,11 +93,11 @@ class TestSelect1(object):
 
         assert len(result_set.rows) == 1
         assert result_set.rows[0].items[0].text_value == "{{1,2,3}}"
-        assert result_set.rows[0].items[1].WhichOneof("value") is None
+        assert result_set.rows[0].items[1].null_flag_value == NullValue.NULL_VALUE
         assert result_set.rows[0].items[2].text_value == "null"
         assert result_set.rows[0].items[3].text_value == "1"
         assert result_set.rows[0].items[4].text_value == "t"
-        assert result_set.rows[0].items[5].WhichOneof("value") is None
+        assert result_set.rows[0].items[5].null_flag_value == NullValue.NULL_VALUE
 
     @yq_all
     def test_select_10_p_19_plus_1(self, client):

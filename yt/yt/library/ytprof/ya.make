@@ -51,6 +51,7 @@ CXXFLAGS(-DYTPROF_BUILD_TYPE='\"${BUILD_TYPE}\"')
 END()
 
 RECURSE(
+    allocation_tag_profiler
     http
     example
     bundle

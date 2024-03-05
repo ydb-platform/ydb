@@ -35,7 +35,6 @@ NO_SANITIZE_COVERAGE()
 
 CFLAGS(
     GLOBAL -D_libunwind_
-    -D_LIBUNWIND_IS_NATIVE_ONLY
     -fno-exceptions
     -fno-rtti
     -funwind-tables
@@ -47,16 +46,32 @@ IF (SANITIZER_TYPE == memory)
     )
 ENDIF()
 
-SRCS(
-    src/Unwind-EHABI.cpp
-    src/Unwind-seh.cpp
-    src/Unwind-sjlj.c
-    src/Unwind-wasm.c
-    src/UnwindLevel1-gcc-ext.c
-    src/UnwindLevel1.c
-    src/UnwindRegistersRestore.S
-    src/UnwindRegistersSave.S
-    src/libunwind.cpp
-)
+IF (NOT OS_EMSCRIPTEN)
+    CFLAGS(
+        -D_LIBUNWIND_IS_NATIVE_ONLY
+    )
+    SRCS(
+        src/Unwind-EHABI.cpp
+        src/Unwind-seh.cpp
+        src/Unwind-sjlj.c
+        src/Unwind-wasm.c
+        src/UnwindLevel1-gcc-ext.c
+        src/UnwindLevel1.c
+        src/UnwindRegistersRestore.S
+        src/UnwindRegistersSave.S
+        src/libunwind.cpp
+    )
+ELSEIF (OS_EMSCRIPTEN)
+    PEERDIR(
+        contrib/restricted/emscripten/include
+    )
+    CFLAGS(
+        -D__USING_WASM_EXCEPTIONS__
+        -D_LIBUNWIND_HIDE_SYMBOLS
+    )
+    SRCS(
+        src/Unwind-wasm.c
+    )
+ENDIF()
 
 END()

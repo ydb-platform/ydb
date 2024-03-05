@@ -9,6 +9,9 @@
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/protos/follower_group.pb.h>
 
 #include <util/generic/hash.h>
 
@@ -151,11 +154,11 @@ bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NK
     if (flags & NKqpProto::TKqpSchemeOperation::FLAG_PG_MODE) {
         settings->set_pg_mode(true);
     }
-    
+
     if (flags & NKqpProto::TKqpSchemeOperation::FLAG_IF_NOT_EXISTS) {
         settings->set_if_not_exist(true);
     }
-    
+
     settings->set_source_path(req->path());
     auto tableIndex = settings->mutable_index();
     tableIndex->CopyFrom(req->add_indexes(0));
@@ -390,6 +393,54 @@ static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& co
         }
     }
     newColumn->set_not_null(column.GetNotNull());
+    return columnType;
+}
+
+template <>
+Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta* newColumn, const NKikimrSchemeOp::TColumnDescription& column) {
+    newColumn->set_name(column.GetName());
+
+    Ydb::Type* columnType = nullptr;
+    auto* typeDesc = NPg::TypeDescFromPgTypeName(column.GetType());
+    if (typeDesc) {
+        columnType = newColumn->mutable_type();
+        auto* pg = columnType->mutable_pg_type();
+        pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
+        pg->set_type_modifier(NPg::TypeModFromPgTypeName(column.GetType()));
+        pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
+        pg->set_typlen(0);
+        pg->set_typmod(0);
+    } else {
+        NYql::NProto::TypeIds protoType;
+        if (!NYql::NProto::TypeIds_Parse(column.GetType(), &protoType)) {
+            throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)
+                << "Got invalid type: " << column.GetType() << " for column: " << column.GetName();
+        }
+
+        if (column.GetNotNull()) {
+            columnType = newColumn->mutable_type();
+        } else {
+            columnType = newColumn->mutable_type()->mutable_optional_type()->mutable_item();
+        }
+        Y_ENSURE(columnType);
+        if (protoType == NYql::NProto::TypeIds::Decimal) {
+            auto typeParams = columnType->mutable_decimal_type();
+            // TODO: Change TEvDescribeSchemeResult to return decimal params
+            typeParams->set_precision(22);
+            typeParams->set_scale(9);
+        } else {
+            NMiniKQL::ExportPrimitiveTypeToProto(protoType, *columnType);
+        }
+    }
+    newColumn->set_not_null(column.GetNotNull());
+    switch (column.GetDefaultValueCase()) {
+        case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
+            auto fromLiteral = newColumn->mutable_from_literal();
+            *fromLiteral = column.GetDefaultFromLiteral();
+            break;
+        }
+        default: break;
+    }
 
     return columnType;
 }
@@ -480,10 +531,6 @@ void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSc
     auto& schema = in.GetSchema();
 
     for (const auto& column : schema.GetColumns()) {
-        Y_ENSURE(
-            column.GetTypeId() != NScheme::NTypeIds::Pg || !column.GetNotNull(),
-            "It is not allowed to create NOT NULL column with pg type"
-        );
         auto newColumn = out.add_columns();
         AddColumn(newColumn, column);
     }
@@ -606,6 +653,15 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
 
         if (!column.family().empty()) {
             cd->SetFamilyName(column.family());
+        }
+
+        switch (column.default_value_case()) {
+            case Ydb::Table::ColumnMeta::kFromLiteral: {
+                auto fromLiteral = cd->MutableDefaultFromLiteral();
+                *fromLiteral = column.from_literal();
+                break;
+            }
+            default: break;
         }
     }
 

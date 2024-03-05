@@ -148,7 +148,7 @@ int TTokenizer::ParseHexDigit(char ch, TStringBuf context)
     YT_ABORT();
 }
 
-void TTokenizer::Expect(ETokenType expectedType)
+void TTokenizer::Expect(ETokenType expectedType) const
 {
     if (expectedType != Type_) {
         if (Type_ == ETokenType::EndOfStream) {
@@ -169,7 +169,7 @@ void TTokenizer::Expect(ETokenType expectedType)
     }
 }
 
-void TTokenizer::ExpectListIndex()
+void TTokenizer::ExpectListIndex() const
 {
     Expect(NYPath::ETokenType::Literal);
     i64 index;
@@ -190,7 +190,7 @@ bool TTokenizer::Skip(ETokenType expectedType)
     return false;
 }
 
-void TTokenizer::ThrowUnexpected()
+void TTokenizer::ThrowUnexpected() const
 {
     if (Type_ == ETokenType::EndOfStream) {
         if (PreviousType_ == ETokenType::Slash) {

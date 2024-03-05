@@ -80,14 +80,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
 
     Y_UNIT_TEST(Datetime32vs64) {
         TScopedAlloc alloc(__LOCATION__);
-        alloc.DisableStrictAllocationCheck();
         for (ui32 v32 = 0; v32 <= 86400; ++v32) {
-            const auto str32 = ValueToString(NUdf::EDataSlot::Datetime, NUdf::TUnboxedValuePod(v32));
+            const NUdf::TUnboxedValue str32 = ValueToString(NUdf::EDataSlot::Datetime, NUdf::TUnboxedValuePod(v32));
             UNIT_ASSERT(str32.HasValue());
             auto v64 = ValueFromString(NUdf::EDataSlot::Datetime64, str32.AsStringRef());
             UNIT_ASSERT(v64.HasValue());
             UNIT_ASSERT_VALUES_EQUAL(v32, v64.Get<i64>());
-            const auto str64 = ValueToString(NUdf::EDataSlot::Datetime64, NUdf::TUnboxedValuePod(v64.Get<i64>()));
+            const NUdf::TUnboxedValue str64 = ValueToString(NUdf::EDataSlot::Datetime64, NUdf::TUnboxedValuePod(v64.Get<i64>()));
             UNIT_ASSERT(str64.HasValue());
             UNIT_ASSERT_VALUES_EQUAL(str32.AsStringRef(), str64.AsStringRef());
         }
@@ -95,14 +94,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
 
     Y_UNIT_TEST(TimestampOldVsNew) {
         TScopedAlloc alloc(__LOCATION__);
-        alloc.DisableStrictAllocationCheck();
         for (ui64 val = 0; val <= 86400000000; val += 1000003) {
-            const auto str32 = ValueToString(NUdf::EDataSlot::Timestamp, NUdf::TUnboxedValuePod(val));
+            const NUdf::TUnboxedValue str32 = ValueToString(NUdf::EDataSlot::Timestamp, NUdf::TUnboxedValuePod(val));
             UNIT_ASSERT(str32.HasValue());
             auto v64 = ValueFromString(NUdf::EDataSlot::Timestamp64, str32.AsStringRef());
             UNIT_ASSERT(v64.HasValue());
             UNIT_ASSERT_VALUES_EQUAL(val, v64.Get<i64>());
-            const auto str64 = ValueToString(NUdf::EDataSlot::Timestamp64, NUdf::TUnboxedValuePod(v64.Get<i64>()));
+            const NUdf::TUnboxedValue str64 = ValueToString(NUdf::EDataSlot::Timestamp64, NUdf::TUnboxedValuePod(v64.Get<i64>()));
             UNIT_ASSERT(str64.HasValue());
             UNIT_ASSERT_VALUES_EQUAL(str32.AsStringRef(), str64.AsStringRef());
         }
@@ -110,14 +108,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
 
     Y_UNIT_TEST(IntervalOldVsNew) {
         TScopedAlloc alloc(__LOCATION__);
-        alloc.DisableStrictAllocationCheck();
         for (ui64 val = -86400000000; val <= 86400000000; val += 1000003) {
-            const auto str32 = ValueToString(NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(val));
+            const NUdf::TUnboxedValue str32 = ValueToString(NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(val));
             UNIT_ASSERT(str32.HasValue());
             auto v64 = ValueFromString(NUdf::EDataSlot::Interval64, str32.AsStringRef());
             UNIT_ASSERT(v64.HasValue());
             UNIT_ASSERT_VALUES_EQUAL(val, v64.Get<i64>());
-            const auto str64 = ValueToString(NUdf::EDataSlot::Interval64, NUdf::TUnboxedValuePod(v64.Get<i64>()));
+            const NUdf::TUnboxedValue str64 = ValueToString(NUdf::EDataSlot::Interval64, NUdf::TUnboxedValuePod(v64.Get<i64>()));
             UNIT_ASSERT(str64.HasValue());
             UNIT_ASSERT_VALUES_EQUAL(str32.AsStringRef(), str64.AsStringRef());
         }

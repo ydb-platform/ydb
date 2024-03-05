@@ -6,7 +6,7 @@
 
 #include <library/cpp/json/writer/json.h>
 
-namespace NKikimr::NYaml {
+namespace NKikimr::NYaml::NDeprecated {
 
     template<typename T>
     static bool SetScalarFromYaml(const YAML::Node& yaml, NJson::TJsonValue& json, NJson::EJsonValueType jsonType) {
@@ -210,9 +210,9 @@ namespace NKikimr::NYaml {
             {"NODE_BROKER", 72057594037936129},
             {"TENANT_SLOT_BROKER", 72057594037936130},
             {"CONSOLE", 72057594037936131},
-            {"TX_ALLOCATOR", TDomainsInfo::MakeTxAllocatorIDFixed(1, idx)},
-            {"FLAT_TX_COORDINATOR", TDomainsInfo::MakeTxCoordinatorIDFixed(1, idx)},
-            {"TX_MEDIATOR", TDomainsInfo::MakeTxMediatorIDFixed(1, idx)},
+            {"TX_ALLOCATOR", TDomainsInfo::MakeTxAllocatorIDFixed(idx)},
+            {"FLAT_TX_COORDINATOR", TDomainsInfo::MakeTxCoordinatorIDFixed(idx)},
+            {"TX_MEDIATOR", TDomainsInfo::MakeTxMediatorIDFixed(idx)},
         };
 
         auto it = tablets.find(type);

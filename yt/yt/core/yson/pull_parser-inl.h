@@ -6,6 +6,7 @@
 
 #include "detail.h"
 
+#include <yt/yt/core/misc/optional.h>
 #include <yt/yt/core/misc/parser_helpers.h>
 
 #include <optional>
@@ -252,7 +253,7 @@ auto TYsonPullParser::ParseItem() -> std::conditional_t<IsOptional, bool, void>
             }
         }
 
-        ThrowUnexpectedTokenException("item", *this, item, ItemType, /* isOptional */ true);
+        ThrowUnexpectedTokenException("item", *this, item, ItemType, /*isOptional*/ true);
     };
 
     auto result = parse();

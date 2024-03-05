@@ -98,7 +98,10 @@ void TServiceContextBase::Reply(const TSharedRefArray& responseMessage)
             responseMessage.Begin() + 2,
             responseMessage.End());
 
-        YT_VERIFY(header.has_codec() && TryEnumCast(header.codec(), &ResponseCodec_));
+        if (header.has_codec()) {
+            YT_VERIFY(TryEnumCast(header.codec(), &ResponseCodec_));
+            SetResponseBodySerializedWithCompression();
+        }
         if (header.has_format()) {
             RequestHeader_->set_response_format(header.format());
         }
@@ -186,7 +189,15 @@ TSharedRefArray TServiceContextBase::BuildResponseMessage()
         header.set_format(RequestHeader_->response_format());
     }
 
-    header.set_codec(static_cast<int>(ResponseCodec_));
+    // COMPAT(danilalexeev): legacy RPC codecs.
+    if (IsResponseBodySerializedWithCompression()) {
+        if (RequestHeader_->has_response_codec()) {
+            header.set_codec(static_cast<int>(ResponseCodec_));
+        } else {
+            ResponseBody_ = PushEnvelope(ResponseBody_, ResponseCodec_);
+            ResponseAttachments_ = DecompressAttachments(ResponseAttachments_, ResponseCodec_);
+        }
+    }
 
     auto message = Error_.IsOK()
         ? CreateResponseMessage(
@@ -464,6 +475,16 @@ void TServiceContextBase::SetResponseCodec(NCompression::ECodec codec)
     ResponseCodec_ = codec;
 }
 
+bool TServiceContextBase::IsResponseBodySerializedWithCompression() const
+{
+    return ResponseBodySerializedWithCompression_;
+}
+
+void TServiceContextBase::SetResponseBodySerializedWithCompression()
+{
+    ResponseBodySerializedWithCompression_ = true;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TServiceContextWrapper::TServiceContextWrapper(IServiceContextPtr underlyingContext)
@@ -728,6 +749,16 @@ void TServiceContextWrapper::SetResponseCodec(NCompression::ECodec codec)
     UnderlyingContext_->SetResponseCodec(codec);
 }
 
+bool TServiceContextWrapper::IsResponseBodySerializedWithCompression() const
+{
+    return UnderlyingContext_->IsResponseBodySerializedWithCompression();
+}
+
+void TServiceContextWrapper::SetResponseBodySerializedWithCompression()
+{
+    UnderlyingContext_->SetResponseBodySerializedWithCompression();
+}
+
 const IServiceContextPtr& TServiceContextWrapper::GetUnderlyingContext() const
 {
     return UnderlyingContext_;
@@ -851,6 +882,7 @@ void TServerBase::ApplyConfig()
     newAppliedConfig->EnableErrorCodeCounting = DynamicConfig_->EnableErrorCodeCounting.value_or(StaticConfig_->EnableErrorCodeCounting);
     newAppliedConfig->EnablePerUserProfiling = DynamicConfig_->EnablePerUserProfiling.value_or(StaticConfig_->EnablePerUserProfiling);
     newAppliedConfig->HistogramTimerProfiling = DynamicConfig_->HistogramTimerProfiling.value_or(StaticConfig_->HistogramTimerProfiling);
+    newAppliedConfig->TracingMode = DynamicConfig_->TracingMode.value_or(StaticConfig_->TracingMode);
     newAppliedConfig->Services = StaticConfig_->Services;
 
     for (const auto& [name, node] : DynamicConfig_->Services) {

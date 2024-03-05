@@ -5,14 +5,18 @@ PEERDIR(
 )
 
 SRCS(
-    control.h
-    control_wrapper.h
     request_discriminator.h
+    request_discriminator.cpp
     sampler.h
-    sampling_throttling_configurator.h
     sampling_throttling_configurator.cpp
+    sampling_throttling_configurator.h
+    sampling_throttling_control.cpp
     sampling_throttling_control.h
+    sampling_throttling_control_internals.cpp
+    sampling_throttling_control_internals.h
+    settings.h
     throttler.h
+    throttler.cpp
 )
 
 END()

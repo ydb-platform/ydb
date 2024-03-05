@@ -19,6 +19,7 @@ message TEvGetMetrics {
     optional uint64 TimeTo = 2;
     repeated string Metrics = 3;
     optional uint32 MaxPoints = 4;
+    bool SkipBorders = 5; // don't return points for TimeFrom / TimeTo when there are no values for them
 }
 
 message TMetricData {

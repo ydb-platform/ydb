@@ -178,12 +178,16 @@ DROP TABLE withoutoid;
 -- Verify that subtransaction rollback restores rd_createSubid.
 BEGIN;
 CREATE TABLE remember_create_subid (c int);
+SAVEPOINT q;
 DROP TABLE remember_create_subid;
+ROLLBACK TO q;
 COMMIT;
 -- Verify that subtransaction rollback restores rd_firstRelfilenodeSubid.
 CREATE TABLE remember_node_subid (c int);
 BEGIN;
+SAVEPOINT q;
 DROP TABLE remember_node_subid;
+ROLLBACK TO q;
 COMMIT;
 -- syntax does not allow empty list of values for list partitions
 CREATE TABLE fail_part PARTITION OF list_parted FOR VALUES IN ();
@@ -193,6 +197,7 @@ CREATE TABLE unparted (
 	a int
 );
 DROP TABLE unparted;
+SELECT conislocal, coninhcount FROM pg_constraint WHERE conrelid = 'part_b'::regclass;
 create table defcheck_def (a int, c int, b int);
 -- test that complex default partition constraints are enforced correctly
 insert into defcheck_def values (0, 0);

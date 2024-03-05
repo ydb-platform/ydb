@@ -41,6 +41,14 @@
                 }
             }
         },
+        "bloat": {
+            "executable": {
+                "bloat": [
+                    "bloat"
+                ]
+            },
+            "formula": "build/external_resources/bloat/resources.json"
+        },
         "clang-format": {
             "executable": {
                 "clang-format": [
@@ -316,6 +324,28 @@
                 "black": {
                     "bottle": "black",
                     "executable": "black"
+                }
+            }
+        },
+        "bloat": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "bloat": {
+                    "bottle": "bloat",
+                    "executable": "bloat"
                 }
             }
         },
@@ -856,6 +886,17 @@
                 {
                     "default": false,
                     "host": {
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "armv7ahf_cortex_a53",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "arch": "arm64",
                         "os": "DARWIN"
                     },
                     "target": {
@@ -1421,6 +1462,17 @@
                         "arch": "wasm64",
                         "os": "EMSCRIPTEN"
                     }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "armv7ahf_cortex_a53",
+                        "os": "LINUX"
+                    }
                 }
             ],
             "tools": {
@@ -1909,6 +1961,10 @@
         },
         "black": {
             "description": "Python styler, Python 3 only"
+        },
+        "bloat": {
+            "description": "Run bloat tool",
+            "visible": false
         },
         "c++": {
             "description": "Run C++ compiler"

@@ -3,6 +3,11 @@
 #include "column_features.h"
 #include "tier_info.h"
 
+#include "abstract/index_info.h"
+#include "indexes/abstract/meta.h"
+#include "statistics/abstract/operator.h"
+#include "statistics/abstract/common.h"
+
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 
 #include <ydb/core/sys_view/common/schema.h>
@@ -12,7 +17,6 @@
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/formats/arrow/transformer/abstract.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
-#include "indexes/abstract/meta.h"
 
 namespace arrow {
     class Array;
@@ -26,31 +30,64 @@ namespace NKikimr::NArrow {
 
 namespace NKikimr::NOlap {
 
+class TPortionInfoWithBlobs;
 struct TInsertedData;
 class TSnapshotColumnInfo;
 using TNameTypeInfo = std::pair<TString, NScheme::TTypeInfo>;
 
 /// Column engine index description in terms of tablet's local table.
 /// We have to use YDB types for keys here.
-struct TIndexInfo : public NTable::TScheme::TTableSchema {
+struct TIndexInfo : public NTable::TScheme::TTableSchema, public IIndexInfo {
 private:
     THashMap<ui32, TColumnFeatures> ColumnFeatures;
     THashMap<ui32, std::shared_ptr<arrow::Field>> ArrowColumnByColumnIdCache;
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
+    std::map<NStatistics::TIdentifier, NStatistics::TOperatorContainer> Statistics;
     TIndexInfo(const TString& name);
-    bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
+    bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators);
     TColumnFeatures& GetOrCreateColumnFeatures(const ui32 columnId) const;
     void BuildSchemaWithSpecials();
     void BuildArrowSchema();
-    void InitializeCaches();
+    void InitializeCaches(const std::shared_ptr<IStoragesManager>& operators);
 public:
-    static constexpr const char* SPEC_COL_PLAN_STEP = NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP;
-    static constexpr const char* SPEC_COL_TX_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_TX_ID;
-    static const TString STORE_INDEX_STATS_TABLE;
-    static const TString TABLE_INDEX_STATS_TABLE;
+    const std::map<NStatistics::TIdentifier, NStatistics::TOperatorContainer>& GetStatistics() const {
+        return Statistics;
+    }
+
+    NStatistics::TOperatorContainer GetStatistics(const NStatistics::TIdentifier& id) const {
+        auto it = Statistics.find(id);
+        if (it != Statistics.end()) {
+            return it->second;
+        }
+        return NStatistics::TOperatorContainer();
+    }
 
     const THashMap<ui32, NIndexes::TIndexMetaContainer>& GetIndexes() const {
         return Indexes;
+    }
+
+    const TString& GetIndexStorageId(const ui32 indexId) const {
+        auto it = Indexes.find(indexId);
+        AFL_VERIFY(it != Indexes.end());
+        return it->second->GetStorageId();
+    }
+
+    const TString& GetColumnStorageId(const ui32 columnId, const TString& specialTier) const {
+        if (specialTier && specialTier != IStoragesManager::DefaultStorageId) {
+            return specialTier;
+        } else {
+            auto it = ColumnFeatures.find(columnId);
+            AFL_VERIFY(it != ColumnFeatures.end());
+            return it->second.GetOperator()->GetStorageId();
+        }
+    }
+
+    const TString& GetEntityStorageId(const ui32 entityId, const TString& specialTier) const {
+        auto it = Indexes.find(entityId);
+        if (it != Indexes.end()) {
+            return it->second->GetStorageId();
+        }
+        return GetColumnStorageId(entityId, specialTier);
     }
 
     enum class ESpecialColumn : ui32 {
@@ -102,7 +139,7 @@ public:
         return result;
     }
 
-    static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
+    static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators);
 
     static const std::vector<std::string>& SnapshotColumnNames() {
         static std::vector<std::string> result = {SPEC_COL_PLAN_STEP, SPEC_COL_TX_ID};
@@ -114,8 +151,7 @@ public:
     std::shared_ptr<arrow::Schema> GetColumnSchema(const ui32 columnId) const;
     std::shared_ptr<arrow::Schema> GetColumnsSchema(const std::set<ui32>& columnIds) const;
     TColumnSaver GetColumnSaver(const ui32 columnId, const TSaverContext& context) const;
-    std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const ui32 columnId) const;
-    std::shared_ptr<TColumnLoader> GetColumnLoaderVerified(const ui32 columnId) const;
+    virtual std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const ui32 columnId) const override;
     std::optional<std::string> GetColumnNameOptional(const ui32 columnId) const {
         auto f = GetColumnFieldOptional(columnId);
         if (!f) {
@@ -157,6 +193,13 @@ public:
     /// Returns names of columns defined by the specific ids.
     std::vector<TString> GetColumnNames(const std::vector<ui32>& ids) const;
     std::vector<ui32> GetColumnIds() const;
+    std::vector<ui32> GetEntityIds() const {
+        auto result = GetColumnIds();
+        for (auto&& i : Indexes) {
+            result.emplace_back(i.first);
+        }
+        return result;
+    }
 
     /// Returns info of columns defined by specific ids.
     std::vector<TNameTypeInfo> GetColumns(const std::vector<ui32>& ids) const;
@@ -179,7 +222,7 @@ public:
     const std::shared_ptr<arrow::Schema>& GetPrimaryKey() const { return PrimaryKey; }
 
     /// Initializes sorting, replace, index and extended keys.
-    void SetAllKeys();
+    void SetAllKeys(const std::shared_ptr<IStoragesManager>& operators);
 
     void CheckTtlColumn(const TString& ttlColumn) const {
         Y_ABORT_UNLESS(!ttlColumn.empty());

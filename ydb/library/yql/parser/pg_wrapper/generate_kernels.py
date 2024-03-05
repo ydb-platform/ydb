@@ -45,7 +45,7 @@ def main():
     with open("pg_sources.inc") as f:
         for line in f:
             pg_sources.append(line.rstrip())
-    with open("../../../../../yql/tools/pg_catalog_dump/dump.json") as f:
+    with open("../../tools/pg_catalog_dump/dump.json") as f:
         catalog = json.load(f)
     catalog_by_oid = {}
     catalog_funcs = set()
@@ -56,7 +56,7 @@ def main():
     for agg in catalog["aggregation"]:
         if not agg["combine_func_id"]:
             continue
-        catalog_aggs_by_id[agg["internal_id"]] = agg
+        catalog_aggs_by_id[agg["agg_id"]] = agg
         assert len(agg["args"]) <= 2
 
     funcs={}
@@ -290,9 +290,9 @@ def main():
                 "    const std::vector<ui32>& argsColumns,\n" \
                 "    const TTypeEnvironment& env) const final {\n" \
                 "    const auto& aggDesc = ResolveAggregation(\"NAME\", tupleType, argsColumns, nullptr);\n" \
-                "    switch (aggDesc.InternalId) {\n" +
+                "    switch (aggDesc.AggId) {\n" +
                 "".join(["    case " + str(agg_id) + ": return MakePgAgg_NAME_" + str(agg_id) + "().PrepareCombineAll(filterColumn, argsColumns, aggDesc);\n" for agg_id in agg_names[name]]) +
-                "    default: throw yexception() << \"Unsupported agg id: \" << aggDesc.InternalId;\n" \
+                "    default: throw yexception() << \"Unsupported agg id: \" << aggDesc.AggId;\n" \
                 "    }\n" \
                 "}\n" \
                 "\n" \
@@ -301,9 +301,9 @@ def main():
                 "    const std::vector<ui32>& argsColumns,\n" \
                 "    const TTypeEnvironment& env) const final {\n" \
                 "    const auto& aggDesc = ResolveAggregation(\"NAME\", tupleType, argsColumns, nullptr);\n"                
-                "    switch (aggDesc.InternalId) {\n" +
+                "    switch (aggDesc.AggId) {\n" +
                 "".join(["    case " + str(agg_id) + ": return MakePgAgg_NAME_" + str(agg_id) + "().PrepareCombineKeys(argsColumns, aggDesc);\n" for agg_id in agg_names[name]]) +
-                "    default: throw yexception() << \"Unsupported agg id: \" << aggDesc.InternalId;\n" \
+                "    default: throw yexception() << \"Unsupported agg id: \" << aggDesc.AggId;\n" \
                 "    }\n" \
                 "}\n" \
                 "\n" \
@@ -313,9 +313,9 @@ def main():
                 "    const TTypeEnvironment& env,\n" \
                 "    TType* returnType) const final {\n" \
                 "    const auto& aggDesc = ResolveAggregation(\"NAME\", tupleType, argsColumns, returnType);\n"
-                "    switch (aggDesc.InternalId) {\n" +
+                "    switch (aggDesc.AggId) {\n" +
                 "".join(["    case " + str(agg_id) + ": return MakePgAgg_NAME_" + str(agg_id) + "().PrepareFinalizeKeys(argsColumns.front(), aggDesc);\n" for agg_id in agg_names[name]]) +
-                "    default: throw yexception() << \"Unsupported agg id: \" << aggDesc.InternalId;\n" \
+                "    default: throw yexception() << \"Unsupported agg id: \" << aggDesc.AggId;\n" \
                 "    }\n" \
                 "}\n" \
                 "};\n").replace("NAME", name))

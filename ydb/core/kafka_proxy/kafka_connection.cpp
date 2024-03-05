@@ -310,6 +310,10 @@ protected:
         Register(CreateKafkaCreatePartitionsActor(Context, header->CorrelationId, message));
     }
 
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TAlterConfigsRequestData>& message) {
+        Register(CreateKafkaAlterConfigsActor(Context, header->CorrelationId, message));
+    }
+
     template<class T>
     TMessagePtr<T> Cast(std::shared_ptr<Msg>& request) {
         return TMessagePtr<T>(request->Buffer, request->Message);
@@ -403,6 +407,10 @@ protected:
 
             case CREATE_PARTITIONS:
                 HandleMessage(&Request->Header, Cast<TCreatePartitionsRequestData>(Request));
+                break;
+
+            case ALTER_CONFIGS:
+                HandleMessage(&Request->Header, Cast<TAlterConfigsRequestData>(Request));
                 break;
 
             default:

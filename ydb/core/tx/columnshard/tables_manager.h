@@ -140,7 +140,7 @@ private:
 public:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId);
 
-    bool TryFinalizeDropPath(NTabletFlatExecutor::TTransactionContext& txc, const ui64 pathId);
+    bool TryFinalizeDropPath(NTable::TDatabase& dbTable, const ui64 pathId);
 
     const TTtl& GetTtl() const {
         return Ttl;
@@ -189,6 +189,32 @@ public:
         return *PrimaryIndex;
     }
 
+    template <class TIndex>
+    TIndex& MutablePrimaryIndexAsVerified() {
+        AFL_VERIFY(!!PrimaryIndex);
+        auto result = dynamic_cast<TIndex*>(PrimaryIndex.get());
+        AFL_VERIFY(result);
+        return *result;
+    }
+
+    template <class TIndex>
+    const TIndex& GetPrimaryIndexAsVerified() const {
+        AFL_VERIFY(!!PrimaryIndex);
+        auto result = dynamic_cast<const TIndex*>(PrimaryIndex.get());
+        AFL_VERIFY(result);
+        return *result;
+    }
+
+    template <class TIndex>
+    const TIndex* GetPrimaryIndexAsOptional() const {
+        if (!PrimaryIndex) {
+            return nullptr;
+        }
+        auto result = dynamic_cast<const TIndex*>(PrimaryIndex.get());
+        AFL_VERIFY(result);
+        return result;
+    }
+
     bool InitFromDB(NIceDb::TNiceDb& db);
     bool LoadIndex(NOlap::TDbWrapper& db);
 
@@ -210,7 +236,6 @@ public:
     bool FillMonitoringReport(NTabletFlatExecutor::TTransactionContext& txc, NJson::TJsonValue& json);
 private:
     void IndexSchemaVersion(const NOlap::TSnapshot& version, const NKikimrSchemeOp::TColumnTableSchema& schema);
-    static NOlap::TIndexInfo DeserializeIndexInfoFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
 };
 
 }

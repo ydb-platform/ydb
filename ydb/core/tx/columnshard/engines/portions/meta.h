@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/engines/scheme/statistics/abstract/portion_storage.h>
 #include <ydb/core/formats/arrow/replace_key.h>
 #include <ydb/core/formats/arrow/special_keys.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
@@ -15,6 +16,7 @@ struct TPortionMeta {
 private:
     std::shared_ptr<NArrow::TFirstLastSpecialKeys> ReplaceKeyEdges; // first and last PK rows
     YDB_ACCESSOR_DEF(TString, TierName);
+    YDB_READONLY_DEF(NStatistics::TPortionStorage, StatisticsStorage);
 public:
     using EProduced = NPortion::EProduced;
 
@@ -26,9 +28,19 @@ public:
     EProduced Produced{EProduced::UNSPECIFIED};
     ui32 FirstPkColumn = 0;
 
+    void SetStatisticsStorage(NStatistics::TPortionStorage&& storage) {
+        AFL_VERIFY(StatisticsStorage.IsEmpty());
+        StatisticsStorage = std::move(storage);
+    }
+
+    bool IsChunkWithPortionInfo(const ui32 columnId, const ui32 chunkIdx) const {
+        return columnId == FirstPkColumn && chunkIdx == 0;
+    }
+
     bool DeserializeFromProto(const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo);
 
     std::optional<NKikimrTxColumnShard::TIndexPortionMeta> SerializeToProto(const ui32 columnId, const ui32 chunk) const;
+    NKikimrTxColumnShard::TIndexPortionMeta SerializeToProto() const;
 
     void FillBatchInfo(const NArrow::TFirstLastSpecialKeys& primaryKeys, const NArrow::TMinMaxSpecialKeys& snapshotKeys, const TIndexInfo& indexInfo);
 

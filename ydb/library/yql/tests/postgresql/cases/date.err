@@ -28,6 +28,15 @@ INSERT INTO DATE_TBL VALUES ('1997-02-28');
 <sql-statement>
 INSERT INTO DATE_TBL VALUES ('1997-02-29');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO DATE_TBL VALUES ('1997-02-29');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "1997-02-29"
+
+        	INSERT INTO DATE_TBL VALUES ('1997-02-29');
+	^
 <sql-statement>
 INSERT INTO DATE_TBL VALUES ('1997-03-01');
 </sql-statement>

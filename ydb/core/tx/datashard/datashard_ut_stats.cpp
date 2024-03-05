@@ -10,41 +10,6 @@ using namespace Tests;
 
 Y_UNIT_TEST_SUITE(DataShardStats) {
 
-    NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runtime, size_t minPartCount = 0, size_t minRows = 0) {
-        NKikimrTxDataShard::TEvPeriodicTableStats stats;
-        bool captured = false;
-
-        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
-            switch (ev->GetTypeRewrite()) {
-                case TEvDataShard::TEvPeriodicTableStats::EventType: {
-                    stats = ev->Get<TEvDataShard::TEvPeriodicTableStats>()->Record;
-                    if (stats.GetTableStats().GetPartCount() >= minPartCount && stats.GetTableStats().GetRowCount() >= minRows) {
-                        captured = true;
-                    }
-                    break;
-                }
-                default: {
-                    break;
-                }
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-        auto prevObserverFunc = runtime.SetObserverFunc(observerFunc);
-
-        for (int i = 0; i < 5 && !captured; ++i) {
-            TDispatchOptions options;
-            options.CustomFinalCondition = [&]() {
-                return captured;
-            };
-            runtime.DispatchEvents(options, TDuration::Seconds(5));
-        }
-
-        runtime.SetObserverFunc(prevObserverFunc);
-        UNIT_ASSERT(captured);
-
-        return stats;
-    }
-
     NKikimrTableStats::TTableStats GetTableStats(TTestActorRuntime& runtime, ui64 tabletId, ui64 tableId) {
         auto sender = runtime.AllocateEdgeActor();
         auto request = MakeHolder<TEvDataShard::TEvGetTableStats>(tableId);
@@ -86,7 +51,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         {
             Cerr << "... waiting for stats after upsert" << Endl;
-            auto stats = WaitTableStats(runtime);
+            auto stats = WaitTableStats(runtime, shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 3u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 0u);
@@ -99,7 +64,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         {
             Cerr << "... waiting for stats after compaction" << Endl;
-            auto stats = WaitTableStats(runtime, 1);
+            auto stats = WaitTableStats(runtime, shard1, 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 3u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1u);
@@ -112,11 +77,11 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetIndexSize(), 54u);
         }
 
-        Write(runtime, sender, shard1, tableId1, TShardedTableOptions().Columns_, 1, 100, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        Upsert(runtime, sender, shard1, tableId1, TShardedTableOptions().Columns_, 1, 100, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
 
         {
             Cerr << "... waiting for stats after write" << Endl;
-            auto stats = WaitTableStats(runtime);
+            auto stats = WaitTableStats(runtime, shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 4u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetImmediateTxCompleted(), 2u);
@@ -151,7 +116,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         {
             Cerr << "... waiting for stats after upsert" << Endl;
-            auto stats = WaitTableStats(runtime);
+            auto stats = WaitTableStats(runtime, shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 3u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 0u);
@@ -163,7 +128,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         {
             Cerr << "... waiting for stats after compaction" << Endl;
-            auto stats = WaitTableStats(runtime, 1);
+            auto stats = WaitTableStats(runtime, shard1, 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 3u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1u);
@@ -214,7 +179,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         {
             Cerr << "... waiting for stats after upsert" << Endl;
-            auto stats = WaitTableStats(runtime);
+            auto stats = WaitTableStats(runtime, shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), count);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 0u);
@@ -226,7 +191,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         {
             Cerr << "... waiting for stats after compaction" << Endl;
-            auto stats = WaitTableStats(runtime, 1);
+            auto stats = WaitTableStats(runtime, shard1, 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), count);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1u);
@@ -296,7 +261,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         {
             Cerr << "... waiting for stats after upsert" << Endl;
-            auto stats = WaitTableStats(runtime);
+            auto stats = WaitTableStats(runtime, shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 5u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 0u);
@@ -308,7 +273,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         {
             Cerr << "... waiting for stats after compaction" << Endl;
-            auto stats = WaitTableStats(runtime, 1);
+            auto stats = WaitTableStats(runtime, shard1, 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 5u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1u);
@@ -366,7 +331,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             CompactTable(runtime, shard1, tableId1, false);
 
             Cerr << "... waiting for stats after compaction" << Endl;
-            auto stats = WaitTableStats(runtime, 1, (batch + 1) * batchItems);
+            auto stats = WaitTableStats(runtime, shard1, 1, (batch + 1) * batchItems);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), (batch + 1) * batchItems);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1);

@@ -75,6 +75,8 @@ struct IClientRequest
     virtual TMutationId GetMutationId() const = 0;
     virtual void SetMutationId(TMutationId id) = 0;
 
+    virtual bool IsLegacyRpcCodecsEnabled() = 0;
+
     virtual size_t GetHash() const = 0;
 
     // Extension methods.
@@ -133,6 +135,7 @@ public:
     DEFINE_BYVAL_RW_PROPERTY(bool, ResponseHeavy);
     DEFINE_BYVAL_RW_PROPERTY(NCompression::ECodec, RequestCodec, NCompression::ECodec::None);
     DEFINE_BYVAL_RW_PROPERTY(NCompression::ECodec, ResponseCodec, NCompression::ECodec::None);
+    DEFINE_BYVAL_RW_PROPERTY(bool, EnableLegacyRpcCodecs, true);
     DEFINE_BYVAL_RW_PROPERTY(bool, GenerateAttachmentChecksums, true);
     // Field is used on client side only. So it is never serialized.
     DEFINE_BYREF_RW_PROPERTY(NTracing::TTraceContext::TTagList, TracingTags);
@@ -182,6 +185,8 @@ public:
     void SetMutationId(TMutationId id) override;
 
     size_t GetHash() const override;
+
+    bool IsLegacyRpcCodecsEnabled() override;
 
     EMultiplexingBand GetMultiplexingBand() const;
     void SetMultiplexingBand(EMultiplexingBand band);
@@ -462,6 +467,7 @@ public:
     DEFINE_BYVAL_RW_PROPERTY(std::optional<TDuration>, DefaultAcknowledgementTimeout);
     DEFINE_BYVAL_RW_PROPERTY(NCompression::ECodec, DefaultRequestCodec, NCompression::ECodec::None);
     DEFINE_BYVAL_RW_PROPERTY(NCompression::ECodec, DefaultResponseCodec, NCompression::ECodec::None);
+    DEFINE_BYVAL_RW_PROPERTY(bool, DefaultEnableLegacyRpcCodecs, true);
 
     DEFINE_BYREF_RW_PROPERTY(TStreamingParameters, DefaultClientAttachmentsStreamingParameters);
     DEFINE_BYREF_RW_PROPERTY(TStreamingParameters, DefaultServerAttachmentsStreamingParameters);

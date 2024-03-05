@@ -47,13 +47,19 @@ TEngineLogsCounters::TEngineLogsCounters()
 
     PortionNoBorderCount = TBase::GetDeriviative("Ttl/PortionNoBorder/Count");
     PortionNoBorderBytes = TBase::GetDeriviative("Ttl/PortionNoBorder/Bytes");
+
+    StatUsageForTTLCount = TBase::GetDeriviative("Ttl/StatUsageForTTLCount/Count");
+    ChunkUsageForTTLCount = TBase::GetDeriviative("Ttl/ChunkUsageForTTLCount/Count");
 }
 
 void TEngineLogsCounters::TPortionsInfoGuard::OnNewPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) const {
     const ui32 producedId = (ui32)(portion->HasRemoveSnapshot() ? NOlap::NPortion::EProduced::INACTIVE : portion->GetMeta().Produced);
     Y_ABORT_UNLESS(producedId < BlobGuards.size());
-    for (auto&& i : portion->GetBlobIds()) {
-        BlobGuards[producedId]->Add(i.BlobSize(), i.BlobSize());
+    for (auto&& i : portion->GetRecords()) {
+        BlobGuards[producedId]->Add(i.GetBlobRange().Size, i.GetBlobRange().Size);
+    }
+    for (auto&& i : portion->GetIndexes()) {
+        BlobGuards[producedId]->Add(i.GetBlobRange().Size, i.GetBlobRange().Size);
     }
     PortionRecordCountGuards[producedId]->Add(portion->GetRecordsCount(), 1);
     PortionSizeGuards[producedId]->Add(portion->GetBlobBytes(), 1);
@@ -62,8 +68,11 @@ void TEngineLogsCounters::TPortionsInfoGuard::OnNewPortion(const std::shared_ptr
 void TEngineLogsCounters::TPortionsInfoGuard::OnDropPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) const {
     const ui32 producedId = (ui32)(portion->HasRemoveSnapshot() ? NOlap::NPortion::EProduced::INACTIVE : portion->GetMeta().Produced);
     Y_ABORT_UNLESS(producedId < BlobGuards.size());
-    for (auto&& i : portion->GetBlobIds()) {
-        BlobGuards[producedId]->Sub(i.BlobSize(), i.BlobSize());
+    for (auto&& i : portion->GetRecords()) {
+        BlobGuards[producedId]->Sub(i.GetBlobRange().Size, i.GetBlobRange().Size);
+    }
+    for (auto&& i : portion->GetIndexes()) {
+        BlobGuards[producedId]->Sub(i.GetBlobRange().Size, i.GetBlobRange().Size);
     }
     PortionRecordCountGuards[producedId]->Sub(portion->GetRecordsCount(), 1);
     PortionSizeGuards[producedId]->Sub(portion->GetBlobBytes(), 1);

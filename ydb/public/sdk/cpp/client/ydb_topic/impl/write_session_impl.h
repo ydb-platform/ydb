@@ -317,7 +317,6 @@ private:
     };
 
     THandleResult OnErrorImpl(NYdb::TPlainStatus&& status); // true - should Start(), false - should Close(), empty - no action
-
 public:
     TWriteSessionImpl(const TWriteSessionSettings& settings,
             std::shared_ptr<TTopicClient::TImpl> client,
@@ -478,6 +477,9 @@ private:
     TInstant LastCountersLogTs;
     TWriterCounters::TPtr Counters;
     TDuration WakeupInterval;
+
+    // Set by the write session, if Settings.DirectWriteToPartition is true and Settings.PartitionId is unset. Otherwise ignored.
+    TMaybe<ui64> DirectWriteToPartitionId;
 protected:
     ui64 MessagesAcquired = 0;
 };

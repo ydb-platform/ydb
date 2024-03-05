@@ -5,7 +5,7 @@
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/library/ycloud/api/events.h>
-#include <ydb/library/ycloud/impl/grpc_service_client.h>
+#include <ydb/library/grpc/actor_client/grpc_service_client.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event.h>
@@ -40,7 +40,7 @@ struct TEvPrivate {
 
 }
 
-class TMonitoringGrpcServiceActor : public NActors::TActor<TMonitoringGrpcServiceActor>, TGrpcServiceClient<Ydb::Monitoring::V1::MonitoringService> {
+class TMonitoringGrpcServiceActor : public NActors::TActor<TMonitoringGrpcServiceActor>, NGrpcActorClient::TGrpcServiceClient<Ydb::Monitoring::V1::MonitoringService> {
 public:
     using TBase = NActors::TActor<TMonitoringGrpcServiceActor>;
     struct TSelfCheckGrpcRequest : TGrpcRequest {
@@ -49,7 +49,7 @@ public:
         using TResponseEventType = TEvPrivate::TEvSelfCheckResponse;
     };
 
-    TMonitoringGrpcServiceActor(const NCloud::TGrpcClientSettings& settings, const NYdb::TCredentialsProviderPtr& credentialsProvider)
+    TMonitoringGrpcServiceActor(const NGrpcActorClient::TGrpcClientSettings& settings, const NYdb::TCredentialsProviderPtr& credentialsProvider)
         : TBase(&TMonitoringGrpcServiceActor::StateFunc)
         , TGrpcServiceClient(settings)
         , Settings(settings)
@@ -118,13 +118,13 @@ public:
     }
 
 private:
-    NCloud::TGrpcClientSettings Settings;
+    NGrpcActorClient::TGrpcClientSettings Settings;
     TMap<uint64_t, TEvYdbCompute::TEvCpuLoadRequest::TPtr> Requests;
     NYdb::TCredentialsProviderPtr CredentialsProvider;
     int64_t Cookie = 0;
 };
 
-std::unique_ptr<NActors::IActor> CreateMonitoringGrpcClientActor(const NCloud::TGrpcClientSettings& settings, const NYdb::TCredentialsProviderPtr& credentialsProvider) {
+std::unique_ptr<NActors::IActor> CreateMonitoringGrpcClientActor(const NGrpcActorClient::TGrpcClientSettings& settings, const NYdb::TCredentialsProviderPtr& credentialsProvider) {
     return std::make_unique<TMonitoringGrpcServiceActor>(settings, credentialsProvider);
 }
 

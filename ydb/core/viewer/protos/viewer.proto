@@ -1,5 +1,6 @@
 syntax = "proto3";
 
+import "ydb/core/graph/protos/graph.proto";
 import "ydb/core/protos/tablet_counters.proto";
 import "ydb/core/protos/node_whiteboard.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
@@ -519,7 +520,7 @@ message TNodeLocation {
     repeated uint32 NodeId = 1;
 }
 
-message TQueryRequest {
+message THttpProxyRequest {
     string Uri = 1;
     bytes Content = 2;
     bytes UserToken = 3;
@@ -531,10 +532,11 @@ message TEvViewerRequest {
     oneof Request {
         NKikimrWhiteboard.TEvTabletStateRequest TabletRequest = 11;
         NKikimrWhiteboard.TEvSystemStateRequest SystemRequest = 12;
-        TQueryRequest QueryRequest = 13;
-        bytes Reserved14 = 14;
+        THttpProxyRequest QueryRequest = 13;
+        THttpProxyRequest RenderRequest = 14;
         bytes Reserved15 = 15;
         bytes Reserved16 = 16;
+        bytes Reserved17 = 17;
     }
 }
 
@@ -544,9 +546,10 @@ message TEvViewerResponse {
         NKikimrWhiteboard.TEvTabletStateResponse TabletResponse = 11;
         NKikimrWhiteboard.TEvSystemStateResponse SystemResponse = 12;
         NKikimrKqp.TEvQueryResponse QueryResponse = 13;
-        bytes Reserved14 = 14;
+        NKikimrGraph.TEvMetricsResult RenderResponse = 14;
         bytes Reserved15 = 15;
         bytes Reserved16 = 16;
+        bytes Reserved17 = 17;
     }
 }
 
@@ -561,7 +564,7 @@ message TEvDescribeSchemeInfo {
     optional string Reason = 2;
     optional string Path = 3;
     optional NKikimrSchemeOp.TPathDescription PathDescription = 4;
-    optional fixed64 PathOwner = 5;
+    optional fixed64 DEPRECATED_PathOwner = 5;  // replaced by PathOwnerId
     optional fixed64 PathId = 6;
 
     optional string LastExistedPrefixPath = 7;

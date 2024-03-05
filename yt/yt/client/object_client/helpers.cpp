@@ -6,8 +6,6 @@ namespace NYT::NObjectClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TStringBuf ObjectIdPathPrefix("#");
-
 NYPath::TYPath FromObjectId(TObjectId id)
 {
     return TString(ObjectIdPathPrefix) + ToString(id);
@@ -78,7 +76,6 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::TransactionMap ||
         type == EObjectType::TopmostTransactionMap ||
         type == EObjectType::ClusterNodeNode ||
-        type == EObjectType::LegacyClusterNodeMap ||
         type == EObjectType::ClusterNodeMap ||
         type == EObjectType::DataNodeMap ||
         type == EObjectType::ExecNodeMap ||
@@ -95,11 +92,13 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::LockMap ||
         type == EObjectType::TabletMap ||
         type == EObjectType::TabletCellMap ||
+        type == EObjectType::VirtualTabletCellMap ||
         type == EObjectType::TabletCellNode ||
         type == EObjectType::TabletCellBundleMap ||
         type == EObjectType::TabletActionMap ||
         type == EObjectType::AreaMap ||
         type == EObjectType::ChaosCellMap ||
+        type == EObjectType::VirtualChaosCellMap ||
         type == EObjectType::ChaosCellBundleMap ||
         type == EObjectType::SysNode ||
         type == EObjectType::PortalEntrance ||
@@ -186,6 +185,14 @@ bool IsTabletOwnerType(EObjectType type)
     return
         IsTableType(type) ||
         type == EObjectType::HunkStorage;
+}
+
+bool IsChunkOwnerType(EObjectType type)
+{
+    return
+        IsTableType(type) ||
+        type == EObjectType::File ||
+        type == EObjectType::Journal;
 }
 
 bool IsCellType(EObjectType type)

@@ -1,4 +1,8 @@
-#include "ydb/public/sdk/cpp/client/ydb_proto/accessor.h"
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/executer_actor/kqp_executer.h>
+
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
@@ -9,7 +13,6 @@
 
 
 extern "C" {
-#include "postgres.h"
 #include "catalog/pg_type_d.h"
 }
 
@@ -3680,6 +3683,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
 
         appConfig.MutableTableServiceConfig()->SetEnablePgConstsToParams(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -3710,6 +3714,32 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                     SELECT * FROM PgTable WHERE key = 4;
                 )");
                 auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+            }
+        }
+
+        {
+            // Check NoTx
+            {
+                const auto query = Q_(R"(
+                    CREATE TABLE PgTable3 (
+                        key int4 PRIMARY KEY,
+                        value text
+                    );
+                    SELECT * FROM PgTable3 WHERE key = 3;
+                )");
+                auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+
+            {
+                const auto query = Q_(R"(
+                    SELECT * FROM PgTable3 WHERE key = 4;
+                    SELECT * FROM PgTable3 WHERE key = 5;
+                )");
+                auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
                 auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
                 UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
@@ -3763,7 +3793,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                     SELECT (1, 2);
                 )");
                 auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
                 UNIT_ASSERT(result.GetIssues().ToString().Contains("alternative is not implemented yet : 138"));
             }
         }
@@ -3838,6 +3868,38 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
                 UNIT_ASSERT(result.GetIssues().ToString().Contains("invalid input syntax for type integer: \"a\""));
+            }
+        }
+
+        {
+            // Check recompile
+            {
+                auto result = db.ExecuteQuery(R"(
+                    CREATE TABLE RecompileTable (id int primary key);
+                )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+                result = db.ExecuteQuery(R"(
+                    INSERT INTO RecompileTable (id) VALUES (1);
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+                result = db.ExecuteQuery(R"(
+                    DROP TABLE RecompileTable;
+                )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+                result = db.ExecuteQuery(R"(
+                    CREATE TABLE RecompileTable (id int primary key);
+                )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+                result = db.ExecuteQuery(R"(
+                    INSERT INTO RecompileTable (id) VALUES (1);
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
             }
         }
     }
@@ -4003,6 +4065,59 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+   }
+
+      Y_UNIT_TEST(ExplainColumnsReorder) {
+        TPortManager tp;
+        ui16 mbusport = tp.GetPort(2134);
+        auto settings = Tests::TServerSettings(mbusport)
+            .SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new Tests::TServer(settings);
+
+        auto runtime = server->GetRuntime();
+        auto sender = runtime->AllocateEdgeActor();
+        auto kqpProxy = MakeKqpProxyID(runtime->GetNodeId(0));
+
+        InitRoot(server, sender);
+
+        auto createSession = [&]() {
+            runtime->Send(new IEventHandle(kqpProxy, sender, new TEvKqp::TEvCreateSessionRequest()));
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvCreateSessionResponse>(sender);
+            auto record = reply->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            return record.GetResponse().GetSessionId();
+        };
+
+        auto sendQuery = [&](const TString& queryText) {
+            auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+            ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
+            ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+            ev->Record.MutableRequest()->SetQuery(queryText);
+            ev->Record.MutableRequest()->SetSyntax(::Ydb::Query::Syntax::SYNTAX_PG);
+            ev->Record.MutableRequest()->SetKeepSession(false);
+            ActorIdToProto(sender, ev->Record.MutableRequestActorId());
+
+            runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
+            return runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
+        };
+
+        createSession();
+
+        auto reply = sendQuery(R"(
+            SELECT 2 y, 1 x;
+        )");
+
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetResponse().GetYdbResults().size(), 1);
+        Cerr << reply->Get()->Record.GetRef().GetResponse().DebugString() << Endl;
+        auto ydbResults = reply->Get()->Record.GetRef().GetResponse().GetYdbResults();
+        TVector <TString> colNames = {"y", "x"};
+        UNIT_ASSERT_VALUES_EQUAL(colNames.size(), ydbResults.begin()->Getcolumns().size());
+        for (size_t i = 0; i < colNames.size(); i++) {
+            UNIT_ASSERT_VALUES_EQUAL(ydbResults.begin()->Getcolumns().at(i).Getname(), colNames[i]);
         }
    }
 }

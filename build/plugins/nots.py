@@ -78,8 +78,8 @@ def _build_directives(name, flags, paths):
     # type: (str, list[str]|tuple[str], list[str]) -> str
 
     parts = [p for p in [name] + (flags or []) if p]
-
-    expressions = ["${{{parts}:\"{path}\"}}".format(parts=";".join(parts), path=path) for path in paths]
+    parts_str = ";".join(parts)
+    expressions = ['${{{parts}:"{path}"}}'.format(parts=parts_str, path=path) for path in paths]
 
     return " ".join(expressions)
 
@@ -119,6 +119,12 @@ def _create_erm_json(unit):
     path = unit.resolve(unit.resolve_arc_path(erm_packages_path))
 
     return ErmJsonLite.load(path)
+
+
+@_with_report_configure_error
+def on_set_append_with_directive(unit, var_name, dir, *values):
+    wrapped = ['${{{dir}:"{v}"}}'.format(dir=dir, v=v) for v in values]
+    __set_append(unit, var_name, " ".join(wrapped))
 
 
 @_with_report_configure_error
@@ -416,10 +422,6 @@ def _add_test(unit, test_type, test_files, deps=None, test_record=None, test_cwd
     if test_record:
         full_test_record.update(test_record)
 
-    for k, v in full_test_record.items():
-        if not isinstance(v, str):
-            logger.warn(k, "expected 'str', got:", type(v))
-
     data = ytest.dump_test(unit, full_test_record)
     if data:
         unit.set_property(["DART_DATA", data])
@@ -474,6 +476,28 @@ def _select_matching_version(erm_json, resource_name, range_str, dep_is_required
 
 
 @_with_report_configure_error
+def on_prepare_deps_configure(unit):
+    # Originally this peerdir was in .conf file
+    # but it kept taking default value of NPM_CONTRIBS_PATH
+    # before it was updated by CUSTOM_CONTRIB_TYPESCRIPT()
+    # so I moved it here.
+    unit.onpeerdir(unit.get("NPM_CONTRIBS_PATH"))
+    pm = _create_pm(unit)
+    pj = pm.load_package_json_from_dir(pm.sources_path)
+    has_deps = pj.has_dependencies()
+    ins, outs = pm.calc_prepare_deps_inouts(unit.get("_TARBALLS_STORE"), has_deps)
+
+    if pj.has_dependencies():
+        unit.onpeerdir(pm.get_local_peers_from_package_json())
+        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("input", ["hide"], sorted(ins)))
+        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("output", ["hide"], sorted(outs)))
+
+    else:
+        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("output", [], sorted(outs)))
+        unit.set(["_PREPARE_DEPS_CMD", "$_PREPARE_NO_DEPS_CMD"])
+
+
+@_with_report_configure_error
 def on_node_modules_configure(unit):
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
@@ -481,21 +505,11 @@ def on_node_modules_configure(unit):
     if pj.has_dependencies():
         unit.onpeerdir(pm.get_local_peers_from_package_json())
         local_cli = unit.get("TS_LOCAL_CLI") == "yes"
-        errors, ins, outs = pm.calc_node_modules_inouts(local_cli)
+        ins, outs = pm.calc_node_modules_inouts(local_cli)
 
-        if errors:
-            ymake.report_configure_error(
-                "There are some issues with lockfiles.\n"
-                + "Please contact support (https://nda.ya.ru/t/sNoSFsO76ygSXL),\n"
-                + "providing following details:\n"
-                + "\n---\n".join([str(err) for err in errors])
-            )
-        else:
-            unit.on_set_node_modules_ins_outs(["IN"] + sorted(ins) + ["OUT"] + sorted(outs))
-
-            __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives("input", ["hide"], sorted(ins)))
-            if not unit.get("TS_TEST_FOR"):
-                __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives("output", ["hide"], sorted(outs)))
+        __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives("input", ["hide"], sorted(ins)))
+        if not unit.get("TS_TEST_FOR"):
+            __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives("output", ["hide"], sorted(outs)))
 
         if pj.get_use_prebuilder():
             lf = pm.load_lockfile_from_dir(pm.sources_path)
@@ -519,10 +533,6 @@ def on_node_modules_configure(unit):
                     "--yatool-prebuilder-path $YATOOL_PREBUILDER_ROOT/node_modules/@yatool/prebuilder",
                 ]
             )
-
-    else:
-        # default "noop" command
-        unit.set(["_NODE_MODULES_CMD", "$TOUCH_UNIT"])
 
 
 @_with_report_configure_error

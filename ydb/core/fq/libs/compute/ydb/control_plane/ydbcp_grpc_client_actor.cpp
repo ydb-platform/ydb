@@ -4,7 +4,7 @@
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/library/ycloud/api/events.h>
-#include <ydb/library/ycloud/impl/grpc_service_client.h>
+#include <ydb/library/grpc/actor_client/grpc_service_client.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event.h>
@@ -15,7 +15,7 @@ namespace NFq {
 class TYdbcpGrpcServiceActor : public NActors::TActor<TYdbcpGrpcServiceActor> {
 public:
     using TBase = NActors::TActor<TYdbcpGrpcServiceActor>;
-    TYdbcpGrpcServiceActor(const NCloud::TGrpcClientSettings&,
+    TYdbcpGrpcServiceActor(const NGrpcActorClient::TGrpcClientSettings&,
                            const NYdb::TCredentialsProviderPtr&)
         : TBase(&TYdbcpGrpcServiceActor::StateFunc)
     {}
@@ -38,7 +38,7 @@ public:
     }
 };
 
-std::unique_ptr<NActors::IActor> CreateYdbcpGrpcClientActor(const NCloud::TGrpcClientSettings& settings, const NYdb::TCredentialsProviderPtr& credentialsProvider) {
+std::unique_ptr<NActors::IActor> CreateYdbcpGrpcClientActor(const NGrpcActorClient::TGrpcClientSettings& settings, const NYdb::TCredentialsProviderPtr& credentialsProvider) {
     return std::make_unique<TYdbcpGrpcServiceActor>(settings, credentialsProvider);
 }
 

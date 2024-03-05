@@ -1,3 +1,7 @@
+Registering pre-existing tables
+	onek
+	onek2
+	int8_tbl
 <sql-statement>
 --
 -- SELECT
@@ -9,10 +13,6 @@ SELECT * FROM onek
    WHERE onek.unique1 < 10
    ORDER BY onek.unique1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
-    
 <sql-statement>
 --
 -- awk '{if($1<20){print $1,$14;}else{next;}}' onek.data | sort +0nr -1
@@ -140,10 +140,6 @@ SET enable_sort TO off;
 --
 SELECT onek2.* FROM onek2 WHERE onek2.unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek2
-    
 <sql-statement>
 --
 -- awk '{if($1<20){print $1,$14;}else{next;}}' onek.data | sort +0nr -1
@@ -164,10 +160,6 @@ SELECT onek2.unique1, onek2.stringu1 FROM onek2
 SELECT onek2.unique1, onek2.stringu1 FROM onek2
    WHERE onek2.unique1 > 980;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek2
-    
 <sql-statement>
 RESET enable_seqscan;
 </sql-statement>
@@ -237,36 +229,12 @@ SELECT p.name, p.age FROM person* p ORDER BY age using >, name;
 --
 select foo from (select 1 offset 0) as foo;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
-    	--
-	^
-        -stdin-:<main>:4:8: Error: No such column: foo
-        	select foo from (select 1 offset 0) as foo;
-	       ^
 <sql-statement>
 select foo from (select null offset 0) as foo;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
-    	select foo from (select null offset 0) as foo;
-	^
-        -stdin-:<main>:1:8: Error: No such column: foo
-        	select foo from (select null offset 0) as foo;
-	       ^
 <sql-statement>
 select foo from (select 'xyzzy',1,null offset 0) as foo;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
-    	select foo from (select 'xyzzy',1,null offset 0) as foo;
-	^
-        -stdin-:<main>:1:8: Error: No such column: foo
-        	select foo from (select 'xyzzy',1,null offset 0) as foo;
-	       ^
 <sql-statement>
 --
 -- Test VALUES lists
@@ -274,10 +242,14 @@ select foo from (select 'xyzzy',1,null offset 0) as foo;
 select * from onek, (values(147, 'RFAAAA'), (931, 'VJAAAA')) as v (i, j)
     WHERE onek.unique1 = v.i and onek.stringu1 = v.j;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
-    
+    -stdin-:<main>:1:1: Error: At function: OrderedMap, At function: EquiJoin
+    	--
+	^
+        -stdin-:<main>:1:1: Error: Cannot compare key columns (0.stringu1 has type: pgname, 1._alias_v.j has type: pgtext)
+        	--
+	^
 <sql-statement>
 -- a more complex case
 -- looks like we're coding lisp :-)
@@ -314,10 +286,8 @@ SELECT 2+2, 57
 UNION ALL
 TABLE int8_tbl;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Fatal: ydb/library/yql/core/yql_expr_type_annotation.cpp:6766  CheckExpectedTypeAndColumnOrder(): requirement IsSameAnnotation(*node.GetTypeAnn(), *it->second) failed, message: Rewrite error, type should be : List<Struct<'column0':pgint8,'column1':pgnumeric>>, but it is: List<Struct<'column0':Error<'<main>':1:1:'Uncompatible member column0 types: pgint4 and pgint8'>,'column1':pgnumeric>> for node AssumeColumnOrder
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
-    
 <sql-statement>
 -- corner case: VALUES with no columns
 CREATE TEMP TABLE nocols();
@@ -353,22 +323,12 @@ SELECT * FROM foo ORDER BY f1 ASC;	-- same thing
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 NULLS FIRST;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 1
-    	SELECT * FROM foo ORDER BY f1 NULLS FIRST;
-	^
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 DESC;
 </sql-statement>
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 2
-    	SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
-	^
 <sql-statement>
 -- check if indexscans do the right things
 CREATE INDEX fooi ON foo (f1);
@@ -387,22 +347,12 @@ SELECT * FROM foo ORDER BY f1;
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 NULLS FIRST;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 1
-    	SELECT * FROM foo ORDER BY f1 NULLS FIRST;
-	^
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 DESC;
 </sql-statement>
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 2
-    	SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
-	^
 <sql-statement>
 DROP INDEX fooi;
 </sql-statement>
@@ -420,22 +370,12 @@ SELECT * FROM foo ORDER BY f1;
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 NULLS FIRST;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 1
-    	SELECT * FROM foo ORDER BY f1 NULLS FIRST;
-	^
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 DESC;
 </sql-statement>
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 2
-    	SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
-	^
 <sql-statement>
 DROP INDEX fooi;
 </sql-statement>
@@ -453,22 +393,12 @@ SELECT * FROM foo ORDER BY f1;
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 NULLS FIRST;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 1
-    	SELECT * FROM foo ORDER BY f1 NULLS FIRST;
-	^
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 DESC;
 </sql-statement>
 <sql-statement>
 SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 2
-    	SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
-	^
 <sql-statement>
 --
 -- Test planning of some cases with partial indexes
@@ -485,10 +415,6 @@ select * from onek2 where unique2 = 11 and stringu1 = 'ATAAAA';
 <sql-statement>
 select * from onek2 where unique2 = 11 and stringu1 = 'ATAAAA';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek2
-    
 <sql-statement>
 -- actually run the query with an analyze to use the partial index
 explain (costs off, analyze on, timing off, summary off)
@@ -511,10 +437,6 @@ select unique2 from onek2 where unique2 = 11 and stringu1 = 'ATAAAA';
 <sql-statement>
 select unique2 from onek2 where unique2 = 11 and stringu1 = 'ATAAAA';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek2
-    
 <sql-statement>
 -- partial index predicate implies clause, so no need for retest
 explain (costs off)
@@ -528,10 +450,6 @@ select * from onek2 where unique2 = 11 and stringu1 < 'B';
 <sql-statement>
 select * from onek2 where unique2 = 11 and stringu1 < 'B';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek2
-    
 <sql-statement>
 explain (costs off)
 select unique2 from onek2 where unique2 = 11 and stringu1 < 'B';
@@ -544,10 +462,6 @@ select unique2 from onek2 where unique2 = 11 and stringu1 < 'B';
 <sql-statement>
 select unique2 from onek2 where unique2 = 11 and stringu1 < 'B';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek2
-    
 <sql-statement>
 -- but if it's an update target, must retest anyway
 explain (costs off)
@@ -561,15 +475,6 @@ select unique2 from onek2 where unique2 = 11 and stringu1 < 'B' for update;
 <sql-statement>
 select unique2 from onek2 where unique2 = 11 and stringu1 < 'B' for update;
 </sql-statement>
--stdin-:<main>: Warning: Parse Sql
-
-    -stdin-:<main>:1:1: Warning: SelectStmt: lockingClause is ignored
-    	select unique2 from onek2 where unique2 = 11 and stringu1 < 'B' for update;
-	^
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek2
-    
 <sql-statement>
 -- partial index is not applicable
 explain (costs off)
@@ -583,10 +488,6 @@ select unique2 from onek2 where unique2 = 11 and stringu1 < 'C';
 <sql-statement>
 select unique2 from onek2 where unique2 = 11 and stringu1 < 'C';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek2
-    
 <sql-statement>
 -- partial index implies clause, but bitmap scan must recheck predicate anyway
 SET enable_indexscan TO off;
@@ -608,10 +509,6 @@ select unique2 from onek2 where unique2 = 11 and stringu1 < 'B';
 <sql-statement>
 select unique2 from onek2 where unique2 = 11 and stringu1 < 'B';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek2
-    
 <sql-statement>
 RESET enable_indexscan;
 </sql-statement>
@@ -635,10 +532,6 @@ select unique1, unique2 from onek2
 select unique1, unique2 from onek2
   where (unique2 = 11 or unique1 = 0) and stringu1 < 'B';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek2
-    
 <sql-statement>
 explain (costs off)
 select unique1, unique2 from onek2
@@ -653,10 +546,6 @@ select unique1, unique2 from onek2
 select unique1, unique2 from onek2
   where (unique2 = 11 and stringu1 < 'B') or unique1 = 0;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek2
-    
 <sql-statement>
 --
 -- Test some corner cases that have been known to confuse the planner

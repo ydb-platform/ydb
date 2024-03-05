@@ -197,30 +197,24 @@ create table inserttest (f1 int, f2 int[],
 <sql-statement>
 insert into inserttest (f2[1], f2[2]) values (1,2);
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 insert into inserttest (f2[1], f2[2]) values (3,4), (5,6);
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 insert into inserttest (f2[1], f2[2]) select 7,8;
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 insert into inserttest (f2[1], f2[2]) values (1,default);  -- not supported
 </sql-statement>
@@ -232,30 +226,24 @@ insert into inserttest (f2[1], f2[2]) values (1,default);  -- not supported
 <sql-statement>
 insert into inserttest (f3.if1, f3.if2) values (1,array['foo']);
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 insert into inserttest (f3.if1, f3.if2) values (1,'{foo}'), (2,'{bar}');
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 insert into inserttest (f3.if1, f3.if2) select 3, '{baz,quux}';
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 insert into inserttest (f3.if1, f3.if2) values (1,default);  -- not supported
 </sql-statement>
@@ -267,66 +255,52 @@ insert into inserttest (f3.if1, f3.if2) values (1,default);  -- not supported
 <sql-statement>
 insert into inserttest (f3.if2[1], f3.if2[2]) values ('foo', 'bar');
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 insert into inserttest (f3.if2[1], f3.if2[2]) values ('foo', 'bar'), ('baz', 'quux');
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 insert into inserttest (f3.if2[1], f3.if2[2]) select 'bear', 'beer';
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 insert into inserttest (f4[1].if2[1], f4[1].if2[2]) values ('foo', 'bar');
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 insert into inserttest (f4[1].if2[1], f4[1].if2[2]) values ('foo', 'bar'), ('baz', 'quux');
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 insert into inserttest (f4[1].if2[1], f4[1].if2[2]) select 'bear', 'beer';
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 select * from inserttest;
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 -- also check reverse-listing
 create table inserttest2 (f1 bigint, f2 text);
@@ -1306,10 +1280,6 @@ where attname = 'a'
    or attrelid = 'mlparted11'::regclass)
 order by attrelid::regclass::text;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_attribute
-    
 <sql-statement>
 alter table mlparted1 attach partition mlparted11 for values from (2) to (5);
 </sql-statement>

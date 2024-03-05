@@ -1,3 +1,5 @@
+/*.md @ydb-platform/docs
+
 /ydb/core/fq/ @ydb-platform/fq
 /ydb/core/public_http/ @ydb-platform/fq
 

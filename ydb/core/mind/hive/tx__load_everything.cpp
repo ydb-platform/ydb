@@ -17,9 +17,7 @@ public:
 
         TAppData* appData = AppData();
         TDomainsInfo* domainsInfo = appData->DomainsInfo.Get();
-        const TDomainsInfo::TDomain& domain = domainsInfo->GetDomain(Self->HiveDomain);
-
-        TTabletId rootHiveId = domainsInfo->GetHive(domain.DefaultHiveUid);
+        TTabletId rootHiveId = domainsInfo->GetHive();
         bool isRootHive = (rootHiveId == Self->TabletID());
 
         NIceDb::TNiceDb db(txc.DB);

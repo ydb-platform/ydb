@@ -26,6 +26,7 @@ message TLoadControlConfig {
     uint32 PendingQueueSize = 6;           // default 0 == instant decline if overloaded
     bool Strict = 7;                       // default false, whether to deny execution in load level unavailable
     uint32 CpuNumber = 8;
+    string MonitoringEndpoint = 9;         // if defined, will be used as REST API instead of default GRPC
 }
 
 message TComputeDatabaseConfig {
@@ -83,9 +84,14 @@ message TComputeMapping {
     TActivationPercentage Activation = 3;
 }
 
+message TSupportedComputeYdbFeatures {
+    bool ReplaceIfExists = 1;
+}
+
 message TComputeConfig {
     TInPlaceCompute InPlace = 1;
     TYdbCompute Ydb = 2;
     EComputeType DefaultCompute = 3;
     repeated TComputeMapping ComputeMapping = 4;
+    TSupportedComputeYdbFeatures SupportedComputeYdbFeatures = 5;
 }

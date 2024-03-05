@@ -9,12 +9,12 @@ private:
     THashMap<TString, THashSet<NOlap::TEvictedBlob>> BlobsToForget;
     THashMap<TString, std::vector<std::shared_ptr<TPortionInfo>>> StoragePortions;
 protected:
+    virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
+    virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) override;
+
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) override;
-    virtual bool DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) override;
     virtual void DoDebugString(TStringOutput& out) const override;
-    virtual void DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) override;
-    virtual void DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) override;
     virtual void DoCompile(TFinalizationContext& /*context*/) override {
     }
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& /*context*/) noexcept override {
@@ -27,19 +27,14 @@ protected:
     virtual ui64 DoCalcMemoryForUsage() const override {
         return 0;
     }
+    virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const override {
+        return std::make_shared<NDataLocks::TListPortionsLock>(PortionsToDrop);
+    }
+
 public:
     TCleanupColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager)
         : TBase(storagesManager, StaticTypeName()) {
 
-    }
-
-
-    virtual THashSet<TPortionAddress> GetTouchedPortions() const override {
-        THashSet<TPortionAddress> result;
-        for (const auto& portionInfo : PortionsToDrop) {
-            result.emplace(portionInfo.GetAddress());
-        }
-        return result;
     }
 
     std::vector<TPortionInfo> PortionsToDrop;

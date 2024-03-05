@@ -133,8 +133,8 @@ class BasePackageManager(object):
     def _contrib_tarball_path(self, pkg):
         return os.path.join(self.contribs_path, pkg.tarball_path)
 
-    def _contrib_tarball_url(self, pkg):
-        return "file:" + self._contrib_tarball_path(pkg)
+    def _tarballs_store_path(self, pkg, store_path):
+        return os.path.join(self.module_path, store_path, pkg.tarball_path)
 
     def _get_default_options(self):
         return ["--registry", NPM_REGISTRY_URL]

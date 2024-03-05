@@ -13,6 +13,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/scheme_board/scheme_board.h>
 #include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 
 #include <shared_mutex>
 
@@ -27,13 +28,10 @@ TString DatabaseFromDomain(const TAppData* appdata = AppData()) {
     auto dinfo = appdata->DomainsInfo;
     if (!dinfo)
         ythrow yexception() << "Invalid DomainsInfo ptr";
-    if (dinfo->Domains.empty() || dinfo->Domains.size() != 1)
-        ythrow yexception() << "Unexpected domains container size: "
-                            << dinfo->Domains.size();
-    if (!dinfo->Domains.begin()->second)
-        ythrow yexception() << "Empty domain params";
+    if (!dinfo->Domain)
+        ythrow yexception() << "No Domain defined";
 
-    return TString("/") + dinfo->Domains.begin()->second->Name;
+    return TString("/") + dinfo->GetDomain()->Name;
 }
 
 struct TDatabaseInfo {
@@ -413,17 +411,16 @@ bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
 }
 
 void TGRpcRequestProxyImpl::MaybeStartTracing(IRequestProxyCtx& ctx) {
-    auto requestType = ctx.GetInternalRequestType();
-    if (requestType.empty()) {
-        return;
-    }
     NWilson::TTraceId traceId;
     if (const auto otelHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER)) {
         traceId = NWilson::TTraceId::FromTraceparentHeader(otelHeader.GetRef());
     }
-    TracingControl->HandleTracing(traceId, NJaegerTracing::TRequestDiscriminator{});
+    TracingControl->HandleTracing(traceId, ctx.GetRequestDiscriminator());
     if (traceId) {
         NWilson::TSpan grpcRequestProxySpan(TWilsonGrpc::RequestProxy, std::move(traceId), "GrpcRequestProxy");
+        if (auto database = ctx.GetDatabaseName()) {
+            grpcRequestProxySpan.Attribute("database", std::move(*database));
+        }
         ctx.StartTracing(std::move(grpcRequestProxySpan));
     }
 }

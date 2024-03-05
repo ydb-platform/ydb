@@ -30,7 +30,7 @@ namespace NKikimr::NBsController {
                         record.SetStatus(NKikimrProto::OK);
                         record.SetNodeID(nodeId);
                         record.SetInstanceId(Self->InstanceId);
-                        record.SetAvailDomain(AppData()->DomainsInfo->GetDomainUidByTabletId(Self->TabletID()));
+                        record.SetAvailDomain(AppData()->DomainsInfo->GetDomain()->DomainUid);
                         outbox.push_back(std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(nodeId),
                             Self->SelfId(), event.Release()));
                     }

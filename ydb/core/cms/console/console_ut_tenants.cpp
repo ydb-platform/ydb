@@ -363,7 +363,7 @@ NKikimrBlobStorage::TEvControllerConfigResponse ReadPoolState(TTenantTestRuntime
 
     NTabletPipe::TClientConfig pipeConfig;
     pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-    runtime.SendToPipe(MakeBSControllerID(0), runtime.Sender, request.Release(), 0, pipeConfig);
+    runtime.SendToPipe(MakeBSControllerID(), runtime.Sender, request.Release(), 0, pipeConfig);
 
     auto ev = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(runtime.Sender);
     return ev->Get()->Record;
@@ -379,7 +379,7 @@ void CheckPoolScope(TTenantTestRuntime &runtime, const TString &name)
 
 void RestartConsole(TTenantTestRuntime &runtime)
 {
-    runtime.Register(CreateTabletKiller(MakeConsoleID(0)));
+    runtime.Register(CreateTabletKiller(MakeConsoleID()));
     TDispatchOptions options;
     options.FinalEvents.emplace_back(&IsTabletActiveEvent, 1);
     runtime.DispatchEvents(options);
@@ -425,7 +425,7 @@ void LocalMiniKQL(TTenantTestRuntime& runtime, ui64 tabletId, const TString& que
 }
 
 void MakePoolBorrowed(TTenantTestRuntime& runtime, const TString& tenant, const TString& pool) {
-    LocalMiniKQL(runtime, MakeConsoleID(0), Sprintf(R"(
+    LocalMiniKQL(runtime, MakeConsoleID(), Sprintf(R"(
         (
             (let key '('('Tenant (Utf8 '"%s")) '('PoolType (Utf8 '"%s"))))
             (let row '('('Borrowed (Bool '1))))
@@ -649,7 +649,7 @@ Y_UNIT_TEST_SUITE(TConsoleTxProcessorTests) {
 
 Y_UNIT_TEST_SUITE(TConsoleTests) {
     void RestartTenantPool(TTenantTestRuntime& runtime) {
-        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(0), 0),
+        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(0)),
                                       runtime.Sender,
                                       new TEvents::TEvPoisonPill));
 
@@ -819,13 +819,13 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
     }
 
     void RunTestRestartConsoleAndPools(TTenantTestRuntime& runtime) {
-        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(1), 0),
+        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(1)),
                                       runtime.Sender,
                                       new TEvents::TEvPoisonPill));
-        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(2), 0),
+        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(2)),
                                       runtime.Sender,
                                       new TEvents::TEvPoisonPill));
-        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(3), 0),
+        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(3)),
                                       runtime.Sender,
                                       new TEvents::TEvPoisonPill));
 

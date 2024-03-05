@@ -16,7 +16,7 @@ class TTracingExt;
 
 DECLARE_REFCOUNTED_CLASS(TTraceContext)
 
-DECLARE_REFCOUNTED_CLASS(TTracingConfig)
+DECLARE_REFCOUNTED_CLASS(TTracingTransportConfig)
 
 DECLARE_REFCOUNTED_CLASS(TAllocationTags)
 

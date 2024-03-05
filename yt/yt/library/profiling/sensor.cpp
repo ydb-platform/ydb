@@ -182,7 +182,7 @@ void TGaugeHistogram::Remove(double value, int count) const noexcept
     Histogram_->Remove(value, count);
 }
 
-void TGaugeHistogram::Reset() noexcept
+void TGaugeHistogram::Reset() const noexcept
 {
     if (!Histogram_) {
         return;
@@ -200,7 +200,7 @@ THistogramSnapshot TGaugeHistogram::GetSnapshot() const
     return Histogram_->GetSnapshot(false);
 }
 
-void TGaugeHistogram::LoadSnapshot(THistogramSnapshot snapshot)
+void TGaugeHistogram::LoadSnapshot(THistogramSnapshot snapshot) const
 {
     if (!Histogram_) {
         return;
@@ -216,49 +216,13 @@ TGaugeHistogram::operator bool() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TRateHistogram::Add(double value, int count) noexcept
+void TRateHistogram::Add(double value, int count) const noexcept
 {
     if (!Histogram_) {
         return;
     }
 
     Histogram_->Add(value, count);
-}
-
-void TRateHistogram::Remove(double value, int count) noexcept
-{
-    if (!Histogram_) {
-        return;
-    }
-
-    Histogram_->Remove(value, count);
-}
-
-void TRateHistogram::Reset() noexcept
-{
-    if (!Histogram_) {
-        return;
-    }
-
-    Histogram_->Reset();
-}
-
-THistogramSnapshot TRateHistogram::GetSnapshot() const
-{
-    if (!Histogram_) {
-        return {};
-    }
-
-    return Histogram_->GetSnapshot(false);
-}
-
-void TRateHistogram::LoadSnapshot(THistogramSnapshot snapshot)
-{
-    if (!Histogram_) {
-        return;
-    }
-
-    Histogram_->LoadSnapshot(snapshot);
 }
 
 TRateHistogram::operator bool() const

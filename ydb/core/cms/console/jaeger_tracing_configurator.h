@@ -8,6 +8,6 @@
 namespace NKikimr::NConsole {
 
 IActor* CreateJaegerTracingConfigurator(NJaegerTracing::TSamplingThrottlingConfigurator tracingConfigurator,
-                                                const NKikimrConfig::TTracingConfig& cfg);
+                                                NKikimrConfig::TTracingConfig cfg);
 
 } // namespace NKikimr::NConsole

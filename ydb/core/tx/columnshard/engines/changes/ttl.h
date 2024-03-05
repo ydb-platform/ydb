@@ -39,7 +39,7 @@ private:
         }
     };
 
-    std::optional<TPortionInfoWithBlobs> UpdateEvictedPortion(TPortionForEviction& info, THashMap<TBlobRange, TString>& srcBlobs,
+    std::optional<TPortionInfoWithBlobs> UpdateEvictedPortion(TPortionForEviction& info, NBlobOperations::NRead::TCompositeReadBlobs& srcBlobs,
         TConstructionContext& context) const;
 
     std::vector<TPortionForEviction> PortionsToEvict; // {portion, TPortionEvictionFeatures}
@@ -57,6 +57,12 @@ protected:
             result = predictor->AddPortion(p.GetPortionInfo());
         }
         return result;
+    }
+    virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
+        const auto pred = [](const TPortionForEviction& p) {
+            return p.GetPortionInfo().GetAddress();
+        };
+        return std::make_shared<NDataLocks::TListPortionsLock>(PortionsToEvict, pred);
     }
 public:
     class TMemoryPredictorSimplePolicy: public IMemoryPredictor {
@@ -80,14 +86,6 @@ public:
     virtual bool NeedConstruction() const override {
         return PortionsToEvict.size();
     }
-    virtual THashSet<TPortionAddress> GetTouchedPortions() const override {
-        THashSet<TPortionAddress> result = TBase::GetTouchedPortions();
-        for (auto&& info : PortionsToEvict) {
-            result.emplace(info.GetPortionInfo().GetAddress());
-        }
-        return result;
-    }
-
     THashMap<ui64, NOlap::TTiering> Tiering;
 
     ui32 GetPortionsToEvictCount() const {

@@ -128,9 +128,9 @@ public:
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
         const TActorId& creator, TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-        const bool enableOlapSink)
+        const bool enableOlapSink, ui32 statementResultIndex)
         : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, chanTransportVersion, aggregation,
-            maximalSecretsSnapshotWaitTime, userRequestContext, TWilsonKqp::DataExecuter, "DataExecuter", streamResult
+            maximalSecretsSnapshotWaitTime, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter, "DataExecuter", streamResult
         )
         , AsyncIoFactory(std::move(asyncIoFactory))
         , EnableOlapSink(enableOlapSink)
@@ -312,6 +312,8 @@ public:
 
         } catch (const yexception& e) {
             InternalError(e.what());
+        } catch (const TMemoryLimitExceededException&) {
+            RuntimeError(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssues({NYql::TIssue(BuildMemoryLimitExceptionMessage())}));
         }
         ReportEventElapsedTime();
     }
@@ -362,7 +364,11 @@ private:
         } catch (const yexception& e) {
             CancelProposal(0);
             InternalError(e.what());
+        } catch (const TMemoryLimitExceededException& e) {
+            CancelProposal(0);
+            RuntimeError(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssues({NYql::TIssue(BuildMemoryLimitExceptionMessage())}));
         }
+
         ReportEventElapsedTime();
     }
 
@@ -944,6 +950,12 @@ private:
             }
         } catch (const yexception& e) {
             InternalError(e.what());
+        } catch (const TMemoryLimitExceededException) {
+            if (ReadOnlyTx) {
+                RuntimeError(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssues({NYql::TIssue(BuildMemoryLimitExceptionMessage())}));
+            } else {
+                RuntimeError(Ydb::StatusIds::UNDETERMINED, NYql::TIssues({NYql::TIssue(BuildMemoryLimitExceptionMessage())}));
+            }
         }
         ReportEventElapsedTime();
     }
@@ -1340,8 +1352,13 @@ private:
                 case NKqpProto::TKqpPhyTableOperation::kReadRanges:
                 case NKqpProto::TKqpPhyTableOperation::kReadRange:
                 case NKqpProto::TKqpPhyTableOperation::kLookup: {
-                    auto partitions = PrunePartitions(op, stageInfo, HolderFactory(), TypeEnv());
+                    bool isFullScan = false;
+                    auto partitions = PrunePartitions(op, stageInfo, HolderFactory(), TypeEnv(), isFullScan);
                     auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
+
+                    if (!readSettings.ItemsLimit && isFullScan) {
+                        Counters->Counters->FullScansExecuted->Inc();
+                    }
 
                     for (auto& [shardId, shardInfo] : partitions) {
                         YQL_ENSURE(!shardInfo.KeyWriteRanges);
@@ -1878,7 +1895,11 @@ private:
                     const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
                     if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
                         const auto& source = stage.GetSources(0).GetReadRangesSource();
-                        SourceScanStageIdToParititions[stageInfo.Id] = PrunePartitions(source, stageInfo, HolderFactory(), TypeEnv());
+                        bool isFullScan;
+                        SourceScanStageIdToParititions[stageInfo.Id] = PrunePartitions(source, stageInfo, HolderFactory(), TypeEnv(), isFullScan);
+                        if (isFullScan && !source.HasItemsLimit()) {
+                            Counters->Counters->FullScansExecuted->Inc();
+                        }
                         for (const auto& [shardId, _] : SourceScanStageIdToParititions.at(stageId)) {
                             shardIds.insert(shardId);
                         }
@@ -2425,10 +2446,10 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     TKqpRequestCounters::TPtr counters, bool streamResult, const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
-    TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext, const bool enableOlapSink)
+    TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext, const bool enableOlapSink, ui32 statementResultIndex)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, executerRetriesConfig,
-        std::move(asyncIoFactory), chanTransportVersion, aggregation, creator, maximalSecretsSnapshotWaitTime, userRequestContext, enableOlapSink);
+        std::move(asyncIoFactory), chanTransportVersion, aggregation, creator, maximalSecretsSnapshotWaitTime, userRequestContext, enableOlapSink, statementResultIndex);
 }
 
 } // namespace NKqp

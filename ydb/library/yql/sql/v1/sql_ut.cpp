@@ -3428,7 +3428,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(GroupByFewBigCubes) {
         NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input GROUP BY CUBE(key, subkey, key + subkey as sum), CUBE(value, value + key + subkey as total);");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Unable to GROUP BY more than 32 groups, you try use 80 groups\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Unable to GROUP BY more than 64 groups, you try use 80 groups\n");
     }
 
     Y_UNIT_TEST(GroupByFewBigCubesWithPragmaLimit) {
@@ -4374,6 +4374,22 @@ select FormatType($f());
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res),
             "<main>:1:15: Error: Selecting data from monitoring source is not supported\n");
+    }
+
+    Y_UNIT_TEST(SessionStartAndSessionStateShouldSurviveSessionWindowArgsError){
+        TString query = R"(
+            $init = ($_row) -> (min(1, 2)); -- error: aggregation func min() can not be used here
+            $calculate = ($_row, $_state) -> (1);
+            $update = ($_row, $_state) -> (2);
+            SELECT
+                SessionStart() over w as session_start,
+                SessionState() over w as session_state,
+            FROM plato.Input as t
+            WINDOW w AS (
+                PARTITION BY user, SessionWindow(ts + 1, $init, $update, $calculate)
+            )
+        )";
+        ExpectFailWithError(query, "<main>:2:33: Error: Aggregation function Min requires exactly 1 argument(s), given: 2\n");
     }
 }
 
@@ -6052,7 +6068,7 @@ Y_UNIT_TEST_SUITE(ExternalTable) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#('actions '('('dropColumns '('"my_column")#");
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('setTableSettings '('('location (String '"abc")) '('other_prop (String '"42")) '('x (String '"y")))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('setTableSettings '('('location (String '"abc")) '('Other_Prop (String '"42")) '('x (String '"y")))))#");
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#(('tableType 'externalTable))#");
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alter))#");
             }

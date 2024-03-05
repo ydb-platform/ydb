@@ -14,12 +14,25 @@ namespace NYT::NNet {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Сontext that is passed to the Dialer.
+
+struct TRemoteContext
+    : public TRefCounted
+{
+    //! Host is used for TlsDialer.
+    std::optional<TString> Host;
+};
+
+DEFINE_REFCOUNTED_TYPE(TRemoteContext)
+
 //! Dialer establishes connection to a (resolved) network address.
 
 struct IDialer
     : public virtual TRefCounted
 {
-    virtual TFuture<IConnectionPtr> Dial(const TNetworkAddress& remote) = 0;
+    virtual TFuture<IConnectionPtr> Dial(
+        const TNetworkAddress& remote,
+        TRemoteContextPtr context = nullptr) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IDialer)

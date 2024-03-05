@@ -1,7 +1,17 @@
 #pragma once
-#include "datashard_impl.h"
+
+#include "change_collector.h"
+
+#include <ydb/core/base/row_version.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/library/accessor/accessor.h>
 
 #include <util/generic/maybe.h>
+
+namespace NKikimr::NMiniKQL {
+    struct TEngineHostCounters;
+}
 
 namespace NKikimr::NDataShard {
 

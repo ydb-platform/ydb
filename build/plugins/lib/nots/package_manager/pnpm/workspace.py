@@ -20,7 +20,8 @@ class PnpmWorkspace(object):
 
     def read(self):
         with open(self.path) as f:
-            self.packages = set(yaml.load(f, Loader=yaml.CSafeLoader).get("packages", []))
+            parsed = yaml.load(f, Loader=yaml.CSafeLoader) or {}
+            self.packages = set(parsed.get("packages", []))
 
     def write(self, path=None):
         if not path:

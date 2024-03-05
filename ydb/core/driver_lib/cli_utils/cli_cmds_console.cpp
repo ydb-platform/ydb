@@ -2,6 +2,8 @@
 #include "cli_cmds.h"
 
 #include <ydb/library/yaml_config/console_dumper.h>
+#include <ydb/core/protos/console_base.pb.h>
+#include <ydb/core/protos/console.pb.h>
 
 #include <util/string/type.h>
 #include <util/string/split.h>

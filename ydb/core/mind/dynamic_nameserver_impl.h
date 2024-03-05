@@ -193,7 +193,7 @@ public:
                        ui32 resolvePoolId)
         : TDynamicNameserver(setup, resolvePoolId)
     {
-        ui32 domain = NodeIdToDomain(node.GetNodeId(), domains);
+        ui32 domain = domains.GetDomain()->DomainUid;
         TDynamicConfig::TDynamicNodeInfo info(node);
         DynamicConfigs[domain]->DynamicNodes.emplace(node.GetNodeId(), info);
     }

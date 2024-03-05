@@ -54,10 +54,16 @@ const std::type_info& CallCtor()
 //! Creates TSerializer object which has preprocessors applied
 //! to a TStruct object referred to by writable.
 template <std::default_initializable TStruct, class TSerializer>
-TSerializer TExternalizedYsonStruct::CreateWritable(TStruct& writable)
+TSerializer TExternalizedYsonStruct::CreateWritable(TStruct& writable, bool setDefaults)
 {
     static_assert(std::derived_from<TSerializer, TExternalizedYsonStruct>);
-    return TSerializer(&writable);
+    if (setDefaults) {
+        return TSerializer(&writable);
+    }
+
+    auto ret = TSerializer();
+    ret.SetThat(&writable);
+    return ret;
 }
 
 //! Creates TSerializer object which has preprocessors applied
@@ -267,11 +273,19 @@ void Serialize(const T& value, NYson::IYsonConsumer* consumer)
 
 template <class T>
     requires CExternallySerializable<T>
+void DeserializeExternalized(T& value, INodePtr node, bool postprocess, bool setDefaults)
+{
+    using TTraits = TGetExternalizedYsonStructTraits<T>;
+    using TSerializer = typename TTraits::TExternalSerializer;
+    auto serializer = TSerializer::template CreateWritable<T, TSerializer>(value, setDefaults);
+    serializer.Load(node, postprocess, setDefaults);
+}
+
+template <class T>
+    requires CExternallySerializable<T>
 void Deserialize(T& value, INodePtr node)
 {
-    using TSerializer = typename TGetExternalizedYsonStructTraits<T>::TExternalSerializer;
-    auto serializer = TSerializer::template CreateWritable<T, TSerializer>(value);
-    Deserialize(serializer, node);
+    DeserializeExternalized(value, std::move(node), /*postprocess*/ true, /*setDefaults*/ true);
 }
 
 template <class T>
@@ -552,7 +566,8 @@ public: \
 #define ASSIGN_EXTERNAL_YSON_SERIALIZER(TStruct, TSerializer) \
     [[maybe_unused]] constexpr auto GetExternalizedYsonStructTraits(TStruct) \
     { \
-        struct [[maybe_unused]] TTraits { \
+        struct [[maybe_unused]] TTraits \
+        { \
             using TExternalSerializer = TSerializer; \
         }; \
         static_assert(std::derived_from<TTraits::TExternalSerializer, ::NYT::NYTree::TExternalizedYsonStruct>, "External serializer must be derived from TExternalizedYsonStruct"); \

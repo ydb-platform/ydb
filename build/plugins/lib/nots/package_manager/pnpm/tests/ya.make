@@ -1,6 +1,6 @@
-PY23_TEST()
-
 OWNER(g:frontend-build-platform)
+
+PY3TEST()
 
 TEST_SRCS(
     test_lockfile.py

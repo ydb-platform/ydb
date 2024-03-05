@@ -866,6 +866,9 @@ struct TEvBlobStorage {
         EvNodeWardenQueryStorageConfig,
         EvNodeWardenStorageConfig,
         EvAskRestartVDisk,
+        EvNodeConfigInvokeOnRoot,
+        EvNodeConfigInvokeOnRootResult,
+        EvNodeWardenStorageConfigConfirm,
 
         // Other
         EvRunActor = EvPut + 15 * 512,
@@ -1010,14 +1013,16 @@ struct TEvBlobStorage {
         bool WrittenBeyondBarrier = false; // was this blob written beyond the barrier?
         mutable NLWTrace::TOrbit Orbit;
         std::shared_ptr<TExecutionRelay> ExecutionRelay;
+        const TString StorageId;
 
         TEvPutResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &id, const TStorageStatusFlags statusFlags,
-                ui32 groupId, float approximateFreeSpaceShare)
+                ui32 groupId, float approximateFreeSpaceShare, const TString& storageId = Default<TString>())
             : Status(status)
             , Id(id)
             , StatusFlags(statusFlags)
             , GroupId(groupId)
             , ApproximateFreeSpaceShare(approximateFreeSpaceShare)
+            , StorageId(storageId)
         {}
 
         TString Print(bool isFull) const {

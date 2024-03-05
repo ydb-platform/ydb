@@ -443,8 +443,11 @@ void TClientRequest::PrepareHeader()
         return;
     }
 
-    Header_.set_request_codec(ToProto<int>(RequestCodec_));
-    Header_.set_response_codec(ToProto<int>(ResponseCodec_));
+    // COMPAT(danilalexeev): legacy RPC codecs
+    if (!EnableLegacyRpcCodecs_) {
+        Header_.set_request_codec(ToProto<int>(RequestCodec_));
+        Header_.set_response_codec(ToProto<int>(ResponseCodec_));
+    }
 
     if (StreamingEnabled_) {
         ToProto(Header_.mutable_server_attachments_streaming_parameters(), ServerAttachmentsStreamingParameters_);
@@ -459,6 +462,11 @@ void TClientRequest::PrepareHeader()
     }
 
     HeaderPrepared_.store(true);
+}
+
+bool TClientRequest::IsLegacyRpcCodecsEnabled()
+{
+    return EnableLegacyRpcCodecs_;
 }
 
 TSharedRefArray TClientRequest::GetHeaderlessMessage() const

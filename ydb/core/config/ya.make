@@ -1,4 +1,5 @@
 RECURSE(
+    init
     protos
     tools
     utils

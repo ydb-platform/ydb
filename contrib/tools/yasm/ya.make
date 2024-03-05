@@ -8,22 +8,11 @@ PROGRAM(yasm)
 VERSION(1.3.0)
 
 LICENSE(
-    Artistic-1.0 AND
-    Artistic-1.0-Perl AND
-    Artistic-2.0 AND
+    "(Artistic-1.0 OR GPL-1.0-or-later OR LGPL-2.0-or-later)" AND
+    "(BSD-3-Clause AND BSD-2-Clause AND (Artistic-1.0 OR GPL-1.0-or-later OR LGPL-2.0-or-later))" AND
     BSD-2-Clause AND
     BSD-3-Clause AND
-    GPL-1.0-or-later AND
-    GPL-2.0-only AND
-    LGPL-2.0-only AND
-    LGPL-2.0-or-later AND
-    LicenseRef-scancode-warranty-disclaimer AND
     Public-Domain
-)
-
-LICENSE_RESTRICTION_EXCEPTIONS(
-    # Consider Artistic-1.0 as acceptable license risk
-    contrib/tools/yasm
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)

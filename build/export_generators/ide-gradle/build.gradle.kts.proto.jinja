@@ -31,6 +31,14 @@ repositories {
 }
 }
 
+sourceSets {
+    main {
+        java.srcDir("build/generated/source/proto")
+    }
+}
+
+val project_root="{%- if exportRoot.startswith(arcadiaRoot + '/') -%}{{ arcadiaRoot }}{%- else -%}{{ exportRoot }}{%- endif -%}"
+
 java {
     withSourcesJar()
     withJavadocJar()

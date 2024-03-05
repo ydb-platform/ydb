@@ -21,12 +21,14 @@ public:
     virtual void AddFile(const TString& path, const TString& objectId) = 0;
 
     virtual TMaybe<TString> FindFile(const TString& objectId) = 0;
+    virtual TMaybe<TString> AcquireFile(const TString& objectId) = 0;
+    virtual void ReleaseFile(const TString& objectId) = 0;
 
     virtual bool Contains(const TString& objectId) = 0;
 
     virtual void Walk(const std::function<void(const TString& objectId)>&) = 0;
 
-    virtual ui64 FreeDiskSize() = 0;
+    virtual i64 FreeDiskSize() = 0;
 
     virtual ui64 UsedDiskSize() = 0;
 

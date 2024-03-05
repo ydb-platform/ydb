@@ -505,6 +505,28 @@
         }
     ],
     "test.test[ansi_idents-basic_columns-default.txt-Results]": [],
+    "test.test[bigdate-input_interval64-default.txt-Analyze]": [
+        {
+            "checksum": "c65d165d3bad7ce31fda44ee48dd215f",
+            "size": 15015,
+            "uri": "https://{canondata_backend}/1784826/2a831b2d73099cc758734ddc249903ecf064810d/resource.tar.gz#test.test_bigdate-input_interval64-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[bigdate-input_interval64-default.txt-Debug]": [
+        {
+            "checksum": "cb33deb86a5dbc3ee776a0be9a89f2c3",
+            "size": 6382,
+            "uri": "https://{canondata_backend}/1784826/2a831b2d73099cc758734ddc249903ecf064810d/resource.tar.gz#test.test_bigdate-input_interval64-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[bigdate-input_interval64-default.txt-Plan]": [
+        {
+            "checksum": "c65d165d3bad7ce31fda44ee48dd215f",
+            "size": 15015,
+            "uri": "https://{canondata_backend}/1784826/2a831b2d73099cc758734ddc249903ecf064810d/resource.tar.gz#test.test_bigdate-input_interval64-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[bigdate-input_interval64-default.txt-Results]": [],
     "test.test[bigdate-int_literals-default.txt-Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",
@@ -514,9 +536,9 @@
     ],
     "test.test[bigdate-int_literals-default.txt-Debug]": [
         {
-            "checksum": "35da6f8af0f9461d5c091dad66a36cd4",
-            "size": 944,
-            "uri": "https://{canondata_backend}/1775059/52446ae3339a73cb6ab2601c56ea1cd705cc4671/resource.tar.gz#test.test_bigdate-int_literals-default.txt-Debug_/opt.yql_patched"
+            "checksum": "f75a9edd97af47f1ad504d444a2a4ce5",
+            "size": 1429,
+            "uri": "https://{canondata_backend}/1781765/cbb813bb2d0d32de54c2e1769d885bafe5cf39f2/resource.tar.gz#test.test_bigdate-int_literals-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[bigdate-int_literals-default.txt-Plan]": [
@@ -2370,9 +2392,9 @@
     ],
     "test.test[pg-select_win_max-default.txt-Debug]": [
         {
-            "checksum": "3cec6f8cb29da6d3fa46296cd4b080a9",
-            "size": 1600,
-            "uri": "https://{canondata_backend}/1937027/dd423a99ed05fbce79d0677e5519d444df503e33/resource.tar.gz#test.test_pg-select_win_max-default.txt-Debug_/opt.yql_patched"
+            "checksum": "a9a9126474747b743ca8eb7212fa7ec4",
+            "size": 1606,
+            "uri": "https://{canondata_backend}/1889210/efe4e2f2d55be8660c9313813d66a8fb62e04dc5/resource.tar.gz#test.test_pg-select_win_max-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-select_win_max-default.txt-Plan]": [
@@ -2436,9 +2458,9 @@
     ],
     "test.test[pg-tpcds-q36-default.txt-Debug]": [
         {
-            "checksum": "20c3c47e7d6e4947f99c7b37a7dd5de9",
-            "size": 3754,
-            "uri": "https://{canondata_backend}/1925821/1d295f9b4197e0ee9040dbe96e131629e0b40339/resource.tar.gz#test.test_pg-tpcds-q36-default.txt-Debug_/opt.yql_patched"
+            "checksum": "37006a12c9b61a46ecbed82c19e07ff3",
+            "size": 3760,
+            "uri": "https://{canondata_backend}/1775059/f83c564439c6bfc4100724c4089f557d22989d2f/resource.tar.gz#test.test_pg-tpcds-q36-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-tpcds-q36-default.txt-Plan]": [
@@ -2502,9 +2524,9 @@
     ],
     "test.test[pg-tpcds-q94-default.txt-Debug]": [
         {
-            "checksum": "d8dff9d6e720e0d7a4c8f3619689168e",
-            "size": 3305,
-            "uri": "https://{canondata_backend}/995452/4daffa0e509c37c55ffb6e303121fefa54adef18/resource.tar.gz#test.test_pg-tpcds-q94-default.txt-Debug_/opt.yql_patched"
+            "checksum": "f27adf3fafc1d572c4751abf4ae0ec01",
+            "size": 3117,
+            "uri": "https://{canondata_backend}/1924537/67045fc137b7aae73c1137f6fa60894b964dec45/resource.tar.gz#test.test_pg-tpcds-q94-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-tpcds-q94-default.txt-Plan]": [

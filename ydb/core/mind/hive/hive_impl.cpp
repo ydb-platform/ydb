@@ -941,11 +941,8 @@ void THive::Handle(TEvHive::TEvReassignTablet::TPtr &ev) {
 void THive::OnActivateExecutor(const TActorContext&) {
     BLOG_D("THive::OnActivateExecutor");
     TDomainsInfo* domainsInfo = AppData()->DomainsInfo.Get();
-    HiveUid = domainsInfo->GetDefaultHiveUid(domainsInfo->Domains.begin()->first);
-    HiveDomain = domainsInfo->GetHiveDomainUid(HiveUid);
-    const TDomainsInfo::TDomain& domain = domainsInfo->GetDomain(HiveDomain);
-    RootHiveId = domainsInfo->GetHive(domain.DefaultHiveUid);
-    Y_ABORT_UNLESS(HiveUid != Max<ui32>() && HiveDomain != TDomainsInfo::BadDomainId);
+    const TDomainsInfo::TDomain& domain = *domainsInfo->GetDomain();
+    RootHiveId = domainsInfo->GetHive();
     HiveId = TabletID();
     HiveGeneration = Executor()->Generation();
     RootDomainKey = TSubDomainKey(domain.SchemeRoot, 1);
@@ -1017,14 +1014,9 @@ void THive::AssignTabletGroups(TLeaderTabletInfo& tablet) {
 
 void THive::SendToBSControllerPipe(IEventBase* payload) {
     if (!BSControllerPipeClient) {
-        Y_ABORT_UNLESS(AppData()->DomainsInfo);
-        ui32 domainUid = HiveDomain;
-        ui64 defaultStateStorageGroup = AppData()->DomainsInfo->GetDefaultStateStorageGroup(domainUid);
-
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-        BSControllerPipeClient = Register(NTabletPipe::CreateClient(
-            SelfId(), MakeBSControllerID(defaultStateStorageGroup), pipeConfig));
+        BSControllerPipeClient = Register(NTabletPipe::CreateClient(SelfId(), MakeBSControllerID(), pipeConfig));
     }
     NTabletPipe::SendData(SelfId(), BSControllerPipeClient, payload);
 }
@@ -2742,8 +2734,6 @@ ui64 THive::GetObjectImbalance(TFullObjectId object) {
 THive::THive(TTabletStorageInfo *info, const TActorId &tablet)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
-    , HiveUid(Max<ui32>())
-    , HiveDomain(Max<ui32>())
     , RootHiveId()
     , HiveId(Max<ui64>())
     , HiveGeneration(0)
@@ -3049,9 +3039,7 @@ void THive::Handle(TEvHive::TEvResponseTabletIdSequence::TPtr& ev) {
 }
 
 void THive::RequestFreeSequence() {
-    TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-    TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
-    TTabletId rootHiveId = domains->GetHive(domain->DefaultHiveUid);
+    TTabletId rootHiveId = AppData()->DomainsInfo->GetHive();
     if (rootHiveId != TabletID()) {
         size_t sequenceIndex = Sequencer.NextFreeSequenceIndex();
         size_t sequenceSize = GetRequestSequenceSize();

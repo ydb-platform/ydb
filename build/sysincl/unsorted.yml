@@ -6,7 +6,6 @@
 - source_filter: ".*contrib.*"
   includes:
   - stat.h
-  - libutf8.h
   - CrashReporterClient.h
   - Errors.h
   - ICSupport.h
@@ -20,26 +19,10 @@
   - XMPSDK.hpp
   - _mingw.h
   - abi_mutex.h
-  - afxcmn.h
-  - afxdao.h
-  - afxdb.h
-  - afxdisp.h
-  - afxext.h
-  - afxodlgs.h
-  - afxole.h
-  - afxwin.h
   - alpha/builtins.h
   - apr_iconv.h
-  - atheos/atomic.h
-  - atheos/semaphore.h
-  - atheos/threads.h
   - atomic_ops.h
   - auth-client-parser/parser.h
-  - bluetooth/bluetooth.h
-  - bluetooth/hci.h
-  - bluetooth/l2cap.h
-  - bluetooth/rfcomm.h
-  - bluetooth/sco.h
   - bstring.h
   - builtins.h
   - c_asm.h
@@ -67,10 +50,7 @@
   - fsio.h
   - fwriteerror.h
   - gdbm.h
-  - ghostscript/iapi.h
-  - ghostscript/ierrors.h
   - gmp.h
-  - gnutls/x509.h
   - hp-timing.h
   - httpd_wrap.h
   - i86.h
@@ -84,8 +64,6 @@
   - ipp.h
   - ippcp.h
   - kfuncs.h
-  - l12_integer_tables.h
-  - l3_integer_tables.h
   - lcms.h
   - libavcodec/aacps_tables.h
   - libavcodec/cbrt_tables.h
@@ -104,20 +82,15 @@
   - locale/weight.h
   - locale/weightwc.h
   - lqr.h
-  - lwp/lwp.h
-  - lwp/stackdep.h
   - m68881.h
   - mach/cthreads.h
   - mathimf.h
-  - matrixos.h
   - mfx/mfxvideo.h
   - mingw.h
   - mips64/sysarch.h
   - ms/uplink.h
   - msl_utility
   - namdef.h
-  - ncurses/curses.h
-  - ncurses/term.h
   - ndir.h
   - net/netdb.h
   - net/socket.h
@@ -128,21 +101,14 @@
   - nonblocking.h
   - note.h
   - opcdef.h
-  - openssl/applink.c
-  - os2def.h
-  - oslib/osfscontrol.h
   - paper.h
-  - pcre_printint.src
   - pire/config.h
   - pngusr.h
-  - probes_mysql_dtrace.h
   - pth.h
   - relocatable.h
   - rtl.h
-  - semLib.h
   - shlib-compat.h
   - sigsegv.h
-  - sockLib.h
   - socket.h
   - socketshr.h
   - socklib.h
@@ -151,12 +117,8 @@
   - streams/un.h
   - stropts
   - swill.h
-  - sysLib.h
-  - taskLib.h
   - tcp.h
   - thread.h
-  - thread_plan9.h
-  - tickLib.h
   - ttdef.h
   - type_traits.h
   - udplite.h
@@ -177,10 +139,8 @@
   #if CONTRIB && defined(_HAVE_LIBIDSA)
   - idsa.h
   #endif
-  - ../lib/memdebug.h
   - ../../VC/include/math.h
   - ../../VC/include/cfloat
-  - ../extra/yassl/taocrypt/include/sha.hpp
   - prof.h
   - ll_alloc_hook.c
   - cpptl/config.h
@@ -190,7 +150,6 @@
   - forwards.h
   - json_valueiterator.inl
   - value.h
-  - pthread/mit/sys/timers.h
   - sljit/sljitLir.c
   - pcre_printint.c
   #ifdef defined(emacs) && CONTRIB && TRASH
@@ -213,18 +172,11 @@
   - ../include/sys/stat.h
   - ../include/fcntl.h
   - ../include/math.h
-  - vcruntime_exception.h
-  - vcruntime_new.h
-  - vcruntime_typeinfo.h
   #endif
 
 - source_filter: "^contrib/(libs/(apache|httpd|libuv)|python/uWSGI)"
   includes:
   - port.h
-
-- source_filter: "^contrib/libs/poco"
-  includes:
-  - timers.h
 
 - includes:
   - cpu-features.h
@@ -237,13 +189,11 @@
   - zircon/types.h
   - zircon/process.h
   - sys/linux-syscalls.h
-  - ompt.h
   # vvvvv ____ because in [geobase/perl/dynamic] does not work ignoring via "// Y_IGNORE"
   - geobase6/service_getter.hpp
   - geobase6/timezone_getter.hpp
   # ^^^^^ ----
   #if defined(__FreeBSD__)
-  - bluetooth.h
   - bsdxml.h
   - devstat.h
   - ieeefp.h
@@ -319,10 +269,6 @@
   - rtcapi.h
   - vadefs.h
   - varargs.h
-  - xlocinfo.h
-  - xstddef
-  - xutility
-  - ymath.h
   - crtassem.h
   #endif
   #if defined(_unix_) && TODO
@@ -357,37 +303,8 @@
   - perl.h
   - XSUB.h
   #endif
-  #if defined(_OS2_)
-  - os2.h
-  #endif
   #if defined(_arm_)
   - arm/limits.h
-  #endif
-  #if defined(_VMS_) && TODO
-  - atrdef.h
-  - dcdef.h
-  - descrip.h
-  - dvsdef.h
-  - fab.h
-  - fibdef.h
-  - gen64def.h
-  - iledef.h
-  - iodef.h
-  - lib$routines.h
-  - libfildef.h
-  - libfisdef.h
-  - lnmdef.h
-  - nam.h
-  - rms.h
-  - rmsdef.h
-  - ssdef.h
-  - starlet.h
-  - str$routines.h
-  - stsdef.h
-  - syidef.h
-  - times.h
-  - unixio.h
-  - tcpSocketVaxRoutines.h
   #endif
   #if defined(_SOLARIS_) && TODO
   - synch.h
@@ -398,13 +315,6 @@
   #endif
   #if defined(__sgi)
   - sgidefs.h
-  #endif
-  #if defined(__BEOS__)
-  - ByteOrder.h
-  - OS.h
-  - support/SupportDefs.h
-  - kernel/OS.h
-  - kernel/image.h
   #endif
   #if defined(_sun_)
   - procfs.h
@@ -421,18 +331,6 @@
   #if defined(HAVE_ALTIVEC)
   - altivec.h
   #endif
-  #if defined(__vxWorks__)
-  - vxCpuLib.h
-  - vxWorks.h
-  - sockLib.h
-  - hostLib.h
-  - ioLib.h
-  - iosLib.h
-  - resolvLib.h
-  - rtpLib.h
-  - pipeDrv.h
-  - selectLib.h
-  #endif
   #if defined(_LIBC) && TRASH
   - ../locale/localeinfo.h
   - ../locale/elem-hash.h
@@ -442,11 +340,7 @@
   - config_auto.h
   #endif
   #if defined(_TRASH_) && TODO
-  - openssl/fips.h
-  - bits/c++config.h
-  - bits/atomicity.h
   - gcrypt.h
-  - gnutls/gnutls.h
   - gdwmfapi.h
   - winmmap.h
   - sf_unistd.h
@@ -457,9 +351,6 @@
   #if defined (__DECC) || defined (__DECCXX)
   - machine/builtins.h
   #endif
-  #if defined(USE_PERL) && TODO
-  - perliol.h
-  #endif
   #if defined(__NetBSD__)
   - lwp.h
   - perfuse.h
@@ -468,9 +359,6 @@
   - sys/systemcfg.h
   - sys/thread.h
   #endif
-  - iostream.h
-  - streambuf.h
-  - ostream.h
   - nacl/nacl_random.h
   - jemalloc/jemalloc.h
   - sys/inttypes.h
@@ -495,12 +383,6 @@
   - ../ucrt/sys/stat.h
   - asm/page.h
   - asm/sgidefs.h
-  - bits/char_traits.h
-  - bits/stl_algobase.h
-  - bits/stl_move.h
-  - bits/stl_pair.h
-  - bits/stl_function.h
-  - bits/move.h
   - ndir.h
   - sunmedia_types.h
   - clidef.h
@@ -527,9 +409,6 @@
   - agg_allocator.h
   - SIOUX.h
   - sys/siginfo.h
-  #if MATLAB_MEX_FILE
-  - mex.h
-  #else
   - lzmalib.h
   # ICU
   - uconfig_local.h
@@ -589,12 +468,6 @@
 
 - case_sensitive: false
   includes:
-  - cor.h
-  - fusion.h
-  - metahost.h
-  #if defined(WINDOWS) && defined (_USE_MFC_)
-  - afx.h
-  #endif
   #if defined(WINDOWS) && CONTRIB && TRASH
   - ../include/stdint.h
   #endif
@@ -607,22 +480,15 @@
   #if CONTRIB && TODO
   - Xm/XmAll.h
   - aep.h
-  - atalla.h
   - crypto/cryptodev.h
-  - cswift.h
   - cxcore.h
   - efndef
   - exiv2/types.hpp
-  - hw_4758_cca.h
   - hw_ubsec.h
-  - hwcryptohook.h
   - jpidef.h
   - lckdef.h
   - libdtdef.h
   - novsock2.h
-  - openssl/fips_rand.h
-  - openssl/fipssyms.h
-  - openssl/jpake.h
   - rld_interface.h
   - screen.h
   - sureware.h
@@ -636,7 +502,6 @@
   #endif
   #if CONTRIB && TRASH
   - macconfig.h
-  - amigaconfig.h
   - json_batchallocator.h
   - json_internalarray.inl
   - json_internalmap.inl
@@ -645,9 +510,6 @@
   #endif
 
 - includes:
-  - Aclapi.h
-  - time64.h
-  - extern.h
   #if defined(__FreeBSD__)
   - _ctype.h
   - alias.h
@@ -682,88 +544,23 @@
   - sys/timers.h
   - sys/tree.h
   - tcpd.h
-  - ypclnt.h
-  #endif
-  #if defined (__linux__)
-  - asm/fpu.h
-  - i386/fpu_control.h
-  - zlibdefs.h
-  #endif
-  #if defined(_MSC_VER)
-  - agents.h
-  - allocators
-  - amp.h
-  - collection.h
-  - ConcurrencySal.h
-  - concurrent_priority_queue.h
-  - concurrent_queue.h
-  - concurrent_unordered_map.h
-  - concurrent_unordered_set.h
-  - concurrent_vector.h
-  - vcruntime_new_debug.h
-  - dvec.h
-  - setjmpex.h
-  - srv.h
-  - typeinfo.h
-  - xcomplex
-  - xdebug
-  - xhash
-  - xiosbase
-  - xkeycheck.h
-  - xlocale
-  - xlocinfo
-  - xlocnum
-  - xmemory
-  - xmemory0
-  - xstring
-  - xtr1common
-  - xtree
-  - yvals.h
-  #endif
-  #if defined(_unix_) && TODO
-  - sys/feature_tests.h
-  #endif
-  #if defined(_VMS_) && TODO
-  - chfdef.h
-  - libdef.h
-  #endif
-  #if defined(__sgi)
-  - sigfpe.h
-  #endif
-  #if defined(__MWERKS__)
-  - nwfileio.h
-  - nwthread.h
   #endif
   #if defined(_TRASH_) && TODO
   - google/profiler.h
   #endif
   - net/errno.h
   - sys/mode.h
-  - nwstdio.h
-  - nw5thread.h
-  - os2thread.h
   - netware.h
   - perldtrace.h
   - win32thread.h
-  - wince.h
-  - symbian/symbian_proto.h
-  - xconfig.h
   - bsd/ctypes.h
-  - objc/NXCType.h
-  - appkit/NXCType.h
   - sfio.h
-  - sys\stat.h
   - ../../VC/include/stdio.h
   - ../ucrt/stdio.h
-  #if EV_USE_IOCP
-  - ev_iocp.c
-  # unknown
   - GL/glx.h
   - CL/va_ext.h
   - sys/sysconf.h
   - ivx.hpp
-  - clAmdBlas.h
-  - clAmdFft.h
   - va/va.h
   #if metrika then skip bad includes from metrika
   - yandex/lbs/LBSLocator.hpp

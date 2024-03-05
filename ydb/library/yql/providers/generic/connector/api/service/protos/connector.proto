@@ -197,8 +197,10 @@ message TSplit {
 
 // ReadDataRequest reads the data associated with a particular table split.
 message TReadSplitsRequest {
-    // Data source instance to connect
-    TDataSourceInstance data_source_instance = 1;
+    // Data source instance to connect.
+    // Deprecated field: server implementations must rely on
+    // TDataSourceInstance provided in each TSelect.
+    TDataSourceInstance data_source_instance = 1 [deprecated = true];
 
     // Splits that YQ engine would like to read.
     repeated TSplit splits = 2;

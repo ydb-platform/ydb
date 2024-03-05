@@ -500,8 +500,12 @@ namespace NSQLTranslationV1 {
         TAstNode* Translate(TContext& ctx) const override;
     };
 
+    enum class ESampleClause {
+        TableSample, //from SQL standard, percantage rate (0..100)
+        Sample //simplified (implied Bernulli mode), fraction (0..1)
+    };
+
     enum class ESampleMode {
-        Auto,
         Bernoulli,
         System
     };

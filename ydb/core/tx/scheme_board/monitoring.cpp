@@ -1056,14 +1056,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     }
 
     static TActorId MakeStateStorageProxyId() {
-        const auto& domains = AppData()->DomainsInfo->Domains;
-        Y_ABORT_UNLESS(domains.size() <= 1);
-
-        for (const auto& domain : domains) {
-            return NKikimr::MakeStateStorageProxyID(domain.second->DefaultSchemeBoardGroup);
-        }
-
-        Y_ABORT("unreachable");
+        return NKikimr::MakeStateStorageProxyID();
     }
 
     template <typename TDerived, typename TEvResponse>

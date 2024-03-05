@@ -23,13 +23,15 @@ public:
 
     NThreading::TFuture<TKey> Put(TRope&& blob);
 
-    std::optional<NThreading::TFuture<TRope>> Get(TKey key);
+    NThreading::TFuture<std::optional<TRope>> Get(TKey key);
 
-    std::optional<NThreading::TFuture<TRope>> Extract(TKey key);
+    NThreading::TFuture<std::optional<TRope>> Extract(TKey key);
 
     NThreading::TFuture<void> Delete(TKey key);
 
 private:
+    NThreading::TFuture<std::optional<TRope>> GetInternal(TKey key, bool removeBlobAfterRead);
+
     NActors::TActorSystem* ActorSystem_;
     IDqComputeStorageActor* ComputeStorageActor_;
     NActors::TActorId ComputeStorageActorId_;

@@ -35,7 +35,6 @@ SRCS(
 
 PEERDIR(
     library/cpp/deprecated/enum_codegen
-    ydb/library/grpc/client
     library/cpp/protobuf/json
     library/cpp/yson
     ydb/core/actorlib_impl
@@ -43,6 +42,7 @@ PEERDIR(
     ydb/core/blobstorage/pdisk
     ydb/core/client/minikql_compile
     ydb/core/client/scheme_cache_lib
+    ydb/core/config/init
     ydb/core/driver_lib/cli_base
     ydb/core/engine
     ydb/core/erasure
@@ -51,8 +51,8 @@ PEERDIR(
     ydb/core/scheme
     ydb/library/aclib
     ydb/library/folder_service/proto
+    ydb/library/grpc/client
     ydb/library/yaml_config
-    ydb/library/yaml_config/deprecated
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/lib/deprecated/client

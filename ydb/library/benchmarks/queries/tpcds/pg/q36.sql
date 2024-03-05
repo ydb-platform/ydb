@@ -1,5 +1,6 @@
 {% include 'header.sql.jinja' %}
 
+select * from (
 select
     sum(ss_net_profit)/sum(ss_ext_sales_price) as gross_margin
    ,i_category
@@ -22,6 +23,7 @@ select
  and s_state in ('IN','AL','MI','MN',
                  'TN','LA','FL','NM')
  group by rollup(i_category,i_class)
+) as sub 
  order by
    lochierarchy desc
   ,case when lochierarchy = 0 then i_category end

@@ -14,8 +14,8 @@ SELECT text 'this is a text string' = text 'this is a text strin' AS false;
 (1 row)
 
 CREATE TABLE TEXT_TBL (f1 text);
-INSERT INTO TEXT_TBL (f1) VALUES ('doh!');
-INSERT INTO TEXT_TBL (f1) VALUES ('hi de ho neighbor');
+INSERT INTO TEXT_TBL VALUES ('doh!');
+INSERT INTO TEXT_TBL VALUES ('hi de ho neighbor');
 SELECT * FROM TEXT_TBL;
         f1         
 -------------------

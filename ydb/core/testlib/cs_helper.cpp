@@ -426,11 +426,11 @@ std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, 
         Y_ABORT_UNLESS(bResourceId.AppendNull().ok());
         Y_ABORT_UNLESS(bLevel.Append(i).ok());
         Y_ABORT_UNLESS(bBinaryStr.AppendNull().ok());
-        Y_ABORT_UNLESS(bJsonVal.Append(std::string(R"({"col1": "val1", "obj": {"obj_col2_int": 16}})")).ok());
+        Y_ABORT_UNLESS(bJsonVal.Append(std::string(R"({"col1": "val1", "col-abc": "val-abc", "obj": {"obj_col2_int": 16}})")).ok());
         Y_ABORT_UNLESS(bJsonDoc.AppendNull().ok());
     }
 
-    const auto maybeJsonDoc = std::string(R"({"col1": "val1", "obj": {"obj_col2_int": 16}})");
+    const auto maybeJsonDoc = std::string(R"({"col1": "val1", "col-abc": "val-abc", "obj": {"obj_col2_int": 16}})");
     for (size_t i = rowCount / 2 + 1; i <= rowCount; ++i) {
         Y_ABORT_UNLESS(bId.Append(i).ok());
         Y_ABORT_UNLESS(bResourceId.Append(std::to_string(i)).ok());

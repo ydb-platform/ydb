@@ -5477,7 +5477,23 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 #endif
             .SetExpectedReply(R"([[1;["val1"];#]])");
 
-        TestTableWithNulls({ testCase });
+        TestTableWithNulls({testCase});
+    }
+
+    Y_UNIT_TEST(Json_GetValue_Minus) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_VALUE(jsonval, "$.'col-abc'"), JSON_VALUE(jsondoc, "$.'col-abc'") FROM `/Root/tableWithNulls`
+                WHERE JSON_VALUE(jsonval, "$.'col-abc'") = "val-abc" AND id = 1;
+            )")
+#if SSA_RUNTIME_VERSION >= 3U
+            .AddExpectedPlanOptions("KqpOlapJsonValue")
+#else
+            .AddExpectedPlanOptions("Udf")
+#endif
+            .SetExpectedReply(R"([[1;["val-abc"];#]])");
+
+        TestTableWithNulls({testCase});
     }
 
     Y_UNIT_TEST(Json_GetValue_ToString) {

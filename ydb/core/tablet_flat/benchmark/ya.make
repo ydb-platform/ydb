@@ -2,11 +2,17 @@ G_BENCHMARK()
 
 TAG(ya:fat)
 SIZE(LARGE)
-TIMEOUT(1200)
+TIMEOUT(600)
+
+IF (BENCHMARK_MAKE_LARGE_PART)
+    CFLAGS(
+        -DBENCHMARK_MAKE_LARGE_PART=1
+    )
+    TIMEOUT(1200)
+ENDIF()
 
 SRCS(
-    b_charge.cpp
-    b_part_index.cpp
+    b_part.cpp
 )
 
 PEERDIR(

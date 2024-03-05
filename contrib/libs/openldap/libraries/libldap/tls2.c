@@ -160,6 +160,14 @@ ldap_pvt_tls_destroy( void )
 	tls_imp->ti_tls_destroy();
 }
 
+static void
+ldap_exit_tls_destroy( void )
+{
+	struct ldapoptions *lo = LDAP_INT_GLOBAL_OPT();
+
+	ldap_int_tls_destroy( lo );
+}
+
 /*
  * Initialize a particular TLS implementation.
  * Called once per implementation.
@@ -168,6 +176,7 @@ static int
 tls_init(tls_impl *impl, int do_threads )
 {
 	static int tls_initialized = 0;
+	int rc;
 
 	if ( !tls_initialized++ ) {
 #ifdef LDAP_R_COMPILE
@@ -183,7 +192,10 @@ tls_init(tls_impl *impl, int do_threads )
 #endif
 	}
 
-	return impl->ti_tls_init();
+	rc = impl->ti_tls_init();
+
+	atexit( ldap_exit_tls_destroy );
+	return rc;
 }
 
 /*

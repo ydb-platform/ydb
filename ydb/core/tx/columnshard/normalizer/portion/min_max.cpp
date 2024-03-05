@@ -14,23 +14,22 @@ class TMinMaxSnapshotChangesTask: public NConveyor::ITask {
 public:
     using TDataContainer = std::vector<std::shared_ptr<TPortionInfo>>;
 private:
-    THashMap<NKikimr::NOlap::TBlobRange, TString> Blobs;
+    NBlobOperations::NRead::TCompositeReadBlobs Blobs;
     TDataContainer Portions;
-    THashMap<ui64, ISnapshotSchema::TPtr> Schemas;
+    std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
     TNormalizationContext NormContext;
 protected:
     virtual bool DoExecute() override {
-        Y_ABORT_UNLESS(!Schemas.empty());
-        auto pkColumnIds = Schemas.begin()->second->GetPkColumnsIds();
+        Y_ABORT_UNLESS(!Schemas->empty());
+        auto pkColumnIds = Schemas->begin()->second->GetPkColumnsIds();
         pkColumnIds.insert(TIndexInfo::GetSpecialColumnIds().begin(), TIndexInfo::GetSpecialColumnIds().end());
 
         for (auto&& portionInfo : Portions) {
-            auto blobSchema = Schemas.FindPtr(portionInfo->GetPortionId());
-            THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo> blobsDataAssemble;
+            auto blobSchema = Schemas->FindPtr(portionInfo->GetPortionId());
+            THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo> blobsDataAssemble;
             for (auto&& i : portionInfo->Records) {
-                auto blobIt = Blobs.find(i.BlobRange);
-                Y_ABORT_UNLESS(blobIt != Blobs.end());
-                blobsDataAssemble.emplace(i.BlobRange, blobIt->second);
+                auto blobData = Blobs.Extract((*blobSchema)->GetIndexInfo().GetColumnStorageId(i.GetColumnId(), portionInfo->GetMeta().GetTierName()), portionInfo->RestoreBlobRange(i.BlobRange));
+                blobsDataAssemble.emplace(i.GetAddress(), blobData);
             }
 
             AFL_VERIFY(!!blobSchema)("details", portionInfo->DebugString());
@@ -47,10 +46,10 @@ protected:
     }
 
 public:
-    TMinMaxSnapshotChangesTask(THashMap<NKikimr::NOlap::TBlobRange, TString>&& blobs, const TNormalizationContext& nCtx, TDataContainer&& portions, THashMap<ui64, ISnapshotSchema::TPtr>&& schemas)
+    TMinMaxSnapshotChangesTask(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TNormalizationContext& nCtx, TDataContainer&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
         : Blobs(std::move(blobs))
         , Portions(std::move(portions))
-        , Schemas(std::move(schemas))
+        , Schemas(schemas)
         , NormContext(nCtx)
     {}
 
@@ -61,7 +60,7 @@ public:
 
     static void FillBlobRanges(std::shared_ptr<IBlobsReadingAction> readAction, const std::shared_ptr<TPortionInfo>& portion) {
         for (auto&& chunk : portion->Records) {
-            readAction->AddRange(chunk.BlobRange);
+            readAction->AddRange(portion->RestoreBlobRange(chunk.BlobRange));
         }
     }
 
@@ -135,7 +134,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizer::Init(const 
     }
 
     THashMap<ui64, std::shared_ptr<TPortionInfo>> portions;
-    THashMap<ui64, ISnapshotSchema::TPtr> schemas;
+    auto schemas = std::make_shared<THashMap<ui64, ISnapshotSchema::TPtr>>();
     auto pkColumnIds = TMinMaxSnapshotChangesTask::GetColumnsFilter(tablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema());
 
     {
@@ -153,22 +152,19 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizer::Init(const 
             }
 
             AFL_VERIFY(portion.ValidSnapshotInfo())("details", portion.DebugString());
-            TColumnRecord rec(loadContext, currentSchema->GetIndexInfo());
-            if (!pkColumnIds.contains(rec.ColumnId)) {
+            if (!pkColumnIds.contains(loadContext.GetAddress().GetColumnId())) {
                 return;
             }
             auto it = portions.find(portion.GetPortion());
             auto portionMeta = loadContext.GetPortionMeta();
             if (it == portions.end()) {
                 Y_ABORT_UNLESS(portion.Records.empty());
-                schemas[portion.GetPortionId()] = currentSchema;
-                auto portionNew = std::make_shared<TPortionInfo>(portion);
-                portionNew->AddRecord(currentSchema->GetIndexInfo(), rec, portionMeta);
-                it = portions.emplace(portion.GetPortion(), portionNew).first;
-            } else {
-                AFL_VERIFY(it->second->IsEqualWithSnapshots(portion))("self", it->second->DebugString())("item", portion.DebugString());
-                it->second->AddRecord(currentSchema->GetIndexInfo(), rec, portionMeta);
+                (*schemas)[portion.GetPortionId()] = currentSchema;
+                it = portions.emplace(portion.GetPortion(), std::make_shared<TPortionInfo>(portion)).first;
             }
+            TColumnRecord rec(it->second->RegisterBlobId(loadContext.GetBlobRange().GetBlobId()), loadContext, currentSchema->GetIndexInfo());
+            AFL_VERIFY(it->second->IsEqualWithSnapshots(portion))("self", it->second->DebugString())("item", portion.DebugString());
+            it->second->AddRecord(currentSchema->GetIndexInfo(), rec, portionMeta);
         };
 
         while (!rowset.EndOfSet()) {
@@ -202,7 +198,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizer::Init(const 
         }
         ++brokenPortioncCount;
         package.emplace_back(portion.second);
-        if (package.size() == 100) {
+        if (package.size() == 1000) {
             std::vector<std::shared_ptr<TPortionInfo>> local;
             local.swap(package);
             tasks.emplace_back(std::make_shared<TPortionsNormalizerTask<TMinMaxSnapshotChangesTask>>(std::move(local), schemas));

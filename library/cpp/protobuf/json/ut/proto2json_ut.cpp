@@ -1143,4 +1143,20 @@ Y_UNIT_TEST(TestFloatToString) {
 #undef TEST_SINGLE
 } // TestFloatToString
 
+Y_UNIT_TEST(TestAny) {
+    TProto2JsonConfig config;
+    config.SetConvertAny(true);
+
+    TString modelStr(R"_({"Any":{"@type":"type.googleapis.com/NProtobufJsonTest.TFlatOptional","String":"value\""}})_");
+
+    TFlatOptional proto;
+    proto.SetString(R"_(value")_");
+    TContainsAny protoWithAny;
+    protoWithAny.MutableAny()->PackFrom(proto);
+
+    TStringStream jsonStr;
+    UNIT_ASSERT_NO_EXCEPTION(Proto2Json(protoWithAny, jsonStr, config));
+    UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
+}
+
 } // TProto2JsonTest

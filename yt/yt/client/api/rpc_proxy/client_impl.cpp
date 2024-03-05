@@ -519,6 +519,7 @@ TFuture<void> TClient::CreateTableBackup(
     req->set_checkpoint_check_period(ToProto<i64>(options.CheckpointCheckPeriod));
     req->set_checkpoint_check_timeout(ToProto<i64>(options.CheckpointCheckTimeout));
     req->set_force(options.Force);
+    req->set_preserve_account(options.PreserveAccount);
 
     return req->Invoke().As<void>();
 }
@@ -536,6 +537,7 @@ TFuture<void> TClient::RestoreTableBackup(
     req->set_force(options.Force);
     req->set_mount(options.Mount);
     req->set_enable_replicas(options.EnableReplicas);
+    req->set_preserve_account(options.PreserveAccount);
 
     return req->Invoke().As<void>();
 }

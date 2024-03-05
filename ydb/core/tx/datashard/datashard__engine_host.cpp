@@ -305,7 +305,14 @@ public:
     }
 
     bool IsValidKey(TKeyDesc& key) const override {
-        TKeyValidator::TValidateOptions options(UserDb);
+        TKeyValidator::TValidateOptions options(
+            UserDb.GetLockTxId(),
+            UserDb.GetLockNodeId(),
+            UserDb.GetIsRepeatableSnapshot(),
+            UserDb.GetIsImmediateTx(),
+            UserDb.GetIsWriteTx(), 
+            Scheme
+        );
         return GetKeyValidator().IsValidKey(key, options);
     }
 
@@ -469,7 +476,7 @@ private:
 
 TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId)
     : StepTxId(stepTxId)
-    , KeyValidator(*self, txc.DB)
+    , KeyValidator(*self)
 {
     auto now = TAppData::TimeProvider->Now();
     EngineHost = MakeHolder<TDataShardEngineHost>(self, *this, txc.DB, stepTxId.TxId, EngineHostCounters, now);

@@ -1447,9 +1447,9 @@
     ],
     "test.test[pg-select_win_expr_agg_order-default.txt-Debug]": [
         {
-            "checksum": "cc9bff3679f61e413086a255c7d4b961",
-            "size": 2778,
-            "uri": "https://{canondata_backend}/1937424/1df9e5779b19e0b7eba6e215901b4c280373b4c6/resource.tar.gz#test.test_pg-select_win_expr_agg_order-default.txt-Debug_/opt.yql"
+            "checksum": "bb2af2950a77e4e1c97766cd80044a00",
+            "size": 2784,
+            "uri": "https://{canondata_backend}/1937027/75317da0d421e00d3d48ce75204f7abb83c1c323/resource.tar.gz#test.test_pg-select_win_expr_agg_order-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-select_win_expr_agg_order-default.txt-Plan]": [
@@ -1531,9 +1531,9 @@
     ],
     "test.test[pg-tpcds-q79-default.txt-Debug]": [
         {
-            "checksum": "ed197497e067d749f703639cae711943",
-            "size": 1280,
-            "uri": "https://{canondata_backend}/1600758/4bccd141523a28df31ef68c43bfce4e16b831213/resource.tar.gz#test.test_pg-tpcds-q79-default.txt-Debug_/opt.yql"
+            "checksum": "4621819a480fc9db86d1b1c5e965277c",
+            "size": 787,
+            "uri": "https://{canondata_backend}/1773845/d550090c4ec31d83d30327ecec7b3ed650bd4d50/resource.tar.gz#test.test_pg-tpcds-q79-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-tpcds-q79-default.txt-Plan]": [
@@ -1573,9 +1573,9 @@
     ],
     "test.test[pg-tpcds-q84-default.txt-Debug]": [
         {
-            "checksum": "acf217080022c3718a299d663a59723f",
-            "size": 803,
-            "uri": "https://{canondata_backend}/1942278/dcf51f87e7494622f2c5e661f1ef8639433dd314/resource.tar.gz#test.test_pg-tpcds-q84-default.txt-Debug_/opt.yql"
+            "checksum": "e99f7e00b21b522ddba0c2c1c39a8ed5",
+            "size": 500,
+            "uri": "https://{canondata_backend}/1773845/d550090c4ec31d83d30327ecec7b3ed650bd4d50/resource.tar.gz#test.test_pg-tpcds-q84-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-tpcds-q84-default.txt-Plan]": [

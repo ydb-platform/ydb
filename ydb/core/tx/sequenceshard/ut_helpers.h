@@ -14,7 +14,7 @@ namespace NSequenceShard {
 
     struct TTestContext {
         TTabletTypes::EType TabletType = TTabletTypes::SequenceShard;
-        ui64 TabletId = MakeTabletID(0, 0, 1);
+        ui64 TabletId = MakeTabletID(false, 1);
         THolder<TTestActorRuntime> Runtime;
         TActorId ClientId;
         TActorId UnmarkedClientId;

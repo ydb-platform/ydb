@@ -3,6 +3,8 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
+#include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 

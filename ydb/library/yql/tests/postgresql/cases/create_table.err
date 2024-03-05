@@ -575,22 +575,12 @@ CREATE TABLE remember_create_subid (c int);
 <sql-statement>
 SAVEPOINT q;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: TransactionStmt: kind is not supported: 4
-    	SAVEPOINT q;
-	^
 <sql-statement>
 DROP TABLE remember_create_subid;
 </sql-statement>
 <sql-statement>
 ROLLBACK TO q;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: TransactionStmt: kind is not supported: 6
-    	ROLLBACK TO q;
-	^
 <sql-statement>
 COMMIT;
 </sql-statement>
@@ -615,22 +605,12 @@ ALTER TABLE remember_node_subid ALTER c TYPE bigint;
 <sql-statement>
 SAVEPOINT q;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: TransactionStmt: kind is not supported: 4
-    	SAVEPOINT q;
-	^
 <sql-statement>
 DROP TABLE remember_node_subid;
 </sql-statement>
 <sql-statement>
 ROLLBACK TO q;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: TransactionStmt: kind is not supported: 6
-    	ROLLBACK TO q;
-	^
 <sql-statement>
 COMMIT;
 </sql-statement>
@@ -931,10 +911,6 @@ CREATE TABLE partitioned (
 -- check relkind
 SELECT relkind FROM pg_class WHERE relname = 'partitioned';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_class
-    
 <sql-statement>
 -- prevent a function referenced in partition key from being dropped
 DROP FUNCTION plusone(int);
@@ -2150,10 +2126,6 @@ CREATE TABLE part_b PARTITION OF parted (
 -- conislocal should be false for any merged constraints, true otherwise
 SELECT conislocal, coninhcount FROM pg_constraint WHERE conrelid = 'part_b'::regclass ORDER BY conislocal, coninhcount;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_constraint
-    
 <sql-statement>
 -- Once check_b is added to the parent, it should be made non-local for part_b
 ALTER TABLE parted ADD CONSTRAINT check_b CHECK (b >= 0);
@@ -2166,10 +2138,6 @@ ALTER TABLE parted ADD CONSTRAINT check_b CHECK (b >= 0);
 <sql-statement>
 SELECT conislocal, coninhcount FROM pg_constraint WHERE conrelid = 'part_b'::regclass;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_constraint
-    
 <sql-statement>
 -- Neither check_a nor check_b are droppable from part_b
 ALTER TABLE part_b DROP CONSTRAINT check_a;
@@ -2201,10 +2169,6 @@ ALTER TABLE parted DROP CONSTRAINT check_a, DROP CONSTRAINT check_b;
 <sql-statement>
 SELECT conislocal, coninhcount FROM pg_constraint WHERE conrelid = 'part_b'::regclass;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_constraint
-    
 <sql-statement>
 -- specify PARTITION BY for a partition
 CREATE TABLE fail_part_col_not_found PARTITION OF parted FOR VALUES IN ('c') PARTITION BY RANGE (c);

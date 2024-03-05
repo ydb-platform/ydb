@@ -6,6 +6,8 @@
 
 #include <ydb/core/base/domain.h>
 #include <ydb/core/erasure/erasure.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/core/protos/tablet.pb.h>
 
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/protobuf/json/util.h>
@@ -680,9 +682,9 @@ namespace NKikimr::NYaml {
                                 Y_ENSURE_BT(success, "pdisk ids should be unique, non unique pdisk_id : " << pdiskId);
                             }
 
-                            std::optional<ui32> pDiskCategoryId;
+                            std::optional<ui64> pDiskCategoryId;
                             if (info.HasPDiskCategory()) {
-                                ui32 pDiskCategory = 0;
+                                ui64 pDiskCategory = 0;
                                 if (!TryFromString(info.GetPDiskCategory(), pDiskCategory)) {
                                     pDiskCategory = PdiskCategoryFromString(info.GetPDiskCategory());
                                 }

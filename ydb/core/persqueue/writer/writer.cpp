@@ -33,7 +33,7 @@ namespace NKikimr::NPQ {
 #define INFO(message)  LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
 #define ERROR(message) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
 
-static const ui64 WRITE_BLOCK_SIZE = 4_KB;    
+static const ui64 WRITE_BLOCK_SIZE = 4_KB;
 
 TString TEvPartitionWriter::TEvInitResult::TSuccess::ToString() const {
     auto out = TStringBuilder() << "Success {"
@@ -106,7 +106,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     using EErrorCode = TEvPartitionWriter::TEvWriteResponse::EErrorCode;
 
     static constexpr size_t MAX_QUOTA_INFLIGHT = 3;
-    
+
     static void FillHeader(NKikimrClient::TPersQueuePartitionRequest& request,
             ui32 partitionId, const TActorId& pipeClient)
     {
@@ -172,6 +172,20 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         SendInitResult(ownerCookie, sourceIdInfo, writeId);
     }
 
+    TString IssuesAsString(const NKikimrKqp::TQueryResponse& response) {
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(response.GetQueryIssues(), issues);
+        return issues.ToString();
+    }
+
+    void InitResult(const TString& reason, const NKikimrKqp::TEvQueryResponse& record) {
+        NKikimrClient::TResponse response;
+        response.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
+        response.SetErrorCode(NPersQueue::NErrorCode::UNKNOWN_TXID);
+        response.SetErrorReason(IssuesAsString(record.GetResponse()));
+        return InitResult(reason, std::move(response));
+    }
+
     template <typename... Args>
     void SendWriteResult(Args&&... args) {
         Send(Client, new TEvPartitionWriter::TEvWriteResponse(Opts.SessionId, Opts.TxId, std::forward<Args>(args)...));
@@ -217,6 +231,10 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         Y_UNUSED(ctx);
 
         auto& record = ev->Get()->Record.GetRef();
+        if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+            return InitResult("Invalid KQP session", record);
+        }
+
         WriteId = record.GetResponse().GetTopicOperations().GetWriteId();
 
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY,
@@ -274,11 +292,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
         auto& request = *ev->Record.MutablePartitionRequest();
         auto& cmd = *request.MutableCmdGetOwnership();
-        if (Opts.UseDeduplication) {
-            cmd.SetOwner(SourceId);
-        } else {
-            cmd.SetOwner(CreateGuidAsString());
-        }
+        cmd.SetOwner(SourceId);
         cmd.SetForce(true);
 
         SetWriteId(request);
@@ -724,16 +738,16 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
                 ReceivedQuota.insert(ReceivedQuota.end(), PendingQuota.begin(), PendingQuota.end());
                 PendingQuota.clear();
 
-                ProcessQuotaAndWrite();                
+                ProcessQuotaAndWrite();
 
                 break;
 
             case EWakeupTag::RlNoResource:
-                // Re-requesting the quota. We do this until we get a quota. 
+                // Re-requesting the quota. We do this until we get a quota.
                 // We do not request a quota with a long waiting time because the writer may already be a destroyer, and the quota will still be waiting to be received.
                 RequestDataQuota(PendingQuotaAmount, ctx);
                 break;
-            
+
             default:
                 Y_VERIFY_DEBUG_S(false, "Unsupported tag: " << static_cast<ui64>(tag));
         }
@@ -754,7 +768,7 @@ public:
         , TabletId(tabletId)
         , PartitionId(partitionId)
         , ExpectedGeneration(opts.ExpectedGeneration)
-        , SourceId(opts.SourceId)
+        , SourceId(opts.UseDeduplication ? opts.SourceId : CreateGuidAsString())
         , Opts(opts)
     {
         if (Opts.MeteringMode) {
@@ -840,7 +854,7 @@ private:
 IActor* CreatePartitionWriter(const TActorId& client,
                              // const NKikimrSchemeOp::TPersQueueGroupDescription& config,
                               ui64 tabletId,
-                              ui32 partitionId, 
+                              ui32 partitionId,
                               const TPartitionWriterOpts& opts) {
     return new TPartitionWriter(client, tabletId, partitionId, opts);
 }

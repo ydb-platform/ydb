@@ -67,6 +67,7 @@ class TestBindings:
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    @pytest.mark.parametrize("is_replace_if_exists", [True, False])
     def test_binding_operations(self, kikimr, s3, client: FederatedQueryClient, yq_version):
 
         resource = boto3.resource(
@@ -192,6 +193,7 @@ class TestBindings:
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    @pytest.mark.parametrize("is_replace_if_exists", [True, False])
     def test_modify_connection_with_a_lot_of_bindings(self, kikimr, s3, client: FederatedQueryClient, yq_version):
 
         resource = boto3.resource(

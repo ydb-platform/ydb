@@ -188,6 +188,14 @@ bool IsTabletOwnerType(EObjectType type)
         type == EObjectType::HunkStorage;
 }
 
+bool IsChunkOwnerType(EObjectType type)
+{
+    return
+        IsTableType(type) ||
+        type == EObjectType::File ||
+        type == EObjectType::Journal;
+}
+
 bool IsCellType(EObjectType type)
 {
     return

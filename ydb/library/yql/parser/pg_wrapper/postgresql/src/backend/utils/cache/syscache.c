@@ -1233,7 +1233,7 @@ SearchSysCacheExists(int cacheId,
  * No lock is retained on the syscache entry.
  */
 Oid
-GetSysCacheOid(int cacheId,
+GetSysCacheOid_original(int cacheId,
 			   AttrNumber oidcol,
 			   Datum key1,
 			   Datum key2,
@@ -1385,7 +1385,7 @@ SearchSysCacheCopyAttNum(Oid relid, int16 attnum)
  * a different cache for the same catalog the tuple was fetched from.
  */
 Datum
-SysCacheGetAttr(int cacheId, HeapTuple tup,
+SysCacheGetAttr_original(int cacheId, HeapTuple tup,
 				AttrNumber attributeNumber,
 				bool *isNull)
 {

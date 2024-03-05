@@ -61,7 +61,7 @@ bool TFutureState<void>::Cancel(const TError& error) noexcept
         return false;
     }
     // The reference is acquired above.
-    TIntrusivePtr<TFutureState<void>> this_(this, /* addReference */ false);
+    TIntrusivePtr<TFutureState<void>> this_(this, /*addReference*/ false);
 
     {
         auto guard = Guard(SpinLock_);

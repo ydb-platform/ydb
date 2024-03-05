@@ -348,7 +348,11 @@ private:
 
             YT_VERIFY(RequestBody_.Size() >= 2);
             TMessageWithAttachments messageWithAttachments;
-            messageWithAttachments.Message = RequestBody_[1];
+            if (Request_->IsLegacyRpcCodecsEnabled()) {
+                messageWithAttachments.Message = ExtractMessageFromEnvelopedMessage(RequestBody_[1]);
+            } else {
+                messageWithAttachments.Message = RequestBody_[1];
+            }
 
             for (int index = 2; index < std::ssize(RequestBody_); ++index) {
                 messageWithAttachments.Attachments.push_back(RequestBody_[index]);
@@ -612,21 +616,22 @@ private:
                 }
             }
 
-            TMessageWithAttachments messageWithAttachments;
-            try {
-                messageWithAttachments = ByteBufferToMessageWithAttachments(
-                    ResponseBodyBuffer_.Unwrap(),
-                    messageBodySize);
-            } catch (const std::exception& ex) {
-                auto error = TError(NRpc::EErrorCode::TransportError, "Failed to receive request body") << ex;
-                NotifyError(TStringBuf("Failed to receive request body"), error);
-                return;
-            }
-
             NRpc::NProto::TResponseHeader responseHeader;
             ToProto(responseHeader.mutable_request_id(), Request_->GetRequestId());
             if (Request_->Header().has_response_codec()) {
                 responseHeader.set_codec(Request_->Header().response_codec());
+            }
+
+            TMessageWithAttachments messageWithAttachments;
+            try {
+                messageWithAttachments = ByteBufferToMessageWithAttachments(
+                    ResponseBodyBuffer_.Unwrap(),
+                    messageBodySize,
+                    !responseHeader.has_codec());
+            } catch (const std::exception& ex) {
+                auto error = TError(NRpc::EErrorCode::TransportError, "Failed to receive request body") << ex;
+                NotifyError(TStringBuf("Failed to receive request body"), error);
+                return;
             }
 
             auto responseMessage = CreateResponseMessage(

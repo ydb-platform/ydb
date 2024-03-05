@@ -9,6 +9,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -45,12 +46,6 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::CMS,
                     "TJsonProxyBase::Bootstrap url=" << RequestEvent->Get()->Request.GetPathInfo());
-
-        auto dinfo = AppData(ctx)->DomainsInfo;
-        if (dinfo->Domains.size() != 1) {
-            ReplyWithErrorAndDie(TString("HTTP/1.1 501 Not Implemented\r\n\r\nMultiple domains are not supported."), ctx);
-            return;
-        }
 
         TAutoPtr<TRequestEvent> request = PrepareRequest(ctx);
         if (!request) {
@@ -247,10 +242,8 @@ public:
     {
     }
 
-    ui64 GetTabletId(const TActorContext &ctx) const override {
-        auto dinfo = AppData(ctx)->DomainsInfo;
-        ui32 domain = dinfo->Domains.begin()->first;
-        return useConsole ? MakeConsoleID(domain) : MakeCmsID(domain);
+    ui64 GetTabletId(const TActorContext& /*ctx*/) const override {
+        return useConsole ? MakeConsoleID() : MakeCmsID();
     }
 
     TString GetTabletName() const override {

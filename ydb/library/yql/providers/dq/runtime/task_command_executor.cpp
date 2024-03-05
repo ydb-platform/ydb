@@ -127,13 +127,11 @@ public:
                         "TaskRunner",
                         labels,
                         name);
-                    auto& old = CurrentJobStats[counterName];
                     if (name.EndsWith("Time")) {
-                        QueryStat.AddTimeCounter(counterName, value - old);
+                        QueryStat.SetTimeCounter(counterName, value);
                     } else {
-                        QueryStat.AddCounter(counterName, value - old);
+                        QueryStat.SetCounter(counterName, value);
                     }
-                    old = value;
                 }
             });
         }
@@ -766,7 +764,6 @@ private:
     std::unique_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     NKikimr::NMiniKQL::TComputationNodeFactory ComputationFactory;
     TTaskTransformFactory TaskTransformFactory;
-    THashMap<TString, i64> CurrentJobStats;
     NKikimr::NMiniKQL::IStatsRegistry* JobStats;
     bool TerminateOnError;
     TIntrusivePtr<NDq::IDqTaskRunner> Runner;

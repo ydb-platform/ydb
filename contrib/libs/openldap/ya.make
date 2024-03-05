@@ -14,9 +14,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2.6.6)
+VERSION(2.6.7)
 
-ORIGINAL_SOURCE(https://gitlab.com/api/v4/projects/openldap%2Fopenldap/repository/archive.tar.gz?sha=OPENLDAP_REL_ENG_2_6_6)
+ORIGINAL_SOURCE(https://gitlab.com/api/v4/projects/openldap%2Fopenldap/repository/archive.tar.gz?sha=OPENLDAP_REL_ENG_2_6_7)
 
 PEERDIR(
     contrib/libs/openldap/libraries/liblber

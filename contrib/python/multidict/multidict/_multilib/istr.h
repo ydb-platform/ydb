@@ -43,7 +43,11 @@ istr_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (!ret) {
         goto fail;
     }
+#if PY_MAJOR_VERSION >= 3 && PY_MINOR_VERSION >= 9
+    s = PyObject_CallMethodNoArgs(ret, multidict_str_lower);
+#else
     s =_PyObject_CallMethodId(ret, &PyId_lower, NULL);
+#endif
     if (!s) {
         goto fail;
     }

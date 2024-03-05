@@ -49,6 +49,7 @@
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/protos/counters_datashard.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
@@ -328,6 +329,7 @@ class TDataShard
 
     class TWaitVolatileDependencies;
     class TSendVolatileResult;
+    class TSendVolatileWriteResult;
 
     struct TEvPrivate {
         enum EEv {
@@ -1448,11 +1450,9 @@ public:
             const TActorId& target, std::unique_ptr<IEventBase> event,
             ui64 cookie = 0);
 
-    void SendResult(const TActorContext &ctx,
-                    TOutputOpData::TResultPtr &result,
-                    const TActorId &target,
-                    ui64 step,
-                    ui64 txId);
+    void SendResult(const TActorContext &ctx, TOutputOpData::TResultPtr &result, const TActorId &target, ui64 step, ui64 txId);
+    void SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& result, const TActorId& target, ui64 step, ui64 txId);
+
     void FillSplitTrajectory(ui64 origin, NKikimrTx::TBalanceTrackList& tracks);
 
     void SetCounter(NDataShard::ESimpleCounters counter, ui64 num) const {
@@ -1711,6 +1711,21 @@ public:
     void NotifyOverloadSubscribers(ERejectReason reason);
     void NotifyAllOverloadSubscribers();
 
+    template <typename TResponseRecord>
+    void SetOverloadSubscribed(const std::optional<ui64>& overloadSubscribe, const TActorId& recipient, const TActorId& sender, const ERejectReasons rejectReasons, TResponseRecord& responseRecord) {
+        if (overloadSubscribe && HasPipeServer(recipient)) {
+            ui64 seqNo = overloadSubscribe.value();
+            auto allowed = (ERejectReasons::OverloadByProbability | ERejectReasons::YellowChannels | ERejectReasons::ChangesQueueOverflow);
+            if ((rejectReasons & allowed) != ERejectReasons::None &&
+                (rejectReasons - allowed) == ERejectReasons::None)
+            {
+                if (AddOverloadSubscriber(recipient, sender, seqNo, rejectReasons)) {
+                    responseRecord.SetOverloadSubscribed(seqNo);
+                }
+            }
+        }
+    }
+
     bool HasSharedBlobs() const;
     void CheckInitiateBorrowedPartsReturn(const TActorContext& ctx);
     void CheckStateChange(const TActorContext& ctx);
@@ -1948,7 +1963,7 @@ public:
 
     void CheckMediatorStateRestored();
 
-    void FillExecutionStats(const TExecutionProfile& execProfile, TEvDataShard::TEvProposeTransactionResult& result) const;
+    void FillExecutionStats(const TExecutionProfile& execProfile, NKikimrQueryStats::TTxStats& txStats) const;
 
     // Executes TTxProgressTransaction without specific operation
     void ExecuteProgressTx(const TActorContext& ctx);
@@ -2425,7 +2440,7 @@ private:
         void Enqueue(TAutoPtr<IEventHandle> event, TInstant receivedAt, ui64 tieBreakerIndex, const TActorContext& ctx) {
             TItem* item = &Items.emplace_back(std::move(event), receivedAt, tieBreakerIndex);
 
-            const ui64 txId = EvWrite::Convertor::GetTxId(item->Event);
+            const ui64 txId = NEvWrite::TConvertor::GetTxId(item->Event);
 
             auto& links = TxIds[txId];
             if (Y_UNLIKELY(links.Last)) {
@@ -2440,7 +2455,7 @@ private:
 
         TItem Dequeue() {
             TItem* first = &Items.front();
-            const ui64 txId = EvWrite::Convertor::GetTxId(first->Event);
+            const ui64 txId = NEvWrite::TConvertor::GetTxId(first->Event);
 
             auto it = TxIds.find(txId);
             Y_ABORT_UNLESS(it != TxIds.end() && it->second.First == first,
@@ -2562,9 +2577,7 @@ private:
     TInstant StartedKeyAccessSamplingAt;
     TInstant StopKeyAccessSamplingAt;
 
-    using TTableInfos = THashMap<ui64, TUserTable::TCPtr>;
-    
-    TTableInfos TableInfos;  // tableId -> local table info
+    TUserTable::TTableInfos TableInfos;  // tableId -> local table info
     TTransQueue TransQueue;
     TOutReadSets OutReadSets;
     TPipeline Pipeline;

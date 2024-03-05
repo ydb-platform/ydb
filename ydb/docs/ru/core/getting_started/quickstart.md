@@ -76,6 +76,8 @@
 
       ```bash
       mkdir ~/ydbd && cd ~/ydbd
+      mkdir ydb_data
+      mkdir ydb_certs
       ```
    2. Загрузите текущую версию Docker образа:
 

@@ -15,6 +15,7 @@
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
 #include <ydb/core/protos/external_sources.pb.h>
+#include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
@@ -744,8 +745,8 @@ public:
     TMaybe<TString> GetDomainName() override {
         TAppData* appData = AppData(ActorSystem);
         if (GetDomainLoginOnly()) {
-            if (appData->DomainsInfo && !appData->DomainsInfo->Domains.empty()) {
-                return appData->DomainsInfo->Domains.begin()->second->Name;
+            if (appData->DomainsInfo && appData->DomainsInfo->Domain) {
+                return appData->DomainsInfo->GetDomain()->Name;
             }
         }
         return {};

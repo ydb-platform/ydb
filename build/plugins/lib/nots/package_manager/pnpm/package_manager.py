@@ -69,11 +69,6 @@ class PnpmPackageManager(BasePackageManager):
             virtual_store_dir,
         ]
 
-        lockfile_version = self.load_lockfile_from_dir(self.sources_path).data["lockfileVersion"]
-        if lockfile_version == '6.0':
-            install_cmd.append("--use-lockfile-v6")
-            os.environ['npm_config_auto_install_peers'] = 'true'
-
         self._exec_command(install_cmd)
 
         self._run_apply_addons_if_need(yatool_prebuilder_path, virtual_store_dir)
@@ -127,7 +122,7 @@ class PnpmPackageManager(BasePackageManager):
         src_lf_paths = [build_lockfile_path(self.sources_path)]
 
         for [dep_src_path, (_, depth)] in iteritems(pj.get_workspace_map(ignore_self=True)):
-            dep_mod_path = dep_src_path[len(self.sources_root) + 1:]
+            dep_mod_path = dep_src_path[len(self.sources_root) + 1 :]
             # pnpm requires all package.jsons.
             ins.append(b_rooted(build_pj_path(dep_mod_path)))
 

@@ -783,6 +783,13 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
 
     registrar.Parameter("placeholder_values", &TThis::PlaceholderValues)
         .Optional();
+
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "use_web_assembly",
+        [] (TThis* command) -> auto& {
+            return command->Options.UseWebAssembly;
+        })
+        .Optional(/*init*/ false);
 }
 
 bool TSelectRowsCommand::HasResponseParameters() const
@@ -1549,6 +1556,13 @@ void TCreateTableBackupCommand::Register(TRegistrar registrar)
             return command->Options.Force;
         })
         .Default(false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "preserve_account",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveAccount;
+        })
+        .Default(false);
 }
 
 void TCreateTableBackupCommand::DoExecute(ICommandContextPtr context)
@@ -1583,6 +1597,13 @@ void TRestoreTableBackupCommand::Register(TRegistrar registrar)
         "enable_replicas",
         [] (TThis* command) -> auto& {
             return command->Options.EnableReplicas;
+        })
+        .Default(false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "preserve_account",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveAccount;
         })
         .Default(false);
 }

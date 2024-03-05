@@ -4,6 +4,7 @@
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/protos/ssa.pb.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 

@@ -11,6 +11,7 @@ PEERDIR(
 
 SRCS(
     test_env.h
+    test_table.cpp
     write_topic.h
 )
 

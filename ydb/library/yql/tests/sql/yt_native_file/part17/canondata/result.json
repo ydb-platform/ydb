@@ -1466,9 +1466,9 @@
     ],
     "test.test[pg-order_by_agg_input_columns_prj_and_aggr-default.txt-Debug]": [
         {
-            "checksum": "788cb8868f36367af1f04d5a68977375",
-            "size": 1506,
-            "uri": "https://{canondata_backend}/1871002/41480761fc88d03cb31c849ad940528337d0527e/resource.tar.gz#test.test_pg-order_by_agg_input_columns_prj_and_aggr-default.txt-Debug_/opt.yql"
+            "checksum": "63291ef082824d652a812d5f07cab745",
+            "size": 1536,
+            "uri": "https://{canondata_backend}/937458/0d496f55667fc85c1c096d3350a82ebeff0342bb/resource.tar.gz#test.test_pg-order_by_agg_input_columns_prj_and_aggr-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-order_by_agg_input_columns_prj_and_aggr-default.txt-Plan]": [
@@ -1693,6 +1693,27 @@
             "checksum": "46867c44087dab20796063286dfa4441",
             "size": 921,
             "uri": "https://{canondata_backend}/1923547/68f2fa8e051f31489bd496c183d28c4abddf9f68/resource.tar.gz#test.test_pg-set_of_as_records--Results_/results.txt"
+        }
+    ],
+    "test.test[pg-sort_nulls_priority_window-default.txt-Debug]": [
+        {
+            "checksum": "48ba1a73b1c5913a409ca88cfcd9ddd1",
+            "size": 1925,
+            "uri": "https://{canondata_backend}/1814674/7cf44abddac9825f392f78aedde2aca2415a02cb/resource.tar.gz#test.test_pg-sort_nulls_priority_window-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[pg-sort_nulls_priority_window-default.txt-Plan]": [
+        {
+            "checksum": "a3b64a2cf9903b3868a2dd88a18fc46e",
+            "size": 922,
+            "uri": "https://{canondata_backend}/1814674/7cf44abddac9825f392f78aedde2aca2415a02cb/resource.tar.gz#test.test_pg-sort_nulls_priority_window-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-sort_nulls_priority_window-default.txt-Results]": [
+        {
+            "checksum": "30fa282395de9c43b254454ef87d98c0",
+            "size": 2559,
+            "uri": "https://{canondata_backend}/1814674/7cf44abddac9825f392f78aedde2aca2415a02cb/resource.tar.gz#test.test_pg-sort_nulls_priority_window-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pg-sublink_having_any-default.txt-Debug]": [

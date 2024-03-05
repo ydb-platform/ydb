@@ -1475,7 +1475,7 @@ bool NeedToRenamePgSelectColumns(const TCoPgSelect& pgSelect) {
 bool RenamePgSelectColumns(
     const TCoPgSelect& node,
     TExprNode::TPtr& output,
-    TMaybe<TVector<TString>> tableColumnOrder,
+    const TMaybe<TColumnOrder>& tableColumnOrder,
     TExprContext& ctx,
     TTypeAnnotationContext& types) {
 
@@ -1485,7 +1485,7 @@ bool RenamePgSelectColumns(
     TString optionName = (hasValues) ? "values" : "projection_order";
 
     auto selectorColumnOrder = types.LookupColumnOrder(node.Ref());
-    TVector<TString> insertColumnOrder;
+    TColumnOrder insertColumnOrder;
     if (auto targetColumnsOption = GetSetItemOption(node, "target_columns")) {
         auto targetColumns = GetSetItemOptionValue(TExprBase(targetColumnsOption));
         for (const auto& child : targetColumns->ChildrenList()) {

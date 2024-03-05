@@ -216,6 +216,10 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoO
     SIMPLE_TYPE_SWITCH(Datetime,  ui32);
     SIMPLE_TYPE_SWITCH(Timestamp, ui64);
     SIMPLE_TYPE_SWITCH(Interval,  i64);
+    SIMPLE_TYPE_SWITCH(Date32, i32);
+    SIMPLE_TYPE_SWITCH(Datetime64, i64);
+    SIMPLE_TYPE_SWITCH(Timestamp64, i64);
+    SIMPLE_TYPE_SWITCH(Interval64, i64);
 
 #undef SIMPLE_TYPE_SWITCH
 
@@ -328,10 +332,14 @@ inline ui64 GetValueHash(NScheme::TTypeInfo info, const TCell& cell) {
     case NYql::NProto::TypeIds::Uint16:
         return THash<ui16>()(*(const ui16*)cell.Data());
     case NYql::NProto::TypeIds::Int32:
+    case NYql::NProto::TypeIds::Date32:
         return THash<i32>()(ReadUnaligned<i32>((const i32*)cell.Data()));
     case NYql::NProto::TypeIds::Uint32:
         return THash<ui32>()(ReadUnaligned<ui32>((const ui32*)cell.Data()));
     case NYql::NProto::TypeIds::Int64:
+    case NYql::NProto::TypeIds::Datetime64:
+    case NYql::NProto::TypeIds::Timestamp64:
+    case NYql::NProto::TypeIds::Interval64:
         return THash<i64>()(ReadUnaligned<i64>((const i64*)cell.Data()));
     case NYql::NProto::TypeIds::Uint64:
         return THash<ui64>()(ReadUnaligned<ui64>((const ui64*)cell.Data()));

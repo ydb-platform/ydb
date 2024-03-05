@@ -19,6 +19,7 @@
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -215,13 +216,14 @@ struct TKikimrColumnMetadata {
     NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED;
     TString DefaultFromSequence;
     Ydb::TypedValue DefaultFromLiteral;
+    bool IsBuildInProgress = false;
 
     TKikimrColumnMetadata() = default;
 
     TKikimrColumnMetadata(const TString& name, ui32 id, const TString& type, bool notNull,
         NKikimr::NScheme::TTypeInfo typeInfo = {}, const TString& typeMod = {}, const TString& defaultFromSequence = {},
         NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED,
-        const Ydb::TypedValue& defaultFromLiteral = {})
+        const Ydb::TypedValue& defaultFromLiteral = {}, bool isBuildInProgress = false)
         : Name(name)
         , Id(id)
         , Type(type)
@@ -231,6 +233,7 @@ struct TKikimrColumnMetadata {
         , DefaultKind(defaultKind)
         , DefaultFromSequence(defaultFromSequence)
         , DefaultFromLiteral(defaultFromLiteral)
+        , IsBuildInProgress(isBuildInProgress)
     {}
 
     explicit TKikimrColumnMetadata(const NKikimrKqp::TKqpColumnMetadataProto* message)
@@ -242,6 +245,7 @@ struct TKikimrColumnMetadata {
         , DefaultKind(message->GetDefaultKind())
         , DefaultFromSequence(message->GetDefaultFromSequence())
         , DefaultFromLiteral(message->GetDefaultFromLiteral())
+        , IsBuildInProgress(message->GetIsBuildInProgress())
     {
         auto typeInfoMod = NKikimr::NScheme::TypeInfoModFromProtoColumnType(message->GetTypeId(),
             message->HasTypeInfo() ? &message->GetTypeInfo() : nullptr);
@@ -279,6 +283,7 @@ struct TKikimrColumnMetadata {
         message->SetDefaultFromSequence(DefaultFromSequence);
         message->SetDefaultKind(DefaultKind);
         message->MutableDefaultFromLiteral()->CopyFrom(DefaultFromLiteral);
+        message->SetIsBuildInProgress(IsBuildInProgress);
         if (columnType.TypeInfo) {
             *message->MutableTypeInfo() = *columnType.TypeInfo;
         }

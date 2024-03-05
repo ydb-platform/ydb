@@ -47,6 +47,30 @@ group = "{{ target.publish_group }}"
 version = {% if target.publish_version and target.publish_version != "no" -%}"{{ target.publish_version }}"{%- else -%}project.properties["version"]{%- endif %}
 {%  endif %}
 
+{% if target.enable_preview %}
+tasks.withType<JavaCompile> {
+    options.compilerArgs.add("--enable-preview")
+
+    options.compilerArgs.add("-Xlint:preview")
+    options.release.set({%- if target.required_jdk -%}{{ target.required_jdk }}{%- else -%}17{%- endif -%})
+}
+
+
+tasks.withType<JavaExec> {
+     jvmArgs?.add("--enable-preview")
+ }
+tasks.withType<Test> {
+    jvmArgs?.add("--enable-preview")
+    environment["JAVA_TOOL_OPTIONS"] = "--enable-preview"
+}
+
+tasks.withType<Javadoc> {
+    val javadocOptions = options as CoreJavadocOptions
+    javadocOptions.addStringOption("source", "{%- if target.required_jdk -%}{{ target.required_jdk }}{%- else -%}17{%- endif -%}")
+    javadocOptions.addBooleanOption("-enable-preview", true)
+}
+{% endif %}
+
 
 val bucketUsername: String by project
 val bucketPassword: String by project
@@ -122,6 +146,19 @@ sourceSets.main.java.srcDirs += "{{ srcdir_glob[0] }}"
 {%              endfor -%}
 {%-     endif -%}
 {%- endfor -%}
+
+sourceSets {
+    val test by getting {
+        java.srcDir("ut/java")
+        resources.srcDir("ut/resources")
+        java.srcDir("src/test-integration/java")
+        resources.srcDir("src/test-integration/resources")
+        java.srcDir("src/testFixtures/java")
+        resources.srcDir("src/testFixtures/resources")
+        java.srcDir("src/intTest/java")
+        resources.srcDir("src/intTest/resources")
+    }
+}
 
 dependencies {
 {%- for library in target.consumer if library.classpath -%}

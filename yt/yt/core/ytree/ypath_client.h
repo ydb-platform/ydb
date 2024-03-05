@@ -67,6 +67,8 @@ public:
     NConcurrency::IAsyncZeroCopyOutputStreamPtr GetRequestAttachmentsStream() const override;
     NConcurrency::IAsyncZeroCopyInputStreamPtr GetResponseAttachmentsStream() const override;
 
+    bool IsLegacyRpcCodecsEnabled() override;
+
     TSharedRefArray Serialize() override;
 
 protected:

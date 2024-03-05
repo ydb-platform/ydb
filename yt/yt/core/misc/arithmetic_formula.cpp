@@ -907,7 +907,7 @@ TString ToString(const TBooleanFormulaTags& tags)
     return ToStringViaBuilder(tags);
 }
 
-void FormatValue(TStringBuilderBase* builder, const TBooleanFormulaTags& tags, TStringBuf /* format */)
+void FormatValue(TStringBuilderBase* builder, const TBooleanFormulaTags& tags, TStringBuf /*format*/)
 {
     builder->AppendFormat("%v", tags.GetSourceTags());
 }

@@ -162,7 +162,7 @@ public:
 
     template <std::default_initializable TStruct, class TSerializer>
         // requires std::derived_from<TSerializer, TExternalizedYsonStruct<TStruct>>
-    static TSerializer CreateWritable(TStruct& writable);
+    static TSerializer CreateWritable(TStruct& writable, bool setDefaults);
 
     template <std::default_initializable TStruct, class TSerializer>
         // requires std::derived_from<TSerializer, TExternalizedYsonStruct<TStruct>>

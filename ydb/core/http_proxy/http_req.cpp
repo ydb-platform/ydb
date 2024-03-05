@@ -32,7 +32,7 @@
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/ycloud/api/access_service.h>
 #include <ydb/library/ycloud/api/iam_token_service.h>
-#include <ydb/library/ycloud/impl/grpc_service_cache.h>
+#include <ydb/library/grpc/actor_client/grpc_service_cache.h>
 #include <ydb/library/ycloud/impl/access_service.h>
 #include <ydb/library/ycloud/impl/iam_token_service.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
@@ -93,7 +93,7 @@ namespace NKikimr::NHttpProxy {
         case NYdb::EStatus::ABORTED:
             return TException("Aborted", HTTP_BAD_REQUEST);
         case NYdb::EStatus::UNAVAILABLE:
-            return TException("Unavailable", HTTP_BAD_REQUEST);
+            return TException("Unavailable", HTTP_SERVICE_UNAVAILABLE);
         case NYdb::EStatus::TIMEOUT:
             return TException("RequestExpired", HTTP_BAD_REQUEST);
         case NYdb::EStatus::BAD_SESSION:

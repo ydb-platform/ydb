@@ -3,6 +3,8 @@
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/tx/datashard/range_ops.h>
+#include <ydb/core/scheme/protos/type_info.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 

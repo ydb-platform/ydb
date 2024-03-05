@@ -78,8 +78,8 @@ def _build_directives(name, flags, paths):
     # type: (str, list[str]|tuple[str], list[str]) -> str
 
     parts = [p for p in [name] + (flags or []) if p]
-
-    expressions = ["${{{parts}:\"{path}\"}}".format(parts=";".join(parts), path=path) for path in paths]
+    parts_str = ";".join(parts)
+    expressions = ['${{{parts}:"{path}"}}'.format(parts=parts_str, path=path) for path in paths]
 
     return " ".join(expressions)
 
@@ -119,6 +119,12 @@ def _create_erm_json(unit):
     path = unit.resolve(unit.resolve_arc_path(erm_packages_path))
 
     return ErmJsonLite.load(path)
+
+
+@_with_report_configure_error
+def on_set_append_with_directive(unit, var_name, dir, *values):
+    wrapped = ['${{{dir}:"{v}"}}'.format(dir=dir, v=v) for v in values]
+    __set_append(unit, var_name, " ".join(wrapped))
 
 
 @_with_report_configure_error

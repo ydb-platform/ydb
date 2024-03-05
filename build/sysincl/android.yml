@@ -23,6 +23,7 @@
   - SLES/OpenSLES_AndroidMetadata.h
   - SLES/OpenSLES_Platform.h
   - linux/ashmem.h
+  - time64.h
 
 - source_filter: "^contrib/libs/breakpad/src"
   includes:

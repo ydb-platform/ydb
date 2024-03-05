@@ -61,6 +61,12 @@ message TBundleConfig
     optional TInstanceResources tablet_node_resource_guarantee = 6;
 }
 
+message TResourceQuota
+{
+    optional int32 vcpu = 1;
+    optional int64 memory = 2;
+}
+
 message TReqGetBundleConfig
 {
     required string bundle_name = 1;
@@ -71,6 +77,7 @@ message TRspGetBundleConfig
     optional string bundle_name = 1;
     optional TBundleConfig bundle_config = 2;
     optional TBundleConfigConstraints bundle_constraints = 3;
+    optional TResourceQuota resource_quota = 4;
 }
 
 message TReqSetBundleConfig

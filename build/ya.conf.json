@@ -862,6 +862,17 @@
                         "arch": "armv7ahf_cortex_a53",
                         "os": "LINUX"
                     }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "armv7ahf_cortex_a53",
+                        "os": "LINUX"
+                    }
                 }
             ],
             "tools": {
@@ -1420,6 +1431,17 @@
                     "target": {
                         "arch": "wasm64",
                         "os": "EMSCRIPTEN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "armv7ahf_cortex_a53",
+                        "os": "LINUX"
                     }
                 }
             ],

@@ -77,6 +77,9 @@
     "test_format_setting.TestS3.test_timestamp_simple_format_insert[v1-common/simple_format/test.json-json_each_row]": {
         "uri": "file://test_format_setting.TestS3.test_timestamp_simple_format_insert_v1-common_simple_format_test.json-json_each_row_/timestamp_format_common_simple_format_test.json"
     },
+    "test_format_setting.TestS3.test_timestamp_simple_format_insert[v1-common/simple_format/test.parquet-parquet]": {
+        "uri": "file://test_format_setting.TestS3.test_timestamp_simple_format_insert_v1-common_simple_format_test.parquet-parquet_/timestamp_format_common_simple_format_test.parquet"
+    },
     "test_format_setting.TestS3.test_timestamp_simple_format_insert[v1-common/simple_format/test.tsv-tsv_with_names]": {
         "uri": "file://test_format_setting.TestS3.test_timestamp_simple_format_insert_v1-common_simple_format_test.tsv-tsv_with_names_/timestamp_format_common_simple_format_test.tsv"
     },
@@ -85,6 +88,9 @@
     },
     "test_format_setting.TestS3.test_timestamp_simple_format_insert[v2-common/simple_format/test.json-json_each_row]": {
         "uri": "file://test_format_setting.TestS3.test_timestamp_simple_format_insert_v2-common_simple_format_test.json-json_each_row_/timestamp_format_common_simple_format_test.json"
+    },
+    "test_format_setting.TestS3.test_timestamp_simple_format_insert[v2-common/simple_format/test.parquet-parquet]": {
+        "uri": "file://test_format_setting.TestS3.test_timestamp_simple_format_insert_v2-common_simple_format_test.parquet-parquet_/timestamp_format_common_simple_format_test.parquet"
     },
     "test_format_setting.TestS3.test_timestamp_simple_format_insert[v2-common/simple_format/test.tsv-tsv_with_names]": {
         "uri": "file://test_format_setting.TestS3.test_timestamp_simple_format_insert_v2-common_simple_format_test.tsv-tsv_with_names_/timestamp_format_common_simple_format_test.tsv"
@@ -95,6 +101,9 @@
     "test_format_setting.TestS3.test_timestamp_simple_iso_insert[v1-timestamp/simple_iso/test.json-json_each_row]": {
         "uri": "file://test_format_setting.TestS3.test_timestamp_simple_iso_insert_v1-timestamp_simple_iso_test.json-json_each_row_/timestamp_simple_iso_test.json"
     },
+    "test_format_setting.TestS3.test_timestamp_simple_iso_insert[v1-timestamp/simple_iso/test.parquet-parquet]": {
+        "uri": "file://test_format_setting.TestS3.test_timestamp_simple_iso_insert_v1-timestamp_simple_iso_test.parquet-parquet_/timestamp_simple_iso_test.parquet"
+    },
     "test_format_setting.TestS3.test_timestamp_simple_iso_insert[v1-timestamp/simple_iso/test.tsv-tsv_with_names]": {
         "uri": "file://test_format_setting.TestS3.test_timestamp_simple_iso_insert_v1-timestamp_simple_iso_test.tsv-tsv_with_names_/timestamp_simple_iso_test.tsv"
     },
@@ -103,6 +112,9 @@
     },
     "test_format_setting.TestS3.test_timestamp_simple_iso_insert[v2-timestamp/simple_iso/test.json-json_each_row]": {
         "uri": "file://test_format_setting.TestS3.test_timestamp_simple_iso_insert_v2-timestamp_simple_iso_test.json-json_each_row_/timestamp_simple_iso_test.json"
+    },
+    "test_format_setting.TestS3.test_timestamp_simple_iso_insert[v2-timestamp/simple_iso/test.parquet-parquet]": {
+        "uri": "file://test_format_setting.TestS3.test_timestamp_simple_iso_insert_v2-timestamp_simple_iso_test.parquet-parquet_/timestamp_simple_iso_test.parquet"
     },
     "test_format_setting.TestS3.test_timestamp_simple_iso_insert[v2-timestamp/simple_iso/test.tsv-tsv_with_names]": {
         "uri": "file://test_format_setting.TestS3.test_timestamp_simple_iso_insert_v2-timestamp_simple_iso_test.tsv-tsv_with_names_/timestamp_simple_iso_test.tsv"
@@ -113,6 +125,9 @@
     "test_format_setting.TestS3.test_timestamp_simple_posix_insert[v1-common/simple_posix/test.json-json_each_row]": {
         "uri": "file://test_format_setting.TestS3.test_timestamp_simple_posix_insert_v1-common_simple_posix_test.json-json_each_row_/common_simple_posix_test.json"
     },
+    "test_format_setting.TestS3.test_timestamp_simple_posix_insert[v1-common/simple_posix/test.parquet-parquet]": {
+        "uri": "file://test_format_setting.TestS3.test_timestamp_simple_posix_insert_v1-common_simple_posix_test.parquet-parquet_/common_simple_posix_test.parquet"
+    },
     "test_format_setting.TestS3.test_timestamp_simple_posix_insert[v1-common/simple_posix/test.tsv-tsv_with_names]": {
         "uri": "file://test_format_setting.TestS3.test_timestamp_simple_posix_insert_v1-common_simple_posix_test.tsv-tsv_with_names_/common_simple_posix_test.tsv"
     },
@@ -121,6 +136,9 @@
     },
     "test_format_setting.TestS3.test_timestamp_simple_posix_insert[v2-common/simple_posix/test.json-json_each_row]": {
         "uri": "file://test_format_setting.TestS3.test_timestamp_simple_posix_insert_v2-common_simple_posix_test.json-json_each_row_/common_simple_posix_test.json"
+    },
+    "test_format_setting.TestS3.test_timestamp_simple_posix_insert[v2-common/simple_posix/test.parquet-parquet]": {
+        "uri": "file://test_format_setting.TestS3.test_timestamp_simple_posix_insert_v2-common_simple_posix_test.parquet-parquet_/common_simple_posix_test.parquet"
     },
     "test_format_setting.TestS3.test_timestamp_simple_posix_insert[v2-common/simple_posix/test.tsv-tsv_with_names]": {
         "uri": "file://test_format_setting.TestS3.test_timestamp_simple_posix_insert_v2-common_simple_posix_test.tsv-tsv_with_names_/common_simple_posix_test.tsv"
@@ -142,6 +160,15 @@
     },
     "test_format_setting.TestS3.test_timestamp_unix_time_insert[v1-timestamp/unix_time/test.json-json_each_row-UNIX_TIME_SECONDS]": {
         "uri": "file://test_format_setting.TestS3.test_timestamp_unix_time_insert_v1-timestamp_unix_time_test.json-json_each_row-UNIX_TIME_SECONDS_/UNIX_TIME_SECONDS_timestamp_unix_time_test.json"
+    },
+    "test_format_setting.TestS3.test_timestamp_unix_time_insert[v1-timestamp/unix_time/test.parquet-parquet-UNIX_TIME_MICROSECONDS]": {
+        "uri": "file://test_format_setting.TestS3.test_timestamp_unix_time_insert_v1-timestamp_unix_time_test.parquet-parquet-UNIX_TIME_MICROSECONDS_/UNIX_TIME_MICROSECONDS_timestamp_unix_time_test.parquet"
+    },
+    "test_format_setting.TestS3.test_timestamp_unix_time_insert[v1-timestamp/unix_time/test.parquet-parquet-UNIX_TIME_MILLISECONDS]": {
+        "uri": "file://test_format_setting.TestS3.test_timestamp_unix_time_insert_v1-timestamp_unix_time_test.parquet-parquet-UNIX_TIME_MILLISECONDS_/UNIX_TIME_MILLISECONDS_timestamp_unix_time_test.parquet"
+    },
+    "test_format_setting.TestS3.test_timestamp_unix_time_insert[v1-timestamp/unix_time/test.parquet-parquet-UNIX_TIME_SECONDS]": {
+        "uri": "file://test_format_setting.TestS3.test_timestamp_unix_time_insert_v1-timestamp_unix_time_test.parquet-parquet-UNIX_TIME_SECONDS_/UNIX_TIME_SECONDS_timestamp_unix_time_test.parquet"
     },
     "test_format_setting.TestS3.test_timestamp_unix_time_insert[v1-timestamp/unix_time/test.tsv-tsv_with_names-UNIX_TIME_MICROSECONDS]": {
         "uri": "file://test_format_setting.TestS3.test_timestamp_unix_time_insert_v1-timestamp_unix_time_test.tsv-tsv_with_names-UNIX_TIME_MICROSECONDS_/UNIX_TIME_MICROSECONDS_timestamp_unix_time_test.tsv"
@@ -169,6 +196,15 @@
     },
     "test_format_setting.TestS3.test_timestamp_unix_time_insert[v2-timestamp/unix_time/test.json-json_each_row-UNIX_TIME_SECONDS]": {
         "uri": "file://test_format_setting.TestS3.test_timestamp_unix_time_insert_v2-timestamp_unix_time_test.json-json_each_row-UNIX_TIME_SECONDS_/UNIX_TIME_SECONDS_timestamp_unix_time_test.json"
+    },
+    "test_format_setting.TestS3.test_timestamp_unix_time_insert[v2-timestamp/unix_time/test.parquet-parquet-UNIX_TIME_MICROSECONDS]": {
+        "uri": "file://test_format_setting.TestS3.test_timestamp_unix_time_insert_v2-timestamp_unix_time_test.parquet-parquet-UNIX_TIME_MICROSECONDS_/UNIX_TIME_MICROSECONDS_timestamp_unix_time_test.parquet"
+    },
+    "test_format_setting.TestS3.test_timestamp_unix_time_insert[v2-timestamp/unix_time/test.parquet-parquet-UNIX_TIME_MILLISECONDS]": {
+        "uri": "file://test_format_setting.TestS3.test_timestamp_unix_time_insert_v2-timestamp_unix_time_test.parquet-parquet-UNIX_TIME_MILLISECONDS_/UNIX_TIME_MILLISECONDS_timestamp_unix_time_test.parquet"
+    },
+    "test_format_setting.TestS3.test_timestamp_unix_time_insert[v2-timestamp/unix_time/test.parquet-parquet-UNIX_TIME_SECONDS]": {
+        "uri": "file://test_format_setting.TestS3.test_timestamp_unix_time_insert_v2-timestamp_unix_time_test.parquet-parquet-UNIX_TIME_SECONDS_/UNIX_TIME_SECONDS_timestamp_unix_time_test.parquet"
     },
     "test_format_setting.TestS3.test_timestamp_unix_time_insert[v2-timestamp/unix_time/test.tsv-tsv_with_names-UNIX_TIME_MICROSECONDS]": {
         "uri": "file://test_format_setting.TestS3.test_timestamp_unix_time_insert_v2-timestamp_unix_time_test.tsv-tsv_with_names-UNIX_TIME_MICROSECONDS_/UNIX_TIME_MICROSECONDS_timestamp_unix_time_test.tsv"

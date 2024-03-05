@@ -901,7 +901,10 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSharedRange<TRowRange> MakeSingletonRowRange(TLegacyKey lowerBound, TLegacyKey upperBound);
+TSharedRange<TRowRange> MakeSingletonRowRange(
+    TLegacyKey lowerBound,
+    TLegacyKey upperBound,
+    TRowBufferPtr rowBuffer = nullptr);
 
 TKeyRef ToKeyRef(TUnversionedRow row);
 TKeyRef ToKeyRef(TUnversionedRow row, int prefixLength);

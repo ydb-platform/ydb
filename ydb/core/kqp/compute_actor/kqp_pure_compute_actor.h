@@ -38,6 +38,8 @@ public:
 protected:
     ui64 CalcMkqlMemoryLimit() override;
 
+    void CheckRunStatus() override;
+
 public:
     void FillExtraStats(NDqProto::TDqComputeActorStats* dst, bool last);
 

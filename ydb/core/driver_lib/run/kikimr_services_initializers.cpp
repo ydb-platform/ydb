@@ -108,6 +108,8 @@
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
+#include <ydb/core/protos/node_limits.pb.h>
+#include <ydb/core/protos/compile_service_config.pb.h>
 
 #include <ydb/core/public_http/http_service.h>
 
@@ -698,8 +700,10 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                         data.Yellow ? NKikimrWhiteboard::EFlag::Yellow :
                         data.Orange ? NKikimrWhiteboard::EFlag::Orange :
                         data.Red ? NKikimrWhiteboard::EFlag::Red : NKikimrWhiteboard::EFlag()));
-                    data.ActorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvClockSkewUpdate(
-                        data.PeerId, data.ClockSkew));
+                    if (data.ReportClockSkew) {
+                        data.ActorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvClockSkewUpdate(
+                            data.PeerId, data.ClockSkew));
+                    }
                 };
             }
 
@@ -828,28 +832,55 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     }
 
     if (Config.HasTracingConfig() && Config.GetTracingConfig().HasBackend()) {
-        const auto& tracing_backend = Config.GetTracingConfig().GetBackend();
+        const auto& tracingConfig = Config.GetTracingConfig();
+        const auto& tracingBackend = tracingConfig.GetBackend();
+
         std::unique_ptr<NWilson::IGrpcSigner> grpcSigner;
-        if (tracing_backend.HasAuthConfig() && Factories && Factories->WilsonGrpcSignerFactory) {
-            grpcSigner = Factories->WilsonGrpcSignerFactory(tracing_backend.GetAuthConfig());
+        if (tracingBackend.HasAuthConfig() && Factories && Factories->WilsonGrpcSignerFactory) {
+            grpcSigner = Factories->WilsonGrpcSignerFactory(tracingBackend.GetAuthConfig());
             if (!grpcSigner) {
                 Cerr << "Failed to initialize wilson grpc signer due to misconfiguration. Config provided: "
-                        << tracing_backend.GetAuthConfig().DebugString() << Endl;
+                        << tracingBackend.GetAuthConfig().DebugString() << Endl;
             }
         }
-        NActors::IActor* wilsonUploader = nullptr;
-        switch (tracing_backend.GetBackendCase()) {
+
+        std::unique_ptr<NActors::IActor> wilsonUploader;
+        switch (tracingBackend.GetBackendCase()) {
             case NKikimrConfig::TTracingConfig::TBackendConfig::BackendCase::kOpentelemetry: {
-                const auto& opentelemetry = tracing_backend.GetOpentelemetry();
+                const auto& opentelemetry = tracingBackend.GetOpentelemetry();
                 if (!(opentelemetry.HasCollectorUrl() && opentelemetry.HasServiceName())) {
                     Cerr << "Both collector_url and service_name should be present in opentelemetry backend config" << Endl;
                     break;
                 }
-                wilsonUploader = NWilson::WilsonUploaderParams {
+
+                NWilson::TWilsonUploaderParams uploaderParams {
                     .CollectorUrl = opentelemetry.GetCollectorUrl(),
                     .ServiceName = opentelemetry.GetServiceName(),
                     .GrpcSigner = std::move(grpcSigner),
-                }.CreateUploader();
+                };
+
+                if (tracingConfig.HasUploader()) {
+                    const auto& uploaderConfig = tracingConfig.GetUploader();
+
+#ifdef GET_FIELD_FROM_CONFIG
+#error Macro collision
+#endif
+#define GET_FIELD_FROM_CONFIG(field) \
+                    if (uploaderConfig.Has##field()) { \
+                        uploaderParams.field = uploaderConfig.Get##field(); \
+                    }
+
+                    GET_FIELD_FROM_CONFIG(MaxExportedSpansPerSecond)
+                    GET_FIELD_FROM_CONFIG(MaxSpansInBatch)
+                    GET_FIELD_FROM_CONFIG(MaxBytesInBatch)
+                    GET_FIELD_FROM_CONFIG(MaxBatchAccumulationMilliseconds)
+                    GET_FIELD_FROM_CONFIG(SpanExportTimeoutSeconds)
+                    GET_FIELD_FROM_CONFIG(MaxExportRequestsInflight)
+
+#undef GET_FIELD_FROM_CONFIG
+                }
+
+                wilsonUploader.reset(std::move(uploaderParams).CreateUploader());
                 break;
             }
 
@@ -861,7 +892,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
         if (wilsonUploader) {
             setup->LocalServices.emplace_back(
                 NWilson::MakeWilsonUploaderId(),
-                TActorSetupCmd(wilsonUploader, TMailboxType::ReadAsFilled, appData->BatchPoolId));
+                TActorSetupCmd(wilsonUploader.release(), TMailboxType::ReadAsFilled, appData->BatchPoolId));
         }
     }
 }
@@ -966,15 +997,12 @@ TStateStorageServiceInitializer::TStateStorageServiceInitializer(const TKikimrRu
     : IKikimrServicesInitializer(runConfig) {
 }
 
-void TStateStorageServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
-                                                         const NKikimr::TAppData* appData) {
-    // setup state storage stuff
-    const ui32 maxssid = 255;
-    bool knownss[maxssid + 1] = {};
+void TStateStorageServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    bool found = false;
+
     for (const NKikimrConfig::TDomainsConfig::TStateStorage &ssconf : Config.GetDomainsConfig().GetStateStorage()) {
-        const ui32 ssid = ssconf.GetSSId();
-        Y_ABORT_UNLESS(ssid <= maxssid);
-        knownss[ssid] = true;
+        Y_ABORT_UNLESS(ssconf.GetSSId() == 1);
+        found = true;
 
         TIntrusivePtr<TStateStorageInfo> ssrInfo;
         TIntrusivePtr<TStateStorageInfo> ssbInfo;
@@ -986,17 +1014,13 @@ void TStateStorageServiceInitializer::InitializeServices(NActors::TActorSystemSe
         StartLocalStateStorageReplicas(CreateStateStorageBoardReplica, ssbInfo.Get(), appData->SystemPoolId, *setup);
         StartLocalStateStorageReplicas(CreateSchemeBoardReplica, sbrInfo.Get(), appData->SystemPoolId, *setup);
 
-        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeStateStorageProxyID(ssid),
-                                                                           TActorSetupCmd(CreateStateStorageProxy(ssrInfo.Get(), ssbInfo.Get(), sbrInfo.Get()),
-                                                                                          TMailboxType::ReadAsFilled,
-                                                                                          appData->SystemPoolId)));
+        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeStateStorageProxyID(),
+            TActorSetupCmd(CreateStateStorageProxy(ssrInfo.Get(), ssbInfo.Get(), sbrInfo.Get()),
+            TMailboxType::ReadAsFilled, appData->SystemPoolId)));
     }
-    for (ui32 ssid = 0; ssid <= maxssid; ++ssid) {
-        if (!knownss[ssid])
-            setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeStateStorageProxyID(ssid),
-                                                                               TActorSetupCmd(CreateStateStorageProxyStub(),
-                                                                                              TMailboxType::HTSwap,
-                                                                                              appData->SystemPoolId)));
+    if (!found) {
+        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeStateStorageProxyID(),
+            TActorSetupCmd(CreateStateStorageProxyStub(), TMailboxType::HTSwap, appData->SystemPoolId)));
     }
 
     setup->LocalServices.emplace_back(
@@ -2288,8 +2312,7 @@ TTxProxyInitializer::TTxProxyInitializer(const TKikimrRunConfig &runConfig)
 
 TVector<ui64> TTxProxyInitializer::CollectAllAllocatorsFromAllDomains(const TAppData *appData) {
     TVector<ui64> allocators;
-    for (auto it: appData->DomainsInfo->Domains) {
-        auto &domain = it.second;
+    if (const auto& domain = appData->DomainsInfo->Domain) {
         for (auto tabletId: domain->TxAllocators) {
             allocators.push_back(tabletId);
         }

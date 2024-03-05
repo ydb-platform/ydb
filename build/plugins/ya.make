@@ -1,6 +1,6 @@
 OWNER(g:ymake)
 
-PY23_LIBRARY()
+PY3_LIBRARY()
 
 STYLE_PYTHON()
 

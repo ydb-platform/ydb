@@ -1518,8 +1518,17 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         TGuard<TMutex> guard(StateMutex);
         const ui64 totalSize = Format.DiskSize;
         const ui64 availableSize = (ui64)Format.ChunkSize * Keeper.GetFreeChunkCount();
-        *Mon.FreeSpaceBytes = availableSize;
-        *Mon.UsedSpaceBytes = totalSize - *Mon.FreeSpaceBytes;
+        
+        if (*Mon.PDiskBriefState != TPDiskMon::TPDisk::Error) {
+            *Mon.FreeSpaceBytes = availableSize;
+            *Mon.UsedSpaceBytes = totalSize - availableSize;
+        } else {
+            // If disk is in Error State, show its total and used space as 32KiB (format size)
+            *Mon.FreeSpaceBytes = 0;
+            *Mon.UsedSpaceBytes = 32_KB;
+            *Mon.TotalSpaceBytes = 32_KB;
+        }
+        
         NKikimrWhiteboard::TPDiskStateInfo& pdiskState = reportResult->PDiskState->Record;
         pdiskState.SetPDiskId(PDiskId);
         pdiskState.SetPath(Cfg->GetDevicePath());

@@ -2,7 +2,9 @@
 #include "columnshard_ttl.h"
 #include "columnshard_private_events.h"
 #include "columnshard_schema.h"
+#include "blobs_action/storages_manager/manager.h"
 #include "hooks/abstract/abstract.h"
+#include "engines/column_engine_logs.h"
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/transactions/locks_db.h>
 
@@ -132,15 +134,13 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     }
 
     {
-        TBlobManagerDb blobManagerDb(txc.DB);
-        TMemoryProfileGuard g("TTxInit/StoragesManager");
-        for (auto&& i : Self->StoragesManager->GetStorages()) {
-            if (!i.second->Load(blobManagerDb)) {
-                ACFL_ERROR("event", "storages manager load")("storage", i.first);
-                return false;
-            }
+        AFL_VERIFY(Self->StoragesManager);
+        TMemoryProfileGuard g("TTxInit/NDataSharing::TStoragesManager");
+        if (!Self->StoragesManager->LoadIdempotency(txc.DB)) {
+            return false;
         }
     }
+
     {
         ACFL_INFO("step", "TTablesManager::Load_Start");
         TTablesManager tManagerLocal(Self->StoragesManager, Self->TabletID());
@@ -197,6 +197,15 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         }
     }
 
+    {
+        TMemoryProfileGuard g("TTxInit/NDataSharing::TSessionsManager");
+        auto local = std::make_shared<NOlap::NDataSharing::TSessionsManager>();
+        if (!local->Load(txc.DB, Self->TablesManager.GetPrimaryIndexAsOptional<NOlap::TColumnEngineForLogs>())) {
+            return false;
+        }
+        Self->SharingSessionsManager = local;
+    }
+
     Self->UpdateInsertTableCounters();
     Self->UpdateIndexCounters();
     Self->UpdateResourceMetrics(ctx, {});
@@ -226,6 +235,7 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 void TTxInit::Complete(const TActorContext& ctx) {
     Self->ProgressTxController->OnTabletInit();
     Self->SwitchToWork(ctx);
+    NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*Self);
 }
 
 class TTxUpdateSchema : public TTransactionBase<TColumnShard> {

@@ -283,8 +283,8 @@ private:
             : Index_(index)
             , Queue_(queue)
             , ContextSwitchGuard_(
-                /* out */ [this] { Account(); },
-                /* in  */ [] { })
+                /*out*/ [this] { Account(); },
+                /*in*/ [] { })
         { }
 
         void Account()

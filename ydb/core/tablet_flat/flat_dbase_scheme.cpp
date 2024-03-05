@@ -1,5 +1,7 @@
 #include "flat_dbase_scheme.h"
 
+#include <ydb/core/scheme/protos/type_info.pb.h>
+
 namespace NKikimr {
 namespace NTable {
 

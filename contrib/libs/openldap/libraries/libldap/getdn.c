@@ -2562,6 +2562,8 @@ rdn2strlen( LDAPRDN rdn, unsigned flags, ber_len_t *len,
 			l += vl;
 		}
 	}
+	if ( !iAVA )
+		return( -1 );	/* RDN ::= SET SIZE (1..MAX) OF AVA */
 	
 	*len = l;
 	
@@ -2635,6 +2637,8 @@ rdn2DCEstrlen( LDAPRDN rdn, unsigned flags, ber_len_t *len )
 			l += vl;
 		}
 	}
+	if ( !iAVA )
+		return( -1 );	/* RDN ::= SET SIZE (1..MAX) OF AVA */
 	
 	*len = l;
 	
@@ -2716,6 +2720,8 @@ rdn2UFNstrlen( LDAPRDN rdn, unsigned flags, ber_len_t *len )
 			l += vl;
 		}
 	}
+	if ( !iAVA )
+		return( -1 );	/* RDN ::= SET SIZE (1..MAX) OF AVA */
 	
 	*len = l;
 	
@@ -2794,6 +2800,8 @@ rdn2ADstrlen( LDAPRDN rdn, unsigned flags, ber_len_t *len )
 			l += vl;
 		}
 	}
+	if ( !iAVA )
+		return( -1 );	/* RDN ::= SET SIZE (1..MAX) OF AVA */
 	
 	*len = l;
 	

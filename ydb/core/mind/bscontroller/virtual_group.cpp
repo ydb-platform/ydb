@@ -443,14 +443,13 @@ namespace NKikimr::NBsController {
             const TString& database = *group->Database;
 
             const auto& domainsInfo = AppData()->DomainsInfo;
-            for (const auto& [_, domain] : domainsInfo->Domains) {
+            if (const auto& domain = domainsInfo->Domain) {
                 const TString domainPath = TStringBuilder() << '/' << domain->Name;
                 if (database == domainPath || database.StartsWith(TStringBuilder() << domainPath << '/')) {
-                    RootHiveId = domainsInfo->GetHive(domain->DefaultHiveUid);
+                    RootHiveId = domainsInfo->GetHive();
                     if (RootHiveId == TDomainsInfo::BadTabletId) {
                         return CreateFailed(TStringBuilder() << "failed to resolve Hive -- BadTabletId for Database# " << database);
                     }
-                    break;
                 }
             }
 

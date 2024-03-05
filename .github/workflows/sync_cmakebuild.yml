@@ -28,7 +28,9 @@ jobs:
         git config --global user.name "Alexander Smirnov"
         cd ydb
         git fetch --depth `expr $(git rev-list --count HEAD) + 1`
-        git fetch origin cmakebuild:cmakebuild --depth 3 # 1st with cmake generation, 2nd with previous merge, 3rd is common between main and cmakebuild
+        # Depth 10: 1st with cmake generation, 2nd with previous merge, 3rd is common between main and cmakebuild,
+        # others for possible commits directly on cmakebuild branch
+        git fetch origin cmakebuild:cmakebuild --depth 10 
         mainsha=$(git rev-parse HEAD)
         git checkout cmakebuild
         prevsha=$(git rev-parse HEAD)

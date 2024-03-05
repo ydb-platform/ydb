@@ -172,7 +172,7 @@ TEST_F(TTransformInvokerPoolTest, OutputPoolOutlivesInputPool)
 TEST_F(TTransformInvokerPoolTest, InstantiateForWellKnownTypes)
 {
     const auto testOne = [this] (auto invokerFunctor) {
-        auto inputInvokerPool = CreateDummyInvokerPool(Queue_->GetInvoker(), /* invokerCount */ 10);
+        auto inputInvokerPool = CreateDummyInvokerPool(Queue_->GetInvoker(), /*invokerCount*/ 10);
         return TransformInvokerPool(std::move(inputInvokerPool), invokerFunctor);
     };
 
@@ -182,7 +182,7 @@ TEST_F(TTransformInvokerPoolTest, InstantiateForWellKnownTypes)
     IInvokerPoolPtr w = testOne(CreateIdenticalInvokerByConstReference);
 
     const auto testPair = [this] (auto firstInvokerFunctor, auto secondInvokerFunctor) {
-        auto inputInvokerPool = CreateDummyInvokerPool(Queue_->GetInvoker(), /* invokerCount */ 10);
+        auto inputInvokerPool = CreateDummyInvokerPool(Queue_->GetInvoker(), /*invokerCount*/ 10);
         auto intermediateInvokerPool = TransformInvokerPool(std::move(inputInvokerPool), firstInvokerFunctor);
         auto outputInvokerPool = TransformInvokerPool(std::move(intermediateInvokerPool), secondInvokerFunctor);
     };
@@ -228,7 +228,7 @@ TEST_F(TTransformInvokerPoolTest, Chaining)
 
 TEST_F(TTransformInvokerPoolTest, ReturnTypeConvertability)
 {
-    auto invokerPool = CreateDummyInvokerPool(Queue_->GetInvoker(), /* invokerCount */ 10);
+    auto invokerPool = CreateDummyInvokerPool(Queue_->GetInvoker(), /*invokerCount*/ 10);
     auto suspendableInvokerPool = TransformInvokerPool(invokerPool, CreateSuspendableInvoker);
     auto prioritizedInvokerPool = TransformInvokerPool(suspendableInvokerPool, CreatePrioritizedInvokerTest);
 
@@ -257,7 +257,7 @@ TEST(TInvokerPoolTest, IndexByEnum)
 {
     auto queue = New<TActionQueue>();
 
-    auto invokerPool = CreateDummyInvokerPool(queue->GetInvoker(), /* invokerCount */ 3);
+    auto invokerPool = CreateDummyInvokerPool(queue->GetInvoker(), /*invokerCount*/ 3);
 
     EXPECT_EQ(invokerPool->GetInvoker(0).Get(), invokerPool->GetInvoker(EInvokerIndex::ZeroInvoker).Get());
     EXPECT_EQ(invokerPool->GetInvoker(1).Get(), invokerPool->GetInvoker(EInvokerIndex::FirstInvoker).Get());

@@ -509,12 +509,12 @@ static void SetupServices(TTestActorRuntime &runtime, const TTestEnvOpts &option
         runtime.DispatchEvents(options);
     }
 
-    auto cid = CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeConsoleID(0), TTabletTypes::Console),
+    auto cid = CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeConsoleID(), TTabletTypes::Console),
                      &NConsole::CreateConsole);
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(0), TTabletTypes::BSController),
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(), TTabletTypes::BSController),
                      &CreateFlatBsController);
 
-    auto aid = CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeCmsID(0), TTabletTypes::Cms), &CreateCms);
+    auto aid = CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeCmsID(), TTabletTypes::Cms), &CreateCms);
     runtime.EnableScheduleForActor(aid, true);
     runtime.EnableScheduleForActor(cid, true);
 }
@@ -523,7 +523,7 @@ static void SetupServices(TTestActorRuntime &runtime, const TTestEnvOpts &option
 
 TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
         : TTestBasicRuntime(options.NodeCount, options.DataCenterCount, false)
-        , CmsId(MakeCmsID(0))
+        , CmsId(MakeCmsID())
 {
     TFakeNodeWhiteboardService::Config.MutableResponse()->SetSuccess(true);
     TFakeNodeWhiteboardService::Config.MutableResponse()->ClearStatus();
@@ -556,7 +556,7 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
 
     for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
         if (options.NRings > 1) {
-            SetupCustomStateStorage(*this, options.NToSelect, options.NRings, options.RingSize, 0);
+            SetupCustomStateStorage(*this, options.NToSelect, options.NRings, options.RingSize);
         } else {
             SetupStateStorage(*this, nodeIndex);
         }
@@ -591,8 +591,7 @@ TCmsTestEnv::TCmsTestEnv(ui32 nodeCount,
 }
 
 TIntrusiveConstPtr<NKikimr::TStateStorageInfo> TCmsTestEnv::GetStateStorageInfo() {
-    ui32 StateStorageGroup = 0;
-    const TActorId proxy = MakeStateStorageProxyID(StateStorageGroup);
+    const TActorId proxy = MakeStateStorageProxyID();
     Send(new IEventHandle(proxy, Sender, new TEvStateStorage::TEvListStateStorage()));
 
     auto reply = GrabEdgeEventRethrow<TEvStateStorage::TEvListStateStorageResult>(Sender);

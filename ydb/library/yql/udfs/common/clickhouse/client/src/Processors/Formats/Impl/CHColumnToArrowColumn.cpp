@@ -2,6 +2,8 @@
 
 #if USE_ARROW || USE_PARQUET
 
+#include <common/DateLUTImpl.h>
+#include <DataTypes/DataTypeDateTime64.h>
 #include <Columns/ColumnFixedString.h>
 #include <Columns/ColumnNullable.h>
 #include <Columns/ColumnString.h>
@@ -394,6 +396,43 @@ namespace NDB
         }
     }
 
+    static void fillArrowArrayWithDateTime64ColumnData(
+        const DataTypePtr & type,
+        ColumnPtr write_column,
+        const PaddedPODArray<UInt8> * null_bytemap,
+        const String & format_name,
+        arrow::ArrayBuilder* array_builder,
+        size_t start,
+        size_t end)
+    {
+        const auto * datetime64_type = assert_cast<const DataTypeDateTime64 *>(type.get());
+        const auto & column = assert_cast<const ColumnDecimal<DateTime64> &>(*write_column);
+        arrow::TimestampBuilder & builder = assert_cast<arrow::TimestampBuilder &>(*array_builder);
+        arrow::Status status;
+
+        auto scale = datetime64_type->getScale();
+        bool need_rescale = scale % 3;
+        auto rescale_multiplier = DecimalUtils::scaleMultiplier<DateTime64::NativeType>(3 - scale % 3);
+        for (size_t value_i = start; value_i < end; ++value_i)
+        {
+            if (null_bytemap && (*null_bytemap)[value_i])
+            {
+                status = builder.AppendNull();
+            }
+            else
+            {
+                auto value = static_cast<Int64>(column[value_i].get<DecimalField<DateTime64>>().getValue());
+                if (need_rescale)
+                {
+                    if (common::mulOverflow(value, rescale_multiplier, value))
+                        throw Exception(ErrorCodes::DECIMAL_OVERFLOW, "Decimal math overflow");
+                }
+                status = builder.Append(value);
+            }
+            checkStatus(status, write_column->getName(), format_name);
+        }
+    }
+
     static void fillArrowArray(
         const String & column_name,
         ColumnPtr & column,
@@ -453,6 +492,10 @@ namespace NDB
             ColumnPtr column_array = assert_cast<const ColumnMap *>(column.get())->getNestedColumnPtr();
             DataTypePtr array_type = assert_cast<const DataTypeMap *>(column_type.get())->getNestedType();
             fillArrowArrayWithArrayColumnData<arrow::MapBuilder>(column_name, column_array, array_type, null_bytemap, array_builder, format_name, start, end, dictionary_values);
+        }
+        else if (isDateTime64(column_type))
+        {
+            fillArrowArrayWithDateTime64ColumnData(column_type, column, null_bytemap, format_name, array_builder, start, end);
         }
         else if (isDecimal(column_type))
         {
@@ -548,6 +591,18 @@ namespace NDB
         }
     }
 
+    static arrow::TimeUnit::type getArrowTimeUnit(const DataTypeDateTime64 * type)
+    {
+        UInt32 scale = type->getScale();
+        if (scale == 0)
+            return arrow::TimeUnit::SECOND;
+        if (scale > 0 && scale <= 3)
+            return arrow::TimeUnit::MILLI;
+        if (scale > 3 && scale <= 6)
+            return arrow::TimeUnit::MICRO;
+        return arrow::TimeUnit::NANO;
+    }
+
     static std::shared_ptr<arrow::DataType> getArrowType(
         DataTypePtr column_type, ColumnPtr column, const std::string & column_name, const std::string & format_name, bool * out_is_column_nullable)
     {
@@ -628,6 +683,12 @@ namespace NDB
             return arrow::map(
                 getArrowType(key_type, columns[0], column_name, format_name, out_is_column_nullable),
                 getArrowType(val_type, columns[1], column_name, format_name, out_is_column_nullable));
+        }
+
+        if (isDateTime64(column_type))
+        {
+            const auto * datetime64_type = assert_cast<const DataTypeDateTime64 *>(column_type.get());
+            return arrow::timestamp(getArrowTimeUnit(datetime64_type), datetime64_type->getTimeZone().getTimeZone());
         }
 
         const std::string type_name = column_type->getFamilyName();

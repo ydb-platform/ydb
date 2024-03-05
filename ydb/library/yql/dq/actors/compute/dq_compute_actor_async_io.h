@@ -246,7 +246,6 @@ public:
         const NActors::TActorId& ComputeActorId;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
-        NKikimr::NMiniKQL::TProgramBuilder& ProgramBuilder;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         NWilson::TTraceId TraceId;
     };
@@ -263,7 +262,6 @@ public:
         const THashMap<TString, TString>& TaskParams;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
-        NKikimr::NMiniKQL::TProgramBuilder& ProgramBuilder;
     };
 
     // Creates source.

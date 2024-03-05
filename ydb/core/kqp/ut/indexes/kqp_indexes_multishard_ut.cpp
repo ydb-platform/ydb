@@ -1369,6 +1369,81 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
         }
     }
 
+    Y_UNIT_TEST(SecondaryIndexSelectNull) {
+        TKikimrRunner kikimr(SyntaxV1Settings());
+        CreateTableWithMultishardIndex(kikimr.GetTestClient(), IG_SYNC);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        FillTable(session);
+
+        {
+            const TString query(Q_(R"(
+                UPSERT INTO `/Root/MultiShardIndexed` (key, fk, value) VALUES
+                (5, NULL, "null5"),
+                (NULL, NULL, "nullnull");
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const TString query(Q1_(R"(
+                SELECT COUNT(*) FROM `/Root/MultiShardIndexed` VIEW index WHERE fk IS NULL;
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[2u]]");
+        }
+
+        {
+            const TString query(Q1_(R"(
+                SELECT key FROM `/Root/MultiShardIndexed` VIEW index WHERE fk IS NULL;
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[#];[[5u]]]");
+        }
+
+        {
+            const TString query(Q1_(R"(
+                SELECT fk FROM `/Root/MultiShardIndexed` VIEW index WHERE fk IS NULL;
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[#];[#]]");
+        }
+
+        {
+            const TString query(Q1_(R"(
+                SELECT * FROM `/Root/MultiShardIndexed` VIEW index WHERE fk IS NULL ORDER BY fk, key;
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[#;#;[\"nullnull\"]];[#;[5u];[\"null5\"]]]");
+        }
+
+        {
+            const TString query(Q1_(R"(
+                SELECT * FROM `/Root/MultiShardIndexed` VIEW index WHERE fk IS NULL ORDER BY key DESC, fk DESC;
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[#;[5u];[\"null5\"]];[#;#;[\"nullnull\"]]]");
+        }
+
+    }
+
     Y_UNIT_TEST(SecondaryIndexSelect) {
         TKikimrRunner kikimr(SyntaxV1Settings());
         CreateTableWithMultishardIndex(kikimr.GetTestClient(), IG_SYNC);
@@ -1385,6 +1460,17 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
             UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[2u]]]");
+        }
+
+        {
+            const TString query(Q1_(R"(
+                SELECT key FROM `/Root/MultiShardIndexed` VIEW index WHERE fk IS NULL;
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[]");
         }
 
         {

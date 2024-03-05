@@ -519,19 +519,32 @@ public:
         return FilterDatabase && FilterDatabase != DomainPath;
     }
 
+    bool IsTimeDifferenceCheckNode(const TNodeId nodeId) const {
+        if (!IsSpecificDatabaseFilter()) {
+            return true;
+        }
+
+        auto it = DatabaseState.find(FilterDatabase);
+        if (it == DatabaseState.end()) {
+            return false;
+        }
+        auto& computeNodeIds = it->second.ComputeNodeIds;
+
+        return std::find(computeNodeIds.begin(), computeNodeIds.end(), nodeId) != computeNodeIds.end();
+    }
+
     void Bootstrap() {
         FilterDatabase = Request->Database;
         if (Request->Request.operation_params().has_operation_timeout()) {
             Timeout = GetDuration(Request->Request.operation_params().operation_timeout());
         }
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-        TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
+        auto *domain = domains->GetDomain();
         DomainPath = "/" + domain->Name;
         RootSchemeShardId = domain->SchemeRoot;
-        auto group = domains->GetDefaultStateStorageGroup(domain->DomainUid);
-        ConsoleId = MakeConsoleID(group);
-        RootHiveId = domains->GetHive(domain->DefaultHiveUid);
-        BsControllerId = MakeBSControllerID(group);
+        ConsoleId = MakeConsoleID();
+        RootHiveId = domains->GetHive();
+        BsControllerId = MakeBSControllerID();
 
         if (ConsoleId) {
             TabletRequests.TabletStates[ConsoleId].Database = DomainPath;
@@ -813,10 +826,10 @@ public:
         ReplyAndPassAway();
     }
 
-    bool IsStaticNode(const TEvInterconnect::TNodeInfo& nodeInfo) const {
+    bool IsStaticNode(const TNodeId nodeId) const {
         TAppData* appData = AppData();
         if (appData->DynamicNameserviceConfig) {
-            return nodeInfo.NodeId <= AppData()->DynamicNameserviceConfig->MaxStaticNodeId;
+            return nodeId <= AppData()->DynamicNameserviceConfig->MaxStaticNodeId;
         } else {
             return true;
         }
@@ -827,7 +840,7 @@ public:
         NodesInfo = ev->Release();
         for (const auto& ni : NodesInfo->Nodes) {
             MergedNodeInfo[ni.NodeId] = &ni;
-            if (IsStaticNode(ni) && needComputeFromStaticNodes) {
+            if (IsStaticNode(ni.NodeId) && needComputeFromStaticNodes) {
                 DatabaseState[DomainPath].ComputeNodeIds.push_back(ni.NodeId);
                 RequestComputeNode(ni.NodeId);
             }
@@ -1305,8 +1318,8 @@ public:
 
     void FillCompute(TDatabaseState& databaseState, Ydb::Monitoring::ComputeStatus& computeStatus, TSelfCheckContext context) {
         TVector<TNodeId>* computeNodeIds = &databaseState.ComputeNodeIds;
-        if (databaseState.ResourcePathId 
-            && databaseState.ServerlessComputeResourcesMode != NKikimrSubDomains::EServerlessComputeResourcesModeExclusive) 
+        if (databaseState.ResourcePathId
+            && databaseState.ServerlessComputeResourcesMode != NKikimrSubDomains::EServerlessComputeResourcesModeExclusive)
         {
             auto itDatabase = FilterDomainKey.find(TSubDomainKey(databaseState.ResourcePathId.OwnerId, databaseState.ResourcePathId.LocalPathId));
             if (itDatabase != FilterDomainKey.end()) {
@@ -1958,8 +1971,7 @@ public:
 
     void FillStorage(TDatabaseState& databaseState, Ydb::Monitoring::StorageStatus& storageStatus, TSelfCheckContext context) {
         if (databaseState.StoragePoolNames.empty()) {
-            // pointless in real life
-            // context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no storage pools");
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no storage pools", ETags::StorageState);
         } else {
             for (const TString& poolName : databaseState.StoragePoolNames) {
                 auto itStoragePoolState = StoragePoolState.find(poolName);
@@ -2074,7 +2086,7 @@ public:
         }
     }
 
-    const TDuration MAX_CLOCKSKEW_RED_ISSUE_TIME = TDuration::MicroSeconds(25000);
+    const TDuration MAX_CLOCKSKEW_ORANGE_ISSUE_TIME = TDuration::MicroSeconds(25000);
     const TDuration MAX_CLOCKSKEW_YELLOW_ISSUE_TIME = TDuration::MicroSeconds(5000);
 
     void FillNodesSyncStatus(TOverallStateContext& context) {
@@ -2082,7 +2094,8 @@ public:
         TNodeId maxClockSkewPeerId = 0;
         TNodeId maxClockSkewNodeId = 0;
         for (auto& [nodeId, nodeSystemState] : MergedNodeSystemState) {
-            if (abs(nodeSystemState->GetMaxClockSkewWithPeerUs()) > maxClockSkewUs) {
+            if (IsTimeDifferenceCheckNode(nodeId) && IsTimeDifferenceCheckNode(nodeSystemState->GetMaxClockSkewPeerId())
+                    && abs(nodeSystemState->GetMaxClockSkewWithPeerUs()) > maxClockSkewUs) {
                 maxClockSkewUs = abs(nodeSystemState->GetMaxClockSkewWithPeerUs());
                 maxClockSkewPeerId = nodeSystemState->GetMaxClockSkewPeerId();
                 maxClockSkewNodeId = nodeId;
@@ -2098,8 +2111,8 @@ public:
         FillNodeInfo(maxClockSkewPeerId, syncContext.Location.mutable_peer());
 
         TDuration maxClockSkewTime = TDuration::MicroSeconds(maxClockSkewUs);
-        if (maxClockSkewTime > MAX_CLOCKSKEW_RED_ISSUE_TIME) {
-            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "The nodes have a time difference of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
+        if (maxClockSkewTime > MAX_CLOCKSKEW_ORANGE_ISSUE_TIME) {
+            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, TStringBuilder() << "The nodes have a time difference of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
         } else if (maxClockSkewTime > MAX_CLOCKSKEW_YELLOW_ISSUE_TIME) {
             syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, TStringBuilder() << "The nodes have a time difference of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
         } else {
@@ -2307,6 +2320,7 @@ public:
                 } else if (endpoint.GetName() == "grpcs") {
                     config.Locator = "localhost" + endpoint.GetAddress();
                     config.EnableSsl = true;
+                    config.SslTargetNameOverride = systemStateInfo.GetHost();
                     break;
                 }
             }

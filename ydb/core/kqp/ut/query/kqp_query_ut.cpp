@@ -1559,6 +1559,31 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 1);
         }
     }
+
+    Y_UNIT_TEST(DictJoin) {
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetQueryClient();
+
+        {
+            const TString sql = R"(
+                --!syntax_v1
+
+                $lsource = SELECT 'test' AS ldata;
+                $rsource = SELECT 'test' AS rdata;
+
+                $left = SELECT ROW_NUMBER() OVER w AS r, ldata FROM $lsource WINDOW w AS ();
+                $right = SELECT ROW_NUMBER() OVER w AS r, rdata FROM $rsource WINDOW w AS ();
+
+                $result  = SELECT ldata, rdata FROM $left AS tl INNER JOIN $right AS tr ON tl.r = tr.r;
+
+                SELECT * FROM $result;
+            )";
+            auto result = client.ExecuteQuery(
+                sql,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
 }
 
 } // namespace NKqp

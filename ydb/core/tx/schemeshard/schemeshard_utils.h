@@ -7,6 +7,7 @@
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/protos/table_stats.pb.h>
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 

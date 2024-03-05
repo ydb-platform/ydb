@@ -152,6 +152,7 @@ TYPED_TEST(TNotGrpcTest, StreamingEcho)
     TTestProxy proxy(this->CreateChannel());
     proxy.SetDefaultRequestCodec(NCompression::ECodec::Lz4);
     proxy.SetDefaultResponseCodec(NCompression::ECodec::Zstd_1);
+    proxy.SetDefaultEnableLegacyRpcCodecs(false);
 
     const int AttachmentCount = 30;
     const ssize_t AttachmentSize = 2_MB;
@@ -539,6 +540,7 @@ TYPED_TEST(TNotGrpcTest, Compression)
     TTestProxy proxy(this->CreateChannel());
     proxy.SetDefaultRequestCodec(requestCodecId);
     proxy.SetDefaultResponseCodec(responseCodecId);
+    proxy.SetDefaultEnableLegacyRpcCodecs(false);
 
     auto req = proxy.Compression();
     req->set_request_codec(static_cast<int>(requestCodecId));

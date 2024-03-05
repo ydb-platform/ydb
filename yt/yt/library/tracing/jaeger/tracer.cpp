@@ -324,6 +324,7 @@ bool TJaegerChannelManager::Push(const std::vector<TSharedRef>& batches, int spa
         proxy.SetDefaultTimeout(RpcTimeout_);
 
         auto req = proxy.PostSpans();
+        req->SetEnableLegacyRpcCodecs(false);
         req->set_batch(MergeRefsToString(batches));
 
         if (TvmService_) {

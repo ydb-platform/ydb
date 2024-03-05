@@ -33,14 +33,13 @@ using namespace NActors;
 
 class TTakeResourcesSnapshotActor : public TActorBootstrapped<TTakeResourcesSnapshotActor> {
 public:
-    TTakeResourcesSnapshotActor(const TString& boardPath, ui32 stateStorageGroupId,
+    TTakeResourcesSnapshotActor(const TString& boardPath,
         TOnResourcesSnapshotCallback&& callback)
         : BoardPath(boardPath)
-        , StateStorageGroupId(stateStorageGroupId)
         , Callback(std::move(callback)) {}
 
     void Bootstrap() {
-        auto boardLookup = CreateBoardLookupActor(BoardPath, SelfId(), StateStorageGroupId, EBoardLookupMode::Majority);
+        auto boardLookup = CreateBoardLookupActor(BoardPath, SelfId(), EBoardLookupMode::Majority);
         BoardLookupId = Register(boardLookup);
 
         Become(&TTakeResourcesSnapshotActor::WorkState);
@@ -90,7 +89,6 @@ public:
 
 private:
     const TString BoardPath;
-    const ui32 StateStorageGroupId;
     TOnResourcesSnapshotCallback Callback;
     TActorId BoardLookupId;
 };
@@ -98,9 +96,9 @@ private:
 } // namespace
 
 NActors::IActor* CreateTakeResourcesSnapshotActor(
-    const TString& boardPath, ui32 stateStorageGroupId,TOnResourcesSnapshotCallback&& callback)
+    const TString& boardPath, TOnResourcesSnapshotCallback&& callback)
 {
-    return new TTakeResourcesSnapshotActor(boardPath, stateStorageGroupId, std::move(callback));
+    return new TTakeResourcesSnapshotActor(boardPath, std::move(callback));
 }
 
 } // namespace NKikimr::NKqp::NRm

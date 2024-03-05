@@ -13,6 +13,7 @@ private:
     static inline auto Registrator = TFactory::TRegistrator<TAlterColumnOperation>(GetTypeName());
 
     TString ColumnName;
+    std::optional<TString> StorageId;
 
     NArrow::NSerialization::TSerializerContainer Serializer;
     NArrow::NDictionary::TEncodingDiff DictionaryEncodingDiff;

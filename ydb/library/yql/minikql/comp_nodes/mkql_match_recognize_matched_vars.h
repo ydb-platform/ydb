@@ -8,6 +8,7 @@ namespace NKikimr::NMiniKQL::NMatchRecognize {
 
 template<class R>
 using TMatchedVar = std::vector<R, TMKQLAllocator<R>>;
+
 template<class R>
 void Extend(TMatchedVar<R>& var, const R& r) {
     if (var.empty()) {
@@ -110,8 +111,7 @@ public:
         : TComputationValue<TMatchedVarsValue>(memInfo)
         , HolderFactory(holderFactory)
         , Vars(vars)
-    {
-    }
+    {}
 
     NUdf::TUnboxedValue GetElement(ui32 index) const override {
         return HolderFactory.Create<TRangeList>(HolderFactory, Vars[index]);

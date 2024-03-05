@@ -5,7 +5,7 @@
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/library/ycloud/api/events.h>
-#include <ydb/library/ycloud/impl/grpc_service_client.h>
+#include <ydb/library/grpc/actor_client/grpc_service_client.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event.h>
@@ -39,7 +39,7 @@ class TComputeDatabaseMonitoringActor : public NActors::TActorBootstrapped<TComp
 
         explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
             : Counters(counters)
-        { 
+        {
             Register();
         }
 
@@ -108,13 +108,17 @@ public:
     void Handle(TEvYdbCompute::TEvCpuLoadResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
 
-        auto now = TInstant::Now();    
+        auto now = TInstant::Now();
         if (!response.Issues) {
             auto delta = now - LastCpuLoad;
             LastCpuLoad = now;
 
+            if (response.CpuNumber) {
+                CpuNumber = response.CpuNumber;
+            }
+
             InstantLoad = response.InstantLoad;
-            // exponential moving average 
+            // exponential moving average
             if (!Ready || delta >= AverageLoadInterval) {
                 AverageLoad = InstantLoad;
                 QuotedLoad = InstantLoad;
@@ -138,7 +142,7 @@ public:
 
         // TODO: make load pulling reactive
         // 1. Long period (i.e. AverageLoadInterval/2) when idle (no requests)
-        // 2. Active pulling when busy 
+        // 2. Active pulling when busy
 
         if (MonitoringRequestDelay) {
             Schedule(MonitoringRequestDelay, new NActors::TEvents::TEvWakeup());
@@ -160,7 +164,7 @@ public:
             if (MaxClusterLoad > 0.0 && ((!Ready && Strict) || QuotedLoad >= MaxClusterLoad)) {
                 if (PendingQueue.size() >= PendingQueueSize) {
                     Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(NYdb::EStatus::OVERLOADED, NYql::TIssues{
-                        NYql::TIssue{TStringBuilder{} 
+                        NYql::TIssue{TStringBuilder{}
                         << "Cluster is overloaded, current quoted load " << static_cast<ui64>(QuotedLoad * 100)
                         << "%, average load " << static_cast<ui64>(AverageLoad * 100) << "%"
                         }}), 0, ev->Cookie);
@@ -252,7 +256,7 @@ private:
     const double DefaultQueryLoad;
     const ui32 PendingQueueSize;
     const bool Strict;
-    const ui32 CpuNumber;
+    ui32 CpuNumber = 0;
 
     TQueue<TEvYdbCompute::TEvCpuQuotaRequest::TPtr> PendingQueue;
 };

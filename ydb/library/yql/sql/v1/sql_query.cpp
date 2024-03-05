@@ -2660,6 +2660,75 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
     WarnUnusedNodes();
     return result;
 }
+
+TNodePtr TSqlQuery::Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_core>& statements) {
+    if (Mode == NSQLTranslation::ESqlMode::QUERY) {
+        // inject externally declared named expressions
+        for (auto [name, type] : Ctx.Settings.DeclaredNamedExprs) {
+            if (name.empty()) {
+                Error() << "Empty names for externally declared expressions are not allowed";
+                return nullptr;
+            }
+            TString varName = "$" + name;
+            if (IsAnonymousName(varName)) {
+                Error() << "Externally declared name '" << name << "' is anonymous";
+                return nullptr;
+            }
+
+            auto parsed = ParseType(type, *Ctx.Pool, Ctx.Issues, Ctx.Pos());
+            if (!parsed) {
+                Error() << "Failed to parse type for externally declared name '" << name << "'";
+                return nullptr;
+            }
+
+            TNodePtr typeNode = BuildBuiltinFunc(Ctx, Ctx.Pos(), "ParseType", { BuildLiteralRawString(Ctx.Pos(), type) });
+            PushNamedAtom(Ctx.Pos(), varName);
+            // no duplicates are possible at this stage
+            bool isWeak = true;
+            Ctx.DeclareVariable(varName, typeNode, isWeak);
+            // avoid 'Symbol is not used' warning for externally declared expression
+            YQL_ENSURE(GetNamedNode(varName));
+        }
+    }
+
+    TVector<TNodePtr> blocks;
+    Ctx.PushCurrentBlocks(&blocks);
+    Y_DEFER {
+        Ctx.PopCurrentBlocks();
+    };
+    for (const auto& statement : statements) {
+        if (!Statement(blocks, statement)) {
+            return nullptr;
+        }
+    }
+
+    ui32 topLevelSelects = 0;
+    bool hasTailOps = false;
+    for (auto& block : blocks) {
+        if (block->SubqueryAlias()) {
+            continue;
+        }
+
+        if (block->HasSelectResult()) {
+            ++topLevelSelects;
+        } else if (topLevelSelects) {
+            hasTailOps = true;
+        }
+    }
+
+    if ((Mode == NSQLTranslation::ESqlMode::SUBQUERY || Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW) && (topLevelSelects != 1 || hasTailOps)) {
+        Error() << "Strictly one select/process/reduce statement is expected at the end of "
+            << (Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW ? "view" : "subquery");
+        return nullptr;
+    }
+
+     if (!Ctx.PragmaAutoCommit && Ctx.Settings.EndOfQueryCommit && IsQueryMode(Mode)) {
+        AddStatementToBlocks(blocks, BuildCommitClusters(Ctx.Pos()));
+    }
+
+    auto result = BuildQuery(Ctx.Pos(), blocks, true, Ctx.Scoped);
+    return result;
+}
 namespace {
 
     static bool BuildColumnFeatures(std::map<TString, TDeferredAtom>& result, const TRule_column_schema& columnSchema, const NYql::TPosition& pos, TSqlTranslation& translation) {

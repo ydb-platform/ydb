@@ -1458,11 +1458,11 @@ public:
     }
 };
 
-TEST(TYsonStructTest, TestCustomDefaultsOfNestedStructsAreDiscardedOnDeserialize)
+TEST(TYsonStructTest, TestCustomDefaultsOfNestedStructsAreNotDiscardedOnDeserialize)
 {
     auto deserialized = ConvertTo<TIntrusivePtr<TYsonStructWithNestedStructsAndCustomDefaults>>(TYsonString(TStringBuf("{}")));
-    EXPECT_EQ(deserialized->YsonSerializable->IntValue, 1);
-    EXPECT_EQ(deserialized->YsonStruct->IntValue, 1);
+    EXPECT_EQ(deserialized->YsonSerializable->IntValue, 10);
+    EXPECT_EQ(deserialized->YsonStruct->IntValue, 10);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1825,6 +1825,66 @@ TEST(TYsonStructTest, ExternalizedYsonStructPostPreprocessors)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TTestTraitConfigWithDefaults
+{
+    int Field1;
+    double Field2;
+};
+
+class TTestTraitConfigWithDefaultsSerializer
+    : public TExternalizedYsonStruct
+{
+public:
+    REGISTER_EXTERNALIZED_YSON_STRUCT(TTestTraitConfigWithDefaults, TTestTraitConfigWithDefaultsSerializer);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.ExternalClassParameter("field1", &TThat::Field1)
+            .Default(42);
+        registrar.ExternalClassParameter("field2", &TThat::Field2)
+            .Default(34);
+    }
+};
+
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestTraitConfigWithDefaults, TTestTraitConfigWithDefaultsSerializer);
+
+class TFieldTesterWithCustomDefaults
+    : public NYT::NYTree::TYsonStructLite
+{
+public:
+    TTestTraitConfigWithDefaults Field;
+
+    REGISTER_YSON_STRUCT_LITE(TFieldTesterWithCustomDefaults);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("field", &TThis::Field)
+            .Default({44, 12});
+    }
+};
+
+TEST(TYsonStructTest, ExternalizedYsonStructCustomDefaults)
+{
+    TFieldTesterWithCustomDefaults tester;
+
+    EXPECT_EQ(tester.Field.Field1, 44);
+    EXPECT_EQ(tester.Field.Field2, 12);
+
+    auto node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("field").BeginMap()
+                .Item("field2").Value(77)
+            .EndMap()
+        .EndMap()->AsMap();
+
+    tester.Load(node);
+
+    EXPECT_EQ(tester.Field.Field1, 44);
+    EXPECT_EQ(tester.Field.Field2, 77);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TTestDerivedPodConfig
     : public TTestTraitConfig
 {
@@ -2013,6 +2073,193 @@ TEST(TYsonStructTest, ExternalizedYsonStructDerivedFromTwoExternalizedBases)
     EXPECT_EQ(reader.Field.Field4, 77);
     EXPECT_EQ(reader.Field.Field5, 7);
     EXPECT_EQ(reader.Field.Field6, 8);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TYsonStructWithCustomSubDefault
+    : public TYsonStruct
+{
+public:
+    TIntrusivePtr<TSimpleYsonStruct> Sub;
+
+    REGISTER_YSON_STRUCT(TYsonStructWithCustomSubDefault);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("sub", &TYsonStructWithCustomSubDefault::Sub)
+            .DefaultCtor([] {
+                auto sub = New<TSimpleYsonStruct>();
+                sub->IntValue = 2;
+                return sub;
+            });
+    }
+};
+
+TEST(TYsonStructTest, CustomSubStruct)
+{
+    auto testStruct = New<TYsonStructWithCustomSubDefault>();
+    EXPECT_EQ(testStruct->Sub->IntValue, 2);
+
+    auto testNode = BuildYsonNodeFluently()
+        .BeginMap()
+        .EndMap();
+    testStruct->Load(testNode);
+    EXPECT_EQ(testStruct->Sub->IntValue, 2);
+
+    testNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("sub")
+                .BeginMap()
+                .EndMap()
+        .EndMap();
+    testStruct->Load(testNode);
+    EXPECT_EQ(testStruct->Sub->IntValue, 2);
+
+    testNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("sub")
+                .BeginMap()
+                    .Item("int_value").Value(3)
+                .EndMap()
+        .EndMap();
+    testStruct->Load(testNode);
+    EXPECT_EQ(testStruct->Sub->IntValue, 3);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// NB: Currently TYsonStructLite cannot be used as a field in another config as is.
+// Thus test below uses std::optional + MergeStrategy::Combine instead of plain struct.
+
+class TTestSubConfigLiteWithDefaults
+    : public TYsonStructLite
+{
+public:
+    int MyInt;
+    TString MyString;
+
+    REGISTER_YSON_STRUCT_LITE(TTestSubConfigLiteWithDefaults);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("my_int", &TThis::MyInt)
+            .Default(42);
+        registrar.Parameter("my_string", &TThis::MyString)
+            .Default("y");
+    }
+};
+
+class TTestConfigWithSubStructLite
+    : public TYsonStructLite
+{
+public:
+    std::optional<TTestSubConfigLiteWithDefaults> Sub;
+
+    REGISTER_YSON_STRUCT_LITE(TTestConfigWithSubStructLite);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("sub", &TThis::Sub)
+            .DefaultCtor([] {
+                TTestSubConfigLiteWithDefaults sub = {};
+                sub.MyInt = 11;
+                sub.MyString = "x";
+                return sub;
+            })
+            .MergeBy(EMergeStrategy::Combine);
+    }
+};
+
+TEST(TYsonStructTest, CustomSubStructLite)
+{
+    TTestConfigWithSubStructLite testStruct = {};
+
+    auto testNode = BuildYsonNodeFluently()
+        .BeginMap()
+        .EndMap();
+    testStruct.Load(testNode->AsMap());
+    EXPECT_EQ(testStruct.Sub->MyInt, 11);
+    EXPECT_EQ(testStruct.Sub->MyString, "x");
+
+    testNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("sub")
+                .BeginMap()
+                .EndMap()
+        .EndMap();
+    testStruct.Load(testNode->AsMap());
+    EXPECT_EQ(testStruct.Sub->MyInt, 11);
+    EXPECT_EQ(testStruct.Sub->MyString, "x");
+
+    testNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("sub")
+                .BeginMap()
+                    .Item("my_string").Value("C")
+                .EndMap()
+        .EndMap();
+    testStruct.Load(testNode->AsMap());
+    EXPECT_EQ(testStruct.Sub->MyInt, 11);
+    EXPECT_EQ(testStruct.Sub->MyString, "C");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TTestSupConfigWithCustomDefaults
+{
+    TTestTraitConfigWithDefaults Sub;
+};
+
+class TTestSupConfigWithCustomDefaultsSerializer
+    : public TExternalizedYsonStruct
+{
+public:
+    REGISTER_EXTERNALIZED_YSON_STRUCT(TTestSupConfigWithCustomDefaults, TTestSupConfigWithCustomDefaultsSerializer);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.ExternalClassParameter("sub", &TThat::Sub)
+            .Default(TTestTraitConfigWithDefaults{
+                .Field1 = 16,
+                .Field2 = 34,
+            });
+    }
+};
+
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestSupConfigWithCustomDefaults, TTestSupConfigWithCustomDefaultsSerializer);
+
+TEST(TYsonStructTest, CustomSubExternalizedStruct)
+{
+    TTestSupConfigWithCustomDefaults testStruct = {};
+
+    auto testNode = BuildYsonNodeFluently()
+        .BeginMap()
+        .EndMap();
+    Deserialize(testStruct, testNode->AsMap());
+    EXPECT_EQ(testStruct.Sub.Field1, 16);
+    EXPECT_EQ(testStruct.Sub.Field2, 34);
+
+    testNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("sub")
+                .BeginMap()
+                .EndMap()
+        .EndMap();
+    Deserialize(testStruct, testNode->AsMap());
+    EXPECT_EQ(testStruct.Sub.Field1, 16);
+    EXPECT_EQ(testStruct.Sub.Field2, 34);
+
+    testNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("sub")
+                .BeginMap()
+                    .Item("field2").Value(77)
+                .EndMap()
+        .EndMap();
+    Deserialize(testStruct, testNode->AsMap());
+    EXPECT_EQ(testStruct.Sub.Field1, 16);
+    EXPECT_EQ(testStruct.Sub.Field2, 77);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

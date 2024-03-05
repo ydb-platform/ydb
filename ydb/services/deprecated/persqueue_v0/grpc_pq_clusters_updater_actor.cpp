@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/pq_database.h>
+#include <ydb/library/mkql_proto/protos/minikql.pb.h>
 
 namespace NKikimr {
 namespace NGRpcProxy {

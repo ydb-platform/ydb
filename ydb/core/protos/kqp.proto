@@ -144,6 +144,9 @@ message TKqpColumnMetadataProto {
     optional string DefaultFromSequence = 8;
     optional EDefaultKind DefaultKind = 9;
     optional Ydb.TypedValue DefaultFromLiteral = 10;
+    // flag that indicates that column is currently under the build
+    // operation.
+    optional bool IsBuildInProgress = 11 [default = false];
 };
 
 message TKqpTableMetadataProto {
@@ -315,6 +318,7 @@ message TKqpDefaultSettings {
 
 message TCreateSessionRequest {
     optional string Database = 1;
+    optional string ApplicationName = 2;
 }
 
 message TEvCreateSessionRequest {

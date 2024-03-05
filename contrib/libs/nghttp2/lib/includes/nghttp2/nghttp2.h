@@ -54,7 +54,11 @@ extern "C" {
 
 #include <nghttp2/nghttp2ver.h>
 
-#ifdef NGHTTP2_STATICLIB
+#if defined(WIN32)
+typedef int ssize_t;
+#endif
+
+#if 1
 #  define NGHTTP2_EXTERN
 #elif defined(WIN32) || (__has_declspec_attribute(dllexport) &&                \
                          __has_declspec_attribute(dllimport))

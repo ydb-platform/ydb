@@ -26,6 +26,8 @@ class TYqlPluginOptions
 public:
     NYson::TYsonString SingletonsConfig;
     NYson::TYsonString GatewayConfig;
+    NYson::TYsonString DqGatewayConfig;
+    NYson::TYsonString DqManagerConfig;
     NYson::TYsonString FileStorageConfig;
     NYson::TYsonString OperationAttributes;
 
@@ -70,6 +72,8 @@ struct TAbortResult
 */
 struct IYqlPlugin
 {
+    virtual void Start() = 0;
+
     virtual TQueryResult Run(
         TQueryId queryId,
         TString impersonationUser,

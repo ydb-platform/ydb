@@ -54,7 +54,7 @@ public:
         return Constructed;
     }
 
-    void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& tiers);
+    void OnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& tiers);
 
     std::shared_ptr<IBlobsStorageOperator> GetOperator(const TString& storageIdExt);
     std::shared_ptr<IBlobsStorageOperator> GetOperatorGuarantee(const TString& storageIdExt);

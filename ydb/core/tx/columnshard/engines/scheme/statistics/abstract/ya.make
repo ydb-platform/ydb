@@ -9,10 +9,10 @@ SRCS(
 
 PEERDIR(
     ydb/core/tx/columnshard/engines/scheme/statistics/protos
+    ydb/core/tx/columnshard/engines/scheme/abstract
     contrib/libs/apache/arrow
     ydb/library/actors/core
     ydb/library/conclusion
-    ydb/core/tx/columnshard/splitter
 )
 
 GENERATE_ENUM_SERIALIZATION(common.h)

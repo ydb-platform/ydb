@@ -43,6 +43,7 @@
 #include <vector>
 
 #include "y_absl/base/attributes.h"
+#include "y_absl/base/nullability.h"
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
@@ -113,7 +114,7 @@ TString StrReplaceAll(y_absl::string_view s,
 int StrReplaceAll(
     std::initializer_list<std::pair<y_absl::string_view, y_absl::string_view>>
         replacements,
-    TString* target);
+    y_absl::Nonnull<TString*> target);
 
 // Overload of `StrReplaceAll()` to replace patterns within a given output
 // string *in place* with replacements provided within a container of key/value
@@ -128,7 +129,8 @@ int StrReplaceAll(
 //  EXPECT_EQ(count, 2);
 //  EXPECT_EQ("if (ptr &lt; &amp;foo)", s);
 template <typename StrToStrMapping>
-int StrReplaceAll(const StrToStrMapping& replacements, TString* target);
+int StrReplaceAll(const StrToStrMapping& replacements,
+                  y_absl::Nonnull<TString*> target);
 
 // Implementation details only, past this point.
 namespace strings_internal {
@@ -185,8 +187,8 @@ std::vector<ViableSubstitution> FindSubstitutions(
 }
 
 int ApplySubstitutions(y_absl::string_view s,
-                       std::vector<ViableSubstitution>* subs_ptr,
-                       TString* result_ptr);
+                       y_absl::Nonnull<std::vector<ViableSubstitution>*> subs_ptr,
+                       y_absl::Nonnull<TString*> result_ptr);
 
 }  // namespace strings_internal
 
@@ -201,7 +203,8 @@ TString StrReplaceAll(y_absl::string_view s,
 }
 
 template <typename StrToStrMapping>
-int StrReplaceAll(const StrToStrMapping& replacements, TString* target) {
+int StrReplaceAll(const StrToStrMapping& replacements,
+                  y_absl::Nonnull<TString*> target) {
   auto subs = strings_internal::FindSubstitutions(*target, replacements);
   if (subs.empty()) return 0;
 

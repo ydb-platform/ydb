@@ -14,7 +14,16 @@
 
 #include "y_absl/strings/str_replace.h"
 
+#include <cstddef>
+#include <initializer_list>
+#include <util/generic/string.h>
+#include <utility>
+#include <vector>
+
+#include "y_absl/base/config.h"
+#include "y_absl/base/nullability.h"
 #include "y_absl/strings/str_cat.h"
+#include "y_absl/strings/string_view.h"
 
 namespace y_absl {
 Y_ABSL_NAMESPACE_BEGIN
@@ -28,8 +37,8 @@ using FixedMapping =
 // occurred.
 int ApplySubstitutions(
     y_absl::string_view s,
-    std::vector<strings_internal::ViableSubstitution>* subs_ptr,
-    TString* result_ptr) {
+    y_absl::Nonnull<std::vector<strings_internal::ViableSubstitution>*> subs_ptr,
+    y_absl::Nonnull<TString*> result_ptr) {
   auto& subs = *subs_ptr;
   int substitutions = 0;
   size_t pos = 0;
@@ -74,7 +83,7 @@ TString StrReplaceAll(y_absl::string_view s,
 }
 
 int StrReplaceAll(strings_internal::FixedMapping replacements,
-                  TString* target) {
+                  y_absl::Nonnull<TString*> target) {
   return StrReplaceAll<strings_internal::FixedMapping>(replacements, target);
 }
 

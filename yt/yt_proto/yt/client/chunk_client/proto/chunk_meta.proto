@@ -146,11 +146,10 @@ message TStripedErasurePlacementExt
     // Sizes of the original blocks.
     repeated int64 block_sizes = 3;
 
-    // Some of the input blocks can be padded to fit into the segment.
-    repeated int64 block_padding_sizes = 5;
-
     // Checksums of the original blocks.
     repeated fixed64 block_checksums = 4;
+
+    reserved 5;
 }
 
 // TChunkMeta is stored in *.meta files on data nodes

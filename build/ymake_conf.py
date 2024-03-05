@@ -70,6 +70,7 @@ class Platform(object):
         self.is_arm = self.is_armv7 or self.is_armv8 or self.is_armv8m or self.is_armv7em
         self.is_armv7_neon = self.arch in ('armv7a_neon', 'armv7ahf', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
         self.is_armv7hf = self.arch in ('armv7ahf', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
+        self.is_armv5te = self.arch in ('armv5te_arm968e_s')
 
         self.is_rv32imc = self.arch in ('riscv32_esp',)
         self.is_riscv32 = self.is_rv32imc
@@ -93,6 +94,7 @@ class Platform(object):
         self.is_cortex_m23 = self.arch in ('armv8m_cortex_m23',)
         self.is_cortex_m4 = self.arch in ('armv7em_cortex_m4',)
         self.is_cortex_m7 = self.arch in ('armv7em_cortex_m7')
+        self.is_arm968e_s = self.arch in ('armv5te_arm968e_s')
 
         self.is_power8le = self.arch == 'ppc64le'
         self.is_power9le = self.arch == 'power9le'
@@ -101,7 +103,7 @@ class Platform(object):
         self.is_wasm64 = self.arch == 'wasm64'
         self.is_wasm = self.is_wasm64
 
-        self.is_32_bit = self.is_x86 or self.is_armv7 or self.is_armv8m or self.is_riscv32 or self.is_nds32 or self.is_armv7em or self.is_xtensa or self.is_tc32
+        self.is_32_bit = self.is_x86 or self.is_armv5te or self.is_armv7 or self.is_armv8m or self.is_riscv32 or self.is_nds32 or self.is_armv7em or self.is_xtensa or self.is_tc32
         self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc or self.is_wasm64
 
         assert self.is_32_bit or self.is_64_bit
@@ -176,6 +178,7 @@ class Platform(object):
             (self.is_armv8, 'ARCH_ARM64'),
             (self.is_armv8m, 'ARCH_ARM8M'),
             (self.is_armv7em, 'ARCH_ARM7EM'),
+            (self.is_armv5te, 'ARCH_ARM5TE'),
             (self.is_arm, 'ARCH_ARM'),
             (self.is_linux_armv8 or self.is_macos_arm64, 'ARCH_AARCH64'),
             (self.is_powerpc, 'ARCH_PPC64LE'),
@@ -1242,7 +1245,10 @@ class GnuToolchain(Toolchain):
         elif target.is_armv7_neon:
             self.c_flags_platform.append('-mfpu=neon')
 
-        if (target.is_armv7 or target.is_armv8m or target.is_armv7em) and build.is_size_optimized:
+        elif target.is_arm968e_s:
+            self.c_flags_platform.append('-march=armv5te -mcpu=arm968e-s -mthumb-interwork -mlittle-endian')
+
+        if (target.is_armv7 or target.is_armv8m or target.is_armv7em or target.is_armv5te) and build.is_size_optimized:
             # Enable ARM Thumb2 variable-length instruction encoding
             # to reduce code size
             self.c_flags_platform.append('-mthumb')
@@ -1468,6 +1474,12 @@ class GnuCompiler(Compiler):
             self.c_flags.append('-m32')
         if self.target.is_x86_64:
             self.c_flags.append('-m64')
+
+        if self.target.is_wasm64:
+            # WebAssembly-specific exception handling flags
+            self.c_foptions += [
+                '-fwasm-exceptions',
+            ]
 
         self.debug_info_flags = ['-g']
         if self.target.is_linux:
@@ -2302,6 +2314,8 @@ class Cuda(object):
             "--expt-extended-lambda",
             # Allow host code to invoke __device__ constexpr functions and vice versa
             "--expt-relaxed-constexpr",
+            # Allow to use newer compilers than CUDA Toolkit officially supports
+            "--allow-unsupported-compiler",
         ]
 
         if not self.have_cuda.value:
@@ -2374,10 +2388,10 @@ class Cuda(object):
             if not self.cuda_version.from_user:
                 return False
 
-        if self.cuda_version.value in ('8.0', '9.0', '9.1', '9.2', '10.0'):
-            raise ConfigureError('CUDA versions 8.x, 9.x and 10.0 are no longer supported.\nSee DEVTOOLS-7108.')
+        if self.cuda_version.value in ('8.0', '9.0', '9.1', '9.2', '10.0', '10.1'):
+            raise ConfigureError('CUDA versions 8.x, 9.x and 10.x are no longer supported.\nSee DEVTOOLS-7108 and DTCC-2118.')
 
-        if self.cuda_version.value in ('10.1', '11.0', '11.1', '11.3', '11.4', '11.8', '12.1'):
+        if self.cuda_version.value in ('11.0', '11.1', '11.3', '11.4', '11.8', '12.1'):
             return True
 
         return False

@@ -57,8 +57,8 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
                     ESchemaCompatibility::Incompatible,
                     TError("Column %Qv has stable name %Qv in input and %Qv in output schema",
                         inputColumn->Name(),
-                        inputColumn->StableName().Get(),
-                        outputColumn.StableName().Get())
+                        inputColumn->StableName(),
+                        outputColumn.StableName())
                 };
             }
 
@@ -121,8 +121,8 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
         if (!inputColumn && !deletedColumn) {
             return {
                 ESchemaCompatibility::Incompatible,
-                TError("Deleted column \"%v\" is missing in the input schema",
-                    deletedOutputColumn.StableName().Get())
+                TError("Deleted column %Qv is missing in the input schema",
+                    deletedOutputColumn.StableName())
             };
         }
     }
@@ -133,8 +133,8 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
         if (!deletedOutputColumn) {
             return {
                 ESchemaCompatibility::Incompatible,
-                TError("Deleted column \"%v\" must be deleted in the output schema",
-                    deletedInputColumn.StableName().Get())
+                TError("Deleted column %Qv must be deleted in the output schema",
+                    deletedInputColumn.StableName())
             };
         }
     }

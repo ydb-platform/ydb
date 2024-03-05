@@ -143,7 +143,6 @@ def onjava_module(unit, *args):
         '15',
         '17',
         '18',
-        '19',
         '20',
         '21',
     ):
@@ -416,7 +415,6 @@ def on_jdk_version_macro_check(unit, *args):
         '15',
         '17',
         '18',
-        '19',
         '20',
         '21',
     )

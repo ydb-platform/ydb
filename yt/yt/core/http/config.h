@@ -16,6 +16,8 @@ class THttpIOConfig
 public:
     int ReadBufferSize;
 
+    int MaxRedirectCount;
+
     TDuration ConnectionIdleTimeout;
 
     TDuration HeaderReadTimeout;

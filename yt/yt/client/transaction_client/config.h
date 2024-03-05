@@ -38,4 +38,24 @@ DEFINE_REFCOUNTED_TYPE(TRemoteTimestampProviderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TAlienTimestampProviderConfig
+    : public  NYTree::TYsonStruct
+{
+public:
+    //! Clock server cell tag
+    NObjectClient::TCellTag ClockClusterTag;
+
+    NTransactionClient::TRemoteTimestampProviderConfigPtr TimestampProvider;
+
+    REGISTER_YSON_STRUCT(TAlienTimestampProviderConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TAlienTimestampProviderConfig)
+
+DECLARE_REFCOUNTED_CLASS(TAlienTimestampProviderConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NTransactionClient

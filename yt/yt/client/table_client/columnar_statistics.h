@@ -87,7 +87,9 @@ struct TColumnarStatistics
     void Update(TRange<TUnversionedRow> rows);
     void Update(TRange<TVersionedRow> rows);
 
-    TColumnarStatistics SelectByColumnNames(const TNameTablePtr& nameTable, const std::vector<TStableName>& columnStableNames) const;
+    TColumnarStatistics SelectByColumnNames(
+        const TNameTablePtr& nameTable,
+        const std::vector<TColumnStableName>& columnStableNames) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

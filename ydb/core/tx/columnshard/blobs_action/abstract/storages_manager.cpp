@@ -75,11 +75,12 @@ std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::BuildOp
 }
 
 void IStoragesManager::Stop() {
-    if (Initialized) {
+    AFL_VERIFY(!Finished);
+    if (Initialized && !Finished) {
         for (auto&& i : Constructed) {
             i.second->Stop();
         }
-        Initialized = false;
+        Finished = true;
     }
 }
 

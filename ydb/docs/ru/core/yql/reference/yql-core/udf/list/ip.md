@@ -6,7 +6,7 @@
 * ```Ip::FromString(String{Flags:AutoMap}) -> String?``` - из человекочитаемого представления в бинарное
 * ```Ip::SubnetFromString(String{Flags:AutoMap}) -> String?``` - из человекочитаемого представления подсети в бинарное
 * ```Ip::ToString(String{Flags:AutoMap}) -> String?``` - из бинарного представления в человекочитаемое
-* ```Ip::ToString(String{Flags:AutoMap}) -> String?``` - из бинарного представления подсети в человекочитаемое
+* ```Ip::SubnetToString(String{Flags:AutoMap}) -> String?``` - из бинарного представления подсети в человекочитаемое
 * ```Ip::IsIPv4(String?) -> Bool```
 * ```Ip::IsIPv6(String?) -> Bool```
 * ```Ip::IsEmbeddedIPv4(String?) -> Bool```

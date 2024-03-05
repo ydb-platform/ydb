@@ -28,7 +28,7 @@ SRCS(
     cert_gen.cpp
     ydb_query_ut.cpp
     ydb_ldap_login_ut.cpp
-    ydb_s3_internal_ut.cpp
+    ydb_object_storage_ut.cpp
 )
 
 PEERDIR(

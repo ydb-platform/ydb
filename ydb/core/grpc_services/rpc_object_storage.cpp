@@ -20,7 +20,7 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-using TEvS3ListingRequest = TGrpcRequestOperationCall<Ydb::S3Internal::S3ListingRequest, Ydb::S3Internal::S3ListingResponse>;
+using TEvObjectStorageListingRequest = TGrpcRequestOperationCall<Ydb::ObjectStorage::ListingRequest, Ydb::ObjectStorage::ListingResponse>;
 
 // NOTE: TCell's can reference memomry from tupleValue
 bool CellsFromTuple(const Ydb::Type* tupleType,
@@ -187,15 +187,15 @@ bool CellsFromTuple(const Ydb::Type* tupleType,
     return true;
 }
 
-class TS3ListingRequestGrpc : public TActorBootstrapped<TS3ListingRequestGrpc> {
+class TObjectStorageListingRequestGrpc : public TActorBootstrapped<TObjectStorageListingRequestGrpc> {
 private:
     typedef TActorBootstrapped<TThis> TBase;
 
-    static constexpr ui32 DEFAULT_MAX_KEYS = 1001;
+    static constexpr i32 DEFAULT_MAX_KEYS = 1001;
     static constexpr ui32 DEFAULT_TIMEOUT_SEC = 5*60;
 
     std::unique_ptr<IRequestOpCtx> GrpcRequest;
-    const Ydb::S3Internal::S3ListingRequest* Request;
+    const Ydb::ObjectStorage::ListingRequest* Request;
     THolder<const NACLib::TUserToken> UserToken;
     ui32 MaxKeys;
     TActorId SchemeCache;
@@ -223,9 +223,9 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    TS3ListingRequestGrpc(std::unique_ptr<IRequestOpCtx> request, TActorId schemeCache, THolder<const NACLib::TUserToken>&& userToken)
+    TObjectStorageListingRequestGrpc(std::unique_ptr<IRequestOpCtx> request, TActorId schemeCache, THolder<const NACLib::TUserToken>&& userToken)
         : GrpcRequest(std::move(request))
-        , Request(TEvS3ListingRequest::GetProtoRequest(GrpcRequest.get()))
+        , Request(TEvObjectStorageListingRequest::GetProtoRequest(GrpcRequest.get()))
         , UserToken(std::move(userToken))
         , MaxKeys(DEFAULT_MAX_KEYS)
         , SchemeCache(schemeCache)
@@ -716,7 +716,7 @@ private:
     }
 
     void ReplySuccess(const NActors::TActorContext& ctx) {
-        Ydb::S3Internal::S3ListingResult resp;
+        Ydb::ObjectStorage::ListingResult resp;
 
         for (auto commonPrefix : CommonPrefixesRows) {
             resp.add_common_prefixes(commonPrefix);
@@ -738,14 +738,14 @@ private:
     }
 };
 
-IActor* CreateGrpcS3ListingRequest(std::unique_ptr<IRequestOpCtx> request) {
+IActor* CreateGrpcObjectStorageListingHandler(std::unique_ptr<IRequestOpCtx> request) {
     TActorId schemeCache = MakeSchemeCacheID();
     auto token = THolder<const NACLib::TUserToken>(request->GetInternalToken() ? new NACLib::TUserToken(request->GetSerializedToken()) : nullptr);
-    return new TS3ListingRequestGrpc(std::move(request), schemeCache, std::move(token));
+    return new TObjectStorageListingRequestGrpc(std::move(request), schemeCache, std::move(token));
 }
 
-void DoS3ListingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    f.RegisterActor(CreateGrpcS3ListingRequest(std::move(p)));
+void DoObjectStorageListingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(CreateGrpcObjectStorageListingHandler(std::move(p)));
 }
 
 } // namespace NKikimr

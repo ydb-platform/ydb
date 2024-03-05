@@ -1,10 +1,10 @@
-#include "ydb_s3_internal.h"
+#include "ydb_object_storage.h"
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <ydb/public/api/grpc/draft/ydb_s3_internal_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/draft/ydb_object_storage_v1.grpc.pb.h>
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
@@ -13,19 +13,19 @@
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 
 namespace NYdb {
-namespace NS3Internal {
+namespace NObjectStorage {
 
-TS3ListingResult::TS3ListingResult(std::vector<std::string>&& commonPrefixes, TResultSet&& contents, TStatus&& status)
+TObjectStorageListingResult::TObjectStorageListingResult(std::vector<std::string>&& commonPrefixes, TResultSet&& contents, TStatus&& status)
     : TStatus(std::move(status))
     , CommonPrefixes(std::move(commonPrefixes))
     , Contents(std::move(contents))
 {}
 
-const std::vector<std::string>& TS3ListingResult::GetCommonPrefixes() const {
+const std::vector<std::string>& TObjectStorageListingResult::GetCommonPrefixes() const {
     return CommonPrefixes;
 }
 
-const TResultSet& TS3ListingResult::GetContents() const {
+const TResultSet& TObjectStorageListingResult::GetContents() const {
     return Contents;
 }
 
@@ -35,21 +35,21 @@ void SetProtoValue(Ydb::TypedValue& out, TValue&& in) {
 }
 
 
-class TS3InternalClient::TImpl : public TClientImplCommon<TS3InternalClient::TImpl> {
+class TObjectStorageClient::TImpl : public TClientImplCommon<TObjectStorageClient::TImpl> {
 public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
         : TClientImplCommon(std::move(connections), settings) {}
 
-    TAsyncS3ListingResult S3Listing(const TString& tableName,
+    TAsyncObjectStorageListingResult List(const TString& tableName,
                            TValue&& keyPrefix,
                            const TString& pathColumnPrefix,
                            const TString& pathColumnDelimiter,
                            TValue&& startAfterKeySuffix,
                            ui32 maxKeys,
                            const TVector<TString> columnsToReturn,
-                           const TS3ListingSettings& settings)
+                           const TObjectStorageListingSettings& settings)
     {
-        auto request = MakeOperationRequest<Ydb::S3Internal::S3ListingRequest>(settings);
+        auto request = MakeOperationRequest<Ydb::ObjectStorage::ListingRequest>(settings);
         request.set_table_name(tableName);
         SetProtoValue(*request.mutable_key_prefix(), std::move(keyPrefix));
         request.set_path_column_prefix(pathColumnPrefix);
@@ -60,11 +60,11 @@ public:
             request.add_columns_to_return(c);
         }
 
-        auto promise = NThreading::NewPromise<TS3ListingResult>();
+        auto promise = NThreading::NewPromise<TObjectStorageListingResult>();
 
         auto extractor = [promise]
             (google::protobuf::Any* any, TPlainStatus status) mutable {
-                Ydb::S3Internal::S3ListingResult result;
+                Ydb::ObjectStorage::ListingResult result;
                 if (any) {
                     any->UnpackTo(&result);
                 }
@@ -74,14 +74,14 @@ public:
                 }
                 TResultSet contents(result.Getcontents());
 
-                TS3ListingResult val(std::move(commonPrefixes), std::move(contents), TStatus(std::move(status)));
+                TObjectStorageListingResult val(std::move(commonPrefixes), std::move(contents), TStatus(std::move(status)));
                 promise.SetValue(std::move(val));
             };
 
-        Connections_->RunDeferred<Ydb::S3Internal::V1::S3InternalService, Ydb::S3Internal::S3ListingRequest, Ydb::S3Internal::S3ListingResponse>(
+        Connections_->RunDeferred<Ydb::ObjectStorage::V1::ObjectStorageService, Ydb::ObjectStorage::ListingRequest, Ydb::ObjectStorage::ListingResponse>(
             std::move(request),
             extractor,
-            &Ydb::S3Internal::V1::S3InternalService::Stub::AsyncS3Listing,
+            &Ydb::ObjectStorage::V1::ObjectStorageService::Stub::AsyncList,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -91,20 +91,20 @@ public:
 };
 
 
-TS3InternalClient::TS3InternalClient(const TDriver& driver, const TCommonClientSettings& settings)
+TObjectStorageClient::TObjectStorageClient(const TDriver& driver, const TCommonClientSettings& settings)
     : Impl_(new TImpl(CreateInternalInterface(driver), settings))
 {}
 
-TAsyncS3ListingResult TS3InternalClient::S3Listing(const TString& tableName,
+TAsyncObjectStorageListingResult TObjectStorageClient::List(const TString& tableName,
                                           TValue&& keyPrefix,
                                           const TString& pathColumnPrefix,
                                           const TString& pathColumnDelimiter,
                                           TValue&& startAfterKeySuffix,
                                           ui32 maxKeys,
                                           const TVector<TString>& columnsToReturn,
-                                          const TS3ListingSettings& settings)
+                                          const TObjectStorageListingSettings& settings)
 {
-    return Impl_->S3Listing(tableName,
+    return Impl_->List(tableName,
                             std::move(keyPrefix),
                             pathColumnPrefix,
                             pathColumnDelimiter,

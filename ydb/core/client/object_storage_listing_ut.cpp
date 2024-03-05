@@ -1,8 +1,8 @@
 #include "flat_ut_client.h"
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/public/api/protos/ydb_s3_internal.pb.h>
-#include <ydb/public/api/grpc/draft/ydb_s3_internal_v1.grpc.pb.h>
+#include <ydb/public/api/protos/draft/ydb_object_storage.pb.h>
+#include <ydb/public/api/grpc/draft/ydb_object_storage_v1.grpc.pb.h>
 #include <grpc++/client_context.h>
 #include <grpc++/create_channel.h>
 
@@ -12,7 +12,7 @@ namespace NFlatTests {
 using namespace Tests;
 using NClient::TValue;
 
-Y_UNIT_TEST_SUITE(TS3ListingTest) {
+Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
 
     static int GRPC_PORT = 0;
 
@@ -274,13 +274,13 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
                     const TString& pathPrefix, const TString& pathDelimiter,
                     const TString& pbStartAfterSuffixCols,
                     const TVector<TString>& columnsToReturn, ui32 maxKeys,
-                    Ydb::S3Internal::S3ListingResponse& res) {
+                    Ydb::ObjectStorage::ListingResponse& res) {
         TStringBuilder endpoint;
         endpoint << "localhost:" << grpcPort;
         std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel(endpoint, grpc::InsecureChannelCredentials());
-        auto stub = Ydb::S3Internal::V1::S3InternalService::NewStub(channel);
+        auto stub = Ydb::ObjectStorage::V1::ObjectStorageService::NewStub(channel);
         
-        TAutoPtr<Ydb::S3Internal::S3ListingRequest> request = new Ydb::S3Internal::S3ListingRequest();
+        TAutoPtr<Ydb::ObjectStorage::ListingRequest> request = new Ydb::ObjectStorage::ListingRequest();
         request->Setpath_column_prefix(pathPrefix);
         request->Settable_name(table);
         request->Setpath_column_delimiter(pathDelimiter);
@@ -294,7 +294,7 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
         parseOk = ::google::protobuf::TextFormat::ParseFromString(pbStartAfterSuffixCols, request->mutable_start_after_key_suffix());
         UNIT_ASSERT(parseOk);
         grpc::ClientContext rcontext;
-        grpc::Status status = stub->S3Listing(&rcontext, *request, &res);
+        grpc::Status status = stub->List(&rcontext, *request, &res);
     }
 
     void DoS3Listing(ui16 grpcPort, ui64 bucket, const TString& pathPrefix, const TString& pathDelimiter, const TString& startAfter,
@@ -305,8 +305,8 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
         TStringBuilder endpoint;
         endpoint << "localhost:" <<  grpcPort;
         channel = grpc::CreateChannel(endpoint, grpc::InsecureChannelCredentials());
-        std::unique_ptr<Ydb::S3Internal::V1::S3InternalService::Stub> stub;
-        stub = Ydb::S3Internal::V1::S3InternalService::NewStub(channel);
+        std::unique_ptr<Ydb::ObjectStorage::V1::ObjectStorageService::Stub> stub;
+        stub = Ydb::ObjectStorage::V1::ObjectStorageService::NewStub(channel);
 
         TString keyPrefix = R"(
             type {
@@ -348,7 +348,7 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
             )";
         }
 
-        TAutoPtr<Ydb::S3Internal::S3ListingRequest> request = new Ydb::S3Internal::S3ListingRequest();
+        TAutoPtr<Ydb::ObjectStorage::ListingRequest> request = new Ydb::ObjectStorage::ListingRequest();
         request->Setpath_column_prefix(pathPrefix);
         request->Settable_name("/dc-1/Dir/Table");
         request->Setpath_column_delimiter(pathDelimiter);
@@ -361,12 +361,12 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
         parseOk = ::google::protobuf::TextFormat::ParseFromString(pbStartAfterSuffix, request->mutable_start_after_key_suffix());
         UNIT_ASSERT(parseOk);
         grpc::ClientContext rcontext;
-        Ydb::S3Internal::S3ListingResponse response;
-        grpc::Status status = stub->S3Listing(&rcontext, *request, &response);
+        Ydb::ObjectStorage::ListingResponse response;
+        grpc::Status status = stub->List(&rcontext, *request, &response);
 
         UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
         
-        Ydb::S3Internal::S3ListingResult listingResult;
+        Ydb::ObjectStorage::ListingResult listingResult;
         response.operation().result().UnpackTo(&listingResult);
         
         commonPrefixes.clear();
@@ -520,7 +520,7 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
 
         TString pbStartAfterSuffixCols = MakeTuplePb(startAfterSuffixColumns);
 
-        Ydb::S3Internal::S3ListingResponse response;
+        Ydb::ObjectStorage::ListingResponse response;
         S3Listing(GRPC_PORT, "/dc-1/Dir/Table", pbPrefixCols, pathPrefix, pathDelimiter,
                     pbStartAfterSuffixCols, columnsToReturn, maxKeys, response);
 

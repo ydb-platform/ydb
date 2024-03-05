@@ -4,15 +4,15 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 namespace NYdb {
-namespace NS3Internal {
+namespace NObjectStorage {
 
-struct TS3ListingSettings : public TOperationRequestSettings<TS3ListingSettings> {};
+struct TObjectStorageListingSettings : public TOperationRequestSettings<TObjectStorageListingSettings> {};
 
 
-class TS3ListingResult : public TStatus {
-    friend class TS3InternalClient;
+class TObjectStorageListingResult : public TStatus {
+    friend class TObjectStorageClient;
 private:
-    TS3ListingResult(std::vector<std::string>&& commonPrefixes, TResultSet&& contents, TStatus&& status);
+    TObjectStorageListingResult(std::vector<std::string>&& commonPrefixes, TResultSet&& contents, TStatus&& status);
 
 public:
     const std::vector<std::string>& GetCommonPrefixes() const;
@@ -23,23 +23,23 @@ private:
     TResultSet Contents;
 };
 
-using TAsyncS3ListingResult = NThreading::TFuture<TS3ListingResult>;
+using TAsyncObjectStorageListingResult = NThreading::TFuture<TObjectStorageListingResult>;
 
 
-class TS3InternalClient {
+class TObjectStorageClient {
     class TImpl;
 
 public:
-    TS3InternalClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
+    TObjectStorageClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
 
-    TAsyncS3ListingResult S3Listing(const TString& tableName,
+    TAsyncObjectStorageListingResult List(const TString& tableName,
                            TValue&& keyPrefix,
                            const TString& pathColumnPrefix,
                            const TString& pathColumnDelimiter,
                            TValue&& startAfterKeySuffix,
                            ui32 maxKeys,
                            const TVector<TString> &columnsToReturn,
-                           const TS3ListingSettings& settings = TS3ListingSettings());
+                           const TObjectStorageListingSettings& settings = TObjectStorageListingSettings());
 
 private:
     std::shared_ptr<TImpl> Impl_;

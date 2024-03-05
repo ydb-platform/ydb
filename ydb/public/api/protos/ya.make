@@ -14,6 +14,7 @@ SRCS(
     draft/ydb_maintenance.proto
     draft/ydb_logstore.proto
     draft/ydb_dynamic_config.proto
+    draft/ydb_object_storage.proto
     ydb_federation_discovery.proto
     persqueue_error_codes_v1.proto
     ydb_auth.proto
@@ -40,7 +41,6 @@ SRCS(
     ydb_topic.proto
     ydb_value.proto
     ydb_keyvalue.proto
-    ydb_s3_internal.proto
 )
 
 CPP_PROTO_PLUGIN0(validation ydb/public/lib/validation)

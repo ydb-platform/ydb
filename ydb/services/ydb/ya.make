@@ -11,7 +11,7 @@ SRCS(
     ydb_scheme.cpp
     ydb_scripting.cpp
     ydb_table.cpp
-    ydb_s3_internal.cpp
+    ydb_object_storage.cpp
 )
 
 PEERDIR(

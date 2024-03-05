@@ -13,7 +13,7 @@ SRCS(
     ydb_maintenance_v1.proto
     ydb_logstore_v1.proto
     ydb_dynamic_config_v1.proto
-    ydb_s3_internal_v1.proto
+    ydb_object_storage_v1.proto
 )
 
 PEERDIR(

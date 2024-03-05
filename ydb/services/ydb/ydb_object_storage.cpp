@@ -1,29 +1,29 @@
-#include "ydb_s3_internal.h"
+#include "ydb_object_storage.h"
 
-#include <ydb/core/grpc_services/service_s3_listing.h>
+#include <ydb/core/grpc_services/service_object_storage.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/base/base.h>
 
 namespace NKikimr {
 namespace NGRpcService {
 
-void TGRpcYdbS3InternalService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
+void TGRpcYdbObjectStorageService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
 #define ADD_REQUEST(NAME, IN, OUT, CB) \
-    MakeIntrusive<TGRpcRequest<Ydb::S3Internal::IN, Ydb::S3Internal::OUT, TGRpcYdbS3InternalService>>(this, &Service_, CQ_, \
+    MakeIntrusive<TGRpcRequest<Ydb::ObjectStorage::IN, Ydb::ObjectStorage::OUT, TGRpcYdbObjectStorageService>>(this, &Service_, CQ_, \
         [this](NYdbGrpc::IRequestContextBase *ctx) { \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ActorSystem_->Send(GRpcRequestProxyId_, \
-                new NGRpcService::TGrpcRequestOperationCall<Ydb::S3Internal::IN, Ydb::S3Internal::OUT> \
+                new NGRpcService::TGrpcRequestOperationCall<Ydb::ObjectStorage::IN, Ydb::ObjectStorage::OUT> \
                     (ctx, &CB, NGRpcService::TRequestAuxSettings{NGRpcService::TRateLimiterMode::Off, nullptr})); \
-        }, &Ydb::S3Internal::V1::S3InternalService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("s3listing", #NAME))->Run();
+        }, &Ydb::ObjectStorage::V1::ObjectStorageService::AsyncService::Request ## NAME, \
+        #NAME, logger, getCounterBlock("object-storage-list", #NAME))->Run();
 
-    ADD_REQUEST(S3Listing, S3ListingRequest, S3ListingResponse, DoS3ListingRequest);
+    ADD_REQUEST(List, ListingRequest, ListingResponse, DoObjectStorageListingRequest);
 #undef ADD_REQUEST
 }
 

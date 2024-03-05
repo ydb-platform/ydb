@@ -22,7 +22,7 @@ protected:
     virtual bool DoLoad(IBlobManagerDb& dbBlobs) override {
         return Manager->LoadState(dbBlobs, GetSelfTabletId());
     }
-    virtual void DoOnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& /*tiers*/) override {
+    virtual void DoOnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& /*tiers*/) override {
         return;
     }
 

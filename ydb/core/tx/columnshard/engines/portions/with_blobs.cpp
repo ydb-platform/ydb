@@ -142,7 +142,7 @@ NKikimr::NOlap::TPortionInfoWithBlobs TPortionInfoWithBlobs::BuildByBlobs(std::v
         return l.GetAddress() < r.GetAddress();
     };
     std::sort(result.GetPortionInfo().Records.begin(), result.GetPortionInfo().Records.end(), pred);
-    schema->GetIndexInfo().FillStatistics(result);
+    result.FillStatistics(schema->GetIndexInfo());
     return result;
 }
 
@@ -222,9 +222,9 @@ bool TPortionInfoWithBlobs::ExtractColumnChunks(const ui32 columnId, std::vector
     return true;
 }
 
-void TPortionInfoWithBlobs::FillStatistics(const std::map<NStatistics::TIdentifier, NStatistics::TOperatorContainer>& operators, const TIndexInfo& index) {
+void TPortionInfoWithBlobs::FillStatistics(const TIndexInfo& index) {
     NStatistics::TPortionStorage storage;
-    for (auto&& i : operators) {
+    for (auto&& i : index.GetStatistics()) {
         THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> data;
         for (auto&& entityId : i.second->GetEntityIds()) {
             data.emplace(entityId, GetEntityChunks(entityId));

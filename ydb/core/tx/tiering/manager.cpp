@@ -176,12 +176,6 @@ TTiersManager& TTiersManager::Stop(const bool needStopActor) {
     return *this;
 }
 
-const NTiers::TManager& TTiersManager::GetManagerVerified(const TString& tierId) const {
-    auto it = Managers.find(tierId);
-    Y_ABORT_UNLESS(it != Managers.end());
-    return it->second;
-}
-
 const NTiers::TManager* TTiersManager::GetManagerOptional(const TString& tierId) const {
     auto it = Managers.find(tierId);
     if (it != Managers.end()) {

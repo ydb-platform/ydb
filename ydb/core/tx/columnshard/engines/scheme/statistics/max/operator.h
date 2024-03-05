@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/scheme/statistics/abstract/operator.h>
+#include <ydb/core/scheme_types/scheme_type_info.h>
 
 namespace NKikimr::NOlap::NStatistics::NMax {
 
@@ -9,7 +10,7 @@ private:
     ui32 EntityId = 0;
     static inline auto Registrator = TFactory::TRegistrator<TOperator>(::ToString(EType::Max));
 protected:
-    virtual void DoFillStatisticsData(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, TPortionStorage& portionStats, const TIndexInfo& index) const override;
+    virtual void DoFillStatisticsData(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, TPortionStorage& portionStats, const IIndexInfo& index) const override;
     virtual void DoShiftCursor(TPortionStorageCursor& cursor) const override {
         cursor.AddScalarsPosition(1);
     }

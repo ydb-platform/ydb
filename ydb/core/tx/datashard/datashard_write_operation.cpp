@@ -89,6 +89,7 @@ bool TValidatedWriteTx::ParseOperation(const NEvents::TDataEvents::TEvWrite& ev,
     switch (OperationType) {
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE:
+        case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE:
             break;
         default: {
             ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT;

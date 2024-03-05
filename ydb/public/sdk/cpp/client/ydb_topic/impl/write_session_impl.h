@@ -317,7 +317,6 @@ private:
     };
 
     THandleResult OnErrorImpl(NYdb::TPlainStatus&& status); // true - should Start(), false - should Close(), empty - no action
-
 public:
     TWriteSessionImpl(const TWriteSessionSettings& settings,
             std::shared_ptr<TTopicClient::TImpl> client,

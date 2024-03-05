@@ -697,9 +697,29 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(stats->GetEndOffset(), count);
 
     }
+} // Y_UNIT_TEST_SUITE(BasicUsage)
 
+Y_UNIT_TEST_SUITE(TSettingsValidation) {
+    Y_UNIT_TEST(TWriteSessionProducerSettings) {
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
+        TTopicClient client = setup.MakeClient();
 
+        {
+            auto writeSettings = TWriteSessionSettings()
+                        .Path(TEST_TOPIC)
+                        .ProducerId("something")
+                        .DeduplicationEnabled(false);
+            try {
+                auto writeSession = client.CreateWriteSession(writeSettings);
+                auto event = writeSession->GetEvent(true);
+                UNIT_ASSERT(event.Defined());
+                auto* closedEvent = std::get_if<TSessionClosedEvent>(&event.GetRef());
+                UNIT_ASSERT(closedEvent);
+            } catch (NYdb::TContractViolation&) {
+                //pass
+            }
+        }
+    }
+} // Y_UNIT_TEST_SUITE(TSettingsValidation)
 
-}
-
-}
+} // namespace

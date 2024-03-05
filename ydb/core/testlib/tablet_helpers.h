@@ -39,7 +39,13 @@ namespace NKikimr {
 
     const TChannelsBindings DEFAULT_BINDED_CHANNELS = {GetDefaultChannelBind(), GetDefaultChannelBind(), GetDefaultChannelBind()};
     void SetupBoxAndStoragePool(TTestActorRuntime &runtime, const TActorId& sender, ui32 nGroups = 1);
+    inline void SetupBoxAndStoragePool(TTestActorRuntime &runtime, const TActorId& sender, ui32, ui32 nGroups) {
+        SetupBoxAndStoragePool(runtime, sender, nGroups);
+    }
     void SetupChannelProfiles(TAppPrepare &app, ui32 nchannels = 3);
+    inline void SetupChannelProfiles(TAppPrepare &app, ui32, ui32 nchannels) {
+        SetupChannelProfiles(app, nchannels);
+    }
     TDomainsInfo::TDomain::TStoragePoolKinds DefaultPoolKinds(ui32 count = 1);
 
     i64 SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val);

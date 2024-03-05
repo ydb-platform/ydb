@@ -154,14 +154,11 @@ public:
                         Tablets[pathDescription.GetDomainDescription().GetProcessingParams().GetSchemeShard()] = NKikimrTabletBase::TTabletTypes::SchemeShard;
                     } else {
                         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-                        TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
+                        auto *domain = domains->GetDomain();
                         Tablets[domain->SchemeRoot] = NKikimrTabletBase::TTabletTypes::SchemeShard;
-
-                        ui32 hiveDomain = domains->GetHiveDomainUid(domain->DefaultHiveUid);
-                        ui64 defaultStateStorageGroup = domains->GetDefaultStateStorageGroup(hiveDomain);
-                        Tablets[MakeBSControllerID(defaultStateStorageGroup)] = NKikimrTabletBase::TTabletTypes::BSController;
-                        Tablets[MakeConsoleID(defaultStateStorageGroup)] = NKikimrTabletBase::TTabletTypes::Console;
-                        Tablets[MakeNodeBrokerID(defaultStateStorageGroup)] = NKikimrTabletBase::TTabletTypes::NodeBroker;
+                        Tablets[MakeBSControllerID()] = NKikimrTabletBase::TTabletTypes::BSController;
+                        Tablets[MakeConsoleID()] = NKikimrTabletBase::TTabletTypes::Console;
+                        Tablets[MakeNodeBrokerID()] = NKikimrTabletBase::TTabletTypes::NodeBroker;
                     }
                     if (pathDescription.GetDomainDescription().GetProcessingParams().HasHive()) {
                         Tablets[pathDescription.GetDomainDescription().GetProcessingParams().GetHive()] = NKikimrTabletBase::TTabletTypes::Hive;

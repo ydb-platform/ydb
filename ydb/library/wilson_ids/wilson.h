@@ -1,65 +1,98 @@
 #pragma once
 
+#include <util/system/types.h>
+
 namespace NKikimr {
+    struct TComponentTracingLevels {
+#ifdef DEFINE_TRACING_LEVELS
+#error "Macro collision: DEFINE_TRACING_LEVELS"
+#endif
+
+#define DEFINE_TRACING_LEVELS(COMPONENT, MINIMAL, BASIC, DETAILED, FULL, DIAGNOSTIC, TRACE) \
+        struct COMPONENT { \
+            enum : ui8 { \
+                TopLevel = MINIMAL, \
+                Basic = BASIC, \
+                Detailed = DETAILED, \
+                Full = FULL, \
+                Diagnostic = DIAGNOSTIC, \
+                Trace = TRACE, \
+            }; \
+        };
+
+
+        DEFINE_TRACING_LEVELS(TGrpcProxy, 0, 5, 9, 13, 14, 15)
+        DEFINE_TRACING_LEVELS(TQueryProcessor, 1, 5, 9, 13, 14, 15)
+        DEFINE_TRACING_LEVELS(TDistributedTransactions, 2, 6, 10, 13, 14, 15)
+        DEFINE_TRACING_LEVELS(TTablet, 3, 7, 11, 13, 14, 15)
+        DEFINE_TRACING_LEVELS(TDistributedStorage, 4, 8, 12, 13, 14, 15)
+
+#undef DEFINE_TRACING_LEVELS
+    };
+
 
     struct TWilson {
         enum {
-            BlobStorage = 8, // DS proxy and lower levels
-            DsProxyInternals = 9,
-            VDiskTopLevel = 12,
-            VDiskInternals = 13,
-            PDisk = 14,
+            BlobStorage = TComponentTracingLevels::TDistributedStorage::TopLevel,
+            DsProxyInternals = TComponentTracingLevels::TDistributedStorage::Detailed,
+            VDiskTopLevel = TComponentTracingLevels::TDistributedStorage::Basic,
+            VDiskInternals = TComponentTracingLevels::TDistributedStorage::Detailed,
+            PDisk = TComponentTracingLevels::TDistributedStorage::Detailed,
+            PDiskInternals = TComponentTracingLevels::TDistributedStorage::Full,
         };
     };
 
     struct TWilsonKqp {
         enum {
-            KqpSession = 8,
-                CompileService = 9,
-                CompileActor = 9,
-                SessionAcquireSnapshot = 9,
+            KqpSession = TComponentTracingLevels::TQueryProcessor::TopLevel,
+                CompileService = TComponentTracingLevels::TQueryProcessor::Basic,
+                CompileActor = TComponentTracingLevels::TQueryProcessor::Basic,
+                SessionAcquireSnapshot = TComponentTracingLevels::TQueryProcessor::Basic,
 
-                    ExecuterTableResolve = 10,
-                    ExecuterShardsResolve = 10,
+                    ExecuterTableResolve = TComponentTracingLevels::TQueryProcessor::Detailed,
+                    ExecuterShardsResolve = TComponentTracingLevels::TQueryProcessor::Detailed,
 
-                LiteralExecuter = 9,
+                LiteralExecuter = TComponentTracingLevels::TQueryProcessor::Basic,
 
-                DataExecuter = 9,
-                    DataExecuterAcquireSnapshot = 10,
-                    DataExecuterRunTasks = 10,
+                DataExecuter = TComponentTracingLevels::TQueryProcessor::Basic,
+                    DataExecuterAcquireSnapshot = TComponentTracingLevels::TQueryProcessor::Detailed,
+                    DataExecuterRunTasks = TComponentTracingLevels::TQueryProcessor::Detailed,
 
-                ScanExecuter = 9,
-                    ScanExecuterRunTasks = 10,
+                ScanExecuter = TComponentTracingLevels::TQueryProcessor::Basic,
+                    ScanExecuterRunTasks = TComponentTracingLevels::TQueryProcessor::Detailed,
 
-                KqpNodeSendTasks = 9,
+                KqpNodeSendTasks = TComponentTracingLevels::TQueryProcessor::Basic,
 
-                ProposeTransaction = 9,
+                ProposeTransaction = TComponentTracingLevels::TQueryProcessor::Basic,
 
-                ComputeActor = 9,
+                ComputeActor = TComponentTracingLevels::TQueryProcessor::Basic,
 
-                ReadActor = 9,
-                    ReadActorShardsResolve = 10,
+                ReadActor = TComponentTracingLevels::TQueryProcessor::Basic,
+                    ReadActorShardsResolve = TComponentTracingLevels::TQueryProcessor::Detailed,
 
-                LookupActor = 9,
-                    LookupActorShardsResolve = 10,
-                
-                BulkUpsertActor = 9,
+                LookupActor = TComponentTracingLevels::TQueryProcessor::Basic,
+                    LookupActorShardsResolve = TComponentTracingLevels::TQueryProcessor::Detailed,
 
-                WriteActor = 11,
-                    WriteActorTableNavigate = 11,
+                WriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
+                    WriteActorTableNavigate = TComponentTracingLevels::TQueryProcessor::Detailed,
+
+            BulkUpsertActor = TComponentTracingLevels::TQueryProcessor::TopLevel,
         };
     };
 
     struct TWilsonTablet {
         enum {
-            Tablet = 15
+            TabletTopLevel = TComponentTracingLevels::TTablet::TopLevel,
+            TabletBasic = TComponentTracingLevels::TTablet::Basic,
+            TabletDetailed = TComponentTracingLevels::TTablet::Detailed,
+            TabletFull = TComponentTracingLevels::TTablet::Full,
         };
     };
 
     struct TWilsonGrpc {
         enum {
-            RequestProxy = 9,
-            RequestActor = 9,
+            RequestProxy = TComponentTracingLevels::TGrpcProxy::TopLevel,
+            RequestActor = TComponentTracingLevels::TGrpcProxy::TopLevel,
         };
     };
 

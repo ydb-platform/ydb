@@ -58,7 +58,7 @@ public:
             LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
                         "Taking ownership of tenant pool on node " << nodeId);
 
-            ctx.Send(MakeTenantPoolID(nodeId, Self->DomainId), new TEvTenantPool::TEvTakeOwnership(Self->Generation()));
+            ctx.Send(MakeTenantPoolID(nodeId), new TEvTenantPool::TEvTakeOwnership(Self->Generation()));
             return true;
         }
 

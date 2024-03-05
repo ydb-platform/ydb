@@ -997,15 +997,12 @@ TStateStorageServiceInitializer::TStateStorageServiceInitializer(const TKikimrRu
     : IKikimrServicesInitializer(runConfig) {
 }
 
-void TStateStorageServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
-                                                         const NKikimr::TAppData* appData) {
-    // setup state storage stuff
-    const ui32 maxssid = 255;
-    bool knownss[maxssid + 1] = {};
+void TStateStorageServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    bool found = false;
+
     for (const NKikimrConfig::TDomainsConfig::TStateStorage &ssconf : Config.GetDomainsConfig().GetStateStorage()) {
-        const ui32 ssid = ssconf.GetSSId();
-        Y_ABORT_UNLESS(ssid <= maxssid);
-        knownss[ssid] = true;
+        Y_ABORT_UNLESS(ssconf.GetSSId() == 1);
+        found = true;
 
         TIntrusivePtr<TStateStorageInfo> ssrInfo;
         TIntrusivePtr<TStateStorageInfo> ssbInfo;
@@ -1017,17 +1014,13 @@ void TStateStorageServiceInitializer::InitializeServices(NActors::TActorSystemSe
         StartLocalStateStorageReplicas(CreateStateStorageBoardReplica, ssbInfo.Get(), appData->SystemPoolId, *setup);
         StartLocalStateStorageReplicas(CreateSchemeBoardReplica, sbrInfo.Get(), appData->SystemPoolId, *setup);
 
-        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeStateStorageProxyID(ssid),
-                                                                           TActorSetupCmd(CreateStateStorageProxy(ssrInfo.Get(), ssbInfo.Get(), sbrInfo.Get()),
-                                                                                          TMailboxType::ReadAsFilled,
-                                                                                          appData->SystemPoolId)));
+        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeStateStorageProxyID(),
+            TActorSetupCmd(CreateStateStorageProxy(ssrInfo.Get(), ssbInfo.Get(), sbrInfo.Get()),
+            TMailboxType::ReadAsFilled, appData->SystemPoolId)));
     }
-    for (ui32 ssid = 0; ssid <= maxssid; ++ssid) {
-        if (!knownss[ssid])
-            setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeStateStorageProxyID(ssid),
-                                                                               TActorSetupCmd(CreateStateStorageProxyStub(),
-                                                                                              TMailboxType::HTSwap,
-                                                                                              appData->SystemPoolId)));
+    if (!found) {
+        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeStateStorageProxyID(),
+            TActorSetupCmd(CreateStateStorageProxyStub(), TMailboxType::HTSwap, appData->SystemPoolId)));
     }
 
     setup->LocalServices.emplace_back(
@@ -2319,8 +2312,7 @@ TTxProxyInitializer::TTxProxyInitializer(const TKikimrRunConfig &runConfig)
 
 TVector<ui64> TTxProxyInitializer::CollectAllAllocatorsFromAllDomains(const TAppData *appData) {
     TVector<ui64> allocators;
-    for (auto it: appData->DomainsInfo->Domains) {
-        auto &domain = it.second;
+    if (const auto& domain = appData->DomainsInfo->Domain) {
         for (auto tabletId: domain->TxAllocators) {
             allocators.push_back(tabletId);
         }
@@ -2440,7 +2432,18 @@ TConfigsDispatcherInitializer::TConfigsDispatcherInitializer(const TKikimrRunCon
 }
 
 void TConfigsDispatcherInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    IActor* actor = NConsole::CreateConfigsDispatcher(Config, Labels, InitialCmsConfig, InitialCmsYamlConfig, ConfigInitInfo);
+    NKikimr::NConsole::TConfigsDispatcherInitInfo initInfo {
+        .InitialConfig = Config,
+        .Labels = Labels,
+        .ItemsServeRules = std::monostate{},
+        .DebugInfo = NKikimr::NConsole::TDebugInfo {
+            .StaticConfig = Config,
+            .OldDynConfig = InitialCmsConfig,
+            .NewDynConfig = InitialCmsYamlConfig,
+            .InitInfo = ConfigInitInfo,
+        },
+    };
+    IActor* actor = NConsole::CreateConfigsDispatcher(initInfo);
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
             NConsole::MakeConfigsDispatcherID(NodeId),
             TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));

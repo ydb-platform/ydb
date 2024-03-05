@@ -91,10 +91,10 @@ struct TTestContext {
 
 
     TTestContext() {
-        TabletId = MakeTabletID(0, 0, 1);
+        TabletId = MakeTabletID(false, 1);
         TabletIds.push_back(TabletId);
 
-        BalancerTabletId = MakeTabletID(0, 0, 2);
+        BalancerTabletId = MakeTabletID(false, 2);
         TabletIds.push_back(BalancerTabletId);
     }
 
@@ -487,7 +487,7 @@ TActorId CmdCreateSession(const TPQCmdSettings& settings, TTestContext& tc);
 void CmdGetOffset(
     const ui32 partition,
     const TString& user,
-    i64 offset,
+    i64 expectedOffset,
     TTestContext& tc,
     i64 ctime = -1,
     ui64 writeTime = 0);

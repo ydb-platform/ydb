@@ -48,11 +48,7 @@ def test_ts_config_validate_empty():
 def test_ts_config_declaration_with_dir():
     cfg = TsConfig(path="/tsconfig.json")
     cfg.data = {
-        "compilerOptions": {
-            "rootDir": "./src",
-            "declaration": True,
-            "declarationDir": "some/dir"
-        },
+        "compilerOptions": {"rootDir": "./src", "declaration": True, "declarationDir": "some/dir"},
     }
 
     cfg.validate(use_outdir=False)
@@ -61,10 +57,7 @@ def test_ts_config_declaration_with_dir():
 def test_ts_config_declaration_without_dir():
     cfg = TsConfig(path="/tsconfig.json")
     cfg.data = {
-        "compilerOptions": {
-            "rootDir": "./src",
-            "declaration": True
-        },
+        "compilerOptions": {"rootDir": "./src", "declaration": True},
     }
 
     # When outDir should not be used we got the error
@@ -79,11 +72,7 @@ def test_ts_config_declaration_without_dir():
 def test_ts_config_declaration_with_outdir():
     cfg = TsConfig(path="/tsconfig.json")
     cfg.data = {
-        "compilerOptions": {
-            "rootDir": "./src",
-            "outDir": "some/dir",
-            "declaration": True
-        },
+        "compilerOptions": {"rootDir": "./src", "outDir": "some/dir", "declaration": True},
     }
 
     # When we allow outDir it will be enought to set it

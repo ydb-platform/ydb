@@ -47,6 +47,9 @@ TEngineLogsCounters::TEngineLogsCounters()
 
     PortionNoBorderCount = TBase::GetDeriviative("Ttl/PortionNoBorder/Count");
     PortionNoBorderBytes = TBase::GetDeriviative("Ttl/PortionNoBorder/Bytes");
+
+    StatUsageForTTLCount = TBase::GetDeriviative("Ttl/StatUsageForTTLCount/Count");
+    ChunkUsageForTTLCount = TBase::GetDeriviative("Ttl/ChunkUsageForTTLCount/Count");
 }
 
 void TEngineLogsCounters::TPortionsInfoGuard::OnNewPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) const {

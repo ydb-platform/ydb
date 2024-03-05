@@ -90,7 +90,7 @@ Y_ABSL_NAMESPACE_BEGIN
 //
 // Such implicit cast chaining may be useful within template logic.
 template <typename To>
-constexpr To implicit_cast(typename y_absl::internal::identity_t<To> to) {
+constexpr To implicit_cast(typename y_absl::internal::type_identity_t<To> to) {
   return to;
 }
 

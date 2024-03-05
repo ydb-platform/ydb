@@ -146,9 +146,9 @@ public:
     }
 };
 
-static TActorId MakeBoardReplicaID(ui32 node, ui64 stateStorageGroup, ui32 replicaIndex) {
+static TActorId MakeBoardReplicaID(ui32 node, ui32 replicaIndex) {
     char x[12] = {'s', 's', 'b'};
-    x[3] = (char)stateStorageGroup;
+    x[3] = (char)1;
     memcpy(x + 5, &replicaIndex, sizeof(ui32));
     return TActorId(node, TStringBuf(x, 12));
 }
@@ -225,22 +225,19 @@ void TTestActorSystem::SetupTabletRuntime(const std::function<TNodeLocation(ui32
 }
 
 void TTestActorSystem::SetupStateStorage(ui32 nodeId, ui32 stateStorageNodeId) {
-    for (const auto& [id, domain] : GetDomainsInfo()->Domains) {
-        const ui64 stateStorageGroup = domain->DefaultStateStorageGroup;
+    if (const auto& domain = GetDomainsInfo()->Domain) {
         ui32 numReplicas = 3;
 
         auto process = [&](auto&& generateId, auto&& createReplica) {
             auto info = MakeIntrusive<TStateStorageInfo>();
-            info->StateStorageGroup = stateStorageGroup;
             info->NToSelect = numReplicas;
             info->Rings.resize(numReplicas);
             for (ui32 i = 0; i < numReplicas; ++i) {
-                info->Rings[i].Replicas.push_back(generateId(stateStorageNodeId, stateStorageGroup, i));
+                info->Rings[i].Replicas.push_back(generateId(stateStorageNodeId, i));
             }
             if (nodeId == stateStorageNodeId) {
                 for (ui32 i = 0; i < numReplicas; ++i) {
-                    RegisterService(generateId(stateStorageNodeId, stateStorageGroup, i),
-                        Register(createReplica(info.Get(), i), nodeId));
+                    RegisterService(generateId(stateStorageNodeId, i), Register(createReplica(info.Get(), i), nodeId));
                 }
             }
             return info;
@@ -250,8 +247,7 @@ void TTestActorSystem::SetupStateStorage(ui32 nodeId, ui32 stateStorageNodeId) {
         auto b = process(MakeBoardReplicaID, CreateStateStorageBoardReplica);
         auto sb = process(MakeSchemeBoardReplicaID, CreateSchemeBoardReplica);
 
-        RegisterService(MakeStateStorageProxyID(stateStorageGroup),
-            Register(CreateStateStorageProxy(ss.Get(), b.Get(), sb.Get()), nodeId));
+        RegisterService(MakeStateStorageProxyID(), Register(CreateStateStorageProxy(ss.Get(), b.Get(), sb.Get()), nodeId));
     }
 }
 

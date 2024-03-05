@@ -75,7 +75,7 @@ void TWriteHunksCommand::DoExecute(ICommandContextPtr context)
     std::vector<NApi::TSerializableHunkDescriptorPtr> serializableDescriptors;
     serializableDescriptors.reserve(descriptors.size());
     for (const auto& descriptor : descriptors) {
-        serializableDescriptors.push_back(New<NApi::TSerializableHunkDescriptor>(descriptor));
+        serializableDescriptors.push_back(CreateSerializableHunkDescriptor(descriptor));
     }
 
     context->ProduceOutputValue(BuildYsonStringFluently()

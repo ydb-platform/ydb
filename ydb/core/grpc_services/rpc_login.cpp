@@ -39,7 +39,7 @@ public:
     void Bootstrap() {
         const Ydb::Auth::LoginRequest* protoRequest = GetProtoRequest();
         Credentials = PrepareCredentials(protoRequest->user(), protoRequest->password(), AppData()->AuthConfig);
-        TString domainName = "/" + AppData()->DomainsInfo->Domains.begin()->second->Name;
+        TString domainName = "/" + AppData()->DomainsInfo->GetDomain()->Name;
         PathToDatabase = AppData()->AuthConfig.GetDomainLoginOnly() ? domainName : DatabaseName;
         auto sendParameters = GetSendParameters(Credentials, PathToDatabase);
         Send(sendParameters.Recipient, sendParameters.Event.Release());

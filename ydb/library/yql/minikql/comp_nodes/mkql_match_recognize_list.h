@@ -1,7 +1,11 @@
 #pragma once
+
+#include "mkql_match_recognize_save_load.h"
+
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <unordered_map>
 
@@ -131,15 +135,37 @@ class TSparseList {
             }
         }
 
+        void Save(TOutputSerializer& serializer) const {
+            serializer(Storage.size());
+            for (const auto& [key, item]: Storage) {
+                serializer(key, item.Value, item.LockCount);
+            }
+        }
+
+        void Load(TInputSerializer& serializer) {
+            auto size = serializer.Read<TStorage::size_type>();
+            Storage.reserve(size);
+            for (size_t i = 0; i < size; ++i) {
+                TStorage::key_type key;
+                NUdf::TUnboxedValue row;
+                decltype(TItem::LockCount) lockCount;
+                serializer(key, row, lockCount);
+                Storage.emplace(key, TItem{row, lockCount});
+            }
+        }
+
     private:
         //TODO consider to replace hash table with contiguous chunks
         using TAllocator = TMKQLAllocator<std::pair<const size_t, TItem>, EMemorySubPool::Temporary>;
-        std::unordered_map<
+
+        using TStorage = std::unordered_map<
             size_t,
             TItem,
             std::hash<size_t>,
             std::equal_to<size_t>,
-            TAllocator> Storage;
+            TAllocator>;
+
+        TStorage Storage;
     };
     using TContainerPtr = TContainer::TPtr;
 
@@ -242,6 +268,14 @@ public:
             ToIndex = -1;
         }
 
+        void Save(TOutputSerializer& serializer) const {
+            serializer(Container, FromIndex, ToIndex);
+       }
+
+        void Load(TInputSerializer& serializer) {
+            serializer(Container, FromIndex, ToIndex);
+        }
+
     private:
         TRange(TContainerPtr container, size_t index)
             : Container(container)
@@ -295,6 +329,14 @@ public:
 
     bool Empty() const {
         return Size() == 0;
+    }
+
+    void Save(TOutputSerializer& serializer) const {
+        serializer(Container, ListSize);
+    }
+
+    void Load(TInputSerializer& serializer) {
+        serializer(Container, ListSize);
     }
 
 private:

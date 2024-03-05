@@ -53,9 +53,7 @@ public:
 
 IActor* CreateMessageBusBSAdm(TBusMessageContext &msg) {
     const NKikimrClient::TBSAdm &record = static_cast<TBusBSAdm *>(msg.GetMessage())->Record;
-
-    const ui32 targetDomain = record.GetDomain();
-    const ui64 tabletId = MakeBSControllerID(targetDomain);
+    const ui64 tabletId = MakeBSControllerID();
 
     if (record.HasGroupReconfigureWipe()) {
         const auto &x = record.GetGroupReconfigureWipe();

@@ -523,6 +523,25 @@ void THttpInput::MaybeLogSlowProgress()
     }
 }
 
+bool THttpInput::IsRedirectCode(EStatusCode code) const
+{
+    return code == EStatusCode::MovedPermanently || code == EStatusCode::Found ||
+        code == EStatusCode::SeeOther || code == EStatusCode::UseProxy ||
+        code == EStatusCode::TemporaryRedirect || code == EStatusCode::PermanentRedirect;
+}
+
+std::optional<TString> THttpInput::TryGetRedirectUrl()
+{
+    EnsureHeadersReceived();
+    if (IsRedirectCode(GetStatusCode())) {
+        auto url = Headers_->Find("Location");
+        if (url) {
+            return *url;
+        }
+    }
+    return std::nullopt;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 THttpOutput::THttpOutput(

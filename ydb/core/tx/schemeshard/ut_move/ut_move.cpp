@@ -654,7 +654,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TestDropTable(runtime, ++txId, "/MyRoot", "TableMoveTwice");
         env.TestWaitNotification(runtime, txId);
 
-        env.TestWaitTabletDeletion(runtime, {9437194, 9437195});
+        env.TestWaitTabletDeletion(runtime, {72075186233409546, 72075186233409547});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::ChildrenCount(0),

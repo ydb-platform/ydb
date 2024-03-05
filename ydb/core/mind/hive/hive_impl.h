@@ -306,8 +306,6 @@ public:
 protected:
     TActorId BSControllerPipeClient;
     TActorId RootHivePipeClient;
-    ui64 HiveUid; // Hive Personal Identifier - identifies a unique individual hive
-    ui32 HiveDomain;
     TTabletId RootHiveId;
     TTabletId HiveId;
     ui64 HiveGeneration;

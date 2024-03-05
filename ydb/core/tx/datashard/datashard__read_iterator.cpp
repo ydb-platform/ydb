@@ -2545,7 +2545,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
     auto* request = ev->Get();
     
     if (!request->ReadSpan) {
-        request->ReadSpan = NWilson::TSpan(TWilsonTablet::Tablet, std::move(ev->TraceId), "Datashard.Read", NWilson::EFlags::AUTO_END);
+        request->ReadSpan = NWilson::TSpan(TWilsonTablet::TabletTopLevel, std::move(ev->TraceId), "Datashard.Read", NWilson::EFlags::AUTO_END);
         request->ReadSpan.Attribute("Shard", std::to_string(TabletID()));
     }
 

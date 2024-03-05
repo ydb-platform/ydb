@@ -744,8 +744,8 @@ private:
     const ui32 RecordsCount;
     const ui32 RawBytes;
 public:
-    TIndexChunk BuildIndexChunk() const {
-        return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, BlobRange);
+    TIndexChunk BuildIndexChunk(const TBlobRangeLink16::TLinkId blobLinkId) const {
+        return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, BlobRange.BuildLink(blobLinkId));
     }
 
     template <class TSource>

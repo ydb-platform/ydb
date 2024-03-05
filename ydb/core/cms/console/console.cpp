@@ -24,8 +24,6 @@ void TConsole::DefaultSignalTabletActive(const TActorContext &)
 void TConsole::OnActivateExecutor(const TActorContext &ctx)
 {
     auto domains = AppData(ctx)->DomainsInfo;
-    auto domainId = domains->GetDomainUidByTabletId(TabletID());
-    Y_ABORT_UNLESS(domainId != TDomainsInfo::BadDomainId);
 
     auto tabletsCounters = GetServiceCounters(AppData(ctx)->Counters, "tablets");
     tabletsCounters->RemoveSubgroup("type", "CONSOLE");
@@ -36,7 +34,7 @@ void TConsole::OnActivateExecutor(const TActorContext &ctx)
     ConfigsManager = new TConfigsManager(*this);
     ctx.RegisterWithSameMailbox(ConfigsManager);
 
-    TenantsManager = new TTenantsManager(*this, domains->Domains.at(domainId),
+    TenantsManager = new TTenantsManager(*this, domains->Domain,
                                          Counters,
                                          AppData()->FeatureFlags);
     ctx.RegisterWithSameMailbox(TenantsManager);
@@ -78,7 +76,7 @@ bool TConsole::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActo
         return true;
 
     auto domains = AppData(ctx)->DomainsInfo;
-    auto domain = domains->Domains.at(domains->GetDomainUidByTabletId(TabletID()));
+    auto domain = domains->Domain;
 
     TStringStream str;
     HTML(str) {

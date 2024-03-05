@@ -87,8 +87,8 @@ TKqpPlanner::TKqpPlanner(TKqpTasksGraph& graph, ui64 txId, const TActorId& execu
 {
     if (!Database) {
         // a piece of magic for tests
-        for (auto& x : AppData()->DomainsInfo->DomainByName) {
-            Database = TStringBuilder() << '/' << x.first;
+        if (const auto& domain = AppData()->DomainsInfo->Domain) {
+            Database = TStringBuilder() << '/' << domain->Name;
             LOG_E("Database not set, use " << Database);
         }
     }

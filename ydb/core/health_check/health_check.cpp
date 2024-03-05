@@ -539,13 +539,12 @@ public:
             Timeout = GetDuration(Request->Request.operation_params().operation_timeout());
         }
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-        TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
+        auto *domain = domains->GetDomain();
         DomainPath = "/" + domain->Name;
         RootSchemeShardId = domain->SchemeRoot;
-        auto group = domains->GetDefaultStateStorageGroup(domain->DomainUid);
-        ConsoleId = MakeConsoleID(group);
-        RootHiveId = domains->GetHive(domain->DefaultHiveUid);
-        BsControllerId = MakeBSControllerID(group);
+        ConsoleId = MakeConsoleID();
+        RootHiveId = domains->GetHive();
+        BsControllerId = MakeBSControllerID();
 
         if (ConsoleId) {
             TabletRequests.TabletStates[ConsoleId].Database = DomainPath;

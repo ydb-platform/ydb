@@ -250,9 +250,15 @@ public:
         FillResponseStats(Ydb::StatusIds::SUCCESS);
         Counters->TxProxyMon->ReportStatusOK->Inc();
 
-        auto addLocks = [&](const NYql::NDqProto::TExtraInputData& data) {
-            if (data.GetData().Is<NKikimrTxDataShard::TEvKqpInputActorResultInfo>()) {
+        auto addLocks = [&](const auto& data) {
+            if (data.GetData().template Is<NKikimrTxDataShard::TEvKqpInputActorResultInfo>()) {
                 NKikimrTxDataShard::TEvKqpInputActorResultInfo info;
+                YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");
+                for (auto& lock : info.GetLocks()) {
+                    Locks.push_back(lock);
+                }
+            } else if (data.GetData().template Is<NKikimrKqp::TEvKqpOutputActorResultInfo>()) {
+                NKikimrKqp::TEvKqpOutputActorResultInfo info;
                 YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");
                 for (auto& lock : info.GetLocks()) {
                     Locks.push_back(lock);
@@ -265,6 +271,10 @@ public:
             }
             for (auto& transform : data.GetInputTransformsData()) {
                 addLocks(transform);
+            }
+            for (auto& sink : data.GetSinksExtraData()) {
+                Cerr << "TEST::: " << " DATA FROM SINK " << Endl;
+                addLocks(sink);
             }
         }
 

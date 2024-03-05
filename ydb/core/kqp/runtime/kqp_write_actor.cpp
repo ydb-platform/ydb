@@ -108,14 +108,29 @@ namespace {
             });
         }
 
-        // TODO: add&check locks
+        bool AddAndCheckLock(NKikimrDataEvents::TLock&& lock) {
+            if (!Lock) {
+                Lock = std::move(lock);
+                return true;
+            } else {
+                return lock.GetLockId() == Lock->GetLockId()
+                    && lock.GetDataShard() == Lock->GetDataShard()
+                    && lock.GetSchemeShard() == Lock->GetSchemeShard()
+                    && lock.GetPathId() == Lock->GetPathId()
+                    && lock.GetGeneration() == Lock->GetGeneration()
+                    && lock.GetCounter() == Lock->GetCounter();
+            }
+        }
 
-        // TODO: get locks
+        const std::optional<NKikimrDataEvents::TLock>& GetLock() const {
+            return Lock;
+        }
 
     private:
         std::deque<TInFlightBatch> Batches;
         ui64 NextCookie = 0;
         bool Closed = false;
+        std::optional<NKikimrDataEvents::TLock> Lock;
     };
 
     class TShardsInfo {
@@ -247,6 +262,18 @@ private:
         return Serializer
             ? MemoryLimit - Serializer->GetMemory()
             : std::numeric_limits<i64>::min(); // Can't use zero here because compute can use overcommit!
+    }
+
+    TMaybe<google::protobuf::Any> ExtraData() override {
+        NKikimrKqp::TEvKqpOutputActorResultInfo resultInfo;
+        for (const auto& [_, shardInfo] : ShardsInfo.GetShards()) {
+            if (const auto& lock = shardInfo.GetLock(); lock) {
+                resultInfo.AddLocks()->CopyFrom(*lock);
+            }
+        }
+        google::protobuf::Any result;
+        result.PackFrom(resultInfo);
+        return result;
     }
 
     void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64, const TMaybe<NYql::NDqProto::TCheckpoint>&, bool finished) final {
@@ -450,7 +477,9 @@ private:
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(
             std::get<ui64>(TxId),
-            NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            isLastBatch
+                ? NKikimrDataEvents::TEvWrite::MODE_PREPARE
+                : NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         if (!inFlightBatch.Data.empty()) {
             const ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite)
                 .AddDataToPayload(TString(inFlightBatch.Data));

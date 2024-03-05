@@ -534,6 +534,15 @@ protected:
                 }
             }
         }
+        for (auto& [index, output] : SinksMap) {
+            if (output.AsyncOutput) {
+                if (auto data = output.AsyncOutput->ExtraData()) {
+                    auto* entry = extraData->AddSinksExtraData();
+                    entry->SetIndex(index);
+                    entry->MutableData()->CopyFrom(*data);
+                }
+            }
+        }
     }
 
     void ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues)

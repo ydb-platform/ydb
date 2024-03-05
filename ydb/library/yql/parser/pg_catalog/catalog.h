@@ -58,6 +58,7 @@ struct TProcDesc {
     TString Src;
     TString Descr;
     TVector<ui32> ArgTypes;
+    TVector<TString> InputArgNames;
     ui32 ResultType = 0;
     bool IsStrict = true;
     EProcKind Kind = EProcKind::Function;

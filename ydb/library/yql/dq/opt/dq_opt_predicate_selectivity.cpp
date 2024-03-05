@@ -28,7 +28,10 @@ namespace {
         } else if (auto just = input.Maybe<TCoJust>()) {
             return IsAttribute(just.Cast().Input(), attributeName);
         } else if (input.Ptr()->IsCallable("PgCast")) {
-            auto child = TExprBase(input.Ptr()->ChildRef(1));
+            auto child = TExprBase(input.Ptr()->ChildRef(0));
+            return IsAttribute(child, attributeName);
+        } else if (input.Ptr()->IsCallable("FromPg")) {
+            auto child = TExprBase(input.Ptr()->ChildRef(0));
             return IsAttribute(child, attributeName);
         }
 
@@ -118,6 +121,21 @@ double NYql::NDq::ComputePredicateSelectivity(const TExprBase& input, const std:
     else if (input.Ptr()->IsCallable("FromPg")) {
         auto child = TExprBase(input.Ptr()->ChildRef(0));
         result = ComputePredicateSelectivity(child, stats);
+    }
+
+    else if (input.Ptr()->IsCallable("Exists")) {
+        auto child = TExprBase(input.Ptr()->ChildRef(0));
+        result = ComputePredicateSelectivity(child, stats);
+    }
+
+    else if(input.Ptr()->IsCallable("Find") || input.Ptr()->IsCallable("StringContains")) {
+        auto member =  TExprBase(input.Ptr()->ChildRef(0));
+        auto stringPred = TExprBase(input.Ptr()->ChildRef(1));
+
+        TString attributeName;
+        if (IsAttribute(member, attributeName) && IsConstantExpr(stringPred.Ptr())) {
+            result = 0.1;
+        }
     }
 
     // Process AND, OR and NOT logical operators.

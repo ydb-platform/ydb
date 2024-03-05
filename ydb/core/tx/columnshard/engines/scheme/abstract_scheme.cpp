@@ -1,6 +1,7 @@
 #include "abstract_scheme.h"
 
 #include <ydb/core/tx/columnshard/engines/index_info.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap {
@@ -114,6 +115,27 @@ std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByColumnIdVerified(const 
     auto result = GetFieldByColumnIdOptional(columnId);
     AFL_VERIFY(result)("event", "unknown_column")("column_id", columnId)("schema", DebugString());
     return result;
+}
+
+std::shared_ptr<NKikimr::NOlap::TColumnLoader> ISnapshotSchema::GetColumnLoaderVerified(const ui32 columnId) const {
+    auto result = GetColumnLoaderOptional(columnId);
+    AFL_VERIFY(result);
+    return result;
+}
+
+std::shared_ptr<NKikimr::NOlap::TColumnLoader> ISnapshotSchema::GetColumnLoaderVerified(const std::string& columnName) const {
+    auto result = GetColumnLoaderOptional(columnName);
+    AFL_VERIFY(result);
+    return result;
+}
+
+std::shared_ptr<NKikimr::NOlap::TColumnLoader> ISnapshotSchema::GetColumnLoaderOptional(const std::string& columnName) const {
+    const std::optional<ui32> id = GetColumnIdOptional(columnName);
+    if (id) {
+        return GetColumnLoaderOptional(*id);
+    } else {
+        return nullptr;
+    }
 }
 
 }

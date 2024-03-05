@@ -88,7 +88,7 @@ TOperator::TOperator(const TString& storageId, const TActorId& shardActorId, con
     InitNewExternalOperator();
 }
 
-void TOperator::DoOnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& tiers) {
+void TOperator::DoOnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& tiers) {
     auto* tierManager = tiers->GetManagerOptional(TBase::GetStorageId());
     if (tierManager) {
         InitNewExternalOperator(tierManager);

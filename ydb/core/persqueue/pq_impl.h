@@ -286,6 +286,7 @@ private:
 
     TIntrusivePtr<NTabletPipe::TBoundedClientCacheConfig> PipeClientCacheConfig;
     THolder<NTabletPipe::IClientCache> PipeClientCache;
+    TMap<ui64, TActorId> PartitionWriteQuoters;
 
     bool SubDomainOutOfSpace = false;
 
@@ -349,6 +350,8 @@ private:
 
     void SendEvProposePartitionConfig(const TActorContext& ctx,
                                       TDistributedTransaction& tx);
+
+    TActorId GetPartitionQuoter(const TPartitionId& partitionId);
 
     TPartition* CreatePartitionActor(const TPartitionId& partitionId,
                                      const NPersQueue::TTopicConverterPtr topicConverter,

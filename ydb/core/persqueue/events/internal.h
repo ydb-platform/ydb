@@ -167,6 +167,7 @@ struct TEvPQ {
         EvAccountQuotaCountersUpdated,
         EvQuotaCountersUpdated,
         EvConsumerRemoved,
+        EvSetQuoterParent,
         EvFetchResponse,
         EvPublishRead,
         EvForgetRead,
@@ -955,6 +956,14 @@ struct TEvPQ {
         {}
 
         TString Consumer;
+    };
+
+    struct TEvSetQuoterParent : public TEventLocal<TEvSetQuoterParent, EvSetQuoterParent> {
+        TEvSetQuoterParent(const TActorId& parent)
+            : Parent(parent)
+        {}
+
+        TActorId Parent;
     };
 
     struct TEvFetchResponse : public TEventLocal<TEvFetchResponse, EvFetchResponse> {

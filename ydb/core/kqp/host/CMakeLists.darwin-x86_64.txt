@@ -42,4 +42,5 @@ target_sources(core-kqp-host PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/host/kqp_transform.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/host/kqp_translate.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/host/kqp_type_ann.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/host/kqp_statement_rewrite.cpp
 )

@@ -223,7 +223,7 @@ public:
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
         ResolveTable();
-        Become(&TKqpWriteActor::WriteState);
+        Become(&TKqpWriteActor::StateFunc);
     }
 
     static constexpr char ActorName[] = "KQP_WRITE_ACTOR";
@@ -284,33 +284,17 @@ private:
         ProcessBatches();
     }
 
-    STFUNC(WriteState) {
+    STFUNC(StateFunc) {
         try {
             switch (ev->GetTypeRewrite()) {
-                hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandleWrite);
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleWrite);
-                hFunc(TEvPipeCache::TEvDeliveryProblem, HandleWrite);
+                hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, Handle);
+                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+                hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
                 IgnoreFunc(TEvTxUserProxy::TEvAllocateTxIdResult);
-                hFunc(TEvPrivate::TEvShardRequestTimeout, HandleWrite);
+                hFunc(TEvPrivate::TEvShardRequestTimeout, Handle);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
                 // TODO: locks broken
-            }
-        } catch (const yexception& e) {
-            RuntimeError(e.what(), NYql::NDqProto::StatusIds::INTERNAL_ERROR);
-        }
-    }
-
-    STFUNC(CommitState) {
-        try {
-            switch (ev->GetTypeRewrite()) {
-                hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandleWrite);
-                IgnoreFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult);
-                hFunc(TEvPipeCache::TEvDeliveryProblem, HandleWrite);
-                IgnoreFunc(TEvTxUserProxy::TEvAllocateTxIdResult);
-                IgnoreFunc(TEvPrivate::TEvShardRequestTimeout);
-                IgnoreFunc(TEvInterconnect::TEvNodeConnected);
-                IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
             }
         } catch (const yexception& e) {
             RuntimeError(e.what(), NYql::NDqProto::StatusIds::INTERNAL_ERROR);
@@ -329,7 +313,7 @@ private:
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
     }
 
-    void HandleWrite(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         if (SchemeEntry) {
             return;
         }
@@ -356,7 +340,7 @@ private:
         Callbacks->ResumeExecution();
     }
 
-    void HandleWrite(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+    void Handle(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         switch (ev->Get()->GetStatus()) {
         case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED:
             ProcessWritePreparedShard(ev);
@@ -521,7 +505,7 @@ private:
         RequestNewTxId();*/
     }
 
-    void HandleWrite(TEvPrivate::TEvShardRequestTimeout::TPtr& ev) {
+    void Handle(TEvPrivate::TEvShardRequestTimeout::TPtr& ev) {
         //if (!InFlightBatches.contains(ev->Get()->ShardId)) {
         //    return;
         //}
@@ -533,7 +517,7 @@ private:
         Y_UNUSED(ev);
     }
 
-    void HandleWrite(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         CA_LOG_D("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
         //if (!InFlightBatches.contains(ev->Get()->TabletId)) {
         //    return;

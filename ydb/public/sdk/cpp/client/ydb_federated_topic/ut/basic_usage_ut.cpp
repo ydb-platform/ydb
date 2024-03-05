@@ -896,7 +896,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Path(setup->GetTestTopic())
             .MessageGroupId("src_id");
 
-        WriteSession = topicClient.CreateWriteSession(writeSettings);
+        WriteSession = topicClient.CreateWriteSession(TFederatedWriteSessionSettings(writeSettings));
         Cerr << "Session was created" << Endl;
 
         WriteSession->WaitEvent().Wait(TDuration::Seconds(1));

@@ -26,7 +26,7 @@ typename std::function<void(TEvent&)> WrapFederatedHandler(std::function<void(TF
 }
 
 NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& settings, const std::shared_ptr<TDbInfo>& db, std::shared_ptr<TEventFederator> federator) {
-    NTopic::TReadSessionSettings SubsessionSettings = settings;
+    auto SubsessionSettings = NTopic::TReadSessionSettings(settings);
     SubsessionSettings.EventHandlers_.MaxMessagesBytes(settings.EventHandlers_.MaxMessagesBytes_);
     SubsessionSettings.EventHandlers_.HandlersExecutor(settings.EventHandlers_.HandlersExecutor_);
 

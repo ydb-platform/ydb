@@ -30,6 +30,7 @@ TFederatedWriteSession::TFederatedWriteSession(const TFederatedWriteSessionSetti
                                              std::shared_ptr<TFederatedDbObserver> observer,
                                              std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> codecs)
     : Settings(settings)
+    , SubsessionSettings(settings)
     , Connections(std::move(connections))
     , SubClientSetttings(FromFederated(clientSetttings))
     , ProvidedCodecs(std::move(codecs))
@@ -37,7 +38,7 @@ TFederatedWriteSession::TFederatedWriteSession(const TFederatedWriteSessionSetti
     , AsyncInit(Observer->WaitForFirstState())
     , FederationState(nullptr)
     , Log(Connections->GetLog())
-    , ClientEventsQueue(std::make_shared<NTopic::TWriteSessionEventsQueue>(Settings))
+    , ClientEventsQueue(std::make_shared<NTopic::TWriteSessionEventsQueue>(SubsessionSettings))  // will crash because of handlers overwrite, TODO correct queue with original handlers
     , BufferFreeSpace(Settings.MaxMemoryUsage_)
 {
 }
@@ -106,12 +107,11 @@ void TFederatedWriteSession::OpenSubSessionImpl(std::shared_ptr<TDbInfo> db) {
             }
         });
 
-    NTopic::TWriteSessionSettings wsSettings = Settings;
-    wsSettings
+    SubsessionSettings
         // .MaxMemoryUsage(Settings.MaxMemoryUsage_)  // to fix if split not by half on creation
         .EventHandlers(handlers);
 
-    Subsession = subclient->CreateWriteSession(wsSettings);
+    Subsession = subclient->CreateWriteSession(SubsessionSettings);
     CurrentDatabase = db;
 }
 

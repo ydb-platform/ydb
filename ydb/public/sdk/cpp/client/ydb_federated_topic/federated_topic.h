@@ -245,6 +245,8 @@ TString DebugString(const TReadSessionEvent::TEvent& event);
 struct TFederatedWriteSessionSettings : public NTopic::TWriteSessionSettingsBase<TFederatedWriteSessionSettings> {
     using TSelf = TFederatedWriteSessionSettings;
 
+    using TWriteSessionSettingsBase<TFederatedWriteSessionSettings>::TWriteSessionSettingsBase;
+
     TFederatedWriteSessionSettings() = default;
 
     TFederatedWriteSessionSettings(const TString& path, const TString& producerId, const TString& messageGroupId) {
@@ -265,6 +267,8 @@ struct TFederatedWriteSessionSettings : public NTopic::TWriteSessionSettingsBase
 //! Settings for read session.
 struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettingsBase<TFederatedReadSessionSettings> {
     using TSelf = TFederatedReadSessionSettings;
+
+    using TReadSessionSettingsBase<TFederatedReadSessionSettings>::TReadSessionSettingsBase;
 
     NTopic::TReadSessionSettings& EventHandlers(const TEventHandlers&) {
         ythrow yexception() << "EventHandlers can not be set for federated session, use FederatedEventHandlers instead";

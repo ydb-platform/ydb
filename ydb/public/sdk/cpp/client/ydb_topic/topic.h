@@ -1369,8 +1369,8 @@ struct TWriteSessionSettingsBase : public TRequestSettings<TWriteSessionSettings
         //! this handler (if specified) will be used.
         //! If this handler is not specified, event can be received with TWriteSession::GetEvent() method.
         std::function<void(TWriteSessionEvent::TEvent&)> CommonHandler_;
-        TSelf& CommonHandler(std::function<void(TWriteSessionEvent::TEvent&)>&& handler) {
-            CommonHandler_ = std::move(handler);
+        TSelf& CommonHandler(std::function<void(TWriteSessionEvent::TEvent&)> handler) {
+            CommonHandler_ = handler;
             return static_cast<TSelf&>(*this);
         }
 
@@ -1384,9 +1384,43 @@ struct TWriteSessionSettingsBase : public TRequestSettings<TWriteSessionSettings
 
     //! Enables validation of SeqNo. If enabled, then writer will check writing with seqNo and without it and throws exception.
     FLUENT_SETTING_DEFAULT(bool, ValidateSeqNo, true);
+
+    TWriteSessionSettingsBase() = default;
+
+    template <typename T>
+    explicit TWriteSessionSettingsBase(const TWriteSessionSettingsBase<T>& other)
+        : TRequestSettings<TWriteSessionSettingsBase<TDerived>>(other)
+        , Path_(other.Path_)
+        , ProducerId_(other.ProducerId_)
+        , MessageGroupId_(other.MessageGroupId_)
+        , DeduplicationEnabled_(other.DeduplicationEnabled_)
+        , PartitionId_(other.PartitionId_)
+        , DirectWriteToPartition_(other.DirectWriteToPartition_)
+        , Codec_(other.Codec_)
+        , CompressionLevel_(other.CompressionLevel_)
+        , MaxMemoryUsage_(other.MaxMemoryUsage_)
+        , MaxInflightCount_(other.MaxInflightCount_)
+        , RetryPolicy_(other.RetryPolicy_)
+        , Meta_(other.Meta_)
+        , BatchFlushInterval_(other.BatchFlushInterval_)
+        , BatchFlushSizeBytes_(other.BatchFlushSizeBytes_)
+        , ConnectTimeout_(other.ConnectTimeout_)
+        , Counters_(other.Counters_)
+        , CompressionExecutor_(other.CompressionExecutor_)
+        , EventHandlers_(TEventHandlers()
+            .AcksHandler(other.EventHandlers_.AcksHandler_)
+            .ReadyToAcceptHandler(other.EventHandlers_.ReadyToAcceptHandler_)
+            .SessionClosedHandler(other.EventHandlers_.SessionClosedHandler_)
+            .CommonHandler(other.EventHandlers_.CommonHandler_)
+            .HandlersExecutor(other.EventHandlers_.HandlersExecutor_)
+        )
+        , ValidateSeqNo_(other.ValidateSeqNo_)
+    {}
 };
 
 struct TWriteSessionSettings : public TWriteSessionSettingsBase<TWriteSessionSettings> {
+    using TWriteSessionSettingsBase<TWriteSessionSettings>::TWriteSessionSettingsBase;
+
     TWriteSessionSettings() = default;
 
     TWriteSessionSettings(const TString& path, const TString& producerId, const TString& messageGroupId) {
@@ -1566,10 +1600,42 @@ struct TReadSessionSettingsBase: public TRequestSettings<TReadSessionSettingsBas
 
     //! Log.
     FLUENT_SETTING_OPTIONAL(TLog, Log);
+
+    TReadSessionSettingsBase() = default;
+
+    template <typename T>
+    explicit TReadSessionSettingsBase(const TReadSessionSettingsBase<T>& other)
+        : TRequestSettings<TReadSessionSettingsBase<TDerived>>(other)
+        , ConsumerName_(other.ConsumerName_)
+        , WithoutConsumer_(other.WithoutConsumer_)
+        , Topics_(other.Topics_)
+        , MaxMemoryUsageBytes_(other.MaxMemoryUsageBytes_)
+        , MaxLag_(other.MaxLag_)
+        , ReadFromTimestamp_(other.ReadFromTimestamp_)
+        , RetryPolicy_(other.RetryPolicy_)
+        , EventHandlers_(TEventHandlers()
+            .MaxMessagesBytes(other.EventHandlers_.MaxMessagesBytes_)
+            .DataReceivedHandler(other.EventHandlers_.DataReceivedHandler_)
+            .CommitOffsetAcknowledgementHandler(other.EventHandlers_.CommitOffsetAcknowledgementHandler_)
+            .StartPartitionSessionHandler(other.EventHandlers_.StartPartitionSessionHandler_)
+            .StopPartitionSessionHandler(other.EventHandlers_.StopPartitionSessionHandler_)
+            .PartitionSessionStatusHandler(other.EventHandlers_.PartitionSessionStatusHandler_)
+            .PartitionSessionClosedHandler(other.EventHandlers_.PartitionSessionClosedHandler_)
+            .SessionClosedHandler(other.EventHandlers_.SessionClosedHandler_)
+            .CommonHandler(other.EventHandlers_.CommonHandler_)
+            .HandlersExecutor(other.EventHandlers_.HandlersExecutor_)
+        )
+        , Decompress_(other.Decompress_)
+        , DecompressionExecutor_(other.DecompressionExecutor_)
+        , Counters_(other.Counters_)
+        , ConnectTimeout_(other.ConnectTimeout_)
+        , Log_(other.Log_)
+    {}
 };
 
 //! Settings for read session.
 struct TReadSessionSettings: public TReadSessionSettingsBase<TReadSessionSettings> {
+    using TReadSessionSettingsBase<TReadSessionSettings>::TReadSessionSettingsBase;
 };
 
 //! Contains the message to write and all the options.
@@ -1809,3 +1875,9 @@ private:
 };
 
 } // namespace NYdb::NTopic
+
+/////////////////////////////////////////
+// Templates implementation
+#define EVENT_HANDLERS_IMPL
+#include "impl/event_handlers.h"
+#undef EVENT_HANDLERS_IMPL

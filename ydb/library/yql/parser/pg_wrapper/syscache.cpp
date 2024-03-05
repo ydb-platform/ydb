@@ -145,6 +145,8 @@ struct TSysCache {
         auto& map = cacheItem->Map;
 
         const auto& oidDesc = NPg::LookupType(OIDOID);
+        const auto& charDesc = NPg::LookupType(CHAROID);
+        const auto& textDesc = NPg::LookupType(TEXTOID);
 
         NPg::EnumProc([&](ui32 oid, const NPg::TProcDesc& desc){
             auto key = THeapTupleKey(oid, 0, 0, 0);
@@ -172,6 +174,62 @@ struct TSysCache {
                 auto arr = construct_md_array(dvalues.get(), dnulls.get(), 1, dims, lbs, OIDOID, oidDesc.TypeLen, oidDesc.PassByValue, oidDesc.TypeAlign);
                 FillDatum(Natts_pg_proc, values, nulls, Anum_pg_proc_proargtypes, (Datum)arr);
             }
+
+            const ui32 fullArgsCount = desc.ArgTypes.size() + desc.OutputArgTypes.size();
+            if (!desc.OutputArgTypes.empty())
+            {
+                int dims[MAXDIM];
+                int lbs[MAXDIM];
+                dims[0] = fullArgsCount;
+                lbs[0] = 1;
+                std::unique_ptr<Datum[]> dvalues(new Datum[fullArgsCount]);
+                std::unique_ptr<bool[]> dnulls(new bool[fullArgsCount]);
+                std::copy(desc.ArgTypes.begin(), desc.ArgTypes.end(), dvalues.get());
+                std::copy(desc.OutputArgTypes.begin(), desc.OutputArgTypes.end(), dvalues.get() + desc.ArgTypes.size());
+                std::fill_n(dnulls.get(), fullArgsCount, false);
+
+                auto arr = construct_md_array(dvalues.get(), dnulls.get(), 1, dims, lbs, OIDOID, oidDesc.TypeLen, oidDesc.PassByValue, oidDesc.TypeAlign);
+                FillDatum(Natts_pg_proc, values, nulls, Anum_pg_proc_proallargtypes, (Datum)arr);
+            }
+            if (!desc.OutputArgTypes.empty())
+            {
+                int dims[MAXDIM];
+                int lbs[MAXDIM];
+                dims[0] = fullArgsCount;
+                lbs[0] = 1;
+                std::unique_ptr<Datum[]> dvalues(new Datum[fullArgsCount]);
+                std::unique_ptr<bool[]> dnulls(new bool[fullArgsCount]);
+                std::fill_n(dvalues.get(), desc.ArgTypes.size(), CharGetDatum('i'));
+                std::fill_n(dvalues.get() + desc.ArgTypes.size(), desc.OutputArgTypes.size(), CharGetDatum('o'));
+                std::fill_n(dnulls.get(), fullArgsCount, false);
+
+                auto arr = construct_md_array(dvalues.get(), dnulls.get(), 1, dims, lbs, CHAROID, charDesc.TypeLen, charDesc.PassByValue, charDesc.TypeAlign);
+                FillDatum(Natts_pg_proc, values, nulls, Anum_pg_proc_proargmodes, (Datum)arr);
+            }
+            if (!desc.OutputArgNames.empty() || !desc.InputArgNames.empty()) {
+                Y_ENSURE(desc.InputArgNames.size() + desc.OutputArgNames.size() == fullArgsCount);
+                int dims[MAXDIM];
+                int lbs[MAXDIM];
+                dims[0] = fullArgsCount;
+                lbs[0] = 1;
+                std::unique_ptr<Datum[]> dvalues(new Datum[fullArgsCount]);
+                std::unique_ptr<bool[]> dnulls(new bool[fullArgsCount]);
+                for (ui32 i = 0; i < desc.InputArgNames.size(); ++i) {
+                    dvalues[i] = PointerGetDatum(MakeVar(desc.InputArgNames[i]));
+                }
+
+                for (ui32 i = 0; i < desc.OutputArgNames.size(); ++i) {
+                    dvalues[i + desc.InputArgNames.size()] = PointerGetDatum(MakeVar(desc.OutputArgNames[i]));
+                }
+                std::fill_n(dnulls.get(), fullArgsCount, false);
+
+                auto arr = construct_md_array(dvalues.get(), dnulls.get(), 1, dims, lbs, TEXTOID, textDesc.TypeLen, textDesc.PassByValue, textDesc.TypeAlign);
+                FillDatum(Natts_pg_proc, values, nulls, Anum_pg_proc_proargnames, (Datum)arr);
+                for (ui32 i = 0; i < fullArgsCount; ++i) {
+                    pfree(DatumGetPointer(dvalues[i]));
+                }
+            }
+
             HeapTuple h = heap_form_tuple(tupleDesc, values, nulls);
             auto row = (Form_pg_proc)GETSTRUCT(h);
             Y_ENSURE(row->oid == oid);
@@ -248,7 +306,8 @@ struct TSysCache {
             FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typmodin, desc.TypeModInFuncId);
             FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typmodout, desc.TypeModOutFuncId);
             FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typalign, desc.TypeAlign);
-            FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typstorage, TYPSTORAGE_PLAIN);
+            auto storage = desc.TypeId == desc.ArrayTypeId ? TYPSTORAGE_EXTENDED : TYPSTORAGE_PLAIN;
+            FillDatum(Natts_pg_type, values, nulls, Anum_pg_type_typstorage, storage);
             HeapTuple h = heap_form_tuple(tupleDesc, values, nulls);
             auto row = (Form_pg_type)GETSTRUCT(h);
             Y_ENSURE(row->oid == oid);
@@ -269,7 +328,7 @@ struct TSysCache {
             Y_ENSURE(row->typmodin == desc.TypeModInFuncId);
             Y_ENSURE(row->typmodout == desc.TypeModOutFuncId);
             Y_ENSURE(row->typalign == desc.TypeAlign);
-            Y_ENSURE(row->typstorage == TYPSTORAGE_PLAIN);
+            Y_ENSURE(row->typstorage == storage);
             map.emplace(key, h);
         });
 

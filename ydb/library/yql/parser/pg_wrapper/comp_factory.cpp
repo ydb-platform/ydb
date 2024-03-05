@@ -490,10 +490,6 @@ public:
         if (Cluster_ == "pg_catalog") {
             if (Table_ == "pg_type") {
                 NPg::EnumTypes([&](ui32 oid, const NPg::TTypeDesc& desc) {
-                    if (desc.ArrayTypeId == desc.TypeId) {
-                        return;
-                    }
-
                     NUdf::TUnboxedValue* items;
                     auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgTypeFillers_.size(), items);
                     for (ui32 i = 0; i < PgTypeFillers_.size(); ++i) {

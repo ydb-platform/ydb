@@ -11,7 +11,7 @@ static inline bool IsDropped(const TOlapColumnsDescription::TColumn& col) {
 }
 
 static inline ui32 GetType(const TOlapColumnsDescription::TColumn& col) {
-    Y_ABORT_UNLESS(col.GetType().GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+    Y_ABORT_UNLESS(col.GetType().GetTypeId() < NScheme::NTypeIds::PgFamily, "pg types are not supported");
     return col.GetType().GetTypeId();
 }
 

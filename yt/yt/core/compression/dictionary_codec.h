@@ -35,7 +35,7 @@ struct IDictionaryDecompressor
     : public TRefCounted
 {
     //! Decompresses #input into #ouput.
-    //! Memory for output must be pre-allocated, its size can be infered from frame info.
+    //! Memory for output must be pre-allocated, its size can be inferred from frame info.
     virtual void Decompress(
         TRef input,
         TMutableRef output) = 0;
@@ -73,13 +73,15 @@ DEFINE_REFCOUNTED_TYPE(IDigestedDecompressionDictionary)
 
 struct IDictionaryCompressionCodec
 {
+    virtual ~IDictionaryCompressionCodec() = default;
+
     virtual int GetMinDictionarySize() const = 0;
 
     virtual int GetMaxCompressionLevel() const = 0;
     virtual int GetDefaultCompressionLevel() const = 0;
 
     //! Trains compression dictionary of size not exceeding #dictionarySize.
-    //! This dicionary may then be digested for (de)compression.
+    //! This dictionary may then be digested for (de)compression.
     //! NB: May return null if training failed, e.g. due to lack of #samples
     //! or no sufficient profit from using dictionary on them.
     virtual TErrorOr<TSharedRef> TrainCompressionDictionary(

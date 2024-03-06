@@ -53,11 +53,14 @@ __docformat__ = 'restructuredtext'
 from zope.interface.interface import Interface
 from zope.interface.interface import _wire
 
+
 # Need to actually get the interface elements to implement the right interfaces
 _wire()
 del _wire
 
 from zope.interface.declarations import Declaration
+# The following are to make spec pickles cleaner
+from zope.interface.declarations import Provides
 from zope.interface.declarations import alsoProvides
 from zope.interface.declarations import classImplements
 from zope.interface.declarations import classImplementsFirst
@@ -72,19 +75,13 @@ from zope.interface.declarations import named
 from zope.interface.declarations import noLongerProvides
 from zope.interface.declarations import providedBy
 from zope.interface.declarations import provider
-
 from zope.interface.exceptions import Invalid
-
 from zope.interface.interface import Attribute
 from zope.interface.interface import interfacemethod
 from zope.interface.interface import invariant
 from zope.interface.interface import taggedValue
-
-# The following are to make spec pickles cleaner
-from zope.interface.declarations import Provides
-
-
 from zope.interface.interfaces import IInterfaceDeclaration
+
 
 moduleProvides(IInterfaceDeclaration)
 

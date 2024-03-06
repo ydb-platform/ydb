@@ -6,6 +6,7 @@
 
 #include "detail.h"
 
+#include <yt/yt/core/misc/optional.h>
 #include <yt/yt/core/misc/parser_helpers.h>
 
 #include <optional>

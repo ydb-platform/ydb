@@ -656,10 +656,11 @@ def onadd_check(unit, *args):
             extra_test_dart_data['USE_KTLINT_OLD'] = 'yes'
         else:
             data_list = [KTLINT_CURRENT_EDITOR_CONFIG]
-            baseline_path = unit.get('_KTLINT_BASELINE_FILE')
-            if baseline_path:
+            baseline_path_relative = unit.get('_KTLINT_BASELINE_FILE')
+            if baseline_path_relative:
+                baseline_path = unit.resolve_arc_path(baseline_path_relative).replace('$S', 'arcadia')
                 data_list += [baseline_path]
-                extra_test_dart_data['KTLINT_BASELINE_FILE'] = baseline_path
+                extra_test_dart_data['KTLINT_BASELINE_FILE'] = baseline_path_relative
             extra_test_data = serialize_list(data_list)
             extra_test_dart_data['KTLINT_BINARY'] = '$(KTLINT)/run.bat'
     elif check_type == "JAVA_STYLE":

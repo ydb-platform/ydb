@@ -108,6 +108,7 @@
 #define Y_ABSL_RAW_LOG_INTERNAL_WARNING ::y_absl::LogSeverity::kWarning
 #define Y_ABSL_RAW_LOG_INTERNAL_ERROR ::y_absl::LogSeverity::kError
 #define Y_ABSL_RAW_LOG_INTERNAL_FATAL ::y_absl::LogSeverity::kFatal
+#define Y_ABSL_RAW_LOG_INTERNAL_DFATAL ::y_absl::kLogDebugFatal
 #define Y_ABSL_RAW_LOG_INTERNAL_LEVEL(severity) \
   ::y_absl::NormalizeLogSeverity(severity)
 
@@ -115,6 +116,7 @@
 #define Y_ABSL_RAW_LOG_INTERNAL_MAYBE_UNREACHABLE_WARNING
 #define Y_ABSL_RAW_LOG_INTERNAL_MAYBE_UNREACHABLE_ERROR
 #define Y_ABSL_RAW_LOG_INTERNAL_MAYBE_UNREACHABLE_FATAL Y_ABSL_UNREACHABLE()
+#define Y_ABSL_RAW_LOG_INTERNAL_MAYBE_UNREACHABLE_DFATAL
 #define Y_ABSL_RAW_LOG_INTERNAL_MAYBE_UNREACHABLE_LEVEL(severity)
 
 namespace y_absl {

@@ -91,6 +91,7 @@ from hypothesis.internal.healthcheck import fail_health_check
 from hypothesis.internal.observability import (
     OBSERVABILITY_COLLECT_COVERAGE,
     TESTCASE_CALLBACKS,
+    _system_metadata,
     deliver_json_blob,
     make_testcase,
 )
@@ -833,8 +834,9 @@ class StateForActualGivenExecution:
                     in_drawtime = math.fsum(data.draw_times.values()) - arg_drawtime
                     runtime = datetime.timedelta(seconds=finish - start - in_drawtime)
                     self._timing_features = {
-                        "execute_test": finish - start - in_drawtime,
+                        "execute:test": finish - start - in_drawtime,
                         **data.draw_times,
+                        **data._stateful_run_times,
                     }
 
                 if (current_deadline := self.settings.deadline) is not None:
@@ -926,6 +928,9 @@ class StateForActualGivenExecution:
                     msg, format_arg = data._sampled_from_all_strategies_elements_message
                     add_note(e, msg.format(format_arg))
                 raise
+            finally:
+                if parts := getattr(data, "_stateful_repr_parts", None):
+                    self._string_repr = "\n".join(parts)
 
         # self.test_runner can include the execute_example method, or setup/teardown
         # _example, so it's important to get the PRNG and build context in place first.
@@ -941,7 +946,11 @@ class StateForActualGivenExecution:
         if expected_failure is not None:
             exception, traceback = expected_failure
             if isinstance(exception, DeadlineExceeded) and (
-                runtime_secs := self._timing_features.get("execute_test")
+                runtime_secs := math.fsum(
+                    v
+                    for k, v in self._timing_features.items()
+                    if k.startswith("execute:")
+                )
             ):
                 report(
                     "Unreliable test timings! On an initial run, this "
@@ -1066,8 +1075,8 @@ class StateForActualGivenExecution:
                     string_repr=self._string_repr,
                     arguments={**self._jsonable_arguments, **data._observability_args},
                     timing=self._timing_features,
-                    metadata={},
                     coverage=tractable_coverage_report(trace) or None,
+                    phase=phase,
                 )
                 deliver_json_blob(tc)
             self._timing_features = {}
@@ -1195,7 +1204,11 @@ class StateForActualGivenExecution:
                     },
                     "timing": self._timing_features,
                     "coverage": None,  # Not recorded when we're replaying the MFE
-                    "metadata": {"traceback": tb},
+                    "metadata": {
+                        "traceback": tb,
+                        "predicates": ran_example._observability_predicates,
+                        **_system_metadata(),
+                    },
                 }
                 deliver_json_blob(tc)
                 # Whether or not replay actually raised the exception again, we want

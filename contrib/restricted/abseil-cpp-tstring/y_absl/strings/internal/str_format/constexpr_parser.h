@@ -17,16 +17,17 @@
 
 #include <cassert>
 #include <cstdint>
+#include <cstdio>
 #include <limits>
 
+#include "y_absl/base/config.h"
 #include "y_absl/base/const_init.h"
+#include "y_absl/base/optimization.h"
 #include "y_absl/strings/internal/str_format/extension.h"
 
 namespace y_absl {
 Y_ABSL_NAMESPACE_BEGIN
 namespace str_format_internal {
-
-enum class LengthMod : std::uint8_t { h, hh, l, ll, L, j, z, t, q, none };
 
 // The analyzed properties of a single specified conversion.
 struct UnboundConversion {
@@ -306,7 +307,6 @@ constexpr const char* ConsumeConversion(const char* pos, const char* const end,
     if (Y_ABSL_PREDICT_FALSE(!tag.is_length())) return nullptr;
 
     // It is a length modifier.
-    using str_format_internal::LengthMod;
     LengthMod length_mod = tag.as_length();
     Y_ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
     if (c == 'h' && length_mod == LengthMod::h) {
@@ -322,6 +322,11 @@ constexpr const char* ConsumeConversion(const char* pos, const char* const end,
 
     if (Y_ABSL_PREDICT_FALSE(c == 'v')) return nullptr;
     if (Y_ABSL_PREDICT_FALSE(!tag.is_conv())) return nullptr;
+
+    // `wchar_t` args are marked non-basic so `Bind()` will copy the length mod.
+    if (conv->length_mod == LengthMod::l && c == 'c') {
+      conv->flags = conv->flags | Flags::kNonBasic;
+    }
   }
 #undef Y_ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR
 

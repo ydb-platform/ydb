@@ -20,6 +20,7 @@ import inspect
 from copy import copy
 from functools import lru_cache
 from io import StringIO
+from time import perf_counter
 from typing import (
     Any,
     Callable,
@@ -48,6 +49,7 @@ from hypothesis.core import TestFunc, given
 from hypothesis.errors import InvalidArgument, InvalidDefinition
 from hypothesis.internal.conjecture import utils as cu
 from hypothesis.internal.healthcheck import fail_health_check
+from hypothesis.internal.observability import TESTCASE_CALLBACKS
 from hypothesis.internal.reflection import (
     function_digest,
     get_pretty_function_description,
@@ -116,14 +118,22 @@ def run_state_machine_as_test(state_machine_factory, *, settings=None, _min_step
         machine = factory()
         check_type(RuleBasedStateMachine, machine, "state_machine_factory()")
         cd.hypothesis_runner = machine
+        machine._observability_predicates = cd._observability_predicates  # alias
 
         print_steps = (
             current_build_context().is_final or current_verbosity() >= Verbosity.debug
         )
-        try:
+        cd._stateful_repr_parts = []
+
+        def output(s):
             if print_steps:
-                report(f"state = {machine.__class__.__name__}()")
-            machine.check_invariants(settings)
+                report(s)
+            if TESTCASE_CALLBACKS:
+                cd._stateful_repr_parts.append(s)
+
+        try:
+            output(f"state = {machine.__class__.__name__}()")
+            machine.check_invariants(settings, output, cd._stateful_run_times)
             max_steps = settings.stateful_step_count
             steps_run = 0
 
@@ -140,6 +150,8 @@ def run_state_machine_as_test(state_machine_factory, *, settings=None, _min_step
                     must_stop = True
                 elif steps_run <= _min_steps:
                     must_stop = False
+
+                start_draw = perf_counter()
                 if cd.draw_boolean(p=2**-16, forced=must_stop):
                     break
                 steps_run += 1
@@ -155,12 +167,15 @@ def run_state_machine_as_test(state_machine_factory, *, settings=None, _min_step
                     machine._initialize_rules_to_run.remove(rule)
                 else:
                     rule, data = cd.draw(machine._rules_strategy)
+                draw_label = f"generate:rule:{rule.function.__name__}"
+                cd.draw_times.setdefault(draw_label, 0.0)
+                cd.draw_times[draw_label] += perf_counter() - start_draw
 
                 # Pretty-print the values this rule was called with *before* calling
                 # _add_result_to_targets, to avoid printing arguments which are also
                 # a return value using the variable name they are assigned to.
                 # See https://github.com/HypothesisWorks/hypothesis/issues/2341
-                if print_steps:
+                if print_steps or TESTCASE_CALLBACKS:
                     data_to_print = {
                         k: machine._pretty_print(v) for k, v in data.items()
                     }
@@ -172,7 +187,12 @@ def run_state_machine_as_test(state_machine_factory, *, settings=None, _min_step
                     for k, v in list(data.items()):
                         if isinstance(v, VarReference):
                             data[k] = machine.names_to_values[v.name]
+
+                    label = f"execute:rule:{rule.function.__name__}"
+                    start = perf_counter()
                     result = rule.function(machine, **data)
+                    cd._stateful_run_times[label] += perf_counter() - start
+
                     if rule.targets:
                         if isinstance(result, MultipleResults):
                             for single_result in result.values:
@@ -189,16 +209,15 @@ def run_state_machine_as_test(state_machine_factory, *, settings=None, _min_step
                             HealthCheck.return_value,
                         )
                 finally:
-                    if print_steps:
+                    if print_steps or TESTCASE_CALLBACKS:
                         # 'result' is only used if the step has target bundles.
                         # If it does, and the result is a 'MultipleResult',
                         # then 'print_step' prints a multi-variable assignment.
-                        machine._print_step(rule, data_to_print, result)
-                machine.check_invariants(settings)
+                        output(machine._repr_step(rule, data_to_print, result))
+                machine.check_invariants(settings, output, cd._stateful_run_times)
                 cd.stop_example()
         finally:
-            if print_steps:
-                report("state.teardown()")
+            output("state.teardown()")
             machine.teardown()
 
     # Use a machine digest to identify stateful tests in the example database
@@ -232,11 +251,12 @@ class StateMachineMeta(type):
 class RuleBasedStateMachine(metaclass=StateMachineMeta):
     """A RuleBasedStateMachine gives you a structured way to define state machines.
 
-    The idea is that a state machine carries a bunch of types of data
-    divided into Bundles, and has a set of rules which may read data
-    from bundles (or just from normal strategies) and push data onto
-    bundles. At any given point a random applicable rule will be
-    executed.
+    The idea is that a state machine carries the system under test and some supporting
+    data. This data can be stored in instance variables or
+    divided into Bundles. The state machine has a set of rules which may read data
+    from bundles (or just from normal strategies), push data onto
+    bundles, change the state of the machine, or verify properties.
+    At any given point a random applicable rule will be executed.
     """
 
     _rules_per_class: ClassVar[Dict[type, List[classmethod]]] = {}
@@ -336,7 +356,7 @@ class RuleBasedStateMachine(metaclass=StateMachineMeta):
         cls._invariants_per_class[cls] = target
         return cls._invariants_per_class[cls]
 
-    def _print_step(self, rule, data, result):
+    def _repr_step(self, rule, data, result):
         self.step_count = getattr(self, "step_count", 0) + 1
         output_assignment = ""
         if rule.targets:
@@ -348,13 +368,8 @@ class RuleBasedStateMachine(metaclass=StateMachineMeta):
                     output_assignment = ", ".join(output_names) + " = "
             else:
                 output_assignment = self._last_names(1)[0] + " = "
-        report(
-            "{}state.{}({})".format(
-                output_assignment,
-                rule.function.__name__,
-                ", ".join("%s=%s" % kv for kv in data.items()),
-            )
-        )
+        args = ", ".join("%s=%s" % kv for kv in data.items())
+        return f"{output_assignment}state.{rule.function.__name__}({args})"
 
     def _add_result_to_targets(self, targets, result):
         name = self._new_name()
@@ -365,18 +380,22 @@ class RuleBasedStateMachine(metaclass=StateMachineMeta):
         for target in targets:
             self.bundles.setdefault(target, []).append(VarReference(name))
 
-    def check_invariants(self, settings):
+    def check_invariants(self, settings, output, runtimes):
         for invar in self.invariants():
             if self._initialize_rules_to_run and not invar.check_during_init:
                 continue
             if not all(precond(self) for precond in invar.preconditions):
                 continue
+            name = invar.function.__name__
             if (
                 current_build_context().is_final
                 or settings.verbosity >= Verbosity.debug
+                or TESTCASE_CALLBACKS
             ):
-                report(f"state.{invar.function.__name__}()")
+                output(f"state.{name}()")
+            start = perf_counter()
             result = invar.function(self)
+            runtimes[f"execute:invariant:{name}"] += perf_counter() - start
             if result is not None:
                 fail_health_check(
                     settings,
@@ -458,6 +477,27 @@ class BundleReferenceStrategy(SearchStrategy):
 
 
 class Bundle(SearchStrategy[Ex]):
+    """A collection of values for use in stateful testing.
+
+    Bundles are a kind of strategy where values can be added by rules,
+    and (like any strategy) used as inputs to future rules.
+
+    The ``name`` argument they are passed is the they are referred to
+    internally by the state machine; no two bundles may have
+    the same name. It is idiomatic to use the attribute
+    being assigned to as the name of the Bundle::
+
+        class MyStateMachine(RuleBasedStateMachine):
+            keys = Bundle("keys")
+
+    Bundles can contain the same value more than once; this becomes
+    relevant when using :func:`~hypothesis.stateful.consumes` to remove
+    values again.
+
+    If the ``consume`` argument is set to True, then all values that are
+    drawn from this bundle will be consumed (as above) when requested.
+    """
+
     def __init__(self, name: str, *, consume: bool = False) -> None:
         self.name = name
         self.__reference_strategy = BundleReferenceStrategy(name, consume=consume)
@@ -637,7 +677,7 @@ def rule(
     ``targets`` will define where the end result of this function should go. If
     both are empty then the end result will be discarded.
 
-    ``target`` must be a Bundle, or if the result should go to multiple
+    ``target`` must be a Bundle, or if the result should be replicated to multiple
     bundles you can pass a tuple of them as the ``targets`` argument.
     It is invalid to use both arguments for a single rule.  If the result
     should go to exactly one of several bundles, define a separate rule for
@@ -941,8 +981,14 @@ class RuleStrategy(SearchStrategy):
         return (rule, data.draw(rule.arguments_strategy))
 
     def is_valid(self, rule):
-        if not all(precond(self.machine) for precond in rule.preconditions):
-            return False
+        predicates = self.machine._observability_predicates
+        desc = f"{self.machine.__class__.__qualname__}, rule {rule.function.__name__},"
+        for pred in rule.preconditions:
+            meets_precond = pred(self.machine)
+            where = f"{desc} precondition {get_pretty_function_description(pred)}"
+            predicates[where]["satisfied" if meets_precond else "unsatisfied"] += 1
+            if not meets_precond:
+                return False
 
         for b in rule.bundles:
             bundle = self.machine.bundle(b.name)

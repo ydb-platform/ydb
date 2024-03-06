@@ -1180,6 +1180,8 @@
 # after resolving a problem via ADDINCL there will be much more errors. So currently these types of errors hide under empty resolving
 - source_filter: "^contrib/libs/connectedhomeip/src"
   includes:
+    - CHIP_SYSTEM_CONFIG_PLATFORM_LOG_INCLUDE:
+      - contrib/libs/connectedhomeip/src/platform/Darwin/Logging.h
     - CHIP_SYSTEM_LAYER_IMPL_CONFIG_FILE:
       - contrib/libs/connectedhomeip/src/system/SystemLayerImplSelect.h
       - contrib/libs/connectedhomeip/src/system/SystemLayerImplFreeRTOS.h
@@ -1204,3 +1206,15 @@
 - source_filter: "^contrib/libs/sdbus-cpp"
   includes:
     - SDBUS_HEADER: contrib/libs/systemd/src/systemd/sd-bus.h
+
+- source_filter: "^smart_devices/third_party/beken_freertos_sdk"
+  includes:
+    - LWIP_ERRNO_INCLUDE: smart_devices/third_party/beken_freertos_sdk/beken378/func/lwip_intf/lwip-2.1.2/src/include/lwip/errno.h
+    - LWIP_HOOK_FILENAME
+    - DHCP_GLOBAL_XID_HEADER
+    - MBEDTLS_CONFIG_FILE: smart_devices/third_party/beken_freertos_sdk/beken378/func/mbedtls/mbedtls-port/inc/aws_mbedtls_config.h
+    - MBEDTLS_USER_CONFIG_FILE
+    - MBEDTLS_PLATFORM_STD_MEM_HDR
+    - YOTTA_CFG_MBEDTLS_TARGET_CONFIG_FILE
+    - YOTTA_CFG_MBEDTLS_USER_CONFIG_FILE
+    - xstr(MQTTCLIENT_PLATFORM_HEADER)

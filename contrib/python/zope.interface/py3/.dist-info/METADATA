@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: zope.interface
-Version: 6.1
+Version: 6.2
 Summary: Interfaces for Python
 Home-page: https://github.com/zopefoundation/zope.interface
 Author: Zope Foundation and Contributors
@@ -74,6 +74,15 @@ For detailed documentation, please see https://zopeinterface.readthedocs.io/en/l
 =========
  Changes
 =========
+
+6.2 (2024-02-16)
+================
+
+- Add preliminary support for Python 3.13 as of 3.13a3.
+
+- Add support to use the pipe (``|``) syntax for ``typing.Union``.
+  (`#280 <https://github.com/zopefoundation/zope.interface/issues/280>`_)
+
 
 6.1 (2023-10-05)
 ================

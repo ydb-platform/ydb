@@ -80,6 +80,14 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
                     org::apache::arrow::flatbuf::Precision_DOUBLE)
                     .Union());
 
+        case ESimpleLogicalValueType::Float:
+            return std::tuple(
+                org::apache::arrow::flatbuf::Type_FloatingPoint,
+                org::apache::arrow::flatbuf::CreateFloatingPoint(
+                    *flatbufBuilder,
+                    org::apache::arrow::flatbuf::Precision_SINGLE)
+                    .Union());
+
         case ESimpleLogicalValueType::Boolean:
             return std::tuple(
                 org::apache::arrow::flatbuf::Type_Bool,
@@ -468,6 +476,35 @@ void SerializeDoubleColumn(
         });
 }
 
+void SerializeFloatColumn(
+    const TTypedBatchColumn& typedColumn,
+    TRecordBatchSerializationContext* context)
+{
+    const auto* column = typedColumn.Column;
+    YT_VERIFY(column->Values);
+    YT_VERIFY(column->Values->BitWidth == 32);
+    YT_VERIFY(column->Values->BaseValue == 0);
+    YT_VERIFY(!column->Values->ZigZagEncoded);
+
+    YT_LOG_DEBUG("Adding float column (ColumnId: %v, StartIndex: %v, ValueCount: %v)",
+        column->Id,
+        column->StartIndex,
+        column->ValueCount,
+        column->Rle.has_value());
+
+    SerializeColumnPrologue(typedColumn, context);
+
+    context->AddBuffer(
+        column->ValueCount * sizeof(float),
+        [=] (TMutableRef dstRef) {
+            auto relevantValues = column->GetRelevantTypedValues<float>();
+            ::memcpy(
+                dstRef.Begin(),
+                relevantValues.Begin(),
+                column->ValueCount * sizeof(float));
+        });
+}
+
 void SerializeStringLikeColumn(
     const TTypedBatchColumn& typedColumn,
     TRecordBatchSerializationContext* context)
@@ -583,6 +620,8 @@ void SerializeColumn(
         SerializeIntegerColumn(typedColumn, simpleType, context);
     } else if (simpleType == ESimpleLogicalValueType::Double) {
         SerializeDoubleColumn(typedColumn, context);
+    } else if (simpleType == ESimpleLogicalValueType::Float) {
+        SerializeFloatColumn(typedColumn, context);
     } else if (IsStringLikeType(simpleType)) {
         SerializeStringLikeColumn(typedColumn, context);
     } else if (simpleType == ESimpleLogicalValueType::Boolean) {

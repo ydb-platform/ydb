@@ -47,6 +47,9 @@ using TObjectId = TGuid;
 //! The all-zero id used to denote a non-existing object.
 constexpr TObjectId NullObjectId = {};
 
+//! |#|-prefix.
+extern const TStringBuf ObjectIdPathPrefix;
+
 //! Used to mark counters for well-known ids.
 constexpr ui64 WellKnownCounterMask = 0x8000000000000000;
 
@@ -285,13 +288,13 @@ DEFINE_ENUM(EObjectType,
     ((AreaMap)                                      (714))
     ((HunkStorage)                                  (715))
     ((HunkTablet)                                   (716))
+    ((VirtualTabletCellMap)                         (717))
 
     // Node Tracker stuff
     ((Rack)                                         (800))
     ((RackMap)                                      (801))
     ((ClusterNode)                                  (802))
     ((ClusterNodeNode)                              (803))
-    ((LegacyClusterNodeMap)                         (804))
     ((ClusterNodeMap)                               (807))
     ((DataNodeMap)                                  (808))
     ((ExecNodeMap)                                  (809))
@@ -324,6 +327,7 @@ DEFINE_ENUM(EObjectType,
     ((ChaosTableReplica)                           (1205))
     ((ChaosReplicatedTable)                        (1206))
     ((ReplicationCardCollocation)                  (1207))
+    ((VirtualChaosCellMap)                         (1208))
 
     // Maintenance tracker stuff
     ((ClusterProxyNode)                            (1500))

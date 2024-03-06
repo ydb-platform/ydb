@@ -63,6 +63,8 @@ public:
              return PgBuilder->MakeText(item.AsStringRef().Data() + sizeof(void*)).Release();
         } else if constexpr (PgString == NUdf::EPgStringType::Fixed) {
             auto str = item.AsStringRef().Data() + sizeof(void*);
+            auto len = item.AsStringRef().Size() - sizeof(void*);
+            Y_DEBUG_ABORT_UNLESS(ui32(TypeLen) <= len);
             return PgBuilder->NewString(TypeLen, PgTypeId, NUdf::TStringRef(str, TypeLen)).Release();
         } else {
             return MakeString(item.AsStringRef());

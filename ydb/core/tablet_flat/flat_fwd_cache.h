@@ -4,6 +4,7 @@
 #include "flat_fwd_iface.h"
 #include "flat_fwd_misc.h"
 #include "flat_fwd_page.h"
+#include "flat_part_index_iter.h"
 #include "flat_part_index_iter_iface.h"
 #include "flat_table_part.h"
 #include "flat_part_slice.h"
@@ -60,7 +61,7 @@ namespace NFwd {
         TCache() = delete;
 
         TCache(const TPart* part, IPages* env, TGroupId groupId, const TIntrusiveConstPtr<TSlices>& bounds = nullptr)
-            : Index(CreateIndexIter(part, env, groupId))
+            : Index(MakeHolder<TPartIndexIt>(part, env, groupId)) // TODO: use CreateIndexIter(part, env, groupId)
         { 
             if (bounds && !bounds->empty()) {
                 BeginRowId = bounds->front().BeginRowId();

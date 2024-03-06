@@ -3,7 +3,7 @@ GO_LIBRARY()
 LICENSE(BSD-3-Clause)
 
 SRCS(
-    wrappers.pb.go
+    go_features.pb.go
 )
 
 END()

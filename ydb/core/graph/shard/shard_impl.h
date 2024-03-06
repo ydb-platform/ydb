@@ -26,6 +26,9 @@ public:
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) override;
     void OnReadyToWork();
     void ApplyConfig(const NKikimrConfig::TGraphConfig& config);
+    static void MergeHistogram(std::map<ui64, ui64>& dest, const NKikimrGraph::THistogramMetric& src);
+    static void AggregateHistograms(TMetricsData& data);
+    static void AggregateHistogram(std::unordered_map<TString, double>& values, const TString& name, const std::map<ui64, ui64>& histogram);
 
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev);

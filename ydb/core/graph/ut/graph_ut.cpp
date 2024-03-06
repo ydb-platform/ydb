@@ -52,8 +52,6 @@ Y_UNIT_TEST_SUITE(Graph) {
         };
     }
 
-
-
     Y_UNIT_TEST(CreateGraphShard) {
         TTestBasicRuntime runtime;
 
@@ -144,9 +142,8 @@ Y_UNIT_TEST_SUITE(Graph) {
 
         {
             NGraph::TEvGraph::TEvSendMetrics* event = new NGraph::TEvGraph::TEvSendMetrics();
-            NKikimrGraph::TMetric* metric = event->Record.AddMetrics();
-            metric->SetName("test.metric1");
-            metric->SetValue(13);
+            event->AddMetric("test.metric1", 13);
+            event->AddHistogramMetric("test.metric2", {10, 100, 1000}, {5, 5, 5});
             runtime.Send(NGraph::MakeGraphServiceId(), sender, event);
         }
 
@@ -154,9 +151,8 @@ Y_UNIT_TEST_SUITE(Graph) {
 
         {
             NGraph::TEvGraph::TEvSendMetrics* event = new NGraph::TEvGraph::TEvSendMetrics();
-            NKikimrGraph::TMetric* metric = event->Record.AddMetrics();
-            metric->SetName("test.metric1");
-            metric->SetValue(14);
+            event->AddMetric("test.metric1", 14);
+            event->AddHistogramMetric("test.metric2", {10, 100, 1000}, {2, 10, 3});
             runtime.Send(NGraph::MakeGraphServiceId(), sender, event);
         }
 
@@ -164,21 +160,22 @@ Y_UNIT_TEST_SUITE(Graph) {
 
         {
             NGraph::TEvGraph::TEvSendMetrics* event = new NGraph::TEvGraph::TEvSendMetrics();
-            NKikimrGraph::TMetric* metric = event->Record.AddMetrics();
-            metric->SetName("test.metric1");
-            metric->SetValue(15);
+            event->AddMetric("test.metric1", 15);
+            event->AddHistogramMetric("test.metric2", {10, 100, 1000}, {1, 13, 1});
             runtime.Send(NGraph::MakeGraphServiceId(), sender, event);
         }
 
         {
             NGraph::TEvGraph::TEvGetMetrics* event = new NGraph::TEvGraph::TEvGetMetrics();
             event->Record.AddMetrics("test.metric1");
+            event->Record.AddMetrics("test.metric2.p50");
             runtime.Send(NGraph::MakeGraphServiceId(), sender, event);
             TAutoPtr<IEventHandle> handle;
             NGraph::TEvGraph::TEvMetricsResult* response = runtime.GrabEdgeEventRethrow<NGraph::TEvGraph::TEvMetricsResult>(handle);
             Ctest << "Received result: " << response->Record.ShortDebugString() << Endl;
             UNIT_ASSERT(response->Record.DataSize() > 0);
             UNIT_ASSERT(response->Record.GetData(0).ShortDebugString() == "Values: 13 Values: 14");
+            UNIT_ASSERT(response->Record.GetData(1).ShortDebugString() == "Values: 46 Values: 55");
         }
     }
 

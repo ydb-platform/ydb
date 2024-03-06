@@ -15,6 +15,7 @@ enum class EBackendType {
 struct TMetricsData {
     TInstant Timestamp;
     std::unordered_map<TString, double> Values;
+    std::unordered_map<TString, std::map<ui64, ui64>> HistogramValues;
 };
 
 struct TAggregateSettings {
@@ -46,6 +47,7 @@ public:
 
     static void NormalizeAndDownsample(TMetricsValues& values, size_t maxPoints);
     static void FillResult(TMetricsValues& values, const NKikimrGraph::TEvGetMetrics& get, NKikimrGraph::TEvMetricsResult& result);
+    static double GetTimingForPercentile(double percentile, const TVector<ui64>& values, const TVector<ui64>& /*upper*/bounds, ui64 total);
 
     static TString GetLogPrefix() { return {}; }
 

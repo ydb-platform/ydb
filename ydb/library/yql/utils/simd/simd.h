@@ -316,7 +316,7 @@ struct Perfomancer {
 
             size_t i = 0;
 
-            for (; i * sizes[0] + Trait::SIZE < length * sizes[0]; i += Trait::SIZE / pack) {
+            for (; i * sizes[0] + Trait::SIZE < length * sizes[0]; i += Trait::SIZE / pack * 2) {
                 Iteration(sizes, data, result, i, block * i, block, reg, mask);
             }
             MergeEnds(result, data, sizes, length, i, pack * i);

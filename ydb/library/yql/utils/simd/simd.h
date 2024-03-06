@@ -154,21 +154,11 @@ struct Perfomancer {
             size_t order = 0;
             i8 result[Trait::SIZE];
 
-            for (size_t i = 0; i < Trait::SIZE; ++i) {
-                result[i] = 0;
-            }
-
-            if (shift) {
-                while (cnt < size2) {
-                    result[cnt++] = 0;
-                }
-            }
-
             while (cnt < packs * (size1 + size2)) {
 
                 if (shift) {
                     if (cnt % (size1 + size2) < size2) {
-                        result[cnt++] = 0;
+                        result[cnt++] = 0x80;
                     } else {
                         result[cnt++] = order++;
                     }
@@ -176,7 +166,7 @@ struct Perfomancer {
                     if (cnt % (size1 + size2) < size1) {
                         result[cnt++] = order++;
                     } else {
-                        result[cnt++] = 0;
+                        result[cnt++] = 0x80;
                     }
                 }
             }
@@ -227,23 +217,22 @@ struct Perfomancer {
         }
 
         void Iteration(size_t sizes[4], i8* const data[4], i8* result, int ind, int addr, int step, std::vector<Trait>& reg, std::vector<Trait>& mask) {
-            
             reg[0].Get(&data[0][ind * sizes[0]]);
             reg[1].Get(&data[1][ind * sizes[1]]);
             reg[2].Get(&data[2][ind * sizes[2]]);
             reg[3].Get(&data[3][ind * sizes[3]]);
 
             //shuffle to blend
-            reg[4] = reg[0].Shuffle128(mask[0]);
-            reg[5]= reg[1].Shuffle128(mask[1]);
-            reg[6] = reg[2].Shuffle128(mask[2]);
-            reg[7] = reg[3].Shuffle128(mask[3]);
+            reg[4] = reg[0].template Shuffle<false>(mask[0]);
+            reg[5] = reg[1].template Shuffle<false>(mask[1]);
+            reg[6] = reg[2].template Shuffle<false>(mask[2]);
+            reg[7] = reg[3].template Shuffle<false>(mask[3]);
 
             //pure shuffle
-            reg[8] = reg[0].Shuffle128(mask[9]);
-            reg[9] = reg[1].Shuffle128(mask[10]);
-            reg[10] = reg[2].Shuffle128(mask[11]);
-            reg[11] = reg[3].Shuffle128(mask[12]);
+            reg[8] = reg[0].template Shuffle<false>(mask[9]);
+            reg[9] = reg[1].template Shuffle<false>(mask[10]);
+            reg[10] = reg[2].template Shuffle<false>(mask[11]);
+            reg[11] = reg[3].template Shuffle<false>(mask[12]);
 
             //blend
             //0101
@@ -252,10 +241,10 @@ struct Perfomancer {
             reg[1] = reg[6].Blend(reg[7], mask[7]);
 
             //shuffle to blend
-            reg[12] = reg[8].Shuffle128(mask[0]);
-            reg[13] = reg[9].Shuffle128(mask[1]);
-            reg[14] = reg[10].Shuffle128(mask[2]); 
-            reg[15] = reg[11].Shuffle128(mask[3]);
+            reg[12] = reg[8].template Shuffle<false>(mask[0]);
+            reg[13] = reg[9].template Shuffle<false>(mask[1]);
+            reg[14] = reg[10].template Shuffle<false>(mask[2]); 
+            reg[15] = reg[11].template Shuffle<false>(mask[3]);
 
             //blend
             //0101
@@ -263,25 +252,25 @@ struct Perfomancer {
             //2323
             reg[3] = reg[14].Blend(reg[15], mask[7]);
 
-            reg[4] = reg[0].Shuffle128(mask[4]);
-            reg[5] = reg[1].Shuffle128(mask[5]);
+            reg[4] = reg[0].template Shuffle<false>(mask[4]);
+            reg[5] = reg[1].template Shuffle<false>(mask[5]);
 
-            reg[6] = reg[0].Shuffle128(mask[13]);
-            reg[7] = reg[1].Shuffle128(mask[14]);
+            reg[6] = reg[0].template Shuffle<false>(mask[13]);
+            reg[7] = reg[1].template Shuffle<false>(mask[14]);
 
-            reg[0] = reg[6].Shuffle128(mask[4]);
-            reg[1] = reg[7].Shuffle128(mask[5]);
+            reg[0] = reg[6].template Shuffle<false>(mask[4]);
+            reg[1] = reg[7].template Shuffle<false>(mask[5]);
             reg[8] = reg[4].Blend(reg[5], mask[8]); //ok
             reg[9] = reg[0].Blend(reg[1], mask[8]); //ok
 
-            reg[4] = reg[2].Shuffle128(mask[4]);
-            reg[5] = reg[3].Shuffle128(mask[5]);
+            reg[4] = reg[2].template Shuffle<false>(mask[4]);
+            reg[5] = reg[3].template Shuffle<false>(mask[5]);
 
-            reg[6] = reg[2].Shuffle128(mask[13]);
-            reg[7] = reg[3].Shuffle128(mask[14]);
+            reg[6] = reg[2].template Shuffle<false>(mask[13]);
+            reg[7] = reg[3].template Shuffle<false>(mask[14]);
 
-            reg[2] = reg[6].Shuffle128(mask[4]);
-            reg[3] = reg[7].Shuffle128(mask[5]);
+            reg[2] = reg[6].template Shuffle<false>(mask[4]);
+            reg[3] = reg[7].template Shuffle<false>(mask[5]);
 
             reg[11] = reg[4].Blend(reg[5], mask[8]); //ok
             reg[12] = reg[2].Blend(reg[3], mask[8]); //ok
@@ -290,7 +279,6 @@ struct Perfomancer {
             reg[9].Store(&result[addr + step]);
             reg[11].Store(&result[addr + 2 * step]);
             reg[12].Store(&result[addr + 3 * step]);
-
         }
 
         void MergeEnds(i8* result, i8* const data[4], size_t sizes[4], size_t length, size_t ind, int addr) {
@@ -305,7 +293,6 @@ struct Perfomancer {
         }
 
         void MergeColumns(i8* result, i8* const data[4], size_t sizes[4], size_t length) override {
-
             std::vector<Trait> reg(16);
             std::vector<Trait> mask(15);
 

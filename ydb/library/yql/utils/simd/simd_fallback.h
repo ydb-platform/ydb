@@ -96,8 +96,13 @@ struct FallbackTrait {
         return ans;
     }
 
-    inline FallbackTrait<T> Shuffle128(const FallbackTrait<T>& other) {
+    inline FallbackTrait<T> Shuffle128(const FallbackTrait<T>& other) const {
         return other;
+    }
+
+    template<bool CanBeNegative = true>
+    inline FallbackTrait<T> Shuffle(const FallbackTrait<T>& other) const {
+        return Shuffle128(other);
     }
 
     inline void SetMask(T* ptr) {

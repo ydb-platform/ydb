@@ -232,23 +232,26 @@ struct Perfomancer {
         }
 
         void Iteration(size_t sizes[4], i8* const data[4], i8* result, int ind, int addr, int step, std::vector<Trait>& reg, std::vector<Trait>& mask) {
-
+            Cerr << "in cycle" << Endl;
+            Cerr << ind * sizes[0] << Endl;
             reg[0].Get(&data[0][ind * sizes[0]]);
             reg[1].Get(&data[1][ind * sizes[1]]);
             reg[2].Get(&data[2][ind * sizes[2]]);
             reg[3].Get(&data[3][ind * sizes[3]]);
 
+            Cerr << "GET is ok" << Endl;
+
             //shuffle to blend
-            reg[4] = reg[0].Shuffle128(mask[0]);
-            reg[5]= reg[1].Shuffle128(mask[1]);
-            reg[6] = reg[2].Shuffle128(mask[2]);
-            reg[7] = reg[3].Shuffle128(mask[3]);
+            reg[4] = reg[0].Shuffle256(mask[0]);
+            reg[5]= reg[1].Shuffle256(mask[1]);
+            reg[6] = reg[2].Shuffle256(mask[2]);
+            reg[7] = reg[3].Shuffle256(mask[3]);
 
             //pure shuffle
-            reg[8] = reg[0].Shuffle128(mask[9]);
-            reg[9] = reg[1].Shuffle128(mask[10]);
-            reg[10] = reg[2].Shuffle128(mask[11]);
-            reg[11] = reg[3].Shuffle128(mask[12]);
+            reg[8] = reg[0].Shuffle256(mask[9]);
+            reg[9] = reg[1].Shuffle256(mask[10]);
+            reg[10] = reg[2].Shuffle256(mask[11]);
+            reg[11] = reg[3].Shuffle256(mask[12]);
 
             //blend
             //0101
@@ -257,10 +260,10 @@ struct Perfomancer {
             reg[1] = reg[6].Blend(reg[7], mask[7]);
 
             //shuffle to blend
-            reg[12] = reg[8].Shuffle128(mask[0]);
-            reg[13] = reg[9].Shuffle128(mask[1]);
-            reg[14] = reg[10].Shuffle128(mask[2]); 
-            reg[15] = reg[11].Shuffle128(mask[3]);
+            reg[12] = reg[8].Shuffle256(mask[0]);
+            reg[13] = reg[9].Shuffle256(mask[1]);
+            reg[14] = reg[10].Shuffle256(mask[2]); 
+            reg[15] = reg[11].Shuffle256(mask[3]);
 
             //blend
             //0101
@@ -268,25 +271,25 @@ struct Perfomancer {
             //2323
             reg[3] = reg[14].Blend(reg[15], mask[7]);
 
-            reg[4] = reg[0].Shuffle128(mask[4]);
-            reg[5] = reg[1].Shuffle128(mask[5]);
+            reg[4] = reg[0].Shuffle256(mask[4]);
+            reg[5] = reg[1].Shuffle256(mask[5]);
 
-            reg[6] = reg[0].Shuffle128(mask[13]);
-            reg[7] = reg[1].Shuffle128(mask[14]);
+            reg[6] = reg[0].Shuffle256(mask[13]);
+            reg[7] = reg[1].Shuffle256(mask[14]);
 
-            reg[0] = reg[6].Shuffle128(mask[4]);
-            reg[1] = reg[7].Shuffle128(mask[5]);
+            reg[0] = reg[6].Shuffle256(mask[4]);
+            reg[1] = reg[7].Shuffle256(mask[5]);
             reg[8] = reg[4].Blend(reg[5], mask[8]); //ok
             reg[9] = reg[0].Blend(reg[1], mask[8]); //ok
 
-            reg[4] = reg[2].Shuffle128(mask[4]);
-            reg[5] = reg[3].Shuffle128(mask[5]);
+            reg[4] = reg[2].Shuffle256(mask[4]);
+            reg[5] = reg[3].Shuffle256(mask[5]);
 
-            reg[6] = reg[2].Shuffle128(mask[13]);
-            reg[7] = reg[3].Shuffle128(mask[14]);
+            reg[6] = reg[2].Shuffle256(mask[13]);
+            reg[7] = reg[3].Shuffle256(mask[14]);
 
-            reg[2] = reg[6].Shuffle128(mask[4]);
-            reg[3] = reg[7].Shuffle128(mask[5]);
+            reg[2] = reg[6].Shuffle256(mask[4]);
+            reg[3] = reg[7].Shuffle256(mask[5]);
 
             reg[11] = reg[4].Blend(reg[5], mask[8]); //ok
             reg[12] = reg[2].Blend(reg[3], mask[8]); //ok
@@ -295,6 +298,8 @@ struct Perfomancer {
             reg[9].Store(&result[addr + step]);
             reg[11].Store(&result[addr + 2 * step]);
             reg[12].Store(&result[addr + 3 * step]);
+
+            Cerr << "Store is ok" << Endl;
         }
 
         void MergeEnds(i8* result, i8* const data[4], size_t sizes[4], size_t length, size_t ind, int addr) {
@@ -321,10 +326,11 @@ struct Perfomancer {
             size_t i = 0;
 
             for (; i * sizes[0] + Trait::SIZE < length * sizes[0]; i += Trait::SIZE / pack) {
+                Cerr << i << Endl;
                 Iteration(sizes, data, result, i, block * i, block, reg, mask);
             }
-
-            MergeEnds(result, data, sizes, length, i, block * i);
+            Cerr << "Intrisik is ok" << Endl;
+            MergeEnds(result, data, sizes, length, i, pack * i);
 
         }
 

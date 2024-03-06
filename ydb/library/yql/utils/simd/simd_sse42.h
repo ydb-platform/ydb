@@ -108,7 +108,9 @@ struct TSimd8 {
     }
 
     inline void Get(const T* ptr) {
-        Value = _mm_load_si128(reinterpret_cast<const __m128i *>(ptr));
+        Cerr << "in Get" << Endl;
+        Value = _mm_loadu_si128(reinterpret_cast<const __m128i *>(ptr));
+        Cerr << "After Get" << Endl;
     }
 
     static inline TSimd8<T> Load128(const T values[16]) {
@@ -146,6 +148,10 @@ struct TSimd8 {
 
 
     inline TSimd8<T> Shuffle128(const TSimd8<T>& other) const {
+        return _mm_shuffle_epi8(this->Value, other.Value);
+    }
+
+    inline TSimd8<T> Shuffle256(const TSimd8<T>& other) const {
         return _mm_shuffle_epi8(this->Value, other.Value);
     }
 

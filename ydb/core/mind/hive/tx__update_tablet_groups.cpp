@@ -202,9 +202,7 @@ public:
                         NIceDb::TUpdate<Schema::TabletChannelGen::Group>(group->GetGroupID()),
                         NIceDb::TUpdate<Schema::TabletChannelGen::Version>(tabletStorageInfo->Version),
                         NIceDb::TUpdate<Schema::TabletChannelGen::Timestamp>(timestamp.MilliSeconds()));
-            if (!tablet->ReleaseAllocationUnit(channelId)) {
-                BLOG_W("Failed to release AU for tablet " << tablet->Id << " channel " << channelId);
-            }
+            tablet->ReleaseAllocationUnit(channelId);
             if (!channel->History.empty() && fromGeneration == channel->History.back().FromGeneration) {
                 channel->History.back().GroupID = group->GetGroupID(); // we overwrite history item when generation is the same as previous one (so the tablet didn't run yet)
                 channel->History.back().Timestamp = timestamp;

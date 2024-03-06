@@ -433,6 +433,50 @@
         }
     ],
     "test.test[ansi_idents-inplace_yql-default.txt-Results]": [],
+    "test.test[bigdate-explicit_cast-default.txt-Analyze]": [
+        {
+            "checksum": "01775e7c945a56ebf0edc2d478f4f68d",
+            "size": 2567,
+            "uri": "https://{canondata_backend}/1880306/94e1527dc445194ce3caa514976f24f846cc663f/resource.tar.gz#test.test_bigdate-explicit_cast-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[bigdate-explicit_cast-default.txt-Debug]": [
+        {
+            "checksum": "75e5b49b2f04960243c7d5070108bfac",
+            "size": 4865,
+            "uri": "https://{canondata_backend}/1880306/94e1527dc445194ce3caa514976f24f846cc663f/resource.tar.gz#test.test_bigdate-explicit_cast-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[bigdate-explicit_cast-default.txt-Plan]": [
+        {
+            "checksum": "01775e7c945a56ebf0edc2d478f4f68d",
+            "size": 2567,
+            "uri": "https://{canondata_backend}/1880306/94e1527dc445194ce3caa514976f24f846cc663f/resource.tar.gz#test.test_bigdate-explicit_cast-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[bigdate-explicit_cast-default.txt-Results]": [],
+    "test.test[bigdate-int_cast-default.txt-Analyze]": [
+        {
+            "checksum": "a48ccc9922567dfee1170d2c2df45b6e",
+            "size": 2153,
+            "uri": "https://{canondata_backend}/1871182/1b070eaa6816a28c47f92666b5d664e443ea4c80/resource.tar.gz#test.test_bigdate-int_cast-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[bigdate-int_cast-default.txt-Debug]": [
+        {
+            "checksum": "f8232d3c6d64dfe0d64387ef400e2bcc",
+            "size": 5570,
+            "uri": "https://{canondata_backend}/1871182/1b070eaa6816a28c47f92666b5d664e443ea4c80/resource.tar.gz#test.test_bigdate-int_cast-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[bigdate-int_cast-default.txt-Plan]": [
+        {
+            "checksum": "a48ccc9922567dfee1170d2c2df45b6e",
+            "size": 2153,
+            "uri": "https://{canondata_backend}/1871182/1b070eaa6816a28c47f92666b5d664e443ea4c80/resource.tar.gz#test.test_bigdate-int_cast-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[bigdate-int_cast-default.txt-Results]": [],
     "test.test[binding-named_callable-default.txt-Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",

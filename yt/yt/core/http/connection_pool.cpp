@@ -52,9 +52,7 @@ TConnectionPool::~TConnectionPool()
     YT_UNUSED_FUTURE(ExpiredConnectionsCollector_->Stop());
 }
 
-TFuture<IConnectionPtr> TConnectionPool::Connect(
-    const TNetworkAddress& address,
-    TRemoteContextPtr context)
+TFuture<IConnectionPtr> TConnectionPool::Connect(const TNetworkAddress& address)
 {
     {
         auto guard = Guard(SpinLock_);
@@ -66,7 +64,7 @@ TFuture<IConnectionPtr> TConnectionPool::Connect(
         }
     }
 
-    return Dialer_->Dial(address, std::move(context));
+    return Dialer_->Dial(address);
 }
 
 void TConnectionPool::Release(const IConnectionPtr& connection)

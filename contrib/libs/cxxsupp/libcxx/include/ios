@@ -217,15 +217,10 @@ storage-class-specifier const error_category& iostream_category() noexcept;
 #endif
 
 #include <__assert> // all public C++ headers provide the assertion handler
-#include <__fwd/ios.h>
 #include <__ios/fpos.h>
 #include <__locale>
-#include <__system_error/error_category.h>
-#include <__system_error/error_code.h>
-#include <__system_error/error_condition.h>
-#include <__system_error/system_error.h>
 #include <__utility/swap.h>
-#include <__verbose_abort>
+#include <system_error>
 #include <version>
 
 // standard-mandated includes
@@ -234,7 +229,7 @@ storage-class-specifier const error_category& iostream_category() noexcept;
 #include <iosfwd>
 
 #if !defined(_LIBCPP_HAS_NO_ATOMIC_HEADER)
-#  include <__atomic/atomic.h> // for __xindex_
+#include <atomic>     // for __xindex_
 #endif
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
@@ -245,10 +240,10 @@ _LIBCPP_BEGIN_NAMESPACE_STD
 
 typedef ptrdiff_t streamsize;
 
-class _LIBCPP_EXPORTED_FROM_ABI ios_base
+class _LIBCPP_TYPE_VIS ios_base
 {
 public:
-    class _LIBCPP_EXPORTED_FROM_ABI failure;
+    class _LIBCPP_EXCEPTION_ABI failure;
 
     typedef unsigned int fmtflags;
     static const fmtflags boolalpha   = 0x0001;
@@ -295,7 +290,7 @@ public:
     typedef _VSTD::streampos streampos;
 #endif
 
-    class _LIBCPP_EXPORTED_FROM_ABI Init;
+    class _LIBCPP_TYPE_VIS Init;
 
     // 27.5.2.2 fmtflags state:
     _LIBCPP_INLINE_VISIBILITY fmtflags flags() const;
@@ -424,7 +419,8 @@ template <>
 struct _LIBCPP_TEMPLATE_VIS is_error_code_enum<io_errc::__lx> : public true_type { };
 #endif
 
-_LIBCPP_EXPORTED_FROM_ABI const error_category& iostream_category() _NOEXCEPT;
+_LIBCPP_FUNC_VIS
+const error_category& iostream_category() _NOEXCEPT;
 
 inline _LIBCPP_INLINE_VISIBILITY
 error_code
@@ -440,26 +436,27 @@ make_error_condition(io_errc __e) _NOEXCEPT
     return error_condition(static_cast<int>(__e), iostream_category());
 }
 
-class _LIBCPP_EXPORTED_FROM_ABI ios_base::failure
+class _LIBCPP_EXCEPTION_ABI ios_base::failure
     : public system_error
 {
 public:
     explicit failure(const string& __msg, const error_code& __ec = io_errc::stream);
     explicit failure(const char* __msg, const error_code& __ec = io_errc::stream);
-    _LIBCPP_HIDE_FROM_ABI failure(const failure&) _NOEXCEPT = default;
+    failure(const failure&) _NOEXCEPT = default;
     ~failure() _NOEXCEPT override;
 };
 
 _LIBCPP_NORETURN inline _LIBCPP_INLINE_VISIBILITY
 void __throw_failure(char const* __msg) {
-#ifndef _LIBCPP_HAS_NO_EXCEPTIONS
+#ifndef _LIBCPP_NO_EXCEPTIONS
     throw ios_base::failure(__msg);
 #else
-    _LIBCPP_VERBOSE_ABORT("ios_base::failure was thrown in -fno-exceptions mode with message \"%s\"", __msg);
+    ((void)__msg);
+    _VSTD::abort();
 #endif
 }
 
-class _LIBCPP_EXPORTED_FROM_ABI ios_base::Init
+class _LIBCPP_TYPE_VIS ios_base::Init
 {
 public:
     Init();
@@ -847,12 +844,6 @@ basic_ios<_CharT, _Traits>::set_rdbuf(basic_streambuf<char_type, traits_type>* _
     ios_base::set_rdbuf(__sb);
 }
 
-extern template class _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS basic_ios<char>;
-
-#ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
-extern template class _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS basic_ios<wchar_t>;
-#endif
-
 _LIBCPP_HIDE_FROM_ABI inline
 ios_base&
 boolalpha(ios_base& __str)
@@ -1048,7 +1039,6 @@ defaultfloat(ios_base& __str)
 _LIBCPP_END_NAMESPACE_STD
 
 #if !defined(_LIBCPP_REMOVE_TRANSITIVE_INCLUDES) && _LIBCPP_STD_VER <= 20
-#  include <atomic>
 #  include <concepts>
 #  include <cstddef>
 #  include <cstdlib>
@@ -1057,7 +1047,6 @@ _LIBCPP_END_NAMESPACE_STD
 #  include <limits>
 #  include <new>
 #  include <stdexcept>
-#  include <system_error>
 #  include <type_traits>
 #  include <typeinfo>
 #endif

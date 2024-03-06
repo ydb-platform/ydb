@@ -15,11 +15,13 @@
 #endif
 
 #include <__algorithm/ranges_copy.h>
+#include <__availability>
 #include <__chrono/statically_widen.h>
 #include <__concepts/same_as.h>
 #include <__config>
 #include <__format/buffer.h>
 #include <__format/concepts.h>
+#include <__format/format_args.h>
 #include <__format/format_context.h>
 #include <__format/format_error.h>
 #include <__format/formatter.h>
@@ -34,73 +36,54 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-#if _LIBCPP_STD_VER >= 23
+#if _LIBCPP_STD_VER > 20
 
 template <class _Tp, class _CharT = char>
   requires same_as<remove_cvref_t<_Tp>, _Tp> && formattable<_Tp, _CharT>
-struct _LIBCPP_TEMPLATE_VIS range_formatter {
-  _LIBCPP_HIDE_FROM_ABI constexpr void set_separator(basic_string_view<_CharT> __separator) noexcept {
+struct _LIBCPP_TEMPLATE_VIS _LIBCPP_AVAILABILITY_FORMAT range_formatter {
+  _LIBCPP_HIDE_FROM_ABI constexpr void set_separator(basic_string_view<_CharT> __separator) {
     __separator_ = __separator;
   }
   _LIBCPP_HIDE_FROM_ABI constexpr void
-  set_brackets(basic_string_view<_CharT> __opening_bracket, basic_string_view<_CharT> __closing_bracket) noexcept {
+  set_brackets(basic_string_view<_CharT> __opening_bracket, basic_string_view<_CharT> __closing_bracket) {
     __opening_bracket_ = __opening_bracket;
     __closing_bracket_ = __closing_bracket;
   }
 
-  _LIBCPP_HIDE_FROM_ABI constexpr formatter<_Tp, _CharT>& underlying() noexcept { return __underlying_; }
-  _LIBCPP_HIDE_FROM_ABI constexpr const formatter<_Tp, _CharT>& underlying() const noexcept { return __underlying_; }
+  _LIBCPP_HIDE_FROM_ABI constexpr formatter<_Tp, _CharT>& underlying() { return __underlying_; }
+  _LIBCPP_HIDE_FROM_ABI constexpr const formatter<_Tp, _CharT>& underlying() const { return __underlying_; }
 
   template <class _ParseContext>
-  _LIBCPP_HIDE_FROM_ABI constexpr typename _ParseContext::iterator parse(_ParseContext& __ctx) {
-    auto __begin = __parser_.__parse(__ctx, __format_spec::__fields_range);
-    auto __end   = __ctx.end();
-    // Note the cases where __begin == __end in this code only happens when the
-    // replacement-field has no terminating }, or when the parse is manually
-    // called with a format-spec. The former is an error and the latter means
-    // using a formatter without the format functions or print.
-    if (__begin == __end) [[unlikely]]
-      return __parse_empty_range_underlying_spec(__ctx, __begin);
+  _LIBCPP_HIDE_FROM_ABI constexpr typename _ParseContext::iterator parse(_ParseContext& __parse_ctx) {
+    const _CharT* __begin = __parser_.__parse(__parse_ctx, __format_spec::__fields_range);
+    const _CharT* __end   = __parse_ctx.end();
+    if (__begin == __end)
+      return __begin;
 
     // The n field overrides a possible m type, therefore delay applying the
     // effect of n until the type has been procesed.
+    bool __clear_brackets = (*__begin == _CharT('n'));
+    if (__clear_brackets) {
+      ++__begin;
+      if (__begin == __end) {
+        // Since there is no more data, clear the brackets before returning.
+        set_brackets({}, {});
+        return __begin;
+      }
+    }
+
     __parse_type(__begin, __end);
-    if (__parser_.__clear_brackets_)
+    if (__clear_brackets)
       set_brackets({}, {});
-    if (__begin == __end) [[unlikely]]
-      return __parse_empty_range_underlying_spec(__ctx, __begin);
+    if (__begin == __end)
+      return __begin;
 
     bool __has_range_underlying_spec = *__begin == _CharT(':');
-    if (__has_range_underlying_spec) {
-      // range-underlying-spec:
-      //   :  format-spec
-      ++__begin;
-    } else if (__begin != __end && *__begin != _CharT('}'))
-      // When there is no underlaying range the current parse should have
-      // consumed the format-spec. If not, the not consumed input will be
-      // processed by the underlying. For example {:-} for a range in invalid,
-      // the sign field is not present. Without this check the underlying_ will
-      // get -} as input which my be valid.
-      std::__throw_format_error("The format specifier should consume the input or end with a '}'");
-
-    __ctx.advance_to(__begin);
-    __begin = __underlying_.parse(__ctx);
-
-    // This test should not be required if __has_range_underlying_spec is false.
-    // However this test makes sure the underlying formatter left the parser in
-    // a valid state. (Note this is not a full protection against evil parsers.
-    // For example
-    //   } this is test for the next argument {}
-    //   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
-    // could consume more than it should.
-    if (__begin != __end && *__begin != _CharT('}'))
-      std::__throw_format_error("The format specifier should consume the input or end with a '}'");
-
     if (__parser_.__type_ != __format_spec::__type::__default) {
       // [format.range.formatter]/6
       //   If the range-type is s or ?s, then there shall be no n option and no
       //   range-underlying-spec.
-      if (__parser_.__clear_brackets_) {
+      if (__clear_brackets) {
         if (__parser_.__type_ == __format_spec::__type::__string)
           std::__throw_format_error("The n option and type s can't be used together");
         std::__throw_format_error("The n option and type ?s can't be used together");
@@ -112,6 +95,20 @@ struct _LIBCPP_TEMPLATE_VIS range_formatter {
       }
     } else if (!__has_range_underlying_spec)
       std::__set_debug_format(__underlying_);
+
+    if (__has_range_underlying_spec) {
+      // range-underlying-spec:
+      //   :  format-spec
+      ++__begin;
+      if (__begin == __end)
+        return __begin;
+
+      __parse_ctx.advance_to(__begin);
+      __begin = __underlying_.parse(__parse_ctx);
+    }
+
+    if (__begin != __end && *__begin != _CharT('}'))
+      std::__throw_format_error("The format-spec should consume the input or end with a '}'");
 
     return __begin;
   }
@@ -214,8 +211,7 @@ struct _LIBCPP_TEMPLATE_VIS range_formatter {
   __format_spec::__parser<_CharT> __parser_{.__alignment_ = __format_spec::__alignment::__left};
 
 private:
-  template <contiguous_iterator _Iterator>
-  _LIBCPP_HIDE_FROM_ABI constexpr void __parse_type(_Iterator& __begin, _Iterator __end) {
+  _LIBCPP_HIDE_FROM_ABI constexpr void __parse_type(const _CharT*& __begin, const _CharT* __end) {
     switch (*__begin) {
     case _CharT('m'):
       if constexpr (__fmt_pair_like<_Tp>) {
@@ -223,7 +219,7 @@ private:
         set_separator(_LIBCPP_STATICALLY_WIDEN(_CharT, ", "));
         ++__begin;
       } else
-        std::__throw_format_error("Type m requires a pair or a tuple with two elements");
+        std::__throw_format_error("The range-format-spec type m requires two elements for a pair or tuple");
       break;
 
     case _CharT('s'):
@@ -231,30 +227,19 @@ private:
         __parser_.__type_ = __format_spec::__type::__string;
         ++__begin;
       } else
-        std::__throw_format_error("Type s requires character type as formatting argument");
+        std::__throw_format_error("The range-format-spec type s requires formatting a character type");
       break;
 
     case _CharT('?'):
       ++__begin;
       if (__begin == __end || *__begin != _CharT('s'))
-        std::__throw_format_error("The format specifier should consume the input or end with a '}'");
+        std::__throw_format_error("The format-spec should consume the input or end with a '}'");
       if constexpr (same_as<_Tp, _CharT>) {
         __parser_.__type_ = __format_spec::__type::__debug;
         ++__begin;
       } else
-        std::__throw_format_error("Type ?s requires character type as formatting argument");
+        std::__throw_format_error("The range-format-spec type ?s requires formatting a character type");
     }
-  }
-
-  template <class _ParseContext>
-  _LIBCPP_HIDE_FROM_ABI constexpr typename _ParseContext::iterator
-  __parse_empty_range_underlying_spec(_ParseContext& __ctx, typename _ParseContext::iterator __begin) {
-    __ctx.advance_to(__begin);
-    [[maybe_unused]] typename _ParseContext::iterator __result = __underlying_.parse(__ctx);
-    _LIBCPP_ASSERT_UNCATEGORIZED(
-        __result == __begin,
-        "the underlying's parse function should not advance the input beyond the end of the input");
-    return __begin;
   }
 
   formatter<_Tp, _CharT> __underlying_;
@@ -263,7 +248,7 @@ private:
   basic_string_view<_CharT> __closing_bracket_ = _LIBCPP_STATICALLY_WIDEN(_CharT, "]");
 };
 
-#endif //_LIBCPP_STD_VER >= 23
+#endif //_LIBCPP_STD_VER > 20
 
 _LIBCPP_END_NAMESPACE_STD
 

@@ -20,19 +20,19 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-#if _LIBCPP_STD_VER >= 20
+#if _LIBCPP_STD_VER > 17
 
 template <class _Context>
-class _LIBCPP_TEMPLATE_VIS basic_format_arg;
+class _LIBCPP_TEMPLATE_VIS _LIBCPP_AVAILABILITY_FORMAT basic_format_arg;
 
 template <class _OutIt, class _CharT>
   requires output_iterator<_OutIt, const _CharT&>
-class _LIBCPP_TEMPLATE_VIS basic_format_context;
+class _LIBCPP_TEMPLATE_VIS _LIBCPP_AVAILABILITY_FORMAT basic_format_context;
 
 template <class _Tp, class _CharT = char>
-struct _LIBCPP_TEMPLATE_VIS formatter;
+struct _LIBCPP_TEMPLATE_VIS _LIBCPP_AVAILABILITY_FORMAT formatter;
 
-#endif //_LIBCPP_STD_VER >= 20
+#endif //_LIBCPP_STD_VER > 17
 
 _LIBCPP_END_NAMESPACE_STD
 

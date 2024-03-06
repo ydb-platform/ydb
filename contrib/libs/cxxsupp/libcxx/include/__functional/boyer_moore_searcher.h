@@ -20,13 +20,12 @@
 #include <__iterator/distance.h>
 #include <__iterator/iterator_traits.h>
 #include <__memory/shared_ptr.h>
-#include <__type_traits/make_unsigned.h>
 #include <__utility/pair.h>
 #include <array>
 #include <unordered_map>
 #include <vector>
 
-#if _LIBCPP_STD_VER >= 17
+#if _LIBCPP_STD_VER > 14
 
 _LIBCPP_PUSH_MACROS
 #include <__undef_macros>
@@ -114,7 +113,6 @@ private:
                                       && is_same_v<_BinaryPredicate, equal_to<>>>;
 
 public:
-  _LIBCPP_HIDE_FROM_ABI
   boyer_moore_searcher(_RandomAccessIterator1 __first,
                        _RandomAccessIterator1 __last,
                        _Hash __hash = _Hash(),
@@ -136,7 +134,7 @@ public:
   }
 
   template <class _RandomAccessIterator2>
-  _LIBCPP_HIDE_FROM_ABI pair<_RandomAccessIterator2, _RandomAccessIterator2>
+  pair<_RandomAccessIterator2, _RandomAccessIterator2>
   operator()(_RandomAccessIterator2 __first, _RandomAccessIterator2 __last) const {
     static_assert(__is_same_uncvref<typename iterator_traits<_RandomAccessIterator1>::value_type,
                                     typename iterator_traits<_RandomAccessIterator2>::value_type>::value,
@@ -160,7 +158,7 @@ private:
   shared_ptr<difference_type[]> __suffix_;
 
   template <class _RandomAccessIterator2>
-  _LIBCPP_HIDE_FROM_ABI pair<_RandomAccessIterator2, _RandomAccessIterator2>
+  pair<_RandomAccessIterator2, _RandomAccessIterator2>
   __search(_RandomAccessIterator2 __f, _RandomAccessIterator2 __l) const {
     _RandomAccessIterator2 __current = __f;
     const _RandomAccessIterator2 __last = __l - __pattern_length_;
@@ -185,8 +183,7 @@ private:
   }
 
   template <class _Iterator, class _Container>
-  _LIBCPP_HIDE_FROM_ABI void
-  __compute_bm_prefix(_Iterator __first, _Iterator __last, _BinaryPredicate __pred, _Container& __prefix) {
+  void __compute_bm_prefix(_Iterator __first, _Iterator __last, _BinaryPredicate __pred, _Container& __prefix) {
     const size_t __count = __last - __first;
 
     __prefix[0] = 0;
@@ -202,8 +199,7 @@ private:
     }
   }
 
-  _LIBCPP_HIDE_FROM_ABI void
-  __build_suffix_table(_RandomAccessIterator1 __first, _RandomAccessIterator1 __last, _BinaryPredicate __pred) {
+  void __build_suffix_table(_RandomAccessIterator1 __first, _RandomAccessIterator1 __last, _BinaryPredicate __pred) {
     const size_t __count = __last - __first;
 
     if (__count == 0)
@@ -245,7 +241,6 @@ private:
                                       && is_same_v<_Hash, hash<value_type>>
                                       && is_same_v<_BinaryPredicate, equal_to<>>>;
 public:
-  _LIBCPP_HIDE_FROM_ABI
   boyer_moore_horspool_searcher(_RandomAccessIterator1 __first,
                                 _RandomAccessIterator1 __last,
                                 _Hash __hash = _Hash(),
@@ -267,7 +262,7 @@ public:
   }
 
   template <class _RandomAccessIterator2>
-  _LIBCPP_HIDE_FROM_ABI pair<_RandomAccessIterator2, _RandomAccessIterator2>
+  pair<_RandomAccessIterator2, _RandomAccessIterator2>
   operator()(_RandomAccessIterator2 __first, _RandomAccessIterator2 __last) const {
     static_assert(__is_same_uncvref<typename std::iterator_traits<_RandomAccessIterator1>::value_type,
                                     typename std::iterator_traits<_RandomAccessIterator2>::value_type>::value,
@@ -291,7 +286,7 @@ private:
   shared_ptr<__skip_table_type> __skip_table_;
 
   template <class _RandomAccessIterator2>
-  _LIBCPP_HIDE_FROM_ABI pair<_RandomAccessIterator2, _RandomAccessIterator2>
+  pair<_RandomAccessIterator2, _RandomAccessIterator2>
   __search(_RandomAccessIterator2 __f, _RandomAccessIterator2 __l) const {
     _RandomAccessIterator2 __current = __f;
     const _RandomAccessIterator2 __last = __l - __pattern_length_;
@@ -315,6 +310,6 @@ _LIBCPP_END_NAMESPACE_STD
 
 _LIBCPP_POP_MACROS
 
-#endif // _LIBCPP_STD_VER >= 17
+#endif // _LIBCPP_STD_VER > 14
 
 #endif // _LIBCPP___FUNCTIONAL_BOYER_MOORE_SEARCHER_H

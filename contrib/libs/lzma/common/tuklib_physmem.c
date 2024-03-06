@@ -23,15 +23,15 @@
 
 #elif defined(__OS2__)
 #	define INCL_DOSMISC
-#	error #include <os2.h>
+#	include <os2.h>
 
 #elif defined(__DJGPP__)
 #	error #include <dpmi.h>
 
 #elif defined(__VMS)
-#	error #include <lib$routines.h>
-#	error #include <syidef.h>
-#	error #include <ssdef.h>
+#	include <lib$routines.h>
+#	include <syidef.h>
+#	include <ssdef.h>
 
 #elif defined(AMIGA) || defined(__AROS__)
 #	define __USE_INLINE__

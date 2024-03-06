@@ -1,7 +1,7 @@
 #pragma once
 
 #include "node.h"
-#include "yson_struct_enum.h"
+#include "yson_serialize_common.h"
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/mpl.h>
@@ -9,8 +9,6 @@
 
 #include <yt/yt/core/yson/public.h>
 #include <yt/yt/library/syncmap/map.h>
-
-#include <library/cpp/yt/misc/enum.h>
 
 #include <util/generic/algorithm.h>
 
@@ -90,7 +88,7 @@ public:
 
     // TODO(renadeen): remove this methods.
     void SaveParameter(const TString& key, NYson::IYsonConsumer* consumer) const;
-    void LoadParameter(const TString& key, const NYTree::INodePtr& node);
+    void LoadParameter(const TString& key, const NYTree::INodePtr& node, EMergeStrategy mergeStrategy);
     void ResetParameter(const TString& key);
 
     std::vector<TString> GetAllParameterAliases(const TString& key) const;

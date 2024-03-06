@@ -232,11 +232,9 @@ class bdist_egg(Command):
             remove_tree(self.bdist_dir, dry_run=self.dry_run)
 
         # Add to 'Distribution.dist_files' so that the "upload" command works
-        getattr(self.distribution, 'dist_files', []).append((
-            'bdist_egg',
-            get_python_version(),
-            self.egg_output,
-        ))
+        getattr(self.distribution, 'dist_files', []).append(
+            ('bdist_egg', get_python_version(), self.egg_output)
+        )
 
     def zap_pyfiles(self):
         log.info("Removing .py files from temporary directory")
@@ -321,7 +319,8 @@ def walk_egg(egg_dir):
     if 'EGG-INFO' in dirs:
         dirs.remove('EGG-INFO')
     yield base, dirs, files
-    yield from walker
+    for bdf in walker:
+        yield bdf
 
 
 def analyze_egg(egg_dir, stubs):
@@ -369,7 +368,10 @@ def scan_module(egg_dir, base, name, stubs):
         return True  # Extension module
     pkg = base[len(egg_dir) + 1 :].replace(os.sep, '.')
     module = pkg + (pkg and '.' or '') + os.path.splitext(name)[0]
-    skip = 16  # skip magic & reserved? & date & file size
+    if sys.version_info < (3, 7):
+        skip = 12  # skip magic & date & file size
+    else:
+        skip = 16  # skip magic & reserved? & date & file size
     f = open(filename, 'rb')
     f.read(skip)
     code = marshal.load(f)
@@ -402,12 +404,14 @@ def scan_module(egg_dir, base, name, stubs):
 
 def iter_symbols(code):
     """Yield names and strings used by `code` and its nested code objects"""
-    yield from code.co_names
+    for name in code.co_names:
+        yield name
     for const in code.co_consts:
         if isinstance(const, str):
             yield const
         elif isinstance(const, CodeType):
-            yield from iter_symbols(const)
+            for name in iter_symbols(const):
+                yield name
 
 
 def can_scan():
@@ -419,7 +423,6 @@ def can_scan():
         "Please ask the author to include a 'zip_safe'"
         " setting (either True or False) in the package's setup.py"
     )
-    return False
 
 
 # Attribute names of options for commands that might need to be convinced to

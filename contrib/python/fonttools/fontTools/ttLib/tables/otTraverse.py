@@ -1,5 +1,4 @@
 """Methods for traversing trees of otData-driven OpenType tables."""
-
 from collections import deque
 from typing import Callable, Deque, Iterable, List, Optional, Tuple
 from .otBase import BaseTable

@@ -15,6 +15,7 @@
 #include <__config>
 #include <__iterator/iterator_traits.h>
 #include <__utility/swap.h>
+#include <type_traits>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #  pragma GCC system_header
@@ -22,7 +23,7 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-#if _LIBCPP_STD_VER >= 20
+#if _LIBCPP_STD_VER > 17
 
 template <class _ForwardIterator>
 inline _LIBCPP_INLINE_VISIBILITY constexpr
@@ -34,14 +35,14 @@ shift_right(_ForwardIterator __first, _ForwardIterator __last,
         return __first;
     }
 
-    if constexpr (__has_random_access_iterator_category<_ForwardIterator>::value) {
+    if constexpr (__is_cpp17_random_access_iterator<_ForwardIterator>::value) {
         decltype(__n) __d = __last - __first;
         if (__n >= __d) {
             return __last;
         }
         _ForwardIterator __m = __first + (__d - __n);
         return _VSTD::move_backward(__first, __m, __last);
-    } else if constexpr (__has_bidirectional_iterator_category<_ForwardIterator>::value) {
+    } else if constexpr (__is_cpp17_bidirectional_iterator<_ForwardIterator>::value) {
         _ForwardIterator __m = __last;
         for (; __n > 0; --__n) {
             if (__m == __first) {
@@ -94,7 +95,7 @@ shift_right(_ForwardIterator __first, _ForwardIterator __last,
     }
 }
 
-#endif // _LIBCPP_STD_VER >= 20
+#endif // _LIBCPP_STD_VER > 17
 
 _LIBCPP_END_NAMESPACE_STD
 

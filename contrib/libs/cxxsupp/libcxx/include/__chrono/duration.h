@@ -10,8 +10,6 @@
 #ifndef _LIBCPP___CHRONO_DURATION_H
 #define _LIBCPP___CHRONO_DURATION_H
 
-#include <__compare/ordering.h>
-#include <__compare/three_way_comparable.h>
 #include <__config>
 #include <__type_traits/common_type.h>
 #include <__type_traits/enable_if.h>
@@ -132,7 +130,7 @@ duration_cast(const duration<_Rep, _Period>& __fd)
 template <class _Rep>
 struct _LIBCPP_TEMPLATE_VIS treat_as_floating_point : is_floating_point<_Rep> {};
 
-#if _LIBCPP_STD_VER >= 17
+#if _LIBCPP_STD_VER > 14
 template <class _Rep>
 inline constexpr bool treat_as_floating_point_v = treat_as_floating_point<_Rep>::value;
 #endif
@@ -146,7 +144,7 @@ public:
     _LIBCPP_INLINE_VISIBILITY static _LIBCPP_CONSTEXPR _Rep min()  _NOEXCEPT {return numeric_limits<_Rep>::lowest();}
 };
 
-#if _LIBCPP_STD_VER >= 17
+#if _LIBCPP_STD_VER > 14
 template <class _ToDuration, class _Rep, class _Period>
 inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR
 typename enable_if
@@ -188,11 +186,11 @@ round(const duration<_Rep, _Period>& __d)
 {
     _ToDuration __lower = chrono::floor<_ToDuration>(__d);
     _ToDuration __upper = __lower + _ToDuration{1};
-    auto __lower_diff   = __d - __lower;
-    auto __upper_diff   = __upper - __d;
-    if (__lower_diff < __upper_diff)
+    auto __lowerDiff = __d - __lower;
+    auto __upperDiff = __upper - __d;
+    if (__lowerDiff < __upperDiff)
         return __lower;
-    if (__lower_diff > __upper_diff)
+    if (__lowerDiff > __upperDiff)
         return __upper;
     return __lower.count() & 1 ? __upper : __lower;
 }
@@ -244,10 +242,11 @@ private:
     rep __rep_;
 public:
 
+    _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR
 #ifndef _LIBCPP_CXX03_LANG
-        constexpr duration() = default;
+        duration() = default;
 #else
-        _LIBCPP_HIDE_FROM_ABI duration() {}
+        duration() {}
 #endif
 
     template <class _Rep2>
@@ -308,7 +307,7 @@ typedef duration<long long,        milli> milliseconds;
 typedef duration<long long              > seconds;
 typedef duration<     long, ratio<  60> > minutes;
 typedef duration<     long, ratio<3600> > hours;
-#if _LIBCPP_STD_VER >= 20
+#if _LIBCPP_STD_VER > 17
 typedef duration<     int, ratio_multiply<ratio<24>, hours::period>>         days;
 typedef duration<     int, ratio_multiply<ratio<7>,   days::period>>         weeks;
 typedef duration<     int, ratio_multiply<ratio<146097, 400>, days::period>> years;
@@ -344,8 +343,6 @@ operator==(const duration<_Rep1, _Period1>& __lhs, const duration<_Rep2, _Period
     return __duration_eq<duration<_Rep1, _Period1>, duration<_Rep2, _Period2> >()(__lhs, __rhs);
 }
 
-#if _LIBCPP_STD_VER <= 17
-
 // Duration !=
 
 template <class _Rep1, class _Period1, class _Rep2, class _Period2>
@@ -356,8 +353,6 @@ operator!=(const duration<_Rep1, _Period1>& __lhs, const duration<_Rep2, _Period
 {
     return !(__lhs == __rhs);
 }
-
-#endif // _LIBCPP_STD_VER <= 17
 
 // Duration <
 
@@ -421,20 +416,6 @@ operator>=(const duration<_Rep1, _Period1>& __lhs, const duration<_Rep2, _Period
 {
     return !(__lhs < __rhs);
 }
-
-#if _LIBCPP_STD_VER >= 20
-
-template<class _Rep1, class _Period1, class _Rep2, class _Period2>
-  requires three_way_comparable<common_type_t<_Rep1, _Rep2>>
-_LIBCPP_HIDE_FROM_ABI
-constexpr auto operator<=>(const duration<_Rep1, _Period1>& __lhs,
-                           const duration<_Rep2, _Period2>& __rhs)
-{
-    using _Ct = common_type_t<duration<_Rep1, _Period1>, duration<_Rep2, _Period2>>;
-    return _Ct(__lhs).count() <=> _Ct(__rhs).count();
-}
-
-#endif // _LIBCPP_STD_VER >= 20
 
 // Duration +
 
@@ -549,7 +530,7 @@ operator%(const duration<_Rep1, _Period1>& __lhs, const duration<_Rep2, _Period2
 
 } // namespace chrono
 
-#if _LIBCPP_STD_VER >= 14
+#if _LIBCPP_STD_VER > 11
 // Suffixes for duration literals [time.duration.literals]
 inline namespace literals
 {
@@ -628,7 +609,7 @@ namespace chrono { // hoist the literals into namespace std::chrono
    using namespace literals::chrono_literals;
 } // namespace chrono
 
-#endif // _LIBCPP_STD_VER >= 14
+#endif // _LIBCPP_STD_VER > 11
 
 _LIBCPP_END_NAMESPACE_STD
 

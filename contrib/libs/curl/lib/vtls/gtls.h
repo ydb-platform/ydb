@@ -29,7 +29,7 @@
 
 #ifdef USE_GNUTLS
 
-#error #include <gnutls/gnutls.h>
+#include <gnutls/gnutls.h>
 
 #ifdef HAVE_GNUTLS_SRP
 /* the function exists */

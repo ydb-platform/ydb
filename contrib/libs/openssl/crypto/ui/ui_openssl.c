@@ -57,7 +57,7 @@
 # include "internal/cryptlib.h"
 
 # ifdef OPENSSL_SYS_VMS          /* prototypes for sys$whatever */
-#  error #include <starlet.h>
+#  include <starlet.h>
 #  ifdef __DECC
 #   pragma message disable DOLLARID
 #  endif
@@ -140,10 +140,10 @@
 # endif
 
 # ifdef OPENSSL_SYS_VMS
-#  error #include <ssdef.h>
-#  error #include <iodef.h>
+#  include <ssdef.h>
+#  include <iodef.h>
 #  include <ttdef.h>
-#  error #include <descrip.h>
+#  include <descrip.h>
 struct IOSB {
     short iosb$w_value;
     short iosb$w_count;

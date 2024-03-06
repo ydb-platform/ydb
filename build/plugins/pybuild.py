@@ -1,5 +1,4 @@
 import collections
-import json
 import os
 import six
 from hashlib import md5
@@ -136,15 +135,6 @@ def get_srcdir(path, unit):
     return rootrel_arc_src(path, unit)[: -len(path)].rstrip('/')
 
 
-@lazy
-def get_ruff_configs(unit):
-    rel_config_path = rootrel_arc_src(unit.get('RUFF_CONFIG_PATHS_FILE'), unit)
-    arc_config_path = unit.resolve_arc_path(rel_config_path)
-    abs_config_path = unit.resolve(arc_config_path)
-    with open(abs_config_path, 'r') as fd:
-        return list(json.load(fd).values())
-
-
 def add_python_lint_checks(unit, py_ver, files):
     @lazy
     def get_resolved_files():
@@ -220,8 +210,8 @@ def add_python_lint_checks(unit, py_ver, files):
             params = ["ruff", "tools/ruff_linter/bin/ruff_linter"]
             params += ["FILES"] + resolved_files
             params += ["GLOBAL_RESOURCES", resource]
-            configs = [unit.get('RUFF_CONFIG_PATHS_FILE'), 'build/config/tests/ruff/ruff.toml'] + get_ruff_configs(unit)
-            params += ['CONFIGS'] + configs
+            ruff_cfg = unit.get('STYLE_RUFF_PYPROJECT_VALUE') or 'build/config/tests/ruff/ruff.toml'
+            params += ['CONFIGS', ruff_cfg]
             unit.on_add_linter_check(params)
 
     if files and unit.get('STYLE_PYTHON_VALUE') == 'yes' and is_py3(unit):
@@ -249,7 +239,7 @@ def py_program(unit, py3):
     if py3:
         peers = ['library/python/runtime_py3/main']
         if unit.get('PYTHON_SQLITE3') != 'no':
-            peers.append('contrib/tools/python3/Modules/_sqlite')
+            peers.append('contrib/tools/python3/src/Modules/_sqlite')
     else:
         peers = ['library/python/runtime/main']
         if unit.get('PYTHON_SQLITE3') != 'no':
@@ -480,10 +470,7 @@ def onpy_srcs(unit, *args):
                 # generated
                 if with_ext is None:
                     cpp_files2res.add(
-                        (
-                            os.path.splitext(filename)[0] + out_suffix,
-                            os.path.splitext(path)[0] + out_suffix,
-                        )
+                        (os.path.splitext(filename)[0] + out_suffix, os.path.splitext(path)[0] + out_suffix)
                     )
                 else:
                     cpp_files2res.add((filename + with_ext + out_suffix, path + with_ext + out_suffix))

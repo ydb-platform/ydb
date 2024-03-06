@@ -17,7 +17,6 @@
 #include <ostream>
 
 #include "y_absl/base/attributes.h"
-#include "y_absl/base/config.h"
 
 namespace y_absl {
 Y_ABSL_NAMESPACE_BEGIN

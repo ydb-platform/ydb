@@ -42,9 +42,8 @@
 // This preprocessor token is also defined in raw_io.cc.  If you need to copy
 // this, consider moving both to config.h instead.
 #if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__) || \
-    defined(__hexagon__) || defined(__Fuchsia__) ||                     \
-    defined(__native_client__) || defined(__OpenBSD__) ||               \
-    defined(__EMSCRIPTEN__) || defined(__ASYLO__)
+    defined(__Fuchsia__) || defined(__native_client__) ||               \
+    defined(__OpenBSD__) || defined(__EMSCRIPTEN__) || defined(__ASYLO__)
 
 #include <unistd.h>
 
@@ -57,7 +56,8 @@
 // Y_ABSL_HAVE_SYSCALL_WRITE is defined when the platform provides the syscall
 //   syscall(SYS_write, /*int*/ fd, /*char* */ buf, /*size_t*/ len);
 // for low level operations that want to avoid libc.
-#if (defined(__linux__) || defined(__FreeBSD__)) && !defined(__ANDROID__)
+#if (defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__)) && \
+    !defined(__ANDROID__)
 #include <sys/syscall.h>
 #define Y_ABSL_HAVE_SYSCALL_WRITE 1
 #define Y_ABSL_LOW_LEVEL_WRITE_SUPPORTED 1
@@ -93,7 +93,8 @@ constexpr char kTruncated[] = " ... (message truncated)\n";
 bool VADoRawLog(char** buf, int* size, const char* format, va_list ap)
     Y_ABSL_PRINTF_ATTRIBUTE(3, 0);
 bool VADoRawLog(char** buf, int* size, const char* format, va_list ap) {
-  if (*size < 0) return false;
+  if (*size < 0)
+    return false;
   int n = vsnprintf(*buf, static_cast<size_t>(*size), format, ap);
   bool result = true;
   if (n < 0 || n > *size) {
@@ -121,7 +122,8 @@ constexpr int kLogBufSize = 3000;
 bool DoRawLog(char** buf, int* size, const char* format, ...)
     Y_ABSL_PRINTF_ATTRIBUTE(3, 4);
 bool DoRawLog(char** buf, int* size, const char* format, ...) {
-  if (*size < 0) return false;
+  if (*size < 0)
+    return false;
   va_list ap;
   va_start(ap, format);
   int n = vsnprintf(*buf, static_cast<size_t>(*size), format, ap);
@@ -240,8 +242,8 @@ void AsyncSignalSafeWriteError(const char* s, size_t len) {
   _write(/* stderr */ 2, s, static_cast<unsigned>(len));
 #else
   // stderr logging unsupported on this platform
-  (void)s;
-  (void)len;
+  (void) s;
+  (void) len;
 #endif
 }
 
@@ -256,7 +258,7 @@ void RawLog(y_absl::LogSeverity severity, const char* file, int line,
 bool RawLoggingFullySupported() {
 #ifdef Y_ABSL_LOW_LEVEL_WRITE_SUPPORTED
   return true;
-#else   // !Y_ABSL_LOW_LEVEL_WRITE_SUPPORTED
+#else  // !Y_ABSL_LOW_LEVEL_WRITE_SUPPORTED
   return false;
 #endif  // !Y_ABSL_LOW_LEVEL_WRITE_SUPPORTED
 }

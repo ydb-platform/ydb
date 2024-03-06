@@ -78,22 +78,22 @@ void SetGlobalTracer(const ITracerPtr& tracer)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TTracingConfigStorage
+struct TTracingConfigSingleton
 {
-    TAtomicIntrusivePtr<TTracingTransportConfig> Config{New<TTracingTransportConfig>()};
+    TAtomicIntrusivePtr<TTracingConfig> Config{New<TTracingConfig>()};
 };
 
-static TTracingConfigStorage* GlobalTracingConfig()
+static TTracingConfigSingleton* GlobalTracingConfig()
 {
-    return LeakySingleton<TTracingConfigStorage>();
+    return LeakySingleton<TTracingConfigSingleton>();
 }
 
-void SetTracingTransportConfig(TTracingTransportConfigPtr config)
+void SetTracingConfig(TTracingConfigPtr config)
 {
     GlobalTracingConfig()->Config.Store(std::move(config));
 }
 
-TTracingTransportConfigPtr GetTracingTransportConfig()
+TTracingConfigPtr GetTracingConfig()
 {
     return GlobalTracingConfig()->Config.Acquire();
 }
@@ -627,7 +627,7 @@ void ToProto(NProto::TTracingExt* ext, const TTraceContextPtr& context)
     if (auto endpoint = context->GetTargetEndpoint()){
         ext->set_target_endpoint(endpoint.value());
     }
-    if (GetTracingTransportConfig()->SendBaggage) {
+    if (GetTracingConfig()->SendBaggage) {
         if (auto baggage = context->GetBaggage()) {
             ext->set_baggage(baggage.ToString());
         }

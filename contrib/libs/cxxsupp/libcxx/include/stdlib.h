@@ -109,15 +109,16 @@ extern "C++" {
 #endif
 
 // MSVCRT already has the correct prototype in <stdlib.h> if __cplusplus is defined
-#if !defined(_LIBCPP_MSVCRT)
+#if !defined(_LIBCPP_MSVCRT) && !defined(__sun__)
 _LIBCPP_NODISCARD_EXT inline _LIBCPP_INLINE_VISIBILITY long abs(long __x) _NOEXCEPT {
   return __builtin_labs(__x);
 }
 _LIBCPP_NODISCARD_EXT inline _LIBCPP_INLINE_VISIBILITY long long abs(long long __x) _NOEXCEPT {
   return __builtin_llabs(__x);
 }
-#endif // !defined(_LIBCPP_MSVCRT)
+#endif // !defined(_LIBCPP_MSVCRT) && !defined(__sun__)
 
+#if !defined(__sun__)
 _LIBCPP_NODISCARD_EXT inline _LIBCPP_INLINE_VISIBILITY float abs(float __lcpp_x) _NOEXCEPT {
   return __builtin_fabsf(__lcpp_x); // Use builtins to prevent needing math.h
 }
@@ -130,6 +131,7 @@ _LIBCPP_NODISCARD_EXT inline _LIBCPP_INLINE_VISIBILITY long double
 abs(long double __lcpp_x) _NOEXCEPT {
   return __builtin_fabsl(__lcpp_x);
 }
+#endif // !defined(__sun__)
 
 // div
 
@@ -144,7 +146,7 @@ abs(long double __lcpp_x) _NOEXCEPT {
 #endif
 
 // MSVCRT already has the correct prototype in <stdlib.h> if __cplusplus is defined
-#if !defined(_LIBCPP_MSVCRT)
+#if !defined(_LIBCPP_MSVCRT) && !defined(__sun__)
 inline _LIBCPP_INLINE_VISIBILITY ldiv_t div(long __x, long __y) _NOEXCEPT {
   return ::ldiv(__x, __y);
 }
@@ -154,7 +156,7 @@ inline _LIBCPP_INLINE_VISIBILITY lldiv_t div(long long __x,
   return ::lldiv(__x, __y);
 }
 #endif
-#endif // _LIBCPP_MSVCRT
+#endif // _LIBCPP_MSVCRT / __sun__
 } // extern "C++"
 #endif // __cplusplus
 

@@ -107,9 +107,10 @@ def _fetch_build_egg_no_warn(dist, req):  # noqa: C901  # is too complex (16)  #
         dist_metadata = pkg_resources.PathMetadata(
             dist_location, os.path.join(dist_location, 'EGG-INFO')
         )
-        return pkg_resources.Distribution.from_filename(
+        dist = pkg_resources.Distribution.from_filename(
             dist_location, metadata=dist_metadata
         )
+        return dist
 
 
 def strip_marker(req):

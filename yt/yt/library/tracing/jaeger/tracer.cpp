@@ -25,8 +25,6 @@
 #include <util/system/env.h>
 #include <util/system/byteorder.h>
 
-#include <stack>
-
 namespace NYT::NTracing {
 
 using namespace NRpc;

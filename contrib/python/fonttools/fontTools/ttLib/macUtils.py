@@ -1,5 +1,4 @@
 """ttLib.macUtils.py -- Various Mac-specific stuff."""
-
 from io import BytesIO
 from fontTools.misc.macRes import ResourceReader, ResourceError
 
@@ -36,6 +35,7 @@ def openTTFonts(path):
 
 
 class SFNTResourceReader(BytesIO):
+
     """Simple read-only file wrapper for 'sfnt' resources."""
 
     def __init__(self, path, res_name_or_index):

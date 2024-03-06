@@ -22,9 +22,6 @@
 #include "common/base64.h"
 #include "common/hmac.h"
 #include "common/scram-common.h"
-#ifndef FRONTEND
-#error #include "miscadmin.h"
-#endif
 #include "port/pg_bswap.h"
 
 /*
@@ -76,14 +73,6 @@ scram_SaltedPassword(const char *password,
 	/* Subsequent iterations */
 	for (i = 2; i <= iterations; i++)
 	{
-#ifndef FRONTEND
-		/*
-		 * Make sure that this is interruptible as scram_iterations could be
-		 * set to a large value.
-		 */
-		CHECK_FOR_INTERRUPTS();
-#endif
-
 		if (pg_hmac_init(hmac_ctx, (uint8 *) password, password_len) < 0 ||
 			pg_hmac_update(hmac_ctx, (uint8 *) Ui_prev, key_length) < 0 ||
 			pg_hmac_final(hmac_ctx, Ui, key_length) < 0)

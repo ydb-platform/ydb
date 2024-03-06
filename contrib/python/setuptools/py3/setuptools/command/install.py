@@ -71,7 +71,6 @@ class install(orig.install):
         # command without --root or --single-version-externally-managed
         self.path_file = None
         self.extra_dirs = ''
-        return None
 
     def run(self):
         # Explicit request for old-style install?  Just do it
@@ -83,8 +82,6 @@ class install(orig.install):
             orig.install.run(self)
         else:
             self.do_egg_install()
-
-        return None
 
     @staticmethod
     def _called_from_setup(run_frame):
@@ -116,8 +113,6 @@ class install(orig.install):
                 continue
 
             return caller_module == 'distutils.dist' and info.function == 'run_commands'
-
-        return False
 
     def do_egg_install(self):
         easy_install = self.distribution.get_command_class('easy_install')

@@ -1,7 +1,6 @@
 """
 Merge OpenType Layout tables (GDEF / GPOS / GSUB).
 """
-
 import os
 import copy
 import enum

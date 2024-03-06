@@ -8,26 +8,18 @@ void TSerializableHunkDescriptor::Register(TRegistrar registrar)
 {
     registrar.BaseClassParameter("chunk_id", &TThis::ChunkId);
     registrar.BaseClassParameter("erasure_codec", &TThis::ErasureCodec)
-        .Default(NErasure::ECodec::None);
+        .Optional();
     registrar.BaseClassParameter("block_index", &TThis::BlockIndex);
     registrar.BaseClassParameter("block_offset", &TThis::BlockOffset);
     registrar.BaseClassParameter("block_size", &TThis::BlockSize)
-        .Default(std::nullopt);
+        .Optional();
     registrar.BaseClassParameter("length", &TThis::Length);
 }
 
-TSerializableHunkDescriptorPtr CreateSerializableHunkDescriptor(const THunkDescriptor& descriptor)
+TSerializableHunkDescriptor::TSerializableHunkDescriptor(const THunkDescriptor& descriptor)
+    : THunkDescriptor(descriptor)
 {
-    auto serializableDescriptor = New<TSerializableHunkDescriptor>();
-    serializableDescriptor->ChunkId = descriptor.ChunkId;
-    serializableDescriptor->ErasureCodec = descriptor.ErasureCodec;
-    serializableDescriptor->BlockIndex = descriptor.BlockIndex;
-    serializableDescriptor->BlockOffset = descriptor.BlockOffset;
-    serializableDescriptor->BlockSize = descriptor.BlockSize;
-    serializableDescriptor->Length = descriptor.Length;
-    serializableDescriptor->Postprocess();
-
-    return serializableDescriptor;
+    ::NYT::NYTree::TYsonStructRegistry::Get()->InitializeStruct(this);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

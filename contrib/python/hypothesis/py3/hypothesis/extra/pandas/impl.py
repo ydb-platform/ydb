@@ -346,11 +346,9 @@ def series(
             return pandas.Series(
                 (),
                 index=index,
-                dtype=(
-                    dtype
-                    if dtype is not None
-                    else draw(dtype_for_elements_strategy(elements))
-                ),
+                dtype=dtype
+                if dtype is not None
+                else draw(dtype_for_elements_strategy(elements)),
                 name=draw(name),
             )
 

@@ -9,9 +9,10 @@
 #include <yt/yt/core/misc/range.h>
 
 #include <library/cpp/yt/misc/enum.h>
-#include <library/cpp/yt/misc/strong_typedef.h>
 
 #include <util/generic/size_literals.h>
+
+#include <initializer_list>
 
 namespace NYT::NTableClient {
 
@@ -298,7 +299,7 @@ class TKeyComparer;
 struct TColumnRenameDescriptor;
 using TColumnRenameDescriptors = std::vector<TColumnRenameDescriptor>;
 
-YT_DEFINE_STRONG_TYPEDEF(TColumnStableName, TString);
+class TStableName;
 
 class TColumnSchema;
 

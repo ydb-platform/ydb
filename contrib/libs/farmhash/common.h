@@ -138,7 +138,7 @@
 
 #elif defined(__sun) || defined(sun)
 
-#error #include <sys/byteorder.h>
+#include <sys/byteorder.h>
 #undef bswap_32
 #undef bswap_64
 #define bswap_32(x) BSWAP_32(x)

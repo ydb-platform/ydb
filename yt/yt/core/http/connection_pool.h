@@ -38,9 +38,7 @@ public:
 
     ~TConnectionPool();
 
-    TFuture<NNet::IConnectionPtr> Connect(
-        const NNet::TNetworkAddress& address,
-        NNet::TRemoteContextPtr context = nullptr);
+    TFuture<NNet::IConnectionPtr> Connect(const NNet::TNetworkAddress& address);
 
     void Release(const NNet::IConnectionPtr& connection);
 

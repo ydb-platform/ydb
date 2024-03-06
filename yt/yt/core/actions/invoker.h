@@ -29,20 +29,13 @@ struct IInvoker
     //! in some sense.
     virtual bool CheckAffinity(const IInvokerPtr& invoker) const = 0;
 
-    //! Returns true if the invoker is serialized, i.e. no two callbacks can execute
-    //! concurrently.
-    /*!
-     *  Note, however, that if a callback yields the execution context
-     *  (e.g. by calling #WaitFor) another one can start running (or be resumed) within the
-     *  same serialized invoker.
-     */
+    //! Returns true if invoker is serialized, i.e. never executes
+    //! two callbacks concurrently.
     virtual bool IsSerialized() const = 0;
 
-    using TWaitTimeObserver = std::function<void(TDuration waitTime)>;
-    //! Registers a callback that could be invoked to inform
-    //! of the current wait time for invocations via this invoker.
-    //! These invocations, however, are not guaranteed.
+    using TWaitTimeObserver = std::function<void(TDuration)>;
     virtual void RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver) = 0;
+
 };
 
 DEFINE_REFCOUNTED_TYPE(IInvoker)

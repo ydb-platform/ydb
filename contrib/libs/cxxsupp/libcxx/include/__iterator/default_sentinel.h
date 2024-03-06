@@ -18,12 +18,12 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-#if _LIBCPP_STD_VER >= 20
+#if _LIBCPP_STD_VER > 17
 
 struct default_sentinel_t { };
 inline constexpr default_sentinel_t default_sentinel{};
 
-#endif // _LIBCPP_STD_VER >= 20
+#endif // _LIBCPP_STD_VER > 17
 
 _LIBCPP_END_NAMESPACE_STD
 

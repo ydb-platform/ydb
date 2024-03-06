@@ -25,15 +25,14 @@ struct TConcurrentCache<T>::TLookupTable final
         , Capacity(capacity)
     { }
 
-    typename THashTable::TItemRef Insert(TValuePtr item)
+    bool Insert(TValuePtr item)
     {
         auto fingerprint = THash<T>()(item.Get());
-        auto result = THashTable::Insert(fingerprint, std::move(item));
-
-        if (result) {
+        if (THashTable::Insert(fingerprint, std::move(item))) {
             ++Size;
+            return true;
         }
-        return result;
+        return false;
     }
 };
 
@@ -41,7 +40,7 @@ template <class T>
 TIntrusivePtr<typename TConcurrentCache<T>::TLookupTable>
 TConcurrentCache<T>::RenewTable(const TIntrusivePtr<TLookupTable>& head, size_t capacity)
 {
-    if (head.Get() != Head_) {
+    if (head != Head_) {
         return Head_.Acquire();
     }
 
@@ -206,12 +205,6 @@ void TConcurrentCache<T>::SetCapacity(size_t capacity)
     if (primary->Size >= std::min(capacity, primary->Capacity)) {
         RenewTable(primary, capacity);
     }
-}
-
-template <class T>
-bool TConcurrentCache<T>::IsHead(const TIntrusivePtr<TLookupTable>& head) const
-{
-    return Head_ == head.Get();
 }
 
 /////////////////////////////////////////////////////////////////////////////

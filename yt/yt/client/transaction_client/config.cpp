@@ -31,13 +31,4 @@ void TRemoteTimestampProviderConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TAlienTimestampProviderConfig::Register(TRegistrar registrar)
-{
-    registrar.Parameter("clock_cluster_tag", &TThis::ClockClusterTag);
-    registrar.Parameter("timestamp_provider", &TThis::TimestampProvider)
-        .DefaultNew();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 } // namespace NYT::NTransactionClient

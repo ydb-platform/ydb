@@ -1,5 +1,4 @@
 """Collection of utilities for command-line interfaces and console scripts."""
-
 import os
 import re
 

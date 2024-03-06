@@ -16,7 +16,7 @@
 #include "sanitizer_common.h"
 #include "sanitizer_procmaps.h"
 
-#error #include <procfs.h>
+#include <procfs.h>
 #include <limits.h>
 
 namespace __sanitizer {

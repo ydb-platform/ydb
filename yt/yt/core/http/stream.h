@@ -129,8 +129,6 @@ public:
     int GetPort() const override;
     void SetPort(int port);
 
-    std::optional<TString> TryGetRedirectUrl();
-
 private:
     const NNet::IConnectionPtr Connection_;
     const NNet::TNetworkAddress RemoteAddress_;
@@ -168,8 +166,6 @@ private:
     TSharedRef DoRead();
 
     void MaybeLogSlowProgress();
-
-    bool IsRedirectCode(EStatusCode code) const;
 };
 
 DEFINE_REFCOUNTED_TYPE(THttpInput)

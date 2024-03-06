@@ -1,6 +1,8 @@
 #pragma once
 
-#include <library/cpp/yt/yson_string/public.h>
+#include "public.h"
+
+#include <library/cpp/yt/memory/ref.h>
 
 #include <library/cpp/yt/yson/consumer.h>
 
@@ -25,6 +27,7 @@ public:
     //! Parses #str and converts it into a sequence of elementary calls.
     void OnRaw(TStringBuf str, EYsonType type) override;
     using IYsonConsumer::OnRaw;
+
 };
 
 ////////////////////////////////////////////////////////////////////////////////

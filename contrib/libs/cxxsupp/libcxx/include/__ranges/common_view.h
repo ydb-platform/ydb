@@ -24,17 +24,15 @@
 #include <__ranges/view_interface.h>
 #include <__utility/forward.h>
 #include <__utility/move.h>
+#include <type_traits>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #  pragma GCC system_header
 #endif
 
-_LIBCPP_PUSH_MACROS
-#include <__undef_macros>
-
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-#if _LIBCPP_STD_VER >= 20
+#if _LIBCPP_STD_VER > 17
 
 namespace ranges {
 
@@ -132,10 +130,8 @@ inline namespace __cpo {
 } // namespace views
 } // namespace ranges
 
-#endif // _LIBCPP_STD_VER >= 20
+#endif // _LIBCPP_STD_VER > 17
 
 _LIBCPP_END_NAMESPACE_STD
-
-_LIBCPP_POP_MACROS
 
 #endif // _LIBCPP___RANGES_COMMON_VIEW_H

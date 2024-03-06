@@ -15,7 +15,7 @@ struct TQueryTrackerOptions
     TString QueryTrackerStage = "production";
 };
 
-DEFINE_ENUM(EContentType,
+DEFINE_ENUM(ContentType,
     ((RawInlineData)   (0))
     ((Url)   (1))
 );
@@ -25,7 +25,7 @@ struct TQueryFile
 {
     TString Name;
     TString Content;
-    EContentType Type;
+    ContentType Type;
 
     REGISTER_YSON_STRUCT(TQueryFile);
 

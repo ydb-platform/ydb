@@ -246,7 +246,8 @@ inline _LIBCPP_HIDE_FROM_ABI
 void
 inplace_merge(_BidirectionalIterator __first, _BidirectionalIterator __middle, _BidirectionalIterator __last)
 {
-    std::inplace_merge(std::move(__first), std::move(__middle), std::move(__last), __less<>());
+    std::inplace_merge(std::move(__first), std::move(__middle), std::move(__last),
+                        __less<typename iterator_traits<_BidirectionalIterator>::value_type>());
 }
 
 _LIBCPP_END_NAMESPACE_STD

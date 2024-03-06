@@ -31,7 +31,7 @@
 #else /* Compilers other than Clang or GCC. */
 
 #if defined(__SVR4) && defined(__sun)
-#error #include <sys/byteorder.h>
+#include <sys/byteorder.h>
 
 #if defined(_BIG_ENDIAN)
 #define _YUGA_LITTLE_ENDIAN 0

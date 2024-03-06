@@ -24,7 +24,6 @@ ADDINCL(
 NO_COMPILER_WARNINGS()
 
 SRCS(
-    internal/status_internal.cc
     status.cc
     status_payload_printer.cc
 )

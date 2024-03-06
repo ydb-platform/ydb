@@ -20,7 +20,7 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-#if _LIBCPP_STD_VER >= 20
+#if _LIBCPP_STD_VER > 17
 
 template <class _Iterator>
 concept permutable =
@@ -28,7 +28,7 @@ concept permutable =
     indirectly_movable_storable<_Iterator, _Iterator> &&
     indirectly_swappable<_Iterator, _Iterator>;
 
-#endif // _LIBCPP_STD_VER >= 20
+#endif // _LIBCPP_STD_VER > 17
 
 _LIBCPP_END_NAMESPACE_STD
 

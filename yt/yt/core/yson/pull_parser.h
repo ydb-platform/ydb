@@ -9,6 +9,8 @@
 #include <util/stream/output.h>
 #include <util/stream/zerocopy.h>
 
+#include <stack>
+
 namespace NYT::NYson {
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -202,11 +202,9 @@ def removeOverlaps(
     glyphNames = sorted(
         glyphNames,
         key=lambda name: (
-            (
-                glyfTable[name].getCompositeMaxpValues(glyfTable).maxComponentDepth
-                if glyfTable[name].isComposite()
-                else 0
-            ),
+            glyfTable[name].getCompositeMaxpValues(glyfTable).maxComponentDepth
+            if glyfTable[name].isComposite()
+            else 0,
             name,
         ),
     )

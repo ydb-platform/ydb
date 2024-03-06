@@ -3733,3 +3733,6 @@ __all__ = [
     "parse_unicodes",
     "main",
 ]
+
+if __name__ == "__main__":
+    sys.exit(main())

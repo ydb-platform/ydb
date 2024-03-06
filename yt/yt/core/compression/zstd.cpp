@@ -225,7 +225,7 @@ class TDigestedCompressionDictionary
     , private TNonCopyable
 {
 public:
-    explicit TDigestedCompressionDictionary(ZSTD_CDict* digestedDictionary)
+    TDigestedCompressionDictionary(ZSTD_CDict* digestedDictionary)
         : DigestedDictionary_(digestedDictionary)
     {
         YT_VERIFY(DigestedDictionary_);
@@ -261,7 +261,7 @@ class TDigestedDecompressionDictionary
     , private TNonCopyable
 {
 public:
-    explicit TDigestedDecompressionDictionary(ZSTD_DDict* digestedDictionary)
+    TDigestedDecompressionDictionary(ZSTD_DDict* digestedDictionary)
         : DigestedDictionary_(digestedDictionary)
     {
         YT_VERIFY(DigestedDictionary_);
@@ -459,9 +459,11 @@ TErrorOr<TSharedRef> ZstdTrainCompressionDictionary(i64 dictionarySize, const st
         sampleSizes.data(),
         sampleSizes.size());
     if (ZSTD_isError(resultDictionarySize)) {
-        return TError("Compression dictionary training failed")
+        auto error = TError("Compression dictionary training failed")
             << TErrorAttribute("zstd_error_code", static_cast<int>(ZSTD_getErrorCode(resultDictionarySize)))
             << TErrorAttribute("zstd_error_name", ZSTD_getErrorName(resultDictionarySize));
+        YT_LOG_DEBUG(error);
+        return error;
     }
 
     YT_VERIFY(resultDictionarySize <= dictionary.Size());

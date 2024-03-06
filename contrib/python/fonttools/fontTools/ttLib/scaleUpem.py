@@ -3,6 +3,7 @@
 AAT and Graphite tables are not supported. CFF/CFF2 fonts
 are de-subroutinized."""
 
+
 from fontTools.ttLib.ttVisitor import TTVisitor
 import fontTools.ttLib as ttLib
 import fontTools.ttLib.tables.otBase as otBase

@@ -1042,15 +1042,15 @@ TEST_W(TSchedulerTest, TraceDisableSendBaggage)
     parentContext->PackBaggage(parentBaggage);
     auto parentBaggageString = ConvertToYsonString(parentBaggage);
 
-    auto originalConfig = GetTracingTransportConfig();
+    auto originalConfig = GetTracingConfig();
     auto guard = Finally([&] {
-        SetTracingTransportConfig(originalConfig);
+        SetTracingConfig(originalConfig);
     });
 
     {
-        auto config = New<TTracingTransportConfig>();
+        auto config = New<TTracingConfig>();
         config->SendBaggage = true;
-        SetTracingTransportConfig(std::move(config));
+        SetTracingConfig(std::move(config));
         NTracing::NProto::TTracingExt tracingExt;
         ToProto(&tracingExt, parentContext);
         auto traceContext = TTraceContext::NewChildFromRpc(tracingExt, "Span");
@@ -1060,9 +1060,9 @@ TEST_W(TSchedulerTest, TraceDisableSendBaggage)
     }
 
     {
-        auto config = New<TTracingTransportConfig>();
+        auto config = New<TTracingConfig>();
         config->SendBaggage = false;
-        SetTracingTransportConfig(std::move(config));
+        SetTracingConfig(std::move(config));
         NTracing::NProto::TTracingExt tracingExt;
         ToProto(&tracingExt, parentContext);
         auto traceContext = TTraceContext::NewChildFromRpc(tracingExt, "Span");

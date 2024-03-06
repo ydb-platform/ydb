@@ -15,6 +15,7 @@
 #include <__config>
 #include <__filesystem/path.h>
 #include <string>
+#include <type_traits>
 
 // Only required on Windows for __widen_from_utf8, and included conservatively
 // because it requires support for localization.
@@ -30,7 +31,7 @@
 
 _LIBCPP_BEGIN_NAMESPACE_FILESYSTEM
 
-_LIBCPP_AVAILABILITY_FILESYSTEM_LIBRARY_PUSH
+_LIBCPP_AVAILABILITY_FILESYSTEM_PUSH
 
 template <class _InputIt>
 _LIBCPP_INLINE_VISIBILITY _LIBCPP_DEPRECATED_WITH_CHAR8_T
@@ -98,7 +99,7 @@ _LIBCPP_INLINE_VISIBILITY _LIBCPP_DEPRECATED_WITH_CHAR8_T
 #endif
 }
 
-_LIBCPP_AVAILABILITY_FILESYSTEM_LIBRARY_POP
+_LIBCPP_AVAILABILITY_FILESYSTEM_POP
 
 _LIBCPP_END_NAMESPACE_FILESYSTEM
 

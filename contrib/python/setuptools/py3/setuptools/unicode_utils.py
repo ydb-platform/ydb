@@ -18,7 +18,7 @@ def decompose(path):
 def filesys_decode(path):
     """
     Ensure that the given path is decoded,
-    ``None`` when no expected encoding works
+    NONE when no expected encoding works
     """
 
     if isinstance(path, str):
@@ -32,8 +32,6 @@ def filesys_decode(path):
             return path.decode(enc)
         except UnicodeDecodeError:
             continue
-
-    return None
 
 
 def try_encode(string, enc):

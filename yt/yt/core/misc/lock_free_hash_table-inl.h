@@ -49,10 +49,8 @@ size_t TLockFreeHashTable<T>::GetByteSize() const
 }
 
 template <class T>
-typename TLockFreeHashTable<T>::TItemRef TLockFreeHashTable<T>::Insert(TFingerprint fingerprint, TValuePtr value)
+bool TLockFreeHashTable<T>::Insert(TFingerprint fingerprint, TValuePtr value)
 {
-    using TItemRef = typename TLockFreeHashTable<T>::TItemRef;
-
     auto index = IndexFromFingerprint(fingerprint) % Size_;
     auto stamp = StampFromFingerprint(fingerprint);
 
@@ -70,7 +68,7 @@ typename TLockFreeHashTable<T>::TItemRef TLockFreeHashTable<T>::Insert(TFingerpr
                 std::memory_order::acquire);
             if (success) {
                 value.Release();
-                return TItemRef(&HashTable_[index]);
+                return true;
             }
         }
 
@@ -80,7 +78,7 @@ typename TLockFreeHashTable<T>::TItemRef TLockFreeHashTable<T>::Insert(TFingerpr
         }, ValueFromEntry(tableEntry));
 
         if (TEqualTo<T>()(item.Get(), value.Get())) {
-            return TItemRef(nullptr);
+            return false;
         }
 
         ++index;
@@ -90,7 +88,7 @@ typename TLockFreeHashTable<T>::TItemRef TLockFreeHashTable<T>::Insert(TFingerpr
         --probeCount;
     }
 
-    return TItemRef(nullptr);
+    return false;
 }
 
 template <class T>
@@ -142,7 +140,6 @@ typename TLockFreeHashTable<T>::TItemRef TLockFreeHashTable<T>::FindRef(TFingerp
 
     for (size_t probeCount = Size_; probeCount != 0;) {
         auto tableEntry = HashTable_[index].load(std::memory_order::relaxed);
-        // TODO(lukyan): Rename to entryStamp.
         auto tableStamp = StampFromEntry(tableEntry);
 
         if (tableStamp == 0) {
@@ -182,18 +179,16 @@ typename TLockFreeHashTable<T>::TStamp
 template <class T>
 T* TLockFreeHashTable<T>::ValueFromEntry(TEntry entry)
 {
-    constexpr auto Mask = (1ULL << ValueLog) - 1;
-    return reinterpret_cast<T*>(entry & (Mask ^ 1ULL));
+    return reinterpret_cast<T*>(entry & ((1ULL << ValueLog) - 1));
 }
 
 template <class T>
 typename TLockFreeHashTable<T>::TEntry
-    TLockFreeHashTable<T>::MakeEntry(TStamp stamp, T* value, bool sealed)
+    TLockFreeHashTable<T>::MakeEntry(TStamp stamp, T* value)
 {
     YT_ASSERT(stamp != 0);
-    YT_ASSERT((reinterpret_cast<TEntry>(value) & 1ULL) == 0);
     YT_ASSERT(StampFromEntry(reinterpret_cast<TEntry>(value)) == 0);
-    return (static_cast<TEntry>(stamp) << ValueLog) | reinterpret_cast<TEntry>(value) | (sealed ? 1ULL : 0ULL);
+    return (static_cast<TEntry>(stamp) << ValueLog) | reinterpret_cast<TEntry>(value);
 }
 
 template <class T>

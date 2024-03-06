@@ -121,12 +121,11 @@ TTcpConnection::TTcpConnection(
     , UnixDomainSocketPath_(unixDomainSocketPath)
     , Handler_(std::move(handler))
     , Poller_(std::move(poller))
-    , LoggingTag_(Format("ConnectionId: %v, ConnectionType: %v, RemoteAddress: %v, EncryptionMode: %v, VerificationMode: %v",
+    , LoggingTag_(Format("ConnectionId: %v, ConnectionType: %v, RemoteAddress: %v, EncryptionMode: %v",
         Id_,
         ConnectionType_,
         EndpointDescription_,
-        Config_->EncryptionMode,
-        Config_->VerificationMode))
+        Config_->EncryptionMode))
     , Logger(BusLogger.WithTag(LoggingTag_.c_str()))
     , GenerateChecksums_(Config_->GenerateChecksums)
     , Socket_(socket)
@@ -288,12 +287,11 @@ void TTcpConnection::TryEnqueueHandshake()
     }
 
     NProto::THandshake handshake;
-    ToProto(handshake.mutable_connection_id(), Id_);
+    ToProto(handshake.mutable_foreign_connection_id(), Id_);
     if (ConnectionType_ == EConnectionType::Client) {
         handshake.set_multiplexing_band(ToProto<int>(MultiplexingBand_.load()));
     }
-    handshake.set_encryption_mode(ToProto<int>(EncryptionMode_));
-    handshake.set_verification_mode(ToProto<int>(VerificationMode_));
+    handshake.set_encryption_mode(static_cast<int>(EncryptionMode_));
 
     auto message = MakeHandshakeMessage(handshake);
     auto messageSize = GetByteSize(message);
@@ -502,9 +500,6 @@ void TTcpConnection::Abort(const TError& error)
     // Construct a detailed error.
     YT_VERIFY(!error.IsOK());
     auto detailedError = error << *EndpointAttributes_;
-    if (PeerAttributes_) {
-        detailedError <<= *PeerAttributes_;
-    }
 
     {
         auto guard = Guard(Lock_);
@@ -757,9 +752,6 @@ void TTcpConnection::Terminate(const TError& error)
     // Construct a detailed error.
     YT_VERIFY(!error.IsOK());
     auto detailedError = error << *EndpointAttributes_;
-    if (PeerAttributes_) {
-        detailedError <<= *PeerAttributes_;
-    }
 
     auto guard = Guard(Lock_);
 
@@ -1013,7 +1005,7 @@ ssize_t TTcpConnection::DoReadSocket(char* buffer, size_t size)
         case ESslState::Established: {
             auto result = SSL_read(Ssl_.get(), buffer, size);
             if (PendingSslHandshake_ && result > 0) {
-                YT_LOG_DEBUG("TLS/SSL connection has been established by SSL_read");
+                YT_LOG_DEBUG("TLS/SSL connection has been established by SSL_read (VerificationMode: %v)", VerificationMode_);
                 PendingSslHandshake_ = false;
                 ReadyPromise_.TrySet();
             }
@@ -1186,18 +1178,10 @@ bool TTcpConnection::OnHandshakePacketReceived()
         ? std::make_optional(FromProto<EMultiplexingBand>(handshake.multiplexing_band()))
         : std::nullopt;
 
-    PeerAttributes_ = ConvertToAttributes(BuildYsonStringFluently()
-            .BeginMap()
-                .Item("peer_connection_id").Value(FromProto<TConnectionId>(handshake.connection_id()))
-                .Item("peer_encryption_mode").Value(FromProto<EEncryptionMode>(handshake.encryption_mode()))
-                .Item("peer_verification_mode").Value(FromProto<EVerificationMode>(handshake.verification_mode()))
-            .EndMap());
-
-    YT_LOG_DEBUG("Handshake received (PeerConnectionId: %v, PeerEncryptionMode: %v, PeerVerificationMode: %v, MultiplexingBand: %v)",
-        PeerAttributes_->Get<TString>("peer_connection_id"),
-        PeerAttributes_->Get<TString>("peer_encryption_mode"),
-        PeerAttributes_->Get<TString>("peer_verification_mode"),
-        optionalMultiplexingBand);
+    YT_LOG_DEBUG("Handshake received (ForeignConnectionId: %v, MultiplexingBand: %v, ForeignEncryptionMode: %v)",
+        FromProto<TConnectionId>(handshake.foreign_connection_id()),
+        optionalMultiplexingBand,
+        static_cast<EEncryptionMode>(handshake.encryption_mode()));
 
     if (ConnectionType_ == EConnectionType::Server && optionalMultiplexingBand) {
         auto guard = Guard(Lock_);
@@ -1213,7 +1197,7 @@ bool TTcpConnection::OnHandshakePacketReceived()
         TryEnqueueHandshake();
     }
 
-    auto otherEncryptionMode = handshake.has_encryption_mode() ? FromProto<EEncryptionMode>(handshake.encryption_mode()) : EEncryptionMode::Disabled;
+    auto otherEncryptionMode = handshake.has_encryption_mode() ? static_cast<EEncryptionMode>(handshake.encryption_mode()) : EEncryptionMode::Disabled;
 
     if (EncryptionMode_ == EEncryptionMode::Required || otherEncryptionMode == EEncryptionMode::Required) {
         if (EncryptionMode_ == EEncryptionMode::Disabled || otherEncryptionMode == EEncryptionMode::Disabled) {
@@ -1315,7 +1299,7 @@ ssize_t TTcpConnection::DoWriteFragments(const std::vector<struct iovec>& vec)
             YT_ASSERT(vec.size() == 1);
             auto result = SSL_write(Ssl_.get(), vec[0].iov_base, vec[0].iov_len);
             if (PendingSslHandshake_ && result > 0) {
-                YT_LOG_DEBUG("TLS/SSL connection has been established by SSL_write");
+                YT_LOG_DEBUG("TLS/SSL connection has been established by SSL_write (VerificationMode: %v)", VerificationMode_);
                 PendingSslHandshake_ = false;
                 ReadyPromise_.TrySet();
             }
@@ -1873,7 +1857,7 @@ bool TTcpConnection::DoSslHandshake()
     auto result = SSL_do_handshake(Ssl_.get());
     switch (SSL_get_error(Ssl_.get(), result)) {
         case SSL_ERROR_NONE:
-            YT_LOG_DEBUG("TLS/SSL connection has been established by SSL_do_handshake");
+            YT_LOG_DEBUG("TLS/SSL connection has been established by SSL_do_handshake (VerificationMode %v)", VerificationMode_);
             MaxFragmentsPerWrite_ = 1;
             SslState_ = ESslState::Established;
             ReadyPromise_.TrySet();
@@ -1934,7 +1918,7 @@ void TTcpConnection::TryEstablishSslSession()
         return;
     }
 
-    YT_LOG_DEBUG("Starting TLS/SSL connection");
+    YT_LOG_DEBUG("Starting TLS/SSL connection (VerificationMode: %v)", VerificationMode_);
 
     if (Config_->LoadCertsFromBusCertsDirectory && !TTcpDispatcher::TImpl::Get()->GetBusCertsDirectoryPath()) {
         Abort(TError(NBus::EErrorCode::SslError, "bus_certs_directory_path is not set in tcp_dispatcher config"));
@@ -2011,33 +1995,16 @@ void TTcpConnection::TryEstablishSslSession()
 
     switch (VerificationMode_) {
         case EVerificationMode::Full:
-            // Because of the implementation of check_id() from libs/openssl/crypto/x509/x509_vfy.c,
-            // we can not set both ip and host checks. So we separate them as follows.
-            if (Config_->PeerAlternativeHostName) {
-                // Set hostname for peer certificate verification.
-                if (SSL_set1_host(Ssl_.get(), EndpointHostName_.c_str()) != 1) {
-                    Abort(TError(NBus::EErrorCode::SslError, "Failed to set hostname %v for peer certificate verification", EndpointHostName_));
-                    return;
-                }
-
-                // Add alternative hostname for peer certificate verification.
-                if (SSL_add1_host(Ssl_.get(), Config_->PeerAlternativeHostName->c_str()) != 1) {
-                    Abort(TError(NBus::EErrorCode::SslError, "Failed to add alternative hostname %v for peer certificate verification", *Config_->PeerAlternativeHostName));
-                    return;
-                }
-            } else if (auto networkAddress = TNetworkAddress::TryParse(EndpointHostName_); networkAddress.IsOK() && networkAddress.Value().IsIP()) {
-                // Set ip address for peer certificate verification.
-                auto address = ToString(networkAddress.Value(), {.IncludePort = false, .IncludeTcpProtocol = false});
-                if (X509_VERIFY_PARAM_set1_ip_asc(SSL_get0_param(Ssl_.get()), address.c_str()) != 1) {
-                    Abort(TError(NBus::EErrorCode::SslError, "Failed to set ip address %v for peer certificate verification", address));
-                    return;
-                }
-            } else {
-                // Set hostname for peer certificate verification.
-                if (SSL_set1_host(Ssl_.get(), EndpointHostName_.c_str()) != 1) {
-                    Abort(TError(NBus::EErrorCode::SslError, "Failed to set hostname %v for peer certificate verification", EndpointHostName_));
-                    return;
-                }
+            // Set the hostname for the peer certificate verification.
+            if (SSL_set1_host(Ssl_.get(), EndpointHostName_.data()) != 1) {
+                Abort(TError(NBus::EErrorCode::SslError, "Failed to set hostname %v for the peer certificate verification", EndpointHostName_));
+                return;
+            }
+            if (Config_->PeerAlternativeHostName &&
+                SSL_add1_host(Ssl_.get(), Config_->PeerAlternativeHostName->data()) != 1)
+            {
+                Abort(TError(NBus::EErrorCode::SslError, "Failed to set alternative hostname %v for the peer certificate verification", *Config_->PeerAlternativeHostName));
+                return;
             }
             [[fallthrough]];
         case EVerificationMode::Ca: {

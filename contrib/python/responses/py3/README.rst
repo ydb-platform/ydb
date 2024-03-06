@@ -1232,7 +1232,6 @@ If you are using the ``Retry`` features of ``urllib3`` and want to cover scenari
 
     import responses
     from responses import registries
-    from urllib3.util import Retry
 
 
     @responses.activate(registry=registries.OrderedRegistry)

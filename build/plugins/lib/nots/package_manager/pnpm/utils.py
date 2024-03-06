@@ -1,10 +1,6 @@
 import os
 
-from .constants import PNPM_PRE_LOCKFILE_FILENAME, PNPM_LOCKFILE_FILENAME, PNPM_WS_FILENAME
-
-
-def build_pre_lockfile_path(p):
-    return os.path.join(p, PNPM_PRE_LOCKFILE_FILENAME)
+from .constants import PNPM_LOCKFILE_FILENAME, PNPM_WS_FILENAME
 
 
 def build_lockfile_path(p):

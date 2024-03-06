@@ -91,8 +91,6 @@ public:
 
     void SetCapacity(size_t capacity);
 
-    bool IsHead(const TIntrusivePtr<TLookupTable>& head) const;
-
 private:
     std::atomic<size_t> Capacity_;
     TAtomicPtr<TLookupTable> Head_;

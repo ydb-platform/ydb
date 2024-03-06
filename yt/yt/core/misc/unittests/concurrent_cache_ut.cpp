@@ -112,7 +112,7 @@ TEST_P(TConcurrentCacheTest, Stress)
                 if (!foundRef) {
                     auto value = NewWithExtraSpace<TElement>(&allocator, columnCount);
                     memcpy(value.Get(), key, sizeof(TElement) + columnCount);
-                    auto inserted = static_cast<bool>(inserter.GetTable()->Insert(std::move(value)));
+                    bool inserted = inserter.GetTable()->Insert(std::move(value));
 
                     insertCount += inserted;
                 } else if (reinsert) {

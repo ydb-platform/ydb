@@ -2,8 +2,6 @@
 
 #include "public.h"
 
-#include <yt/yt/core/tracing/config.h>
-
 #include <yt/yt/core/ytree/yson_struct.h>
 
 #include <yt/yt/core/ytalloc/config.h>
@@ -29,7 +27,23 @@
 
 #include <library/cpp/yt/stockpile/stockpile.h>
 
+
 namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TRpcConfig
+    : public NYTree::TYsonStruct
+{
+public:
+    NTracing::TTracingConfigPtr Tracing;
+
+    REGISTER_YSON_STRUCT(TRpcConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TRpcConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -133,7 +147,7 @@ public:
     NProfiling::TSolomonExporterConfigPtr SolomonExporter;
     NLogging::TLogManagerConfigPtr Logging;
     NTracing::TJaegerTracerConfigPtr Jaeger;
-    NTracing::TTracingTransportConfigPtr TracingTransport;
+    TRpcConfigPtr Rpc;
     TTCMallocConfigPtr TCMalloc;
     TStockpileConfigPtr Stockpile;
     bool EnableRefCountedTrackerProfiling;
@@ -161,7 +175,7 @@ public:
     NRpc::TDispatcherDynamicConfigPtr RpcDispatcher;
     NLogging::TLogManagerDynamicConfigPtr Logging;
     NTracing::TJaegerTracerDynamicConfigPtr Jaeger;
-    NTracing::TTracingTransportConfigPtr TracingTransport;
+    TRpcConfigPtr Rpc;
     TTCMallocConfigPtr TCMalloc;
     NYson::TProtobufInteropDynamicConfigPtr ProtobufInterop;
 

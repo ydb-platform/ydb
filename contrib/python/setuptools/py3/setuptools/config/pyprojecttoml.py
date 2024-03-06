@@ -8,7 +8,6 @@ To read project metadata, consider using
 For simple scenarios, you can also try parsing the file directly
 with the help of ``tomllib`` or ``tomli``.
 """
-
 import logging
 import os
 from contextlib import contextmanager
@@ -29,10 +28,10 @@ _logger = logging.getLogger(__name__)
 
 
 def load_file(filepath: _Path) -> dict:
-    from ..compat.py310 import tomllib
+    from setuptools.extern import tomli  # type: ignore
 
     with open(filepath, "rb") as file:
-        return tomllib.load(file)
+        return tomli.load(file)
 
 
 def validate(config: dict, filepath: _Path) -> bool:

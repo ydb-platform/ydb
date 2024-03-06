@@ -1701,10 +1701,10 @@ PyAPI_FUNC(int) _PyImport_IsScript(struct filedescr * fd)
 #define INCL_DOS
 #define INCL_DOSERRORS
 #define INCL_NOPMAPI
-#error #include <os2.h>
+#include <os2.h>
 
 #elif defined(RISCOS)
-#error #include "oslib/osfscontrol.h"
+#include "oslib/osfscontrol.h"
 #endif
 
 static int

@@ -8,6 +8,7 @@ log = logging.getLogger(__name__)
 
 
 class TTCollection(object):
+
     """Object representing a TrueType Collection / OpenType Collection.
     The main API is self.fonts being a list of TTFont instances.
 

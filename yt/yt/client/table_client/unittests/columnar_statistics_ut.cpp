@@ -592,13 +592,13 @@ TEST(TColumnarStatisticsColumnSelectionTest, ColumnSelect)
         .LegacyChunkRowCount = 2,
     };
     auto nameTable = TNameTable::FromKeyColumns({"buzz", "off", "taken", "sec", "list", "size", "friend"});
-    std::vector<TColumnStableName> stableNames = {
-        TColumnStableName("friend"),
-        TColumnStableName("taken"),
-        TColumnStableName("buzz"),
-        TColumnStableName("foo"),
-        TColumnStableName("list"),
-        TColumnStableName("bar"),
+    std::vector<TStableName> stableNames = {
+        TStableName("friend"),
+        TStableName("taken"),
+        TStableName("buzz"),
+        TStableName("foo"),
+        TStableName("list"),
+        TStableName("bar"),
     };
 
     auto selectedStatistics = statistics.SelectByColumnNames(nameTable, stableNames);

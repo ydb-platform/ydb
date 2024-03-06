@@ -116,11 +116,3 @@ def nothing() -> SearchStrategy:
     Examples from this strategy do not shrink (because there are none).
     """
     return NOTHING
-
-
-class BooleansStrategy(SearchStrategy):
-    def do_draw(self, data):
-        return data.draw_boolean()
-
-    def __repr__(self):
-        return "booleans()"

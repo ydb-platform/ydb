@@ -130,12 +130,10 @@ class PackageJson(object):
 
         return None
 
-    # TODO: FBP-1254
-    # def get_workspace_dep_spec_paths(self) -> list[tuple[str, str]]:
     def get_workspace_dep_spec_paths(self):
         """
         Returns names and paths from specifiers of the defined workspace dependencies.
-        :rtype: list[tuple[str, str]]
+        :rtype: list of (str, str)
         """
         spec_paths = []
         schema = self.WORKSPACE_SCHEMA

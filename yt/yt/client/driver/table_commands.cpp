@@ -784,24 +784,10 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
     registrar.Parameter("placeholder_values", &TThis::PlaceholderValues)
         .Optional();
 
-    registrar.ParameterWithUniversalAccessor<bool>(
-        "use_canonical_null_relations",
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "use_web_assembly",
         [] (TThis* command) -> auto& {
-            return command->Options.UseCanonicalNullRelations;
-        })
-        .Optional(/*init*/ false);
-
-    registrar.ParameterWithUniversalAccessor<bool>(
-        "merge_versioned_rows",
-        [] (TThis* command) -> auto& {
-            return command->Options.MergeVersionedRows;
-        })
-        .Optional(/*init*/ false);
-
-    registrar.ParameterWithUniversalAccessor<std::optional<NApi::EExecutionBackend>>(
-        "execution_backend",
-        [] (TThis* command) -> auto& {
-            return command->Options.ExecutionBackend;
+            return command->Options.UseWebAssembly;
         })
         .Optional(/*init*/ false);
 }

@@ -25,7 +25,6 @@
 #include <assert.h>
 
 #include "y_absl/base/config.h"
-#include "y_absl/base/options.h"
 
 // Y_ABSL_BLOCK_TAIL_CALL_OPTIMIZATION
 //

@@ -177,7 +177,8 @@ void ConfigureTCMalloc(const TTCMallocConfigPtr& config)
     }
 }
 
-void ConfigureSingletons(const TSingletonsConfigPtr& config)
+template <class TConfig>
+void ConfigureSingletonsImpl(const TConfig& config)
 {
     SetSpinWaitSlowPathLoggingThreshold(config->SpinWaitSlowPathLoggingThreshold);
 
@@ -212,8 +213,8 @@ void ConfigureSingletons(const TSingletonsConfigPtr& config)
 
     NProfiling::EnablePerfCounters();
 
-    if (auto tracingConfig = config->TracingTransport) {
-        NTracing::SetTracingTransportConfig(tracingConfig);
+    if (auto tracingConfig = config->Rpc->Tracing) {
+        NTracing::SetTracingConfig(tracingConfig);
     }
 
     ConfigureTCMalloc(config->TCMalloc);
@@ -234,7 +235,13 @@ void ConfigureSingletons(const TSingletonsConfigPtr& config)
     NYson::SetProtobufInteropConfig(config->ProtobufInterop);
 }
 
-void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletonsDynamicConfigPtr& dynamicConfig)
+void ConfigureSingletons(const TSingletonsConfigPtr& config)
+{
+    ConfigureSingletonsImpl(config);
+}
+
+template <class TStaticConfig, class TDynamicConfig>
+void ReconfigureSingletonsImpl(const TStaticConfig& config, const TDynamicConfig& dynamicConfig)
 {
     SetSpinWaitSlowPathLoggingThreshold(dynamicConfig->SpinWaitSlowPathLoggingThreshold.value_or(config->SpinWaitSlowPathLoggingThreshold));
 
@@ -257,10 +264,10 @@ void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletons
 
     NRpc::TDispatcher::Get()->Configure(config->RpcDispatcher->ApplyDynamic(dynamicConfig->RpcDispatcher));
 
-    if (dynamicConfig->TracingTransport) {
-        NTracing::SetTracingTransportConfig(dynamicConfig->TracingTransport);
-    } else if (config->TracingTransport) {
-        NTracing::SetTracingTransportConfig(config->TracingTransport);
+    if (dynamicConfig->Rpc->Tracing) {
+        NTracing::SetTracingConfig(dynamicConfig->Rpc->Tracing);
+    } else if (config->Rpc->Tracing) {
+        NTracing::SetTracingConfig(config->Rpc->Tracing);
     }
 
     if (dynamicConfig->TCMalloc) {
@@ -270,6 +277,11 @@ void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletons
     }
 
     NYson::SetProtobufInteropConfig(config->ProtobufInterop->ApplyDynamic(dynamicConfig->ProtobufInterop));
+}
+
+void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletonsDynamicConfigPtr& dynamicConfig)
+{
+    ReconfigureSingletonsImpl(config, dynamicConfig);
 }
 
 template <class TConfig>

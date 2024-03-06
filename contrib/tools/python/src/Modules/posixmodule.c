@@ -32,7 +32,7 @@
 #endif
 
 #if defined(__VMS)
-#    error #include <unixio.h>
+#    include <unixio.h>
 #endif /* defined(__VMS) */
 
 #ifdef __cplusplus
@@ -55,7 +55,7 @@ corresponding Unix manual entries for more information on calls.");
 #define  INCL_DOSERRORS
 #define  INCL_DOSPROCESS
 #define  INCL_NOPMAPI
-#error #include <os2.h>
+#include <os2.h>
 #if defined(PYCC_GCC)
 #include <ctype.h>
 #include <io.h>

@@ -6,7 +6,7 @@ from typing import Iterable, Iterator, Optional, Type
 
 from .._backends.sync import SyncBackend
 from .._backends.base import SOCKET_OPTION, NetworkBackend, NetworkStream
-from .._exceptions import ConnectError, ConnectTimeout
+from .._exceptions import ConnectError, ConnectionNotAvailable, ConnectTimeout
 from .._models import Origin, Request, Response
 from .._ssl import default_ssl_context
 from .._synchronization import Lock
@@ -70,9 +70,9 @@ class HTTPConnection(ConnectionInterface):
                 f"Attempted to send request to {request.url.origin} on connection to {self._origin}"
             )
 
-        try:
-            with self._request_lock:
-                if self._connection is None:
+        with self._request_lock:
+            if self._connection is None:
+                try:
                     stream = self._connect(request)
 
                     ssl_object = stream.get_extra_info("ssl_object")
@@ -94,9 +94,11 @@ class HTTPConnection(ConnectionInterface):
                             stream=stream,
                             keepalive_expiry=self._keepalive_expiry,
                         )
-        except BaseException as exc:
-            self._connect_failed = True
-            raise exc
+                except Exception as exc:
+                    self._connect_failed = True
+                    raise exc
+            elif not self._connection.is_available():
+                raise ConnectionNotAvailable()
 
         return self._connection.handle_request(request)
 
@@ -135,7 +137,7 @@ class HTTPConnection(ConnectionInterface):
                         )
                         trace.return_value = stream
 
-                if self._origin.scheme in (b"https", b"wss"):
+                if self._origin.scheme == b"https":
                     ssl_context = (
                         default_ssl_context()
                         if self._ssl_context is None

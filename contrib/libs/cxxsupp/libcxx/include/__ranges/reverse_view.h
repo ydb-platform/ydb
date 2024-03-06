@@ -24,10 +24,9 @@
 #include <__ranges/size.h>
 #include <__ranges/subrange.h>
 #include <__ranges/view_interface.h>
-#include <__type_traits/conditional.h>
-#include <__type_traits/remove_cvref.h>
 #include <__utility/forward.h>
 #include <__utility/move.h>
+#include <type_traits>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #  pragma GCC system_header
@@ -35,7 +34,7 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-#if _LIBCPP_STD_VER >= 20
+#if _LIBCPP_STD_VER > 17
 
 namespace ranges {
   template<view _View>
@@ -185,7 +184,7 @@ namespace ranges {
   } // namespace views
 } // namespace ranges
 
-#endif // _LIBCPP_STD_VER >= 20
+#endif // _LIBCPP_STD_VER > 17
 
 _LIBCPP_END_NAMESPACE_STD
 

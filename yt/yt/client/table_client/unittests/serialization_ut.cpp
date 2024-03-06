@@ -21,7 +21,7 @@ TEST(TSchemaSerialization, ParseUsingNodeAndSerialize)
     EXPECT_EQ(1, std::ssize(schema.Columns()));
     EXPECT_EQ("a", schema.Columns()[0].Name());
     EXPECT_EQ(1, std::ssize(schema.DeletedColumns()));
-    EXPECT_EQ("b", schema.DeletedColumns()[0].StableName().Underlying());
+    EXPECT_EQ("b", schema.DeletedColumns()[0].StableName().Get());
 
     NYT::NFormats::TFormat format(NFormats::EFormatType::Json);
 
@@ -52,7 +52,7 @@ TEST(TSchemaSerialization, Cursor)
     EXPECT_EQ(1, std::ssize(schema.Columns()));
     EXPECT_EQ("a", schema.Columns()[0].Name());
     EXPECT_EQ(1, std::ssize(schema.DeletedColumns()));
-    EXPECT_EQ("b", schema.DeletedColumns()[0].StableName().Underlying());
+    EXPECT_EQ("b", schema.DeletedColumns()[0].StableName().Get());
 }
 
 TEST(TSchemaSerialization, Deleted)
@@ -63,7 +63,7 @@ TEST(TSchemaSerialization, Deleted)
     TTableSchema schema;
     EXPECT_THROW_WITH_SUBSTRING(
         Deserialize(schema, NYTree::ConvertToNode(NYson::TYsonString(TString(schemaString)))),
-        "Stable name should be set for a deleted column");
+        "stable name should be set for a deleted column");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

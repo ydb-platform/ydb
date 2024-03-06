@@ -1,12 +1,12 @@
 LIBRARY()
 
 PEERDIR(
-    contrib/tools/python3
+    contrib/tools/python3/src
     library/cpp/resource
 )
 
 ADDINCL(
-    contrib/tools/python3/Include
+    contrib/tools/python3/src/Include
 )
 
 CFLAGS(

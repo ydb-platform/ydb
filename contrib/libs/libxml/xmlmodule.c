@@ -410,7 +410,7 @@ xmlModulePlatformSymbol(void *handle, const char *name, void **symbol)
 
 #ifdef HAVE_OS2
 
-#error #include <os2.h>
+#include <os2.h>
 
 /*
  * xmlModulePlatformOpen:

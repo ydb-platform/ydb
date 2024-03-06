@@ -3,6 +3,7 @@
 
 
 class Classifier(object):
+
     """
     Main Classifier object, used to classify things into similar sets.
     """

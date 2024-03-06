@@ -17,13 +17,10 @@
 #include <algorithm>
 #include <cstdint>
 
-#include "y_absl/base/config.h"
 #include "y_absl/base/internal/endian.h"
-#include "y_absl/base/optimization.h"
 #include "y_absl/numeric/bits.h"
 #include "y_absl/strings/ascii.h"
 #include "y_absl/strings/internal/memutil.h"
-#include "y_absl/strings/string_view.h"
 
 namespace y_absl {
 Y_ABSL_NAMESPACE_BEGIN

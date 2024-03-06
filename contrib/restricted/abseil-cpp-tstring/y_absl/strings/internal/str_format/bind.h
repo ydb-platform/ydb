@@ -15,19 +15,16 @@
 #ifndef Y_ABSL_STRINGS_INTERNAL_STR_FORMAT_BIND_H_
 #define Y_ABSL_STRINGS_INTERNAL_STR_FORMAT_BIND_H_
 
-#include <cassert>
+#include <array>
 #include <cstdio>
-#include <ostream>
+#include <sstream>
 #include <util/generic/string.h>
 
-#include "y_absl/base/config.h"
+#include "y_absl/base/port.h"
 #include "y_absl/container/inlined_vector.h"
 #include "y_absl/strings/internal/str_format/arg.h"
 #include "y_absl/strings/internal/str_format/checker.h"
-#include "y_absl/strings/internal/str_format/constexpr_parser.h"
-#include "y_absl/strings/internal/str_format/extension.h"
 #include "y_absl/strings/internal/str_format/parser.h"
-#include "y_absl/strings/string_view.h"
 #include "y_absl/types/span.h"
 #include "y_absl/utility/utility.h"
 
@@ -206,7 +203,7 @@ bool FormatUntyped(FormatRawSinkImpl raw_sink, UntypedFormatSpecImpl format,
 TString& AppendPack(TString* out, UntypedFormatSpecImpl format,
                         y_absl::Span<const FormatArgImpl> args);
 
-TString FormatPack(UntypedFormatSpecImpl format,
+TString FormatPack(const UntypedFormatSpecImpl format,
                        y_absl::Span<const FormatArgImpl> args);
 
 int FprintF(std::FILE* output, UntypedFormatSpecImpl format,

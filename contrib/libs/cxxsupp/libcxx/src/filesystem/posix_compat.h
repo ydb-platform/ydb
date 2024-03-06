@@ -24,11 +24,9 @@
 #define POSIX_COMPAT_H
 
 #include <__assert>
-#include <__config>
 #include <filesystem>
 
-#include "error.h"
-#include "time_utils.h"
+#include "filesystem_common.h"
 
 #if defined(_LIBCPP_WIN32API)
 # define WIN32_LEAN_AND_MEAN
@@ -37,13 +35,10 @@
 # include <io.h>
 # include <winioctl.h>
 #else
-# include <fcntl.h>
 # include <unistd.h>
 # include <sys/stat.h>
 # include <sys/statvfs.h>
-# include <sys/time.h>
 #endif
-#include <stdlib.h>
 #include <time.h>
 
 #if defined(_LIBCPP_WIN32API)
@@ -79,6 +74,7 @@ struct LIBCPP_REPARSE_DATA_BUFFER {
 _LIBCPP_BEGIN_NAMESPACE_FILESYSTEM
 
 namespace detail {
+namespace {
 
 #if defined(_LIBCPP_WIN32API)
 
@@ -122,7 +118,36 @@ namespace detail {
 
 #define O_NONBLOCK 0
 
-inline int set_errno(int e = GetLastError()) {
+
+// There were 369 years and 89 leap days from the Windows epoch
+// (1601) to the Unix epoch (1970).
+#define FILE_TIME_OFFSET_SECS (uint64_t(369 * 365 + 89) * (24 * 60 * 60))
+
+TimeSpec filetime_to_timespec(LARGE_INTEGER li) {
+  TimeSpec ret;
+  ret.tv_sec = li.QuadPart / 10000000 - FILE_TIME_OFFSET_SECS;
+  ret.tv_nsec = (li.QuadPart % 10000000) * 100;
+  return ret;
+}
+
+TimeSpec filetime_to_timespec(FILETIME ft) {
+  LARGE_INTEGER li;
+  li.LowPart = ft.dwLowDateTime;
+  li.HighPart = ft.dwHighDateTime;
+  return filetime_to_timespec(li);
+}
+
+FILETIME timespec_to_filetime(TimeSpec ts) {
+  LARGE_INTEGER li;
+  li.QuadPart =
+      ts.tv_nsec / 100 + (ts.tv_sec + FILE_TIME_OFFSET_SECS) * 10000000;
+  FILETIME ft;
+  ft.dwLowDateTime = li.LowPart;
+  ft.dwHighDateTime = li.HighPart;
+  return ft;
+}
+
+int set_errno(int e = GetLastError()) {
   errno = static_cast<int>(__win_err_to_errc(e));
   return -1;
 }
@@ -145,7 +170,7 @@ private:
   HANDLE h;
 };
 
-inline int stat_handle(HANDLE h, StatT *buf) {
+int stat_handle(HANDLE h, StatT *buf) {
   FILE_BASIC_INFO basic;
   if (!GetFileInformationByHandleEx(h, FileBasicInfo, &basic, sizeof(basic)))
     return set_errno();
@@ -183,7 +208,7 @@ inline int stat_handle(HANDLE h, StatT *buf) {
   return 0;
 }
 
-inline int stat_file(const wchar_t *path, StatT *buf, DWORD flags) {
+int stat_file(const wchar_t *path, StatT *buf, DWORD flags) {
   WinHandle h(path, FILE_READ_ATTRIBUTES, flags);
   if (!h)
     return set_errno();
@@ -191,26 +216,24 @@ inline int stat_file(const wchar_t *path, StatT *buf, DWORD flags) {
   return ret;
 }
 
-inline int stat(const wchar_t *path, StatT *buf) { return stat_file(path, buf, 0); }
+int stat(const wchar_t *path, StatT *buf) { return stat_file(path, buf, 0); }
 
-inline int lstat(const wchar_t *path, StatT *buf) {
+int lstat(const wchar_t *path, StatT *buf) {
   return stat_file(path, buf, FILE_FLAG_OPEN_REPARSE_POINT);
 }
 
-inline int fstat(int fd, StatT *buf) {
+int fstat(int fd, StatT *buf) {
   HANDLE h = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
   return stat_handle(h, buf);
 }
 
-inline int mkdir(const wchar_t *path, int permissions) {
+int mkdir(const wchar_t *path, int permissions) {
   (void)permissions;
-  if (!CreateDirectoryW(path, nullptr))
-    return set_errno();
-  return 0;
+  return _wmkdir(path);
 }
 
-inline int symlink_file_dir(const wchar_t *oldname, const wchar_t *newname,
-                            bool is_dir) {
+int symlink_file_dir(const wchar_t *oldname, const wchar_t *newname,
+                     bool is_dir) {
   path dest(oldname);
   dest.make_preferred();
   oldname = dest.c_str();
@@ -226,21 +249,21 @@ inline int symlink_file_dir(const wchar_t *oldname, const wchar_t *newname,
   return set_errno();
 }
 
-inline int symlink_file(const wchar_t *oldname, const wchar_t *newname) {
+int symlink_file(const wchar_t *oldname, const wchar_t *newname) {
   return symlink_file_dir(oldname, newname, false);
 }
 
-inline int symlink_dir(const wchar_t *oldname, const wchar_t *newname) {
+int symlink_dir(const wchar_t *oldname, const wchar_t *newname) {
   return symlink_file_dir(oldname, newname, true);
 }
 
-inline int link(const wchar_t *oldname, const wchar_t *newname) {
+int link(const wchar_t *oldname, const wchar_t *newname) {
   if (CreateHardLinkW(newname, oldname, nullptr))
     return 0;
   return set_errno();
 }
 
-inline int remove(const wchar_t *path) {
+int remove(const wchar_t *path) {
   detail::WinHandle h(path, DELETE, FILE_FLAG_OPEN_REPARSE_POINT);
   if (!h)
     return set_errno();
@@ -251,7 +274,7 @@ inline int remove(const wchar_t *path) {
   return 0;
 }
 
-inline int truncate_handle(HANDLE h, off_t length) {
+int truncate_handle(HANDLE h, off_t length) {
   LARGE_INTEGER size_param;
   size_param.QuadPart = length;
   if (!SetFilePointerEx(h, size_param, 0, FILE_BEGIN))
@@ -261,19 +284,19 @@ inline int truncate_handle(HANDLE h, off_t length) {
   return 0;
 }
 
-inline int ftruncate(int fd, off_t length) {
+int ftruncate(int fd, off_t length) {
   HANDLE h = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
   return truncate_handle(h, length);
 }
 
-inline int truncate(const wchar_t *path, off_t length) {
+int truncate(const wchar_t *path, off_t length) {
   detail::WinHandle h(path, GENERIC_WRITE, 0);
   if (!h)
     return set_errno();
   return truncate_handle(h, length);
 }
 
-inline int rename(const wchar_t *from, const wchar_t *to) {
+int rename(const wchar_t *from, const wchar_t *to) {
   if (!(MoveFileExW(from, to,
                     MOVEFILE_COPY_ALLOWED | MOVEFILE_REPLACE_EXISTING |
                         MOVEFILE_WRITE_THROUGH)))
@@ -281,11 +304,11 @@ inline int rename(const wchar_t *from, const wchar_t *to) {
   return 0;
 }
 
-inline int chdir(const wchar_t* path) {
-  if (!SetCurrentDirectoryW(path))
-    return set_errno();
-  return 0;
+template <class... Args> int open(const wchar_t *filename, Args... args) {
+  return _wopen(filename, args...);
 }
+int close(int fd) { return _close(fd); }
+int chdir(const wchar_t *path) { return _wchdir(path); }
 
 struct StatVFS {
   uint64_t f_frsize;
@@ -294,7 +317,7 @@ struct StatVFS {
   uint64_t f_bavail;
 };
 
-inline int statvfs(const wchar_t *p, StatVFS *buf) {
+int statvfs(const wchar_t *p, StatVFS *buf) {
   path dir = p;
   while (true) {
     error_code local_ec;
@@ -320,29 +343,11 @@ inline int statvfs(const wchar_t *p, StatVFS *buf) {
   return 0;
 }
 
-inline wchar_t* getcwd([[maybe_unused]] wchar_t* in_buf, [[maybe_unused]] size_t in_size) {
-  // Only expected to be used with us allocating the buffer.
-  _LIBCPP_ASSERT(in_buf == nullptr, "Windows getcwd() assumes in_buf==nullptr");
-  _LIBCPP_ASSERT(in_size == 0, "Windows getcwd() assumes in_size==0");
+wchar_t *getcwd(wchar_t *buff, size_t size) { return _wgetcwd(buff, size); }
 
-  size_t buff_size = MAX_PATH + 10;
-  std::unique_ptr<wchar_t, decltype(&::free)> buff(static_cast<wchar_t*>(malloc(buff_size * sizeof(wchar_t))), &::free);
-  DWORD retval = GetCurrentDirectoryW(buff_size, buff.get());
-  if (retval > buff_size) {
-    buff_size = retval;
-    buff.reset(static_cast<wchar_t*>(malloc(buff_size * sizeof(wchar_t))));
-    retval = GetCurrentDirectoryW(buff_size, buff.get());
-  }
-  if (!retval) {
-    set_errno();
-    return nullptr;
-  }
-  return buff.release();
-}
-
-inline wchar_t *realpath(const wchar_t *path, [[maybe_unused]] wchar_t *resolved_name) {
+wchar_t *realpath(const wchar_t *path, wchar_t *resolved_name) {
   // Only expected to be used with us allocating the buffer.
-  _LIBCPP_ASSERT_UNCATEGORIZED(resolved_name == nullptr,
+  _LIBCPP_ASSERT(resolved_name == nullptr,
                  "Windows realpath() assumes a null resolved_name");
 
   WinHandle h(path, FILE_READ_ATTRIBUTES, 0);
@@ -381,7 +386,7 @@ inline wchar_t *realpath(const wchar_t *path, [[maybe_unused]] wchar_t *resolved
 #define AT_SYMLINK_NOFOLLOW 1
 using ModeT = int;
 
-inline int fchmod_handle(HANDLE h, int perms) {
+int fchmod_handle(HANDLE h, int perms) {
   FILE_BASIC_INFO basic;
   if (!GetFileInformationByHandleEx(h, FileBasicInfo, &basic, sizeof(basic)))
     return set_errno();
@@ -395,7 +400,7 @@ inline int fchmod_handle(HANDLE h, int perms) {
   return 0;
 }
 
-inline int fchmodat(int /*fd*/, const wchar_t *path, int perms, int flag) {
+int fchmodat(int fd, const wchar_t *path, int perms, int flag) {
   DWORD attributes = GetFileAttributesW(path);
   if (attributes == INVALID_FILE_ATTRIBUTES)
     return set_errno();
@@ -422,7 +427,7 @@ inline int fchmodat(int /*fd*/, const wchar_t *path, int perms, int flag) {
   return 0;
 }
 
-inline int fchmod(int fd, int perms) {
+int fchmod(int fd, int perms) {
   HANDLE h = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
   return fchmod_handle(h, perms);
 }
@@ -430,7 +435,7 @@ inline int fchmod(int fd, int perms) {
 #define MAX_SYMLINK_SIZE MAXIMUM_REPARSE_DATA_BUFFER_SIZE
 using SSizeT = ::int64_t;
 
-inline SSizeT readlink(const wchar_t *path, wchar_t *ret_buf, size_t bufsize) {
+SSizeT readlink(const wchar_t *path, wchar_t *ret_buf, size_t bufsize) {
   uint8_t buf[MAXIMUM_REPARSE_DATA_BUFFER_SIZE];
   detail::WinHandle h(path, FILE_READ_ATTRIBUTES, FILE_FLAG_OPEN_REPARSE_POINT);
   if (!h)
@@ -474,13 +479,14 @@ inline SSizeT readlink(const wchar_t *path, wchar_t *ret_buf, size_t bufsize) {
 }
 
 #else
-inline int symlink_file(const char *oldname, const char *newname) {
+int symlink_file(const char *oldname, const char *newname) {
   return ::symlink(oldname, newname);
 }
-inline int symlink_dir(const char *oldname, const char *newname) {
+int symlink_dir(const char *oldname, const char *newname) {
   return ::symlink(oldname, newname);
 }
 using ::chdir;
+using ::close;
 using ::fchmod;
 #if defined(AT_SYMLINK_NOFOLLOW) && defined(AT_FDCWD)
 using ::fchmodat;
@@ -491,6 +497,7 @@ using ::getcwd;
 using ::link;
 using ::lstat;
 using ::mkdir;
+using ::open;
 using ::readlink;
 using ::realpath;
 using ::remove;
@@ -507,6 +514,7 @@ using SSizeT = ::ssize_t;
 
 #endif
 
+} // namespace
 } // end namespace detail
 
 _LIBCPP_END_NAMESPACE_FILESYSTEM

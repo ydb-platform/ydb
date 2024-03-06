@@ -90,7 +90,7 @@
 
 #elif defined(HAVE_SYS_BYTEORDER_H)
 	// Solaris
-#	error #include <sys/byteorder.h>
+#	include <sys/byteorder.h>
 #	ifdef BSWAP_16
 #		define bswap16(num) BSWAP_16(num)
 #	endif

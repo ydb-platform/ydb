@@ -126,15 +126,11 @@ private:
         return TNetworkAddress(address, parsedUrl.Port.value_or(GetDefaultPort(parsedUrl)));
     }
 
-    std::pair<THttpOutputPtr, THttpInputPtr> OpenHttp(const TUrlRef& urlRef)
+    std::pair<THttpOutputPtr, THttpInputPtr> OpenHttp(const TNetworkAddress& address)
     {
-        auto context = New<TRemoteContext>();
-        context->Host = urlRef.Host;
-        auto address = GetAddress(urlRef);
-
         // TODO(aleexfi): Enable connection pool by default
         if (Config_->MaxIdleConnections == 0) {
-            auto connection = WaitFor(Dialer_->Dial(address, std::move(context))).ValueOrThrow();
+            auto connection = WaitFor(Dialer_->Dial(address)).ValueOrThrow();
 
             auto input = New<THttpInput>(
                 connection,
@@ -150,7 +146,7 @@ private:
 
             return {std::move(output), std::move(input)};
         } else {
-            auto connection = WaitFor(ConnectionPool_->Connect(address, std::move(context))).ValueOrThrow();
+            auto connection = WaitFor(ConnectionPool_->Connect(address)).ValueOrThrow();
 
             auto reuseSharedState = New<NDetail::TReusableConnectionState>(connection, ConnectionPool_);
 
@@ -243,8 +239,8 @@ private:
         THttpInputPtr response;
 
         auto urlRef = ParseUrl(url);
-
-        std::tie(request, response) = OpenHttp(urlRef);
+        auto address = GetAddress(urlRef);
+        std::tie(request, response) = OpenHttp(address);
 
         request->SetHost(urlRef.Host, urlRef.PortStr);
         if (headers) {
@@ -270,32 +266,6 @@ private:
         }));
     }
 
-    IResponsePtr DoRequest(
-        EMethod method,
-        const TString& url,
-        const std::optional<TSharedRef>& body,
-        const THeadersPtr& headers,
-        int redirectCount = 0)
-    {
-        auto [request, response] = StartAndWriteHeaders(method, url, headers);
-
-        if (body) {
-            WaitFor(request->WriteBody(*body))
-                .ThrowOnError();
-        } else {
-            WaitFor(request->Close())
-                .ThrowOnError();
-        }
-
-        // Waits for response headers internally.
-        auto redirectUrl = response->TryGetRedirectUrl();
-        if (redirectUrl && redirectCount < Config_->MaxRedirectCount) {
-            return DoRequest(method, *redirectUrl, body, headers, redirectCount + 1);
-        }
-
-        return IResponsePtr(response);
-    }
-
     TFuture<IResponsePtr> Request(
         EMethod method,
         const TString& url,
@@ -303,7 +273,20 @@ private:
         const THeadersPtr& headers)
     {
         return WrapError(url, BIND([=, this, this_ = MakeStrong(this)] {
-            return DoRequest(method, url, body, headers);
+            auto [request, response] = StartAndWriteHeaders(method, url, headers);
+
+            if (body) {
+                WaitFor(request->WriteBody(*body))
+                    .ThrowOnError();
+            } else {
+                WaitFor(request->Close())
+                    .ThrowOnError();
+            }
+
+            // Waits for response headers internally.
+            response->GetStatusCode();
+
+            return IResponsePtr(response);
         }));
     }
 };

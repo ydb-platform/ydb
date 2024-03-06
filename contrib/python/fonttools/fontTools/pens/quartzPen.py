@@ -9,6 +9,7 @@ __all__ = ["QuartzPen"]
 
 
 class QuartzPen(BasePen):
+
     """A pen that creates a CGPath
 
     Parameters

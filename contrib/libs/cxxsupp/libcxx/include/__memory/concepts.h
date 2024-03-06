@@ -19,7 +19,6 @@
 #include <__ranges/concepts.h>
 #include <__type_traits/is_reference.h>
 #include <__type_traits/remove_cvref.h>
-#include <__type_traits/remove_reference.h> // TODO(modules): This should not be required
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #  pragma GCC system_header
@@ -27,7 +26,7 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-#if _LIBCPP_STD_VER >= 20
+#if _LIBCPP_STD_VER > 17
 
 namespace ranges {
 
@@ -63,7 +62,7 @@ concept __nothrow_forward_range =
 
 } // namespace ranges
 
-#endif // _LIBCPP_STD_VER >= 20
+#endif // _LIBCPP_STD_VER > 17
 
 _LIBCPP_END_NAMESPACE_STD
 

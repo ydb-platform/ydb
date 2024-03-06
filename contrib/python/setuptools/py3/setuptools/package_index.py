@@ -112,13 +112,15 @@ def egg_info_for_url(url):
 def distros_for_url(url, metadata=None):
     """Yield egg or source distribution objects that might be found at a URL"""
     base, fragment = egg_info_for_url(url)
-    yield from distros_for_location(url, base, metadata)
+    for dist in distros_for_location(url, base, metadata):
+        yield dist
     if fragment:
         match = EGG_FRAGMENT.match(fragment)
         if match:
-            yield from interpret_distro_name(
+            for dist in interpret_distro_name(
                 url, match.group(1), metadata, precedence=CHECKOUT_DIST
-            )
+            ):
+                yield dist
 
 
 def distros_for_location(location, basename, metadata=None):
@@ -319,7 +321,7 @@ class PackageIndex(Environment):
         try:
             parse_version(dist.version)
         except Exception:
-            return None
+            return
         return super().add(dist)
 
     # FIXME: 'PackageIndex.process_url' is too complex (14)
@@ -406,7 +408,6 @@ class PackageIndex(Environment):
             raise DistutilsError(msg % url)
         else:
             self.warn(msg, url)
-            return False
 
     def scan_egg_links(self, search_path):
         dirs = filter(os.path.isdir, search_path)
@@ -515,7 +516,7 @@ class PackageIndex(Environment):
             if dist in requirement:
                 return dist
             self.debug("%s does not match %s", requirement, dist)
-        return super().obtain(requirement, installer)
+        return super(PackageIndex, self).obtain(requirement, installer)
 
     def check_hash(self, checker, filename, tfp):
         """
@@ -649,8 +650,6 @@ class PackageIndex(Environment):
                     if os.path.exists(dist.download_location):
                         return dist
 
-            return None
-
         if force_scan:
             self.prescan()
             self.find_packages(requirement)
@@ -674,7 +673,6 @@ class PackageIndex(Environment):
                 (source and "a source distribution of " or ""),
                 requirement,
             )
-            return None
         else:
             self.info("Best match: %s", dist)
             return dist.clone(location=dist.download_location)
@@ -1038,7 +1036,6 @@ class PyPIConfig(configparser.RawConfigParser):
         for repository, cred in self.creds_by_repository.items():
             if url.startswith(repository):
                 return cred
-        return None
 
 
 def open_with_auth(url, opener=urllib.request.urlopen):

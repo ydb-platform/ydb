@@ -8,7 +8,6 @@ To create your own config system, you need to create an instance of
 ``options`` class variable set to your instance of Options.
 
 """
-
 from __future__ import annotations
 
 import logging

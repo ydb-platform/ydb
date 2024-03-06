@@ -175,18 +175,16 @@ public:
 
         auto id = TConnectionId::Create();
 
-        YT_LOG_DEBUG("Connecting to server (Address: %v, ConnectionId: %v, MultiplexingBand: %v, EncryptionMode: %v, VerificationMode: %v)",
+        YT_LOG_DEBUG("Connecting to server (Address: %v, ConnectionId: %v, MultiplexingBand: %v, EncryptionMode: %v)",
             EndpointDescription_,
             id,
             options.MultiplexingBand,
-            Config_->EncryptionMode,
-            Config_->VerificationMode);
+            Config_->EncryptionMode);
 
         auto endpointAttributes = ConvertToAttributes(BuildYsonStringFluently()
             .BeginMap()
                 .Items(*EndpointAttributes_)
                 .Item("connection_id").Value(id)
-                .Item("connection_type").Value(EConnectionType::Client)
             .EndMap());
 
         auto poller = TTcpDispatcher::TImpl::Get()->GetXferPoller();

@@ -21,14 +21,18 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-#if _LIBCPP_STD_VER >= 20
+#if _LIBCPP_STD_VER > 17
 
 // [concepts.object]
 
-template <class _Tp>
-concept movable = is_object_v<_Tp> && move_constructible<_Tp> && assignable_from<_Tp&, _Tp> && swappable<_Tp>;
+template<class _Tp>
+concept movable =
+  is_object_v<_Tp> &&
+  move_constructible<_Tp> &&
+  assignable_from<_Tp&, _Tp> &&
+  swappable<_Tp>;
 
-#endif // _LIBCPP_STD_VER >= 20
+#endif // _LIBCPP_STD_VER > 17
 
 _LIBCPP_END_NAMESPACE_STD
 

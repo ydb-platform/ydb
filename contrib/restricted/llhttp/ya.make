@@ -6,9 +6,9 @@ LICENSE(MIT)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(9.2.0)
+VERSION(9.1.3)
 
-ORIGINAL_SOURCE(https://github.com/nodejs/llhttp/archive/release/v9.2.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/nodejs/llhttp/archive/release/v9.1.3.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/restricted/llhttp/include

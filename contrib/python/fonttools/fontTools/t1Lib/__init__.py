@@ -15,7 +15,6 @@ write(path, data, kind='OTHER', dohex=False)
 	part should be written as hexadecimal or binary, but only if kind
 	is 'OTHER'.
 """
-
 import fontTools
 from fontTools.misc import eexec
 from fontTools.misc.macCreatorType import getMacCreatorAndType
@@ -50,6 +49,7 @@ class T1Error(Exception):
 
 
 class T1Font(object):
+
     """Type 1 font class.
 
     Uses a minimal interpeter that supports just about enough PS to parse

@@ -11,11 +11,11 @@ class Result(object):
 def lazy(func):
     result = Result()
 
-    def wrapper(*args, **kwargs):
+    def wrapper():
         try:
             return result._result
         except AttributeError:
-            result._result = func(*args, **kwargs)
+            result._result = func()
 
         return result._result
 

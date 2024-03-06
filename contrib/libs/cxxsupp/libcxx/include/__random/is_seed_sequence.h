@@ -10,9 +10,7 @@
 #define _LIBCPP___RANDOM_IS_SEED_SEQUENCE_H
 
 #include <__config>
-#include <__type_traits/is_convertible.h>
-#include <__type_traits/is_same.h>
-#include <__type_traits/remove_cv.h>
+#include <type_traits>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #  pragma GCC system_header

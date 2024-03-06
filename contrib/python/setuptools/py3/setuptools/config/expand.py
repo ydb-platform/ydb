@@ -17,7 +17,6 @@ functions among several configuration file formats.
 
 **PRIVATE MODULE**: API reserved for setuptools internal usage only.
 """
-
 import ast
 import importlib
 import os

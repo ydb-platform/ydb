@@ -16,8 +16,6 @@ SRCS(
     uuid.go
     version1.go
     version4.go
-    version6.go
-    version7.go
 )
 
 GO_TEST_SRCS(

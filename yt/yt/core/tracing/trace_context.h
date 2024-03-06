@@ -42,8 +42,8 @@ ITracerPtr GetGlobalTracer();
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void SetTracingTransportConfig(TTracingTransportConfigPtr config);
-TTracingTransportConfigPtr GetTracingTransportConfig();
+void SetTracingConfig(TTracingConfigPtr config);
+TTracingConfigPtr GetTracingConfig();
 
 ////////////////////////////////////////////////////////////////////////////////
 

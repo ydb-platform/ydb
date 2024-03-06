@@ -6,6 +6,14 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TRpcConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("tracing", &TThis::Tracing)
+        .Default();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void THeapSizeLimit::Register(TRegistrar registrar)
 {
     registrar.Parameter("container_memory_ratio", &TThis::ContainerMemoryRatio)
@@ -87,7 +95,7 @@ void TSingletonsConfig::Register(TRegistrar registrar)
         .DefaultCtor([] () { return NLogging::TLogManagerConfig::CreateDefault(); });
     registrar.Parameter("jaeger", &TThis::Jaeger)
         .DefaultNew();
-    registrar.Parameter("tracing_transport", &TThis::TracingTransport)
+    registrar.Parameter("rpc", &TThis::Rpc)
         .DefaultNew();
     registrar.Parameter("tcmalloc", &TThis::TCMalloc)
         .DefaultNew();
@@ -127,7 +135,7 @@ void TSingletonsDynamicConfig::Register(TRegistrar registrar)
         .DefaultNew();
     registrar.Parameter("jaeger", &TThis::Jaeger)
         .DefaultNew();
-    registrar.Parameter("tracing_transport", &TThis::TracingTransport)
+    registrar.Parameter("rpc", &TThis::Rpc)
         .DefaultNew();
     registrar.Parameter("tcmalloc", &TThis::TCMalloc)
         .Optional();

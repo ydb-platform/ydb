@@ -13,8 +13,6 @@
 #include <__algorithm/fill.h>
 #include <__algorithm/max.h>
 #include <__config>
-#include <__iterator/iterator_traits.h>
-#include <cstdint>
 #include <initializer_list>
 #include <vector>
 
@@ -54,7 +52,7 @@ public:
 
     // generating functions
     template<class _RandomAccessIterator>
-    _LIBCPP_HIDE_FROM_ABI void generate(_RandomAccessIterator __first, _RandomAccessIterator __last);
+        void generate(_RandomAccessIterator __first, _RandomAccessIterator __last);
 
     // property functions
     _LIBCPP_INLINE_VISIBILITY
@@ -72,7 +70,7 @@ public:
 
 private:
     template<class _InputIterator>
-    _LIBCPP_HIDE_FROM_ABI void __init(_InputIterator __first, _InputIterator __last);
+    void __init(_InputIterator __first, _InputIterator __last);
 
     vector<result_type> __v_;
 };

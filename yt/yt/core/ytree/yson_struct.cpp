@@ -112,9 +112,9 @@ void TYsonStructBase::SaveParameter(const TString& key, IYsonConsumer* consumer)
     Meta_->GetParameter(key)->Save(this, consumer);
 }
 
-void TYsonStructBase::LoadParameter(const TString& key, const NYTree::INodePtr& node)
+void TYsonStructBase::LoadParameter(const TString& key, const NYTree::INodePtr& node, EMergeStrategy mergeStrategy)
 {
-    Meta_->LoadParameter(this, key, node);
+    Meta_->LoadParameter(this, key, node, mergeStrategy);
 }
 
 void TYsonStructBase::ResetParameter(const TString& key)

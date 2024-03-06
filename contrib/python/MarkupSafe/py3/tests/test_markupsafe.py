@@ -73,7 +73,7 @@ def test_escaping(escape):
         Markup(
             "<!-- outer comment -->"
             "<em>Foo &amp; Bar"
-            " <!-- inner comment about <em> -->\n "
+            "<!-- inner comment about <em> -->"
             "</em>"
             "<!-- comment\nwith\nnewlines\n-->"
             "<meta content='tag\nwith\nnewlines'>"

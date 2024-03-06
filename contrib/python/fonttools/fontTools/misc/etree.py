@@ -11,7 +11,6 @@ or subclasses built-in ElementTree classes to add features that are
 only availble in lxml, like OrderedDict for attributes, pretty_print and
 iterwalk.
 """
-
 from fontTools.misc.textTools import tostr
 
 

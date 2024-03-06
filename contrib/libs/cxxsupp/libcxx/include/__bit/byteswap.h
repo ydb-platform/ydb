@@ -13,6 +13,7 @@
 #include <__concepts/arithmetic.h>
 #include <__config>
 #include <cstdint>
+#include <cstdlib>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #  pragma GCC system_header
@@ -20,10 +21,10 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-#if _LIBCPP_STD_VER >= 23
+#if _LIBCPP_STD_VER > 20
 
 template <integral _Tp>
-_LIBCPP_NODISCARD_EXT _LIBCPP_HIDE_FROM_ABI constexpr _Tp byteswap(_Tp __val) noexcept {
+_LIBCPP_HIDE_FROM_ABI constexpr _Tp byteswap(_Tp __val) noexcept {
 
   if constexpr (sizeof(_Tp) == 1) {
     return __val;
@@ -47,7 +48,7 @@ _LIBCPP_NODISCARD_EXT _LIBCPP_HIDE_FROM_ABI constexpr _Tp byteswap(_Tp __val) no
   }
 }
 
-#endif // _LIBCPP_STD_VER >= 23
+#endif // _LIBCPP_STD_VER > 20
 
 _LIBCPP_END_NAMESPACE_STD
 

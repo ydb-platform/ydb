@@ -30,13 +30,11 @@
 #include <__ranges/enable_borrowed_range.h>
 #include <__ranges/size.h>
 #include <__ranges/view_interface.h>
-#include <__type_traits/is_nothrow_move_constructible.h>
-#include <__type_traits/make_unsigned.h>
-#include <__utility/declval.h>
 #include <__utility/forward.h>
 #include <__utility/integer_sequence.h>
 #include <__utility/move.h>
 #include <tuple>
+#include <type_traits>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #  pragma GCC system_header
@@ -47,7 +45,7 @@ _LIBCPP_PUSH_MACROS
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-#if _LIBCPP_STD_VER >= 23
+#if _LIBCPP_STD_VER > 20
 
 namespace ranges {
 
@@ -79,9 +77,7 @@ _LIBCPP_HIDE_FROM_ABI constexpr auto __tuple_transform(_Fun&& __f, _Tuple&& __tu
 template <class _Fun, class _Tuple>
 _LIBCPP_HIDE_FROM_ABI constexpr void __tuple_for_each(_Fun&& __f, _Tuple&& __tuple) {
   std::apply(
-      [&]<class... _Types>(_Types&&... __elements) {
-        (static_cast<void>(std::invoke(__f, std::forward<_Types>(__elements))), ...);
-      },
+      [&]<class... _Types>(_Types&&... __elements) { (std::invoke(__f, std::forward<_Types>(__elements)), ...); },
       std::forward<_Tuple>(__tuple));
 }
 
@@ -507,7 +503,7 @@ inline namespace __cpo {
 } // namespace views
 } // namespace ranges
 
-#endif // _LIBCPP_STD_VER >= 23
+#endif // _LIBCPP_STD_VER > 20
 
 _LIBCPP_END_NAMESPACE_STD
 

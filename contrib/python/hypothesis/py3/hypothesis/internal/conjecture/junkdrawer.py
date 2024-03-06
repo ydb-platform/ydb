@@ -110,10 +110,12 @@ class IntList(Sequence[int]):
         return len(self.__underlying)
 
     @overload
-    def __getitem__(self, i: int) -> int: ...  # pragma: no cover
+    def __getitem__(self, i: int) -> int:
+        ...  # pragma: no cover
 
     @overload
-    def __getitem__(self, i: slice) -> "IntList": ...  # pragma: no cover
+    def __getitem__(self, i: slice) -> "IntList":
+        ...  # pragma: no cover
 
     def __getitem__(self, i: Union[int, slice]) -> "Union[int, IntList]":
         if isinstance(i, slice):
@@ -243,7 +245,7 @@ class LazySequenceCopy:
         return i
 
 
-def clamp(lower: float, value: float, upper: float) -> float:
+def clamp(lower: int, value: int, upper: int) -> int:
     """Given a value and lower/upper bounds, 'clamp' the value so that
     it satisfies lower <= value <= upper."""
     return max(lower, min(value, upper))

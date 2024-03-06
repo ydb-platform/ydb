@@ -124,11 +124,9 @@ if (HAVE_CUDA)
     " --expt-extended-lambda"
     # Allow host code to invoke __device__ constexpr functions and vice versa
     " --expt-relaxed-constexpr"
-    # Allow to use newer compilers than CUDA Toolkit officially supports
-    " --allow-unsupported-compiler"
   )
 
-  set(NVCC_STD_VER 17)
+  set(NVCC_STD_VER 14)
   if(MSVC)
     set(NVCC_STD "/std:c++${NVCC_STD_VER}")
   else()

@@ -53,10 +53,10 @@ public:
             : __p_(__wl.begin(), __wl.end()) {__init();}
 #endif // _LIBCPP_CXX03_LANG
         template<class _UnaryOperation>
-        _LIBCPP_HIDE_FROM_ABI param_type(size_t __nw, double __xmin, double __xmax,
+            param_type(size_t __nw, double __xmin, double __xmax,
                        _UnaryOperation __fw);
 
-        _LIBCPP_HIDE_FROM_ABI vector<double> probabilities() const;
+        vector<double> probabilities() const;
 
         friend _LIBCPP_INLINE_VISIBILITY
             bool operator==(const param_type& __x, const param_type& __y)
@@ -66,7 +66,7 @@ public:
             {return !(__x == __y);}
 
     private:
-        _LIBCPP_HIDE_FROM_ABI void __init();
+        void __init();
 
         friend class discrete_distribution;
 
@@ -115,8 +115,7 @@ public:
         _LIBCPP_INLINE_VISIBILITY
         result_type operator()(_URNG& __g)
         {return (*this)(__g, __p_);}
-    template<class _URNG>
-    _LIBCPP_HIDE_FROM_ABI result_type operator()(_URNG& __g, const param_type& __p);
+    template<class _URNG> result_type operator()(_URNG& __g, const param_type& __p);
 
     // property functions
     _LIBCPP_INLINE_VISIBILITY

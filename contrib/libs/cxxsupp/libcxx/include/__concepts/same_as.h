@@ -18,17 +18,17 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-#if _LIBCPP_STD_VER >= 20
+#if _LIBCPP_STD_VER > 17
 
 // [concept.same]
 
-template <class _Tp, class _Up>
+template<class _Tp, class _Up>
 concept __same_as_impl = _IsSame<_Tp, _Up>::value;
 
-template <class _Tp, class _Up>
+template<class _Tp, class _Up>
 concept same_as = __same_as_impl<_Tp, _Up> && __same_as_impl<_Up, _Tp>;
 
-#endif // _LIBCPP_STD_VER >= 20
+#endif // _LIBCPP_STD_VER > 17
 
 _LIBCPP_END_NAMESPACE_STD
 

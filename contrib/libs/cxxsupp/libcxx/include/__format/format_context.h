@@ -37,11 +37,11 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-#if _LIBCPP_STD_VER >= 20
+#if _LIBCPP_STD_VER > 17
 
 template <class _OutIt, class _CharT>
 requires output_iterator<_OutIt, const _CharT&>
-class _LIBCPP_TEMPLATE_VIS basic_format_context;
+class _LIBCPP_TEMPLATE_VIS _LIBCPP_AVAILABILITY_FORMAT basic_format_context;
 
 #ifndef _LIBCPP_HAS_NO_LOCALIZATION
 /**
@@ -80,6 +80,7 @@ requires output_iterator<_OutIt, const _CharT&>
 class
     // clang-format off
     _LIBCPP_TEMPLATE_VIS
+    _LIBCPP_AVAILABILITY_FORMAT
     _LIBCPP_PREFERRED_NAME(format_context)
     _LIBCPP_IF_WIDE_CHARACTERS(_LIBCPP_PREFERRED_NAME(wformat_context))
     // clang-format on
@@ -120,9 +121,9 @@ private:
   // TODO FMT Validate whether lazy creation is the best solution.
   optional<_VSTD::locale> __loc_;
 
-  template <class _OtherOutIt, class _OtherCharT>
-  friend _LIBCPP_HIDE_FROM_ABI basic_format_context<_OtherOutIt, _OtherCharT>
-  __format_context_create(_OtherOutIt, basic_format_args<basic_format_context<_OtherOutIt, _OtherCharT>>,
+  template <class __OutIt, class __CharT>
+  friend _LIBCPP_HIDE_FROM_ABI basic_format_context<__OutIt, __CharT>
+  __format_context_create(__OutIt, basic_format_args<basic_format_context<__OutIt, __CharT>>,
                           optional<_VSTD::locale>&&);
 
   // Note: the Standard doesn't specify the required constructors.
@@ -133,9 +134,9 @@ private:
       : __out_it_(_VSTD::move(__out_it)), __args_(__args),
         __loc_(_VSTD::move(__loc)) {}
 #else
-  template <class _OtherOutIt, class _OtherCharT>
-  friend _LIBCPP_HIDE_FROM_ABI basic_format_context<_OtherOutIt, _OtherCharT>
-      __format_context_create(_OtherOutIt, basic_format_args<basic_format_context<_OtherOutIt, _OtherCharT>>);
+  template <class __OutIt, class __CharT>
+  friend _LIBCPP_HIDE_FROM_ABI basic_format_context<__OutIt, __CharT>
+      __format_context_create(__OutIt, basic_format_args<basic_format_context<__OutIt, __CharT>>);
 
   _LIBCPP_HIDE_FROM_ABI
   explicit basic_format_context(_OutIt __out_it,
@@ -161,7 +162,7 @@ private:
 // Here the width of an element in input is determined dynamically.
 // Note when the top-level element has no width the retargeting is not needed.
 template <class _CharT>
-class _LIBCPP_TEMPLATE_VIS
+class _LIBCPP_TEMPLATE_VIS _LIBCPP_AVAILABILITY_FORMAT
     basic_format_context<typename __format::__retarget_buffer<_CharT>::__iterator, _CharT> {
 public:
   using iterator  = typename __format::__retarget_buffer<_CharT>::__iterator;
@@ -215,7 +216,7 @@ private:
 };
 
 _LIBCPP_CTAD_SUPPORTED_FOR_TYPE(basic_format_context);
-#endif //_LIBCPP_STD_VER >= 20
+#endif //_LIBCPP_STD_VER > 17
 
 _LIBCPP_END_NAMESPACE_STD
 

@@ -1,7 +1,6 @@
 """The module contains miscellaneous helpers.
 It's not considered part of the public ufoLib API.
 """
-
 import warnings
 import functools
 

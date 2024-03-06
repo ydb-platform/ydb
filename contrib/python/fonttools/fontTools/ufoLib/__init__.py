@@ -197,6 +197,7 @@ class _UFOBaseIO:
 
 
 class UFOReader(_UFOBaseIO):
+
     """
     Read the various components of the .ufo.
 
@@ -880,6 +881,7 @@ class UFOReader(_UFOBaseIO):
 
 
 class UFOWriter(UFOReader):
+
     """
     Write the various components of the .ufo.
 

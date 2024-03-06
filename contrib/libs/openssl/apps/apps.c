@@ -2279,7 +2279,7 @@ double app_tminterval(int stop, int usertime)
 
 #elif defined(OPENSSL_SYSTEM_VMS)
 # include <time.h>
-# error #include <times.h>
+# include <times.h>
 
 double app_tminterval(int stop, int usertime)
 {

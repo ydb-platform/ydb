@@ -13,9 +13,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(16.2)
+VERSION(16.1)
 
-ORIGINAL_SOURCE(https://github.com/postgres/postgres/archive/REL_16_2.tar.gz)
+ORIGINAL_SOURCE(https://github.com/postgres/postgres/archive/REL_16_1.tar.gz)
 
 PEERDIR(
     contrib/libs/libc_compat

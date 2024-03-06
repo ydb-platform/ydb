@@ -476,14 +476,7 @@ class AxisMappingDescriptor(SimpleDescriptor):
 
     _attrs = ["inputLocation", "outputLocation"]
 
-    def __init__(
-        self,
-        *,
-        inputLocation=None,
-        outputLocation=None,
-        description=None,
-        groupDescription=None,
-    ):
+    def __init__(self, *, inputLocation=None, outputLocation=None):
         self.inputLocation: SimpleLocationDict = inputLocation or {}
         """dict. Axis values for the input of the mapping, in design space coordinates.
 
@@ -497,20 +490,6 @@ class AxisMappingDescriptor(SimpleDescriptor):
         varLib.
 
         .. versionadded:: 5.1
-        """
-        self.description = description
-        """string. A description of the mapping.
-
-        varLib.
-
-        .. versionadded:: 5.2
-        """
-        self.groupDescription = groupDescription
-        """string. A description of the group of mappings.
-
-        varLib.
-
-        .. versionadded:: 5.2
         """
 
 
@@ -1434,27 +1413,18 @@ class BaseDocWriter(object):
         ):
             axesElement = ET.Element("axes")
             if self.documentObject.elidedFallbackName is not None:
-                axesElement.attrib["elidedfallbackname"] = (
-                    self.documentObject.elidedFallbackName
-                )
+                axesElement.attrib[
+                    "elidedfallbackname"
+                ] = self.documentObject.elidedFallbackName
             self.root.append(axesElement)
         for axisObject in self.documentObject.axes:
             self._addAxis(axisObject)
 
         if self.documentObject.axisMappings:
-            mappingsElement = None
-            lastGroup = object()
+            mappingsElement = ET.Element("mappings")
+            self.root.findall(".axes")[0].append(mappingsElement)
             for mappingObject in self.documentObject.axisMappings:
-                if getattr(mappingObject, "groupDescription", None) != lastGroup:
-                    if mappingsElement is not None:
-                        self.root.findall(".axes")[0].append(mappingsElement)
-                    lastGroup = getattr(mappingObject, "groupDescription", None)
-                    mappingsElement = ET.Element("mappings")
-                    if lastGroup is not None:
-                        mappingsElement.attrib["description"] = lastGroup
                 self._addAxisMapping(mappingsElement, mappingObject)
-            if mappingsElement is not None:
-                self.root.findall(".axes")[0].append(mappingsElement)
 
         if self.documentObject.locationLabels:
             labelsElement = ET.Element("labels")
@@ -1616,8 +1586,6 @@ class BaseDocWriter(object):
 
     def _addAxisMapping(self, mappingsElement, mappingObject):
         mappingElement = ET.Element("mapping")
-        if getattr(mappingObject, "description", None) is not None:
-            mappingElement.attrib["description"] = mappingObject.description
         for what in ("inputLocation", "outputLocation"):
             whatObject = getattr(mappingObject, what, None)
             if whatObject is None:
@@ -1776,17 +1744,17 @@ class BaseDocWriter(object):
         if instanceObject.filename is not None:
             instanceElement.attrib["filename"] = instanceObject.filename
         if instanceObject.postScriptFontName is not None:
-            instanceElement.attrib["postscriptfontname"] = (
-                instanceObject.postScriptFontName
-            )
+            instanceElement.attrib[
+                "postscriptfontname"
+            ] = instanceObject.postScriptFontName
         if instanceObject.styleMapFamilyName is not None:
-            instanceElement.attrib["stylemapfamilyname"] = (
-                instanceObject.styleMapFamilyName
-            )
+            instanceElement.attrib[
+                "stylemapfamilyname"
+            ] = instanceObject.styleMapFamilyName
         if instanceObject.styleMapStyleName is not None:
-            instanceElement.attrib["stylemapstylename"] = (
-                instanceObject.styleMapStyleName
-            )
+            instanceElement.attrib[
+                "stylemapstylename"
+            ] = instanceObject.styleMapStyleName
         if self.effectiveFormatTuple < (5, 0):
             # Deprecated members as of version 5.0
             if instanceObject.glyphs:
@@ -2113,11 +2081,10 @@ class BaseDocReader(LogMixin):
             self.documentObject.axes.append(axisObject)
             self.axisDefaults[axisObject.name] = axisObject.default
 
+        mappingsElement = self.root.find(".axes/mappings")
         self.documentObject.axisMappings = []
-        for mappingsElement in self.root.findall(".axes/mappings"):
-            groupDescription = mappingsElement.attrib.get("description")
+        if mappingsElement is not None:
             for mappingElement in mappingsElement.findall("mapping"):
-                description = mappingElement.attrib.get("description")
                 inputElement = mappingElement.find("input")
                 outputElement = mappingElement.find("output")
                 inputLoc = {}
@@ -2131,10 +2098,7 @@ class BaseDocReader(LogMixin):
                     value = float(dimElement.attrib["xvalue"])
                     outputLoc[name] = value
                 axisMappingObject = self.axisMappingDescriptorClass(
-                    inputLocation=inputLoc,
-                    outputLocation=outputLoc,
-                    description=description,
-                    groupDescription=groupDescription,
+                    inputLocation=inputLoc, outputLocation=outputLoc
                 )
                 self.documentObject.axisMappings.append(axisMappingObject)
 
@@ -3315,23 +3279,3 @@ class DesignSpaceDocument(LogMixin, AsDictMixin):
         finally:
             for source, font in zip(self.sources, fonts):
                 source.font = font
-
-
-def main(args=None):
-    """Roundtrip .designspace file through the DesignSpaceDocument class"""
-
-    if args is None:
-        import sys
-
-        args = sys.argv[1:]
-
-    from argparse import ArgumentParser
-
-    parser = ArgumentParser(prog="designspaceLib", description=main.__doc__)
-    parser.add_argument("input")
-    parser.add_argument("output")
-
-    options = parser.parse_args(args)
-
-    ds = DesignSpaceDocument.fromfile(options.input)
-    ds.write(options.output)

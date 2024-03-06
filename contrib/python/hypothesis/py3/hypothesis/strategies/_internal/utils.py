@@ -17,7 +17,6 @@ import attr
 
 from hypothesis.internal.cache import LRUReusedCache
 from hypothesis.internal.compat import dataclass_asdict
-from hypothesis.internal.conjecture.junkdrawer import clamp
 from hypothesis.internal.floats import float_to_int
 from hypothesis.internal.reflection import proxies
 from hypothesis.vendor.pretty import pretty
@@ -161,9 +160,6 @@ def to_jsonable(obj: object) -> object:
     """
     if isinstance(obj, (str, int, float, bool, type(None))):
         if isinstance(obj, int) and abs(obj) >= 2**63:
-            # Silently clamp very large ints to max_float, to avoid
-            # OverflowError when casting to float.
-            obj = clamp(-sys.float_info.max, obj, sys.float_info.max)
             return float(obj)
         return obj
     if isinstance(obj, (list, tuple, set, frozenset)):
@@ -176,14 +172,6 @@ def to_jsonable(obj: object) -> object:
             for k, v in obj.items()
         }
 
-    # Hey, might as well try calling a .to_json() method - it works for Pandas!
-    # We try this before the below general-purpose handlers to give folks a
-    # chance to control this behavior on their custom classes.
-    try:
-        return to_jsonable(obj.to_json())  # type: ignore
-    except Exception:
-        pass
-
     # Special handling for dataclasses, attrs, and pydantic classes
     if (
         (dcs := sys.modules.get("dataclasses"))
@@ -195,6 +183,12 @@ def to_jsonable(obj: object) -> object:
         return to_jsonable(attr.asdict(obj, recurse=False))  # type: ignore
     if (pyd := sys.modules.get("pydantic")) and isinstance(obj, pyd.BaseModel):
         return to_jsonable(obj.model_dump())
+
+    # Hey, might as well try calling a .to_json() method - it works for Pandas!
+    try:
+        return to_jsonable(obj.to_json())  # type: ignore
+    except Exception:
+        pass
 
     # If all else fails, we'll just pretty-print as a string.
     return pretty(obj)

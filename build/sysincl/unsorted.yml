@@ -50,7 +50,10 @@
   - fsio.h
   - fwriteerror.h
   - gdbm.h
+  - ghostscript/iapi.h
+  - ghostscript/ierrors.h
   - gmp.h
+  - gnutls/x509.h
   - hp-timing.h
   - httpd_wrap.h
   - i86.h
@@ -101,6 +104,8 @@
   - nonblocking.h
   - note.h
   - opcdef.h
+  - os2def.h
+  - oslib/osfscontrol.h
   - paper.h
   - pire/config.h
   - pngusr.h
@@ -303,8 +308,36 @@
   - perl.h
   - XSUB.h
   #endif
+  #if defined(_OS2_)
+  - os2.h
+  #endif
   #if defined(_arm_)
   - arm/limits.h
+  #endif
+  #if defined(_VMS_) && TODO
+  - atrdef.h
+  - dcdef.h
+  - descrip.h
+  - dvsdef.h
+  - fab.h
+  - fibdef.h
+  - gen64def.h
+  - iledef.h
+  - iodef.h
+  - lib$routines.h
+  - libfildef.h
+  - libfisdef.h
+  - lnmdef.h
+  - nam.h
+  - rms.h
+  - rmsdef.h
+  - ssdef.h
+  - starlet.h
+  - str$routines.h
+  - stsdef.h
+  - syidef.h
+  - times.h
+  - unixio.h
   #endif
   #if defined(_SOLARIS_) && TODO
   - synch.h
@@ -341,6 +374,7 @@
   #endif
   #if defined(_TRASH_) && TODO
   - gcrypt.h
+  - gnutls/gnutls.h
   - gdwmfapi.h
   - winmmap.h
   - sf_unistd.h
@@ -359,6 +393,9 @@
   - sys/systemcfg.h
   - sys/thread.h
   #endif
+  - iostream.h
+  - streambuf.h
+  - ostream.h
   - nacl/nacl_random.h
   - jemalloc/jemalloc.h
   - sys/inttypes.h

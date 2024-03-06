@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(4.49.0)
+VERSION(4.47.2)
 
 LICENSE(MIT)
 
@@ -41,7 +41,6 @@ PY_SRCS(
     fontTools/cu2qu/errors.py
     fontTools/cu2qu/ufo.py
     fontTools/designspaceLib/__init__.py
-    fontTools/designspaceLib/__main__.py
     fontTools/designspaceLib/split.py
     fontTools/designspaceLib/statNames.py
     fontTools/designspaceLib/types.py

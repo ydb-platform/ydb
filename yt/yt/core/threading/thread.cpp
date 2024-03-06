@@ -293,12 +293,12 @@ void TThread::ConfigureSignalHandlerStack()
 
     // The size of of the custom stack to be provided for signal handlers.
     constexpr size_t SignalHandlerStackSize = 16_KB;
-    YT_THREAD_LOCAL(std::unique_ptr<char[]>) Stack = std::make_unique<char[]>(SignalHandlerStackSize);
+    YT_THREAD_LOCAL(std::array<char, SignalHandlerStackSize>) Stack;
 
     stack_t stack{
-        .ss_sp = GetTlsRef(Stack).get(),
+        .ss_sp = GetTlsRef(Stack).data(),
         .ss_flags = 0,
-        .ss_size = SignalHandlerStackSize,
+        .ss_size = GetTlsRef(Stack).size(),
     };
     YT_VERIFY(sigaltstack(&stack, nullptr) == 0);
 #endif

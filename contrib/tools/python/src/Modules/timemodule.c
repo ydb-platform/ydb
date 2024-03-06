@@ -77,7 +77,7 @@ static long main_thread;
 #if defined(PYOS_OS2)
 #define INCL_DOS
 #define INCL_ERRORS
-#error #include <os2.h>
+#include <os2.h>
 #endif
 
 #if defined(PYCC_VACPP)

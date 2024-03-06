@@ -18,7 +18,7 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-#if _LIBCPP_STD_VER >= 20
+#if _LIBCPP_STD_VER > 17
 
 namespace __format {
 
@@ -28,7 +28,7 @@ inline constexpr bool __enable_insertable = false;
 
 } // namespace __format
 
-#endif //_LIBCPP_STD_VER >= 20
+#endif //_LIBCPP_STD_VER > 17
 
 _LIBCPP_END_NAMESPACE_STD
 

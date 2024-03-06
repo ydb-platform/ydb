@@ -1,8 +1,10 @@
 #pragma once
 
 #include "public.h"
+#include "property.h"
+#include "optional.h"
 
-#include <yt/yt/core/yson/public.h>
+#include <yt/yt/core/yson/string.h>
 
 #include <yt/yt/core/ytree/public.h>
 
@@ -12,12 +14,7 @@
 
 #include <yt/yt/core/threading/public.h>
 
-#include <library/cpp/yt/yson/public.h>
-
 #include <library/cpp/yt/yson_string/convert.h>
-#include <library/cpp/yt/yson_string/string.h>
-
-#include <library/cpp/yt/misc/property.h>
 
 #include <util/system/getpid.h>
 

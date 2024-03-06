@@ -4,9 +4,8 @@ import re
 from json.decoder import JSONDecodeError
 from typing import Any
 from typing import Callable
+from typing import Dict
 from typing import List
-from typing import Mapping
-from typing import MutableMapping
 from typing import Optional
 from typing import Pattern
 from typing import Tuple
@@ -18,7 +17,7 @@ from requests import PreparedRequest
 from urllib3.util.url import parse_url
 
 
-def _create_key_val_str(input_dict: Union[Mapping[Any, Any], Any]) -> str:
+def _create_key_val_str(input_dict: Union[Dict[Any, Any], Any]) -> str:
     """
     Returns string of format {'key': val, 'key2': val2}
     Function is called recursively for nested dictionaries
@@ -58,8 +57,8 @@ def _create_key_val_str(input_dict: Union[Mapping[Any, Any], Any]) -> str:
 
 
 def _filter_dict_recursively(
-    dict1: Mapping[Any, Any], dict2: Mapping[Any, Any]
-) -> Mapping[Any, Any]:
+    dict1: Dict[Any, Any], dict2: Dict[Any, Any]
+) -> Dict[Any, Any]:
     filtered_dict = {}
     for k, val in dict1.items():
         if k in dict2:
@@ -71,7 +70,7 @@ def _filter_dict_recursively(
 
 
 def urlencoded_params_matcher(
-    params: Optional[Mapping[str, str]], *, allow_blank: bool = False
+    params: Optional[Dict[str, str]], *, allow_blank: bool = False
 ) -> Callable[..., Any]:
     """
     Matches URL encoded data
@@ -101,7 +100,7 @@ def urlencoded_params_matcher(
 
 
 def json_params_matcher(
-    params: Optional[Union[Mapping[str, Any], List[Any]]], *, strict_match: bool = True
+    params: Optional[Union[Dict[str, Any], List[Any]]], *, strict_match: bool = True
 ) -> Callable[..., Any]:
     """Matches JSON encoded data of request body.
 
@@ -193,7 +192,7 @@ def fragment_identifier_matcher(identifier: Optional[str]) -> Callable[..., Any]
 
 
 def query_param_matcher(
-    params: Optional[MutableMapping[str, Any]], *, strict_match: bool = True
+    params: Optional[Dict[str, Any]], *, strict_match: bool = True
 ) -> Callable[..., Any]:
     """Matcher to match 'params' argument in request.
 
@@ -277,7 +276,7 @@ def query_string_matcher(query: Optional[str]) -> Callable[..., Any]:
     return match
 
 
-def request_kwargs_matcher(kwargs: Optional[Mapping[str, Any]]) -> Callable[..., Any]:
+def request_kwargs_matcher(kwargs: Optional[Dict[str, Any]]) -> Callable[..., Any]:
     """
     Matcher to match keyword arguments provided to request
 
@@ -309,7 +308,7 @@ def request_kwargs_matcher(kwargs: Optional[Mapping[str, Any]]) -> Callable[...,
 
 
 def multipart_matcher(
-    files: Mapping[str, Any], data: Optional[Mapping[str, str]] = None
+    files: Dict[str, Any], data: Optional[Dict[str, str]] = None
 ) -> Callable[..., Any]:
     """
     Matcher to match 'multipart/form-data' content-type.
@@ -393,7 +392,7 @@ def multipart_matcher(
 
 
 def header_matcher(
-    headers: Mapping[str, Union[str, Pattern[str]]], strict_match: bool = False
+    headers: Dict[str, Union[str, Pattern[str]]], strict_match: bool = False
 ) -> Callable[..., Any]:
     """
     Matcher to match 'headers' argument in request using the responses library.
@@ -409,7 +408,7 @@ def header_matcher(
     :return: (func) matcher
     """
 
-    def _compare_with_regex(request_headers: Union[Mapping[Any, Any], Any]) -> bool:
+    def _compare_with_regex(request_headers: Union[Dict[Any, Any], Any]) -> bool:
         if strict_match and len(request_headers) != len(headers):
             return False
 
@@ -421,13 +420,13 @@ def header_matcher(
                 else:
                     if not v == request_headers[k]:
                         return False
-            else:
+            elif strict_match:
                 return False
 
         return True
 
     def match(request: PreparedRequest) -> Tuple[bool, str]:
-        request_headers: Union[Mapping[Any, Any], Any] = request.headers or {}
+        request_headers: Union[Dict[Any, Any], Any] = request.headers or {}
 
         if not strict_match:
             # filter down to just the headers specified in the matcher

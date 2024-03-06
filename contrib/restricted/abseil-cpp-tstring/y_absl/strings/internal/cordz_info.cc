@@ -21,6 +21,7 @@
 #include "y_absl/strings/internal/cord_internal.h"
 #include "y_absl/strings/internal/cord_rep_btree.h"
 #include "y_absl/strings/internal/cord_rep_crc.h"
+#include "y_absl/strings/internal/cord_rep_ring.h"
 #include "y_absl/strings/internal/cordz_handle.h"
 #include "y_absl/strings/internal/cordz_statistics.h"
 #include "y_absl/strings/internal/cordz_update_tracker.h"
@@ -31,6 +32,8 @@
 namespace y_absl {
 Y_ABSL_NAMESPACE_BEGIN
 namespace cord_internal {
+
+using ::y_absl::base_internal::SpinLockHolder;
 
 #ifdef Y_ABSL_INTERNAL_NEED_REDUNDANT_CONSTEXPR_DECL
 constexpr size_t CordzInfo::kMaxStackDepth;
@@ -76,8 +79,6 @@ class CordRepAnalyzer {
   // adds the results to `statistics`. Note that node counts and memory sizes
   // are not initialized, computed values are added to any existing values.
   void AnalyzeCordRep(const CordRep* rep) {
-    Y_ABSL_ASSERT(rep != nullptr);
-
     // Process all linear nodes.
     // As per the class comments, use refcout - 1 on the top level node, as the
     // top level node is assumed to be referenced only for analysis purposes.
@@ -85,7 +86,7 @@ class CordRepAnalyzer {
     RepRef repref{rep, (refcount > 1) ? refcount - 1 : 1};
 
     // Process the top level CRC node, if present.
-    if (repref.tag() == CRC) {
+    if (repref.rep->tag == CRC) {
       statistics_.node_count++;
       statistics_.node_counts.crc++;
       memory_usage_.Add(sizeof(CordRepCrc), repref.refcount);
@@ -95,14 +96,15 @@ class CordRepAnalyzer {
     // Process all top level linear nodes (substrings and flats).
     repref = CountLinearReps(repref, memory_usage_);
 
-    switch (repref.tag()) {
-      case CordRepKind::BTREE:
+    if (repref.rep != nullptr) {
+      if (repref.rep->tag == RING) {
+        AnalyzeRing(repref);
+      } else if (repref.rep->tag == BTREE) {
         AnalyzeBtree(repref);
-        break;
-      default:
-        // We should have a btree node if not null.
-        Y_ABSL_ASSERT(repref.tag() == CordRepKind::UNUSED_0);
-        break;
+      } else {
+        // We should have either a concat, btree, or ring node if not null.
+        assert(false);
+      }
     }
 
     // Adds values to output
@@ -120,18 +122,10 @@ class CordRepAnalyzer {
     const CordRep* rep;
     size_t refcount;
 
-    // Returns a 'child' RepRef which contains the cumulative reference count
-    // of this instance multiplied by the child's reference count. Returns a
-    // nullptr RepRef value with a refcount of 0 if `child` is nullptr.
+    // Returns a 'child' RepRef which contains the cumulative reference count of
+    // this instance multiplied by the child's reference count.
     RepRef Child(const CordRep* child) const {
-      if (child == nullptr) return RepRef{nullptr, 0};
       return RepRef{child, refcount * child->refcount.Get()};
-    }
-
-    // Returns the tag of this rep, or UNUSED_0 if this instance is null
-    constexpr CordRepKind tag() const {
-      Y_ABSL_ASSERT(rep == nullptr || rep->tag != CordRepKind::UNUSED_0);
-      return rep ? static_cast<CordRepKind>(rep->tag) : CordRepKind::UNUSED_0;
     }
   };
 
@@ -173,7 +167,7 @@ class CordRepAnalyzer {
   // buffers where we count children unrounded.
   RepRef CountLinearReps(RepRef rep, MemoryUsage& memory_usage) {
     // Consume all substrings
-    while (rep.tag() == SUBSTRING) {
+    while (rep.rep->tag == SUBSTRING) {
       statistics_.node_count++;
       statistics_.node_counts.substring++;
       memory_usage.Add(sizeof(CordRepSubstring), rep.refcount);
@@ -181,7 +175,7 @@ class CordRepAnalyzer {
     }
 
     // Consume possible FLAT
-    if (rep.tag() >= FLAT) {
+    if (rep.rep->tag >= FLAT) {
       size_t size = rep.rep->flat()->AllocatedSize();
       CountFlat(size);
       memory_usage.Add(size, rep.refcount);
@@ -189,7 +183,7 @@ class CordRepAnalyzer {
     }
 
     // Consume possible external
-    if (rep.tag() == EXTERNAL) {
+    if (rep.rep->tag == EXTERNAL) {
       statistics_.node_count++;
       statistics_.node_counts.external++;
       size_t size = rep.rep->length + sizeof(CordRepExternalImpl<intptr_t>);
@@ -198,6 +192,17 @@ class CordRepAnalyzer {
     }
 
     return rep;
+  }
+
+  // Analyzes the provided ring.
+  void AnalyzeRing(RepRef rep) {
+    statistics_.node_count++;
+    statistics_.node_counts.ring++;
+    const CordRepRing* ring = rep.rep->ring();
+    memory_usage_.Add(CordRepRing::AllocSize(ring->capacity()), rep.refcount);
+    ring->ForEach([&](CordRepRing::index_type pos) {
+      CountLinearReps(rep.Child(ring->entry_child(pos)), memory_usage_);
+    });
   }
 
   // Analyzes the provided btree.

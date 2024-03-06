@@ -82,7 +82,6 @@ are supported, but support for CFF2 variable fonts will be added soon.
 The discussion and implementation of these features are tracked at
 https://github.com/fonttools/fonttools/issues/1537
 """
-
 from fontTools.misc.fixedTools import (
     floatToFixedToFloat,
     strToFixedToFloat,
@@ -615,7 +614,7 @@ def _instantiateGvarGlyph(
     if optimize:
         isComposite = glyf[glyphname].isComposite()
         for var in tupleVarStore:
-            var.optimize(coordinates, endPts, isComposite=isComposite)
+            var.optimize(coordinates, endPts, isComposite)
 
 
 def instantiateGvarGlyph(varfont, glyphname, axisLimits, optimize=True):
@@ -644,11 +643,9 @@ def instantiateGvar(varfont, axisLimits, optimize=True):
     glyphnames = sorted(
         glyf.glyphOrder,
         key=lambda name: (
-            (
-                glyf[name].getCompositeMaxpValues(glyf).maxComponentDepth
-                if glyf[name].isComposite() or glyf[name].isVarComposite()
-                else 0
-            ),
+            glyf[name].getCompositeMaxpValues(glyf).maxComponentDepth
+            if glyf[name].isComposite() or glyf[name].isVarComposite()
+            else 0,
             name,
         ),
     )

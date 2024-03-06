@@ -339,6 +339,9 @@ private:
 
         ~TCallHandler()
         {
+            if (ReplyBus_) {
+                ReplyBus_->Terminate(TError(NYT::EErrorCode::Canceled, "GRPC call completed"));
+            }
             Owner_->OnCallHandlerDestroyed();
         }
 

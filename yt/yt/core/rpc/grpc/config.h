@@ -122,24 +122,24 @@ DEFINE_REFCOUNTED_TYPE(TChannelCredentialsConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChannelConfigTemplate
+class TChannelConfigBase
     : public NYTree::TYsonStruct
 {
 public:
     TChannelCredentialsConfigPtr Credentials;
     THashMap<TString, NYTree::INodePtr> GrpcArguments;
 
-    REGISTER_YSON_STRUCT(TChannelConfigTemplate);
+    REGISTER_YSON_STRUCT(TChannelConfigBase);
 
     static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(TChannelConfigTemplate)
+DEFINE_REFCOUNTED_TYPE(TChannelConfigBase)
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TChannelConfig
-    : public TChannelConfigTemplate
+    : public TChannelConfigBase
 {
 public:
     TString Address;

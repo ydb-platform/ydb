@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: responses
-Version: 0.25.0
+Version: 0.24.1
 Summary: A utility library for mocking out the `requests` Python library.
 Home-page: https://github.com/getsentry/responses
 Author: David Cramer
@@ -19,7 +19,6 @@ Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
-Classifier: Programming Language :: Python :: 3.12
 Classifier: Topic :: Software Development
 Requires-Python: >=3.8
 Description-Content-Type: text/x-rst
@@ -1274,7 +1273,6 @@ If you are using the ``Retry`` features of ``urllib3`` and want to cover scenari
 
     import responses
     from responses import registries
-    from urllib3.util import Retry
 
 
     @responses.activate(registry=registries.OrderedRegistry)

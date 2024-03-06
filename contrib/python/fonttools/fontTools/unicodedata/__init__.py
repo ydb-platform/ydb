@@ -201,13 +201,15 @@ T = TypeVar("T")
 
 
 @overload
-def script_horizontal_direction(script_code: str, default: T) -> HorizDirection | T: ...
+def script_horizontal_direction(script_code: str, default: T) -> HorizDirection | T:
+    ...
 
 
 @overload
 def script_horizontal_direction(
     script_code: str, default: type[KeyError] = KeyError
-) -> HorizDirection: ...
+) -> HorizDirection:
+    ...
 
 
 def script_horizontal_direction(

@@ -1,5 +1,4 @@
 """ttLib.tables.ttProgram.py -- Assembler/disassembler for TrueType bytecode programs."""
-
 from __future__ import annotations
 
 from fontTools.misc.textTools import num2binary, binary2num, readHex, strjoin

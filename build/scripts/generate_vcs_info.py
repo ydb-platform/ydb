@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import time
+import six as six_
 
 
 INDENT = " " * 4
@@ -20,7 +21,10 @@ def _get_vcs_dictionary(vcs_type, *arg):
 
 def _get_user_locale():
     try:
-        return [locale.getencoding()]
+        if six_.PY3:
+            return [locale.getencoding()]
+        else:
+            return [locale.getdefaultlocale()[1]]
     except Exception:
         return []
 
@@ -112,7 +116,7 @@ class _GitVersion:
         except Exception:
             branch_info = [''.encode('utf-8')]
 
-        depth = str(_GitVersion._get_git_depth(env, arc_root)).encode('utf-8')
+        depth = six_.text_type(_GitVersion._get_git_depth(env, arc_root)).encode('utf-8')
 
         # logger.debug('Git info commit:{}, author:{}, summary:{}, svn_id:{}'.format(commit, author, summary, svn_id))
         return [commit, author, summary, svn_id, tag_info[0], branch_info[0], depth]
@@ -171,7 +175,7 @@ class _SystemInfo:
 
     @staticmethod
     def _to_text(s):
-        if isinstance(s, bytes):
+        if isinstance(s, six_.binary_type):
             return s.decode(_SystemInfo.get_locale(), errors='replace')
         return s
 
@@ -235,7 +239,7 @@ class _SystemInfo:
                 try:
                     import ctypes
 
-                    msg = str(ctypes.FormatError(e.winerror), _SystemInfo.get_locale()).encode('utf-8')
+                    msg = six_.text_type(ctypes.FormatError(e.winerror), _SystemInfo.get_locale()).encode('utf-8')
                 except ImportError:
                     pass
             # logger.debug('System command call {} failed [{}]: {}\n'.format(command, errcodes, msg))

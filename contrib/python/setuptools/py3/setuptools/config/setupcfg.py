@@ -8,7 +8,6 @@ To read project metadata, consider using
 For simple scenarios, you can also try parsing the file directly
 with the help of ``configparser``.
 """
-
 import contextlib
 import functools
 import os
@@ -283,8 +282,8 @@ class ConfigHandler(Generic[Target]):
 
         try:
             current_value = getattr(target_obj, option_name)
-        except AttributeError as e:
-            raise KeyError(option_name) from e
+        except AttributeError:
+            raise KeyError(option_name)
 
         if current_value:
             # Already inhabited. Skipping.
@@ -582,11 +581,11 @@ class ConfigMetadataHandler(ConfigHandler["DistributionMetadata"]):
             # accidentally include newlines and other unintended content
             try:
                 Version(version)
-            except InvalidVersion as e:
+            except InvalidVersion:
                 raise OptionError(
                     f'Version loaded from {value} does not '
                     f'comply with PEP 440: {version}'
-                ) from e
+                )
 
             return version
 
@@ -695,9 +694,9 @@ class ConfigOptionsHandler(ConfigHandler["Distribution"]):
 
         valid_keys = ['where', 'include', 'exclude']
 
-        find_kwargs = dict([
-            (k, v) for k, v in section_data.items() if k in valid_keys and v
-        ])
+        find_kwargs = dict(
+            [(k, v) for k, v in section_data.items() if k in valid_keys and v]
+        )
 
         where = find_kwargs.get('where')
         if where is not None:

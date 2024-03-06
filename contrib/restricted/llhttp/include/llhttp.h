@@ -3,8 +3,8 @@
 #define INCLUDE_LLHTTP_H_
 
 #define LLHTTP_VERSION_MAJOR 9
-#define LLHTTP_VERSION_MINOR 2
-#define LLHTTP_VERSION_PATCH 0
+#define LLHTTP_VERSION_MINOR 1
+#define LLHTTP_VERSION_PATCH 3
 
 #ifndef INCLUDE_LLHTTP_ITSELF_H_
 #define INCLUDE_LLHTTP_ITSELF_H_
@@ -181,8 +181,7 @@ enum llhttp_method {
   HTTP_SET_PARAMETER = 42,
   HTTP_REDIRECT = 43,
   HTTP_RECORD = 44,
-  HTTP_FLUSH = 45,
-  HTTP_QUERY = 46
+  HTTP_FLUSH = 45
 };
 typedef enum llhttp_method llhttp_method_t;
 
@@ -363,7 +362,6 @@ typedef enum llhttp_status llhttp_status_t;
   XX(31, LINK, LINK) \
   XX(32, UNLINK, UNLINK) \
   XX(33, SOURCE, SOURCE) \
-  XX(46, QUERY, QUERY) \
 
 
 #define RTSP_METHOD_MAP(XX) \
@@ -430,7 +428,6 @@ typedef enum llhttp_status llhttp_status_t;
   XX(43, REDIRECT, REDIRECT) \
   XX(44, RECORD, RECORD) \
   XX(45, FLUSH, FLUSH) \
-  XX(46, QUERY, QUERY) \
 
 
 #define HTTP_STATUS_MAP(XX) \
@@ -550,8 +547,6 @@ extern "C" {
 
 #if defined(__wasm__)
 #define LLHTTP_EXPORT __attribute__((visibility("default")))
-#elif defined(_WIN32)
-#define LLHTTP_EXPORT __declspec(dllexport)
 #else
 #define LLHTTP_EXPORT
 #endif

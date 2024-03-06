@@ -86,8 +86,7 @@ public:
         _LIBCPP_INLINE_VISIBILITY
         result_type operator()(_URNG& __g)
         {return (*this)(__g, __p_);}
-    template<class _URNG>
-    _LIBCPP_HIDE_FROM_ABI result_type operator()(_URNG& __g, const param_type& __p);
+    template<class _URNG> result_type operator()(_URNG& __g, const param_type& __p);
 
     // property functions
     _LIBCPP_INLINE_VISIBILITY
@@ -134,30 +133,30 @@ _RealType
 normal_distribution<_RealType>::operator()(_URNG& __g, const param_type& __p)
 {
     static_assert(__libcpp_random_is_valid_urng<_URNG>::value, "");
-    result_type __up;
+    result_type _Up;
     if (__v_hot_)
     {
         __v_hot_ = false;
-        __up = __v_;
+        _Up = __v_;
     }
     else
     {
-        uniform_real_distribution<result_type> __uni(-1, 1);
+        uniform_real_distribution<result_type> _Uni(-1, 1);
         result_type __u;
         result_type __v;
         result_type __s;
         do
         {
-            __u = __uni(__g);
-            __v = __uni(__g);
+            __u = _Uni(__g);
+            __v = _Uni(__g);
             __s = __u * __u + __v * __v;
         } while (__s > 1 || __s == 0);
-        result_type __fp = _VSTD::sqrt(-2 * _VSTD::log(__s) / __s);
-        __v_ = __v * __fp;
+        result_type _Fp = _VSTD::sqrt(-2 * _VSTD::log(__s) / __s);
+        __v_ = __v * _Fp;
         __v_hot_ = true;
-        __up = __u * __fp;
+        _Up = __u * _Fp;
     }
-    return __up * __p.stddev() + __p.mean();
+    return _Up * __p.stddev() + __p.mean();
 }
 
 template <class _CharT, class _Traits, class _RT>
@@ -190,16 +189,16 @@ operator>>(basic_istream<_CharT, _Traits>& __is,
     __is.flags(_Istream::dec | _Istream::skipws);
     result_type __mean;
     result_type __stddev;
-    result_type __vp = 0;
-    bool __v_hot = false;
-    __is >> __mean >> __stddev >> __v_hot;
-    if (__v_hot)
-        __is >> __vp;
+    result_type _Vp = 0;
+    bool _V_hot = false;
+    __is >> __mean >> __stddev >> _V_hot;
+    if (_V_hot)
+        __is >> _Vp;
     if (!__is.fail())
     {
         __x.param(param_type(__mean, __stddev));
-        __x.__v_hot_ = __v_hot;
-        __x.__v_ = __vp;
+        __x.__v_hot_ = _V_hot;
+        __x.__v_ = _Vp;
     }
     return __is;
 }

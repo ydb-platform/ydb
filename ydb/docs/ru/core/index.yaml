@@ -1,4 +1,4 @@
-title: YDB
+title: Документация YDB
 description:
   - >-
     <i>YDB</i> — это распределённая отказоустойчивая Distributed SQL СУБД.
@@ -6,9 +6,9 @@ description:
     Для запросов используется диалект SQL (<a
     href="yql/reference/">YQL</a>).
 nav:
-  title: YDB
+  title: Документация YDB
 meta:
-  title: YDB
+  title: Документация YDB
 links:
   - title: Начало работы
     description: Разверните кластер и выполните простейшие операции с данными

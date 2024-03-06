@@ -1625,7 +1625,9 @@ private:
         if (addExternalDataSources && FederatedQuerySetup) {
             InitS3Provider(queryType);
             InitGenericProvider();
-            InitYtProvider();
+            if (FederatedQuerySetup->YtGateway) {
+                InitYtProvider();
+            }
         }
 
         InitPgProvider();

@@ -153,22 +153,7 @@ private:
             }
             metrics->AddMetric("queries.requests", total);
             if (total != 0) {
-                double p50 = NGraph::GetTimingForPercentile(50, ExecuteLatencyMsValues, ExecuteLatencyMsBounds, total);
-                if (!isnan(p50)) {
-                    metrics->AddMetric("queries.latencies.p50", p50);
-                }
-                double p75 = NGraph::GetTimingForPercentile(75, ExecuteLatencyMsValues, ExecuteLatencyMsBounds, total);
-                if (!isnan(p75)) {
-                    metrics->AddMetric("queries.latencies.p75", p75);
-                }
-                double p90 = NGraph::GetTimingForPercentile(90, ExecuteLatencyMsValues, ExecuteLatencyMsBounds, total);
-                if (!isnan(p90)) {
-                    metrics->AddMetric("queries.latencies.p90", p90);
-                }
-                double p99 = NGraph::GetTimingForPercentile(99, ExecuteLatencyMsValues, ExecuteLatencyMsBounds, total);
-                if (!isnan(p99)) {
-                    metrics->AddMetric("queries.latencies.p99", p99);
-                }
+                metrics->AddHistogramMetric("queries.latencies", ExecuteLatencyMsValues, ExecuteLatencyMsBounds);
             }
         }
         if (metrics->Record.MetricsSize() > 0) {

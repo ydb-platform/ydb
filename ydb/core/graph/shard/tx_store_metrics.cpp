@@ -27,6 +27,7 @@ public:
 };
 
 void TGraphShard::ExecuteTxStoreMetrics(TMetricsData&& data) {
+    AggregateHistograms(data);
     switch (BackendType) {
         case EBackendType::Memory:
             MemoryBackend.StoreMetrics(std::move(data));

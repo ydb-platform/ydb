@@ -4,6 +4,12 @@ package NKikimrGraph;
 
 option java_package = "ru.yandex.kikimr.proto";
 
+message THistogramMetric {
+    string Name = 1;
+    repeated uint64 HistogramBounds = 2 [packed = true];
+    repeated uint64 HistogramValues = 3 [packed = true];
+}
+
 message TMetric {
     string Name = 1;
     optional double Value = 2;
@@ -12,6 +18,7 @@ message TMetric {
 message TEvSendMetrics {
     repeated TMetric Metrics = 1;
     optional uint64 Time = 2; // for testing purposes only
+    repeated THistogramMetric HistogramMetrics = 3;
 }
 
 message TEvGetMetrics {

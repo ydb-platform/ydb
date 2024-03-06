@@ -90,6 +90,39 @@ void TGraphShard::ApplyConfig(const NKikimrConfig::TGraphConfig& config) {
     }
 }
 
+void TGraphShard::MergeHistogram(std::map<ui64, ui64>& dest, const NKikimrGraph::THistogramMetric& src) {
+    size_t size(std::min(src.HistogramBoundsSize(), src.HistogramValuesSize()));
+    for (size_t n = 0; n < size; ++n) {
+        dest[src.GetHistogramBounds(n)] += src.GetHistogramValues(n);
+    }
+}
+
+void TGraphShard::AggregateHistograms(TMetricsData& data) {
+    for (const auto& [name, hist] : data.HistogramValues) {
+        AggregateHistogram(data.Values, name, hist);
+    }
+    data.HistogramValues.clear();
+}
+
+void TGraphShard::AggregateHistogram(std::unordered_map<TString, double>& values, const TString& name, const std::map<ui64, ui64>& histogram) {
+    TVector<ui64> histBoundaries;
+    TVector<ui64> histValues;
+    ui64 total = 0;
+
+    histBoundaries.reserve(histogram.size());
+    histValues.reserve(histogram.size());
+    for (auto [boundary, value] : histogram) {
+        histBoundaries.push_back(boundary);
+        histValues.push_back(value);
+        total += value;
+    }
+    // it's hardcoded for now, will be changed to aggregate function later
+    values[name + ".p50"] = TBaseBackend::GetTimingForPercentile(.50, histValues, histBoundaries, total);
+    values[name + ".p75"] = TBaseBackend::GetTimingForPercentile(.75, histValues, histBoundaries, total);
+    values[name + ".p90"] = TBaseBackend::GetTimingForPercentile(.90, histValues, histBoundaries, total);
+    values[name + ".p99"] = TBaseBackend::GetTimingForPercentile(.99, histValues, histBoundaries, total);
+}
+
 STFUNC(TGraphShard::StateWork) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvSubDomain::TEvConfigure, Handle);
@@ -125,7 +158,10 @@ void TGraphShard::Handle(TEvGraph::TEvSendMetrics::TPtr& ev) {
         TMetricsData data;
         data.Timestamp = TInstant::Seconds(ev->Get()->Record.GetTime());
         for (const auto& metric : ev->Get()->Record.GetMetrics()) {
-            data.Values[metric.GetName()] += metric.GetValue();
+            data.Values[metric.GetName()] = metric.GetValue();
+        }
+        for (const auto& metric : ev->Get()->Record.GetHistogramMetrics()) {
+            MergeHistogram(data.HistogramValues[metric.GetName()], metric);
         }
         BLOG_TRACE("Executing direct TxStoreMetrics");
         ExecuteTxStoreMetrics(std::move(data));
@@ -151,8 +187,12 @@ void TGraphShard::Handle(TEvGraph::TEvSendMetrics::TPtr& ev) {
             }
         }
     }
+    // aggregation
     for (const auto& metric : ev->Get()->Record.GetMetrics()) {
         MetricsData.Values[metric.GetName()] += metric.GetValue(); // simple accumulation by name of metric
+    }
+    for (auto& histMetric : ev->Get()->Record.GetHistogramMetrics()) {
+        MergeHistogram(MetricsData.HistogramValues[histMetric.GetName()], histMetric);
     }
 }
 

@@ -4,6 +4,11 @@
             "uri": "file://test.test_DeserializationError_/results.txt"
         }
     ],
+    "test.test[InnerProductDistance]": [
+        {
+            "uri": "file://test.test_InnerProductDistance_/results.txt"
+        }
+    ],
     "test.test[LazyListSerialization]": [
         {
             "uri": "file://test.test_LazyListSerialization_/results.txt"

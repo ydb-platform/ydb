@@ -273,7 +273,6 @@ public:
                 addLocks(transform);
             }
             for (auto& sink : data.GetSinksExtraData()) {
-                Cerr << "TEST::: " << " DATA FROM SINK " << Endl;
                 addLocks(sink);
             }
         }

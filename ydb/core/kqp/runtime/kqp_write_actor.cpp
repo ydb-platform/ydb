@@ -49,13 +49,19 @@ namespace {
 
     class TShardInfo {
     public:
+        TShardInfo() = default;
+        TShardInfo(const TShardInfo&) = delete;
+        TShardInfo(TShardInfo&&) = default;
+        TShardInfo& operator=(const TShardInfo&) = delete;
+        TShardInfo& operator=(TShardInfo&&) = default;
+
         struct TInFlightBatch {
             TString Data;
             ui32 SendAttempts = 0;
             ui64 Cookie = 0;
         };
 
-        bool Size() const {
+        size_t Size() const {
             return Batches.size();
         }
 
@@ -108,9 +114,9 @@ namespace {
             });
         }
 
-        bool AddAndCheckLock(NKikimrDataEvents::TLock&& lock) {
+        bool AddAndCheckLock(const NKikimrDataEvents::TLock& lock) {
             if (!Lock) {
-                Lock = std::move(lock);
+                Lock = lock;
                 return true;
             } else {
                 return lock.GetLockId() == Lock->GetLockId()
@@ -299,11 +305,12 @@ private:
         YQL_ENSURE(!Finished || Serializer->IsFinished());
 
         if (Finished) {
-            for (auto& [_, shardInfo] : ShardsInfo.GetShards()) {
+            for (auto& [shardId, shardInfo] : ShardsInfo.GetShards()) {
                 // Add fake empty batch to each shard without unsent data for commit evwrite.
-                if (shardInfo.IsEmpty() || shardInfo.LastBatch().SendAttempts != 0) {
-                    shardInfo.PushBatch("");
-                }
+                //if (shardInfo.IsEmpty() || shardInfo.LastBatch().SendAttempts != 0) {
+                shardInfo.PushBatch(TString());
+
+                //}
                 shardInfo.Close();
             }
         }
@@ -377,6 +384,7 @@ private:
             break;
         // TODO: process errors
         default:
+            YQL_ENSURE(false);
             break;
         }
     }
@@ -384,9 +392,13 @@ private:
     void ProcessWriteCompletedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId()
             << ", TabletId=" << ev->Get()->Record.GetOrigin()
-            << ", Cookie=" << ev->Cookie);
+            << ", Cookie=" << ev->Cookie
+            << ", LocksCount=" << ev->Get()->Record.GetTxLocks().size());
 
         PopShardBatch(ev->Get()->Record.GetOrigin(), ev->Cookie);
+        for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+            ShardsInfo.GetShard(ev->Get()->Record.GetOrigin()).AddAndCheckLock(lock);
+        }
         ProcessBatches();
     }
 
@@ -477,9 +489,11 @@ private:
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(
             std::get<ui64>(TxId),
-            isLastBatch
-                ? NKikimrDataEvents::TEvWrite::MODE_PREPARE
-                : NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            //isLastBatch
+            //    ? NKikimrDataEvents::TEvWrite::MODE_PREPARE
+            //    : NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE
+
         if (!inFlightBatch.Data.empty()) {
             const ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite)
                 .AddDataToPayload(TString(inFlightBatch.Data));
@@ -499,12 +513,17 @@ private:
 
         if (isLastBatch) {
             // TODO: Send locks structs
+            evWrite->Record.MutableLocks()->AddLocks();
+            evWrite->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+            // TODO: tmp for columnshard
+            evWrite->SetLockId(Settings.GetLockTxId(), Settings.GetLockNodeId());
         } else {
             evWrite->SetLockId(Settings.GetLockTxId(), Settings.GetLockNodeId());
         }
 
         CA_LOG_D("Send EvWrite to ShardID=" << shardId << ", TxId=" << std::get<ui64>(TxId)
-            << ", Size=" << inFlightBatch.Data.size() << ", Cookie=" << inFlightBatch.Cookie);
+            << ", Size=" << inFlightBatch.Data.size() << ", Cookie=" << inFlightBatch.Cookie
+            << (isLastBatch ? " (LastBatch)" : ""));
         Send(
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, true),
@@ -544,6 +563,7 @@ private:
 //
         //RetryShard(ev->Get()->ShardId);
         Y_UNUSED(ev);
+        YQL_ENSURE(false);
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -552,6 +572,7 @@ private:
         //    return;
         //}
         //RetryShard(ev->Get()->TabletId);
+        YQL_ENSURE(false);
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {

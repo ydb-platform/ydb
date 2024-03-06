@@ -67,7 +67,7 @@ Subcommand options:
 | `--window`, `-w` | Statistics window in seconds.<br>Default value: `1`. |
 | `--quiet`, `-q` | Output only the final test result. |
 | `--print-timestamp` | Print the time together with the statistics of each time window. |
-| `--warmup-time` | Test warm-up period (in seconds).<br>Within the period, no statistics are calculated. It's needed to eliminate the effect of transition processes at startup.<br>Default value: `5`. |
+| `--warmup` | Test warm-up period (in seconds).<br>Within the period, no statistics are calculated. It's needed to eliminate the effect of transition processes at startup.<br>Default value: `5`. |
 | `--percentile` | Percentile that is output in statistics.<br>Default value: `50`. |
 | `--topic` | Topic name.<br>Default value: `workload-topic`. |
 | `--threads`, `-t` | Number of producer threads.<br>Default value: `1`. |
@@ -134,7 +134,7 @@ Subcommand options:
 | `--window`, `-w` | Statistics window in seconds.<br>Default value: `1`. |
 | `--quiet`, `-q` | Output only the final test result. |
 | `--print-timestamp` | Print the time together with the statistics of each time window. |
-| `--warmup-time` | Test warm-up period (in seconds).<br>Within the period, no statistics are calculated. It's needed to eliminate the effect of transition processes at startup.<br>Default value: `5`. |
+| `--warmup` | Test warm-up period (in seconds).<br>Within the period, no statistics are calculated. It's needed to eliminate the effect of transition processes at startup.<br>Default value: `5`. |
 | `--percentile` | Percentile that is output in statistics.<br>Default value: `50`. |
 | `--topic` | Topic name.<br>Default value: `workload-topic`. |
 | `--consumers`, `-c` | Number of consumers.<br>Default value: `1`. |
@@ -200,7 +200,7 @@ Subcommand options:
 | `--window`, `-w` | Statistics window in seconds.<br>Default value: `1`. |
 | `--quiet`, `-q` | Output only the final test result. |
 | `--print-timestamp` | Print the time together with the statistics of each time window. |
-| `--warmup-time` | Test warm-up period (in seconds).<br>Within the period, no statistics are calculated. It's needed to eliminate the effect of transition processes at startup.<br>Default value: `5`. |
+| `--warmup` | Test warm-up period (in seconds).<br>Within the period, no statistics are calculated. It's needed to eliminate the effect of transition processes at startup.<br>Default value: `5`. |
 | `--percentile` | Percentile that is output in statistics.<br>Default value: `50`. |
 | `--topic` | Topic name.<br>Default value: `workload-topic`. |
 | `--producer-threads`, `-p` | Number of producer threads.<br>Default value: `1`. |

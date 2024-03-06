@@ -1155,26 +1155,57 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
         }
     }
 
+    auto buildNewStage = [&](TCoLambda remapLambda, TDqCnUnionAll& conn) {
+        auto collectStage = Build<TDqStage>(ctx, conn.Pos())
+            .Inputs()
+                .Add(conn)
+                .Build()
+            .Program(remapLambda)
+            .Settings(TDqStageSettings().BuildNode(ctx, conn.Pos()))
+            .Done();
+
+        conn = Build<TDqCnUnionAll>(ctx, conn.Pos())
+            .Output()
+                .Stage(collectStage)
+                .Index().Build(0U)
+                .Build()
+            .Done().Cast<TDqCnUnionAll>();
+    };
+
     if (!remapLeft.empty() || !remapRight.empty()) {
         auto joinKeys = join.JoinKeys().Ref().ChildrenList();
         auto connLeft = join.LeftInput().Cast<TDqCnUnionAll>();
         auto connRight = join.RightInput().Cast<TDqCnUnionAll>();
 
         std::vector<std::pair<TDqCnUnionAll, TCoLambda>> remaps;
+        bool canPushLeftLambdaToStage = false;
+        bool canPushRightLambdaToStage = false;
 
-        if (!remapLeft.empty())
-            remaps.emplace_back(connLeft, PrepareJoinSide<true>(connLeft.Pos(), leftNames, leftJoinKeys, remapLeft, filter || rightKind, joinKeys, ctx));
+        if (!remapLeft.empty()) {
+            auto lambda = PrepareJoinSide<true>(connLeft.Pos(), leftNames, leftJoinKeys, remapLeft, filter || rightKind, joinKeys, ctx);
+            if (!IsDqDependsOnStageOutput(join.RightInput(), connLeft.Output().Stage(), FromString<ui32>(connLeft.Output().Index().Value()))) {
+                remaps.emplace_back(connLeft, std::move(lambda));
+                canPushLeftLambdaToStage = true;
+            } else {
+                buildNewStage(std::move(lambda), connLeft);
+            }
+        }
 
-        if (!remapRight.empty())
-            remaps.emplace_back(connRight, PrepareJoinSide<false>(connRight.Pos(), rightNames, rightJoinKeys, remapRight, filter || leftKind, joinKeys, ctx));
+        if (!remapRight.empty()) {
+            auto lambda = PrepareJoinSide<false>(connRight.Pos(), rightNames, rightJoinKeys, remapRight, filter || leftKind, joinKeys, ctx);
+            if (!IsDqDependsOnStageOutput(join.RightInput(), connLeft.Output().Stage(), FromString<ui32>(connLeft.Output().Index().Value()))) {
+                remaps.emplace_back(connRight, std::move(lambda));
+                canPushRightLambdaToStage = true;
+            } else {
+                buildNewStage(std::move(lambda), connRight);
+            }
+        }
 
-        DqPushLambdasToStagesUnionAll(remaps, ctx, optCtx);
-
-        if (!remapLeft.empty())
-            connLeft = remaps.front().first;
-
-        if (!remapRight.empty())
-            connRight = remaps.back().first;
+        if (!remaps.empty()) {
+            DqPushLambdasToStagesUnionAll(remaps, ctx, optCtx);
+            connLeft = canPushLeftLambdaToStage ? remaps.front().first : connLeft;
+            connRight = canPushRightLambdaToStage ? remaps.back().first : connRight;
+        }
 
         const auto& items = GetSeqItemType(*join.Ref().GetTypeAnn()).Cast<TStructExprType>()->GetItems();
         TExprNode::TListType fields(items.size());

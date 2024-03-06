@@ -196,10 +196,10 @@ struct TDomainsInfo : public TThrRefBase {
     /*[[deprecated]]*/ ui32 GetDomainUidByTabletId(ui64) const { return GetDomain()->DomainUid; }
     /*[[deprecated]]*/ ui32 GetDefaultHiveUid(ui32) const { return TDomain::DefaultHiveUid; }
     /*[[deprecated]]*/ void AddHive(ui32, ui64 hive) { AddHive(hive); }
-    /*[[deprecated]]*/ static ui64 MakeTxCoordinatorID(ui32, ui32 uid) { return MakeTxCoordinatorIDFixed(uid); }
-    /*[[deprecated]]*/ static ui64 MakeTxCoordinatorIDFixed(ui32, ui32 uid) { return MakeTxCoordinatorIDFixed(uid); }
-    /*[[deprecated]]*/ static ui64 MakeTxMediatorID(ui32, ui32 uid) { return MakeTxMediatorIDFixed(uid); }
-    /*[[deprecated]]*/ static ui64 MakeTxAllocatorID(ui32, ui32 uid) { return MakeTxAllocatorIDFixed(uid); }
+    /*[[deprecated]]*/ static ui64 MakeTxCoordinatorID(ui32, ui32 uid) { return MakeTabletID(true, 0x800000 | uid); }
+    /*[[deprecated]]*/ static ui64 MakeTxCoordinatorIDFixed(ui32, ui32 uid) { return MakeTabletID(true, 0x800000 | uid); }
+    /*[[deprecated]]*/ static ui64 MakeTxMediatorID(ui32, ui32 uid) { return MakeTabletID(true, 0x810000 | uid); }
+    /*[[deprecated]]*/ static ui64 MakeTxAllocatorID(ui32, ui32 uid) { return MakeTabletID(true, 0x820000 | uid); }
 };
 
 }

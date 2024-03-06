@@ -14,7 +14,7 @@ static inline bool IsDropped(const TTableInfo::TColumn& col) {
 }
 
 static inline ui32 GetType(const TTableInfo::TColumn& col) {
-    Y_ABORT_UNLESS(col.PType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+    Y_ABORT_UNLESS(col.PType.GetTypeId() < NScheme::NTypeIds::PgFamily, "pg types are not supported");
     return col.PType.GetTypeId();
 }
 

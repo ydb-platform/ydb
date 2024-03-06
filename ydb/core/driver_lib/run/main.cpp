@@ -31,6 +31,16 @@
 
 namespace NKikimr {
 
+NKikimrConfig::TCurrentCompatibilityInfo TCompatibilityInfo::MakeCurrent() {
+    using TCurrentConstructor = TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo;
+    // using TVersionConstructor = TCompatibilityInfo::TProtoConstructor::TVersion;
+    // using TCompatibilityRuleConstructor = TCompatibilityInfo::TProtoConstructor::TCompatibilityRule;
+
+    return TCurrentConstructor{
+        .Application = "ydb",
+    }.ToPB();
+}
+
 int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories) {
 #ifdef _win32_
     WSADATA dummy;

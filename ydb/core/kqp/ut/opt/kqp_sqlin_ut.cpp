@@ -1016,7 +1016,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
             CompareYson(R"([[[1u];["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
 
             const Ydb::TableStats::QueryStats stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_EQUAL_C(2, stats.query_phases_size(), stats.DebugString())
+            UNIT_ASSERT_EQUAL_C(2, stats.query_phases_size(), stats.DebugString());
         }
 
         // complex (tuple) key

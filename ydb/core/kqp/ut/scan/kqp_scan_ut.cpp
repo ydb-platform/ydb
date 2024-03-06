@@ -738,7 +738,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             SELECT t1.Name, t1.Amount, t2.Id
             FROM Test AS t1
             LEFT JOIN Tmp AS t2
-            ON t1.Amount = t2.Value;
+            ON t1.Amount = t2.Value
+            ORDER BY t1.Name, t1.Amount, t2.Id;
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());

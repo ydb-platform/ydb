@@ -1349,16 +1349,17 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 --!syntax_v1
 
                 SELECT l.Key, l.Value, r.Key, r.Value FROM left as l FULL JOIN right as r
-                    ON (l.Value = r.Value AND l.Key = r.Key);
+                    ON (l.Value = r.Value AND l.Key = r.Key)
+                    ORDER BY l.Key, r.Key;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
-                [[1];[10];[1];[10]];
-                [[2];[20];#;#];
-                [[3];[30];#;#];
+                [#;#;[2];[200]];
                 [#;#;[3];[300]];
                 [#;#;[4];[40]];
-                [#;#;[2];[200]]
+                [[1];[10];[1];[10]];
+                [[2];[20];#;#];
+                [[3];[30];#;#]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }

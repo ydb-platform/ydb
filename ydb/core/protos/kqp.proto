@@ -669,6 +669,7 @@ message TKqpStreamLookupSettings {
      optional bool ImmediateTx = 6;
      repeated string LookupKeyColumns = 7;
      optional NKqpProto.EStreamLookupStrategy LookupStrategy = 8;
+     optional bool AllowInconsistentReads = 9 [default = false];
 }
 
 message TKqpSequencerSettings {

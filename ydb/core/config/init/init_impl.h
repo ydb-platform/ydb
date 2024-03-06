@@ -194,7 +194,7 @@ struct TWithDefault {
     }
 
     void EnsureDefined() const {
-        if (Y_UNLIKELY(!Default)) {
+        if (Y_UNLIKELY(Default)) {
             ythrow yexception() << "TWithDefault access through GetRef() assuming it is non-default";
         }
     }

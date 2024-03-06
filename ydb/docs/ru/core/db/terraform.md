@@ -28,17 +28,19 @@
 3. Добавить провайдер в `~/.terraformrc`, дописав в секцию `provider_installation` следующее содержание (если такой секции ещё не было, то создать):
 
     ```tf
-    direct {
-      exclude = ["terraform.storage.ydb.tech/*/*"]
-    }
+    provider_installation {
+      direct {
+        exclude = ["terraform.storage.ydb.tech/*/*"]
+      }
 
-    filesystem_mirror {
-      path    = "/PATH_TO_HOME/.terraform.d/plugins"
-      include = ["terraform.storage.ydb.tech/*/*"]
+      filesystem_mirror {
+        path    = "/PATH_TO_HOME/.terraform.d/plugins"
+        include = ["terraform.storage.ydb.tech/*/*"]
+      }
     }
     ```
 
-4. Далее настраиваем сам {{ ydb-short-name }} провайдер для работы:
+4. Далее настраиваем сам {{ ydb-short-name }} провайдер для работы (например в файле `provider.tf` в рабочей директории):
 
     ```tf
     terraform {
@@ -87,6 +89,7 @@
 pqconfig:
   require_credentials_in_new_protocol: false
   check_acl: false
+```
 
 ### Построчная таблица {#ydb-table}
 
@@ -95,7 +98,6 @@ pqconfig:
 Работа с поколоночными таблицами через Terraform пока не доступна.
 
 {% endnote %}
-
 
 Для работы с таблицами используется ресурс `ydb_table`.
 

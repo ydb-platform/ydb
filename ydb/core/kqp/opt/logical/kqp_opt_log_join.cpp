@@ -147,6 +147,11 @@ bool IsKqlPureExpr(const TExprBase& expr) {
 TDqJoin FlipLeftSemiJoin(const TDqJoin& join, TExprContext& ctx) {
     Y_DEBUG_ABORT_UNLESS(join.JoinType().Value() == "LeftSemi");
 
+    TVector<TCoAtom> leftJoinKeyNames;
+    leftJoinKeyNames.reserve(join.JoinKeys().Size());
+    TVector<TCoAtom> rightJoinKeyNames;
+    rightJoinKeyNames.reserve(join.JoinKeys().Size());
+
     auto joinKeysBuilder = Build<TDqJoinKeyTupleList>(ctx, join.Pos());
     for (const auto& keys : join.JoinKeys()) {
         joinKeysBuilder.Add<TDqJoinKeyTuple>()
@@ -155,6 +160,8 @@ TDqJoin FlipLeftSemiJoin(const TDqJoin& join, TExprContext& ctx) {
             .RightLabel(keys.LeftLabel())
             .RightColumn(keys.LeftColumn())
             .Build();
+        leftJoinKeyNames.emplace_back(keys.RightColumn());
+        rightJoinKeyNames.emplace_back(keys.LeftColumn());
     }
 
     return Build<TDqJoin>(ctx, join.Pos())
@@ -164,6 +171,10 @@ TDqJoin FlipLeftSemiJoin(const TDqJoin& join, TExprContext& ctx) {
         .RightLabel(join.LeftLabel())
         .JoinType().Build("RightSemi")
         .JoinKeys(joinKeysBuilder.Done())
+        .LeftJoinKeyNames()
+            .Add(leftJoinKeyNames).Build()
+        .RightJoinKeyNames()
+            .Add(rightJoinKeyNames).Build()
         .Done();
 }
 
@@ -835,6 +846,8 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         .RightLabel(join.RightLabel())
         .JoinType(join.JoinType())
         .JoinKeys(join.JoinKeys())
+        .LeftJoinKeyNames(join.LeftJoinKeyNames())
+        .RightJoinKeyNames(join.RightJoinKeyNames())
         .Done();
 }
 

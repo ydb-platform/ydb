@@ -37,8 +37,9 @@ namespace NKikimr {
             DsProxyInternals = TComponentTracingLevels::TDistributedStorage::Detailed,
             VDiskTopLevel = TComponentTracingLevels::TDistributedStorage::Basic,
             VDiskInternals = TComponentTracingLevels::TDistributedStorage::Detailed,
-            PDisk = TComponentTracingLevels::TDistributedStorage::Detailed,
-            PDiskInternals = TComponentTracingLevels::TDistributedStorage::Full,
+            PDiskTopLevel = TComponentTracingLevels::TDistributedStorage::Basic,
+            PDiskBasic = TComponentTracingLevels::TDistributedStorage::Detailed,
+            PDiskDetailed = TComponentTracingLevels::TDistributedStorage::Full,
         };
     };
 

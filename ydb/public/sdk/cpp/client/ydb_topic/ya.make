@@ -3,8 +3,9 @@ LIBRARY()
 GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/client/ydb_topic/topic.h)
 
 SRCS(
-    topic.h
+    out.cpp
     proto_accessor.cpp
+    topic.h
 )
 
 PEERDIR(

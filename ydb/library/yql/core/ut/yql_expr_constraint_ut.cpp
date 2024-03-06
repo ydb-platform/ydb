@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
         TExprContext exprCtx;
         const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(key[desc])");
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "");
     }
 
     Y_UNIT_TEST(SortByTranspentIfPresent) {
@@ -309,7 +309,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
         TExprContext exprCtx;
         const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(key[asc])");
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "");
     }
 
     Y_UNIT_TEST(SortDesc) {

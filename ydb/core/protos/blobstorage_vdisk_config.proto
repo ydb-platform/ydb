@@ -22,8 +22,6 @@ message TVDiskConfig {
 
     optional bool BarrierValidation = 60;
     optional bool EnableOverseerLsnReporting = 61; // deprecated
-
-    optional uint64 BurstThresholdNs = 62;
 };
 
 // organizes hierarchy of VDisk configs: VDisk config may have a base config,

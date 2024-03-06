@@ -2157,6 +2157,10 @@ namespace NKikimr {
                                     TABLED() {str << "BurstThresholdNs";}
                                     TABLED() {str << Config->BurstThresholdNs;}
                                 }
+                                TABLER() {
+                                    TABLED() {str << "DiskTimeAvailableScale";}
+                                    TABLED() {str << Config->DiskTimeAvailableScale;}
+                                }
                             }
                         }
 

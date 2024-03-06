@@ -34,7 +34,7 @@ ui64 AggregateVDiskCounters(std::unique_ptr<TEnvironmentSetup>& env, TString sto
 
 void SetupEnv(const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<TEnvironmentSetup>& env,
         ui32& groupSize, TBlobStorageGroupType& groupType, ui32& groupId, std::vector<ui32>& pdiskLayout,
-        ui32 burstThresholdNs = 0, TString vdiskKind = "") {
+        ui32 burstThresholdNs = 0, float diskTimeAvailableScale = 1) {
     groupSize = topology.TotalVDisks;
     groupType = topology.GType;
     env.reset(new TEnvironmentSetup({
@@ -42,7 +42,7 @@ void SetupEnv(const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<
         .Erasure = groupType,
         .DiskType = NPDisk::EDeviceType::DEVICE_TYPE_ROT,
         .BurstThresholdNs = burstThresholdNs,
-        .VDiskKind = vdiskKind,
+        .DiskTimeAvailableScale =  diskTimeAvailableScale,
     }));
 
     env->CreateBoxAndPool(1, 1);
@@ -248,7 +248,7 @@ enum class ELoadDistribution : ui8 {
 
 template <typename TInflightActor>
 void TestBurst(ui32 requests, ui32 inflight, TDuration delay, ELoadDistribution loadDistribution,
-        ui32 burstThresholdNs = 0) {
+        ui32 burstThresholdNs = 0, float diskTimeAvailableScale = 1) {
     TBlobStorageGroupInfo::TTopology topology(TBlobStorageGroupType::ErasureNone, 1, 1, 1, true);
     auto* actor = new TInflightActor({requests, inflight, delay}, 8_MB);
     std::unique_ptr<TEnvironmentSetup> env;
@@ -256,7 +256,8 @@ void TestBurst(ui32 requests, ui32 inflight, TDuration delay, ELoadDistribution 
     TBlobStorageGroupType groupType;
     ui32 groupId;
     std::vector<ui32> pdiskLayout;
-    SetupEnv(topology, env, groupSize, groupType, groupId, pdiskLayout, burstThresholdNs, "Test1");
+    SetupEnv(topology, env, groupSize, groupType, groupId, pdiskLayout, burstThresholdNs,
+            diskTimeAvailableScale);
 
     actor->SetGroupId(groupId);
     env->Runtime->Register(actor, 1);
@@ -283,6 +284,35 @@ Y_UNIT_TEST_SUITE(BurstDetection) {
 
     Y_UNIT_TEST(TestOverlySensitive) {
         TestBurst<TInflightActorPut>(10, 1, TDuration::Seconds(1), ELoadDistribution::DistributionBurst, 1);
+    }
+}
+
+void TestDiskTimeAvailableScaling() {
+    auto measure = [](float scale) {
+        TBlobStorageGroupInfo::TTopology topology(TBlobStorageGroupType::ErasureNone, 1, 1, 1, true);
+        std::unique_ptr<TEnvironmentSetup> env;
+        ui32 groupSize;
+        TBlobStorageGroupType groupType;
+        ui32 groupId;
+        std::vector<ui32> pdiskLayout;
+        SetupEnv(topology, env, groupSize, groupType, groupId, pdiskLayout, 0, scale);
+
+        return AggregateVDiskCounters(env, env->StoragePoolName, groupSize, groupId, pdiskLayout,
+                "advancedCost", "DiskTimeAvailable");
+    };
+
+    i64 test1 = measure(1);
+    i64 test2 = measure(2);
+
+    i64 delta = test1 * 2 - test2;
+
+    UNIT_ASSERT_LE_C(std::abs(delta), 10, "Total time available: with scale=1 time=" << test1 <<
+            ", with scale=2 time=" << test2);
+}
+
+Y_UNIT_TEST_SUITE(DiskTimeAvailable) {
+    Y_UNIT_TEST(Scaling) {
+        TestDiskTimeAvailableScaling();
     }
 }
 

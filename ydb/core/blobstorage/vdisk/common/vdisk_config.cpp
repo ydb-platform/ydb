@@ -121,6 +121,7 @@ namespace NKikimr {
 #endif
 
         BurstThresholdNs = NPDisk::DevicePerformance.at(baseInfo.DeviceType).BurstThresholdNs;
+        DiskTimeAvailableScale = 1;
     }
 
     void TVDiskConfig::SetupHugeBytes() {
@@ -163,7 +164,6 @@ namespace NKikimr {
 
         UPDATE_MACRO(BarrierValidation);
 
-        UPDATE_MACRO(BurstThresholdNs);
 #undef UPDATE_MACRO
     }
 

@@ -237,20 +237,8 @@ public:
         }
     }
 
-    void Finalize() {
-        if (LocksBroken) {
-            TString message = "Transaction locks invalidated.";
-
-            return ReplyErrorAndDie(Ydb::StatusIds::ABORTED,
-                YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message));
-        }
-
-        auto& response = *ResponseEv->Record.MutableResponse();
-
-        FillResponseStats(Ydb::StatusIds::SUCCESS);
-        Counters->TxProxyMon->ReportStatusOK->Inc();
-
-        auto addLocks = [&](const auto& data) {
+    void OnComputeActorFinished(TActorId computeActor) override {
+        auto addLocks = [this](const auto& data) {
             if (data.GetData().template Is<NKikimrTxDataShard::TEvKqpInputActorResultInfo>()) {
                 NKikimrTxDataShard::TEvKqpInputActorResultInfo info;
                 YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");
@@ -265,18 +253,31 @@ public:
                 }
             }
         };
-        for (auto& [_, data] : ExtraData) {
-            for (auto& source : data.GetSourcesExtraData()) {
-                addLocks(source);
-            }
-            for (auto& transform : data.GetInputTransformsData()) {
-                addLocks(transform);
-            }
-            for (auto& sink : data.GetSinksExtraData()) {
-                addLocks(sink);
-            }
+
+        const auto& data = ExtraData.at(computeActor);
+        for (const auto& source : data.GetSourcesExtraData()) {
+            addLocks(source);
+        }
+        for (const auto& transform : data.GetInputTransformsData()) {
+            addLocks(transform);
+        }
+        for (const auto& sink : data.GetSinksExtraData()) {
+            addLocks(sink);
+        }
+    }
+
+    void Finalize() {
+        if (LocksBroken) {
+            TString message = "Transaction locks invalidated.";
+
+            return ReplyErrorAndDie(Ydb::StatusIds::ABORTED,
+                YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message));
         }
 
+        auto& response = *ResponseEv->Record.MutableResponse();
+
+        FillResponseStats(Ydb::StatusIds::SUCCESS);
+        Counters->TxProxyMon->ReportStatusOK->Inc();
         ResponseEv->Snapshot = GetSnapshot();
 
         if (!Locks.empty()) {

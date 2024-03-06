@@ -306,11 +306,8 @@ private:
 
         if (Finished) {
             for (auto& [shardId, shardInfo] : ShardsInfo.GetShards()) {
-                // Add fake empty batch to each shard without unsent data for commit evwrite.
-                //if (shardInfo.IsEmpty() || shardInfo.LastBatch().SendAttempts != 0) {
+                // Add fake empty batch for commit evwrite.
                 shardInfo.PushBatch(TString());
-
-                //}
                 shardInfo.Close();
             }
         }

@@ -1104,14 +1104,9 @@ void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput&
         transformProto->SetOutputType(input.Transform->OutputType);
         if (input.Meta.StreamLookupSettings) {
             YQL_ENSURE(input.Meta.StreamLookupSettings);
-            if (snapshot.IsValid()) {
-                input.Meta.StreamLookupSettings->MutableSnapshot()->SetStep(snapshot.Step);
-                input.Meta.StreamLookupSettings->MutableSnapshot()->SetTxId(snapshot.TxId);
-            } else {
-                YQL_ENSURE(tasksGraph.GetMeta().AllowInconsistentReads, "Expected valid snapshot or enabled inconsistent read mode");
-                input.Meta.StreamLookupSettings->SetAllowInconsistentReads(true);
-            }
-
+            YQL_ENSURE(snapshot.IsValid(), "stream lookup cannot be performed without the snapshot.");
+            input.Meta.StreamLookupSettings->MutableSnapshot()->SetStep(snapshot.Step);
+            input.Meta.StreamLookupSettings->MutableSnapshot()->SetTxId(snapshot.TxId);
             if (lockTxId) {
                 input.Meta.StreamLookupSettings->SetLockTxId(*lockTxId);
             }

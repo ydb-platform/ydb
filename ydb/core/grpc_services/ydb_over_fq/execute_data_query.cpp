@@ -14,6 +14,123 @@ using GetQueryStatusRpc = TGrpcFqRequestOperationCall<FederatedQuery::GetQuerySt
 using DescribeQueryRpc = TGrpcFqRequestOperationCall<FederatedQuery::DescribeQueryRequest, FederatedQuery::DescribeQueryResponse>;
 using GetResultDataRpc = TGrpcFqRequestOperationCall<FederatedQuery::GetResultDataRequest, FederatedQuery::GetResultDataResponse>;
 
+template<typename TReq, typename TResp>
+class TLocalGrpcRequest
+    : public TEvProxyRuntimeEvent
+    , public TFqPermissionsBase<TReq> {
+public:
+    using TRequest = TReq;
+    using TResponse = TResp;
+    using TPermissions = TFqPermissionsBase<TReq>;
+
+    TLocalGrpcRequest()
+        : TEvProxyRuntimeEvent{}
+        , TPermissions{nullptr}
+    {}
+
+    const TMaybe<TString> GetPeerMetaValues(const TString& key) const override {
+        return BaseRequest->GetPeerMetaValues(key);
+    }
+
+    // auth
+    const TMaybe<TString> GetYdbToken() const override {
+        return GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER);
+    }
+
+    void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) override {
+        AuthState_.State = state;
+    }
+
+    void SetInternalToken(const TIntrusiveConstPtr<NACLib::TUserToken>& token) override {
+        InternalToken_ = token;
+    }
+
+    const NYdbGrpc::TAuthState& GetAuthState() const override {
+        return AuthState_;
+    }
+
+    void ReplyUnauthenticated(const TString& msg = "") override {
+        BaseRequest->ReplyWithRpcStatus(grpc::StatusCode::UNAUTHENTICATED, msg);
+    }
+
+    void RaiseIssue(const NYql::TIssue& issue) override {
+        BaseRequest->RaiseIssue(issue);
+    }
+    void RaiseIssues(const NYql::TIssues& issues) override {
+        BaseRequest->RaiseIssues(issues);
+    }
+
+    //tracing
+    void StartTracing(NWilson::TSpan&& span) override {
+        Span_ = std::move(span);
+    }
+    void LegacyFinishSpan() override {
+        Span_.End();
+    }
+
+    // validation
+    bool Validate(TString&) override {
+        return true;
+    }
+
+    // counters
+    void SetCounters(IGRpcProxyCounters::TPtr counters) override {
+        Counters_ = counters;
+    }
+    IGRpcProxyCounters::TPtr GetCounters() const override {
+        return Counters_;
+    }
+    void UseDatabase(const TString& database) override {
+        Counters_->UseDatabase(database);
+    }
+
+    // rate limiting
+
+    // This method allows to set hook for unary call.
+    // The hook will be called at the reply time
+    // TRespHookCtx::Ptr will be passed in to the hook, it is allow
+    // to store the ctx somwhere to delay reply and then call Pass() to send response.
+    void SetRespHook(TRespHook&& hook) override {
+        RespHook = std::move(hook);
+    }
+    void SetRlPath(TMaybe<NRpcService::TRlPath>&& path) override {
+        RlPath = std::move(path);
+    }
+    TRateLimiterMode GetRlMode() const override {
+        // TODO: is ok?
+        return TRateLimiterMode::Off;
+    }
+    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
+        ICheckerIface* iface) {
+        // TODO
+    }
+
+    // Pass request for next processing
+    virtual void Pass(const IFacilityProvider& facility) = 0;
+
+    // audit
+    void SetAuditLogHook(TAuditLogHook&&) override {
+        Y_ABORT("unimplemented for TLocalGrpcRequest");
+    }
+    void SetDiskQuotaExceeded(bool) override {
+        // unimplemented
+    }
+
+private:
+    std::shared_ptr<IRequestCtx> BaseRequest;
+    NYdbGrpc::TAuthState AuthState_;
+    TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
+    NWilson::TSpan Span_;
+    IGRpcProxyCounters::TPtr Counters_;
+    // rate limiting
+    TRespHook RespHook;
+    TMaybe<NRpcService::TRlPath> RlPath;
+};
+
+TLocalGrpcRequest<FederatedQuery::CreateQueryRequest, FederatedQuery::CreateQueryResponse> MakeRequest() {
+    return TLocalGrpcRequest<FederatedQuery::CreateQueryRequest, FederatedQuery::CreateQueryResponse>{};
+};
+
 template<typename TRpc, typename TCbWrapper>
 class TLocalRpcCtxWithPerms
     : public NRpcService::TLocalRpcCtx<TRpc, TCbWrapper>

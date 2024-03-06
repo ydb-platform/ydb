@@ -16,7 +16,7 @@
 Для начала работы необходимо:
 
 1. Развернуть кластер [YDB](../deploy/index.md)
-2. Создать БД (описано в п.1 для соответствующего типа развертывания кластера)
+2. Создать базу данных (описано в п.1 для соответствующего типа развертывания кластера)
 3. Установить [Terraform](https://developer.hashicorp.com/terraform/install)
 4. Установить и настроить [Terraform provider for {{ ydb-short-name }}](https://github.com/ydb-platform/terraform-provider-ydb/)
 

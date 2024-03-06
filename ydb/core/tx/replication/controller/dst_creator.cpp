@@ -36,6 +36,25 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         }
     }
 
+    NKikimrScheme::EStatus ConvertStatus(NYdb::EStatus status) {
+        switch (status) {
+        case NYdb::EStatus::SUCCESS:
+            return NKikimrScheme::StatusSuccess;
+        case NYdb::EStatus::BAD_REQUEST:
+            return NKikimrScheme::StatusInvalidParameter;
+        case NYdb::EStatus::UNAUTHORIZED:
+            return NKikimrScheme::StatusAccessDenied;
+        case NYdb::EStatus::SCHEME_ERROR:
+            return NKikimrScheme::StatusSchemeError;
+        case NYdb::EStatus::PRECONDITION_FAILED:
+            return NKikimrScheme::StatusPreconditionFailed;
+        case NYdb::EStatus::ALREADY_EXISTS:
+            return NKikimrScheme::StatusAlreadyExists;
+        default:
+            return NKikimrScheme::StatusNotAvailable;
+        }
+    }
+
     void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());
 
@@ -47,7 +66,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 return Retry();
             }
 
-            return Error(NKikimrScheme::StatusNotAvailable, TStringBuilder() << "Cannot describe table"
+            return Error(ConvertStatus(result.GetStatus()), TStringBuilder() << "Cannot describe table"
                 << ": status: " << result.GetStatus()
                 << ", issue: " << result.GetIssues().ToOneLineString());
         }
@@ -62,6 +81,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return Error(NKikimrScheme::StatusSchemeError, error);
         }
 
+        // TODO: support indexed tables
+        TxBody.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
         TxBody.MutableCreateTable()->SetName(ToString(ExtractBase(DstPath)));
         AllocateTxId();
     }
@@ -320,7 +341,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());
 
-        if (SchemeShardId == ev->Get()->TabletId) {
+        if (SchemeShardId != ev->Get()->TabletId) {
             return;
         }
 

@@ -44,3 +44,7 @@ GENERATE_ENUM_SERIALIZATION(replication.h)
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut_dst_creator
+)

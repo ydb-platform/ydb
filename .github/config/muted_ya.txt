@@ -8,8 +8,6 @@ ydb/core/debug_tools/ut OperationLog.ConcurrentWrites
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/kafka_proxy/ut KafkaProtocol.CreatePartitionsScenario
 ydb/core/kafka_proxy/ut KafkaProtocol.ProduceScenario
-ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
-ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata
 ydb/core/kqp/ut/federated_query/generic *
 ydb/core/kqp/ut/olap *
@@ -63,8 +61,6 @@ ydb/services/persqueue_v1/ut TPersQueueTest.SetupLockSession
 ydb/services/persqueue_v1/ut TPersQueueTest.TopicServiceCommitOffsetBadOffsets
 ydb/services/persqueue_v1/ut TPQCompatTest.BadTopics
 ydb/services/persqueue_v1/ut [3/10]*
-ydb/services/persqueue_v1/ut TPartitionWriterCacheActorTests.DropOldWriter
-ydb/services/persqueue_v1/ut TPartitionWriterCacheActorTests.WriteReplyOrder
 ydb/services/persqueue_v1/ut TPersQueueTest.DisableWrongSettings
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync*
 ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestActiveSessionCountAfterBadSession

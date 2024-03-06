@@ -1,10 +1,11 @@
 #include "operator.h"
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
+#include <ydb/core/tx/columnshard/splitter/abstract/chunks.h>
 
 namespace NKikimr::NOlap::NStatistics::NMax {
 
-void TOperator::DoFillStatisticsData(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, TPortionStorage& portionStats, const TIndexInfo& index) const {
+void TOperator::DoFillStatisticsData(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, TPortionStorage& portionStats, const IIndexInfo& index) const {
     AFL_VERIFY(data.size() == 1);
     auto loader = index.GetColumnLoaderVerified(EntityId);
     std::shared_ptr<arrow::Scalar> result;

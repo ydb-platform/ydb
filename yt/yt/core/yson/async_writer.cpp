@@ -94,7 +94,7 @@ void TAsyncYsonWriter::OnRaw(TFuture<TYsonString> asyncStr)
             flushedSize->fetch_add(ysonStr.AsStringBuf().size(), std::memory_order::relaxed);
             return TSegment{
                 ysonStr,
-                ysonStr.GetType() == EYsonType::Node && (!topLevel || type != EYsonType::Node)
+                ysonStr.GetType() == EYsonType::Node && (!topLevel || type != EYsonType::Node),
             };
         })));
 }

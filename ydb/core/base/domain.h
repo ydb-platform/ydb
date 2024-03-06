@@ -120,6 +120,16 @@ struct TDomainsInfo : public TThrRefBase {
         ui32 DomainRootTag() const {
             return DomainUid + FirstUserTag;
         }
+
+        // NEVER USE THIS
+        /*[[deprecated]]*/ ui32 GetHiveUidByIdx(ui32) const { return 0; }
+        /*[[deprecated]]*/ static constexpr ui32 DefaultStateStorageGroup = 1;
+        /*[[deprecated]]*/ static constexpr ui32 DefaultHiveUid = 1;
+        template <typename... TOtherArgs>
+        /*[[deprecated]]*/ static TDomain::TPtr ConstructDomainWithExplicitTabletIds(const TString &name, ui32 domainUid,
+                ui64 schemeRoot, ui32, ui32, TVector<ui32>, ui32, TVector<ui32>, TOtherArgs&&... args) {
+            return ConstructDomainWithExplicitTabletIds(name, domainUid, schemeRoot, std::forward<TOtherArgs>(args)...);
+        }
     };
 
     TIntrusivePtr<TDomain> Domain;
@@ -147,6 +157,7 @@ struct TDomainsInfo : public TThrRefBase {
     void AddDomain(TDomain *domain) {
         Y_ABORT_UNLESS(!Domain);
         Domain = domain;
+        Domains.emplace(domain->DomainUid, domain);
     }
 
     void AddHive(ui64 hive) {
@@ -157,6 +168,7 @@ struct TDomainsInfo : public TThrRefBase {
     void ClearDomainsAndHive() {
         Domain.Reset();
         HiveTabletId.reset();
+        Domains.clear();
     }
 
     const TDomain& GetDomain(ui32 domainUid) const {
@@ -177,6 +189,17 @@ struct TDomainsInfo : public TThrRefBase {
     ui64 GetHive() const {
         return HiveTabletId.value_or(BadTabletId);
     }
+
+    // NEVER USE THIS
+    THashMap<ui32, TDomain::TPtr> Domains;
+    /*[[deprecated]]*/ ui64 GetHive(ui32) const { return GetHive(); }
+    /*[[deprecated]]*/ ui32 GetDomainUidByTabletId(ui64) const { return GetDomain()->DomainUid; }
+    /*[[deprecated]]*/ ui32 GetDefaultHiveUid(ui32) const { return TDomain::DefaultHiveUid; }
+    /*[[deprecated]]*/ void AddHive(ui32, ui64 hive) { AddHive(hive); }
+    /*[[deprecated]]*/ static ui64 MakeTxCoordinatorID(ui32, ui32 uid) { return MakeTabletID(true, 0x800000 | uid); }
+    /*[[deprecated]]*/ static ui64 MakeTxCoordinatorIDFixed(ui32, ui32 uid) { return MakeTabletID(true, 0x800000 | uid); }
+    /*[[deprecated]]*/ static ui64 MakeTxMediatorID(ui32, ui32 uid) { return MakeTabletID(true, 0x810000 | uid); }
+    /*[[deprecated]]*/ static ui64 MakeTxAllocatorID(ui32, ui32 uid) { return MakeTabletID(true, 0x820000 | uid); }
 };
 
 }

@@ -20,6 +20,7 @@ class TJsonStorage : public TJsonStorageBase {
     enum class EGroupSort {
         PoolName,
         Kind,
+        MediaType,
         Erasure,
         Degraded,
         Usage,
@@ -46,6 +47,7 @@ class TJsonStorage : public TJsonStorageBase {
         TString PoolName;
         TString GroupId;
         TString Kind;
+        TString MediaType;
         TString Erasure;
         ui32 Degraded;
         float Usage;
@@ -100,6 +102,8 @@ public:
                 GroupSort = EGroupSort::PoolName;
             } else if (sort == "Kind") {
                 GroupSort = EGroupSort::Kind;
+            } else if (sort == "MediaType") {
+                GroupSort = EGroupSort::MediaType;
             } else if (sort == "Erasure") {
                 GroupSort = EGroupSort::Erasure;
             } else if (sort == "Degraded") {
@@ -142,6 +146,7 @@ public:
             const auto& groupRow = GroupRowsByGroupId[groupId];
             json << "\"PoolName\":\"" << groupRow.PoolName << "\",";
             json << "\"Kind\":\"" << groupRow.Kind << "\",";
+            json << "\"MediaType\":\"" << groupRow.MediaType << "\",";
             json << "\"Erasure\":\"" << groupRow.Erasure << "\",";
             json << "\"Degraded\":\"" << groupRow.Degraded << "\",";
             json << "\"Usage\":\"" << groupRow.Usage << "\",";
@@ -310,6 +315,7 @@ public:
                 row.PoolName = poolName;
                 row.GroupId = groupId;
                 row.Kind = poolInfo.Kind;
+                row.MediaType = poolInfo.MediaType;
                 auto ib = BSGroupIndex.find(groupId);
                 if (ib != BSGroupIndex.end()) {
                     row.Erasure = ib->second.GetErasureSpecies();
@@ -349,6 +355,7 @@ public:
                 ++foundGroups;
                 if (Version == EVersion::v1) {
                     pool->AddGroups()->SetGroupId(groupId);
+                    pool->SetMediaType(poolInfo.MediaType);
                 } else if (Version == EVersion::v2) {
                     if (!UsageBuckets.empty() && !BinarySearch(UsageBuckets.begin(), UsageBuckets.end(), (ui32)(row.Usage * 100) / UsagePace)) {
                         continue;
@@ -390,6 +397,9 @@ public:
                     break;
                 case EGroupSort::Kind:
                     SortCollection(GroupRows, [](const TGroupRow& node) { return node.Kind;}, ReverseSort);
+                    break;
+                case EGroupSort::MediaType:
+                    SortCollection(GroupRows, [](const TGroupRow& node) { return node.MediaType;}, ReverseSort);
                     break;
                 case EGroupSort::Erasure:
                     SortCollection(GroupRows, [](const TGroupRow& node) { return node.Erasure;}, ReverseSort);
@@ -494,7 +504,7 @@ struct TJsonRequestParameters<TJsonStorage> {
                       {"name":"version","in":"query","description":"query version (v1, v2)","required":false,"type":"string"},
                       {"name":"usage_pace","in":"query","description":"bucket size as a percentage","required":false,"type":"integer","default":5},
                       {"name":"usage_buckets","in":"query","description":"filter groups by usage buckets","required":false,"type":"integer"},
-                      {"name":"sort","in":"query","description":"sort by (PoolName,Type,Erasure,Degraded,Usage,GroupId,Used,Limit,Read,Write)","required":false,"type":"string"},
+                      {"name":"sort","in":"query","description":"sort by (PoolName,Kind,MediaType,Erasure,Degraded,Usage,GroupId,Used,Limit,Read,Write)","required":false,"type":"string"},
                       {"name":"offset","in":"query","description":"skip N nodes","required":false,"type":"integer"},
                       {"name":"limit","in":"query","description":"limit to N nodes","required":false,"type":"integer"},
                       {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";

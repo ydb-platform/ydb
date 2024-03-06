@@ -233,7 +233,88 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
             UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 2, value = 3\nkey = 4, value = 5\n");
         }
+    }   
+
+    Y_UNIT_TEST(ReplaceImmediate) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        auto opts = TShardedTableOptions().Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}});
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+        const ui32 rowCount = 3;
+
+        ui64 txId = 100;
+
+        Cout << "========= Send immediate replace =========\n";
+        {
+            const auto writeResult = Replace(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrigin(), shard);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStep(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrderId(), txId);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxId(), txId);
+
+            const auto& tableAccessStats = writeResult.GetTxStats().GetTableAccessStats(0);
+            UNIT_ASSERT_VALUES_EQUAL(tableAccessStats.GetTableInfo().GetName(), "/Root/table-1");
+            UNIT_ASSERT_VALUES_EQUAL(tableAccessStats.GetUpdateRow().GetCount(), rowCount);
+        }
+
+        Cout << "========= Read table =========\n";
+        {
+            auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
+            UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
+        }
     }    
+
+    Y_UNIT_TEST(ReplaceImmediate_DefaultValue) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        auto opts = TShardedTableOptions().Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}});
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+        const ui32 rowCount = 1;
+
+        ui64 txId = 100;
+
+        Cout << "========= Send immediate upsert =========\n";
+        {
+            Upsert(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        }
+
+        Cout << "========= Send immediate replace =========\n";
+        {
+            std::vector<ui32> columnIds = {1};
+
+            // Set only key and leave value default
+            ui32 value = 0;
+            TVector<TCell> cells;
+            cells.emplace_back(TCell((const char*)&value, sizeof(ui32)));
+
+            TSerializedCellMatrix matrix(cells, rowCount, columnIds.size());
+            TString blobData = matrix.ReleaseBuffer();
+
+            auto request = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(++txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*request).AddDataToPayload(std::move(blobData));
+            request->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+
+            auto writeResult = Write(runtime, sender, shard, std::move(request), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrigin(), shard);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStep(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrderId(), txId);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxId(), txId);
+
+            const auto& tableAccessStats = writeResult.GetTxStats().GetTableAccessStats(0);
+            UNIT_ASSERT_VALUES_EQUAL(tableAccessStats.GetTableInfo().GetName(), "/Root/table-1");
+            UNIT_ASSERT_VALUES_EQUAL(tableAccessStats.GetUpdateRow().GetCount(), rowCount);
+        }
+
+        Cout << "========= Read table =========\n";
+        {
+            auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
+            UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 0, value = NULL\n");
+        }
+    }     
 
     Y_UNIT_TEST_TWIN(UpsertPrepared, Volatile) {
         auto [runtime, server, sender] = TestCreateServer();

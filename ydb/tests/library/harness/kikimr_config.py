@@ -385,8 +385,8 @@ class KikimrConfigGenerator(object):
 
         if pg_compatible_expirement:
             self.yaml_config["table_service_config"]["enable_prepared_ddl"] = True
-            # self.yaml_config["table_service_config"]["enable_ast_cache"] = True
-            # self.yaml_config["table_service_config"]["enable_pg_consts_to_params"] = True
+            self.yaml_config["table_service_config"]["enable_ast_cache"] = True
+            self.yaml_config["table_service_config"]["enable_pg_consts_to_params"] = True
             self.yaml_config["table_service_config"]["index_auto_choose_mode"] = 'max_used_prefix'
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
             self.yaml_config["feature_flags"]['enable_table_pg_types'] = True

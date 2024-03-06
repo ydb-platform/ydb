@@ -468,7 +468,7 @@ resource "ydb_topic" "ydb_topic" {
 Поддерживаются следующие аргументы:
 
 * `name` - (обязательный) имя топика.
-* `database_endpoint` - (обязательный) полный путь до базы данных, например: `"grpcs://example.com:2135/?database=/Root/testdb0"` аналог `connection_string` для таблиц.
+* `database_endpoint` - (обязательный) полный путь до базы данных, например: `"grpcs://example.com:2135/?database=/Root/testdb0"`; аналог `connection_string` для таблиц.
 * `retention_period_ms` - длительность хранения данных в миллисекундах, значение по умолчанию - `86400000` (сутки).
 * `partitions_count` - количество партиций, значение по умолчанию - `2`.
 * `supported_codecs` - поддерживаемые кодеки сжатия данных, значение по умолчанию - `"gzip", "raw", "zstd"`.

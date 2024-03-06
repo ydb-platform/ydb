@@ -229,7 +229,7 @@ ttl {
 ```
 
 * `column_name` — (обязательный) имя колонки для TTL.
-* `expire_interval` — (обязательный) интервал в формате [ISO 8601](https://ru.wikipedia.org/wiki/ISO_8601) (например P1D продолжительность длиной 1 сутки (24 часа)).
+* `expire_interval` — (обязательный) интервал в формате [ISO 8601](https://ru.wikipedia.org/wiki/ISO_8601) (например, `P1D` — интервал длиной в 1 сутки, то есть 24 часа).
 * `unit` — (необязательный) задается в случае, если колонка с ttl имеет [числовой тип](../yql/reference/types/primitive.md#numeric). Поддерживаемые значения:
   * `seconds`
   * `milliseconds`

@@ -2849,11 +2849,3 @@ TReadRowsResult::TReadRowsResult(TStatus&& status, TResultSet&& resultSet)
 
 } // namespace NTable
 } // namespace NYdb
-
-Y_DECLARE_OUT_SPEC(, NYdb::NTable::TCreateSessionResult, o, x) {
-    return x.Out(o);
-}
-
-Y_DECLARE_OUT_SPEC(, NYdb::NTable::TDescribeTableResult, o, x) {
-    return x.Out(o);
-}

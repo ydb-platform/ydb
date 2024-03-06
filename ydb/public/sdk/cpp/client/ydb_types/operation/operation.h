@@ -47,7 +47,3 @@ private:
 using TAsyncOperation = NThreading::TFuture<TOperation>;
 
 } // namespace NYdb
-
-Y_DECLARE_OUT_SPEC(inline, NYdb::TOperation, o, x) {
-    return x.Out(o);
-}

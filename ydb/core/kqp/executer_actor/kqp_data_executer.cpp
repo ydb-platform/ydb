@@ -1825,6 +1825,7 @@ private:
             case NKikimrKqp::ISOLATION_LEVEL_READ_UNCOMMITTED:
                 YQL_ENSURE(ReadOnlyTx);
                 YQL_ENSURE(!VolatileTx);
+                TasksGraph.GetMeta().AllowInconsistentReads = true;
                 ImmediateTx = true;
                 break;
 

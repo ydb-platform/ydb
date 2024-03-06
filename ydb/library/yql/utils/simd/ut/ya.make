@@ -5,4 +5,6 @@ SRCS(
     merge_ut.cpp
 )
 
+CFLAGS(-mavx2)
+
 END()

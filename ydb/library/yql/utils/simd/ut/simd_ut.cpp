@@ -29,7 +29,6 @@ struct TTestFactory {
     }
 };
 
-#pragma clang attribute push(__attribute__((target("avx2"))), apply_to=function)
 Y_UNIT_TEST_SUITE(TSimdAVX2) {
     using namespace NSimd::NAVX2;
     Y_UNIT_TEST(SimdBool) {
@@ -211,9 +210,6 @@ Y_UNIT_TEST_SUITE(TSimdAVX2) {
     }
 }
 
-#pragma clang attribute pop
-
-#pragma clang attribute push(__attribute__((target("sse4.2"))), apply_to=function)
 Y_UNIT_TEST_SUITE(TSimdSSE42) {
     using namespace NSimd::NSSE42;
     Y_UNIT_TEST(SimdBool) {
@@ -375,7 +371,6 @@ Y_UNIT_TEST_SUITE(TSimdSSE42) {
         UNIT_ASSERT_EQUAL((v1.BlendVar(v2, blend) == res).All(), true);
     }
 }
-#pragma clang attribute pop
 
 Y_UNIT_TEST_SUITE(SimdFallback) {
     using namespace NSimd::NFallback;

@@ -2658,11 +2658,18 @@ TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationCon
     }
 
     auto join = node.Cast<TDqJoin>();
+    const auto joinType = join.JoinType().Value();
+    const bool leftIsUnionAll = join.LeftInput().Maybe<TDqCnUnionAll>().IsValid();
+    const bool rightIsUnionAll = join.RightInput().Maybe<TDqCnUnionAll>().IsValid();
+    const bool useHashJoin = EHashJoinMode::Off != hashJoin 
+        && joinType != "Cross"sv 
+        && leftIsUnionAll 
+        && rightIsUnionAll;
 
     if (DqValidateJoinInputs(join.LeftInput(), join.RightInput(), parentsMap, allowStageMultiUsage)) {
         // pass
     } else if (DqValidateJoinInputs(join.RightInput(), join.LeftInput(), parentsMap, allowStageMultiUsage)) {
-        if (EHashJoinMode::Off == hashJoin) {
+        if (!useHashJoin) {
             if (const auto maybeFlipJoin = DqFlipJoin(join, ctx)) {
                 join = maybeFlipJoin.Cast();
             } else {
@@ -2673,10 +2680,7 @@ TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationCon
         return node;
     }
 
-    const auto joinType = join.JoinType().Value();
-    const bool leftIsUnionAll = join.LeftInput().Maybe<TDqCnUnionAll>().IsValid();
-    const bool rightIsUnionAll = join.RightInput().Maybe<TDqCnUnionAll>().IsValid();
-    if (EHashJoinMode::Off != hashJoin && join.JoinType().Value() != "Cross"sv && leftIsUnionAll && rightIsUnionAll) {
+    if (useHashJoin) {
         return DqBuildHashJoin(join, hashJoin, ctx, optCtx);
     }
 

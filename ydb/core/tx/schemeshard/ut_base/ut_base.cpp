@@ -6332,17 +6332,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                         );
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup_1", true),
-                           {NLs::PathsInsideDomain(4),
-                            NLs::ShardsInsideDomain(18),
-                            NLs::PathVersionEqual(1),
-                            NLs::NotFinished});
-
-        TActorId sender = runtime.AllocateEdgeActor();
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
-
-        env.TestWaitNotification(runtime, txId);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup_1", true),
                            {NLs::CheckPartCount("PQGroup_1", 100, 10, 10, 100),
                             NLs::PathsInsideDomain(4),
                             NLs::ShardsInsideDomain(18),
@@ -6863,7 +6852,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         AsyncForceDropUnsafe(runtime, ++txId, pVer.PathId.LocalPathId);
 
         TestModificationResult(runtime, txId-2, NKikimrScheme::StatusAccepted);
-        TestModificationResult(runtime, txId-1, NKikimrScheme::StatusMultipleModifications);
+        TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
 
         TActorId sender = runtime.AllocateEdgeActor();

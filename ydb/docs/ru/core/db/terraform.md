@@ -80,16 +80,13 @@
 
 {% endnote %}
 
-Если на сервере {{ ydb-short-name }} не включена авторизация, то в конфиге БД [config.yaml](../deploy/configuration/config.md) нужно указать:
+Если вы используете создание ресурсов `ydb_table_changefeed` или `ydb_topic` и на сервере {{ ydb-short-name }} не включена авторизация, то в конфиге БД [config.yaml](../deploy/configuration/config.md) нужно указать:
 
 ```yaml
 ...
 pqconfig:
   require_credentials_in_new_protocol: false
   check_acl: false
-```
-
-если вы используете создание ресурсов `ydb_table_changefeed` или `ydb_topic`.
 
 ### Построчная таблица {#ydb-table}
 

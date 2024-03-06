@@ -234,6 +234,8 @@ public:
         }
     }
 
+    void FillViews(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& views);
+
     bool NeedCheckTableVersions() const {
         return CompileStats.FromCache;
     }

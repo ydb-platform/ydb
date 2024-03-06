@@ -71,6 +71,16 @@ bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigat
     return true;
 }
 
+void TKqpQueryState::FillViews(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& views) {
+    for (const auto& view : views) {
+        const auto& pathId = view.GetTableId();
+        const auto schemaVersion = view.GetSchemaVersion();
+        auto [it, isInserted] = TableVersions.emplace(TTableId(pathId.GetOwnerId(), pathId.GetTableId()), schemaVersion);
+        if (!isInserted) {
+            Y_ENSURE(it->second == schemaVersion);
+        }
+    }
+}
 
 std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet> TKqpQueryState::BuildNavigateKeySet() {
     TableVersions.clear();
@@ -78,6 +88,7 @@ std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet> TKqpQueryState::BuildN
     for (const auto& tx : PreparedQuery->GetPhysicalQuery().GetTransactions()) {
         FillTables(tx);
     }
+    FillViews(PreparedQuery->GetPhysicalQuery().GetViewInfos());
 
     auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
     navigate->DatabaseName = Database;

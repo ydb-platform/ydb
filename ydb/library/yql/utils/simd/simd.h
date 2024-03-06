@@ -120,8 +120,7 @@ struct Perfomancer {
         Algo() {}
 
         Trait CreateBlendMask(size_t size1, size_t size2, bool shift) {
-            
-            i8* result = new i8[Trait::SIZE];
+            i8 result[Trait::SIZE];
 
             size_t cnt = 0;
 
@@ -146,7 +145,6 @@ struct Perfomancer {
 
             Trait reg;
             reg.SetMask(result);
-            delete[] result;
             return reg;
         }
 
@@ -154,7 +152,7 @@ struct Perfomancer {
             int packs = Trait::SIZE / (size1 + size2);
             size_t cnt = 0;
             size_t order = 0;
-            i8* result = new i8[Trait::SIZE];
+            i8 result[Trait::SIZE];
 
             for (size_t i = 0; i < Trait::SIZE; ++i) {
                 result[i] = 0;
@@ -184,14 +182,12 @@ struct Perfomancer {
             }
 
             Trait reg(result);
-            delete[] result;
             return reg;
         }
 
         Trait CreatePureShuffleMask(size_t size1, size_t size2) {
 
-            i8* result = new i8[Trait::SIZE];
-
+            i8 result[Trait::SIZE];
             size_t packs = Trait::SIZE / (size1 + size2);
             size_t cnt = 0;
             size_t start = packs * size1;
@@ -207,7 +203,6 @@ struct Perfomancer {
             }
 
             Trait reg(result);
-            delete[] result;
             return reg;
         }
         void PrepareMasks(size_t sizes[4], std::vector<Trait>& mask) {
@@ -232,7 +227,7 @@ struct Perfomancer {
         }
 
         void Iteration(size_t sizes[4], i8* const data[4], i8* result, int ind, int addr, int step, std::vector<Trait>& reg, std::vector<Trait>& mask) {
-
+            
             reg[0].Get(&data[0][ind * sizes[0]]);
             reg[1].Get(&data[1][ind * sizes[1]]);
             reg[2].Get(&data[2][ind * sizes[2]]);
@@ -295,6 +290,7 @@ struct Perfomancer {
             reg[9].Store(&result[addr + step]);
             reg[11].Store(&result[addr + 2 * step]);
             reg[12].Store(&result[addr + 3 * step]);
+
         }
 
         void MergeEnds(i8* result, i8* const data[4], size_t sizes[4], size_t length, size_t ind, int addr) {
@@ -323,9 +319,7 @@ struct Perfomancer {
             for (; i * sizes[0] + Trait::SIZE < length * sizes[0]; i += Trait::SIZE / pack) {
                 Iteration(sizes, data, result, i, block * i, block, reg, mask);
             }
-
-            MergeEnds(result, data, sizes, length, i, block * i);
-
+            MergeEnds(result, data, sizes, length, i, pack * i);
         }
 
         ~Algo() = default;

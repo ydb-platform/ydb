@@ -2385,7 +2385,7 @@ struct TFromPgExec {
                     len = strlen(ptr);
                 } else {
                     len = GetCleanVarSize((const text*)ptr);
-                    Y_ENSURE(len + VARHDRSZ + sizeof(void*) == item.AsStringRef().Size());
+                    Y_ENSURE(len + VARHDRSZ + sizeof(void*) <= item.AsStringRef().Size());
                     ptr += VARHDRSZ;
                 }
 
@@ -2498,12 +2498,9 @@ struct TToPgExec {
             break;
         }
         case TEXTOID:
-        case VARCHAROID:
-        case BYTEAOID:
-        case CSTRINGOID: {
+        case BYTEAOID: {
             NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
             NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
-            std::vector<char> tmp;
             for (size_t i = 0; i < length; ++i) {
                 auto item = reader.GetItem(array, i);
                 if (!item) {
@@ -2511,38 +2508,9 @@ struct TToPgExec {
                     continue;
                 }
 
-                ui32 len;
-                if (IsCString) {
-                    len = sizeof(void*) + 1 + item.AsStringRef().Size();
-                    if (Y_UNLIKELY(len < item.AsStringRef().Size())) {
-                        ythrow yexception() << "Too long string";
-                    }
-
-                    if (tmp.capacity() < len) {
-                        tmp.reserve(Max<ui64>(len, tmp.capacity() * 2));
-                    }
-
-                    tmp.resize(len);
-                    NUdf::ZeroMemoryContext(tmp.data() + sizeof(void*));
-                    memcpy(tmp.data() + sizeof(void*), item.AsStringRef().Data(), len - 1 - sizeof(void*));
-                    tmp[len - 1] = 0;
-                } else {
-                    len = sizeof(void*) + VARHDRSZ + item.AsStringRef().Size();
-                    if (Y_UNLIKELY(len < item.AsStringRef().Size())) {
-                        ythrow yexception() << "Too long string";
-                    }
-
-                    if (tmp.capacity() < len) {
-                        tmp.reserve(Max<ui64>(len, tmp.capacity() * 2));
-                    }
-
-                    tmp.resize(len);
-                    NUdf::ZeroMemoryContext(tmp.data() + sizeof(void*));
-                    memcpy(tmp.data() + sizeof(void*) + VARHDRSZ, item.AsStringRef().Data(), len - VARHDRSZ - sizeof(void*));
-                    UpdateCleanVarSize((text*)(tmp.data() + sizeof(void*)), item.AsStringRef().Size());
-                }
-
-                builder.Add(NUdf::TBlockItem(NUdf::TStringRef(tmp.data(), len)));
+                auto ref = item.AsStringRef();
+                auto ptr = builder.AddPgItem<false, VARHDRSZ>(ref);
+                UpdateCleanVarSize((text*)(ptr + sizeof(void*)), ref.Size());
             }
 
             *res = builder.Build(true);

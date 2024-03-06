@@ -100,10 +100,6 @@ struct FallbackTrait {
         return other;
     }
 
-    inline FallbackTrait<T> Shuffle256(const FallbackTrait<T>& other) {
-        return other;
-    }
-    
     inline void SetMask(T* ptr) {
         Value = *ptr;
     }

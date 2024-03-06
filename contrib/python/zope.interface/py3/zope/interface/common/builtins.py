@@ -19,10 +19,10 @@ that they implement the appropriate interface.
 """
 
 from zope.interface import classImplements
-
 from zope.interface.common import collections
-from zope.interface.common import numbers
 from zope.interface.common import io
+from zope.interface.common import numbers
+
 
 __all__ = [
     'IList',

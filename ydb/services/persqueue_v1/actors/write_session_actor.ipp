@@ -1,4 +1,5 @@
 #ifndef WRITE_SESSION_ACTOR_IMPL
+#include "write_session_actor.h"
 #error "Do not include this file directly"
 #endif
 

@@ -80,7 +80,7 @@ namespace NFwd {
 
         TResult Handle(IPageLoadingQueue *head, TPageId pageId, ui64 lower) noexcept override
         {
-            Y_ABORT_UNLESS(pageId != Max<TPageId>(), "Invalid requested pageId");
+            Y_ABORT_UNLESS(pageId != Max<TPageId>(), "Requested page is invalid");
 
             if (auto *page = Trace.Get(pageId)) {
                 return { page, false, true };
@@ -89,36 +89,26 @@ namespace NFwd {
             DropPagesBefore(pageId);
             Shrink();
 
-            bool more = Grow && (OnHold + OnFetch <= lower);
+            bool grow = OnHold + OnFetch <= lower;
 
-            if (!Started) {
-                Y_ABORT_UNLESS(Index->Seek(BeginRowId) == EReady::Data);
-                Y_ABORT_UNLESS(Index->GetPageId() <= pageId, "Requested page out of slice bounds");
-                Started = true;
-            }
-
-            while (Index->IsValid() && Index->GetPageId() < pageId) {
-                Y_ABORT_UNLESS(Index->Next() == EReady::Data);
-                Y_ABORT_UNLESS(Index->GetRowId() < EndRowId, "Requested page out of slice bounds");
-            }
-
-            if (Offset == Pages.size()) {
-                Y_ABORT_UNLESS(Index->GetPageId() == pageId);
+            if (Offset == Pages.size()) { // isn't processed yet
+                SyncIndex(pageId);
                 AddToQueue(head, pageId);
-                Y_ABORT_UNLESS(Index->Next() == EReady::Data);
             }
 
-            return {Pages.at(Offset).Touch(pageId, Stat), more, true};
+            grow &= Index->IsValid() && Index->GetRowId() < EndRowId;
+
+            return {Pages.at(Offset).Touch(pageId, Stat), grow, true};
         }
 
         void Forward(IPageLoadingQueue *head, ui64 upper) noexcept override
         {
+            Y_ABORT_UNLESS(Started, "Couldn't be called before Handle returns grow");
+
             while (OnHold + OnFetch < upper && Index->IsValid() && Index->GetRowId() < EndRowId) {
                 AddToQueue(head, Index->GetPageId());
                 Y_ABORT_UNLESS(Index->Next() != EReady::Page);
             }
-
-            Grow &= Index->IsValid() && Index->GetRowId() < EndRowId;
         }
 
         void Apply(TArrayRef<NPageCollection::TLoadedPage> loaded) noexcept override
@@ -179,7 +169,25 @@ namespace NFwd {
             }
         }
 
-        void AddToQueue(IPageLoadingQueue *head, TPageId pageId) {
+        void SyncIndex(TPageId pageId) noexcept
+        {
+            if (!Started) {
+                Y_ABORT_UNLESS(Index->Seek(BeginRowId) == EReady::Data);
+                Y_ABORT_UNLESS(Index->GetPageId() <= pageId, "Requested page is out of slice bounds");
+                Started = true;
+            }
+
+            while (Index->IsValid() && Index->GetPageId() < pageId) {
+                Y_ABORT_UNLESS(Index->Next() == EReady::Data);
+                Y_ABORT_UNLESS(Index->GetRowId() < EndRowId, "Requested page is out of slice bounds");
+            }
+
+            Y_ABORT_UNLESS(Index->GetPageId() == pageId, "Requested page doesn't belong to the part");
+            Y_ABORT_UNLESS(Index->Next() != EReady::Page);
+        }
+
+        void AddToQueue(IPageLoadingQueue *head, TPageId pageId) noexcept
+        {
             auto size = head->AddToQueue(pageId, EPage::DataPage);
 
             Stat.Fetch += size;
@@ -191,7 +199,6 @@ namespace NFwd {
         }
 
     private:
-        bool Grow = true;       /* Have some pages for Forward(...) */
         THolder<IIndexIter> Index; /* Points on next to load page */
         bool Started = false;
         TRowId BeginRowId, EndRowId;

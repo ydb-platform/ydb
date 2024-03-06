@@ -15,74 +15,56 @@ namespace NTable {
         using TIter = TIndex::TIter;
 
     public:
-        struct TResult {
-            TResult(TPageId pageId) noexcept : PageId(pageId) { }
-
-            explicit operator bool() const noexcept
-            {
-                return PageId != Max<TPageId>();
-            }
-
-            operator TPageId() const noexcept
-            {
-                return PageId;
-            }
-
-            TPageId PageId = Max<TPageId>();
-        };
-
-        explicit TForward(const TPart* part, IPages* env, TGroupId groupId, ui32 trace, const TIntrusiveConstPtr<TSlices>& bounds = nullptr)
+        TForward(const TPart* part, IPages* env, TGroupId groupId, ui32 trace, const TIntrusiveConstPtr<TSlices>& slices = nullptr)
             : Trace(Max(ui32(1), trace))
             , Index(part, env, groupId)
         {
-            if (bounds && !bounds->empty()) {
-                BeginBoundRowId = bounds->front().BeginRowId();
-                EndBoundRowId = bounds->back().EndRowId();
+            if (slices && !slices->empty()) {
+                BeginRowId = slices->front().BeginRowId();
+                EndRowId = slices->back().EndRowId();
             } else {
-                BeginBoundRowId = 0;
-                EndBoundRowId = Max<TRowId>();
+                BeginRowId = 0;
+                EndRowId = Max<TRowId>();
             }
         }
 
-        inline TPageId On(bool head = false) noexcept
+        bool HasMore() noexcept
         {
-            EnsureStarted();
-            return PageOf(head ? Head : Edge);
+            return Head != End;
         }
 
-        TResult Clean(TPageId until) noexcept
+        std::optional<TPageId> Clean(TPageId until) noexcept
         {
             EnsureStarted();
 
-            if (PageOf(Tail) > until) {
-                Y_ABORT("Part lookups goes below of its trace pages");
-            } else {
-                const auto edgeId = Max(PageOf(Edge), until);
+            Y_ABORT_UNLESS(GetPageOf(Tail) <= until, "Part lookups goes below of its trace pages");
 
-                while (Edge != End && Edge->GetPageId() < until) ++Edge;
+            const auto edgeId = Max(GetPageOf(Edge), until);
 
-                if (PageOf(Edge) != edgeId)
-                    Y_ABORT("Part lookup page is out of its index");
-
-                if (Tail == Head) Tail = Head = Edge;
+            while (Edge != End && Edge->GetPageId() < until) {
+              ++Edge;
             }
 
-            if (Tail != Head && Edge - Tail >= ssize_t(Trace)) {
+            Y_ABORT_UNLESS(GetPageOf(Edge) == edgeId, "Part lookup page is out of its index");
+
+            if (Tail == Head) {
+                Tail = Head = Edge;
+            } else if (Edge - Tail >= ssize_t(Trace)) {
                 return (Tail++)->GetPageId();
             }
 
-            return Max<TPageId>();
+            return { };
         }
 
-        TResult More(TPageId until) noexcept
+        std::optional<TPageId> More(TPageId until) noexcept
         {
             EnsureStarted();
 
-            if (Head != End && ((Edge - Head >= 0) || PageOf(Head) < until)) {
+            if (Head != End && (Head <= Edge || GetPageOf(Head) < until)) {
                 return (Head++)->GetPageId();
             }
 
-            return Max<TPageId>();
+            return { };
         }
 
     private:
@@ -102,14 +84,14 @@ namespace NTable {
             Edge = (*index)->Begin();
             End = (*index)->End();
 
-            if (BeginBoundRowId > 0) {
+            if (BeginRowId > 0) {
                 // Find the first page we would allow to load
-                Tail = Head = Edge = index->LookupRow(BeginBoundRowId);
+                Tail = Head = Edge = index->LookupRow(BeginRowId);
             }
-            if (EndBoundRowId < index->GetEndRowId()) {
+            if (EndRowId < index->GetEndRowId()) {
                 // Find the first page we would refuse to load
-                End = index->LookupRow(EndBoundRowId);
-                if (End && End->GetRowId() < EndBoundRowId) {
+                End = index->LookupRow(EndRowId);
+                if (End && End->GetRowId() < EndRowId) {
                     ++End;
                 }
             }
@@ -117,7 +99,7 @@ namespace NTable {
             Started = true;
         }
 
-        inline TPageId PageOf(const TIter &it) const
+        inline TPageId GetPageOf(const TIter &it) const
         {
             return it == End ? Max<TPageId>() : it->GetPageId();
         }
@@ -129,7 +111,7 @@ namespace NTable {
         TPartIndexIt Index;
         bool Started = false;
         TIter Tail, Head, Edge, End;
-        TRowId BeginBoundRowId, EndBoundRowId;
+        TRowId BeginRowId, EndRowId;
     };
 }
 }

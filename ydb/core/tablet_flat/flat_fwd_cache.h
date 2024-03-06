@@ -10,52 +10,51 @@ namespace NKikimr {
 namespace NTable {
 namespace NFwd {
 
-    class TCache : public IPageLoadingLogic {
-        using TGroupId = NPage::TGroupId;
-
-        template<size_t Items>
-        struct TRound {
-            const TSharedData* Get(TPageId pageId) const
-            {
-                if (pageId < Edge) {
-                    const auto pred = [pageId](const NPageCollection::TLoadedPage &page) {
-                        return page.PageId == pageId;
-                    };
-
-                    auto it = std::find_if(Pages.begin(), Pages.end(), pred);
-
-                    if (it == Pages.end()) {
-                        Y_ABORT("Failed to locate page within forward trace");
+    template<size_t Capacity>
+    class TLoadedPagesCircularBuffer {
+    public:
+        const TSharedData* Get(TPageId pageId) const
+        {
+            if (pageId < FirstUnloadedPageId) {
+                for (const auto& page : LoadedPages) {
+                    if (page.PageId == pageId) {
+                        return &page.Data;
                     }
-
-                    return &it->Data;
                 }
 
-                return nullptr;
+                Y_ABORT("Failed to locate page within forward trace");
             }
 
-            ui32 Emplace(TPage &page)
-            {
-                Y_ABORT_UNLESS(page, "Cannot push invalid page to trace cache");
+            // next pages may be requested, ignore them
+            return nullptr;
+        }
 
-                Offset = (Pages.size() + Offset - 1) % Pages.size();
+        // returns released data size
+        ui64 Emplace(TPage &page)
+        {
+            Y_ABORT_UNLESS(page, "Cannot push invalid page to trace cache");
 
-                const ui32 was = Pages[Offset].Data.size();
+            Offset = (Offset + 1) % Capacity;
 
-                Pages[Offset].Data = page.Release();
-                Pages[Offset].PageId = page.PageId;
-                Edge = Max(Edge, page.PageId + 1);
+            const ui64 was = LoadedPages[Offset].Data.size();
 
-                return was;
-            }
+            LoadedPages[Offset].Data = page.Release();
+            LoadedPages[Offset].PageId = page.PageId;
+            FirstUnloadedPageId = Max(FirstUnloadedPageId, page.PageId + 1);
 
-        private:
-            std::array<NPageCollection::TLoadedPage, Items> Pages;
-            TPageId Edge = 0;
-            ui32 Offset = 0;
-        };
+            return was;
+        }
 
+    private:
+        std::array<NPageCollection::TLoadedPage, Capacity> LoadedPages;
+        ui32 Offset = 0;
+        TPageId FirstUnloadedPageId = 0;
+    };
+
+    class TCache : public IPageLoadingLogic {
     public:
+        using TGroupId = NPage::TGroupId;
+
         TCache() = delete;
 
         TCache(const TPart* part, IPages* env, TGroupId groupId, const TIntrusiveConstPtr<TSlices>& bounds = nullptr)
@@ -64,7 +63,9 @@ namespace NFwd {
 
         ~TCache()
         {
-            for (auto &it: Pages) it.Release();
+            for (auto &it: Pages) {
+                it.Release();
+            }
         }
 
         TResult Handle(IPageLoadingQueue *head, TPageId pageId, ui64 lower) noexcept override
@@ -121,16 +122,16 @@ namespace NFwd {
             };
 
             while (auto more = Index.More(until())) {
-                auto size = head->AddToQueue(more, EPage::DataPage);
+                auto size = head->AddToQueue(*more, EPage::DataPage);
 
                 Stat.Fetch += size;
                 OnFetch += size;
 
-                Pages.emplace_back(more, size, 0, Max<TPageId>());
+                Pages.emplace_back(*more, size, 0, Max<TPageId>());
                 Pages.back().Fetch = EFetch::Wait;
             }
 
-            Grow = Grow && Index.On(true) < Max<TPageId>();
+            Grow = Grow && Index.HasMore();
 
             return Pages.at(Offset);
         }
@@ -140,7 +141,7 @@ namespace NFwd {
             while (auto drop = Index.Clean(pageId)) {
                 auto &page = Pages.at(Offset);
 
-                if (!Pages || page.PageId != drop.PageId) {
+                if (!Pages || page.PageId != *drop) {
                     Y_ABORT("Dropping page that is not exist in cache");
                 } else if (page.Size == 0) {
                     Y_ABORT("Dropping page that has not been touched");
@@ -160,8 +161,9 @@ namespace NFwd {
 
         TCache& Shrink() noexcept
         {
-            for (; Offset && Pages[0].Ready(); Offset--)
+            for (; Offset && Pages[0].Ready(); Offset--) {
                 Pages.pop_front();
+            }
 
             return *this;
         }
@@ -169,7 +171,7 @@ namespace NFwd {
     private:
         bool Grow = true;       /* Have some pages for Forward(...) */
         TForward Index;
-        TRound<TPart::Trace> Trace;
+        TLoadedPagesCircularBuffer<TPart::Trace> Trace;
 
         /*_ Forward cache line state */
 

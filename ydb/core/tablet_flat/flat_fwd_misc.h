@@ -26,11 +26,6 @@ namespace NFwd {
                 << "}";
         }
 
-        friend inline IOutputStream& operator<<(IOutputStream& out, const TStat& stat) {
-            stat.Describe(out);
-            return out;
-        }
-
         TStat& operator +=(const TStat &stat)
         {
             Fetch += stat.Fetch;

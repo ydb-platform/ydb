@@ -875,7 +875,6 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto res = session.ExplainDataQuery(R"(
-            PRAGMA kikimr.OptEnablePredicateExtract = 'true';
             SELECT t.*
             FROM
                (SELECT * FROM `/Root/test_table_idx_idx`

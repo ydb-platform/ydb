@@ -25,6 +25,7 @@ struct TOptimizerStatistics {
     double Nrows = 0;
     int Ncols = 0;
     double Cost = 0;
+    double Selectivity = 1.0;
     const TVector<TString>& KeyColumns;
 
     TOptimizerStatistics() : KeyColumns(EmptyColumns) {}

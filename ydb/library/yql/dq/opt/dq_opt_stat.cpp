@@ -195,6 +195,7 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
         double selectivity = ComputePredicateSelectivity(flatmap.Lambda().Body(), inputStats);
 
         auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->Cost, inputStats->KeyColumns );
+        outputStats.Selectivity *= selectivity;
 
         typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats) );
     }
@@ -236,6 +237,7 @@ void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationConte
     double selectivity = ComputePredicateSelectivity(filterBody, inputStats);
 
     auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->Cost, inputStats->KeyColumns);
+    outputStats.Selectivity *= selectivity;
 
     typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats) );
 }

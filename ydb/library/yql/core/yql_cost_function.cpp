@@ -45,10 +45,12 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
     EStatisticsType outputType;
     bool leftKeyColumns = false;
     bool rightKeyColumns = false;
+    double selectivity = 1.0;
 
 
     if (IsPKJoin(rightStats,rightJoinKeys)) {
-        newCard = leftStats.Nrows;
+        newCard = leftStats.Nrows * rightStats.Selectivity;
+        selectivity = leftStats.Selectivity * rightStats.Selectivity;
         leftKeyColumns = true;
         if (leftStats.Type == EStatisticsType::BaseTable){
             outputType = EStatisticsType::FilteredFactTable;
@@ -58,6 +60,9 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
     }
     else if (IsPKJoin(leftStats,leftJoinKeys)) {
         newCard = rightStats.Nrows;
+        newCard = rightStats.Nrows * leftStats.Selectivity;
+        selectivity = leftStats.Selectivity * rightStats.Selectivity;
+
         rightKeyColumns = true;
         if (rightStats.Type == EStatisticsType::BaseTable){
             outputType = EStatisticsType::FilteredFactTable;
@@ -76,8 +81,10 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
         + newCard 
         + leftStats.Cost + rightStats.Cost;
 
-    return TOptimizerStatistics(outputType, newCard, newNCols, cost, 
+    auto result =  TOptimizerStatistics(outputType, newCard, newNCols, cost, 
         leftKeyColumns ? leftStats.KeyColumns : ( rightKeyColumns ? rightStats.KeyColumns : TOptimizerStatistics::EmptyColumns));
+    result.Selectivity = selectivity;
+    return result;
 }
 
 

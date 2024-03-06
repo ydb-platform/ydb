@@ -76,7 +76,7 @@
 
 {% note info %}
 
-Если требуется, пользователь может передавать строку соединения с БД стандартными средствами Terraform - через variables
+Если требуется, пользователь может передавать строку соединения с БД стандартными средствами Terraform - через [variables](https://developer.hashicorp.com/terraform/language/values/variables).
 
 {% endnote %}
 

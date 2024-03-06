@@ -76,7 +76,7 @@ bool TPredicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& sour
 }
 
 bool TSnapshotFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& /*step*/) const {
-    auto filter = MakeSnapshotFilter(source->GetStageData().GetTable(), source->GetContext()->GetReadMetadata()->GetSnapshot());
+    auto filter = MakeSnapshotFilter(source->GetStageData().GetTable(), source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
     source->MutableStageData().AddFilter(filter);
     return true;
 }

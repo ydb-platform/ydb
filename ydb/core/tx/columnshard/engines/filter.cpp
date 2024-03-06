@@ -123,18 +123,4 @@ NArrow::TColumnFilter MakeSnapshotFilter(const std::shared_ptr<arrow::RecordBatc
     return MakeSnapshotFilterImpl<TSnapshotGetter>(batch, snapshot);
 }
 
-NArrow::TColumnFilter FilterPortion(const std::shared_ptr<arrow::Table>& portion, const TReadMetadata& readMetadata, const bool useSnapshotFilter) {
-    Y_ABORT_UNLESS(portion);
-    NArrow::TColumnFilter result = readMetadata.GetPKRangesFilter().BuildFilter(portion);
-    if (readMetadata.GetSnapshot().GetPlanStep() && useSnapshotFilter) {
-        result = result.And(MakeSnapshotFilter(portion, readMetadata.GetSnapshot()));
-    }
-
-    return result;
-}
-
-NArrow::TColumnFilter FilterNotIndexed(const std::shared_ptr<arrow::Table>& batch, const TReadMetadata& readMetadata) {
-    return readMetadata.GetPKRangesFilter().BuildFilter(batch);
-}
-
 }

@@ -25,7 +25,7 @@
 1. Нужно скачать [код провайдера](https://github.com/ydb-platform/terraform-provider-ydb/)
 2. Собрать провайдер, выполнив `make local-build`
 Провайдер установится в папку плагинов Terraform - `~/.terraform.d/plugins/terraform.storage.ydb.tech/...`
-3. Настроить `~/.terraformrc`, добавив в секцию `provider_installation` (если такая секция уже есть, то в текущую) следующее содержание:
+3. Добавить провайдер в `~/.terraformrc`, дописав в секцию `provider_installation` следующее содержание (если такой секции ещё не было, то создать):
 
     ```tf
     direct {

@@ -448,6 +448,7 @@ public:
                 Split(ArgNamesStr.substr(1, ArgNamesStr.size() - 2), ",", names);
                 Y_ENSURE(names.size() >= LastProc.ArgTypes.size());
                 LastProc.OutputArgNames.insert(LastProc.OutputArgNames.begin(), names.begin() + LastProc.ArgTypes.size(), names.end());
+                LastProc.InputArgNames.insert(LastProc.InputArgNames.begin(), names.begin(), names.begin() + LastProc.ArgTypes.size());
             }
 
             if (!AllArgTypesStr.empty()) {

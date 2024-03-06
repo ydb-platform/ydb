@@ -470,6 +470,8 @@ struct TEvBlobStorage {
         EvPatch,
         EvInplacePatch,
         EvAssimilate,
+        EvGetBlock,
+        EvGetBlockResult,
 
         //
         EvPutResult = EvPut + 512,                              /// 268 632 576
@@ -1349,6 +1351,77 @@ struct TEvBlobStorage {
 
         TEvBlockResult(NKikimrProto::EReplyStatus status)
             : Status(status)
+        {}
+
+        TString Print(bool isFull) const {
+            Y_UNUSED(isFull);
+            TStringStream str;
+            str << "TEvBlockResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
+            if (ErrorReason.size()) {
+                str << " ErrorReason# \"" << ErrorReason << "\"";
+            }
+            str << "}";
+            return str.Str();
+        }
+
+        TString ToString() const {
+            return Print(false);
+        }
+    };
+
+    struct TEvGetBlock : public TEventLocal<TEvBlock, EvGetBlock> {
+        const ui64 TabletId;
+        const TInstant Deadline;
+        const ui64 IssuerGuid = RandomNumber<ui64>() | 1;
+        bool IsMonitored = true;
+        ui32 RestartCounter = 0;
+        std::shared_ptr<TExecutionRelay> ExecutionRelay;
+
+        TEvGetBlock(ui64 tabletId, TInstant deadline)
+            : TabletId(tabletId)
+            , Deadline(deadline)
+        {}
+
+        TEvGetBlock(ui64 tabletId, TInstant deadline, ui64 issuerGuid)
+            : TabletId(tabletId)
+            , Deadline(deadline)
+            , IssuerGuid(issuerGuid)
+        {}
+
+        TString Print(bool isFull) const {
+            Y_UNUSED(isFull);
+            TStringStream str;
+            str << "TEvBlock {TabletId# " << TabletId
+                << " Deadline# " << Deadline.MilliSeconds()
+                << " IsMonitored# " << IsMonitored
+                << "}";
+            return str.Str();
+        }
+
+        TString ToString() const {
+            return Print(false);
+        }
+
+        ui32 CalculateSize() const {
+            return sizeof(*this);
+        }
+
+        std::unique_ptr<TEvBlockResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
+            ui32 groupId);
+    };
+
+    struct TEvGetBlockResult : public TEventLocal<TEvBlockResult, EvGetBlockResult> {
+        NKikimrProto::EReplyStatus Status;
+        ui32 Generation;
+        TString ErrorReason;
+        std::shared_ptr<TExecutionRelay> ExecutionRelay;
+
+        TEvGetBlockResult(NKikimrProto::EReplyStatus status)
+            : Status(status)
+        {}
+
+        TEvGetBlockResult(ui32 generation)
+            : Generation(generation)
         {}
 
         TString Print(bool isFull) const {

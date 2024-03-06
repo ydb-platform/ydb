@@ -145,6 +145,7 @@ inline void SetExecutionRelay(IEventBase& ev, std::shared_ptr<TEvBlobStorage::TE
         XX(Put)
         XX(Get)
         XX(Block)
+        XX(GetBlock)
         XX(Discover)
         XX(Range)
         XX(CollectGarbage)
@@ -696,6 +697,11 @@ IActor* CreateBlobStorageGroupMultiCollectRequest(const TIntrusivePtr<TBlobStora
 IActor* CreateBlobStorageGroupBlockRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
     const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
     const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvBlock *ev,
+    ui64 cookie, NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters);
+
+IActor* CreateBlobStorageGroupGetBlockRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
+    const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
+    const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGetBlock *ev,
     ui64 cookie, NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters);
 
 IActor* CreateBlobStorageGroupStatusRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,

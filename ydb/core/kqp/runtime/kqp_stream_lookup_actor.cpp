@@ -35,7 +35,6 @@ public:
         , TypeEnv(args.TypeEnv)
         , Alloc(args.Alloc)
         , Snapshot(settings.GetSnapshot().GetStep(), settings.GetSnapshot().GetTxId())
-        , AllowInconsistentReads(settings.GetAllowInconsistentReads())
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
         , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), args.TypeEnv, args.HolderFactory, args.InputDesc))
@@ -274,10 +273,6 @@ private:
             Locks.push_back(lock);
         }
 
-        if (!Snapshot.IsValid()) {
-            Snapshot = IKqpGateway::TKqpSnapshot(record.GetSnapshot().GetStep(), record.GetSnapshot().GetTxId());
-        }
-
         Counters->DataShardIteratorMessages->Inc();
         if (record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
             Counters->DataShardIteratorFails->Inc();
@@ -393,12 +388,9 @@ private:
 
         TReadState read(record.GetReadId(), shardId);
 
-        if (Snapshot.IsValid()) {
-            record.MutableSnapshot()->SetStep(Snapshot.Step);
-            record.MutableSnapshot()->SetTxId(Snapshot.TxId);
-        } else {
-            YQL_ENSURE(AllowInconsistentReads, "Expected valid snapshot or enabled inconsistent read mode");
-        }
+        YQL_ENSURE(Snapshot.IsValid(), "Invalid snapshot value");
+        record.MutableSnapshot()->SetStep(Snapshot.Step);
+        record.MutableSnapshot()->SetTxId(Snapshot.TxId);
 
         if (LockTxId && BrokenLocks.empty()) {
             record.SetLockTxId(*LockTxId);
@@ -504,7 +496,6 @@ private:
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     IKqpGateway::TKqpSnapshot Snapshot;
-    const bool AllowInconsistentReads;
     const TMaybe<ui64> LockTxId;
     std::unordered_map<ui64, TReadState> Reads;
     std::unordered_map<ui64, TShardState> ReadsPerShard;

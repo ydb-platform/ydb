@@ -100,7 +100,7 @@ namespace NKikimr::NOlap {
     public:
         TNormalizationController(std::shared_ptr<IStoragesManager> storagesManager, const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>& counters)
             : StoragesManager(storagesManager)
-            , TaskSubscription("CS:NORMALIZER", counters) {}
+            , TaskSubscription("CS::NORMALIZER", counters) {}
 
         const NOlap::NResourceBroker::NSubscribe::TTaskContext& GetTaskSubscription() const {
             return TaskSubscription;

@@ -18,7 +18,7 @@ std::unique_ptr<NActors::IEventBase> TRepliesAdapter::RebuildReplyEvent(std::uni
         AFL_VERIFY(!!ev->Body)("key", ev->Key)("interval_from", ev->GetReadInterval().first)("interval_to", ev->GetReadInterval().second);
         return std::make_unique<NBlobCache::TEvBlobCache::TEvReadBlobRangeResult>(bRange, NKikimrProto::EReplyStatus::OK, ev->Body);
     } else {
-        return std::make_unique<NBlobCache::TEvBlobCache::TEvReadBlobRangeResult>(bRange, NKikimrProto::EReplyStatus::ERROR, "");
+        return std::make_unique<NBlobCache::TEvBlobCache::TEvReadBlobRangeResult>(bRange, NKikimrProto::EReplyStatus::ERROR, ev->ToString());
     }
 }
 

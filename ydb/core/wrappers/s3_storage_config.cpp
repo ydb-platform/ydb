@@ -5,6 +5,7 @@
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/utils/stream/PreallocatedStreamBuf.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/utils/stream/ResponseStream.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/Aws.h>
+#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/utils/threading/Executor.h>
 #include <contrib/libs/curl/include/curl/curl.h>
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/log.h>
@@ -105,6 +106,7 @@ Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(co
     if (settings.HasHttpRequestTimeoutMs()) {
         config.httpRequestTimeoutMs = settings.GetHttpRequestTimeoutMs();
     }
+    config.executor = std::make_shared<Aws::Utils::Threading::PooledThreadExecutor>(1);
     config.enableTcpKeepAlive = true;
     //    config.lowSpeedLimit = 0;
     config.maxConnections = 5;

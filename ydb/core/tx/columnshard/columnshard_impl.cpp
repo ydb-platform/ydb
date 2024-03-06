@@ -169,6 +169,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , SubscribeCounters(std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>())
     , InsertTaskSubscription(NOlap::TInsertColumnEngineChanges::StaticTypeName(), SubscribeCounters)
     , CompactTaskSubscription(NOlap::TCompactColumnEngineChanges::StaticTypeName(), SubscribeCounters)
+    , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), SubscribeCounters)
     , ReadCounters("Read")
     , ScanCounters("Scan")
     , WritesMonitor(*this)
@@ -723,8 +724,8 @@ protected:
         }
     }
     virtual bool DoOnError(const TBlobRange& range, const NOlap::IBlobsReadingAction::TErrorStatus& status) override {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "DoOnError")("blob_id", range)("status", status.GetErrorMessage())("status_code", status.GetStatus());
-        AFL_VERIFY(false)("blob_id", range)("status", status.GetStatus());
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DoOnError")("blob_id", range)("status", status.GetErrorMessage())("status_code", status.GetStatus());
+        AFL_VERIFY(false)("blob_id", range)("status", status.GetStatus())("status_message", status.GetErrorMessage());
         TxEvent->SetPutStatus(NKikimrProto::ERROR);
         TActorContext::AsActorContext().Send(ParentActorId, std::move(TxEvent));
         return false;
@@ -867,13 +868,17 @@ bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls, con
     }
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
-    std::shared_ptr<NOlap::TTTLColumnEngineChanges> indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(eviction, BackgroundController.GetConflictTTLPortions());
+
+    const ui64 memoryUsageLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetTieringsMemoryLimit() : ((ui64)512 * 1024 * 1024);
+    std::shared_ptr<NOlap::TTTLColumnEngineChanges> indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(
+        eviction, BackgroundController.GetConflictTTLPortions(), memoryUsageLimit);
 
     if (!indexChanges) {
         ACFL_DEBUG("background", "ttl")("skip_reason", "no_changes");
         return false;
     }
 
+    const TString externalTaskId = indexChanges->GetTaskIdentifier();
     const bool needWrites = indexChanges->NeedConstruction();
     ACFL_DEBUG("background", "ttl")("need_writes", needWrites);
 
@@ -881,7 +886,9 @@ bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls, con
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, false);
     NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexStart(TabletID(), indexChanges->TypeString());
     if (needWrites) {
-        ActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(std::make_shared<TChangesReadTask>(std::move(ev), SelfId(), TabletID(), CompactionCounters)));
+        NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
+            ResourceSubscribeActor, std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(
+                std::make_shared<TChangesReadTask>(std::move(ev), SelfId(), TabletID(), CompactionCounters), 0, indexChanges->CalcMemoryForUsage(), externalTaskId, TTLTaskSubscription));
     } else {
         ev->SetPutStatus(NKikimrProto::OK);
         ActorContext().Send(SelfId(), std::move(ev));

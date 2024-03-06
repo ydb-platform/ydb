@@ -110,11 +110,13 @@ std::shared_ptr<arrow::RecordBatch> TMergePartialStream::SingleSourceDrain(const
     } else {
         result = SortHeap.Current().GetKeyColumns().Slice(startPos, delta + (include ? 1 : 0));
     }
+    AFL_VERIFY(result);
 #ifndef NDEBUG
     NArrow::TStatusValidator::Validate(result->ValidateFull());
 #endif
-    if (Reverse) {
+    if (Reverse && result->num_rows()) {
         auto permutation = NArrow::MakePermutation(result->num_rows(), true);
+        AFL_VERIFY(permutation);
         result = NArrow::TStatusValidator::GetValid(arrow::compute::Take(result, permutation)).record_batch();
     }
 

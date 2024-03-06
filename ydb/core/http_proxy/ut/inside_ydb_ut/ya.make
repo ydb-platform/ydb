@@ -1,9 +1,6 @@
-UNITTEST_FOR(ydb/core/http_proxy)
+OWNER(g:kikimr)
 
-OWNER(
-    g:kikimr
-    g:logbroker
-)
+UNITTEST()
 
 SIZE(MEDIUM)
 
@@ -16,7 +13,6 @@ PEERDIR(
     ydb/library/actors/http
     ydb/library/grpc/server
     ydb/library/grpc/server/actors
-    library/cpp/resource
     # logbroker/unified_agent/client/cpp/logger
     ydb/core/base
     ydb/core/http_proxy
@@ -26,22 +22,19 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_discovery
     ydb/public/sdk/cpp/client/ydb_types
     ydb/services/ydb
-    ydb/library/testlib/service_mocks
-    ydb/core/tx/datashard/ut_common
-    # kikimr/yndx/testlib/service_mocks
-
 )
 
 SRCS(
-    datastreams_fixture.h
-    http_proxy_ut.cpp
-    error_codes_ut.cpp
+    ../http_proxy_ut.cpp
+    inside_ydb_ut.cpp
 )
 
 RESOURCE(
-    internal_counters.json internal_counters.json
-    proxy_counters.json proxy_counters.json
+    ydb/core/http_proxy/ut/internal_counters.json internal_counters.json
+    ydb/core/http_proxy/ut/proxy_counters.json proxy_counters.json
 )
+
+ENV(INSIDE_YDB="1")
 
 YQL_LAST_ABI_VERSION()
 

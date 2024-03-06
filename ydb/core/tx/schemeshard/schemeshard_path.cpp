@@ -923,7 +923,7 @@ const TPath::TChecker& TPath::TChecker::NotChildren(EStatus status) const {
         << ", children: " << childrenCount);
 }
 
-const TPath::TChecker& TPath::TChecker::NotIndexes(EStatus status) const {
+const TPath::TChecker& TPath::TChecker::CanBackupTable(EStatus status) const {
     if (Failed) {
         return *this;
     }

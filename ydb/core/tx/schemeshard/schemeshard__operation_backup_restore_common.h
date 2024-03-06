@@ -619,7 +619,7 @@ public:
                 .NotAsyncReplicaTable()
                 .NotUnderOperation()
                 .IsCommonSensePath() //forbid alter impl index tables
-                .NotIndexes(); //forbid backup table with indexes
+                .CanBackupTable(); //forbid backup table with indexes
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());

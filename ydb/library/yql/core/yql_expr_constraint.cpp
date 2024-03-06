@@ -781,18 +781,19 @@ private:
                 columns.resize(size, std::make_pair(TPartOfConstraintBase::TPathType(), columns.back().second));
                 auto it = columns.begin();
                 for (auto i = 0U; i < size; ++i) {
-                    if (auto path = GetPathToKey(*keySelectorBody.Child(i), keySelectorArg)) {
+                    if (auto path = GetPathToKey<true>(*keySelectorBody.Child(i), keySelectorArg)) {
                         if (set.insert(*path).second)
                             it++->first = std::move(*path);
                         else if (columns.cend() != it)
                             it = columns.erase(it);
                     } else {
-                        return {};
+                        columns.resize(i);
+                        break;
                     }
                 }
             } else
                 return {};
-        else if (auto path = GetPathToKey(keySelectorBody, keySelectorArg))
+        else if (auto path = GetPathToKey<true>(keySelectorBody, keySelectorArg))
             if (columns.size() == 1U)
                 columns.front().first = std::move(*path);
             else

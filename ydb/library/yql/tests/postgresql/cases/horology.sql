@@ -78,6 +78,7 @@ SELECT '4714-11-24 BC'::date < '2020-10-05'::timestamptz as t;
 SELECT '2020-10-05'::timestamptz >= '4714-11-24 BC'::date as t;
 SELECT '4714-11-24 BC'::timestamp < '2020-10-05'::timestamptz as t;
 SELECT '2020-10-05'::timestamptz >= '4714-11-24 BC'::timestamp as t;
+SELECT d1 AS us_iso FROM TIMESTAMP_TBL;
 SELECT to_timestamp('97/Feb/16', 'YYMonDD');
 SELECT to_timestamp('2011-12-18 11:38 PST', 'YYYY-MM-DD HH12:MI TZ');  -- NYI
 SELECT to_timestamp('2000 + + JUN', 'YYYY  MON');

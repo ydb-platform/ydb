@@ -1,4 +1,5 @@
 #include "index_info.h"
+#include "statistics/abstract/operator.h"
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/sort_cursor.h>
@@ -8,9 +9,6 @@
 #include <ydb/core/base/appdata.h>
 
 namespace NKikimr::NOlap {
-
-const TString TIndexInfo::STORE_INDEX_STATS_TABLE = TString("/") + NSysView::SysPathName + "/" + NSysView::StorePrimaryIndexStatsName;
-const TString TIndexInfo::TABLE_INDEX_STATS_TABLE = TString("/") + NSysView::SysPathName + "/" + NSysView::TablePrimaryIndexStatsName;
 
 static std::vector<TString> NamesOnly(const std::vector<TNameTypeInfo>& columns) {
     std::vector<TString> out;
@@ -315,12 +313,6 @@ TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId, const TSaverContext
     }
 }
 
-std::shared_ptr<TColumnLoader> TIndexInfo::GetColumnLoaderVerified(const ui32 columnId) const {
-    auto result = GetColumnLoaderOptional(columnId);
-    AFL_VERIFY(result);
-    return result;
-}
-
 std::shared_ptr<TColumnLoader> TIndexInfo::GetColumnLoaderOptional(const ui32 columnId) const {
     auto it = ColumnFeatures.find(columnId);
     if (it == ColumnFeatures.end()) {
@@ -368,6 +360,17 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
     if (schema.GetEngine() != NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_index_info")("reason", "incorrect_engine_in_schema");
         return false;
+    }
+
+    {
+        NStatistics::TPortionStorageCursor cursor;
+        for (const auto& stat : schema.GetStatistics()) {
+            NStatistics::TOperatorContainer container;
+            AFL_VERIFY(container.DeserializeFromProto(stat));
+            container.SetCursor(cursor);
+            Statistics.emplace(container->GetIdentifier(), container);
+            container->ShiftCursor(cursor);
+        }
     }
 
     for (const auto& idx : schema.GetIndexes()) {

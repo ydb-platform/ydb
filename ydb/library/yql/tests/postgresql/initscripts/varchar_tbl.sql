@@ -5,3 +5,7 @@ INSERT INTO VARCHAR_TBL (f1) VALUES ('ab');
 INSERT INTO VARCHAR_TBL (f1) VALUES ('abcd');
 INSERT INTO VARCHAR_TBL (f1) VALUES ('abcd');
 
+CREATE TABLE varchar_tbl(f1 varchar(4));
+INSERT INTO varchar_tbl
+SELECT * from VARCHAR_TBL;
+

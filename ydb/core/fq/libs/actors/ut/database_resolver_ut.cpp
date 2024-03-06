@@ -175,8 +175,8 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
                 })",           
             NYql::TDatabaseResolverResponse::TDatabaseDescription{
                 TString{"ydb.serverless.yandexcloud.net:2135"},
-                TString{""},
-                0,
+                TString{"ydb.serverless.yandexcloud.net"},
+                2135,
                 TString("/ru-central1/b1g7jdjqd07qg43c4fmp/etn021us5r9rhld1vgbh"),
                 true
                 },
@@ -196,8 +196,8 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
                 })",
             NYql::TDatabaseResolverResponse::TDatabaseDescription{
                 TString{"yds.serverless.yandexcloud.net:2135"},
-                TString{""},
-                0,
+                TString{"yds.serverless.yandexcloud.net"},
+                2135,
                 TString("/ru-central1/b1g7jdjqd07qg43c4fmp/etn021us5r9rhld1vgbh"),
                 true
                 },
@@ -218,8 +218,8 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
                 })",
             NYql::TDatabaseResolverResponse::TDatabaseDescription{
                 TString{"u-lb.etn021us5r9rhld1vgbh.ydb.mdb.yandexcloud.net:2135"},
-                TString{""},
-                0,
+                TString{"u-lb.etn021us5r9rhld1vgbh.ydb.mdb.yandexcloud.net"},
+                2135,
                 TString("/ru-central1/b1g7jdjqd07qg43c4fmp/etn021us5r9rhld1vgbh"),
                 true
                 },

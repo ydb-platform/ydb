@@ -19,7 +19,7 @@ namespace NSchemeBoard {
 
 class TSubscriberTest: public NUnitTest::TTestBase {
     TVector<TActorId> ResolveReplicas() {
-        const TActorId proxy = MakeStateStorageProxyID(0);
+        const TActorId proxy = MakeStateStorageProxyID();
         const TActorId edge = Context->AllocateEdgeActor();
 
         Context->Send(proxy, edge, new TEvStateStorage::TEvListSchemeBoard());
@@ -126,7 +126,7 @@ void TSubscriberTest::NotifyDelete() {
 void TSubscriberTest::StrongNotificationAfterCommit() {
     const TActorId edge = Context->AllocateEdgeActor();
 
-    Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyDelete>(edge, "path", 0, 1, false);
+    Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyDelete>(edge, "path", 1, false);
     {
         auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyDelete>(edge);
         UNIT_ASSERT(ev->Get());
@@ -162,7 +162,7 @@ void TSubscriberTest::InvalidNotification() {
 void TSubscriberTest::ReconnectOnFailure() {
     const TActorId edge = Context->AllocateEdgeActor(1);
 
-    Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyDelete>(edge, "path", 0, 1, true, 1);
+    Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyDelete>(edge, "path", 1, true, 1);
 
     Context->Disconnect(0, 1);
     Context->Connect(0, 1);
@@ -251,7 +251,7 @@ void TSubscriberTest::SyncWithOutdatedReplica() {
 
 class TSubscriberCombinationsTest: public NUnitTest::TTestBase {
     TVector<TActorId> ResolveReplicas(TTestContext& context) {
-        const TActorId proxy = MakeStateStorageProxyID(0);
+        const TActorId proxy = MakeStateStorageProxyID();
         const TActorId edge = context.AllocateEdgeActor();
 
         context.Send(proxy, edge, new TEvStateStorage::TEvListSchemeBoard());

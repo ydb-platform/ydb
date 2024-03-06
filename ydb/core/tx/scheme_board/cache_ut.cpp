@@ -124,7 +124,7 @@ void TCacheTest::Navigate() {
     auto entry = TestNavigate("/Root/DirA", TNavigate::EStatus::Ok);
 
     TestNavigateByTableId(entry.TableId, TNavigate::EStatus::Ok, "/Root/DirA");
-    TestNavigateByTableId(TTableId(1ull << 56, 1), TNavigate::EStatus::RootUnknown, "");
+    TestNavigateByTableId(TTableId(2UL << 56, 1), TNavigate::EStatus::RootUnknown, "");
 }
 
 void TCacheTest::Attributes() {

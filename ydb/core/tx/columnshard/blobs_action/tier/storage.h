@@ -13,7 +13,7 @@ private:
     using TBase = IBlobsStorageOperator;
     const NActors::TActorId TabletActorId;
     std::shared_ptr<TGCInfo> GCInfo = std::make_shared<TGCInfo>();
-
+    std::optional<NKikimrSchemeOp::TS3Settings> CurrentS3Settings;
     NWrappers::NExternalStorage::IExternalStorageConfig::TPtr InitializationConfig;
     NWrappers::NExternalStorage::IExternalStorageConfig::TPtr ExternalStorageConfig;
     TSpinLock ChangeOperatorLock;
@@ -32,7 +32,7 @@ protected:
     virtual std::shared_ptr<IBlobsReadingAction> DoStartReadingAction() override;
     virtual std::shared_ptr<IBlobsGCAction> DoStartGCAction(const std::shared_ptr<TRemoveGCCounters>& counters) const override;
     virtual bool DoLoad(IBlobManagerDb& dbBlobs) override;
-    virtual void DoOnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& tiers) override;
+    virtual void DoOnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& tiers) override;
 
 public:
     TOperator(const TString& storageId, const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager);

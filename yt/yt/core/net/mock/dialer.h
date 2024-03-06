@@ -14,7 +14,7 @@ class TDialerMock
 public:
     explicit TDialerMock(IDialerPtr underlying);
 
-    MOCK_METHOD(TFuture<IConnectionPtr>, Dial, (const TNetworkAddress& remote), (override));
+    MOCK_METHOD(TFuture<IConnectionPtr>, Dial, (const TNetworkAddress& remote, TRemoteContextPtr context), (override));
 
 private:
     const IDialerPtr Underlying_;

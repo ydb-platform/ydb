@@ -49,11 +49,18 @@ void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager* ti
     } else {
         settings.SetEndpoint("nowhere");
     }
+    {
+        TGuard<TSpinLock> changeLock(ChangeOperatorLock);
+        if (CurrentS3Settings && CurrentS3Settings->SerializeAsString() == settings.SerializeAsString()) {
+            return;
+        }
+    }
     auto extStorageConfig = NWrappers::NExternalStorage::IExternalStorageConfig::Construct(settings);
     AFL_VERIFY(extStorageConfig);
     auto extStorageOperator = extStorageConfig->ConstructStorageOperator(false);
     extStorageOperator->InitReplyAdapter(std::make_shared<NOlap::NBlobOperations::NTier::TRepliesAdapter>(GetStorageId()));
     TGuard<TSpinLock> changeLock(ChangeOperatorLock);
+    CurrentS3Settings = settings;
     ExternalStorageOperator = extStorageOperator;
 }
 
@@ -81,7 +88,7 @@ TOperator::TOperator(const TString& storageId, const TActorId& shardActorId, con
     InitNewExternalOperator();
 }
 
-void TOperator::DoOnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& tiers) {
+void TOperator::DoOnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& tiers) {
     auto* tierManager = tiers->GetManagerOptional(TBase::GetStorageId());
     if (tierManager) {
         InitNewExternalOperator(tierManager);

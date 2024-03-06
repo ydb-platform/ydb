@@ -55,13 +55,15 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
         LockNodeId = record.GetLockNodeId();
     }
 
+    OverloadSubscribe = record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>{};
+
     NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta;
 
     LOG_T("Parsing write transaction for " << globalTxId << " at " << TabletId << ", record: " << record.ShortDebugString());
 
     if (record.operations().size() != 0) {
         Y_ABORT_UNLESS(record.operations().size() == 1, "Only one operation is supported now");
-        Y_ABORT_UNLESS(record.operations(0).GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, "Only UPSERT operation is supported now");
+
         const NKikimrDataEvents::TEvWrite::TOperation& recordOperation = record.operations(0);
 
         ColumnIds = {recordOperation.GetColumnIds().begin(), recordOperation.GetColumnIds().end()};
@@ -82,6 +84,20 @@ TValidatedWriteTx::~TValidatedWriteTx() {
 }
 
 bool TValidatedWriteTx::ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos) {
+    
+    OperationType = recordOperation.GetType();
+    switch (OperationType) {
+        case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:
+        case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE:
+        case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE:
+            break;
+        default: {
+            ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT;
+            ErrStr = TStringBuilder() << OperationType << " operation is not supported now";
+            return false;
+        }
+    }
+
     const NKikimrDataEvents::TTableId& tableIdRecord = recordOperation.GetTableId();
 
     auto tableInfoPtr = tableInfos.FindPtr(tableIdRecord.GetTableId());
@@ -307,6 +323,7 @@ TWriteOperation::TWriteOperation(const TBasicOpInfo& op, ui64 tabletId)
 TWriteOperation::TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr&& ev, TDataShard* self)
     : TWriteOperation(op, self->TabletID())
 {
+    Recipient = ev->Recipient;
     SetTarget(ev->Sender);
     SetCookie(ev->Cookie);
 
@@ -439,7 +456,7 @@ void TWriteOperation::ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase& 
     LocksCache().Locks.clear();
     ArtifactFlags = 0;
 
-    LOG_D("tx " << GetTxId() << " released its data");
+    LOG_D("tx " << GetTxId() << " at " << TabletId << " released its data");
 }
 
 void TWriteOperation::DbStoreLocksAccessLog(NTable::TDatabase& txcDb)
@@ -460,7 +477,7 @@ void TWriteOperation::DbStoreLocksAccessLog(NTable::TDatabase& txcDb)
     TStringBuf vecData(vecDataStart, vecDataSize);
     db.Table<Schema::TxArtifacts>().Key(GetTxId()).Update(NIceDb::TUpdate<Schema::TxArtifacts::Locks>(vecData));
 
-    LOG_T("Storing " << vec.size() << " locks for txid=" << GetTxId() << " in " << TabletId);
+    LOG_T("Storing " << vec.size() << " locks for txid=" << GetTxId() << " at " << TabletId);
 }
 
 void TWriteOperation::DbStoreArtifactFlags(NTable::TDatabase& txcDb)
@@ -470,7 +487,7 @@ void TWriteOperation::DbStoreArtifactFlags(NTable::TDatabase& txcDb)
     NIceDb::TNiceDb db(txcDb);
     db.Table<Schema::TxArtifacts>().Key(GetTxId()).Update<Schema::TxArtifacts::Flags>(ArtifactFlags);
 
-    LOG_T("Storing artifactflags=" << ArtifactFlags << " for txid=" << GetTxId() << " in " << TabletId);
+    LOG_T("Storing artifactflags=" << ArtifactFlags << " for txid=" << GetTxId() << " at " << TabletId);
 }
 
 ui64 TWriteOperation::GetMemoryConsumption() const {
@@ -643,6 +660,7 @@ void TWriteOperation::UntrackMemory() const {
 void TWriteOperation::SetError(const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg) {
     SetAbortedFlag();
     WriteResult = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletId, GetTxId(), status, errorMsg);
+    LOG_I("Write transaction " << GetTxId() << " at " << TabletId << " has an error: " << errorMsg);
 }
 
 void TWriteOperation::SetWriteResult(std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>&& writeResult) {

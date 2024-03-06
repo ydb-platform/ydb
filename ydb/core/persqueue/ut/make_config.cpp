@@ -1,5 +1,7 @@
 #include "make_config.h"
 
+#include <ydb/core/persqueue/utils.h>
+
 namespace NKikimr::NPQ::NHelpers {
 
 NKikimrPQ::TPQTabletConfig MakeConfig(ui64 version,
@@ -26,6 +28,8 @@ NKikimrPQ::TPQTabletConfig MakeConfig(ui64 version,
     config.SetYdbDatabasePath("");
 
     config.SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
+
+    Migrate(config);
 
     return config;
 }

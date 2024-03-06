@@ -4,8 +4,17 @@
 #include "ypath_detail.h"
 
 #include <yt/yt/core/yson/producer.h>
+#include <yt/yt/core/yson/async_writer.h>
 
 namespace NYT::NYTree {
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TVirtualCompositeNodeReadOffloadParams
+{
+    NConcurrency::EWaitForStrategy WaitForStrategy = NConcurrency::EWaitForStrategy::WaitFor;
+    i64 BatchSize = 10'000;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -17,10 +26,12 @@ public:
     DEFINE_BYVAL_RW_PROPERTY(bool, Opaque, true);
 
 protected:
-    TVirtualMapBase();
-    explicit TVirtualMapBase(INodePtr owningNode);
+    explicit TVirtualMapBase(INodePtr owningNode = nullptr);
+
+    virtual std::optional<TVirtualCompositeNodeReadOffloadParams> GetReadOffloadParams() const;
 
     virtual std::vector<TString> GetKeys(i64 limit = std::numeric_limits<i64>::max()) const = 0;
+
     virtual i64 GetSize() const = 0;
 
     virtual IYPathServicePtr FindItemService(TStringBuf key) const = 0;
@@ -60,7 +71,6 @@ class TCompositeMapService
 {
 public:
     TCompositeMapService();
-
     ~TCompositeMapService();
 
     std::vector<TString> GetKeys(i64 limit = std::numeric_limits<i64>::max()) const override;
@@ -93,7 +103,10 @@ public:
     DEFINE_BYVAL_RW_PROPERTY(bool, Opaque, true);
 
 protected:
+    virtual std::optional<TVirtualCompositeNodeReadOffloadParams> GetReadOffloadParams() const;
+
     virtual i64 GetSize() const = 0;
+
     virtual IYPathServicePtr FindItemService(int index) const = 0;
 
     bool DoInvoke(const IYPathServiceContextPtr& context) override;

@@ -21,6 +21,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
 
 #include <ydb/core/util/ulid.h>
 
@@ -458,6 +459,16 @@ public:
         Become(&TKqpSessionActor::ExecuteState);
     }
 
+    void CompileSplittedQuery() {
+        YQL_ENSURE(QueryState);
+        auto ev = QueryState->BuildCompileSplittedRequest(CompilationCookie);
+        LOG_D("Sending CompileSplittedQuery request");
+
+        Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
+            QueryState->KqpSessionSpan.GetTraceId());
+        Become(&TKqpSessionActor::ExecuteState);
+    }
+
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto* response = ev->Get();
         YQL_ENSURE(response->Request);
@@ -497,7 +508,15 @@ public:
         // is success.
         if (!QueryState->SaveAndCheckCompileResult(ev->Get())) {
             LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
-            ReplyQueryCompileError();
+
+            if (QueryState->CompileResult->NeedToSplit) {
+                YQL_ENSURE(!QueryState->HasTxControl() && QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE);
+                auto ev = QueryState->BuildSplitRequest(CompilationCookie);
+                Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
+                    QueryState->KqpSessionSpan.GetTraceId());
+            } else {
+                ReplyQueryCompileError();
+            }
             return;
         }
 
@@ -525,6 +544,31 @@ public:
 
         Send(MakeKqpCompileServiceID(SelfId().NodeId()), request.release(), 0, QueryState->QueryId,
             QueryState->KqpSessionSpan.GetTraceId());
+    }
+
+    void Handle(TEvKqp::TEvSplitResponse::TPtr& ev) {
+        // outdated event from previous query.
+        // ignoring that.
+        if (ev->Cookie < QueryId) {
+            return;
+        }
+
+        YQL_ENSURE(QueryState);
+        TTimerGuard timer(this);
+        QueryState->SaveAndCheckSplitResult(ev->Get());
+        OnSuccessSplitRequest();
+    }
+
+    void OnSuccessSplitRequest() {
+        YQL_ENSURE(ExecuteNextStatementPart());
+    }
+
+    bool ExecuteNextStatementPart() {
+        if (QueryState->PrepareNextStatementPart()) {
+            CompileSplittedQuery();
+            return true;
+        }
+        return false;
     }
 
     void OnSuccessCompileRequest() {
@@ -1647,10 +1691,15 @@ public:
 
         QueryResponse = std::move(resEv);
 
+
         ProcessNextStatement();
     }
 
     void ProcessNextStatement() {
+        if (ExecuteNextStatementPart()) {
+            return;
+        }
+
         if (QueryState->ProcessingLastStatement()) {
             Cleanup();
             return;
@@ -2096,6 +2145,7 @@ public:
 
                 // forgotten messages from previous aborted request
                 hFunc(TEvKqp::TEvCompileResponse, HandleNoop);
+                hFunc(TEvKqp::TEvSplitResponse, HandleNoop);
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleNoop);
                 hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleNoop)
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNoop);
@@ -2142,6 +2192,7 @@ public:
                 // forgotten messages from previous aborted request
                 hFunc(TEvKqp::TEvCompileResponse, Handle);
                 hFunc(TEvKqp::TEvParseResponse, Handle);
+                hFunc(TEvKqp::TEvSplitResponse, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
 
@@ -2178,6 +2229,7 @@ public:
 
                 // forgotten messages from previous aborted request
                 hFunc(TEvKqp::TEvCompileResponse, HandleNoop);
+                hFunc(TEvKqp::TEvSplitResponse, HandleNoop);
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleNoop);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNoop);
                 hFunc(TEvents::TEvUndelivered, HandleNoop);

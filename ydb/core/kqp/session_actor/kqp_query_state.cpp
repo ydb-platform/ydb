@@ -141,6 +141,14 @@ bool TKqpQueryState::SaveAndCheckParseResult(TEvKqp::TEvParseResponse&& ev) {
     return true;
 }
 
+bool TKqpQueryState::SaveAndCheckSplitResult(TEvKqp::TEvSplitResponse* ev) {
+    SplittedExprs = std::move(ev->Exprs);
+    SplittedWorld = std::move(ev->World);
+    SplittedCtx = std::move(ev->Ctx);
+    NextSplittedExpr = -1;
+    return true;
+}
+
 std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie) {
     TMaybe<TKqpQueryId> query;
     TMaybe<TString> uid;
@@ -231,6 +239,74 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
 
     return std::make_unique<TEvKqp::TEvRecompileRequest>(UserToken, CompileResult->Uid, CompileResult->Query, isQueryActionPrepare,
         compileDeadline, DbCounters, ApplicationName, std::move(cookie), UserRequestContext, std::move(Orbit), TempTablesState);
+}
+
+std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildSplitRequest(std::shared_ptr<std::atomic<bool>> cookie) {
+    auto request = BuildCompileRequest(cookie);
+    request->Split = true;
+    return request;
+}
+
+std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedRequest(std::shared_ptr<std::atomic<bool>> cookie) {
+    TMaybe<TKqpQueryId> query;
+    TMaybe<TString> uid;
+
+    TKqpQuerySettings settings(GetType());
+    settings.DocumentApiRestricted = IsDocumentApiRestricted_;
+    settings.IsInternalCall = IsInternalCall();
+    settings.Syntax = GetSyntax();
+
+    switch (GetAction()) {
+        case NKikimrKqp::QUERY_ACTION_EXECUTE:
+            query = TKqpQueryId(Cluster, Database, GetQuery(), settings, GetQueryParameterTypes());
+            break;
+        default:
+            YQL_ENSURE(false);
+    }
+
+    auto compileDeadline = QueryDeadlines.TimeoutAt;
+    if (QueryDeadlines.CancelAt) {
+        compileDeadline = Min(compileDeadline, QueryDeadlines.CancelAt);
+    }
+
+    const bool perStatementResult = !HasTxControl() && GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE;
+
+    TMaybe<TQueryAst> statementAst;
+    if (!Statements.empty()) {
+        YQL_ENSURE(CurrentStatementId < Statements.size());
+        statementAst = Statements[CurrentStatementId];
+    }
+
+    return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, uid, std::move(query), false,
+        false, perStatementResult, compileDeadline, DbCounters, ApplicationName, std::move(cookie),
+        UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst,
+        false, SplittedCtx.Get(), SplittedExprs.at(NextSplittedExpr));
+}
+
+bool TKqpQueryState::PrepareNextStatementPart() {
+    QueryData = {};
+    PreparedQuery = {};
+    CompileResult = {};
+    TxCtx = {};
+    CurrentTx = 0;
+    TableVersions = {};
+    MaxReadType = ETableReadType::Other;
+    Commit = false;
+    Commited = false;
+    TopicOperations = {};
+    ReplayMessage = {};
+
+    ++NextSplittedExpr;
+    
+    if (NextSplittedExpr >= static_cast<int>(SplittedExprs.size()) || SplittedExprs.empty()) {
+        SplittedWorld.Reset();
+        SplittedExprs.clear();
+        SplittedCtx.Reset();
+        NextSplittedExpr = -1;
+        return false;
+    }
+
+    return true;
 }
 
 void TKqpQueryState::AddOffsetsToTransaction() {

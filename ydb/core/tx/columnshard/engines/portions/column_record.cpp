@@ -48,11 +48,11 @@ NKikimrTxColumnShard::TIndexColumnMeta TChunkMeta::SerializeToProto() const {
     return meta;
 }
 
-TColumnRecord::TColumnRecord(const TColumnChunkLoadContext& loadContext, const TIndexInfo& info)
+TColumnRecord::TColumnRecord(const TBlobRangeLink16::TLinkId blobLinkId, const TColumnChunkLoadContext& loadContext, const TIndexInfo& info)
     : Meta(loadContext, info)
     , ColumnId(loadContext.GetAddress().GetColumnId())
     , Chunk(loadContext.GetAddress().GetChunk())
-    , BlobRange(loadContext.GetBlobRange())
+    , BlobRange(loadContext.GetBlobRange().BuildLink(blobLinkId))
 {
 }
 
@@ -82,7 +82,7 @@ NKikimr::TConclusionStatus TColumnRecord::DeserializeFromProto(const NKikimrColu
         }
     }
     {
-        auto parsed = TBlobRange::BuildFromProto(proto.GetBlobRange());
+        auto parsed = TBlobRangeLink16::BuildFromProto(proto.GetBlobRange());
         if (!parsed) {
             return parsed;
         }

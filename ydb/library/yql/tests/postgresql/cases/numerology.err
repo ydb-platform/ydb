@@ -1,6 +1,9 @@
 Registering pre-existing tables
+	int4_tbl
 	INT4_TBL
+	float8_tbl
 	INT2_TBL
+	int2_tbl
 	FLOAT8_TBL
 <sql-statement>
 --

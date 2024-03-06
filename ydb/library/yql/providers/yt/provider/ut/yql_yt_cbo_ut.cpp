@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/providers/yt/provider/yql_yt_join_impl.h>
 #include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
+#include <ydb/library/yql/dq/opt/dq_opt_log.h>
 
 namespace NYql {
 
@@ -71,6 +72,21 @@ Y_UNIT_TEST(OrderJoinsDoesNothingWhenCBODisabled) {
     UNIT_ASSERT_VALUES_EQUAL(tree, optimizedTree);
 }
 
+Y_UNIT_TEST(NonReordable) {
+    auto stat = std::make_shared<TOptimizerStatistics>();
+    auto left = std::make_shared<TRelOptimizerNode>("a", stat);
+    auto right = std::make_shared<TRelOptimizerNode>("a", stat);
+
+    std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>> joinConditions;
+    joinConditions.insert({NDq::TJoinColumn{"a", "b"}, NDq::TJoinColumn{"a","c"}});
+    auto root = std::make_shared<TJoinOptimizerNode>(
+        left, right, joinConditions, EJoinKind::InnerJoin, EJoinAlgoType::GraceJoin, true);
+    TDummyProviderContext optCtx;
+    std::unique_ptr<IOptimizerNew> opt = std::unique_ptr<IOptimizerNew>(NDq::MakeNativeOptimizerNew(optCtx, 1024));
+    auto result = opt->JoinSearch(root);
+    UNIT_ASSERT(root == result);
+}
+
 Y_UNIT_TEST(BuildOptimizerTree2Tables) {
     TExprContext exprCtx;
     auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n"}, exprCtx);
@@ -132,6 +148,22 @@ Y_UNIT_TEST(BuildYtJoinTree2Tables) {
     auto joinTree = BuildYtJoinTree(resultTree, exprCtx, {});
 
     UNIT_ASSERT(AreSimilarTrees(joinTree, tree));
+}
+
+Y_UNIT_TEST(BuildYtJoinTree2TablesForceMergeJoib) {
+    TExprContext exprCtx;
+    auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n"}, exprCtx);
+    tree->Left = MakeLeaf({"c"}, {"c"},  100000, 12333, exprCtx);
+    tree->Right = MakeLeaf({"n"}, {"n"}, 1000, 1233, exprCtx);
+    tree->LinkSettings.ForceSortedMerge = true;
+
+    std::shared_ptr<IBaseOptimizerNode> resultTree;
+    std::shared_ptr<IProviderContext> resultCtx;
+    BuildOptimizerJoinTree(resultTree, resultCtx, tree);
+
+    auto joinTree = BuildYtJoinTree(resultTree, exprCtx, {});
+
+    UNIT_ASSERT(joinTree == tree);
 }
 
 Y_UNIT_TEST(BuildYtJoinTree2TablesComplexLabel) {

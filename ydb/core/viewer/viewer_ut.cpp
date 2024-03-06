@@ -618,9 +618,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             entry.Kind = TSchemeCacheNavigate::EKind::KindExtSubdomain;
             entry.DomainInfo = MakeIntrusive<TDomainInfo>(SHARED_DOMAIN_KEY, SHARED_DOMAIN_KEY);
             auto domains = runtime.GetAppData().DomainsInfo;
-            auto domain = domains->Domains.begin()->second;
-            ui64 hiveId = domains->GetHive(domain->DefaultHiveUid);
-            entry.DomainInfo->Params.SetHive(hiveId);
+            entry.DomainInfo->Params.SetHive(domains->GetHive());
         } else if (path == "/Root/serverless/users" || entry.TableId.PathId == SERVERLESS_TABLE) {
             entry.Status = TSchemeCacheNavigate::EStatus::Ok;
             entry.Kind = TSchemeCacheNavigate::EKind::KindTable;

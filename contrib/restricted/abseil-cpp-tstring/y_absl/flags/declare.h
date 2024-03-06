@@ -40,13 +40,8 @@ class Flag;
 // Flag
 //
 // Forward declaration of the `y_absl::Flag` type for use in defining the macro.
-#if defined(_MSC_VER) && !defined(__clang__)
-template <typename T>
-class Flag;
-#else
 template <typename T>
 using Flag = flags_internal::Flag<T>;
-#endif
 
 Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

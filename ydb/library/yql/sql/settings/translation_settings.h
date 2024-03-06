@@ -117,6 +117,7 @@ namespace NSQLTranslation {
         bool UnicodeLiterals = false;
 
         TMaybe<TString> ApplicationName;
+        bool PgSortNulls = false;
     };
 
     bool ParseTranslationSettings(const TString& query, NSQLTranslation::TTranslationSettings& settings, NYql::TIssues& issues);

@@ -18,6 +18,7 @@ Then you can make a variable-font this way:
 
 API *will* change in near future.
 """
+
 from typing import List
 from fontTools.misc.vector import Vector
 from fontTools.misc.roundTools import noRound, otRound
@@ -215,8 +216,6 @@ def _add_avar(font, axes, mappings, axisTags):
 
     if mappings:
         interesting = True
-
-        hiddenAxes = [axis for axis in axes.values() if axis.hidden]
 
         inputLocations = [
             {
@@ -571,9 +570,11 @@ def _get_advance_metrics(
     sparse_advance = 0xFFFF
     for glyph in glyphOrder:
         vhAdvances = [
-            metrics[glyph][0]
-            if glyph in metrics and metrics[glyph][0] != sparse_advance
-            else None
+            (
+                metrics[glyph][0]
+                if glyph in metrics and metrics[glyph][0] != sparse_advance
+                else None
+            )
             for metrics in advMetricses
         ]
         vhAdvanceDeltasAndSupports[glyph] = masterModel.getDeltasAndSupports(
@@ -752,10 +753,14 @@ def _add_BASE(font, masterModel, master_ttfs, axisTags):
 
 
 def _merge_OTL(font, model, master_fonts, axisTags):
+    otl_tags = ["GSUB", "GDEF", "GPOS"]
+    if not any(tag in font for tag in otl_tags):
+        return
+
     log.info("Merging OpenType Layout tables")
     merger = VariationMerger(model, axisTags, font)
 
-    merger.mergeTables(font, master_fonts, ["GSUB", "GDEF", "GPOS"])
+    merger.mergeTables(font, master_fonts, otl_tags)
     store = merger.store_builder.finish()
     if not store:
         return

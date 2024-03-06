@@ -1868,9 +1868,9 @@
     ],
     "test.test[pg-select_win_count_all-default.txt-Debug]": [
         {
-            "checksum": "4e5298a8cb161db246107189ba31c985",
-            "size": 1788,
-            "uri": "https://{canondata_backend}/1777230/91a147d17132375579c4f4ec545f8c73b8b69ee1/resource.tar.gz#test.test_pg-select_win_count_all-default.txt-Debug_/opt.yql_patched"
+            "checksum": "bec03ada15eb4738066a2bdf5063877a",
+            "size": 1794,
+            "uri": "https://{canondata_backend}/1880306/279c7aba2c44599afb6ffd3e15e09f8e37a8e4ce/resource.tar.gz#test.test_pg-select_win_count_all-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-select_win_count_all-default.txt-Plan]": [
@@ -2035,6 +2035,28 @@
         }
     ],
     "test.test[pg-wide_sort--Results]": [],
+    "test.test[pg_catalog-pg_aggregate-default.txt-Analyze]": [
+        {
+            "checksum": "c1f2d837c3623c81dd596a9877913fb8",
+            "size": 948,
+            "uri": "https://{canondata_backend}/1936947/7a33d500072033ae868c5c1e2bf951de3ed26f10/resource.tar.gz#test.test_pg_catalog-pg_aggregate-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[pg_catalog-pg_aggregate-default.txt-Debug]": [
+        {
+            "checksum": "12afe573e5b08db085a77ae9c3eee1a1",
+            "size": 3808,
+            "uri": "https://{canondata_backend}/1936947/7a33d500072033ae868c5c1e2bf951de3ed26f10/resource.tar.gz#test.test_pg_catalog-pg_aggregate-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg_catalog-pg_aggregate-default.txt-Plan]": [
+        {
+            "checksum": "c1f2d837c3623c81dd596a9877913fb8",
+            "size": 948,
+            "uri": "https://{canondata_backend}/1936947/7a33d500072033ae868c5c1e2bf951de3ed26f10/resource.tar.gz#test.test_pg_catalog-pg_aggregate-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg_catalog-pg_aggregate-default.txt-Results]": [],
     "test.test[produce-process_multi_out_bad_count_fail--Results]": [
         {
             "uri": "file://test.test_produce-process_multi_out_bad_count_fail--Results_/extracted"

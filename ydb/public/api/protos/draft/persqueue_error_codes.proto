@@ -48,5 +48,7 @@ enum EErrorCode {
 
     SCHEMA_ERROR = 28;
 
+    UNKNOWN_TXID = 30;
+
     ERROR = 100;
 }

@@ -424,7 +424,35 @@ public:
                 };
 
                 ApplyFillers(AllPgClassFillers, Y_ARRAY_SIZE(AllPgClassFillers), PgClassFillers_);
-            }
+            } else if (Table_ == "pg_proc") {
+                static const std::pair<const char*, TPgProcFiller> AllPgProcFillers[] = {
+                    {"oid", [](const NPg::TProcDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.ProcId)); }},
+                    {"proname", [](const NPg::TProcDesc& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN)); }},
+                    {"pronamespace", [](const NPg::TProcDesc&) { return ScalarDatumToPod(ObjectIdGetDatum(PG_CATALOG_NAMESPACE)); }},
+                    {"proowner", [](const NPg::TProcDesc&) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
+                    {"prorettype", [](const NPg::TProcDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.ResultType)); }},
+                    {"prolang", [](const NPg::TProcDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.Lang)); }},
+                    {"prokind", [](const NPg::TProcDesc& desc) { return ScalarDatumToPod(CharGetDatum(desc.Kind)); }},
+                };
+
+                ApplyFillers(AllPgProcFillers, Y_ARRAY_SIZE(AllPgProcFillers), PgProcFillers_);
+            } else if (Table_ == "pg_aggregate") {
+                static const std::pair<const char*, TPgAggregateFiller> AllPgAggregateFillers[] = {
+                    {"aggfnoid", [](const NPg::TAggregateDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.AggId)); }},
+                    {"aggkind", [](const NPg::TAggregateDesc& desc) { return ScalarDatumToPod(CharGetDatum(desc.Kind)); }},
+                    {"aggtranstype", [](const NPg::TAggregateDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.TransTypeId)); }},
+                };
+
+                ApplyFillers(AllPgAggregateFillers, Y_ARRAY_SIZE(AllPgAggregateFillers), PgAggregateFillers_);
+            } else if (Table_ == "pg_language") {
+                static const std::pair<const char*, TPgLanguageFiller> AllPgLanguageFillers[] = {
+                    {"oid", [](const NPg::TLanguageDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.LangId)); }},
+                    {"lanname", [](const NPg::TLanguageDesc& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN)); }},
+                    {"lanowner", [](const NPg::TLanguageDesc&) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
+                };
+
+                ApplyFillers(AllPgLanguageFillers, Y_ARRAY_SIZE(AllPgLanguageFillers), PgLanguageFillers_);
+            }            
         } else {
             if (Table_ == "tables") {
                 static const std::pair<const char*, TTablesFiller> AllTablesFillers[] = {
@@ -462,10 +490,6 @@ public:
         if (Cluster_ == "pg_catalog") {
             if (Table_ == "pg_type") {
                 NPg::EnumTypes([&](ui32 oid, const NPg::TTypeDesc& desc) {
-                    if (desc.ArrayTypeId == desc.TypeId) {
-                        return;
-                    }
-
                     NUdf::TUnboxedValue* items;
                     auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgTypeFillers_.size(), items);
                     for (ui32 i = 0; i < PgTypeFillers_.size(); ++i) {
@@ -701,6 +725,42 @@ public:
 
                     rows.emplace_back(row);
                 }
+            } else if (Table_ == "pg_proc") {
+                NPg::EnumProc([&](ui32, const NPg::TProcDesc& desc) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgProcFillers_.size(), items);
+                    for (ui32 i = 0; i < PgProcFillers_.size(); ++i) {
+                        if (PgProcFillers_[i]) {
+                            items[i] = PgProcFillers_[i](desc);
+                        }
+                    }
+
+                    rows.emplace_back(row);
+                });
+            } else if (Table_ == "pg_aggregate") {
+                NPg::EnumAggregation([&](ui32, const NPg::TAggregateDesc& desc) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgAggregateFillers_.size(), items);
+                    for (ui32 i = 0; i < PgAggregateFillers_.size(); ++i) {
+                        if (PgAggregateFillers_[i]) {
+                            items[i] = PgAggregateFillers_[i](desc);
+                        }
+                    }
+
+                    rows.emplace_back(row);
+                });
+            } else if (Table_ == "pg_language") {
+                NPg::EnumLanguages([&](ui32, const NPg::TLanguageDesc& desc) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgLanguageFillers_.size(), items);
+                    for (ui32 i = 0; i < PgLanguageFillers_.size(); ++i) {
+                        if (PgLanguageFillers_[i]) {
+                            items[i] = PgLanguageFillers_[i](desc);
+                        }
+                    }
+
+                    rows.emplace_back(row);
+                });
             }
         } else {
             if (Table_ == "tables") {
@@ -783,6 +843,15 @@ private:
 
     using TPgClassFiller = NUdf::TUnboxedValuePod(*)(const NPg::TTableInfo&, ui32 namespaceOid, ui32 amOid);
     TVector<TPgClassFiller> PgClassFillers_;
+
+    using TPgProcFiller = NUdf::TUnboxedValuePod(*)(const NPg::TProcDesc&);
+    TVector<TPgProcFiller> PgProcFillers_;
+
+    using TPgAggregateFiller = NUdf::TUnboxedValuePod(*)(const NPg::TAggregateDesc&);
+    TVector<TPgAggregateFiller> PgAggregateFillers_;
+
+    using TPgLanguageFiller = NUdf::TUnboxedValuePod(*)(const NPg::TLanguageDesc&);
+    TVector<TPgLanguageFiller> PgLanguageFillers_;
 };
 
 class TFunctionCallInfo {

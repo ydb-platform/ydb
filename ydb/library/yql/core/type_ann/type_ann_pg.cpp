@@ -994,7 +994,7 @@ IGraphTransformer::TStatus PgWhereWrapper(const TExprNode::TPtr& input, TExprNod
 
 IGraphTransformer::TStatus PgSortWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
-    if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
+    if (!EnsureArgsCount(*input, 4, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -1005,6 +1005,16 @@ IGraphTransformer::TStatus PgSortWrapper(const TExprNode::TPtr& input, TExprNode
     if (input->Child(2)->Content() != "asc" && input->Child(2)->Content() != "desc") {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(2)->Pos()),
             TStringBuilder() << "Unsupported sort direction: " << input->Child(2)->Content()));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureAtom(*input->Child(3), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->Child(3)->Content() != "first" && input->Child(3)->Content() != "last") {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(3)->Pos()),
+            TStringBuilder() << "Unsupported nulls ordering: " << input->Child(3)->Content()));
         return IGraphTransformer::TStatus::Error;
     }
 

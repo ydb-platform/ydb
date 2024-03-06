@@ -117,9 +117,11 @@ private:
     YDB_READONLY_DEF(ui64, GlobalTxId);
     YDB_READONLY_DEF(TTableId, TableId);
     YDB_READONLY_DEF(std::optional<NKikimrDataEvents::TKqpLocks>, KqpLocks);
+    YDB_READONLY_DEF(NKikimrDataEvents::TEvWrite::TOperation::EOperationType, OperationType);
     YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
     YDB_READONLY_DEF(TInstant, ReceivedAt);
+    YDB_READONLY_DEF(std::optional<ui64>, OverloadSubscribe);
 
     YDB_READONLY_DEF(ui64, TxSize);
 
@@ -274,6 +276,7 @@ private:
 
     const ui64 TabletId;
 
+    YDB_READONLY_DEF(TActorId, Recipient);
     YDB_READONLY_DEF(ui64, ArtifactFlags);
     YDB_ACCESSOR_DEF(ui64, TxCacheUsage);
     YDB_ACCESSOR_DEF(ui64, ReleasedTxDataSize);

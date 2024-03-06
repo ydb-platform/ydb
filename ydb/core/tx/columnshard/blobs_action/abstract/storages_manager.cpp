@@ -32,9 +32,9 @@ std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::GetOper
     return GetOperatorGuarantee(storageId);
 }
 
-void IStoragesManager::OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& tiers) {
+void IStoragesManager::OnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& tiers) {
     for (auto&& i : tiers->GetManagers()) {
-        GetOperatorGuarantee(i.second.GetTierName())->OnTieringModified(tiers);
+        GetOperatorGuarantee(i.first)->OnTieringModified(tiers);
     }
 }
 
@@ -75,11 +75,12 @@ std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::BuildOp
 }
 
 void IStoragesManager::Stop() {
-    if (Initialized) {
+    AFL_VERIFY(!Finished);
+    if (Initialized && !Finished) {
         for (auto&& i : Constructed) {
             i.second->Stop();
         }
-        Initialized = false;
+        Finished = true;
     }
 }
 

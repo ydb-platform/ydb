@@ -1,4 +1,5 @@
 Registering pre-existing tables
+	int4_tbl
 	INT4_TBL
 <sql-statement>
 --
@@ -38,7 +39,3 @@ SELECT DISTINCT ON (string4, ten) string4, ten, two
 -- bug #5049: early 8.4.x chokes on volatile DISTINCT ON clauses
 select distinct on (1) floor(random()) as r, f1 from int4_tbl order by 1,2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    

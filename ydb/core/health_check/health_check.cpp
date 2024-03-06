@@ -519,19 +519,32 @@ public:
         return FilterDatabase && FilterDatabase != DomainPath;
     }
 
+    bool IsTimeDifferenceCheckNode(const TNodeId nodeId) const {
+        if (!IsSpecificDatabaseFilter()) {
+            return true;
+        }
+
+        auto it = DatabaseState.find(FilterDatabase);
+        if (it == DatabaseState.end()) {
+            return false;
+        }
+        auto& computeNodeIds = it->second.ComputeNodeIds;
+
+        return std::find(computeNodeIds.begin(), computeNodeIds.end(), nodeId) != computeNodeIds.end();
+    }
+
     void Bootstrap() {
         FilterDatabase = Request->Database;
         if (Request->Request.operation_params().has_operation_timeout()) {
             Timeout = GetDuration(Request->Request.operation_params().operation_timeout());
         }
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-        TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
+        auto *domain = domains->GetDomain();
         DomainPath = "/" + domain->Name;
         RootSchemeShardId = domain->SchemeRoot;
-        auto group = domains->GetDefaultStateStorageGroup(domain->DomainUid);
-        ConsoleId = MakeConsoleID(group);
-        RootHiveId = domains->GetHive(domain->DefaultHiveUid);
-        BsControllerId = MakeBSControllerID(group);
+        ConsoleId = MakeConsoleID();
+        RootHiveId = domains->GetHive();
+        BsControllerId = MakeBSControllerID();
 
         if (ConsoleId) {
             TabletRequests.TabletStates[ConsoleId].Database = DomainPath;
@@ -813,10 +826,10 @@ public:
         ReplyAndPassAway();
     }
 
-    bool IsStaticNode(const TEvInterconnect::TNodeInfo& nodeInfo) const {
+    bool IsStaticNode(const TNodeId nodeId) const {
         TAppData* appData = AppData();
         if (appData->DynamicNameserviceConfig) {
-            return nodeInfo.NodeId <= AppData()->DynamicNameserviceConfig->MaxStaticNodeId;
+            return nodeId <= AppData()->DynamicNameserviceConfig->MaxStaticNodeId;
         } else {
             return true;
         }
@@ -827,7 +840,7 @@ public:
         NodesInfo = ev->Release();
         for (const auto& ni : NodesInfo->Nodes) {
             MergedNodeInfo[ni.NodeId] = &ni;
-            if (IsStaticNode(ni) && needComputeFromStaticNodes) {
+            if (IsStaticNode(ni.NodeId) && needComputeFromStaticNodes) {
                 DatabaseState[DomainPath].ComputeNodeIds.push_back(ni.NodeId);
                 RequestComputeNode(ni.NodeId);
             }
@@ -2081,7 +2094,8 @@ public:
         TNodeId maxClockSkewPeerId = 0;
         TNodeId maxClockSkewNodeId = 0;
         for (auto& [nodeId, nodeSystemState] : MergedNodeSystemState) {
-            if (abs(nodeSystemState->GetMaxClockSkewWithPeerUs()) > maxClockSkewUs) {
+            if (IsTimeDifferenceCheckNode(nodeId) && IsTimeDifferenceCheckNode(nodeSystemState->GetMaxClockSkewPeerId())
+                    && abs(nodeSystemState->GetMaxClockSkewWithPeerUs()) > maxClockSkewUs) {
                 maxClockSkewUs = abs(nodeSystemState->GetMaxClockSkewWithPeerUs());
                 maxClockSkewPeerId = nodeSystemState->GetMaxClockSkewPeerId();
                 maxClockSkewNodeId = nodeId;

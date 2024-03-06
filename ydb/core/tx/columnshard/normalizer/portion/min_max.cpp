@@ -28,7 +28,7 @@ protected:
             auto blobSchema = Schemas->FindPtr(portionInfo->GetPortionId());
             THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo> blobsDataAssemble;
             for (auto&& i : portionInfo->Records) {
-                auto blobData = Blobs.Extract((*blobSchema)->GetIndexInfo().GetColumnStorageId(i.GetColumnId(), portionInfo->GetMeta().GetTierName()), i.BlobRange);
+                auto blobData = Blobs.Extract((*blobSchema)->GetIndexInfo().GetColumnStorageId(i.GetColumnId(), portionInfo->GetMeta().GetTierName()), portionInfo->RestoreBlobRange(i.BlobRange));
                 blobsDataAssemble.emplace(i.GetAddress(), blobData);
             }
 
@@ -60,7 +60,7 @@ public:
 
     static void FillBlobRanges(std::shared_ptr<IBlobsReadingAction> readAction, const std::shared_ptr<TPortionInfo>& portion) {
         for (auto&& chunk : portion->Records) {
-            readAction->AddRange(chunk.BlobRange);
+            readAction->AddRange(portion->RestoreBlobRange(chunk.BlobRange));
         }
     }
 
@@ -152,8 +152,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizer::Init(const 
             }
 
             AFL_VERIFY(portion.ValidSnapshotInfo())("details", portion.DebugString());
-            TColumnRecord rec(loadContext, currentSchema->GetIndexInfo());
-            if (!pkColumnIds.contains(rec.ColumnId)) {
+            if (!pkColumnIds.contains(loadContext.GetAddress().GetColumnId())) {
                 return;
             }
             auto it = portions.find(portion.GetPortion());
@@ -161,13 +160,11 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizer::Init(const 
             if (it == portions.end()) {
                 Y_ABORT_UNLESS(portion.Records.empty());
                 (*schemas)[portion.GetPortionId()] = currentSchema;
-                auto portionNew = std::make_shared<TPortionInfo>(portion);
-                portionNew->AddRecord(currentSchema->GetIndexInfo(), rec, portionMeta);
-                it = portions.emplace(portion.GetPortion(), portionNew).first;
-            } else {
-                AFL_VERIFY(it->second->IsEqualWithSnapshots(portion))("self", it->second->DebugString())("item", portion.DebugString());
-                it->second->AddRecord(currentSchema->GetIndexInfo(), rec, portionMeta);
+                it = portions.emplace(portion.GetPortion(), std::make_shared<TPortionInfo>(portion)).first;
             }
+            TColumnRecord rec(it->second->RegisterBlobId(loadContext.GetBlobRange().GetBlobId()), loadContext, currentSchema->GetIndexInfo());
+            AFL_VERIFY(it->second->IsEqualWithSnapshots(portion))("self", it->second->DebugString())("item", portion.DebugString());
+            it->second->AddRecord(currentSchema->GetIndexInfo(), rec, portionMeta);
         };
 
         while (!rowset.EndOfSet()) {

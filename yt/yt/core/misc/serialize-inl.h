@@ -7,6 +7,8 @@
 #include "collection_helpers.h"
 #include "maybe_inf.h"
 
+#include <yt/yt/core/yson/string.h>
+
 #include <library/cpp/yt/small_containers/compact_vector.h>
 #include <library/cpp/yt/small_containers/compact_flat_map.h>
 #include <library/cpp/yt/small_containers/compact_set.h>
@@ -1981,4 +1983,3 @@ struct TSerializerTraits<TMaybeInf<T>, C, void>
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
-

@@ -255,7 +255,9 @@ struct TKqpCompileRequest {
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         NLWTrace::TOrbit orbit = {}, NWilson::TSpan span = {},
         TKqpTempTablesState::TConstPtr tempTablesState = {},
-        TMaybe<TQueryAst> queryAst = {})
+        TMaybe<TQueryAst> queryAst = {},
+        NYql::TExprContext* splitCtx = nullptr,
+        NYql::TExprNode::TPtr splitExpr = nullptr)
         : Sender(sender)
         , Query(std::move(query))
         , Uid(uid)
@@ -270,6 +272,8 @@ struct TKqpCompileRequest {
         , TempTablesState(std::move(tempTablesState))
         , IntrestedInResult(std::move(intrestedInResult))
         , QueryAst(std::move(queryAst))
+        , SplitCtx(splitCtx)
+        , SplitExpr(splitExpr)
     {}
 
     TActorId Sender;
@@ -288,6 +292,9 @@ struct TKqpCompileRequest {
     TKqpTempTablesState::TConstPtr TempTablesState;
     std::shared_ptr<std::atomic<bool>> IntrestedInResult;
     TMaybe<TQueryAst> QueryAst;
+
+    NYql::TExprContext* SplitCtx;
+    NYql::TExprNode::TPtr SplitExpr;
 
     bool IsIntrestedInResult() const {
         return IntrestedInResult->load();
@@ -448,6 +455,7 @@ private:
             HFunc(TEvKqp::TEvCompileInvalidateRequest, Handle);
             HFunc(TEvKqp::TEvRecompileRequest, Handle);
             HFunc(TEvKqp::TEvParseResponse, Handle);
+            HFunc(TEvKqp::TEvSplitResponse, Handle);
 
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig);
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig);
@@ -491,6 +499,7 @@ private:
         bool enableSequences = TableServiceConfig.GetEnableSequences();
         bool enableColumnsWithDefault = TableServiceConfig.GetEnableColumnsWithDefault();
         bool enableOlapSink = TableServiceConfig.GetEnableOlapSink();
+        bool enableCreateTableAs = TableServiceConfig.GetEnableCreateTableAs();
 
         auto mkqlHeavyLimit = TableServiceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit();
 
@@ -516,6 +525,7 @@ private:
             TableServiceConfig.GetEnableSequences() != enableSequences ||
             TableServiceConfig.GetEnableColumnsWithDefault() != enableColumnsWithDefault ||
             TableServiceConfig.GetEnableOlapSink() != enableOlapSink ||
+            TableServiceConfig.GetEnableCreateTableAs() != enableCreateTableAs ||
             TableServiceConfig.GetExtractPredicateRangesLimit() != rangesLimit ||
             TableServiceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit() != mkqlHeavyLimit) {
 
@@ -649,12 +659,20 @@ private:
             ev->Get()->Orbit,
             ev->Get()->Query ? ev->Get()->Query->UserSid : 0);
 
-        TKqpCompileSettings compileSettings(request.KeepInCache, request.IsQueryActionPrepare, request.PerStatementResult,
-            request.Deadline, TableServiceConfig.GetEnableAstCache() ? ECompileActorAction::PARSE : ECompileActorAction::COMPILE);
+        TKqpCompileSettings compileSettings(
+            request.KeepInCache,
+            request.IsQueryActionPrepare,
+            request.PerStatementResult,
+            request.Deadline,
+            ev->Get()->Split
+                ? ECompileActorAction::SPLIT
+                : TableServiceConfig.GetEnableAstCache()
+                    ? ECompileActorAction::PARSE
+                    : ECompileActorAction::COMPILE);
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
             compileSettings, request.UserToken, dbCounters, request.ApplicationName, ev->Cookie, std::move(ev->Get()->IntrestedInResult),
             ev->Get()->UserRequestContext, std::move(ev->Get()->Orbit), std::move(compileServiceSpan),
-            std::move(ev->Get()->TempTablesState));
+            std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx, request.SplitExpr);
 
         if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
             return CompileByAst(*request.QueryAst, compileRequest, ctx);
@@ -767,6 +785,12 @@ private:
             << ", sender: " << compileRequest.Sender
             << ", status: " << compileResult->Status
             << ", compileActor: " << ev->Sender);
+
+        if (compileResult->NeedToSplit) {
+            Reply(compileRequest.Sender, compileResult, compileStats, ctx,
+                compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan), (CollectDiagnostics ? ev->Get()->ReplayMessageUserView : std::nullopt));
+            return;
+        }
 
         bool keepInCache = compileRequest.CompileSettings.KeepInCache && compileResult->AllowCache;
         bool isPerStatementExecution = TableServiceConfig.GetEnableAstCache() && compileRequest.QueryAst;
@@ -937,6 +961,12 @@ private:
         CompileByAst(astStatements.front(), compileRequest, ctx);
     }
 
+    void Handle(TEvKqp::TEvSplitResponse::TPtr& ev, const TActorContext& ctx) {
+        auto& query = ev->Get()->Query;
+        auto compileRequest = RequestsQueue.FinishActiveRequest(query);
+        ctx.Send(compileRequest.Sender, ev->Release(), 0, compileRequest.Cookie);
+    }
+
 private:
     bool InsertPreparingQuery(const TKqpCompileResult::TConstPtr& compileResult, bool keepInCache, bool isPerStatementExecution) {
         YQL_ENSURE(compileResult->Query);
@@ -996,7 +1026,8 @@ private:
     void StartCompilation(TKqpCompileRequest&& request, const TActorContext& ctx) {
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, MetadataProviderConfig, ModuleResolverState, Counters,
             request.Uid, request.Query, request.UserToken, FederatedQuerySetup, request.DbCounters, request.ApplicationName, request.UserRequestContext,
-            request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action, std::move(request.QueryAst), CollectDiagnostics, request.CompileSettings.PerStatementResult);
+            request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action, std::move(request.QueryAst), CollectDiagnostics,
+            request.CompileSettings.PerStatementResult, request.SplitCtx, request.SplitExpr);
         auto compileActorId = ctx.ExecutorThread.RegisterActor(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
 

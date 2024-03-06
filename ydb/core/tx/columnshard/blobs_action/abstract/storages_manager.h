@@ -9,6 +9,7 @@ class IStoragesManager {
 private:
     TRWMutex RWMutex;
     bool Initialized = false;
+    bool Finished = false;
 protected:
     virtual std::shared_ptr<IBlobsStorageOperator> DoBuildOperator(const TString& storageId) = 0;
     THashMap<TString, std::shared_ptr<IBlobsStorageOperator>> Constructed;
@@ -54,7 +55,7 @@ public:
         return Constructed;
     }
 
-    void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& tiers);
+    void OnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& tiers);
 
     std::shared_ptr<IBlobsStorageOperator> GetOperator(const TString& storageIdExt);
     std::shared_ptr<IBlobsStorageOperator> GetOperatorGuarantee(const TString& storageIdExt);

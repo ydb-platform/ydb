@@ -716,7 +716,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         TPersQueueV1TestServer server;
         SET_LOCALS;
         MAKE_INSECURE_STUB(Ydb::Topic::V1::TopicService);
-        server.EnablePQLogs({ NKikimrServices::PQ_METACACHE, NKikimrServices::PQ_READ_PROXY});
+        server.EnablePQLogs({ NKikimrServices::PQ_METACACHE, NKikimrServices::PQ_READ_PROXY, NKikimrServices::PERSQUEUE});
         server.EnablePQLogs({ NKikimrServices::KQP_PROXY }, NLog::EPriority::PRI_EMERG);
         server.EnablePQLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD }, NLog::EPriority::PRI_ERROR);
 
@@ -742,8 +742,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         }
 
         // await and confirm CreatePartitionStreamRequest from server
-        i64 assignId = 0;
-        i64 generation = 0;
+        i64 assignId;
+        i64 generation;
         {
             Ydb::Topic::StreamReadMessage::FromServer resp;
 
@@ -756,8 +756,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT_VALUES_EQUAL(resp.start_partition_session_request().partition_session().path(), "acc/topic1");
             UNIT_ASSERT(resp.start_partition_session_request().partition_session().partition_id() == 0);
             UNIT_ASSERT(resp.start_partition_session_request().partition_location().generation() > 0);
-            generation = resp.start_partition_session_request().partition_location().generation();
             assignId = resp.start_partition_session_request().partition_session().partition_session_id();
+            generation = resp.start_partition_session_request().partition_location().generation();
         }
 
         server.Server->AnnoyingClient->RestartPartitionTablets(server.Server->CleverServer->GetRuntime(), "rt3.dc1--acc--topic1");
@@ -5020,10 +5020,37 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     ReadRuleVersions: 567
     TopicPath: "/Root/PQ/rt3.dc1--acc--topic3"
     YdbDatabasePath: "/Root"
+    Consumers {
+      Name: "first-consumer"
+      ReadFromTimestampsMs: 11223344000
+      FormatVersion: 0
+      Codec {
+      }
+      ServiceType: "data-streams"
+      Version: 0
+      Important: false
+    }
+    Consumers {
+      Name: "consumer"
+      ReadFromTimestampsMs: 111000
+      FormatVersion: 0
+      Codec {
+        Ids: 2
+        Ids: 10004
+        Codecs: "lzop"
+        Codecs: "CUSTOM"
+      }
+      ServiceType: "data-streams"
+      Version: 567
+      Important: true
+    }
   }
   ErrorCode: OK
 }
 )___";
+
+        Cerr << ">>>>> " << res.DebugString() << Endl;
+
         UNIT_ASSERT_VALUES_EQUAL(res.DebugString(), resultDescribe);
 
         Cerr << "DESCRIBES:\n";
@@ -6696,6 +6723,55 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             auto meta = msg.GetMessageMeta();
             UNIT_ASSERT_VALUES_EQUAL(meta->Fields.size(), metadataSizeExpected);
             metadataSizeExpected--;
+        }
+    }
+
+    Y_UNIT_TEST(DisableWrongSettings) {
+        NPersQueue::TTestServer server;
+        server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR });
+        server.EnableLogs({NKikimrServices::PERSQUEUE}, NActors::NLog::EPriority::PRI_INFO);
+        TString topicFullName = "rt3.dc1--acc--topic1";
+        auto driver = SetupTestAndGetDriver(server, topicFullName, 3);
+
+        std::shared_ptr<grpc::Channel> Channel_;
+        std::unique_ptr<Ydb::Topic::V1::TopicService::Stub> TopicStubP_;
+        {
+            Channel_ = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
+            TopicStubP_ = Ydb::Topic::V1::TopicService::NewStub(Channel_);
+        }
+
+        {
+            grpc::ClientContext rcontext1;
+            auto writeStream1 = TopicStubP_->StreamWrite(&rcontext1);
+            UNIT_ASSERT(writeStream1);
+            Ydb::Topic::StreamWriteMessage::FromClient req;
+            Ydb::Topic::StreamWriteMessage::FromServer resp;
+
+            req.mutable_init_request()->set_path("acc/topic1");
+            req.mutable_init_request()->set_message_group_id("some-group");
+            if (!writeStream1->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+            UNIT_ASSERT(writeStream1->Read(&resp));
+            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.status() == Ydb::StatusIds::BAD_REQUEST);
+        }
+        {
+            grpc::ClientContext rcontext1;
+            auto writeStream1 = TopicStubP_->StreamWrite(&rcontext1);
+            UNIT_ASSERT(writeStream1);
+            Ydb::Topic::StreamWriteMessage::FromClient req;
+            Ydb::Topic::StreamWriteMessage::FromServer resp;
+
+            req.mutable_init_request()->set_path("acc/topic1");
+            req.mutable_init_request()->set_message_group_id("some-group");
+            req.mutable_init_request()->set_producer_id("producer");
+            if (!writeStream1->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+            UNIT_ASSERT(writeStream1->Read(&resp));
+            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.status() == Ydb::StatusIds::BAD_REQUEST);
         }
     }
 

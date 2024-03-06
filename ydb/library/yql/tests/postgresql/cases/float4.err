@@ -812,6 +812,7 @@ with testdata(bits) as (values
   (x'3f9e064b'),
   (x'3f9e0651'),
   (x'03d20cfe')
+)
 select float4send(flt) as ibits,
        flt,
        flt::text::float4 as r_flt,
@@ -823,10 +824,9 @@ select float4send(flt) as ibits,
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:157:1: Error: ERROR:  syntax error at or near "select"
-
-    	select float4send(flt) as ibits,
-	^
+    -stdin-:<main>:163:31: Error: Unknown type: xfloat4
+    	  from (select bits::integer::xfloat4::float4 as flt
+	                              ^
 <sql-statement>
 -- clean up, lest opr_sanity complain
 drop type xfloat4 cascade;

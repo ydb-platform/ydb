@@ -41,6 +41,7 @@ struct TEvKqp {
     using TEvRecompileRequest = NPrivateEvents::TEvRecompileRequest;
     using TEvCompileResponse = NPrivateEvents::TEvCompileResponse;
     using TEvParseResponse = NPrivateEvents::TEvParseResponse;
+    using TEvSplitResponse = NPrivateEvents::TEvSplitResponse;
     using TEvCompileInvalidateRequest = NPrivateEvents::TEvCompileInvalidateRequest;
 
     using TEvInitiateSessionShutdown = NKikimr::NKqp::NPrivateEvents::TEvInitiateSessionShutdown;

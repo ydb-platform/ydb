@@ -463,6 +463,11 @@ private:
             }
         }
 
+        if (Request->has_continuation_token()) {
+            TString lastPath = Request->Getcontinuation_token().Getlast_path();
+            fromValues[PathColumnInfo.KeyOrder] = TCell(lastPath.data(), lastPath.size());
+        }
+
         KeyRangeFrom.Parse(TSerializedCellVec::Serialize(fromValues));
         KeyRangeTo.Parse(TSerializedCellVec::Serialize(toValues));
 
@@ -560,7 +565,7 @@ private:
             CurrentShardIdx = 0;
             MakeShardRequest(CurrentShardIdx, ctx);
         } else {
-            ReplySuccess(ctx);
+            ReplySuccess(ctx, false);
         }
     }
 
@@ -574,9 +579,17 @@ private:
         ev->Record.SetPathColumnDelimiter(Request->Getpath_column_delimiter());
         ev->Record.SetSerializedStartAfterKeySuffix(StartAfterSuffixColumns.GetBuffer());
         ev->Record.SetMaxKeys(MaxKeys - ContentsRows.size() - CommonPrefixesRows.size());
+        
         if (!CommonPrefixesRows.empty()) {
             // Next shard might have the same common prefix, need to skip it
             ev->Record.SetLastCommonPrefix(CommonPrefixesRows.back());
+        }
+
+        if (Request->has_continuation_token()) {
+            ev->Record.SetLastPath(Request->Getcontinuation_token().Getlast_path());
+            if (CommonPrefixesRows.empty() && Request->Getcontinuation_token().is_folder()) {
+                ev->Record.SetLastCommonPrefix(Request->Getcontinuation_token().Getlast_path());
+            }
         }
 
         for (const auto& ci : ContentsColumns) {
@@ -644,14 +657,17 @@ private:
             ContentsRows.emplace_back(shardResponse.GetContentsRows(i));
         }
 
-        if (CurrentShardIdx+1 < KeyRange->GetPartitions().size() &&
-            MaxKeys > ContentsRows.size() + CommonPrefixesRows.size() &&
+        bool hasMoreShards = CurrentShardIdx + 1 < KeyRange->GetPartitions().size();
+        bool maxKeysExhausted = MaxKeys <= ContentsRows.size() + CommonPrefixesRows.size();
+
+        if (hasMoreShards &&
+            !maxKeysExhausted &&
             shardResponse.GetMoreRows())
         {
             ++CurrentShardIdx;
             MakeShardRequest(CurrentShardIdx, ctx);
         } else {
-            ReplySuccess(ctx);
+            ReplySuccess(ctx, (hasMoreShards && shardResponse.GetMoreRows()) || maxKeysExhausted);
         }
     }
 
@@ -715,8 +731,10 @@ private:
         }
     }
 
-    void ReplySuccess(const NActors::TActorContext& ctx) {
+    void ReplySuccess(const NActors::TActorContext& ctx, bool isTruncated) {
         Ydb::ObjectStorage::ListingResult resp;
+
+        resp.set_is_truncated(isTruncated);
 
         for (auto commonPrefix : CommonPrefixesRows) {
             resp.add_common_prefixes(commonPrefix);
@@ -725,6 +743,31 @@ private:
         auto &contents = *resp.mutable_contents();
         contents.set_truncated(false);
         FillResultRows(contents, ContentsColumns, ContentsRows);
+
+        TString lastFile;
+        TString lastDirectory;
+        if (ContentsRows.size() > 0) {
+            // Path column is always first.
+            TSerializedCellVec &row = ContentsRows[ContentsRows.size() - 1];
+            const auto& cell = row.GetCells()[0];
+            lastFile = TString(cell.AsBuf().data(), cell.AsBuf().size());
+        }
+
+        if (CommonPrefixesRows.size() > 0) {
+            lastDirectory = CommonPrefixesRows[CommonPrefixesRows.size() - 1];
+        }
+        
+        if (lastDirectory || lastFile) {
+            auto token = resp.mutable_next_continuation_token();
+            
+            if (lastDirectory > lastFile) {
+                token->set_last_path(lastDirectory);
+                token->set_is_folder(true);
+            } else {
+                token->set_last_path(lastFile);
+                token->set_is_folder(false);
+            }
+        }
 
         try {
             GrpcRequest->SendResult(resp, Ydb::StatusIds::SUCCESS);

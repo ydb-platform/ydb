@@ -823,6 +823,7 @@ message TEvS3ListingRequest {
     optional uint32 MaxKeys = 7;
 
     optional string LastCommonPrefix = 8;
+    optional string LastPath = 9;
 }
 
 message TEvS3ListingResponse {

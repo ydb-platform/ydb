@@ -75,22 +75,49 @@ public:
         }
         const ui32 pathColPos = prefixColumns.GetCells().size();
 
+        size_t columnCount = txc.DB.GetScheme().GetTableInfo(localTableId)->KeyColumns.size();
+
         // TODO: check path column is present in schema and has Utf8 type
         const TString pathPrefix = Ev->Get()->Record.GetPathColumnPrefix();
         const TString pathSeparator = Ev->Get()->Record.GetPathColumnDelimiter();
-        TSerializedCellVec suffixColumns;
+
         TString startAfterPath;
+        bool minKeyInclusive = false;
+        TSerializedCellVec suffixColumns;
         if (Ev->Get()->Record.GetSerializedStartAfterKeySuffix().empty()) {
-            key.emplace_back(pathPrefix.data(), pathPrefix.size(), NScheme::TTypeInfo(NScheme::NTypeIds::Utf8));
-            key.resize(txc.DB.GetScheme().GetTableInfo(localTableId)->KeyColumns.size());
+            if (Ev->Get()->Record.HasLastPath()) {
+                TString reqLastPath = Ev->Get()->Record.GetLastPath();
+
+                key.emplace_back(reqLastPath, NScheme::TTypeInfo(NScheme::NTypeIds::Utf8));
+
+                startAfterPath = reqLastPath;
+            } else {
+                minKeyInclusive = true;
+                key.emplace_back(pathPrefix.data(), pathPrefix.size(), NScheme::TTypeInfo(NScheme::NTypeIds::Utf8));
+                key.resize(columnCount);
+            }
         } else {
             suffixColumns.Parse(Ev->Get()->Record.GetSerializedStartAfterKeySuffix());
             size_t prefixSize = prefixColumns.GetCells().size();
-            for (size_t i = 0; i < suffixColumns.GetCells().size(); ++i) {
-                size_t ki = prefixSize + i;
-                key.emplace_back(suffixColumns.GetCells()[i].Data(), suffixColumns.GetCells()[i].Size(), tableInfo.KeyColumnTypes[ki]);
+
+            if (Ev->Get()->Record.HasLastPath()) {
+                TString reqLastPath = Ev->Get()->Record.GetLastPath();
+                
+                key.emplace_back(reqLastPath, tableInfo.KeyColumnTypes[prefixSize]);
+
+                for (size_t i = 1; i < suffixColumns.GetCells().size(); ++i) {
+                    size_t ki = prefixSize + i;
+                    key.emplace_back(suffixColumns.GetCells()[i].Data(), suffixColumns.GetCells()[i].Size(), tableInfo.KeyColumnTypes[ki]);
+                }
+                
+                startAfterPath = reqLastPath;
+            } else {
+                for (size_t i = 0; i < suffixColumns.GetCells().size(); ++i) {
+                    size_t ki = prefixSize + i;
+                    key.emplace_back(suffixColumns.GetCells()[i].Data(), suffixColumns.GetCells()[i].Size(), tableInfo.KeyColumnTypes[ki]);
+                }
+                startAfterPath = TString(suffixColumns.GetCells()[0].Data(), suffixColumns.GetCells()[0].Size());
             }
-            startAfterPath = TString(suffixColumns.GetCells()[0].Data(), suffixColumns.GetCells()[0].Size());
         }
 
         TString lastCommonPath; // we will skip a common prefix iff it has been already returned from the prevoius shard
@@ -103,7 +130,7 @@ public:
             const size_t pathColIdx =  prefixColumns.GetCells().size();
             key.resize(pathColIdx);
             key.emplace_back(LastPath.data(), LastPath.size(), NScheme::TTypeInfo(NScheme::NTypeIds::Utf8));
-            key.resize(txc.DB.GetScheme().GetTableInfo(localTableId)->KeyColumns.size());
+            key.resize(columnCount);
 
             lastCommonPath = LastCommonPath;
         } else {
@@ -137,7 +164,7 @@ public:
 
         NTable::TKeyRange keyRange;
         keyRange.MinKey = key;
-        keyRange.MinInclusive = suffixColumns.GetCells().empty();
+        keyRange.MinInclusive = minKeyInclusive;
         keyRange.MaxKey = endKey;
         keyRange.MaxInclusive = endKeyInclusive;
 
@@ -207,7 +234,7 @@ public:
                         break;
                 }
             } else {
-                // For prefix save a row with 1 column
+                // For prefix save only path
                 if (path > startAfterPath && path != lastCommonPath) {
                     LastCommonPath = path;
                     Result->Record.AddCommonPrefixesRows(path);
@@ -226,6 +253,7 @@ public:
                 // Skip to the next key after path+separator
                 key.resize(prefixColumns.GetCells().size());
                 key.emplace_back(lookup.data(), lookup.size(), NScheme::TTypeInfo(NScheme::NTypeIds::Utf8));
+                key.resize(columnCount);
 
                 if (!iter->SkipTo(key, /* inclusive = */ true)) {
                     return false;

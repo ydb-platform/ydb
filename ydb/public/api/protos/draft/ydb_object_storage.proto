@@ -13,18 +13,26 @@ message ListingRequest {
     TypedValue key_prefix = 2; // A tuple representing all key columns that preceed path column
     string path_column_prefix = 3;
     string path_column_delimiter = 4;
-    TypedValue start_after_key_suffix = 5; // A tuple representing key columns that succeed path column
-    int32 max_keys = 6;
-    repeated string columns_to_return = 7;
+    ContinuationToken continuation_token = 5;
+    TypedValue start_after_key_suffix = 6; // A tuple representing key columns that succeed path column
+    int32 max_keys = 7;
+    repeated string columns_to_return = 8;
 
-    Ydb.Operations.OperationParams operation_params = 8;
+    Ydb.Operations.OperationParams operation_params = 9;
 }
 
 message ListingResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
+message ContinuationToken {
+    string last_path = 1;
+    bool is_folder = 2;
+}
+
 message ListingResult {
     repeated string common_prefixes = 1;    // Folders.
     Ydb.ResultSet contents = 2;           // Every Contents row starts with key suffix with KeySuffixSize columns
+    bool is_truncated = 3;
+    ContinuationToken next_continuation_token = 4;
 }

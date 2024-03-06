@@ -127,12 +127,13 @@ public:
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
-        const TActorId& creator, TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext)
+        const TActorId& creator, TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
+        const bool enableOlapSink, ui32 statementResultIndex)
         : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, chanTransportVersion, aggregation,
-            maximalSecretsSnapshotWaitTime, userRequestContext, TWilsonKqp::DataExecuter, "DataExecuter"
+            maximalSecretsSnapshotWaitTime, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter, "DataExecuter", streamResult
         )
         , AsyncIoFactory(std::move(asyncIoFactory))
-        , StreamResult(streamResult)
+        , EnableOlapSink(enableOlapSink)
     {
         Target = creator;
 
@@ -311,6 +312,8 @@ public:
 
         } catch (const yexception& e) {
             InternalError(e.what());
+        } catch (const TMemoryLimitExceededException&) {
+            RuntimeError(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssues({NYql::TIssue(BuildMemoryLimitExceptionMessage())}));
         }
         ReportEventElapsedTime();
     }
@@ -345,7 +348,8 @@ private:
                 hFunc(TEvPersQueue::TEvProposeTransactionResult, HandlePrepare);
                 hFunc(TEvPrivate::TEvReattachToShard, HandleExecute);
                 hFunc(TEvDqCompute::TEvState, HandlePrepare); // from CA
-                hFunc(TEvDqCompute::TEvChannelData, HandleExecute); // from CA
+                hFunc(TEvDqCompute::TEvChannelData, HandleChannelData); // from CA
+                hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandlePrepare);
                 hFunc(TEvKqp::TEvAbortExecution, HandlePrepare);
                 hFunc(TEvents::TEvUndelivered, HandleUndelivered);
@@ -360,7 +364,11 @@ private:
         } catch (const yexception& e) {
             CancelProposal(0);
             InternalError(e.what());
+        } catch (const TMemoryLimitExceededException& e) {
+            CancelProposal(0);
+            RuntimeError(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssues({NYql::TIssue(BuildMemoryLimitExceptionMessage())}));
         }
+
         ReportEventElapsedTime();
     }
 
@@ -933,7 +941,8 @@ private:
                 hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
                 hFunc(TEvTxProxy::TEvProposeTransactionStatus, HandleExecute);
                 hFunc(TEvDqCompute::TEvState, HandleComputeStats);
-                hFunc(TEvDqCompute::TEvChannelData, HandleExecute);
+                hFunc(NYql::NDq::TEvDqCompute::TEvChannelData, HandleChannelData);
+                hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
                 hFunc(TEvKqp::TEvAbortExecution, HandleExecute);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 default:
@@ -941,6 +950,12 @@ private:
             }
         } catch (const yexception& e) {
             InternalError(e.what());
+        } catch (const TMemoryLimitExceededException) {
+            if (ReadOnlyTx) {
+                RuntimeError(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssues({NYql::TIssue(BuildMemoryLimitExceptionMessage())}));
+            } else {
+                RuntimeError(Ydb::StatusIds::UNDETERMINED, NYql::TIssues({NYql::TIssue(BuildMemoryLimitExceptionMessage())}));
+            }
         }
         ReportEventElapsedTime();
     }
@@ -1271,11 +1286,6 @@ private:
                 LOG_N("Shard " << msg->TabletId << " lost pipe while waiting for reply"
                     << (msg->NotDelivered ? " (last message not delivered)" : ""));
 
-                if (ReadOnlyTx && msg->NotDelivered) {
-                    CancelProposal(msg->TabletId);
-                    return ReplyUnavailable(TStringBuilder() << "Could not deliver program to shard " << msg->TabletId);
-                }
-
                 return ReplyTxStateUnknown(msg->TabletId);
             }
 
@@ -1286,41 +1296,6 @@ private:
             case TShardState::EState::Initial:
             case TShardState::EState::Preparing:
                 YQL_ENSURE(false, "Unexpected shard " << msg->TabletId << " state " << ToString(shardState->State));
-        }
-    }
-
-    void HandleExecute(TEvDqCompute::TEvChannelData::TPtr& ev) {
-        auto& record = ev->Get()->Record;
-        auto& channelData = record.GetChannelData();
-
-        TDqSerializedBatch batch;
-        batch.Proto = std::move(*record.MutableChannelData()->MutableData());
-        if (batch.Proto.HasPayloadId()) {
-            batch.Payload = ev->Get()->GetPayload(batch.Proto.GetPayloadId());
-        }
-
-        auto& channel = TasksGraph.GetChannel(channelData.GetChannelId());
-        YQL_ENSURE(channel.DstTask == 0);
-        auto shardId = TasksGraph.GetTask(channel.SrcTask).Meta.ShardId;
-
-        if (Stats) {
-            Stats->ResultBytes += batch.Size();
-            Stats->ResultRows += batch.RowCount();
-        }
-
-        LOG_T("Got result, channelId: " << channel.Id << ", shardId: " << shardId
-            << ", inputIndex: " << channel.DstInputIndex << ", from: " << ev->Sender
-            << ", finished: " << channelData.GetFinished());
-
-        ResponseEv->TakeResult(channel.DstInputIndex, std::move(batch));
-        {
-            LOG_T("Send ack to channelId: " << channel.Id << ", seqNo: " << record.GetSeqNo() << ", to: " << ev->Sender);
-
-            auto ackEv = MakeHolder<TEvDqCompute::TEvChannelDataAck>();
-            ackEv->Record.SetSeqNo(record.GetSeqNo());
-            ackEv->Record.SetChannelId(channel.Id);
-            ackEv->Record.SetFreeSpace(50_MB);
-            Send(ev->Sender, ackEv.Release(), /* TODO: undelivery */ 0, /* cookie */ channel.Id);
         }
     }
 
@@ -1377,8 +1352,13 @@ private:
                 case NKqpProto::TKqpPhyTableOperation::kReadRanges:
                 case NKqpProto::TKqpPhyTableOperation::kReadRange:
                 case NKqpProto::TKqpPhyTableOperation::kLookup: {
-                    auto partitions = PrunePartitions(op, stageInfo, HolderFactory(), TypeEnv());
+                    bool isFullScan = false;
+                    auto partitions = PrunePartitions(op, stageInfo, HolderFactory(), TypeEnv(), isFullScan);
                     auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
+
+                    if (!readSettings.ItemsLimit && isFullScan) {
+                        Counters->Counters->FullScansExecuted->Inc();
+                    }
 
                     for (auto& [shardId, shardInfo] : partitions) {
                         YQL_ENSURE(!shardInfo.KeyWriteRanges);
@@ -1632,13 +1612,13 @@ private:
                     for (const auto& sink : stage.GetSinks()) {
                         if (sink.GetTypeCase() == NKqpProto::TKqpSink::kExternalSink) {
                             SaveScriptExternalEffectRequired = true;
-                            scriptExternalEffect->Sinks.push_back(sink.GetExternalSink());
+                            scriptExternalEffect->Description.Sinks.push_back(sink.GetExternalSink());
                         }
                     }
                 }
             }
         }
-        scriptExternalEffect->SecretNames = SecretNames;
+        scriptExternalEffect->Description.SecretNames = SecretNames;
 
         if (!WaitRequired()) {
             return Execute();
@@ -1666,11 +1646,21 @@ private:
         }
 
         for (const auto &tableOp : stage.GetTableOps()) {
-            if (tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kReadOlapRange
-                && tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kUpsertRows) {
+            if (tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
                 return true;
             }
         }
+
+        return false;
+    }
+
+    bool HasOlapSink(const NKqpProto::TKqpPhyStage& stage) {
+        for (const auto& sink : stage.GetSinks()) {
+            if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink) {
+                return true;
+            }
+        }
+
         return false;
     }
 
@@ -1703,7 +1693,8 @@ private:
                     }
                 }
 
-                if (stageInfo.Meta.IsOlap() && HasDmlOperationOnOlap(tx.Body->GetType(), stage)) {
+                if ((stageInfo.Meta.IsOlap() && HasDmlOperationOnOlap(tx.Body->GetType(), stage))
+                    || (!EnableOlapSink && HasOlapSink(stage))) {
                     auto error = TStringBuilder() << "Data manipulation queries do not support column shard tables.";
                     LOG_E(error);
                     ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
@@ -1904,7 +1895,11 @@ private:
                     const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
                     if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
                         const auto& source = stage.GetSources(0).GetReadRangesSource();
-                        SourceScanStageIdToParititions[stageInfo.Id] = PrunePartitions(source, stageInfo, HolderFactory(), TypeEnv());
+                        bool isFullScan;
+                        SourceScanStageIdToParititions[stageInfo.Id] = PrunePartitions(source, stageInfo, HolderFactory(), TypeEnv(), isFullScan);
+                        if (isFullScan && !source.HasItemsLimit()) {
+                            Counters->Counters->FullScansExecuted->Inc();
+                        }
                         for (const auto& [shardId, _] : SourceScanStageIdToParititions.at(stageId)) {
                             shardIds.insert(shardId);
                         }
@@ -2206,7 +2201,7 @@ private:
             }
         }
 
-        const bool singlePartitionOptAllowed = !UnknownAffectedShardCount && !HasExternalSources && (DatashardTxs.size() == 0);
+        const bool singlePartitionOptAllowed = !HasOlapTable && !UnknownAffectedShardCount && !HasExternalSources && (DatashardTxs.size() == 0);
         const bool useDataQueryPool = !(HasExternalSources && DatashardTxs.size() == 0);
         const bool localComputeTasks = !((HasExternalSources || HasOlapTable || HasDatashardSourceScan) && DatashardTxs.size() == 0);
 
@@ -2409,7 +2404,7 @@ private:
 
 private:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
-    bool StreamResult = false;
+    bool EnableOlapSink = false;
 
     bool HasExternalSources = false;
     bool SecretSnapshotRequired = false;
@@ -2451,10 +2446,10 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     TKqpRequestCounters::TPtr counters, bool streamResult, const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
-    TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext)
+    TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext, const bool enableOlapSink, ui32 statementResultIndex)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, executerRetriesConfig,
-        std::move(asyncIoFactory), chanTransportVersion, aggregation, creator, maximalSecretsSnapshotWaitTime, userRequestContext);
+        std::move(asyncIoFactory), chanTransportVersion, aggregation, creator, maximalSecretsSnapshotWaitTime, userRequestContext, enableOlapSink, statementResultIndex);
 }
 
 } // namespace NKqp

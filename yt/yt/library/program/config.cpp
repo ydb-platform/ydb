@@ -6,14 +6,6 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TRpcConfig::Register(TRegistrar registrar)
-{
-    registrar.Parameter("tracing", &TThis::Tracing)
-        .Default();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 void THeapSizeLimit::Register(TRegistrar registrar)
 {
     registrar.Parameter("container_memory_ratio", &TThis::ContainerMemoryRatio)
@@ -63,6 +55,8 @@ void TStockpileConfig::Register(TRegistrar registrar)
 
 void THeapProfilerConfig::Register(TRegistrar registrar)
 {
+    registrar.Parameter("sampling_rate", &TThis::SamplingRate)
+        .Default();
     registrar.Parameter("snapshot_update_period", &TThis::SnapshotUpdatePeriod)
         .Default(TDuration::Seconds(5));
 }
@@ -93,7 +87,7 @@ void TSingletonsConfig::Register(TRegistrar registrar)
         .DefaultCtor([] () { return NLogging::TLogManagerConfig::CreateDefault(); });
     registrar.Parameter("jaeger", &TThis::Jaeger)
         .DefaultNew();
-    registrar.Parameter("rpc", &TThis::Rpc)
+    registrar.Parameter("tracing_transport", &TThis::TracingTransport)
         .DefaultNew();
     registrar.Parameter("tcmalloc", &TThis::TCMalloc)
         .DefaultNew();
@@ -106,6 +100,8 @@ void TSingletonsConfig::Register(TRegistrar registrar)
     registrar.Parameter("resource_tracker_vcpu_factor", &TThis::ResourceTrackerVCpuFactor)
         .Optional();
     registrar.Parameter("heap_profiler", &TThis::HeapProfiler)
+        .DefaultNew();
+    registrar.Parameter("protobuf_interop", &TThis::ProtobufInterop)
         .DefaultNew();
 
     registrar.Postprocessor([] (TThis* config) {
@@ -131,7 +127,7 @@ void TSingletonsDynamicConfig::Register(TRegistrar registrar)
         .DefaultNew();
     registrar.Parameter("jaeger", &TThis::Jaeger)
         .DefaultNew();
-    registrar.Parameter("rpc", &TThis::Rpc)
+    registrar.Parameter("tracing_transport", &TThis::TracingTransport)
         .DefaultNew();
     registrar.Parameter("tcmalloc", &TThis::TCMalloc)
         .Optional();

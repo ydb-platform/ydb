@@ -220,6 +220,10 @@ inline std::tuple<ResourceTypes...> GetStDev(const TVector<std::tuple<ResourceTy
     return tuple_cast<ResourceTypes...>::cast(st_dev);
 }
 
+extern const std::unordered_map<TTabletTypes::EType, TString> TABLET_TYPE_SHORT_NAMES;
+
+extern const std::unordered_map<TString, TTabletTypes::EType> TABLET_TYPE_BY_SHORT_NAME;
+
 class THive;
 
 struct THiveSharedSettings {
@@ -299,6 +303,7 @@ struct TNodeFilter {
     TVector<TNodeId> AllowedNodes;
     TVector<TDataCenterId> AllowedDataCenters;
     TSubDomainKey ObjectDomain;
+    TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
 
     const THive& Hive;
 

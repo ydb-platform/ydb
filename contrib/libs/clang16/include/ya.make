@@ -806,9 +806,9 @@ RUN_PROGRAM(
 )
 
 RUN_PROGRAM(
-    contrib/tools/python3 contrib/libs/clang16/lib/Tooling/DumpTool/generate_cxx_src_locs.py --json-input-path
-        contrib/libs/clang16/lib/Tooling/ASTNodeAPI.json --output-file clang/Tooling/NodeIntrospection.inc
-        --use-empty-implementation 0 --empty-implementation
+    contrib/tools/python3/bin contrib/libs/clang16/lib/Tooling/DumpTool/generate_cxx_src_locs.py
+        --json-input-path contrib/libs/clang16/lib/Tooling/ASTNodeAPI.json --output-file
+        clang/Tooling/NodeIntrospection.inc --use-empty-implementation 0 --empty-implementation
         contrib/libs/clang16/lib/Tooling/EmptyNodeIntrospection.inc.in
     CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/clang16/lib/Tooling
     IN ${ARCADIA_BUILD_ROOT}/contrib/libs/clang16/lib/Tooling/yamaker_mock.dep
@@ -882,7 +882,7 @@ RUN_PROGRAM(
 )
 
 RUN_PROGRAM(
-    contrib/tools/python3 ${ARCADIA_ROOT}/contrib/libs/clang16/include/yamaker_mkdepdir.py
+    contrib/tools/python3/bin ${ARCADIA_ROOT}/contrib/libs/clang16/include/yamaker_mkdepdir.py
         ${ARCADIA_BUILD_ROOT}/contrib/libs/clang16/lib/Tooling
     CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/clang16
     OUT_NOAUTO ${ARCADIA_BUILD_ROOT}/contrib/libs/clang16/lib/Tooling/yamaker_mock.dep

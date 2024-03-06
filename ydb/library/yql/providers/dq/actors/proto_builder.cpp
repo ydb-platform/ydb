@@ -60,6 +60,7 @@ bool TProtoBuilder::CanBuildResultSet() const {
 }
 
 TString TProtoBuilder::BuildYson(TVector<NYql::NDq::TDqSerializedBatch>&& rows, ui64 maxBytesLimit) {
+    TThrowingBindTerminator t;
     ui64 size = 0;
     TStringStream out;
     NYson::TYsonWriter writer((IOutputStream*)&out);
@@ -82,6 +83,7 @@ TString TProtoBuilder::BuildYson(TVector<NYql::NDq::TDqSerializedBatch>&& rows, 
 }
 
 bool TProtoBuilder::WriteYsonData(NYql::NDq::TDqSerializedBatch&& data, const std::function<bool(const TString& rawYson)>& func) {
+    TThrowingBindTerminator t;
     return WriteData(std::move(data), [&](const NYql::NUdf::TUnboxedValuePod& value) {
         auto rowYson = NCommon::WriteYsonValue(value, ResultType, ColumnOrder.empty() ? nullptr : &ColumnOrder);
         return func(rowYson);
@@ -89,6 +91,7 @@ bool TProtoBuilder::WriteYsonData(NYql::NDq::TDqSerializedBatch&& data, const st
 }
 
 bool TProtoBuilder::WriteData(NYql::NDq::TDqSerializedBatch&& data, const std::function<bool(const NYql::NUdf::TUnboxedValuePod& value)>& func) {
+    TThrowingBindTerminator t;
     TGuard<TScopedAlloc> allocGuard(Alloc);
 
     TMemoryUsageInfo memInfo("ProtoBuilder");
@@ -106,6 +109,7 @@ bool TProtoBuilder::WriteData(NYql::NDq::TDqSerializedBatch&& data, const std::f
 }
 
 bool TProtoBuilder::WriteData(TVector<NYql::NDq::TDqSerializedBatch>&& rows, const std::function<bool(const NYql::NUdf::TUnboxedValuePod& value)>& func) {
+    TThrowingBindTerminator t;
     TGuard<TScopedAlloc> allocGuard(Alloc);
 
     TMemoryUsageInfo memInfo("ProtoBuilder");

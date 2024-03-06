@@ -2444,6 +2444,19 @@
             "Match": {"Type": "Callable", "Name": "WideFromBlocks"}
         },
         {
+            "Name": "TCoReplicateScalars",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "ReplicateScalars"},
+            "Children": [
+                {"Index": 1, "Name": "Indexes", "Type": "TCoAtomList", "Optional": true}
+            ]
+        },
+        {
+            "Name": "TCoWideToBlocks",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "WideToBlocks"}
+        },
+        {
             "Name": "TCoPgSelect",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "PgSelect"},

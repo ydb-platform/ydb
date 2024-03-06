@@ -235,7 +235,6 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
 //! Derived comparison operators.
 //! Note that these ignore flags.
 bool operator == (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
-bool operator != (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
 bool operator <= (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
 bool operator <  (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
 bool operator >= (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
@@ -260,7 +259,6 @@ int CompareRows(
 //! Derived comparison operators.
 //! Note that these ignore aggregate flags.
 bool operator == (TUnversionedRow lhs, TUnversionedRow rhs);
-bool operator != (TUnversionedRow lhs, TUnversionedRow rhs);
 bool operator <= (TUnversionedRow lhs, TUnversionedRow rhs);
 bool operator <  (TUnversionedRow lhs, TUnversionedRow rhs);
 bool operator >= (TUnversionedRow lhs, TUnversionedRow rhs);
@@ -774,10 +772,15 @@ public:
 
     size_t GetSpaceUsed() const
     {
-        return StringData_.GetHolder()->GetTotalByteSize().value_or(StringData_.Size()) +
-            RowData_.GetHolder()->GetTotalByteSize().value_or(RowData_.Size());
+        size_t size = 0;
+        if (StringData_) {
+            size += StringData_.GetHolder()->GetTotalByteSize().value_or(StringData_.Size());
+        }
+        if (RowData_) {
+            size += RowData_.GetHolder()->GetTotalByteSize().value_or(RowData_.Size());
+        }
+        return size;
     }
-
 
     friend void swap(TUnversionedOwningRow& lhs, TUnversionedOwningRow& rhs)
     {
@@ -903,7 +906,10 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSharedRange<TRowRange> MakeSingletonRowRange(TLegacyKey lowerBound, TLegacyKey upperBound);
+TSharedRange<TRowRange> MakeSingletonRowRange(
+    TLegacyKey lowerBound,
+    TLegacyKey upperBound,
+    TRowBufferPtr rowBuffer = nullptr);
 
 TKeyRef ToKeyRef(TUnversionedRow row);
 TKeyRef ToKeyRef(TUnversionedRow row, int prefixLength);

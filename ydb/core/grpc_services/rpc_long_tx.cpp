@@ -6,7 +6,6 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/serializer/full.h>
 #include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>

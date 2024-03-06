@@ -40,7 +40,7 @@ public:
 
     THashMap<TString, std::vector<NNet::TIP6Network>> Networks;
 
-    TEnumIndexedVector<EMultiplexingBand, TMultiplexingBandConfigPtr> MultiplexingBands;
+    TEnumIndexedArray<EMultiplexingBand, TMultiplexingBandConfigPtr> MultiplexingBands;
 
     TTcpDispatcherConfigPtr ApplyDynamic(const TTcpDispatcherDynamicConfigPtr& dynamicConfig) const;
 
@@ -66,7 +66,7 @@ public:
 
     std::optional<THashMap<TString, std::vector<NNet::TIP6Network>>> Networks;
 
-    std::optional<TEnumIndexedVector<EMultiplexingBand, TMultiplexingBandConfigPtr>> MultiplexingBands;
+    std::optional<TEnumIndexedArray<EMultiplexingBand, TMultiplexingBandConfigPtr>> MultiplexingBands;
 
     //! Used to store TLS/SSL certificate files.
     std::optional<TString> BusCertsDirectoryPath;

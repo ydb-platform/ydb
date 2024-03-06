@@ -224,6 +224,8 @@ private:
 
     std::atomic<EMultiplexingBand> MultiplexingBand_ = EMultiplexingBand::Default;
 
+    EMultiplexingBand ActualMultiplexingBand_ = EMultiplexingBand::Default;
+
     TAtomicObject<TError> Error_;
 
     NNet::IAsyncDialerSessionPtr DialerSession_;
@@ -274,6 +276,8 @@ private:
 
     const EEncryptionMode EncryptionMode_;
     const EVerificationMode VerificationMode_;
+
+    NYTree::IAttributeDictionaryPtr PeerAttributes_;
 
     size_t MaxFragmentsPerWrite_ = 256;
 

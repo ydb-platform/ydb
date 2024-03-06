@@ -19,15 +19,34 @@
 #include <__memory/allocator_traits.h> // __pointer
 #include <__memory/auto_ptr.h>
 #include <__memory/compressed_pair.h>
+#include <__type_traits/add_lvalue_reference.h>
+#include <__type_traits/common_type.h>
+#include <__type_traits/dependent_type.h>
+#include <__type_traits/integral_constant.h>
+#include <__type_traits/is_array.h>
+#include <__type_traits/is_assignable.h>
+#include <__type_traits/is_constructible.h>
+#include <__type_traits/is_convertible.h>
+#include <__type_traits/is_default_constructible.h>
+#include <__type_traits/is_function.h>
+#include <__type_traits/is_pointer.h>
+#include <__type_traits/is_reference.h>
+#include <__type_traits/is_same.h>
+#include <__type_traits/is_swappable.h>
+#include <__type_traits/is_void.h>
+#include <__type_traits/remove_extent.h>
+#include <__type_traits/type_identity.h>
 #include <__utility/forward.h>
 #include <__utility/move.h>
 #include <cstddef>
 #include <stlfwd>
-#include <type_traits>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #  pragma GCC system_header
 #endif
+
+_LIBCPP_PUSH_MACROS
+#include <__undef_macros>
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
@@ -100,7 +119,7 @@ struct __unique_ptr_deleter_sfinae<_Deleter&> {
 };
 
 #if defined(_LIBCPP_ABI_ENABLE_UNIQUE_PTR_TRIVIAL_ABI)
-#  define _LIBCPP_UNIQUE_PTR_TRIVIAL_ABI __attribute__((trivial_abi))
+#  define _LIBCPP_UNIQUE_PTR_TRIVIAL_ABI __attribute__((__trivial_abi__))
 #else
 #  define _LIBCPP_UNIQUE_PTR_TRIVIAL_ABI
 #endif
@@ -541,7 +560,7 @@ bool
 operator>=(const unique_ptr<_T1, _D1>& __x, const unique_ptr<_T2, _D2>& __y) {return !(__x < __y);}
 
 
-#if _LIBCPP_STD_VER > 17
+#if _LIBCPP_STD_VER >= 20
 template <class _T1, class _D1, class _T2, class _D2>
 requires three_way_comparable_with<typename unique_ptr<_T1, _D1>::pointer,
                                    typename unique_ptr<_T2, _D2>::pointer>
@@ -635,7 +654,7 @@ operator>=(nullptr_t, const unique_ptr<_T1, _D1>& __x) {
   return !(nullptr < __x);
 }
 
-#if _LIBCPP_STD_VER > 17
+#if _LIBCPP_STD_VER >= 20
 template <class _T1, class _D1>
   requires three_way_comparable<
       typename unique_ptr<_T1, _D1>::pointer> _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX23
@@ -645,7 +664,7 @@ operator<=>(const unique_ptr<_T1, _D1>& __x, nullptr_t) {
 }
 #endif
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 
 template<class _Tp>
 struct __unique_if
@@ -682,7 +701,26 @@ template<class _Tp, class... _Args>
     typename __unique_if<_Tp>::__unique_array_known_bound
     make_unique(_Args&&...) = delete;
 
-#endif // _LIBCPP_STD_VER > 11
+#endif // _LIBCPP_STD_VER >= 14
+
+#if _LIBCPP_STD_VER >= 20
+
+template <class _Tp>
+_LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX23 typename __unique_if<_Tp>::__unique_single
+make_unique_for_overwrite() {
+  return unique_ptr<_Tp>(new _Tp);
+}
+
+template <class _Tp>
+_LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX23 typename __unique_if<_Tp>::__unique_array_unknown_bound
+make_unique_for_overwrite(size_t __n) {
+  return unique_ptr<_Tp>(new __remove_extent_t<_Tp>[__n]);
+}
+
+template<class _Tp, class... _Args>
+typename __unique_if<_Tp>::__unique_array_known_bound make_unique_for_overwrite(_Args&&...) = delete;
+
+#endif // _LIBCPP_STD_VER >= 20
 
 template <class _Tp> struct _LIBCPP_TEMPLATE_VIS hash;
 
@@ -708,5 +746,7 @@ struct _LIBCPP_TEMPLATE_VIS hash<__enable_hash_helper<
 };
 
 _LIBCPP_END_NAMESPACE_STD
+
+_LIBCPP_POP_MACROS
 
 #endif // _LIBCPP___MEMORY_UNIQUE_PTR_H

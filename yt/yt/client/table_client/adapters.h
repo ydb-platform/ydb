@@ -36,10 +36,12 @@ void PipeReaderToWriter(
     const IUnversionedRowsetWriterPtr& writer,
     const TPipeReaderToWriterOptions& options);
 
+//! Parameter #pipeDelay is used only for testing.
 void PipeReaderToWriterByBatches(
     const NApi::ITableReaderPtr& reader,
     const NFormats::ISchemalessFormatWriterPtr& writer,
-    const TRowBatchReadOptions& options);
+    const TRowBatchReadOptions& options,
+    TDuration pipeDelay = TDuration::Zero());
 
 void PipeInputToOutput(
     IInputStream* input,

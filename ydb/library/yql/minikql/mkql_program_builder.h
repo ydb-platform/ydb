@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "mkql_node.h"
 #include "mkql_node_builder.h"
+#include "mkql_type_builder.h"
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/core/sql_types/match_recognize.h>
 
@@ -122,7 +123,7 @@ struct TAggInfo {
     std::vector<ui32> ArgsColumns;
 };
 
-class TProgramBuilder : private TNonCopyable {
+class TProgramBuilder : public TTypeBuilder {
 public:
     TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry, bool voidWithEffects = false);
 
@@ -136,13 +137,7 @@ public:
     TRuntimeNode NewVoid();
     TRuntimeNode NewNull();
 
-    TType* NewDataType(NUdf::TDataTypeId schemeType, bool optional = false);
-    TType* NewDataType(NUdf::EDataSlot slot, bool optional = false) {
-        return NewDataType(NUdf::GetDataTypeInfo(slot).TypeId, optional);
-    }
 
-    TType* NewDecimalType(ui8 precision, ui8 scale);
-    TType* NewPgType(ui32 typeId);
 
     template <typename T, typename = std::enable_if_t<NUdf::TKnownDataType<T>::Result>>
     TRuntimeNode NewDataLiteral(T data) const {
@@ -162,47 +157,27 @@ public:
 
     TRuntimeNode NewDecimalLiteral(NYql::NDecimal::TInt128 data, ui8 precision, ui8 scale) const;
 
-    TType* NewOptionalType(TType* itemType);
     TRuntimeNode NewEmptyOptional(TType* optionalOrPgType);
     TRuntimeNode NewEmptyOptionalDataLiteral(NUdf::TDataTypeId schemeType);
     TRuntimeNode NewOptional(TRuntimeNode data);
     TRuntimeNode NewOptional(TType* optionalType, TRuntimeNode data);
 
-    TType* NewEmptyStructType();
-    TType* NewStructType(TType* baseStructType, const std::string_view& memberName, TType* memberType);
-    TType* NewStructType(const TArrayRef<const std::pair<std::string_view, TType*>>& memberTypes);
-    TType* NewArrayType(const TArrayRef<const std::pair<std::string_view, TType*>>& memberTypes);
     TRuntimeNode NewEmptyStruct();
     TRuntimeNode NewStruct(const TArrayRef<const std::pair<std::string_view, TRuntimeNode>>& members);
     TRuntimeNode NewStruct(TType* structType, const TArrayRef<const std::pair<std::string_view, TRuntimeNode>>& members);
 
-    TType* NewListType(TType* itemType);
     TRuntimeNode NewEmptyList();
     TRuntimeNode NewEmptyList(TType* itemType);
     TRuntimeNode NewEmptyListOfVoid();
     TRuntimeNode NewList(TType* itemType, const TArrayRef<const TRuntimeNode>& items);
 
-    TType* NewDictType(TType* keyType, TType* payloadType, bool multi);
     TRuntimeNode NewEmptyDict();
     TRuntimeNode NewDict(TType* dictType, const TArrayRef<const std::pair<TRuntimeNode, TRuntimeNode>>& items);
 
-    TType* NewStreamType(TType* itemType);
-    TType* NewFlowType(TType* itemType);
-    TType* NewTaggedType(TType* baseType, const std::string_view& tag);
-    TType* NewBlockType(TType* itemType, TBlockType::EShape shape);
-
-    TType* NewEmptyTupleType();
-    TType* NewTupleType(const TArrayRef<TType* const>& elements);
-    TType* NewArrayType(const TArrayRef<TType* const>& elements);
     TRuntimeNode NewEmptyTuple();
     TRuntimeNode NewTuple(TType* tupleType, const TArrayRef<const TRuntimeNode>& elements);
     TRuntimeNode NewTuple(const TArrayRef<const TRuntimeNode>& elements);
 
-    TType* NewEmptyMultiType();
-    TType* NewMultiType(const TArrayRef<TType* const>& elements);
-
-    TType* NewResourceType(const std::string_view& tag);
-    TType* NewVariantType(TType* underlyingType);
     TRuntimeNode NewVariant(TRuntimeNode item, ui32 tupleIndex, TType* variantType);
     TRuntimeNode NewVariant(TRuntimeNode item, const std::string_view& member, TType* variantType);
 
@@ -697,6 +672,7 @@ public:
         const std::string_view& cluster,
         const std::string_view& table,
         TType* returnType);
+    TRuntimeNode PgToRecord(TRuntimeNode input, const TArrayRef<std::pair<std::string_view, std::string_view>>& members);
 
     TRuntimeNode ScalarApply(const TArrayRef<const TRuntimeNode>& args, const TArrayLambda& handler);
 
@@ -831,11 +807,9 @@ private:
 
     bool IsNull(TRuntimeNode arg);
 protected:
-    const TTypeEnvironment& Env;
     const IFunctionRegistry& FunctionRegistry;
     const bool VoidWithEffects;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
-    bool UseNullType = true;
 };
 
 bool CanExportType(TType* type, const TTypeEnvironment& env);

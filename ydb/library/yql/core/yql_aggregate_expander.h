@@ -8,12 +8,11 @@ namespace NYql {
 
 class TAggregateExpander {
 public:
-    TAggregateExpander(bool allowPickle, bool usePartitionsByKeys, const bool useFinalizeByKeys, const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx,
+    TAggregateExpander(bool usePartitionsByKeys, const bool useFinalizeByKeys, const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx,
         bool forceCompact = false, bool compactForDistinct = false, bool usePhases = false)
         : Node(node)
         , Ctx(ctx)
         , TypesCtx(typesCtx)
-        , AllowPickle(allowPickle)
         , UsePartitionsByKeys(usePartitionsByKeys)
         , UseFinalizeByKeys(useFinalizeByKeys)
         , ForceCompact(forceCompact)
@@ -93,7 +92,6 @@ private:
     const TExprNode::TPtr Node;
     TExprContext& Ctx;
     TTypeAnnotationContext& TypesCtx;
-    bool AllowPickle;
     bool UsePartitionsByKeys;
     bool UseFinalizeByKeys = false;
     bool ForceCompact;
@@ -132,7 +130,7 @@ private:
 };
 
 inline TExprNode::TPtr ExpandAggregatePeepholeImpl(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx, const bool useFinalizeByKey, const bool useBlocks) {
-    TAggregateExpander aggExpander(false, !useFinalizeByKey && !useBlocks, useFinalizeByKey, node, ctx, typesCtx, true);
+    TAggregateExpander aggExpander(!useFinalizeByKey && !useBlocks, useFinalizeByKey, node, ctx, typesCtx, true);
     return aggExpander.ExpandAggregate();
 }
 

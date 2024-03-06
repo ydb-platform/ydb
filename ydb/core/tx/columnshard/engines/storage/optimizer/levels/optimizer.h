@@ -1,6 +1,7 @@
 #pragma once
 #include "counters.h"
 
+#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
@@ -200,11 +201,11 @@ public:
     class TPortionsScanner {
     private:
         THashMap<ui64, std::shared_ptr<TPortionInfo>> CurrentPortions;
-        const THashSet<TPortionAddress>& BusyPortions;
+        const std::shared_ptr<NDataLocks::TManager> DataLocksManager;
     public:
 
-        TPortionsScanner(const THashSet<TPortionAddress>& busyPortions)
-            : BusyPortions(busyPortions)
+        TPortionsScanner(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager)
+            : DataLocksManager(dataLocksManager)
         {
 
         }
@@ -216,7 +217,7 @@ public:
         bool AddBorderPoint(const TBorderPoint& p, bool& hasBusy) {
             hasBusy = false;
             for (auto&& [_, portionInfo] : p.GetStartPortions()) {
-                if (BusyPortions.contains(portionInfo->GetAddress())) {
+                if (DataLocksManager->IsLocked(*portionInfo)) {
                     hasBusy = true;
                     continue;
                 }
@@ -224,7 +225,7 @@ public:
             }
 
             for (auto&& [_, portionInfo] : p.GetFinishPortions()) {
-                if (BusyPortions.contains(portionInfo->GetAddress())) {
+                if (DataLocksManager->IsLocked(*portionInfo)) {
                     continue;
                 }
                 AFL_VERIFY(CurrentPortions.erase(portionInfo->GetPortion()));
@@ -239,12 +240,12 @@ public:
         MergeChunks
     };
 
-    std::vector<std::vector<std::shared_ptr<TPortionInfo>>> GetPortionsToCompact(const ui64 sizeLimit, const THashSet<TPortionAddress>& busyPortions) const {
+    std::vector<std::vector<std::shared_ptr<TPortionInfo>>> GetPortionsToCompact(const ui64 sizeLimit, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
         std::vector<std::vector<std::shared_ptr<TPortionInfo>>> result;
         THashSet<ui64> readyPortionIds;
         ui64 resultSize = 0;
 
-        TPortionsScanner buffer(busyPortions);
+        TPortionsScanner buffer(locksManager);
         THashMap<ui64, std::shared_ptr<TPortionInfo>> portionsCurrentChain;
         ui64 chainSize = 0;
         EChainProblem problemType = EChainProblem::NoProblem;
@@ -429,8 +430,8 @@ public:
         ProvidePortionsNextLevel(removeInstant);
     }
 
-    std::shared_ptr<TColumnEngineChanges> BuildOptimizationTask(const TCompactionLimits& /*limits*/, std::shared_ptr<TGranuleMeta> granule, const THashSet<TPortionAddress>& busyPortions, const TInstant /*currentInstant*/) const {
-        std::vector<std::vector<std::shared_ptr<TPortionInfo>>> portionGroups = PortionsPlacement.GetPortionsToCompact(PortionsSizeLimit, busyPortions);
+    std::shared_ptr<TColumnEngineChanges> BuildOptimizationTask(const TCompactionLimits& /*limits*/, std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager, const TInstant /*currentInstant*/) const {
+        std::vector<std::vector<std::shared_ptr<TPortionInfo>>> portionGroups = PortionsPlacement.GetPortionsToCompact(PortionsSizeLimit, locksManager);
         if (portionGroups.empty()) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "optimization_task_skipped");
             return nullptr;
@@ -449,7 +450,7 @@ public:
             Y_ABORT_UNLESS(position);
             positions.emplace_back(*position);
         }
-        TSaverContext saverContext(StoragesManager->GetOperator(IStoragesManager::DefaultStorageId), StoragesManager);
+        TSaverContext saverContext(StoragesManager);
         auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(CompactionLimits.GetSplitSettings(), granule, portions, saverContext);
         for (auto&& i : positions) {
             result->AddCheckPoint(i);
@@ -495,8 +496,8 @@ protected:
             }
         }
     }
-    virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const THashSet<TPortionAddress>& busyPortions) const override {
-        return LStart->BuildOptimizationTask(limits, granule, busyPortions, TInstant::Now());
+    virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
+        return LStart->BuildOptimizationTask(limits, granule, locksManager, TInstant::Now());
 
     }
     virtual TOptimizationPriority DoGetUsefulMetric() const override {

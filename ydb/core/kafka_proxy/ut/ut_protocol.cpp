@@ -1,6 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include "../kafka_messages.h"
+#include "../kafka_constants.h"
 #include "../actors/actors.h"
 
 #include <ydb/services/ydb/ydb_common_ut.h>
@@ -289,15 +290,19 @@ std::vector<NTopic::TReadSessionEvent::TDataReceivedEvent> Read(std::shared_ptr<
 }
 
 struct TTopicConfig {
+    inline static const std::map<TString, TString> DummyMap;
+
     TTopicConfig(
             TString name,
             ui32 partionsNumber,
             std::optional<TString> retentionMs = std::nullopt,
-            std::optional<TString> retentionBytes = std::nullopt)
+            std::optional<TString> retentionBytes = std::nullopt,
+            const std::map<TString, TString>& configs = DummyMap)
         : Name(name)
         , PartitionsNumber(partionsNumber)
         , RetentionMs(retentionMs)
         , RetentionBytes(retentionBytes)
+        , Configs(configs)
     {
     }
 
@@ -305,6 +310,7 @@ struct TTopicConfig {
     ui32 PartitionsNumber;
     std::optional<TString> RetentionMs;
     std::optional<TString> RetentionBytes;
+    std::map<TString, TString> Configs;
 };
 
 class TTestClient {
@@ -532,7 +538,12 @@ public:
         TReadInfo readInfo;
         for (;;) {
             readInfo = JoinAndSyncGroup(topics, groupId);
-            if (readInfo.Partitions.size() == expectedPartitionsCount) {
+            ui32 partitionsCount = 0;
+            for (auto topicPartitions: readInfo.Partitions) {
+                partitionsCount += topicPartitions.Partitions.size();
+            }
+
+            if (partitionsCount == expectedPartitionsCount) {
                 break;
             }
             WaitRebalance(readInfo.MemberId, readInfo.GenerationId, groupId);    
@@ -628,6 +639,13 @@ public:
             addConfig(topicToCreate.RetentionMs, "retention.ms");
             addConfig(topicToCreate.RetentionBytes, "retention.bytes");
 
+            for (auto const& [name, value] : topicToCreate.Configs) {
+                NKafka::TCreateTopicsRequestData::TCreatableTopic::TCreateableTopicConfig config;
+                config.Name = name;
+                config.Value = value;
+                topic.Configs.push_back(config);
+            }
+
             request.Topics.push_back(topic);
         }
 
@@ -651,6 +669,42 @@ public:
         }
 
         return WriteAndRead<TCreatePartitionsResponseData>(header, request);
+    }
+
+    TMessagePtr<TAlterConfigsResponseData> AlterConfigs(std::vector<TTopicConfig> topicsToModify, bool validateOnly = false) {
+        Cerr << ">>>>> TAlterConfigsRequestData\n";
+        
+        TRequestHeaderData header = Header(NKafka::EApiKey::ALTER_CONFIGS, 2);
+        TAlterConfigsRequestData request;
+        request.ValidateOnly = validateOnly;
+
+        for (auto& topicToModify : topicsToModify) {
+            NKafka::TAlterConfigsRequestData::TAlterConfigsResource resource;
+            resource.ResourceType = TOPIC_RESOURCE_TYPE;
+            resource.ResourceName = topicToModify.Name;
+
+            auto addConfig = [&resource](std::optional<TString> configValue, TString configName) { 
+                if (configValue.has_value()) {
+                    NKafka::TAlterConfigsRequestData::TAlterConfigsResource::TAlterableConfig config;
+                    config.Name = configName;
+                    config.Value = configValue.value();
+                    resource.Configs.push_back(config);
+                }
+            };
+            
+            addConfig(topicToModify.RetentionMs, "retention.ms");
+            addConfig(topicToModify.RetentionBytes, "retention.bytes");
+
+            for (auto const& [name, value] : topicToModify.Configs) {
+                NKafka::TAlterConfigsRequestData::TAlterConfigsResource::TAlterableConfig config;
+                config.Name = name;
+                config.Value = value;
+                resource.Configs.push_back(config);
+            }
+            request.Resources.push_back(resource);
+        }
+
+        return WriteAndRead<TAlterConfigsResponseData>(header, request);
     }
 
     void UnknownApiKey() {
@@ -730,7 +784,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 15u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
         }
 
         {
@@ -954,7 +1008,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 15u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
         }
 
         {
@@ -1187,7 +1241,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = clientA.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 15u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
         }
 
         {
@@ -1342,7 +1396,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 15u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
         }
 
         {
@@ -1556,7 +1610,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 15u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
         }
 
         {
@@ -1599,11 +1653,9 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 TTopicConfig("topic-997-test", 1)
             });
 
-            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-997-test");
-            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, DUPLICATE_RESOURCE);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].Name.value(), "topic-997-test");
-            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].ErrorCode, DUPLICATE_RESOURCE);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, INVALID_REQUEST);
 
             auto describeTopicSettings = NTopic::TDescribeTopicSettings().IncludeStats(true);
             auto result = pqClient.DescribeTopic("/Root/topic-997-test", describeTopicSettings).GetValueSync();
@@ -1618,17 +1670,14 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 TTopicConfig("topic-995-test", 1)
             });
 
-            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-996-test");
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, NONE_ERROR);
             auto result996 = pqClient.DescribeTopic("/Root/topic-996-test", describeTopicSettings).GetValueSync();
             UNIT_ASSERT(result996.IsSuccess());
             
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].Name.value(), "topic-995-test");
-            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].ErrorCode, DUPLICATE_RESOURCE);
-
-            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[2].Name.value(), "topic-995-test");
-            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[2].ErrorCode, DUPLICATE_RESOURCE);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].ErrorCode, INVALID_REQUEST);
 
             auto result995 = pqClient.DescribeTopic("/Root/topic-995-test", describeTopicSettings).GetValueSync();
             UNIT_ASSERT(!result995.IsSuccess());
@@ -1648,7 +1697,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         {
             // Set valid retention
             ui64 retentionMs = 168 * 60 * 60 * 1000;
-            ui64 retentionBytes = 51'200'000'000ul;
+            ui64 retentionBytes = 51'200 * 1_MB;
 
             auto msg = client.CreateTopics({ TTopicConfig("topic-993-test", 1, std::to_string(retentionMs), std::to_string(retentionBytes))});
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
@@ -1657,7 +1706,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto result993 = pqClient.DescribeTopic("/Root/topic-993-test", describeTopicSettings).GetValueSync();
             UNIT_ASSERT(result993.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(result993.GetTopicDescription().GetRetentionPeriod().MilliSeconds(), retentionMs);
-            UNIT_ASSERT_VALUES_EQUAL(result993.GetTopicDescription().GetRetentionStorageMb(), retentionBytes / 1'000'000);
+            UNIT_ASSERT_VALUES_EQUAL(result993.GetTopicDescription().GetRetentionStorageMb(), retentionBytes / 1_MB);
         }
 
         {
@@ -1747,6 +1796,30 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT(!result993.IsSuccess());
         }
 
+        {
+            // Legal, but meaningless for Logbroker config
+            std::map<TString, TString> configs { std::make_pair("flush.messages", "1") };
+            auto msg = client.CreateTopics( { TTopicConfig("topic-987-test", 1, std::nullopt, std::nullopt, configs) });
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-987-test");
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, NONE_ERROR);
+
+            auto result = pqClient.DescribeTopic("/Root/topic-987-test", describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            // Both legal and illegal configs
+            std::map<TString, TString> configs { std::make_pair("compression.type", "zstd"), std::make_pair("flush.messages", "1") };
+            auto msg = client.CreateTopics( { TTopicConfig("topic-986-test", 1, std::nullopt, std::nullopt, configs) });
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-986-test");
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, INVALID_REQUEST);
+
+            auto result = pqClient.DescribeTopic("/Root/topic-986-test", describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+        }
+
     } // Y_UNIT_TEST(CreateTopicsScenario)
 
     Y_UNIT_TEST(CreatePartitionsScenario) {
@@ -1793,7 +1866,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 15u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
         }
 
         {
@@ -1896,6 +1969,188 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
     } // Y_UNIT_TEST(CreatePartitionsScenario)
 
+    Y_UNIT_TEST(AlterConfigsScenario) {
+        TInsecureTestServer testServer("2");
+
+        TString topic0Name = "/Root/topic-0-test";
+        TString shortTopic0Name = "topic-0-test";
+        TString topic1Name = "/Root/topic-1-test";
+        TString shortTopic1Name = "topic-1-test";
+        TString notExistsTopicName = "/Root/not-exists";
+        ui64 minActivePartitions = 10;
+
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        {
+            auto result0 = pqClient.CreateTopic(
+                topic0Name,
+                NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(minActivePartitions, minActivePartitions)
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result0.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result0.GetStatus(), EStatus::SUCCESS);
+
+            auto result1 = pqClient.CreateTopic(
+                topic1Name,
+                NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(minActivePartitions, minActivePartitions)
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result1.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result1.GetStatus(), EStatus::SUCCESS);
+        }
+
+        TTestClient client(testServer.Port);
+
+        {
+            auto msg = client.ApiVersions();
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
+        }
+
+        {
+            auto msg = client.SaslHandshake();
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(msg->Mechanisms.size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(*msg->Mechanisms[0], "PLAIN");
+        }
+
+        {
+            auto msg = client.SaslAuthenticate("ouruser@/Root", "ourUserPassword");
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        auto describeTopicSettings = NTopic::TDescribeTopicSettings().IncludeStats(true);
+
+        {   
+            // Check validate only
+            auto msg = client.AlterConfigs({ TTopicConfig(shortTopic0Name, 1), TTopicConfig(notExistsTopicName, 1) }, true);
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ResourceName.value(), shortTopic0Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, NONE_ERROR);
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[1].ResourceName.value(), notExistsTopicName);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[1].ErrorCode, NONE_ERROR);
+        }
+
+        {   
+            // Set valid retention
+            ui64 retentionMs = 168 * 60 * 60 * 1000;
+            ui64 retentionBytes = 51'200 * 1_MB;
+
+            auto msg = client.AlterConfigs({
+                    TTopicConfig(shortTopic0Name, 1, std::to_string(retentionMs), std::to_string(retentionBytes)),
+                    TTopicConfig(shortTopic1Name, 1, std::to_string(retentionMs), std::to_string(retentionBytes)),
+            });
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 2);
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ResourceName.value(), shortTopic0Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, NONE_ERROR);
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[1].ResourceName.value(), shortTopic1Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[1].ErrorCode, NONE_ERROR);
+
+            auto result0 = pqClient.DescribeTopic(shortTopic0Name, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result0.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetRetentionPeriod().MilliSeconds(), retentionMs);
+            UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetRetentionStorageMb(), retentionBytes / (1024 * 1024));
+
+            auto result1 = pqClient.DescribeTopic(shortTopic0Name, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result1.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(result1.GetTopicDescription().GetRetentionPeriod().MilliSeconds(), retentionMs);
+            UNIT_ASSERT_VALUES_EQUAL(result1.GetTopicDescription().GetRetentionStorageMb(), retentionBytes / (1024 * 1024));
+        }
+
+        {
+            // Wrong config value(retention.ms) isn't applied
+            auto initialTopicDescription = pqClient.DescribeTopic(shortTopic0Name, describeTopicSettings)
+                    .GetValueSync()
+                    .GetTopicDescription();
+
+            auto msg = client.AlterConfigs({ TTopicConfig(shortTopic0Name, 1, "not_a_number", "42")});
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ResourceName.value(), shortTopic0Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, INVALID_CONFIG);
+
+            auto resultingTopicDescription = pqClient.DescribeTopic(shortTopic0Name, describeTopicSettings)
+                    .GetValueSync()
+                    .GetTopicDescription();
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                    initialTopicDescription.GetRetentionPeriod().MilliSeconds(),
+                    resultingTopicDescription.GetRetentionPeriod().MilliSeconds()
+            );
+            UNIT_ASSERT_VALUES_EQUAL(
+                    initialTopicDescription.GetRetentionStorageMb(),
+                    resultingTopicDescription.GetRetentionStorageMb()
+            );
+        }
+
+        {
+            // Nonnumber retention.bytes
+            auto alteredTopic = TTopicConfig(
+                    shortTopic0Name,
+                    1,
+                    std::nullopt,
+                    "notNumber"
+            );
+            auto msg = client.AlterConfigs({alteredTopic});
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ResourceName.value(), shortTopic0Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, INVALID_CONFIG);
+        }
+
+        {
+            // Too big retention.ms
+            auto alteredTopic = TTopicConfig(
+                    shortTopic0Name,
+                    1,
+                    std::to_string(365 * 24 * 60 * 60 * 1000ul),
+                    std::nullopt
+            );
+            auto msg = client.AlterConfigs({alteredTopic});
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ResourceName.value(), shortTopic0Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, INVALID_CONFIG);
+        }
+
+        {
+            // Duplicate topics
+            ui64 retentionMs = 168 * 60 * 60 * 1000;
+            ui64 retentionBytes = 51'200 * 1_MB;
+
+            auto msg = client.AlterConfigs({
+                    TTopicConfig(shortTopic0Name, 1, std::to_string(retentionMs), std::to_string(retentionBytes)),
+                    TTopicConfig(shortTopic0Name, 1, std::to_string(retentionMs), std::to_string(retentionBytes)),
+            });
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ResourceName.value(), shortTopic0Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, INVALID_REQUEST);
+        }
+
+        {
+            // Legal, but meaningless for Logbroker config 
+            std::map<TString, TString> configs { std::make_pair("flush.messages", "1") };
+            auto msg = client.AlterConfigs({ TTopicConfig(shortTopic0Name, 1, std::nullopt, std::nullopt, configs) });
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ResourceName.value(), shortTopic0Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, NONE_ERROR);
+        }
+
+        {
+            // Both legal and illegal configs
+            std::map<TString, TString> configs { std::make_pair("compression.type", "zstd"), std::make_pair("flush.messages", "1") };
+            auto msg = client.AlterConfigs({ TTopicConfig(shortTopic0Name, 1, std::nullopt, std::nullopt, configs) });
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ResourceName.value(), shortTopic0Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, INVALID_REQUEST);
+        }
+
+    }
+
     Y_UNIT_TEST(LoginWithApiKey) {
         TInsecureTestServer testServer;
 
@@ -1925,7 +2180,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 15u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
         }
 
         {

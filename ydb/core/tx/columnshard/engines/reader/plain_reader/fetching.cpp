@@ -3,6 +3,8 @@
 #include <ydb/core/tx/columnshard/engines/filter.h>
 #include <ydb/core/formats/arrow/simple_arrays_cache.h>
 
+#include <ydb/library/yql/minikql/mkql_terminator.h>
+
 namespace NKikimr::NOlap::NPlainReader {
 
 bool TStepAction::DoApply(IDataReader& /*owner*/) const {
@@ -14,8 +16,10 @@ bool TStepAction::DoApply(IDataReader& /*owner*/) const {
 }
 
 bool TStepAction::DoExecute() {
+    NMiniKQL::TThrowingBindTerminator bind;
     while (Step) {
         if (Source->IsEmptyData()) {
+            Source->Finalize();
             FinishedFlag = true;
             return true;
         }
@@ -23,11 +27,13 @@ bool TStepAction::DoExecute() {
             return true;
         }
         if (Source->IsEmptyData()) {
+            Source->Finalize();
             FinishedFlag = true;
             return true;
         }
         Step = Step->GetNextStep();
     }
+    Source->Finalize();
     FinishedFlag = true;
     return true;
 }
@@ -55,6 +61,9 @@ bool TAssemblerStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source
 }
 
 bool TFilterProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& /*step*/) const {
+    AFL_VERIFY(source);
+    AFL_VERIFY(Step);
+    AFL_VERIFY(source->GetStageData().GetTable());
     auto filter = Step->BuildFilter(source->GetStageData().GetTable());
     source->MutableStageData().AddFilter(filter);
     return true;
@@ -67,7 +76,7 @@ bool TPredicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& sour
 }
 
 bool TSnapshotFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& /*step*/) const {
-    auto filter = MakeSnapshotFilter(source->GetStageData().GetTable(), source->GetContext()->GetReadMetadata()->GetSnapshot());
+    auto filter = MakeSnapshotFilter(source->GetStageData().GetTable(), source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
     source->MutableStageData().AddFilter(filter);
     return true;
 }

@@ -85,10 +85,7 @@ const TNodeDescriptor& NullNodeDescriptor();
 ////////////////////////////////////////////////////////////////////////////////
 
 bool operator == (const TNodeDescriptor& lhs, const TNodeDescriptor& rhs);
-bool operator != (const TNodeDescriptor& lhs, const TNodeDescriptor& rhs);
-
 bool operator == (const TNodeDescriptor& lhs, const NProto::TNodeDescriptor& rhs);
-bool operator != (const TNodeDescriptor& lhs, const NProto::TNodeDescriptor& rhs);
 
 void FormatValue(TStringBuilderBase* builder, const TNodeDescriptor& descriptor, TStringBuf spec);
 TString ToString(const TNodeDescriptor& descriptor);

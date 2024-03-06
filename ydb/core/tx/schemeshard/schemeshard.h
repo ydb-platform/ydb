@@ -93,6 +93,8 @@ struct TEvSchemeShard {
         EvProcessingRequest,
         EvProcessingResponse,
 
+        EvOwnerActorAck,
+
         EvEnd
     };
 
@@ -329,10 +331,9 @@ struct TEvSchemeShard {
                                                                   EvDescribeSchemeResult> {
         TEvDescribeSchemeResult() = default;
 
-        TEvDescribeSchemeResult(const TString& path, ui64 pathOwner, TPathId pathId)
+        TEvDescribeSchemeResult(const TString& path, TPathId pathId)
         {
             Record.SetPath(path);
-            Record.SetPathOwner(pathOwner);
             Record.SetPathId(pathId.LocalPathId);
             Record.SetPathOwnerId(pathId.OwnerId);
         }
@@ -343,8 +344,8 @@ struct TEvSchemeShard {
 
         TEvDescribeSchemeResultBuilder() = default;
 
-        TEvDescribeSchemeResultBuilder(const TString& path, ui64 pathOwner, TPathId pathId)
-            : TEvDescribeSchemeResult(path, pathOwner, pathId)
+        TEvDescribeSchemeResultBuilder(const TString& path, TPathId pathId)
+            : TEvDescribeSchemeResult(path, pathId)
         {
         }
     };
@@ -641,6 +642,10 @@ struct TEvSchemeShard {
 
     struct TEvLoginResult : TEventPB<TEvLoginResult, NKikimrScheme::TEvLoginResult, EvLoginResult> {
         TEvLoginResult() = default;
+    };
+
+    struct TEvOwnerActorAck : TEventPB<TEvOwnerActorAck, NKikimrScheme::TEvOwnerActorAck, EvOwnerActorAck> {
+        TEvOwnerActorAck() = default;
     };
 };
 

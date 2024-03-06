@@ -1,5 +1,6 @@
 #include "prepare.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/vdisk_services.h>

@@ -1,6 +1,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/protos/table_stats.pb.h>
 
 using namespace NKikimr;
 using namespace NSchemeShardUT_Private;
@@ -303,6 +304,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
         TTestEnv env(runtime);
 
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::PERSQUEUE_READ_BALANCER, NActors::NLog::PRI_TRACE);
 
         auto& appData = runtime.GetAppData();
 

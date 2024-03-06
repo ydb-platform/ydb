@@ -194,6 +194,7 @@ def test_setitem() -> None:
     d1[key] = "b"
     d2[key] = "b"
 
+
 def test_delitem() -> None:
     d1: multidict.MultiDict[str] = multidict.MultiDict({"a": "b"})
     d2: multidict.CIMultiDict[str] = multidict.CIMultiDict({"a": "b"})
@@ -247,6 +248,7 @@ def test_update_mapping() -> None:
 
     d1.update({key: "b"})
     d2.update({key: "b"})
+
 
 def test_popone() -> None:
     d1: multidict.MultiDict[str] = multidict.MultiDict({"a": "b"})

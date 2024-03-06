@@ -183,7 +183,7 @@ TVector<TTabletId> TStoragePoolInfo::PullWaitingTablets() {
 }
 
 TStoragePoolInfo::TStats TStoragePoolInfo::GetStats() const {
-    TStoragePoolInfo::TStats stats;
+    TStoragePoolInfo::TStats stats = {};
     if (Groups.empty()) {
         return stats;
     }

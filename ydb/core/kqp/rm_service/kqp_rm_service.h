@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_pattern_cache.h>
@@ -102,7 +103,7 @@ public:
 
 
 NActors::IActor* CreateTakeResourcesSnapshotActor(
-    const TString& boardPath, ui32 stateStorageGroupId,
+    const TString& boardPath,
     std::function<void(TVector<NKikimrKqp::TKqpNodeResources>&&)>&& callback);
 
 

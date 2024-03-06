@@ -7,6 +7,7 @@ SRCS(
     delta.go
     linear.go
     mux.go
+    order.go
     resource.go
     resources.go
     simple.go
@@ -16,6 +17,7 @@ SRCS(
 
 GO_TEST_SRCS(
     linear_test.go
+    order_test.go
     status_test.go
 )
 

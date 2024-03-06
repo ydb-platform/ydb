@@ -34,18 +34,24 @@ Y_UNIT_TEST_SUITE(ObjectDistribuiton) {
         std::bernoulli_distribution subtract(0.2);
 
         std::unordered_map<TNodeId, TNodeInfo> nodes;
+        NKikimrLocal::TTabletAvailability dummyTabletAvailability;
+        dummyTabletAvailability.SetType(TTabletTypes::Dummy);
         TObjectDistributions objectDistributions(nodes);
         for (TNodeId nodeId = 0; nodeId < NUM_NODES; ++nodeId) {
             TNodeInfo& node = nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, hive)).first->second;
             node.ServicedDomains.push_back(TEST_DOMAIN);
             node.RegisterInDomains();
             node.LocationAcquired = true;
+            node.TabletAvailability.emplace(std::piecewise_construct,
+                                            std::tuple<TTabletTypes::EType>(TTabletTypes::Dummy),
+                                            std::tuple<NKikimrLocal::TTabletAvailability>(dummyTabletAvailability));
         }
 
         for (size_t i = 0; i < NUM_OPERATIONS; i++) {
             TLeaderTabletInfo tablet(0, hive);
             tablet.AssignDomains(TEST_DOMAIN, {});
             tablet.ObjectId.second = pickObject(engine);
+            tablet.SetType(TTabletTypes::Dummy);
             TFullObjectId object = tablet.ObjectId;
             TNodeId node = pickNode(engine);
             ui64& curCount = trueDistribution[{node, object}];
@@ -118,6 +124,7 @@ Y_UNIT_TEST_SUITE(ObjectDistribuiton) {
         for (size_t i = 0; i < 3; i++) {
             tablets[i].emplace(i + 1, hive);
             tablets[i]->ObjectId = {1, i + 1};
+            tablets[i]->SetType(TTabletTypes::Dummy);
         }
         tablets[0]->AssignDomains(DOMAIN_A, {});
         pickNodeForObject.emplace_back(0, NUM_NODES / 2 - 1);
@@ -128,11 +135,16 @@ Y_UNIT_TEST_SUITE(ObjectDistribuiton) {
 
         std::unordered_map<TNodeId, TNodeInfo> nodes;
         TObjectDistributions objectDistributions(nodes);
+        NKikimrLocal::TTabletAvailability dummyTabletAvailability;
+        dummyTabletAvailability.SetType(TTabletTypes::Dummy);
         for (TNodeId nodeId = 0; nodeId < NUM_NODES; ++nodeId) {
             TNodeInfo& node = nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, hive)).first->second;
             node.ServicedDomains.push_back(nodeId * 2 < NUM_NODES ? DOMAIN_A : DOMAIN_B);
             node.RegisterInDomains();
             node.LocationAcquired = true;
+            node.TabletAvailability.emplace(std::piecewise_construct,
+                                            std::tuple<TTabletTypes::EType>(TTabletTypes::Dummy),
+                                            std::tuple<NKikimrLocal::TTabletAvailability>(dummyTabletAvailability));
         }
 
         std::mt19937 engine(42);

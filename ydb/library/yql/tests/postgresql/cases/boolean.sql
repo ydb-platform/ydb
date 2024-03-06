@@ -90,7 +90,7 @@ INSERT INTO BOOLTBL3 (d, b, o) VALUES ('null', null, 3);
 -- correct. Use a table as source to prevent constant simplification
 -- to interfer.
 CREATE TABLE booltbl4(isfalse bool, istrue bool, isnul bool);
-INSERT INTO booltbl4 (isfalse, istrue, isnul) VALUES (false, true, null);
+INSERT INTO booltbl4 VALUES (false, true, null);
 \pset null '(null)'
 -- AND expression need to return null if there's any nulls and not all
 -- of the value are true

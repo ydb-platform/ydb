@@ -270,11 +270,25 @@ void TDictionaryCompressionConfig::Register(TRegistrar registrar)
     registrar.Parameter("column_dictionary_size", &TThis::ColumnDictionarySize)
         .GreaterThanOrEqual(NCompression::GetDictionaryCompressionCodec()->GetMinDictionarySize())
         .Default(32_KB);
+    registrar.Parameter("compression_level", &TThis::CompressionLevel)
+        .InRange(1, NCompression::GetDictionaryCompressionCodec()->GetMaxCompressionLevel())
+        .Default(NCompression::GetDictionaryCompressionCodec()->GetDefaultCompressionLevel());
     registrar.Parameter("applied_policies", &TThis::AppliedPolicies)
         .Default({
             EDictionaryCompressionPolicy::LargeChunkFirst,
             EDictionaryCompressionPolicy::FreshChunkFirst,
-        });
+        })
+        .ResetOnLoad();
+
+    registrar.Parameter("policy_probation_samples_size", &TThis::PolicyProbationSamplesSize)
+        .GreaterThan(0)
+        .Default(12_MB);
+    registrar.Parameter("max_acceptable_compression_ratio", &TThis::MaxAcceptableCompressionRatio)
+        .Default(0.7)
+        .InRange(0, 1);
+    registrar.Parameter("max_decompression_blob_size", &TThis::MaxDecompressionBlobSize)
+        .GreaterThan(0)
+        .Default(64_MB);
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->DesiredSampleCount > config->MaxProcessedSampleCount) {

@@ -6,12 +6,14 @@ namespace NKikimr::NSchemeShard {
 void TOlapIndexSchema::SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& indexSchema) const {
     indexSchema.SetId(Id);
     indexSchema.SetName(Name);
+    indexSchema.SetStorageId(StorageId);
     IndexMeta.SerializeToProto(indexSchema);
 }
 
 void TOlapIndexSchema::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& indexSchema) {
     Id = indexSchema.GetId();
     Name = indexSchema.GetName();
+    StorageId = indexSchema.GetStorageId();
     AFL_VERIFY(IndexMeta.DeserializeFromProto(indexSchema))("incorrect_proto", indexSchema.DebugString());
 }
 
@@ -22,8 +24,16 @@ bool TOlapIndexSchema::ApplyUpdate(const TOlapSchema& currentSchema, const TOlap
         errors.AddError("different index classes: " + upsert.GetIndexConstructor().GetClassName() + " vs " + IndexMeta.GetClassName());
         return false;
     }
-    auto object = upsert.GetIndexConstructor()->CreateIndexMeta(GetId(), currentSchema, errors);
+    if (upsert.GetStorageId()) {
+        StorageId = *upsert.GetStorageId();
+    }
+    auto object = upsert.GetIndexConstructor()->CreateIndexMeta(GetId(), GetName(), currentSchema, errors);
     if (!object) {
+        return false;
+    }
+    auto conclusion = IndexMeta->CheckModificationCompatibility(object);
+    if (conclusion.IsFail()) {
+        errors.AddError("cannot modify index: " + conclusion.GetErrorMessage());
         return false;
     }
     IndexMeta = NBackgroundTasks::TInterfaceProtoContainer<NOlap::NIndexes::IIndexMeta>(object);
@@ -39,7 +49,7 @@ bool TOlapIndexesDescription::ApplyUpdate(const TOlapSchema& currentSchema, cons
             }
         } else {
             const ui32 id = nextEntityId++;
-            auto meta = index.GetIndexConstructor()->CreateIndexMeta(id, currentSchema, errors);
+            auto meta = index.GetIndexConstructor()->CreateIndexMeta(id, index.GetName(), currentSchema, errors);
             if (!meta) {
                 return false;
             }

@@ -592,8 +592,8 @@ namespace NKikimr {
 
                 info.Lsn = TLsnSeg(lsnBatch.First, lsnBatch.First);
                 lsnBatch.First++;
-                auto [logMsg, traceId] = CreatePutLogEvent(ctx, "TEvVMultiPut", vMultiPutActorId, cookie, std::move(orbit),
-                    info, std::move(result));
+                auto [logMsg, traceId] = CreatePutLogEvent(ctx, "TEvVMultiPut", vMultiPutActorId, cookie,
+                    (itemIdx ? NLWTrace::TOrbit{} : std::move(orbit)), info, std::move(result));
                 evLogs->AddLog(THolder<NPDisk::TEvLog>(logMsg.release()), std::move(traceId));
             }
 
@@ -2152,6 +2152,10 @@ namespace NKikimr {
                                 TABLER() {
                                     TABLED() {str << "VDiskIncarnationGuid";}
                                     TABLED() {str << Db->GetVDiskIncarnationGuid(true);}
+                                }
+                                TABLER() {
+                                    TABLED() {str << "BurstThresholdNs";}
+                                    TABLED() {str << Config->BurstThresholdNs;}
                                 }
                             }
                         }

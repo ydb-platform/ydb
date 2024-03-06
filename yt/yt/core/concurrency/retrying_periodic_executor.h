@@ -6,7 +6,7 @@
 #include <yt/yt/core/actions/callback.h>
 #include <yt/yt/core/actions/future.h>
 
-#include <yt/yt/core/misc/backoff_strategy_config.h>
+#include <yt/yt/core/misc/config.h>
 
 namespace NYT::NConcurrency {
 
@@ -47,12 +47,13 @@ public:
 
     void Reset();
 
-    TDuration GetBackoffTimeEstimate() const;
+    std::tuple<TDuration, TDuration> GetBackoffInterval() const;
 
 private:
     //! Used for backoff time estimation
     std::atomic<TDuration> CachedBackoffDuration_;
     std::atomic<double> CachedBackoffMultiplier_;
+    std::atomic<double> CachedBackoffJitter_;
 
     TBackoffStrategy Backoff_;
 
@@ -86,7 +87,7 @@ public:
         TExponentialBackoffOptions backoffOptions,
         std::optional<TDuration> period = {});
 
-    TDuration GetBackoffTimeEstimate() const;
+    std::tuple<TDuration, TDuration> GetBackoffInterval() const;
 
 private:
     using TBase = NDetail::TPeriodicExecutorBase<NDetail::TRetryingInvocationTimePolicy>;

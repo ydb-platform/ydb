@@ -158,7 +158,7 @@ TString DeriveYsonName(const TString& protobufName, const google::protobuf::File
 
 struct TProtobufInteropConfigSingleton
 {
-    TAtomicIntrusivePtr<TProtobufInteropDynamicConfig> Config{New<TProtobufInteropDynamicConfig>()};
+    TAtomicIntrusivePtr<TProtobufInteropConfig> Config{New<TProtobufInteropConfig>()};
 };
 
 TProtobufInteropConfigSingleton* GlobalProtobufInteropConfig()
@@ -166,7 +166,7 @@ TProtobufInteropConfigSingleton* GlobalProtobufInteropConfig()
     return LeakySingleton<TProtobufInteropConfigSingleton>();
 }
 
-TProtobufInteropDynamicConfigPtr GetProtobufInteropConfig()
+TProtobufInteropConfigPtr GetProtobufInteropConfig()
 {
     return GlobalProtobufInteropConfig()->Config.Acquire();
 }
@@ -177,7 +177,7 @@ TProtobufInteropDynamicConfigPtr GetProtobufInteropConfig()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void SetProtobufInteropConfig(TProtobufInteropDynamicConfigPtr config)
+void SetProtobufInteropConfig(TProtobufInteropConfigPtr config)
 {
     GlobalProtobufInteropConfig()->Config.Store(std::move(config));
 }
@@ -385,7 +385,9 @@ public:
         , YsonMap_(descriptor->options().GetExtension(NYT::NYson::NProto::yson_map))
         , Required_(descriptor->options().GetExtension(NYT::NYson::NProto::required))
         , Converter_(registry->FindMessageBytesFieldConverter(descriptor->containing_type(), descriptor->index()))
-        , EnumYsonStorageType_(descriptor->options().GetExtension(NYT::NYson::NProto::enum_yson_storage_type))
+        , EnumYsonStorageType_(descriptor->options().HasExtension(NYT::NYson::NProto::enum_yson_storage_type) ?
+            std::optional(descriptor->options().GetExtension(NYT::NYson::NProto::enum_yson_storage_type)) :
+            std::nullopt)
     {
         if (YsonMap_ && !descriptor->is_map()) {
             THROW_ERROR_EXCEPTION("Field %v is not a map and cannot be annotated with \"yson_map\" option",
@@ -496,9 +498,19 @@ public:
         return Converter_;
     }
 
-    const NYT::NYson::NProto::EEnumYsonStorageType& GetEnumYsonStorageType() const
+    EEnumYsonStorageType GetEnumYsonStorageType() const
     {
-        return EnumYsonStorageType_;
+        if (EnumYsonStorageType_) {
+            switch (*EnumYsonStorageType_) {
+                case NYT::NYson::NProto::EEnumYsonStorageType::EYST_STRING:
+                    return EEnumYsonStorageType::String;
+                case NYT::NYson::NProto::EEnumYsonStorageType::EYST_INT:
+                    return EEnumYsonStorageType::Int;
+            }
+        }
+
+        auto config = GetProtobufInteropConfig();
+        return config->DefaultEnumYsonStorageType;
     }
 
     void WriteSchema(IYsonConsumer* consumer) const
@@ -582,7 +594,7 @@ private:
     const bool YsonMap_;
     const bool Required_;
     const std::optional<TProtobufMessageBytesFieldConverter> Converter_;
-    const NYT::NYson::NProto::EEnumYsonStorageType EnumYsonStorageType_;
+    const std::optional<NYT::NYson::NProto::EEnumYsonStorageType> EnumYsonStorageType_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -773,7 +785,8 @@ TProtobufElement TProtobufField::GetElement(bool insideRepeated) const
         });
     } else {
         return std::make_unique<TProtobufScalarElement>(TProtobufScalarElement{
-            static_cast<TProtobufScalarElement::TType>(GetType())
+            static_cast<TProtobufScalarElement::TType>(GetType()),
+            GetEnumYsonStorageType()
         });
     }
 }
@@ -1014,11 +1027,11 @@ protected:
                     data);
                 return;
             case EUtf8Check::ThrowOnFail:
-                THROW_ERROR_EXCEPTION("String field got non UTF-8 value (Path: %v)",
+                THROW_ERROR_EXCEPTION("Non UTF-8 value in string field %v",
                     YPathStack_.GetHumanReadablePath())
+                    << TErrorAttribute("non_utf8_string", data)
                     << TErrorAttribute("ypath", YPathStack_.GetPath())
-                    << TErrorAttribute("proto_field", fieldFullName)
-                    << TErrorAttribute("non_utf8_string", data);
+                    << TErrorAttribute("proto_field", fieldFullName);
         }
     }
 };
@@ -2499,13 +2512,12 @@ private:
 
                     case FieldDescriptor::TYPE_ENUM: {
                         ParseScalar([&] {
-                            using NYT::NYson::NProto::EEnumYsonStorageType;
-                            switch(field->GetEnumYsonStorageType()) {
-                                case EEnumYsonStorageType::EYST_INT:
-                                    storeEnumAsInt(unsignedValue);
-                                    break;
-                                case EEnumYsonStorageType::EYST_STRING:
+                            switch (field->GetEnumYsonStorageType()) {
+                                case EEnumYsonStorageType::String:
                                     storeEnumAsString(unsignedValue);
+                                    break;
+                                case EEnumYsonStorageType::Int:
+                                    storeEnumAsInt(unsignedValue);
                                     break;
                             }
                         });
@@ -2742,13 +2754,12 @@ private:
 
                     case FieldDescriptor::TYPE_ENUM: {
                         ParseVarintPacked<ui32>(length, field, [&] (auto value) {
-                            using NYT::NYson::NProto::EEnumYsonStorageType;
-                            switch(field->GetEnumYsonStorageType()) {
-                                case EEnumYsonStorageType::EYST_INT:
-                                    storeEnumAsInt(value);
-                                    break;
-                                case EEnumYsonStorageType::EYST_STRING:
+                            switch (field->GetEnumYsonStorageType()) {
+                                case EEnumYsonStorageType::String:
                                     storeEnumAsString(value);
+                                    break;
+                                case EEnumYsonStorageType::Int:
+                                    storeEnumAsInt(value);
                                     break;
                             }
                         });

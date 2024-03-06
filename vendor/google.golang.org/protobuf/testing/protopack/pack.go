@@ -25,10 +25,10 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-// Number is the field number; aliased from the protowire package for convenience.
+// Number is the field number; aliased from the [protowire] package for convenience.
 type Number = protowire.Number
 
-// Number type constants; copied from the protowire package for convenience.
+// Number type constants; copied from the [protowire] package for convenience.
 const (
 	MinValidNumber      Number = protowire.MinValidNumber
 	FirstReservedNumber Number = protowire.FirstReservedNumber
@@ -36,10 +36,10 @@ const (
 	MaxValidNumber      Number = protowire.MaxValidNumber
 )
 
-// Type is the wire type; aliased from the protowire package for convenience.
+// Type is the wire type; aliased from the [protowire] package for convenience.
 type Type = protowire.Type
 
-// Wire type constants; copied from the protowire package for convenience.
+// Wire type constants; copied from the [protowire] package for convenience.
 const (
 	VarintType     Type = protowire.VarintType
 	Fixed32Type    Type = protowire.Fixed32Type
@@ -50,9 +50,9 @@ const (
 )
 
 type (
-	// Token is any other type (e.g., Message, Tag, Varint, Float32, etc).
+	// Token is any other type (e.g., [Message], [Tag], [Varint], [Float32], etc).
 	Token token
-	// Message is an ordered sequence of  Tokens, where certain tokens may
+	// Message is an ordered sequence of [Token] values, where certain tokens may
 	// contain other tokens. It is functionally a concrete syntax tree that
 	// losslessly represents any arbitrary wire data (including invalid input).
 	Message []Token
@@ -96,10 +96,10 @@ type (
 	// using more bytes than is strictly necessary. The number of extra bytes
 	// alone is sufficient to losslessly represent the denormalized varint.
 	//
-	// The value may be one of Tag, Bool, Varint, Svarint, or Uvarint,
+	// The value may be one of [Tag], [Bool], [Varint], [Svarint], or [Uvarint],
 	// where the varint representation of each token is denormalized.
 	//
-	// Alternatively, the value may be one of String, Bytes, or LengthPrefix,
+	// Alternatively, the value may be one of [String], [Bytes], or [LengthPrefix],
 	// where the varint representation of the length-prefix is denormalized.
 	Denormalized struct {
 		Count uint // number of extra bytes
@@ -249,21 +249,21 @@ func (m Message) Marshal() []byte {
 
 // Unmarshal parses the input protobuf wire data as a syntax tree.
 // Any parsing error results in the remainder of the input being
-// concatenated to the message as a Raw type.
+// concatenated to the message as a [Raw] type.
 //
 // Each tag (a tuple of the field number and wire type) encountered is
-// inserted into the syntax tree as a Tag.
+// inserted into the syntax tree as a [Tag].
 //
 // The contents of each wire type is mapped to the following Go types:
 //
-//	VarintType   => Uvarint
-//	Fixed32Type  => Uint32
-//	Fixed64Type  => Uint64
-//	BytesType    => Bytes
-//	GroupType    => Message
+//   - [VarintType] ⇒ [Uvarint]
+//   - [Fixed32Type] ⇒ [Uint32]
+//   - [Fixed64Type] ⇒ [Uint64]
+//   - [BytesType] ⇒ [Bytes]
+//   - [StartGroupType] and [StartGroupType] ⇒ [Message]
 //
 // Since the wire format is not self-describing, this function cannot parse
-// sub-messages and will leave them as the Bytes type. Further manual parsing
+// sub-messages and will leave them as the [Bytes] type. Further manual parsing
 // can be performed as such:
 //
 //	var m, m1, m2 Message
@@ -280,25 +280,25 @@ func (m *Message) Unmarshal(in []byte) {
 
 // UnmarshalDescriptor parses the input protobuf wire data as a syntax tree
 // using the provided message descriptor for more accurate parsing of fields.
-// It operates like Unmarshal, but may use a wider range of Go types to
+// It operates like [Message.Unmarshal], but may use a wider range of Go types to
 // represent the wire data.
 //
 // The contents of each wire type is mapped to one of the following Go types:
 //
-//	VarintType   => Bool, Varint, Svarint, Uvarint
-//	Fixed32Type  => Int32, Uint32, Float32
-//	Fixed64Type  => Uint32, Uint64, Float64
-//	BytesType    => String, Bytes, LengthPrefix
-//	GroupType    => Message
+//   - [VarintType] ⇒ [Bool], [Varint], [Svarint], [Uvarint]
+//   - [Fixed32Type] ⇒ [Int32], [Uint32], [Float32]
+//   - [Fixed64Type] ⇒ [Uint32], [Uint64], [Float64]
+//   - [BytesType] ⇒ [String], [Bytes], [LengthPrefix]
+//   - [StartGroupType] and [StartGroupType] ⇒ [Message]
 //
-// If the field is unknown, it uses the same mapping as Unmarshal.
+// If the field is unknown, it uses the same mapping as [Message.Unmarshal].
 // Known sub-messages are parsed as a Message and packed repeated fields are
-// parsed as a LengthPrefix.
+// parsed as a [LengthPrefix].
 func (m *Message) UnmarshalDescriptor(in []byte, desc protoreflect.MessageDescriptor) {
 	m.unmarshal(in, desc, false)
 }
 
-// UnmarshalAbductive is like UnmarshalDescriptor, but infers abductively
+// UnmarshalAbductive is like [Message.UnmarshalDescriptor], but infers abductively
 // whether any unknown bytes values is a message based on whether it is
 // a syntactically well-formed message.
 //

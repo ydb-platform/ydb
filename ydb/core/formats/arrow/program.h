@@ -229,6 +229,8 @@ public:
         , KernelFunction(std::move(kernelFunction))
     {}
 
+    static TAssign MakeTimestamp(const TColumnInfo& column, ui64 value);
+
     bool IsConstant() const { return Operation == EOperation::Constant; }
     bool IsOk() const { return Operation != EOperation::Unspecified || !!KernelFunction; }
     EOperation GetOperation() const { return Operation; }

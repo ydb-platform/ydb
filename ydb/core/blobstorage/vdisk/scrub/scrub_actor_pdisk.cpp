@@ -11,6 +11,7 @@ namespace NKikimr {
         Send(ScrubCtx->PDiskCtx->PDiskId, msg.release());
         CurrentState = TStringBuilder() << "reading data from " << part.ToString();
         auto res = WaitForPDiskEvent<NPDisk::TEvChunkReadResult>();
+        ScrubCtx->VCtx->CostTracker->CountPDiskResponse();
         auto *m = res->Get();
         Y_VERIFY_S(m->Status == NKikimrProto::OK || m->Status == NKikimrProto::CORRUPTED,
             "Status# " << NKikimrProto::EReplyStatus_Name(m->Status));
@@ -41,6 +42,7 @@ namespace NKikimr {
         Send(ScrubCtx->PDiskCtx->PDiskId, msg.release());
         CurrentState = TStringBuilder() << "writing index to " << part.ToString();
         auto res = WaitForPDiskEvent<NPDisk::TEvChunkWriteResult>();
+        ScrubCtx->VCtx->CostTracker->CountPDiskResponse();
         Y_ABORT_UNLESS(res->Get()->Status == NKikimrProto::OK); // FIXME: good logic
     }
 

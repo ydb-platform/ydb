@@ -2,12 +2,13 @@
 #include "context.h"
 #include "columns_set.h"
 #include "fetched_data.h"
-#include <ydb/core/tx/columnshard/resource_subscriber/task.h>
-#include <ydb/core/tx/columnshard/engines/reader/read_filter_merger.h>
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/action.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/engines/reader/read_filter_merger.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/insert_table/data.h>
-#include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 namespace NKikimr::NOlap {
@@ -26,6 +27,8 @@ private:
     YDB_READONLY(ui32, SourceIdx, 0);
     YDB_READONLY_DEF(NIndexedReader::TSortableBatchPosition, Start);
     YDB_READONLY_DEF(NIndexedReader::TSortableBatchPosition, Finish);
+    NArrow::TReplaceKey StartReplaceKey;
+    NArrow::TReplaceKey FinishReplaceKey;
     YDB_READONLY_DEF(std::shared_ptr<TSpecialReadContext>, Context);
     YDB_READONLY(TSnapshot, RecordSnapshotMax, TSnapshot::Zero());
     std::optional<ui32> RecordsCount;
@@ -36,7 +39,8 @@ private:
 protected:
     THashMap<ui32, TFetchingInterval*> Intervals;
 
-    std::shared_ptr<TFetchedData> StageData;
+    std::unique_ptr<TFetchedData> StageData;
+    std::unique_ptr<TFetchedResult> StageResult;
 
     TAtomic FilterStageFlag = 0;
     bool IsReadyFlag = false;
@@ -51,7 +55,25 @@ protected:
     virtual void DoAbort() = 0;
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexMeta) = 0;
 public:
+    virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const = 0;
+
+    const NArrow::TReplaceKey& GetStartReplaceKey() const {
+        return StartReplaceKey;
+    }
+    const NArrow::TReplaceKey& GetFinishReplaceKey() const {
+        return FinishReplaceKey;
+    }
+
+    const TFetchedResult& GetStageResult() const {
+        AFL_VERIFY(!!StageResult);
+        return *StageResult;
+    }
+
     void SetIsReady();
+
+    void Finalize() {
+        StageResult = std::make_unique<TFetchedResult>(std::move(StageData));
+    }
 
     bool IsEmptyData() const {
         return GetStageData().IsEmpty();
@@ -137,16 +159,18 @@ public:
     void RegisterInterval(TFetchingInterval& interval);
 
     IDataSource(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, 
-        const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish,
-        const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount
-    )
+        const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish,
+        const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount)
         : SourceIdx(sourceIdx)
-        , Start(start)
-        , Finish(finish)
+        , Start(context->GetReadMetadata()->BuildSortedPosition(start))
+        , Finish(context->GetReadMetadata()->BuildSortedPosition(finish))
+        , StartReplaceKey(start)
+        , FinishReplaceKey(finish)
         , Context(context)
         , RecordSnapshotMax(recordSnapshotMax)
         , RecordsCount(recordsCount)
     {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugJson())("finish", Finish.DebugJson());
         if (Start.IsReverseSort()) {
             std::swap(Start, Finish);
         }
@@ -162,9 +186,10 @@ class TPortionDataSource: public IDataSource {
 private:
     using TBase = IDataSource;
     std::shared_ptr<TPortionInfo> Portion;
+    std::shared_ptr<ISnapshotSchema> Schema;
 
     void NeedFetchColumns(const std::set<ui32>& columnIds,
-        const std::shared_ptr<IBlobsReadingAction>& readingAction, THashMap<TBlobRange, ui32>& nullBlocks,
+        TBlobsAction& blobsAction, THashMap<TChunkAddress, ui32>& nullBlocks,
         const std::shared_ptr<NArrow::TColumnFilter>& filter);
 
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexChecker) override;
@@ -183,6 +208,10 @@ private:
 
     virtual void DoAbort() override;
 public:
+    virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const override {
+        return Portion->DecodeBlobAddresses(std::move(blobsOriginal), Schema->GetIndexInfo());
+    }
+
     virtual ui64 GetRawBytes(const std::set<ui32>& columnIds) const override {
         return Portion->GetRawBytes(columnIds);
     }
@@ -200,10 +229,11 @@ public:
     }
 
     TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context,
-        const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish)
+        const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish)
         : TBase(sourceIdx, context, start, finish, portion->RecordSnapshotMax(), portion->GetRecordsCount())
-        , Portion(portion) {
-
+        , Portion(portion)
+        , Schema(GetContext()->GetReadMetadata()->GetLoadSchema(Portion->GetMinSnapshot()))
+    {
     }
 };
 
@@ -233,6 +263,16 @@ private:
         return result;
     }
 public:
+    virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const override {
+        THashMap<TChunkAddress, TString> result;
+        for (auto&& i : blobsOriginal) {
+            for (auto&& b : i.second) {
+                result.emplace(TChunkAddress(1, 1), std::move(b.second));
+            }
+        }
+        return result;
+    }
+
     virtual ui64 GetRawBytes(const std::set<ui32>& /*columnIds*/) const override {
         return CommittedBlob.GetBlobRange().Size;
     }
@@ -246,7 +286,7 @@ public:
     }
 
     TCommittedDataSource(const ui32 sourceIdx, const TCommittedBlob& committed, const std::shared_ptr<TSpecialReadContext>& context,
-        const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish)
+        const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish)
         : TBase(sourceIdx, context, start, finish, committed.GetSnapshot(), {})
         , CommittedBlob(committed) {
 

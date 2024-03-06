@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.7.0)
+VERSION(3.8.0)
 
 LICENSE(Apache-2.0)
 
@@ -66,6 +66,8 @@ PY_SRCS(
     ydb/dbapi/cursor.py
     ydb/dbapi/errors.py
     ydb/default_pem.py
+    ydb/draft/__init__.py
+    ydb/draft/dynamic_config.py
     ydb/driver.py
     ydb/export.py
     ydb/global_settings.py

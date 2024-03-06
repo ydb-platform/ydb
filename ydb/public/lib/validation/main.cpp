@@ -1,7 +1,7 @@
-#include "helpers.h"
-
-#include <ydb/public/api//protos/annotations/validation.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/api/protos/annotations/validation.pb.h>
+#include <ydb/public/lib/protobuf/helpers.h>
+#include <ydb/public/lib/protobuf/scoped_file_printer.h>
 
 #include <google/protobuf/compiler/code_generator.h>
 #include <google/protobuf/compiler/plugin.h>
@@ -20,36 +20,10 @@ namespace NKikimr::NValidation {
 
 using namespace google::protobuf::compiler;
 using namespace google::protobuf;
+using namespace NKikimr::NProtobuf;
 
 using TVariables = std::map<TString, TString>;
-
-class TPrinter {
-public:
-    explicit TPrinter(OutputDirectory* output, const TString& fileName, const TString& scope)
-        : Output(output)
-        , FileName(fileName)
-        , Scope(scope)
-    {
-    }
-
-    io::Printer* operator->() {
-        if (!Printer) {
-            Stream.Reset(Output->OpenForInsert(FileName, Scope));
-            Printer.ConstructInPlace(Stream.Get(), '$');
-        }
-
-        return Printer.Get();
-    }
-
-private:
-    OutputDirectory* Output;
-    const TString FileName;
-    const TString Scope;
-
-    THolder<io::ZeroCopyOutputStream> Stream;
-    TMaybe<io::Printer> Printer;
-
-}; // TPrinter
+using TPrinter = NKikimr::NProtobuf::TScopedFilePrinter;
 
 bool IsScalarType(const FieldDescriptor* field) {
     switch (field->cpp_type()) {

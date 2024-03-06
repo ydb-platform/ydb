@@ -17,21 +17,21 @@ ORIGINAL_SOURCE(https://github.com/curl/curl/releases/download/curl-8_5_0/curl-8
 
 PEERDIR(
     contrib/libs/libc_compat
+    contrib/libs/nghttp2
     contrib/libs/openssl
     contrib/libs/zlib
 )
 
-ADDINCL(
-    GLOBAL contrib/libs/curl/include
-    contrib/libs/c-ares/include
-    contrib/libs/curl/lib
-)
-
-IF (NOT OS_WINDOWS)
-    PEERDIR(
-        contrib/libs/nghttp2
+IF (NOT EXPORT_CMAKE)
+    ADDINCL(
+        contrib/libs/c-ares/include
     )
 ENDIF()
+
+ADDINCL(
+    GLOBAL contrib/libs/curl/include
+    contrib/libs/curl/lib
+)
 
 NO_COMPILER_WARNINGS()
 

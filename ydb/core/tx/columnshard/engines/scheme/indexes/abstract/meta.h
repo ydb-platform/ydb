@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/splitter/chunks.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
+#include <ydb/library/conclusion/status.h>
 
 #include <library/cpp/object_factory/object_factory.h>
 
@@ -25,22 +26,36 @@ namespace NKikimr::NOlap::NIndexes {
 
 class IIndexMeta {
 private:
+    YDB_READONLY_DEF(TString, IndexName);
     YDB_READONLY(ui32, IndexId, 0);
+    YDB_READONLY(TString, StorageId, IStoragesManager::DefaultStorageId);
 protected:
     virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const ui32 indexId, std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const = 0;
     virtual void DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const = 0;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) = 0;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const = 0;
+    virtual TConclusionStatus DoCheckModificationCompatibility(const IIndexMeta& newMeta) const = 0;
 
 public:
     using TFactory = NObjectFactory::TObjectFactory<IIndexMeta, TString>;
     using TProto = NKikimrSchemeOp::TOlapIndexDescription;
 
     IIndexMeta() = default;
-    IIndexMeta(const ui32 indexId)
-        : IndexId(indexId)
+    IIndexMeta(const ui32 indexId, const TString& indexName)
+        : IndexName(indexName)
+        , IndexId(indexId)
     {
 
+    }
+
+    TConclusionStatus CheckModificationCompatibility(const std::shared_ptr<IIndexMeta>& newMeta) const {
+        if (!newMeta) {
+            return TConclusionStatus::Fail("new meta cannot be absent");
+        }
+        if (newMeta->GetClassName() != GetClassName()) {
+            return TConclusionStatus::Fail("new meta have to be same index class (" + GetClassName() + "), but new class name: " + newMeta->GetClassName());
+        }
+        return DoCheckModificationCompatibility(*newMeta);
     }
 
     virtual ~IIndexMeta() = default;
@@ -53,15 +68,16 @@ public:
         return DoFillIndexCheckers(info, schema);
     }
 
-    bool DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) {
-        IndexId = proto.GetId();
-        AFL_VERIFY(IndexId);
-        return DoDeserializeFromProto(proto);
-    }
+    bool DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto);
 
     void SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const {
         AFL_VERIFY(IndexId);
         proto.SetId(IndexId);
+        AFL_VERIFY(IndexName);
+        proto.SetName(IndexName);
+        if (StorageId) {
+            proto.SetStorageId(StorageId);
+        }
         return DoSerializeToProto(proto);
     }
 
@@ -83,6 +99,8 @@ public:
 class TPortionIndexChunk: public IPortionDataChunk {
 private:
     using TBase = IPortionDataChunk;
+    const ui32 RecordsCount;
+    const ui64 RawBytes;
     const TString Data;
 protected:
     virtual const TString& DoGetData() const override {
@@ -98,7 +116,7 @@ protected:
         return false;
     }
     virtual std::optional<ui32> DoGetRecordsCount() const override {
-        return {};
+        return RecordsCount;
     }
     virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const override {
         return nullptr;
@@ -106,10 +124,12 @@ protected:
     virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const override {
         return nullptr;
     }
-    virtual void DoAddIntoPortion(const TBlobRange& bRange, TPortionInfo& portionInfo) const override;
+    virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfo& portionInfo) const override;
 public:
-    TPortionIndexChunk(const ui32 entityId, const TString& data)
-        : TBase(entityId, 0) 
+    TPortionIndexChunk(const ui32 entityId, const ui32 recordsCount, const ui64 rawBytes, const TString& data)
+        : TBase(entityId, 0)
+        , RecordsCount(recordsCount)
+        , RawBytes(rawBytes)
         , Data(data)
     {
     }
@@ -126,9 +146,12 @@ protected:
 
     virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const ui32 indexId, std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const override final;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& /*proto*/) override;
+
+    TConclusionStatus CheckSameColumnsForModification(const IIndexMeta& newMeta) const;
+
 public:
     TIndexByColumns() = default;
-    TIndexByColumns(const ui32 indexId, const std::set<ui32>& columnIds);
+    TIndexByColumns(const ui32 indexId, const TString& indexName, const std::set<ui32>& columnIds);
 };
 
 }   // namespace NKikimr::NOlap::NIndexes

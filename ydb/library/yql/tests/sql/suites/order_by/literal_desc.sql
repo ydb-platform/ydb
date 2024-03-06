@@ -1,4 +1,5 @@
 /* postgres can not */
+/* hybridfile can not YQL-17743 */
 use plato;
 
 insert into Output

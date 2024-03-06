@@ -85,7 +85,7 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
 }
 
 void TNodeWarden::Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
-    Send(ev->Sender, new TEvNodeWardenStorageConfig(StorageConfig));
+    Send(ev->Sender, new TEvNodeWardenStorageConfig(StorageConfig, nullptr));
     if (ev->Get()->Subscribe) {
         StorageConfigSubscribers.insert(ev->Sender);
     }
@@ -95,16 +95,44 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     ev->Get()->Config->Swap(&StorageConfig);
     if (StorageConfig.HasBlobStorageConfig()) {
         if (const auto& bsConfig = StorageConfig.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
-            ApplyServiceSet(bsConfig.GetServiceSet(), true, false, true);
+            const NKikimrBlobStorage::TNodeWardenServiceSet *proposed = nullptr;
+            if (const auto& proposedConfig = ev->Get()->ProposedConfig) {
+                Y_VERIFY_S(StorageConfig.GetGeneration() < proposedConfig->GetGeneration(),
+                    "StorageConfig.Generation# " << StorageConfig.GetGeneration()
+                    << " ProposedConfig.Generation# " << proposedConfig->GetGeneration());
+                Y_ABORT_UNLESS(proposedConfig->HasBlobStorageConfig()); // must have the BlobStorageConfig and the ServiceSet
+                const auto& proposedBsConfig = proposedConfig->GetBlobStorageConfig();
+                Y_ABORT_UNLESS(proposedBsConfig.HasServiceSet());
+                proposed = &proposedBsConfig.GetServiceSet();
+            }
+            ApplyStorageConfig(bsConfig.GetServiceSet(), proposed);
         }
     }
     for (const TActorId& subscriber : StorageConfigSubscribers) {
-        Send(subscriber, new TEvNodeWardenStorageConfig(StorageConfig));
+        Send(subscriber, new TEvNodeWardenStorageConfig(StorageConfig, nullptr));
     }
+    TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvNodeWardenStorageConfigConfirm, 0, ev->Sender, SelfId(),
+        nullptr, 0));
 }
 
 void TNodeWarden::HandleUnsubscribe(STATEFN_SIG) {
     StorageConfigSubscribers.erase(ev->Sender);
+}
+
+void TNodeWarden::ApplyStorageConfig(const NKikimrBlobStorage::TNodeWardenServiceSet& current,
+        const NKikimrBlobStorage::TNodeWardenServiceSet *proposed) {
+    if (!proposed) { // just start the required services
+        // wipe out obsolete VSlots from running PDisks from current.Prev; however, it is not synchronous
+        return ApplyStaticServiceSet(current);
+    }
+
+    NKikimrBlobStorage::TNodeWardenServiceSet ss(*proposed);
+    // stop running obsolete VSlots to prevent them from answering
+    ApplyStaticServiceSet(ss);
+}
+
+void TNodeWarden::ApplyStaticServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& ss) {
+    ApplyServiceSet(ss, true, false, true);
 }
 
 void TNodeWarden::HandleIncrHugeInit(NIncrHuge::TEvIncrHugeInit::TPtr ev) {

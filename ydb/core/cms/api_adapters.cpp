@@ -163,6 +163,7 @@ class TListClusterNodes: public TAdapterActor<
         out.set_host(in.Host);
         out.set_port(in.IcPort);
         out.set_state(ConvertNodeState(in.State));
+        *out.mutable_start_time() = TimeUtil::MicrosecondsToTimestamp(in.StartTime.GetValue());
 
         auto& location = *out.mutable_location();
         location.set_data_center(in.Location.GetDataCenterId());
@@ -378,6 +379,7 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
         cmsRequest.SetAvailabilityMode(ConvertAvailabilityMode(opts.availability_mode()));
         cmsRequest.SetPartialPermissionAllowed(true);
         cmsRequest.SetSchedule(true);
+        cmsRequest.SetPriority(opts.priority());
 
         for (const auto& group : request.action_groups()) {
             Y_ABORT_UNLESS(group.actions().size() == 1);
@@ -559,6 +561,7 @@ public:
             opts.set_task_uid(taskUid);
             opts.set_description(request.GetReason());
             opts.set_availability_mode(ConvertAvailabilityMode(request.GetAvailabilityMode()));
+            opts.set_priority(request.GetPriority());
 
             // pending actions
             for (const auto& action : request.GetActions()) {

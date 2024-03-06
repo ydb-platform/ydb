@@ -884,6 +884,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
             auto indexDelete = Build<TKqlDeleteRows>(ctx, pos)
                 .Table(tableNode)
                 .Input(deleteIndexKeys)
+                .ReturningColumns<TCoAtomList>().Build()
                 .Done();
 
             effects.emplace_back(indexDelete);

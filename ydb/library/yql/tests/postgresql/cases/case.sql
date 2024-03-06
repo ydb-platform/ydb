@@ -56,6 +56,46 @@ SELECT CASE 1 WHEN 0 THEN 1/0 WHEN 1 THEN 1 ELSE 2/0 END;
 -- Test for cases involving untyped literals in test expression
 SELECT CASE 'a' WHEN 'a' THEN 1 ELSE 2 END;
 --
+-- Examples of targets involving tables
+--
+SELECT
+  CASE
+    WHEN i >= 3 THEN i
+  END AS ">= 3 or Null"
+  FROM CASE_TBL;
+SELECT
+  CASE WHEN i >= 3 THEN (i + i)
+       ELSE i
+  END AS "Simplest Math"
+  FROM CASE_TBL;
+SELECT i AS "Value",
+  CASE WHEN (i < 0) THEN 'small'
+       WHEN (i = 0) THEN 'zero'
+       WHEN (i = 1) THEN 'one'
+       WHEN (i = 2) THEN 'two'
+       ELSE 'big'
+  END AS "Category"
+  FROM CASE_TBL;
+SELECT
+  CASE WHEN ((i < 0) or (i < 0)) THEN 'small'
+       WHEN ((i = 0) or (i = 0)) THEN 'zero'
+       WHEN ((i = 1) or (i = 1)) THEN 'one'
+       WHEN ((i = 2) or (i = 2)) THEN 'two'
+       ELSE 'big'
+  END AS "Category"
+  FROM CASE_TBL;
+--
+-- Examples of qualifications involving tables
+--
+--
+-- NULLIF() and COALESCE()
+-- Shorthand forms for typical CASE constructs
+--  defined in the SQL standard.
+--
+SELECT * FROM CASE_TBL WHERE COALESCE(f,i) = 4;
+SELECT COALESCE(a.f, b.i, b.j)
+  FROM CASE_TBL a, CASE2_TBL b;
+--
 -- Nested CASE expressions
 --
 -- This test exercises a bug caused by aliasing econtext->caseValue_isNull

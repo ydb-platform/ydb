@@ -1,5 +1,7 @@
 #include "kafka_create_partitions_actor.h"
 
+#include "control_plane_common.h"
+
 #include <ydb/core/kafka_proxy/kafka_events.h>
 
 #include <ydb/services/lib/actors/pq_schema_actor.h>
@@ -112,10 +114,6 @@ public:
         return DummyString;
     };
 
-    void SetDiskQuotaExceeded(bool disk) override {
-        Y_UNUSED(disk);
-    };
-
     bool GetDiskQuotaExceeded() const override {
         return false;
     };
@@ -153,7 +151,7 @@ public:
         Y_UNUSED(status);
     };
 
-    void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status) override {
+    void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status, EStreamCtrl) override {
         Y_UNUSED(in);
         Y_UNUSED(status);
     };
@@ -221,8 +219,7 @@ private:
     }
 };
 
-class TCreatePartitionsActor : public NKikimr::NGRpcProxy::V1::TUpdateSchemeActor<TCreatePartitionsActor, TKafkaCreatePartitionsRequest>{
-    using TBase = NKikimr::NGRpcProxy::V1::TUpdateSchemeActor<TCreatePartitionsActor, TKafkaCreatePartitionsRequest>;
+class TCreatePartitionsActor : public TAlterTopicActor<TCreatePartitionsActor, TKafkaTopicModificationRequest> {
 public:
 
     TCreatePartitionsActor(
@@ -231,34 +228,18 @@ public:
             TString topicPath,
             TString databaseName,
             ui32 partitionsNumber)
-        : TBase(new TKafkaCreatePartitionsRequest(
+        : TAlterTopicActor<TCreatePartitionsActor, TKafkaTopicModificationRequest>(
+            requester, 
             userToken,
             topicPath,
-            databaseName,
-            [this](const EKafkaErrors status, const TString& message) {
-                this->SendResult(status, message);
-            })
-        )
-        , Requester(requester)
-        , TopicPath(topicPath)
+            databaseName)
         , PartionsNumber(partitionsNumber)
     {
         KAFKA_LOG_D(
-            "Create Topic actor. DatabaseName: " << databaseName <<
+            "Create partitions actor. DatabaseName: " << databaseName <<
             ". TopicPath: " << TopicPath <<
             ". PartitionsNumber: " << PartionsNumber);
     };
-
-    ~TCreatePartitionsActor() = default;
-
-    void SendResult(const EKafkaErrors status, const TString& message) {
-        THolder<TEvKafka::TEvTopicModificationResponse> response(new TEvKafka::TEvTopicModificationResponse());
-        response->Status = status;
-        response->TopicPath = TopicPath;
-        response->Message = message;
-        Send(Requester, response.Release());
-        Send(SelfId(), new TEvents::TEvPoison());
-    }
 
     void ModifyPersqueueConfig(
             const TActorContext& ctx,
@@ -273,16 +254,9 @@ public:
         groupConfig.SetTotalGroupCount(PartionsNumber);
     }
 
-    void Bootstrap(const NActors::TActorContext& ctx) {
-        TBase::Bootstrap(ctx);
-        SendDescribeProposeRequest(ctx);
-        Become(&TBase::StateWork);
-    };
+    ~TCreatePartitionsActor() = default;
 
 private:
-    const TActorId Requester;
-    const TString TopicPath;
-    const std::shared_ptr<TString> SerializedToken;
     const ui32 PartionsNumber;
 };
 
@@ -302,15 +276,9 @@ void TKafkaCreatePartitionsActor::Bootstrap(const NActors::TActorContext& ctx) {
         return;
     }
 
-    std::unordered_set<TString> topicNames;
-    for (auto& topic : Message->Topics) {
-        auto& topicName = topic.Name.value();
-        if (topicNames.contains(topicName)) {
-            DuplicateTopicNames.insert(topicName);
-        } else {
-            topicNames.insert(topicName);
-        }
-    }
+    DuplicateTopicNames = ExtractDuplicates<TCreatePartitionsRequestData::TCreatePartitionsTopic>(
+        Message->Topics,
+        [](TCreatePartitionsRequestData::TCreatePartitionsTopic topic) -> TString { return topic.Name.value(); });
 
     for (auto& topic : Message->Topics) {
         auto& topicName = topic.Name.value();
@@ -394,22 +362,14 @@ void TKafkaCreatePartitionsActor::Reply(const TActorContext& ctx) {
 };
 
 TStringBuilder TKafkaCreatePartitionsActor::InputLogMessage() {
-    TStringBuilder stringBuilder;
-    stringBuilder << "Create partitions actor: New request. ValidateOnly:" << (Message->ValidateOnly != 0) << " Topics: [";
-
-    bool isFirst = true;
-    for (auto& requestTopic : Message->Topics) {
-        if (isFirst) {
-            isFirst = false;
-        } else {
-            stringBuilder << ",";
-        }
-        stringBuilder << " " << requestTopic.Name.value();
-    }
-    stringBuilder << " ]";
-    return stringBuilder;
+    return InputLogMessage<TCreatePartitionsRequestData::TCreatePartitionsTopic>(
+            "Create partitions actor",
+            Message->Topics,
+            Message->ValidateOnly != 0,
+            [](TCreatePartitionsRequestData::TCreatePartitionsTopic topic) -> TString {
+                return topic.Name.value();
+            });
 };
-
 
 void TKafkaCreatePartitionsActor::ProcessValidateOnly(const NActors::TActorContext& ctx) {
     TCreatePartitionsResponseData::TPtr response = std::make_shared<TCreatePartitionsResponseData>();

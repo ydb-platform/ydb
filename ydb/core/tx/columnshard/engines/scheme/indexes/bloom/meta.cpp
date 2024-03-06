@@ -11,17 +11,22 @@
 namespace NKikimr::NOlap::NIndexes {
 
 std::shared_ptr<arrow::RecordBatch> TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
-    std::vector<bool> flags;
-    flags.resize(BitsCount, false);
+    std::set<ui64> hashes;
     for (ui32 i = 0; i < HashesCount; ++i) {
         NArrow::NHash::NXX64::TStreamStringHashCalcer hashCalcer(3 * i);
-        for (; reader.IsCorrect(); reader.ReadNext()) {
+        for (reader.Start(); reader.IsCorrect(); reader.ReadNext()) {
             hashCalcer.Start();
             for (auto&& i : reader) {
                 NArrow::NHash::TXX64::AppendField(i.GetCurrentChunk(), i.GetCurrentRecordIndex(), hashCalcer);
             }
-            flags[hashCalcer.Finish() % BitsCount] = true;
+            const ui64 h = hashCalcer.Finish();
+            hashes.emplace(h);
         }
+    }
+    const ui32 bitsCount = hashes.size() / std::log(2);
+    std::vector<bool> flags(bitsCount, false);
+    for (auto&& i : hashes) {
+        flags[i % flags.size()] = true;
     }
 
     arrow::BooleanBuilder builder;
@@ -30,7 +35,7 @@ std::shared_ptr<arrow::RecordBatch> TBloomIndexMeta::DoBuildIndexImpl(TChunkedBa
     std::shared_ptr<arrow::BooleanArray> out;
     NArrow::TStatusValidator::Validate(builder.Finish(&out));
 
-    return arrow::RecordBatch::Make(ResultSchema, BitsCount, {out});
+    return arrow::RecordBatch::Make(ResultSchema, bitsCount, {out});
 }
 
 void TBloomIndexMeta::DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const {
@@ -58,7 +63,8 @@ void TBloomIndexMeta::DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataF
             for (auto&& i : foundColumns) {
                 NArrow::NHash::TXX64::AppendField(i.second, calcer);
             }
-            hashes.emplace(calcer.Finish());
+            const ui64 hash = calcer.Finish();
+            hashes.emplace(hash);
         }
         branch->MutableIndexes().emplace_back(std::make_shared<TBloomFilterChecker>(GetIndexId(), std::move(hashes)));
     }

@@ -891,27 +891,24 @@ private:
         Visit(msg.GetToken1());
         Visit(msg.GetBlock2());
         Visit(msg.GetBlock3());
-        Visit(msg.GetRule_simple_table_ref4());
-        Visit(msg.GetToken5());
+        Visit(msg.GetBlock4());
+        Visit(msg.GetRule_simple_table_ref5());
+        Visit(msg.GetToken6());
         PushCurrentIndent();
         NewLine();
-        Visit(msg.GetRule_create_table_entry6());
-        for (const auto& b : msg.GetBlock7()) {
+        Visit(msg.GetRule_create_table_entry7());
+        for (const auto& b : msg.GetBlock8()) {
             Visit(b.GetToken1());
             NewLine();
             Visit(b.GetRule_create_table_entry2());
         }
-        if (msg.HasBlock8()) {
-            Visit(msg.GetBlock8());
+        if (msg.HasBlock9()) {
+            Visit(msg.GetBlock9());
         }
 
         PopCurrentIndent();
         NewLine();
-        Visit(msg.GetToken9());
-        if (msg.HasBlock10()) {
-            NewLine();
-            Visit(msg.GetBlock10());
-        }
+        Visit(msg.GetToken10());
         if (msg.HasBlock11()) {
             NewLine();
             Visit(msg.GetBlock11());
@@ -923,6 +920,14 @@ private:
         if (msg.HasBlock13()) {
             NewLine();
             Visit(msg.GetBlock13());
+        }
+        if (msg.HasBlock14()) {
+            NewLine();
+            Visit(msg.GetBlock14());
+        }
+        if (msg.HasBlock15()) {
+            NewLine();
+            Visit(msg.GetBlock15());
         }
     }
 
@@ -1253,8 +1258,10 @@ private:
     void VisitFor(const TRule_for_stmt& msg) {
         if (msg.HasBlock1()) {
             PosFromToken(msg.GetBlock1().GetToken1());
+        } else if (msg.HasBlock2()) {
+            PosFromToken(msg.GetBlock2().GetToken1());
         } else {
-            PosFromToken(msg.GetToken2());
+            PosFromToken(msg.GetToken3());
         }
 
         NewLine();
@@ -1262,20 +1269,24 @@ private:
             Visit(msg.GetBlock1());
         }
 
-        Visit(msg.GetToken2());
-        Visit(msg.GetRule_bind_parameter3());
-        Visit(msg.GetToken4());
-        Visit(msg.GetRule_expr5());
+        if (msg.HasBlock2()) {
+            Visit(msg.GetBlock2());
+        }
+
+        Visit(msg.GetToken3());
+        Visit(msg.GetRule_bind_parameter4());
+        Visit(msg.GetToken5());
+        Visit(msg.GetRule_expr6());
         NewLine();
         PushCurrentIndent();
-        Visit(msg.GetRule_do_stmt6());
+        Visit(msg.GetRule_do_stmt7());
         PopCurrentIndent();
-        if (msg.HasBlock7()) {
+        if (msg.HasBlock8()) {
             NewLine();
-            Visit(msg.GetBlock7().GetToken1());
+            Visit(msg.GetBlock8().GetToken1());
             NewLine();
             PushCurrentIndent();
-            Visit(msg.GetBlock7().GetRule_do_stmt2());
+            Visit(msg.GetBlock8().GetRule_do_stmt2());
             PopCurrentIndent();
         }
     }

@@ -10,20 +10,25 @@ public:
 private:
     using TBase = TIndexByColumns;
     std::shared_ptr<arrow::Schema> ResultSchema;
-    const ui64 RowsCountExpectation = 10000;
     double FalsePositiveProbability = 0.1;
     ui32 HashesCount = 0;
-    ui32 BitsCount = 0;
     static inline auto Registrator = TFactory::TRegistrator<TBloomIndexMeta>(GetClassNameStatic());
     void Initialize() {
         AFL_VERIFY(!ResultSchema);
         std::vector<std::shared_ptr<arrow::Field>> fields = {std::make_shared<arrow::Field>("", arrow::TypeTraits<arrow::BooleanType>::type_singleton())};
         ResultSchema = std::make_shared<arrow::Schema>(fields);
-        AFL_VERIFY(FalsePositiveProbability < 1 && FalsePositiveProbability > 0.01);
+        AFL_VERIFY(FalsePositiveProbability < 1 && FalsePositiveProbability >= 0.01);
         HashesCount = -1 * std::log(FalsePositiveProbability) / std::log(2);
-        BitsCount = RowsCountExpectation * HashesCount / std::log(2);
     }
 protected:
+    virtual TConclusionStatus DoCheckModificationCompatibility(const IIndexMeta& newMeta) const override {
+        const auto* bMeta = dynamic_cast<const TBloomIndexMeta*>(&newMeta);
+        if (!bMeta) {
+            return TConclusionStatus::Fail("cannot read meta as appropriate class: " + GetClassName() + ". Meta said that class name is " + newMeta.GetClassName());
+        }
+        AFL_VERIFY(FalsePositiveProbability < 1 && FalsePositiveProbability >= 0.01);
+        return TBase::CheckSameColumnsForModification(newMeta);
+    }
     virtual void DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const override;
 
     virtual std::shared_ptr<arrow::RecordBatch> DoBuildIndexImpl(TChunkedBatchReader& reader) const override;
@@ -49,8 +54,8 @@ protected:
 
 public:
     TBloomIndexMeta() = default;
-    TBloomIndexMeta(const ui32 indexId, const std::set<ui32>& columnIds, const double fpProbability)
-        : TBase(indexId, columnIds)
+    TBloomIndexMeta(const ui32 indexId, const TString& indexName, std::set<ui32>& columnIds, const double fpProbability)
+        : TBase(indexId, indexName, columnIds)
         , FalsePositiveProbability(fpProbability) {
         Initialize();
     }

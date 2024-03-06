@@ -10,7 +10,8 @@ namespace NKqp {
 
 enum class ECompileActorAction {
     COMPILE,
-    PARSE
+    PARSE,
+    SPLIT,
 };
 
 IActor* CreateKqpCompileService(const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
@@ -32,12 +33,15 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     const TString& uid, const TKqpQueryId& query,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
-    TKqpDbCountersPtr dbCounters, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-    NWilson::TTraceId traceId = {},
+    TKqpDbCountersPtr dbCounters, const TMaybe<TString>& applicationName,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext, NWilson::TTraceId traceId = {},
     TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
     ECompileActorAction compileAction = ECompileActorAction::COMPILE,
-    TMaybe<TQueryAst> astResult = {},
-    bool collectFullDiagnostics = false);
+    TMaybe<TQueryAst> queryAst = {},
+    bool collectFullDiagnostics = false,
+    bool PerStatementResult = false,
+    NYql::TExprContext* ctx = nullptr,
+    NYql::TExprNode::TPtr expr = nullptr);
 
 IActor* CreateKqpCompileRequestActor(const TActorId& owner, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TMaybe<TString>& uid,
     TMaybe<TKqpQueryId>&& query, bool keepInCache, const TInstant& deadline, TKqpDbCountersPtr dbCounters,

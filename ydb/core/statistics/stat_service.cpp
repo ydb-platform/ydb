@@ -24,6 +24,19 @@ public:
         return NKikimrServices::TActivity::STAT_SERVICE;
     }
 
+   struct TEvPrivate {
+        enum EEv {
+            EvRequestTimeout = EventSpaceBegin(TEvents::ES_PRIVATE),
+
+            EvEnd
+        };
+
+        struct TEvRequestTimeout : public TEventLocal<TEvRequestTimeout, EvRequestTimeout> {
+            std::unordered_set<ui64> NeedSchemeShards;
+            TActorId PipeClientId;
+        };
+    };
+
     void Bootstrap() {
         EnableStatistics = AppData()->FeatureFlags.GetEnableStatistics();
 
@@ -41,8 +54,11 @@ public:
             hFunc(TEvStatistics::TEvGetStatistics, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvStatistics::TEvPropagateStatistics, Handle);
+            IgnoreFunc(TEvStatistics::TEvPropagateStatisticsResponse);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            hFunc(TEvStatistics::TEvStatisticsIsDisabled, Handle);
+            hFunc(TEvPrivate::TEvRequestTimeout, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
                 LOG_CRIT_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
@@ -51,20 +67,21 @@ public:
     }
 
 private:
-    bool IsSAUnavailable() {
-        return ResolveSAStage == RSA_FINISHED && StatisticsAggregatorId == 0;
-    }
-
     void HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
         LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Subscribed for config changes");
+            "Subscribed for config changes on node " << SelfId().NodeId());
     }
 
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         const auto& record = ev->Get()->Record;
-        const auto& featureFlags = record.GetConfig().GetFeatureFlags();
-        EnableStatistics = featureFlags.GetEnableStatistics();
-
+        const auto& config = record.GetConfig();
+        if (config.HasFeatureFlags()) {
+            const auto& featureFlags = config.GetFeatureFlags();
+            EnableStatistics = featureFlags.GetEnableStatistics();
+            if (!EnableStatistics) {
+                ReplyAllFailed();
+            }
+        }
         auto response = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(record);
         Send(ev->Sender, response.release(), 0, ev->Cookie);
     }
@@ -77,7 +94,7 @@ private:
         request.EvCookie = ev->Cookie;
         request.StatRequests.swap(ev->Get()->StatRequests);
 
-        if (!EnableStatistics || IsSAUnavailable()) {
+        if (!EnableStatistics) {
             ReplyFailed(requestId, true);
             return;
         }
@@ -106,12 +123,12 @@ private:
             auto& entry = navigate->ResultSet.back();
             if (entry.Status != TNavigate::EStatus::Ok) {
                 StatisticsAggregatorId = 0;
-            } else {
+            } else if (entry.DomainInfo->Params.HasStatisticsAggregator()) {
                 StatisticsAggregatorId = entry.DomainInfo->Params.GetStatisticsAggregator();
             }
-            ResolveSAStage = RSA_FINISHED;
+            ResolveSAStage = StatisticsAggregatorId ? RSA_FINISHED : RSA_INITIAL;
 
-            if (StatisticsAggregatorId != 0) {
+            if (StatisticsAggregatorId) {
                 ConnectToSA();
                 SyncNode();
             } else {
@@ -127,7 +144,7 @@ private:
         }
         auto& request = itRequest->second;
 
-        if (!EnableStatistics || IsSAUnavailable()) {
+        if (!EnableStatistics) {
             ReplyFailed(requestId, true);
             return;
         }
@@ -135,7 +152,7 @@ private:
         std::unordered_set<ui64> ssIds;
         bool isServerless = false;
         ui64 aggregatorId = 0;
-        TPathId resourcesDomainKey;
+        TPathId domainKey, resourcesDomainKey;
         for (const auto& entry : navigate->ResultSet) {
             if (entry.Status != TNavigate::EStatus::Ok) {
                 continue;
@@ -144,6 +161,7 @@ private:
             ssIds.insert(domainInfo->ExtractSchemeShard());
             aggregatorId = domainInfo->Params.GetStatisticsAggregator();
             isServerless = domainInfo->IsServerless();
+            domainKey = domainInfo->DomainKey;
             resourcesDomainKey = domainInfo->ResourcesDomainKey;
         }
         if (ssIds.size() != 1) {
@@ -157,22 +175,36 @@ private:
             return;
         }
 
+        bool isNewSS = (NeedSchemeShards.find(request.SchemeShardId) == NeedSchemeShards.end());
+        if (isNewSS) {
+            NeedSchemeShards.insert(request.SchemeShardId);
+        }
+
+        auto navigateDomainKey = [this] (TPathId domainKey) {
+            using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+            auto navigate = std::make_unique<TNavigate>();
+            auto& entry = navigate->ResultSet.emplace_back();
+            entry.TableId = TTableId(domainKey.OwnerId, domainKey.LocalPathId);
+            entry.Operation = TNavigate::EOp::OpPath;
+            entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
+            entry.RedirectRequired = false;
+            navigate->Cookie = ResolveSACookie;
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
+            ResolveSAStage = RSA_IN_FLIGHT;
+        };
+
         switch (ResolveSAStage) {
-        case RSA_NOT_RUN:
+        case RSA_INITIAL:
             if (!isServerless) {
-                StatisticsAggregatorId = aggregatorId;
-                ResolveSAStage = RSA_FINISHED;
+                if (aggregatorId) {
+                    StatisticsAggregatorId = aggregatorId;
+                    ResolveSAStage = RSA_FINISHED;
+                } else {
+                    navigateDomainKey(domainKey);
+                    return;
+                }
             } else {
-                using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-                auto navigate = std::make_unique<TNavigate>();
-                auto& entry = navigate->ResultSet.emplace_back();
-                entry.TableId = TTableId(resourcesDomainKey.OwnerId, resourcesDomainKey.LocalPathId);
-                entry.Operation = TNavigate::EOp::OpPath;
-                entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
-                entry.RedirectRequired = false;
-                navigate->Cookie = ResolveSACookie;
-                Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
-                ResolveSAStage = RSA_IN_FLIGHT;
+                navigateDomainKey(resourcesDomainKey);
                 return;
             }
             break;
@@ -182,7 +214,7 @@ private:
             break;
         }
 
-        if (IsSAUnavailable()) {
+        if (!StatisticsAggregatorId) {
             ReplyFailed(requestId, true);
             return;
         }
@@ -190,11 +222,18 @@ private:
         if (!SAPipeClientId) {
             ConnectToSA();
             SyncNode();
-        } else {
+
+        } else if (isNewSS) {
             auto requestStats = std::make_unique<TEvStatistics::TEvRequestStats>();
             requestStats->Record.SetNodeId(SelfId().NodeId());
+            requestStats->Record.SetUrgent(false);
             requestStats->Record.AddNeedSchemeShards(request.SchemeShardId);
             NTabletPipe::SendData(SelfId(), SAPipeClientId, requestStats.release());
+
+            auto timeout = std::make_unique<TEvPrivate::TEvRequestTimeout>();
+            timeout->NeedSchemeShards.insert(request.SchemeShardId);
+            timeout->PipeClientId = SAPipeClientId;
+            Schedule(RequestTimeout, timeout.release());
         }
     }
 
@@ -202,9 +241,12 @@ private:
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
             "EvPropagateStatistics, node id = " << SelfId().NodeId());
 
+        Send(ev->Sender, new TEvStatistics::TEvPropagateStatisticsResponse);
+
         auto* record = ev->Get()->MutableRecord();
         for (const auto& entry : record->GetEntries()) {
             ui64 schemeShardId = entry.GetSchemeShardId();
+            NeedSchemeShards.erase(schemeShardId);
             auto& statisticsState = Statistics[schemeShardId];
 
             if (entry.GetStats().empty()) {
@@ -303,6 +345,36 @@ private:
         SyncNode();
     }
 
+    void Handle(TEvStatistics::TEvStatisticsIsDisabled::TPtr&) {
+        ReplyAllFailed();
+    }
+
+    void Handle(TEvPrivate::TEvRequestTimeout::TPtr& ev) {
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "EvRequestTimeout"
+            << ", pipe client id = " << ev->Get()->PipeClientId
+            << ", schemeshard count = " << ev->Get()->NeedSchemeShards.size());
+
+        if (SAPipeClientId != ev->Get()->PipeClientId) {
+            return;
+        }
+        auto requestStats = std::make_unique<TEvStatistics::TEvRequestStats>();
+        bool hasNeedSchemeShards = false;
+        for (auto& ssId : ev->Get()->NeedSchemeShards) {
+            if (NeedSchemeShards.find(ssId) != NeedSchemeShards.end()) {
+                requestStats->Record.AddNeedSchemeShards(ssId);
+                hasNeedSchemeShards = true;
+            }
+        }
+        if (!hasNeedSchemeShards) {
+            return;
+        }
+        requestStats->Record.SetNodeId(SelfId().NodeId());
+        requestStats->Record.SetUrgent(true);
+
+        NTabletPipe::SendData(SelfId(), SAPipeClientId, requestStats.release());
+    }
+
     void ConnectToSA() {
         if (SAPipeClientId || !StatisticsAggregatorId) {
             return;
@@ -322,22 +394,24 @@ private:
         auto connect = std::make_unique<TEvStatistics::TEvConnectNode>();
         auto& record = connect->Record;
 
+        auto timeout = std::make_unique<TEvPrivate::TEvRequestTimeout>();
+        timeout->PipeClientId = SAPipeClientId;
+
         record.SetNodeId(SelfId().NodeId());
         for (const auto& [ssId, ssState] : Statistics) {
             auto* entry = record.AddHaveSchemeShards();
             entry->SetSchemeShardId(ssId);
             entry->SetTimestamp(ssState.Timestamp);
         }
-        std::unordered_set<ui64> ssIds;
-        for (const auto& [reqId, reqState] : InFlight) {
-            if (reqState.SchemeShardId != 0) {
-                ssIds.insert(reqState.SchemeShardId);
-            }
-        }
-        for (const auto& ssId : ssIds) {
+        for (const auto& ssId : NeedSchemeShards) {
             record.AddNeedSchemeShards(ssId);
+            timeout->NeedSchemeShards.insert(ssId);
         }
         NTabletPipe::SendData(SelfId(), SAPipeClientId, connect.release());
+
+        if (!NeedSchemeShards.empty()) {
+            Schedule(RequestTimeout, timeout.release());
+        }
 
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
             "SyncNode(), pipe client id = " << SAPipeClientId);
@@ -449,6 +523,8 @@ private:
     std::unordered_map<ui64, TRequestState> InFlight; // request id -> state
     ui64 NextRequestId = 1;
 
+    std::unordered_set<ui64> NeedSchemeShards;
+
     struct TStatEntry {
         ui64 RowCount = 0;
         ui64 BytesSize = 0;
@@ -465,11 +541,13 @@ private:
 
     static const ui64 ResolveSACookie = std::numeric_limits<ui64>::max();
     enum EResolveSAStage {
-        RSA_NOT_RUN,
+        RSA_INITIAL,
         RSA_IN_FLIGHT,
         RSA_FINISHED
     };
-    EResolveSAStage ResolveSAStage = RSA_NOT_RUN;
+    EResolveSAStage ResolveSAStage = RSA_INITIAL;
+
+    static constexpr TDuration RequestTimeout = TDuration::MilliSeconds(100);
 };
 
 THolder<IActor> CreateStatService() {

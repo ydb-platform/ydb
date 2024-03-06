@@ -7,13 +7,13 @@ with sr_items as
       {{item}},
       {{date_dim}}
  where sr_item_sk = i_item_sk
- and   d_date    in 
+ and   d_date    in
 	(select d_date
 	from {{date_dim}}
-	where d_week_seq in 
+	where d_week_seq in
 		(select d_week_seq
 		from {{date_dim}}
-	  where d_date in ('1998-01-02'::date,'1998-10-15'::date,'1998-11-10'::date)))
+	  where d_date in ('2000-06-17'::date,'2000-08-22'::date,'2000-11-17'::date)))
  and   sr_returned_date_sk   = d_date_sk
  group by i_item_id),
  cr_items as
@@ -23,13 +23,13 @@ with sr_items as
       {{item}},
       {{date_dim}}
  where cr_item_sk = i_item_sk
- and   d_date    in 
+ and   d_date    in
 	(select d_date
 	from {{date_dim}}
-	where d_week_seq in 
+	where d_week_seq in
 		(select d_week_seq
 		from {{date_dim}}
-	  where d_date in ('1998-01-02'::date,'1998-10-15'::date,'1998-11-10'::date)))
+	  where d_date in ('2000-06-17'::date,'2000-08-22'::date,'2000-11-17'::date)))
  and   cr_returned_date_sk   = d_date_sk
  group by i_item_id),
  wr_items as
@@ -39,13 +39,13 @@ with sr_items as
       {{item}},
       {{date_dim}}
  where wr_item_sk = i_item_sk
- and   d_date    in 
+ and   d_date    in
 	(select d_date
 	from {{date_dim}}
-	where d_week_seq in 
+	where d_week_seq in
 		(select d_week_seq
 		from {{date_dim}}
-		where d_date in ('1998-01-02'::date,'1998-10-15'::date,'1998-11-10'::date)))
+		where d_date in ('2000-06-17'::date,'2000-08-22'::date,'2000-11-17'::date)))
  and   wr_returned_date_sk   = d_date_sk
  group by i_item_id)
   select  sr_items.item_id
@@ -60,7 +60,7 @@ with sr_items as
      ,cr_items
      ,wr_items
  where sr_items.item_id=cr_items.item_id
-   and sr_items.item_id=wr_items.item_id 
+   and sr_items.item_id=wr_items.item_id
  order by sr_items.item_id
          ,sr_item_qty
  limit 100;

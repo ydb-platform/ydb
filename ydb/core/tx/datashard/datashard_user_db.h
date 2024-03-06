@@ -1,7 +1,17 @@
 #pragma once
-#include "datashard_impl.h"
+
+#include "change_collector.h"
+
+#include <ydb/core/base/row_version.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/library/accessor/accessor.h>
 
 #include <util/generic/maybe.h>
+
+namespace NKikimr::NMiniKQL {
+    struct TEngineHostCounters;
+}
 
 namespace NKikimr::NDataShard {
 
@@ -30,9 +40,19 @@ public:
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
 
+    virtual void ReplaceRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+    
     virtual void EraseRow(
             const TTableId& tableId,
-            const TArrayRef<const TRawTypeValue> key) = 0;            
+            const TArrayRef<const TRawTypeValue> key) = 0;
+
+    virtual void CommitChanges(
+            const TTableId& tableId,
+            ui64 lockId,
+            const TRowVersion& writeVersion) = 0;
 };
 
 class IDataShardConflictChecker {
@@ -85,9 +105,19 @@ public:
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops) override;
     
+    void ReplaceRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+            
     void EraseRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key) override;
+
+    void CommitChanges(
+            const TTableId& tableId, 
+            ui64 lockId, 
+            const TRowVersion& writeVersion) override;
 
 //IDataShardChangeGroupProvider
 public:  
@@ -110,7 +140,6 @@ public:
     void ResetCollectedChanges();
 
 public:
-    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion);
     bool NeedToReadBeforeWrite(const TTableId& tableId);
     void AddCommitTxId(const TTableId& tableId, ui64 txId, const TRowVersion& commitVersion);
     ui64 GetWriteTxId(const TTableId& tableId);
@@ -143,6 +172,7 @@ private:
     YDB_ACCESSOR_DEF(ui32, LockNodeId);
     YDB_ACCESSOR_DEF(ui64, VolatileTxId);
     YDB_ACCESSOR_DEF(bool, IsImmediateTx);
+    YDB_ACCESSOR_DEF(bool, IsWriteTx);
     YDB_ACCESSOR_DEF(bool, IsRepeatableSnapshot);
 
     YDB_ACCESSOR_DEF(TRowVersion, ReadVersion);

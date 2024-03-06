@@ -2,8 +2,11 @@
 #include "columnshard_ttl.h"
 #include "columnshard_private_events.h"
 #include "columnshard_schema.h"
+#include "blobs_action/storages_manager/manager.h"
 #include "hooks/abstract/abstract.h"
+#include "engines/column_engine_logs.h"
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
+#include <ydb/core/tx/columnshard/transactions/locks_db.h>
 
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tx/columnshard/operations/write.h>
@@ -36,10 +39,9 @@ void TTxInit::SetDefaults() {
     Self->LastWriteId = TWriteId{0};
     Self->LastPlannedStep = 0;
     Self->LastPlannedTxId = 0;
+    Self->LastCompletedTx = NOlap::TSnapshot::Zero();
     Self->OwnerPathId = 0;
     Self->OwnerPath.clear();
-    Self->AltersInFlight.clear();
-    Self->CommitsInFlight.clear();
     Self->LongTxWrites.clear();
     Self->LongTxWritesByUniqueId.clear();
 }
@@ -72,6 +74,14 @@ bool TTxInit::Precharge(TTransactionContext& txc) {
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastExportNumber, Self->LastExportNo);
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::OwnerPathId, Self->OwnerPathId);
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::OwnerPath, Self->OwnerPath);
+
+    {
+        ui64 lastCompletedStep = 0;
+        ui64 lastCompletedTx = 0;
+        ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastCompletedStep, lastCompletedStep);
+        ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastCompletedTxId, lastCompletedTx);
+        Self->LastCompletedTx = NOlap::TSnapshot(lastCompletedStep, lastCompletedTx);
+    }
 
     if (!ready) {
         return false;
@@ -124,15 +134,13 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     }
 
     {
-        TBlobManagerDb blobManagerDb(txc.DB);
-        TMemoryProfileGuard g("TTxInit/StoragesManager");
-        for (auto&& i : Self->StoragesManager->GetStorages()) {
-            if (!i.second->Load(blobManagerDb)) {
-                ACFL_ERROR("event", "storages manager load")("storage", i.first);
-                return false;
-            }
+        AFL_VERIFY(Self->StoragesManager);
+        TMemoryProfileGuard g("TTxInit/NDataSharing::TStoragesManager");
+        if (!Self->StoragesManager->LoadIdempotency(txc.DB)) {
+            return false;
         }
     }
+
     {
         ACFL_INFO("step", "TTablesManager::Load_Start");
         TTablesManager tManagerLocal(Self->StoragesManager, Self->TabletID());
@@ -179,19 +187,25 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
             }
         }
     }
-
     {
-        TMemoryProfileGuard g("TTxInit/CommitsInFlight");
-        for (const auto& pr : Self->CommitsInFlight) {
-            ui64 txId = pr.first;
-            for (TWriteId writeId : pr.second.WriteIds) {
-                Y_ABORT_UNLESS(Self->LongTxWrites.contains(writeId),
-                    "TTxInit at %" PRIu64 " : Commit %" PRIu64 " references local write %" PRIu64 " that doesn't exist",
-                    Self->TabletID(), txId, writeId);
-                Self->AddLongTxWrite(writeId, txId);
+        TMemoryProfileGuard g("TTxInit/LocksDB");
+        if (txc.DB.GetScheme().GetTableInfo(Schema::Locks::TableId)) {
+            TColumnShardLocksDb locksDb(*Self, txc);
+            if (!Self->SysLocks.Load(locksDb)) {
+                return false;
             }
         }
     }
+
+    {
+        TMemoryProfileGuard g("TTxInit/NDataSharing::TSessionsManager");
+        auto local = std::make_shared<NOlap::NDataSharing::TSessionsManager>();
+        if (!local->Load(txc.DB, Self->TablesManager.GetPrimaryIndexAsOptional<NOlap::TColumnEngineForLogs>())) {
+            return false;
+        }
+        Self->SharingSessionsManager = local;
+    }
+
     Self->UpdateInsertTableCounters();
     Self->UpdateIndexCounters();
     Self->UpdateResourceMetrics(ctx, {});
@@ -219,7 +233,9 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 }
 
 void TTxInit::Complete(const TActorContext& ctx) {
+    Self->ProgressTxController->OnTabletInit();
     Self->SwitchToWork(ctx);
+    NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*Self);
 }
 
 class TTxUpdateSchema : public TTransactionBase<TColumnShard> {
@@ -375,33 +391,6 @@ ITransaction* TColumnShard::CreateTxInitSchema() {
 
 void TColumnShard::Handle(TEvPrivate::TEvNormalizerResult::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxApplyNormalizer(this, ev->Get()->GetChanges()), ctx);
-}
-
-bool TColumnShard::LoadTx(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody) {
-    switch (txKind) {
-        case NKikimrTxColumnShard::TX_KIND_SCHEMA: {
-            TColumnShard::TAlterMeta meta;
-            Y_ABORT_UNLESS(meta.Body.ParseFromString(txBody));
-            AltersInFlight.emplace(txId, std::move(meta));
-            break;
-        }
-        case NKikimrTxColumnShard::TX_KIND_COMMIT: {
-            NKikimrTxColumnShard::TCommitTxBody body;
-            Y_ABORT_UNLESS(body.ParseFromString(txBody));
-
-            TColumnShard::TCommitMeta meta;
-            for (auto& id : body.GetWriteIds()) {
-                meta.AddWriteId(TWriteId{id});
-            }
-
-            CommitsInFlight.emplace(txId, std::move(meta));
-            break;
-        }
-        default: {
-            Y_ABORT("Unsupported TxKind stored in the TxInfo table");
-        }
-    }
-    return true;
 }
 
 }

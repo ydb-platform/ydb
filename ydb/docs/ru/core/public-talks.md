@@ -9,7 +9,7 @@
 * Тема: Искусство бенчмаркинга распределённых баз данных на примере YDB
 
   * [Запись трансляции](https://youtu.be/iMjq96GQTHQ?si=moMbI3Je90s3zY60).
-  * [Презентация] (https://https://github.com/ydb-platform/ydb-presentations/blob/main/2023/ru/yatalks/ydb_benchmarking/presentation.pdf)
+  * [Презентация](https://https://github.com/ydb-platform/ydb-presentations/blob/main/2023/ru/yatalks/ydb_benchmarking/presentation.pdf)
   * Из доклада вы узнаете, какие проблемы производительности мы нашли в популярных бенчмарках Yahoo! Cloud Serving Benchmark (YCSB) и Benchbase TPC-C. Как их исправили и как теперь используют эти бенчмарки, чтобы находить узкие места в YDB и делать оптимизацию. И насколько, согласно этим бенчмаркам, YDB опережает своих основных конкурентов CockroachDB и YugabyteDB, которые тоже являются распределёнными СУБД с открытым исходным кодом.
 
 ### 2023: Открытые системы. СУБД {#ospdatabases2023}

@@ -77,16 +77,6 @@ TServiceId::TServiceId(std::string serviceName, TRealmId realmId)
     , RealmId(realmId)
 { }
 
-bool operator == (const TServiceId& lhs, const TServiceId& rhs)
-{
-    return lhs.ServiceName == rhs.ServiceName && lhs.RealmId == rhs.RealmId;
-}
-
-bool operator != (const TServiceId& lhs, const TServiceId& rhs)
-{
-    return !(lhs == rhs);
-}
-
 TString ToString(const TServiceId& serviceId)
 {
     auto result = TString(serviceId.ServiceName);

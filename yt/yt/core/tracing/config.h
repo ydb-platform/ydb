@@ -8,18 +8,18 @@ namespace NYT::NTracing {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTracingConfig
+class TTracingTransportConfig
     : public NYTree::TYsonStruct
 {
 public:
     bool SendBaggage;
 
-    REGISTER_YSON_STRUCT(TTracingConfig);
+    REGISTER_YSON_STRUCT(TTracingTransportConfig);
 
     static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(TTracingConfig)
+DEFINE_REFCOUNTED_TYPE(TTracingTransportConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

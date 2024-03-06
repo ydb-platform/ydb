@@ -167,25 +167,6 @@ TDqJoin FlipLeftSemiJoin(const TDqJoin& join, TExprContext& ctx) {
         .Done();
 }
 
-TMaybeNode<TKqlKeyInc> GetRightTableKeyPrefix(const TKqlKeyRange& range) {
-    if (!range.From().Maybe<TKqlKeyInc>() || !range.To().Maybe<TKqlKeyInc>()) {
-        return {};
-    }
-    auto rangeFrom = range.From().Cast<TKqlKeyInc>();
-    auto rangeTo = range.To().Cast<TKqlKeyInc>();
-
-    if (rangeFrom.ArgCount() != rangeTo.ArgCount()) {
-        return {};
-    }
-    for (ui32 i = 0; i < rangeFrom.ArgCount(); ++i) {
-        if (rangeFrom.Arg(i).Raw() != rangeTo.Arg(i).Raw()) {
-            return {};
-        }
-    }
-
-    return rangeFrom;
-}
-
 TExprBase BuildLookupIndex(TExprContext& ctx, const TPositionHandle pos,
     const TKqpTable& table, const TCoAtomList& columns,
     const TExprBase& keysToLookup, const TVector<TCoAtom>& skipNullColumns, const TString& indexName,
@@ -858,6 +839,25 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
 }
 
 } // anonymous namespace
+
+TMaybeNode<TKqlKeyInc> GetRightTableKeyPrefix(const TKqlKeyRange& range) {
+    if (!range.From().Maybe<TKqlKeyInc>() || !range.To().Maybe<TKqlKeyInc>()) {
+        return {};
+    }
+    auto rangeFrom = range.From().Cast<TKqlKeyInc>();
+    auto rangeTo = range.To().Cast<TKqlKeyInc>();
+
+    if (rangeFrom.ArgCount() != rangeTo.ArgCount()) {
+        return {};
+    }
+    for (ui32 i = 0; i < rangeFrom.ArgCount(); ++i) {
+        if (rangeFrom.Arg(i).Raw() != rangeTo.Arg(i).Raw()) {
+            return {};
+        }
+    }
+
+    return rangeFrom;
+}
 
 TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {

@@ -277,12 +277,11 @@ struct TServiceId
     TServiceId() = default;
     TServiceId(std::string serviceName, TRealmId realmId = NullRealmId);
 
+    bool operator==(const TServiceId& other) const = default;
+
     std::string ServiceName;
     TRealmId RealmId;
 };
-
-bool operator == (const TServiceId& lhs, const TServiceId& rhs);
-bool operator != (const TServiceId& lhs, const TServiceId& rhs);
 
 TString ToString(const TServiceId& serviceId);
 

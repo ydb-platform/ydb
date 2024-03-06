@@ -14,6 +14,7 @@
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <ydb/core/util/pb.h>
+#include <ydb/public/api/protos/ydb_export.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -1706,7 +1707,7 @@ namespace NSchemeShardUT_Private {
     }
 
     void TestBuildColumn(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
-        const TString &src, const TString& columnName, const Ydb::TypedValue& literal, Ydb::StatusIds::StatusCode expectedStatus) 
+        const TString &src, const TString& columnName, const Ydb::TypedValue& literal, Ydb::StatusIds::StatusCode expectedStatus)
     {
         AsyncBuildColumn(runtime, id, schemeShard, dbName, src, columnName, literal);
 
@@ -2181,8 +2182,13 @@ namespace NSchemeShardUT_Private {
         return combination;
     }
 
-    void AsyncSend(TTestActorRuntime &runtime, ui64 targetTabletId, IEventBase *ev) {
-        ForwardToTablet(runtime, targetTabletId, runtime.AllocateEdgeActor(), ev);
+    void AsyncSend(TTestActorRuntime &runtime, ui64 targetTabletId, IEventBase *ev,
+            ui32 nodeIndex, TActorId sender) {
+        if (sender == TActorId()) {
+            ForwardToTablet(runtime, targetTabletId, runtime.AllocateEdgeActor(nodeIndex), ev);
+        } else {
+            ForwardToTablet(runtime, targetTabletId, sender, ev, nodeIndex);
+        }
     }
 
     TTestActorRuntimeBase::TEventObserver SetSuppressObserver(TTestActorRuntime &runtime, TVector<THolder<IEventHandle> > &suppressed, ui32 type) {
@@ -2339,7 +2345,7 @@ namespace NSchemeShardUT_Private {
         TSerializedCellMatrix matrix(cells, 1, 2);
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
-        ui64 payloadIndex = NKikimr::NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(matrix.ReleaseBuffer()));
+        ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(matrix.ReleaseBuffer()));
         evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
 
         ForwardToTablet(runtime, datashardTabletId, sender, evWrite.release());

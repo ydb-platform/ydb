@@ -310,6 +310,10 @@ protected:
         Register(CreateKafkaCreatePartitionsActor(Context, header->CorrelationId, message));
     }
 
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TAlterConfigsRequestData>& message) {
+        Register(CreateKafkaAlterConfigsActor(Context, header->CorrelationId, message));
+    }
+
     template<class T>
     TMessagePtr<T> Cast(std::shared_ptr<Msg>& request) {
         return TMessagePtr<T>(request->Buffer, request->Message);
@@ -319,7 +323,14 @@ protected:
         KAFKA_LOG_D("process message: ApiKey=" << Request->Header.RequestApiKey << ", ExpectedSize=" << Request->ExpectedSize
                                                << ", Size=" << Request->Size);
 
-        Request->Method = EApiKeyNames.find(static_cast<EApiKey>(Request->Header.RequestApiKey))->second;
+        auto apiKeyNameIt = EApiKeyNames.find(static_cast<EApiKey>(Request->Header.RequestApiKey));
+        if (apiKeyNameIt == EApiKeyNames.end()) {
+            KAFKA_LOG_ERROR("Unsupported message: ApiKey=" << Request->Header.RequestApiKey);
+            PassAway();
+            return false;
+        }
+
+        Request->Method = apiKeyNameIt->second;
 
         PendingRequestsQueue.push_back(Request);
         PendingRequests[Request->Header.CorrelationId] = Request;
@@ -396,6 +407,10 @@ protected:
 
             case CREATE_PARTITIONS:
                 HandleMessage(&Request->Header, Cast<TCreatePartitionsRequestData>(Request));
+                break;
+
+            case ALTER_CONFIGS:
+                HandleMessage(&Request->Header, Cast<TAlterConfigsRequestData>(Request));
                 break;
 
             default:

@@ -23,8 +23,7 @@ namespace NActors {
             NActors::NMemory::TLabel<MemoryLabelSharedData>::Add(allocSize);
 
             auto* header = reinterpret_cast<THeader*>(raw + PrivateHeaderSize);
-            header->RefCount = 1;
-            header->Owner = nullptr;
+            new (header) THeader(nullptr);
 
             data = raw + OverheadSize;
             NSan::Poison(data, size);
@@ -41,6 +40,7 @@ namespace NActors {
 
             auto* header = reinterpret_cast<THeader*>(raw + PrivateHeaderSize);
             Y_DEBUG_ABORT_UNLESS(header->Owner == nullptr);
+            header->~THeader();
 
             y_deallocate(raw);
         }

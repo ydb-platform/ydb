@@ -916,7 +916,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 ResponseQT->Increment(response.MicroSeconds());
                 IssueWriteIfPossible(ctx);
 
-                if (ConfirmedBlobIds.size() == 1 && !InitialAllocation.IsEmpty()) {
+                if (ConfirmedBlobIds.size() == 1 && InitialAllocation.IsEmpty()) {
                     if (NextReadTimestamp == TMonotonic()) {
                         NextReadTimestamp = TActivationContext::Monotonic();
                     }
@@ -1243,7 +1243,7 @@ public:
                         tabletId = (tabletId << 10) + tag;
                         tabletId = (tabletId << 10) + Parent.NodeId();
                         tabletId &= (1ull << 44) - 1;
-                        tabletId = MakeTabletID(0, 0, tabletId);
+                        tabletId = MakeTabletID(false, tabletId);
                         tabletIds[name] = tabletId;
                     }
                 } else {

@@ -12,9 +12,10 @@ namespace {
 
 class TLineageScanner {
 public:
-    TLineageScanner(const TExprNode& root, const TTypeAnnotationContext& ctx)
+    TLineageScanner(const TExprNode& root, const TTypeAnnotationContext& ctx, TExprContext& exprCtx)
         : Root_(root)
         , Ctx_(ctx)
+        , ExprCtx_(exprCtx)
     {}
 
     TString Process() {
@@ -209,7 +210,15 @@ private:
             return &lineage;
         }
 
-        if (node.IsCallable({"Unordered", "UnorderedSubquery", "Right!", "Skip", "Take", "Sort", "AssumeSorted"})) {
+        if (node.IsCallable({
+            "Unordered", 
+            "UnorderedSubquery", 
+            "Right!", 
+            "Skip", 
+            "Take", 
+            "Sort", 
+            "AssumeSorted", 
+            "SkipNullMembers"})) {
             lineage = *CollectLineage(node.Head());
             return &lineage;
         } else if (node.IsCallable("ExtractMembers")) {
@@ -224,9 +233,17 @@ private:
             HandleWindow(lineage, node);
         } else if (node.IsCallable("EquiJoin")) {
             HandleEquiJoin(lineage, node);
+        } else {
+            Warning(node, TStringBuilder() << node.Content() << " is not supported");
         }
 
         return &lineage;
+    }
+
+    void Warning(const TExprNode& node, const TString& message) {
+        auto issue = TIssue(ExprCtx_.GetPosition(node.Pos()), message);
+        SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_LINEAGE_INTERNAL_ERROR, issue);
+        ExprCtx_.AddWarning(issue);
     }
 
     void HandleExtractMembers(TLineage& lineage, const TExprNode& node) {
@@ -763,6 +780,7 @@ private:
 private:
     const TExprNode& Root_;
     const TTypeAnnotationContext& Ctx_;
+    TExprContext& ExprCtx_;
     TNodeMap<IDataProvider*> Reads_, Writes_;
     ui32 NextReadId_ = 0;
     ui32 NextWriteId_ = 0;
@@ -773,8 +791,8 @@ private:
 
 }
 
-TString CalculateLineage(const TExprNode& root, const TTypeAnnotationContext& ctx) {
-    TLineageScanner scanner(root, ctx);
+TString CalculateLineage(const TExprNode& root, const TTypeAnnotationContext& ctx, TExprContext& exprCtx) {
+    TLineageScanner scanner(root, ctx, exprCtx);
     return scanner.Process();
 }
 

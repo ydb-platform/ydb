@@ -25,6 +25,16 @@ struct ISchemalessFormatWriter
 
     virtual i64 GetWrittenSize() const = 0;
 
+    virtual i64 GetEncodedRowBatchCount() const
+    {
+        return 0;
+    }
+
+    virtual i64 GetEncodedColumnarBatchCount() const
+    {
+        return 0;
+    }
+
     [[nodiscard]] virtual TFuture<void> Flush() = 0;
 
     virtual bool WriteBatch(NTableClient::IUnversionedRowBatchPtr rowBatch) = 0;

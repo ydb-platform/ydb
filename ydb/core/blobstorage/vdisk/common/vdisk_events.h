@@ -18,6 +18,7 @@
 #include <ydb/core/base/event_filter.h>
 #include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/core/protos/blobstorage_disk.pb.h>
 
 #include <ydb/core/util/pb.h>
 
@@ -33,6 +34,10 @@
 // FIXME: this check is obsolete; TEvVGet message generators check expected reply size by their own
 #ifndef BS_EVVGET_SIZE_VERIFY
 #define BS_EVVGET_SIZE_VERIFY 0
+#endif
+
+#ifndef VDISK_SKELETON_TRACE
+#define VDISK_SKELETON_TRACE 0
 #endif
 
 namespace NKikimr {
@@ -332,6 +337,7 @@ namespace NKikimr {
         const NKikimrBlobStorage::EVDiskQueueId ExtQueueId = NKikimrBlobStorage::EVDiskQueueId::Unknown;
         const NKikimrBlobStorage::EVDiskInternalQueueId IntQueueId = NKikimrBlobStorage::EVDiskInternalQueueId::IntUnknown;
         const TActorId ActorId;
+        const ui64 InternalMessageId = 0;
 
         TVMsgContext() = default;
 
@@ -343,6 +349,7 @@ namespace NKikimr {
             , ExtQueueId(msgQoS.GetExtQueueId())
             , IntQueueId(msgQoS.GetIntQueueId())
             , ActorId(ActorIdFromProto(msgQoS.GetSenderActorId()))
+            , InternalMessageId(msgQoS.GetInternalMessageId())
         {}
 
         void Output(IOutputStream &str) const {
@@ -352,6 +359,7 @@ namespace NKikimr {
                 << " Cost# " << Cost
                 << " ExtQueueId# " << ExtQueueId
                 << " IntQueueId# " << IntQueueId
+                << " InternalMessageId# " << InternalMessageId
                 << "}";
         }
 
@@ -366,10 +374,12 @@ namespace NKikimr {
             : public TEventLocal<TEvVDiskRequestCompleted, TEvBlobStorage::EvVDiskRequestCompleted> {
         TVMsgContext Ctx;
         std::unique_ptr<IEventHandle> Event;
+        bool DoNotResend;
 
-        TEvVDiskRequestCompleted(const TVMsgContext &ctx, std::unique_ptr<IEventHandle> event)
+        TEvVDiskRequestCompleted(const TVMsgContext &ctx, std::unique_ptr<IEventHandle> event, bool doNotResend = false)
             : Ctx(ctx)
             , Event(std::move(event))
+            , DoNotResend(doNotResend)
         {
             Y_DEBUG_ABORT_UNLESS(Ctx.ExtQueueId != NKikimrBlobStorage::EVDiskQueueId::Unknown);
             Y_DEBUG_ABORT_UNLESS(Ctx.IntQueueId != NKikimrBlobStorage::EVDiskInternalQueueId::IntUnknown);
@@ -468,6 +478,9 @@ namespace NKikimr {
         TActorIDPtr SkeletonFrontIDPtr;
         THPTimer ExecutionTimer;
 
+    protected:
+        bool DoNotResendFromSkeletonFront = false;
+
     public:
         TEvVResultBaseWithQoSPB() = default;
 
@@ -493,6 +506,7 @@ namespace NKikimr {
                 resultQoS->Swap(queryRecord->MutableMsgQoS());
                 resultQoS->ClearDeadlineSeconds();
                 resultQoS->ClearSendMeCostSettings();
+                resultQoS->ClearInternalMessageId();
             } else {
                 Y_ABORT_UNLESS(!SkeletonFrontIDPtr);
             }
@@ -526,7 +540,7 @@ namespace NKikimr {
                 byteSize, this->ToString().data());
 
             if (SkeletonFrontIDPtr && MsgCtx.IntQueueId != NKikimrBlobStorage::IntUnknown) {
-                ctx.Send(*SkeletonFrontIDPtr, new TEvVDiskRequestCompleted(MsgCtx, std::move(ev)));
+                ctx.Send(*SkeletonFrontIDPtr, new TEvVDiskRequestCompleted(MsgCtx, std::move(ev), DoNotResendFromSkeletonFront));
             } else {
                 TActivationContext::Send(ev.release());
             }
@@ -1427,6 +1441,9 @@ namespace NKikimr {
         TString ToString() const override {
             TStringStream str;
             str << "{EvVGetResult QueryResult Status# " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
+            if (Record.HasErrorReason()) {
+                str << " ErrorReason# '" << EscapeC(Record.GetErrorReason()) << '\'';
+            }
             for (const auto& result : Record.GetResult()) {
                 str << " {";
                 str << (result.HasBlobID() ? LogoBlobIDFromLogoBlobID(result.GetBlobID()).ToString() : "?")
@@ -1467,7 +1484,7 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void MakeError(NKikimrProto::EReplyStatus status, const TString& /*errorReason*/,
+        void MakeError(NKikimrProto::EReplyStatus status, const TString& errorReason,
                 const NKikimrBlobStorage::TEvVGet &request) {
             NKikimrProto::EReplyStatus messageStatus = status;
             NKikimrProto::EReplyStatus queryStatus = status != NKikimrProto::NOTREADY ? status : NKikimrProto::ERROR;
@@ -1500,6 +1517,9 @@ namespace NKikimr {
             if (request.HasTimestamps()) {
                 Record.MutableTimestamps()->CopyFrom(request.GetTimestamps());
             }
+            if (errorReason) {
+                Record.SetErrorReason(errorReason);
+            }
         }
     };
 
@@ -1513,7 +1533,9 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
-        TVDiskSkeletonTrace *VDiskSkeletonTrace = nullptr;
+#if VDISK_SKELETON_TRACE
+        std::shared_ptr<TVDiskSkeletonTrace> VDiskSkeletonTrace;
+#endif
 
         TEvVSpecialPatchBase() = default;
 
@@ -1907,7 +1929,9 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
-        TVDiskSkeletonTrace *VDiskSkeletonTrace = nullptr;
+#if VDISK_SKELETON_TRACE
+        std::shared_ptr<TVDiskSkeletonTrace> VDiskSkeletonTrace;
+#endif
 
         TEvVPatchStart() = default;
 
@@ -1993,7 +2017,9 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
-        TVDiskSkeletonTrace *VDiskSkeletonTrace = nullptr;
+#if VDISK_SKELETON_TRACE
+        std::shared_ptr<TVDiskSkeletonTrace> VDiskSkeletonTrace;
+#endif
 
         TEvVPatchDiff() = default;
 
@@ -2068,7 +2094,9 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
-        TVDiskSkeletonTrace *VDiskSkeletonTrace = nullptr;
+#if VDISK_SKELETON_TRACE
+        std::shared_ptr<TVDiskSkeletonTrace> VDiskSkeletonTrace;
+#endif
 
         TEvVPatchXorDiff() = default;
 
@@ -2180,6 +2208,10 @@ namespace NKikimr {
         void SetStatusFlagsAndFreeSpace(ui32 statusFlags, float approximateFreeSpaceShare) {
             Record.SetStatusFlags(statusFlags);
             Record.SetApproximateFreeSpaceShare(approximateFreeSpaceShare);
+        }
+
+        void SetForceEndResponse() {
+            DoNotResendFromSkeletonFront = true;
         }
 
         void MakeError(NKikimrProto::EReplyStatus status, const TString &errorReason,

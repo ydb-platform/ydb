@@ -140,7 +140,7 @@ void TFinishProposeWriteUnit::Complete(TOperation::TPtr op, const TActorContext 
         Pipeline.RemoveActiveOp(op);
 
         DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
-        DataShard.EmitHeartbeats(ctx);
+        DataShard.EmitHeartbeats();
     }
 
     DataShard.SendRegistrationRequestTimeCast(ctx);
@@ -158,12 +158,10 @@ void TFinishProposeWriteUnit::CompleteRequest(TOperation::TPtr op, const TActorC
                 << DataShard.TabletID() << " send to client, propose latency: "
                 << duration.MilliSeconds() << " ms, status: " << res->GetStatus());
 
-    TString errors = res->GetError();
-    if (errors.size()) {
+    if (res->IsError()) {
         LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::FinishProposeUnit_CompleteRequest), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 
                     "Errors while proposing transaction txid " << op->GetTxId()
-                    << " at tablet " << DataShard.TabletID() << " status: "
-                    << res->GetStatus() << " errors: " << errors);
+                    << " at tablet " << DataShard.TabletID() << " " << res->GetError());
     }
 
     if (res->IsPrepared()) {
@@ -173,8 +171,9 @@ void TFinishProposeWriteUnit::CompleteRequest(TOperation::TPtr op, const TActorC
         DataShard.CheckMvccStateChangeCanStart(ctx);
     }
 
-    if (op->HasNeedDiagnosticsFlag())
-        AddDiagnosticsResult(*res);
+    AddDiagnosticsResult(*res);
+
+    DataShard.FillExecutionStats(op->GetExecutionProfile(), *res->Record.MutableTxStats());
 
     if (!gSkipRepliesFailPoint.Check(DataShard.TabletID(), op->GetTxId())) {
         if (res->IsPrepared()) {
@@ -184,7 +183,13 @@ void TFinishProposeWriteUnit::CompleteRequest(TOperation::TPtr op, const TActorC
             res->SetOrbit(std::move(op->Orbit));
         }
 
-        ctx.Send(writeOp->GetEv()->Sender, res.release(), 0, writeOp->GetEv()->Cookie);
+        if (op->IsImmediate() && !op->IsReadOnly() && !op->IsAborted() && op->MvccReadWriteVersion) {
+            DataShard.SendImmediateWriteResult(*op->MvccReadWriteVersion, op->GetTarget(), res.release(), op->GetCookie());
+        } else if (op->HasVolatilePrepareFlag() && !op->IsDirty()) {
+            DataShard.SendWithConfirmedReadOnlyLease(op->GetFinishProposeTs(), op->GetTarget(), res.release(), op->GetCookie());
+        } else {
+            ctx.Send(op->GetTarget(), res.release(), 0, op->GetCookie());
+        }
     }
 }
 

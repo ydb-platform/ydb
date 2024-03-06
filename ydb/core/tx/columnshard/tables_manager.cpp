@@ -270,7 +270,9 @@ void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapsho
 }
 
 void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& version, const TTableInfo::TTableVersionInfo& versionInfo, NIceDb::TNiceDb& db) {
-    auto& table = Tables.at(pathId);
+    auto it = Tables.find(pathId);
+    AFL_VERIFY(it != Tables.end());
+    auto& table = it->second;
 
     if (versionInfo.HasSchemaPresetId()) {
         Y_ABORT_UNLESS(SchemaPresets.contains(versionInfo.GetSchemaPresetId()));
@@ -302,8 +304,10 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
 }
 
 void TTablesManager::IndexSchemaVersion(const NOlap::TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema) {
-    NOlap::TIndexInfo indexInfo = DeserializeIndexInfoFromProto(schema);
-    indexInfo.SetAllKeys();
+    std::optional<NOlap::TIndexInfo> indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema, StoragesManager);
+    Y_ABORT_UNLESS(indexInfoOptional);
+    NOlap::TIndexInfo indexInfo = std::move(*indexInfoOptional);
+    indexInfo.SetAllKeys(StoragesManager);
     const bool isFirstPrimaryIndexInitialization = !PrimaryIndex;
     if (!PrimaryIndex) {
         PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, NOlap::TCompactionLimits(), StoragesManager);
@@ -317,19 +321,13 @@ void TTablesManager::IndexSchemaVersion(const NOlap::TSnapshot& snapshot, const 
     PrimaryIndex->OnTieringModified(nullptr, Ttl);
 }
 
-NOlap::TIndexInfo TTablesManager::DeserializeIndexInfoFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema) {
-    std::optional<NOlap::TIndexInfo> indexInfo = NOlap::TIndexInfo::BuildFromProto(schema);
-    Y_ABORT_UNLESS(indexInfo);
-    return *indexInfo;
-}
-
 TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId)
     : StoragesManager(storagesManager)
     , TabletId(tabletId)
 {
 }
 
-bool TTablesManager::TryFinalizeDropPath(NTabletFlatExecutor::TTransactionContext& txc, const ui64 pathId) {
+bool TTablesManager::TryFinalizeDropPath(NTable::TDatabase& dbTable, const ui64 pathId) {
     auto itDrop = PathsToDrop.find(pathId);
     if (itDrop == PathsToDrop.end()) {
         return false;
@@ -338,7 +336,7 @@ bool TTablesManager::TryFinalizeDropPath(NTabletFlatExecutor::TTransactionContex
         return false;
     }
     PathsToDrop.erase(itDrop);
-    NIceDb::TNiceDb db(txc.DB);
+    NIceDb::TNiceDb db(dbTable);
     NColumnShard::Schema::EraseTableInfo(db, pathId);
     const auto& table = Tables.find(pathId);
     Y_ABORT_UNLESS(table != Tables.end(), "No schema for path %lu", pathId);

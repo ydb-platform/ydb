@@ -14,8 +14,10 @@ import "ydb/core/protos/blob_depot_config.proto";
 import "ydb/public/api/protos/ydb_coordination.proto";
 import "ydb/public/api/protos/ydb_export.proto";
 import "ydb/public/api/protos/ydb_value.proto";
+import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/core/protos/index_builder.proto";
+import "ydb/core/tx/columnshard/engines/scheme/statistics/protos/data.proto";
 
 import "google/protobuf/empty.proto";
 
@@ -88,6 +90,9 @@ message TColumnDescription {
         Ydb.TypedValue DefaultFromLiteral = 10; // Literal default value
     }
     optional bool NotNull = 8;
+    // flag that indicates that column is currently under the build
+    // operation.
+    optional bool IsBuildInProgress = 11 [default = false];
 }
 
 message TStorageSettings {
@@ -387,6 +392,7 @@ message TTableDescription {
     repeated TSequenceDescription Sequences = 39;
 
     optional TTableReplicationConfig ReplicationConfig = 40;
+
     optional bool Temporary = 41;
 }
 
@@ -395,14 +401,25 @@ message TDictionaryEncodingSettings {
 }
 
 message TCompressionOptions {
-    optional EColumnCodec CompressionCodec = 2; // LZ4 (in arrow LZ4_FRAME variant) if not set
-    optional int32 CompressionLevel = 3; // Use default compression level if not set (0 != not set)
+    optional EColumnCodec Codec = 2; // LZ4 (in arrow LZ4_FRAME variant) if not set
+    optional int32 Level = 3; // Use default compression level if not set (0 != not set)
+}
+
+message TOlapColumn {
+
+    message TSerializer {
+        optional string ClassName = 1;
+        oneof Implementation {
+            TCompressionOptions ArrowCompression = 40;
+        }
+    }
 }
 
 message TOlapColumnDiff {
     optional string Name = 1;
-    optional TCompressionOptions Compression = 2;
     optional TDictionaryEncodingSettings DictionaryEncoding = 4;
+    optional TOlapColumn.TSerializer Serializer = 5;
+    optional string StorageId = 6;
 }
 
 message TOlapColumnDescription {
@@ -417,8 +434,10 @@ message TOlapColumnDescription {
     optional NKikimrProto.TTypeInfo TypeInfo = 6;
     optional bool NotNull = 7;
 
-    optional TCompressionOptions Compression = 8;
+    optional TCompressionOptions Compression = 8[deprecated = true];
     optional TDictionaryEncodingSettings DictionaryEncoding = 9;
+    optional TOlapColumn.TSerializer Serializer = 10;
+    optional string StorageId = 11;
 }
 
 message TRequestedBloomFilter {
@@ -429,8 +448,9 @@ message TRequestedBloomFilter {
 message TOlapIndexRequested {
     optional string Name = 1;
     optional TCompressionOptions Compression = 3;
+    optional string StorageId = 4;
 
-    optional string ClassName = 2;
+    optional string ClassName = 39;
     oneof Implementation {
         TRequestedBloomFilter BloomFilter = 40;
     }
@@ -449,9 +469,11 @@ message TOlapIndexDescription {
     optional string Name = 2;
     optional TCompressionOptions Compression = 3;
 
-    optional string ClassName = 4;
+    optional string StorageId = 4;
+
+    optional string ClassName = 40;
     oneof Implementation {
-        TBloomFilter BloomFilter = 40;
+        TBloomFilter BloomFilter = 41;
     }
 }
 
@@ -491,6 +513,7 @@ message TColumnTableSchema {
 
     optional bool CompositeMarks = 9 [ default = false ];
     repeated TOlapIndexDescription Indexes = 10;
+    repeated NKikimrColumnShardStatisticsProto.TOperatorContainer Statistics = 11;
 }
 
 message TAlterColumnTableSchema {
@@ -500,6 +523,8 @@ message TAlterColumnTableSchema {
     repeated TOlapColumnDiff AlterColumns = 7;
     repeated TOlapIndexRequested UpsertIndexes = 8;
     repeated string DropIndexes = 9;
+    repeated NKikimrColumnShardStatisticsProto.TConstructorContainer UpsertStatistics = 10;
+    repeated string DropStatistics = 11;
 }
 
 // Schema presets are used to manage multiple tables with the same schema
@@ -1553,6 +1578,8 @@ message TModifyScheme {
     optional bool FailedOnAlreadyExists = 63 [default = true];
 
     optional TViewDescription CreateView = 64;
+
+    optional NActorsProto.TActorId TempTableOwnerActorId = 65;
 }
 
 // "Script", used by client to parse text files with multiple DDL commands
@@ -1806,6 +1833,7 @@ message TExternalTableDescription {
     optional string Location = 6;
     repeated TColumnDescription Columns = 7;
     optional bytes Content = 8;
+    optional bool ReplaceIfExists = 9; // Only applicable for `create external table` operation
 }
 
 // Access without authorization
@@ -1866,6 +1894,7 @@ message TExternalDataSourceDescription {
     optional string Installation = 6;
     optional TAuth Auth = 7;
     optional TExternalDataSourceProperties Properties = 8;
+    optional bool ReplaceIfExists = 9;
 }
 
 message TViewDescription {

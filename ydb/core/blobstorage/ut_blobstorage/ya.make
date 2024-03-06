@@ -17,9 +17,11 @@ SRCS(
     counting_events.cpp
     decommit_3dc.cpp
     defrag.cpp
+    discover.cpp
     encryption.cpp
     extra_block_checks.cpp
     gc_quorum_3dc.cpp
+    get.cpp
     group_reconfiguration.cpp
     incorrect_queries.cpp
     index_restore_get.cpp
@@ -27,25 +29,16 @@ SRCS(
     mirror3dc.cpp
     mirror3of4.cpp
     monitoring.cpp
+    multiget.cpp
+    patch.cpp
     recovery.cpp
     sanitize_groups.cpp
     scrub_fast.cpp
     snapshots.cpp
     space_check.cpp
     sync.cpp
+    ut_helpers.cpp
 )
-
-IF (BUILD_TYPE != "DEBUG")
-    SRCS(
-#        big_cluster.cpp
-        get.cpp
-        discover.cpp
-        multiget.cpp
-        patch.cpp
-    )
-ELSE ()
-    MESSAGE(WARNING "It takes too much time to run test in DEBUG mode, some tests are skipped")
-ENDIF ()
 
 PEERDIR(
     ydb/core/base

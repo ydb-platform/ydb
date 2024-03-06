@@ -1,98 +1,89 @@
 #include "symbolizer.h"
 
-#include <library/cpp/deprecated/atomic/atomic.h>
-#include <library/cpp/malloc/api/malloc.h>
-#include <library/cpp/dwarf_backtrace/backtrace.h>
+#include <contrib/libs/backtrace/backtrace.h>
 
-#include <util/generic/hash.h>
+#include <util/generic/string.h>
+#include <util/generic/vector.h>
+#include <util/system/type_name.h>
 #include <util/system/execpath.h>
 #include <util/string/builder.h>
 
-#include <dlfcn.h>
-#include <link.h>
-#include <signal.h>
+#include <functional>
+#include <mutex>
+#include <vector>
+#include <numeric>
+#include <algorithm>
+#include <filesystem>
 
-#include <iostream>
-#include <sstream>
-
-namespace NYql {
-
-namespace NBacktrace {
-    
-extern THashMap<TString, TString> Mapping;
-
-} // namespace NBacktrace
-} // namespace NYql
-
-int DlIterCallback(struct dl_phdr_info *info, size_t size, void *data)
-{
-    Y_UNUSED(size);
-    if (*info->dlpi_name) {
-        TDllInfo dllInfo{ info->dlpi_name, (ui64)info->dlpi_addr };
-        reinterpret_cast<THashMap<TString, TDllInfo>*>(data)->emplace(dllInfo.Path, dllInfo);
+namespace {
+void HandleLibBacktraceError(void* data, const char* msg, int) {
+    if (!data) {
+        Cerr << msg;
+        return;
     }
-
-    return 0;
+    *(reinterpret_cast<TString*>(data)) = msg;
 }
 
-class TBacktraceSymbolizer : public IBacktraceSymbolizer {
-public:
-    TBacktraceSymbolizer(bool kikimrFormat) : IBacktraceSymbolizer(), KikimrFormat_(kikimrFormat) {
-        dl_iterate_phdr(DlIterCallback, &DLLs_);
+int HandleLibBacktraceFrame(void* data, uintptr_t, const char* filename, int lineno, const char* function) {
+    TString fileName = filename ? filename : "???";
+    TString functionName = function ? CppDemangle(function) : "???";
+    *reinterpret_cast<TString*>(data) = TStringBuilder() << functionName << " at " << fileName << ":" << lineno << ":0";
+    return 0;
+}
+}
 
-    }
-
-    TString SymbolizeFrame(void* ptr) override {
-        ui64 address = (ui64)ptr - 1;
-        ui64 offset = 0;
-        TString modulePath = BinaryPath_;
-#ifdef _linux_
-        Dl_info dlInfo;
-        memset(&dlInfo, 0, sizeof(dlInfo));
-        auto ret = dladdr((void*)address, &dlInfo);
-        if (ret) {
-            auto path = dlInfo.dli_fname;
-            auto it = DLLs_.find(path);
-            if (it != DLLs_.end()) {
-                modulePath = path;
-                offset = it->second.BaseAddress;
+namespace NYql {
+    namespace NBacktrace {
+        namespace {
+            auto CreateState(TStringBuf filename) {
+                return backtrace_create_state(
+                    filename.data(),
+                    0,
+                    HandleLibBacktraceError,
+                    nullptr
+                );
             }
         }
-#endif
-        auto it = NYql::NBacktrace::Mapping.find(modulePath);
-        if (it != NYql::NBacktrace::Mapping.end()) {
-            modulePath = it->second;
+
+        TVector<TString> Symbolize(const TVector<TStackFrame>& frames) {
+            if (frames.empty()) {
+                return {};
+            }
+            static std::mutex mutex;
+            const std::lock_guard lock{mutex};
+
+            TVector<TString> result(frames.size());
+            std::vector<size_t> order(frames.size());
+            std::iota(order.begin(), order.end(), 0u);
+            std::sort(order.begin(), order.end(), [&frames](auto a, auto b) { return frames[a].File < frames[b].File; });
+
+            struct backtrace_state* state = nullptr;
+
+            for (size_t i = 0; i < order.size(); ++i) {
+                if (!i || frames[order[i - 1]].File != frames[order[i]].File) {
+                    if (!std::filesystem::exists(frames[order[i]].File.c_str())) {
+                        state = nullptr;
+                    } else {
+                        state = CreateState(frames[order[i]].File);
+                    }
+                }
+
+                if (!state) {
+                    result[order[i]] = TStringBuilder() << "File not found: " << frames[order[i]].File;
+                    continue;
+                }
+
+                int status = backtrace_pcinfo(
+                    state,
+                    reinterpret_cast<uintptr_t>(frames[order[i]].Address) - 1, // last byte of the call instruction
+                    HandleLibBacktraceFrame,
+                    HandleLibBacktraceError,
+                    &result[order[i]]);
+                if (0 != status) {
+                    break;
+                }
+            }
+            return result;
         }
-
-        if (!KikimrFormat_) {
-            return TStringBuilder() << "StackFrame: " << modulePath << " " << address << " " <<  offset << "\n";
-        }
-
-        std::array<const void*, 1> addrs = { (const void*)address };
-        TString output;
-        TStringOutput out(output);
-
-        auto error = NDwarf::ResolveBacktraceLocked(addrs, [&](const NDwarf::TLineInfo& info) {
-            if (!info.FileName.Empty())
-                out << info.FileName << ":" << info.Line << ":" << info.Col << " ";
-            if (!info.FunctionName.Empty())
-                out << "in " << info.FunctionName << " ";
-            return NDwarf::EResolving::Continue;
-        });
-
-        if (error) {
-            out << "LibBacktrace failed: (" << error->Code << ") " << error->Message;
-        }
-
-        return output;
     }
-
-private:
-    THashMap<TString, TDllInfo> DLLs_;
-    TString BinaryPath_ = GetPersistentExecPath();
-    bool KikimrFormat_;
-};
-
-std::unique_ptr<IBacktraceSymbolizer> BuildSymbolizer(bool format) {
-    return std::unique_ptr<IBacktraceSymbolizer>(new TBacktraceSymbolizer(format));
 }

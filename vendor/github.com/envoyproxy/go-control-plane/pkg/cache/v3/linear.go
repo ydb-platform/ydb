@@ -187,7 +187,7 @@ func (cache *LinearCache) respondDelta(request *DeltaRequest, value chan DeltaRe
 	if len(resp.Resources) > 0 || len(resp.RemovedResources) > 0 {
 		if cache.log != nil {
 			cache.log.Debugf("[linear cache] node: %s, sending delta response for typeURL %s with resources: %v removed resources: %v with wildcard: %t",
-				request.GetNode().GetId(), request.TypeUrl, GetResourceNames(resp.Resources), resp.RemovedResources, state.IsWildcard())
+				request.GetNode().GetId(), request.GetTypeUrl(), GetResourceNames(resp.Resources), resp.RemovedResources, state.IsWildcard())
 		}
 		value <- resp
 		return resp
@@ -299,7 +299,7 @@ func (cache *LinearCache) GetResources() map[string]types.Resource {
 }
 
 func (cache *LinearCache) CreateWatch(request *Request, _ stream.StreamState, value chan Response) func() {
-	if request.TypeUrl != cache.typeURL {
+	if request.GetTypeUrl() != cache.typeURL {
 		value <- nil
 		return nil
 	}
@@ -312,8 +312,8 @@ func (cache *LinearCache) CreateWatch(request *Request, _ stream.StreamState, va
 	// strip version prefix if it is present
 	var lastVersion uint64
 	var err error
-	if strings.HasPrefix(request.VersionInfo, cache.versionPrefix) {
-		lastVersion, err = strconv.ParseUint(request.VersionInfo[len(cache.versionPrefix):], 0, 64)
+	if strings.HasPrefix(request.GetVersionInfo(), cache.versionPrefix) {
+		lastVersion, err = strconv.ParseUint(request.GetVersionInfo()[len(cache.versionPrefix):], 0, 64)
 	} else {
 		err = errors.New("mis-matched version prefix")
 	}
@@ -321,13 +321,14 @@ func (cache *LinearCache) CreateWatch(request *Request, _ stream.StreamState, va
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 
-	if err != nil {
+	switch {
+	case err != nil:
 		stale = true
-		staleResources = request.ResourceNames
-	} else if len(request.ResourceNames) == 0 {
+		staleResources = request.GetResourceNames()
+	case len(request.GetResourceNames()) == 0:
 		stale = lastVersion != cache.version
-	} else {
-		for _, name := range request.ResourceNames {
+	default:
+		for _, name := range request.GetResourceNames() {
 			// When a resource is removed, its version defaults 0 and it is not considered stale.
 			if lastVersion < cache.versionVector[name] {
 				stale = true
@@ -340,7 +341,7 @@ func (cache *LinearCache) CreateWatch(request *Request, _ stream.StreamState, va
 		return nil
 	}
 	// Create open watches since versions are up to date.
-	if len(request.ResourceNames) == 0 {
+	if len(request.GetResourceNames()) == 0 {
 		cache.watchAll[value] = struct{}{}
 		return func() {
 			cache.mu.Lock()
@@ -348,7 +349,7 @@ func (cache *LinearCache) CreateWatch(request *Request, _ stream.StreamState, va
 			delete(cache.watchAll, value)
 		}
 	}
-	for _, name := range request.ResourceNames {
+	for _, name := range request.GetResourceNames() {
 		set, exists := cache.watches[name]
 		if !exists {
 			set = make(watches)
@@ -359,7 +360,7 @@ func (cache *LinearCache) CreateWatch(request *Request, _ stream.StreamState, va
 	return func() {
 		cache.mu.Lock()
 		defer cache.mu.Unlock()
-		for _, name := range request.ResourceNames {
+		for _, name := range request.GetResourceNames() {
 			set, exists := cache.watches[name]
 			if exists {
 				delete(set, value)

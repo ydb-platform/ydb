@@ -358,13 +358,20 @@ public:
         REGISTER    (TGetQueryResultCommand,               "get_query_result",                Null,       Structured, false, false, ApiVersion4);
         REGISTER    (TReadQueryResultCommand,              "read_query_result",               Null,       Tabular,    false, true, ApiVersion4);
         REGISTER    (TAlterQueryCommand,                   "alter_query",                     Null,       Tabular,    false, false, ApiVersion4);
+        REGISTER    (TGetQueryTrackerInfoCommand,          "get_query_tracker_info",          Null,       Structured, false, false, ApiVersion4);
 
         REGISTER_ALL(TGetBundleConfigCommand,              "get_bundle_config",               Null,       Structured, false,  false);
         REGISTER_ALL(TSetBundleConfigCommand,              "set_bundle_config",               Structured, Null,       false,  false);
 
-        REGISTER_ALL(TStartPipelineCommand,                "start_pipeline",                  Null,       Structured, false,  false);
-        REGISTER_ALL(TStopPipelineCommand,                 "stop_pipeline",                   Null,       Structured, false,  false);
-        REGISTER_ALL(TPausePipelineCommand,                "pause_pipeline",                  Null,       Structured, false,  false);
+        REGISTER    (TGetPipelineSpecCommand,              "get_pipeline_spec",               Null,       Structured, true,   false, ApiVersion4);
+        REGISTER    (TSetPipelineSpecCommand,              "set_pipeline_spec",               Structured, Structured, true,   false, ApiVersion4);
+        REGISTER    (TRemovePipelineSpecCommand,           "remove_pipeline_spec",            Null,       Structured, true,   false, ApiVersion4);
+        REGISTER    (TGetPipelineDynamicSpecCommand,       "get_pipeline_dynamic_spec",       Null,       Structured, true,   false, ApiVersion4);
+        REGISTER    (TSetPipelineDynamicSpecCommand,       "set_pipeline_dynamic_spec",       Structured, Structured, true,   false, ApiVersion4);
+        REGISTER    (TRemovePipelineDynamicSpecCommand,    "remove_pipeline_dynamic_spec",    Null,       Structured, true,   false, ApiVersion4);
+        REGISTER    (TStartPipelineCommand,                "start_pipeline",                  Null,       Structured, false,  false, ApiVersion4);
+        REGISTER    (TStopPipelineCommand,                 "stop_pipeline",                   Null,       Structured, false,  false, ApiVersion4);
+        REGISTER    (TPausePipelineCommand,                "pause_pipeline",                  Null,       Structured, false,  false, ApiVersion4);
 
         if (Config_->EnableInternalCommands) {
             REGISTER_ALL(TReadHunksCommand,                "read_hunks",                      Null,       Structured, false,  true );

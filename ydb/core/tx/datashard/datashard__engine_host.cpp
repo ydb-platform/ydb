@@ -2,7 +2,7 @@
 #include "datashard_impl.h"
 #include "datashard_user_db.h"
 #include "datashard__engine_host.h"
-#include "sys_tables.h"
+#include <ydb/core/tx/locks/sys_tables.h>
 
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
@@ -276,7 +276,7 @@ public:
         return UserDb.GetChangeCollector(tableId);
     }
 
-    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion) {
+    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion) override {
         UserDb.CommitChanges(tableId, lockId, writeVersion);
     }
 
@@ -305,7 +305,14 @@ public:
     }
 
     bool IsValidKey(TKeyDesc& key) const override {
-        TKeyValidator::TValidateOptions options(UserDb);
+        TKeyValidator::TValidateOptions options(
+            UserDb.GetLockTxId(),
+            UserDb.GetLockNodeId(),
+            UserDb.GetIsRepeatableSnapshot(),
+            UserDb.GetIsImmediateTx(),
+            UserDb.GetIsWriteTx(), 
+            Scheme
+        );
         return GetKeyValidator().IsValidKey(key, options);
     }
 
@@ -360,6 +367,10 @@ public:
 
     void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
         UserDb.UpdateRow(tableId, key, ops);
+    }
+
+    void ReplaceRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
+        UserDb.ReplaceRow(tableId, key, ops);
     }
 
     void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) override {
@@ -469,7 +480,7 @@ private:
 
 TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId)
     : StepTxId(stepTxId)
-    , KeyValidator(*self, txc.DB)
+    , KeyValidator(*self)
 {
     auto now = TAppData::TimeProvider->Now();
     EngineHost = MakeHolder<TDataShardEngineHost>(self, *this, txc.DB, stepTxId.TxId, EngineHostCounters, now);
@@ -521,7 +532,6 @@ TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorC
     KqpExecCtx.RandomProvider = TAppData::RandomProvider.Get();
     KqpExecCtx.TimeProvider = TAppData::TimeProvider.Get();
     KqpExecCtx.ApplyCtx = KqpApplyCtx.Get();
-    KqpExecCtx.Alloc = KqpAlloc.Get();
     KqpExecCtx.TypeEnv = KqpTypeEnv.Get();
     if (auto rm = NKqp::TryGetKqpResourceManager()) {
         KqpExecCtx.PatternCache = rm->GetPatternCache();
@@ -606,13 +616,6 @@ void TEngineBay::SetIsRepeatableSnapshot() {
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
     host->SetIsRepeatableSnapshot();
-}
-
-void TEngineBay::CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion) {
-    Y_ABORT_UNLESS(EngineHost);
-
-    auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
-    host->CommitChanges(tableId, lockId, writeVersion);
 }
 
 TVector<IDataShardChangeCollector::TChange> TEngineBay::GetCollectedChanges() const {
@@ -701,9 +704,9 @@ NKqp::TKqpTasksRunner& TEngineBay::GetKqpTasksRunner(NKikimrTxDataShard::TKqpTra
 
         settings.OptLLVM = "OFF";
         settings.TerminateOnError = false;
-
+        Y_ABORT_UNLESS(KqpAlloc);
         KqpAlloc->SetLimit(10_MB);
-        KqpTasksRunner = NKqp::CreateKqpTasksRunner(std::move(*tx.MutableTasks()), KqpExecCtx, settings, KqpLogFunc);
+        KqpTasksRunner = NKqp::CreateKqpTasksRunner(std::move(*tx.MutableTasks()), *KqpAlloc.Get(), KqpExecCtx, settings, KqpLogFunc);
     }
 
     return *KqpTasksRunner;

@@ -4,7 +4,6 @@ SRCS(
     background_controller.cpp
     blob.cpp
     blob_cache.cpp
-    blob_manager.cpp
     columnshard__init.cpp
     columnshard__notify_tx_completion.cpp
     columnshard__plan_step.cpp
@@ -25,9 +24,9 @@ SRCS(
     columnshard_view.cpp
     counters.cpp
     defs.cpp
+    inflight_request_tracker.cpp
     write_actor.cpp
     tables_manager.cpp
-    tx_controller.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(columnshard.h)
@@ -43,17 +42,23 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/tx/time_cast
     ydb/core/tx/columnshard/engines
     ydb/core/tx/columnshard/engines/writer
     ydb/core/tx/columnshard/counters
     ydb/core/tx/columnshard/common
     ydb/core/tx/columnshard/splitter
     ydb/core/tx/columnshard/operations
+    ydb/core/tx/columnshard/transactions
+    ydb/core/tx/columnshard/transactions/operators
     ydb/core/tx/columnshard/blobs_reader
     ydb/core/tx/columnshard/blobs_action
+    ydb/core/tx/columnshard/data_locks
+    ydb/core/tx/columnshard/data_sharing
     ydb/core/tx/columnshard/resource_subscriber
     ydb/core/tx/columnshard/normalizer/granule
     ydb/core/tx/columnshard/normalizer/portion
+    ydb/core/tx/columnshard/blobs_action/storages_manager
     ydb/core/tx/tiering
     ydb/core/tx/conveyor/usage
     ydb/core/tx/tracing

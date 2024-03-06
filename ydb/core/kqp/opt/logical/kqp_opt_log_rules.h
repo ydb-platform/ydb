@@ -53,7 +53,7 @@ NYql::NNodes::TExprBase KqpRewriteTakeOverIndexRead(const NYql::NNodes::TExprBas
     const TKqpOptimizeContext& kqpCtx, const NYql::TParentsMap& parentsMap);
 
 NYql::NNodes::TExprBase KqpDeleteOverLookup(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
-    const TKqpOptimizeContext &kqpCtx);
+    const TKqpOptimizeContext &kqpCtx, const NYql::TParentsMap& parentsMap);
 
 NYql::NNodes::TExprBase KqpExcessUpsertInputColumns(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx);
 

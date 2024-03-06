@@ -274,9 +274,9 @@ private:
         }
     }
 
-    TEnumIndexedVector<EUnversionedStringSegmentType, ui64> GetEncodingMethodsCosts() const
+    TEnumIndexedArray<EUnversionedStringSegmentType, ui64> GetEncodingMethodsCosts() const
     {
-        TEnumIndexedVector<EUnversionedStringSegmentType, ui64> costs;
+        TEnumIndexedArray<EUnversionedStringSegmentType, ui64> costs;
         for (auto type : TEnumTraits<EUnversionedStringSegmentType>::GetDomainValues()) {
             costs[type] = GetSpecificEncodingMethodCosts(type);
         }

@@ -9,7 +9,7 @@
 #include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
-#include <ydb/core/tx/datashard/sys_tables.h>
+#include <ydb/core/tx/locks/sys_tables.h>
 #include <ydb/library/aclib/aclib.h>
 
 #include <util/datetime/base.h>

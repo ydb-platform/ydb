@@ -3,7 +3,6 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/common/validation.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
-#include <ydb/core/formats/arrow/compression/object.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
 #include <util/generic/set.h>
@@ -18,7 +17,7 @@ private:
     YDB_READONLY_DEF(TDuration, EvictDuration);
 
     ui32 TtlUnitsInSecond;
-    YDB_READONLY_DEF(std::optional<NArrow::TCompression>, Compression);
+    YDB_READONLY_DEF(std::optional<NArrow::NSerialization::TSerializerContainer>, Serializer);
 public:
     TTierInfo(const TString& tierName, TDuration evictDuration, const TString& column, ui32 unitsInSecond = 0)
         : Name(tierName)
@@ -34,8 +33,8 @@ public:
         return now - EvictDuration;
     }
 
-    TTierInfo& SetCompression(const NArrow::TCompression& value) {
-        Compression = value;
+    TTierInfo& SetSerializer(const NArrow::NSerialization::TSerializerContainer& value) {
+        Serializer = value;
         return *this;
     }
 
@@ -51,9 +50,9 @@ public:
 
     TString GetDebugString() const {
         TStringBuilder sb;
-        sb << "name=" << Name << ";duration=" << EvictDuration << ";column=" << EvictColumnName << ";compression=";
-        if (Compression) {
-            sb << Compression->DebugString();
+        sb << "name=" << Name << ";duration=" << EvictDuration << ";column=" << EvictColumnName << ";serializer=";
+        if (Serializer) {
+            sb << Serializer->DebugString();
         } else {
             sb << "NOT_SPECIFIED(Default)";
         }
@@ -133,11 +132,11 @@ public:
         return {};
     }
 
-    std::optional<NArrow::TCompression> GetCompression(const TString& name) const {
+    std::optional<NArrow::NSerialization::TSerializerContainer> GetSerializer(const TString& name) const {
         auto it = TierByName.find(name);
         if (it != TierByName.end()) {
             Y_ABORT_UNLESS(!name.empty());
-            return it->second->GetCompression();
+            return it->second->GetSerializer();
         }
         return {};
     }

@@ -50,6 +50,9 @@ public:
         auto& record = ev->Record;
         record.SetPgWire(true);
         NKikimrKqp::TCreateSessionRequest& request = *record.MutableRequest();
+        if (ConnectionParams.count("application_name")) {
+            request.SetApplicationName(ConnectionParams["application_name"]);
+        }
         request.SetDatabase(database);
         BLOG_D("Sent CreateSessionRequest to kqpProxy " << ev->Record.ShortDebugString());
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release());

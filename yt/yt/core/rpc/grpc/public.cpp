@@ -24,6 +24,8 @@ const char* const AuthServiceTicketMetadataKey = "yt-auth-service-ticket";
 const char* const ErrorMetadataKey = "yt-error-bin";
 const char* const MessageBodySizeMetadataKey = "yt-message-body-size";
 const char* const ProtocolVersionMetadataKey = "yt-protocol-version";
+const char* const RequestCodecKey = "yt-request-codec";
+const char* const ResponseCodecKey = "yt-response-codec";
 
 const THashSet<TStringBuf>& GetNativeMetadataKeys()
 {
@@ -45,6 +47,8 @@ const THashSet<TStringBuf>& GetNativeMetadataKeys()
         ErrorMetadataKey,
         MessageBodySizeMetadataKey,
         ProtocolVersionMetadataKey,
+        RequestCodecKey,
+        ResponseCodecKey,
     };
     return result;
 }

@@ -62,7 +62,7 @@ namespace NPageCollection {
             LargeGlobId.MaterializeTo(vec);
 
             {
-                const auto &blobs = Meta.Blobs();
+                auto blobs = Meta.Blobs();
                 vec.insert(vec.end(), blobs.begin(), blobs.end());
             }
         }

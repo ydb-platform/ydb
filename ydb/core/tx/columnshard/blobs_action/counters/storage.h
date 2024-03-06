@@ -25,7 +25,6 @@ public:
 class TStorageCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
-    THashMap<TString, std::shared_ptr<TConsumerCounters>> ConsumerCounters;
 public:
     TStorageCounters(const TString& storageId);
 

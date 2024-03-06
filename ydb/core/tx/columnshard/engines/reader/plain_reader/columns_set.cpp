@@ -12,11 +12,8 @@ TString TColumnsSet::DebugString() const {
 }
 
 NKikimr::NOlap::NPlainReader::TColumnsSet TColumnsSet::operator-(const TColumnsSet& external) const {
-    if (external.IsEmpty()) {
+    if (external.IsEmpty() || IsEmpty()) {
         return *this;
-    }
-    if (IsEmpty()) {
-        return external;
     }
     TColumnsSet result = *this;
     for (auto&& i : external.ColumnIds) {

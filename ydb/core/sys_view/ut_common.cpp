@@ -32,7 +32,9 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, ui32 
 
     TVector<NKikimrKqp::TKqpSetting> kqpSettings;
 
-    Settings = new Tests::TServerSettings(mbusPort);
+    NKikimrProto::TAuthConfig authConfig;
+    authConfig.SetUseBuiltinDomain(true);
+    Settings = new Tests::TServerSettings(mbusPort, authConfig);
     Settings->SetDomainName("Root");
     Settings->SetNodeCount(staticNodes);
     Settings->SetDynamicNodeCount(dynamicNodes);

@@ -9,5 +9,5 @@ $src = select
 from Input as u
 assume order by key;
 
-select * from $src where key < "075" or key > "075" order by key, subkey;
+select * from $src where key < "075" or key > "075" order by key, subkey, value;
 

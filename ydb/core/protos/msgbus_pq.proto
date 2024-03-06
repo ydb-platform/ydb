@@ -169,6 +169,7 @@ message TPersQueuePartitionRequest {
 
     optional bool IsDirectWrite = 18 [default = false];
     optional uint64 PutUnitsSize = 19;
+    optional int64 InitialSeqNo = 26;
 }
 
 message TPersQueueMetaRequest {

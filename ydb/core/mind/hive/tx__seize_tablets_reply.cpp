@@ -24,7 +24,7 @@ public:
             TTabletId tabletId = protoTabletInfo.GetTabletID();
             std::pair<ui64, ui64> owner(protoTabletInfo.GetTabletOwner().GetOwner(), protoTabletInfo.GetTabletOwner().GetOwnerIdx());
             TLeaderTabletInfo& tablet = Self->GetTablet(tabletId);
-            tablet.Type = protoTabletInfo.GetTabletType();
+            tablet.SetType(protoTabletInfo.GetTabletType());
             tablet.NodeId = 0;
             tablet.Node = nullptr;
             tablet.BecomeStopped();

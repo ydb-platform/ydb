@@ -1,2 +1,3 @@
 --!syntax_pg
-select * from pg_catalog.pg_namespace order by oid;
+select nspname,oid,nspowner from pg_catalog.pg_namespace order by oid;
+

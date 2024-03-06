@@ -1,54 +1,40 @@
 #pragma once
 
-#include "datashard_impl.h"
-#include "datashard_locks.h"
-#include "datashard__engine_host.h"
+#include "key_validator.h"
 #include "datashard_user_db.h"
+#include "datashard_user_table.h"
 #include "operation.h"
 
 #include <ydb/core/tx/tx_processing.h>
+#include <ydb/core/tx/locks/locks.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/engine/minikql/minikql_engine_host_counters.h>
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
 namespace NKikimr {
 namespace NDataShard {
 
-
-class TValidatedWriteTx: TNonCopyable {
+class TValidatedWriteTx: TNonCopyable, public TValidatedTx {
 public:
     using TPtr = std::shared_ptr<TValidatedWriteTx>;
 
-    TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, ui64 globalTxId, TInstant receivedAt, const TRowVersion& readVersion, const TRowVersion& writeVersion, const NEvents::TDataEvents::TEvWrite::TPtr& ev);
+    TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant receivedAt, const NEvents::TDataEvents::TEvWrite& ev);
     ~TValidatedWriteTx();
+
+    EType GetType() const override { 
+        return EType::WriteTx; 
+    };
 
     static constexpr ui64 MaxReorderTxKeys() {
         return 100;
     }
 
-    const NEvents::TDataEvents::TEvWrite::TPtr& GetEv() const {
-        return Ev;
+    ui64 GetTxId() const override {
+        return GlobalTxId;
     }
 
-    const NKikimrDataEvents::TEvWrite& GetRecord() const {
-        return Ev->Get()->Record;
-    }
 
-    const NKikimrDataEvents::TEvWrite::TOperation& RecordOperation() const {
-        Y_ABORT_UNLESS(GetRecord().operations().size() == 1, "Only one operation is supported now");
-        Y_ABORT_UNLESS(GetRecord().operations(0).GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, "Only UPSERT operation is supported now");
-        return GetRecord().operations(0);
-    }
-
-    ui64 LockTxId() const {
-        return GetRecord().locktxid();
-    }
-    ui32 LockNodeId() const {
-        return GetRecord().locknodeid();
-    }
-    bool Immediate() const {
-        return GetRecord().txmode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE;
-    }
     bool NeedDiagnostics() const {
         return true;
     }
@@ -61,14 +47,11 @@ public:
     bool RequirePrepare() const {
         return ErrCode == NKikimrTxDataShard::TError::SNAPSHOT_NOT_READY_YET;
     }
-    bool RequireWrites() const {
-        return TxInfo().HasWrites() || !Immediate();
-    }
     bool HasWrites() const {
         return TxInfo().HasWrites();
     }
     bool HasLockedWrites() const {
-        return HasWrites() && LockTxId();
+        return HasWrites() && LockTxId;
     }
     bool HasDynamicWrites() const {
         return TxInfo().DynKeysCount != 0;
@@ -81,71 +64,24 @@ public:
         return KeyValidator;
     }
 
-    TDataShardUserDb& GetUserDb() {
-        return UserDb;
-    }
-
-    const TDataShardUserDb& GetUserDb() const {
-        return UserDb;
-    }
-
     bool CanCancel();
     bool CheckCancelled();
 
-    void SetWriteVersion(TRowVersion writeVersion) {
-        UserDb.SetWriteVersion(writeVersion);
-    }
-    void SetReadVersion(TRowVersion readVersion) {
-        UserDb.SetReadVersion(readVersion);
-    }
+    ui32 ExtractKeys(const NTable::TScheme& scheme, bool allowErrors);
+    bool ReValidateKeys(const NTable::TScheme& scheme);
 
-    void SetVolatileTxId(ui64 txId) {
-        UserDb.SetVolatileTxId(txId);
+    ui64 HasOperations() const {
+        return Matrix.GetRowCount() != 0;
     }
-
-    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion) {
-        UserDb.CommitChanges(tableId, lockId, writeVersion);
-    }
-
-    TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const {
-        return UserDb.GetCollectedChanges();
-    }
-    void ResetCollectedChanges() {
-        UserDb.ResetCollectedChanges();
-    }
-
-    TVector<ui64> GetVolatileCommitTxIds() const {
-        return UserDb.GetVolatileCommitTxIds();
-    }
-    const absl::flat_hash_set<ui64>& GetVolatileDependencies() const {
-        return UserDb.GetVolatileDependencies();
-    }
-    std::optional<ui64> GetVolatileChangeGroup() {
-        return UserDb.GetChangeGroup();
-    }
-    bool GetVolatileCommitOrdered() const {
-        return UserDb.GetVolatileCommitOrdered();
-    }
-
-    bool IsProposed() const {
-        return Source != TActorId();
-    }
-
-    inline const ::NKikimrDataEvents::TKqpLocks& GetKqpLocks() const {
-        return GetRecord().locks();
-    }
-
-    bool ParseRecord(const TDataShard::TTableInfos& tableInfos);
-    void SetTxKeys(const ::google::protobuf::RepeatedField<::NProtoBuf::uint32>& columnIds);
-
-    ui32 ExtractKeys(bool allowErrors);
-    bool ReValidateKeys();
-
     ui32 KeysCount() const {
         return TxInfo().WritesCount;
     }
 
     void ReleaseTxData();
+
+    ui64 GetMemoryConsumption() const override {
+        return GetTxSize();
+    }
 
     bool IsTxInfoLoaded() const {
         return TxInfo().Loaded;
@@ -163,70 +99,69 @@ public:
     }
 
 private:
-    const NEvents::TDataEvents::TEvWrite::TPtr& Ev;
-    TDataShardUserDb UserDb;
+    bool ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos);
+    void SetTxKeys(const TUserTable& tableInfo);
+    TVector<TKeyValidator::TColumnWriteMeta> GetColumnWrites() const;
+
+    void ComputeTxSize();
+
+private:
     TKeyValidator KeyValidator;
-    NMiniKQL::TEngineHostCounters EngineHostCounters;
 
     const ui64 TabletId;
-    const TActorContext& Ctx;
+    const bool IsImmediate;
 
-    YDB_ACCESSOR_DEF(TActorId, Source);
+    YDB_READONLY_DEF(ui64, LockTxId);
+    YDB_READONLY_DEF(ui32, LockNodeId);
 
+    YDB_READONLY_DEF(ui64, GlobalTxId);
     YDB_READONLY_DEF(TTableId, TableId);
+    YDB_READONLY_DEF(std::optional<NKikimrDataEvents::TKqpLocks>, KqpLocks);
+    YDB_READONLY_DEF(NKikimrDataEvents::TEvWrite::TOperation::EOperationType, OperationType);
+    YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
     YDB_READONLY_DEF(TInstant, ReceivedAt);
+    YDB_READONLY_DEF(std::optional<ui64>, OverloadSubscribe);
 
     YDB_READONLY_DEF(ui64, TxSize);
 
     YDB_READONLY_DEF(NKikimrTxDataShard::TError::EKind, ErrCode);
     YDB_READONLY_DEF(TString, ErrStr);
     YDB_READONLY_DEF(bool, IsReleased);
-
-    const TUserTable* TableInfo;
-private:
-    void ComputeTxSize();
 };
 
 class TWriteOperation : public TOperation {
-    friend class TWriteUnit;
+    friend class TExecuteWriteUnit;
 public:
-    static TWriteOperation* CastWriteOperation(TOperation::TPtr op);
-    
-    explicit TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr ev, TDataShard* self, TTransactionContext& txc, const TActorContext& ctx);
+    using TPtr = TIntrusivePtr<TWriteOperation>;
 
+    static TWriteOperation* CastWriteOperation(TOperation::TPtr op);
+    static TWriteOperation* TryCastWriteOperation(TOperation::TPtr op);
+
+    explicit TWriteOperation(const TBasicOpInfo& op, ui64 tabletId);
+    explicit TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr&& ev, TDataShard* self);
     ~TWriteOperation();
 
     void FillTxData(TValidatedWriteTx::TPtr dataTx);
-    void FillTxData(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TActorId& target, NEvents::TDataEvents::TEvWrite::TPtr&& ev, const TVector<TSysTables::TLocksTable::TLock>& locks, ui64 artifactFlags);
-    void FillVolatileTxData(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx);
+    void FillTxData(TDataShard* self, const TActorId& target, const TString& txBody, const TVector<TSysTables::TLocksTable::TLock>& locks, ui64 artifactFlags);
+    void FillVolatileTxData(TDataShard* self);
 
-    const NEvents::TDataEvents::TEvWrite::TPtr& GetEv() const {
-        return Ev;
-    }
-    void SetEv(const NEvents::TDataEvents::TEvWrite::TPtr& ev) {
-        UntrackMemory();
-        Ev = ev;
-        TrackMemory();
-    }
-    void ClearEv() {
-        UntrackMemory();
-        Ev.Reset();
-        TrackMemory();
-    }
+    TString GetTxBody() const;
+    void SetTxBody(const TString& txBody);
+    void ClearTxBody();
 
     void Deactivate() override {
-        ClearEv();
+        ClearTxBody();
 
         TOperation::Deactivate();
     }
 
-    ui32 ExtractKeys() {
-        return WriteTx ? WriteTx->ExtractKeys(false) : 0;
+    ui32 ExtractKeys(const NTable::TScheme& scheme) {
+        return WriteTx ? WriteTx->ExtractKeys(scheme, false) : 0;
     }
 
-    bool ReValidateKeys() {
-        return WriteTx ? WriteTx->ReValidateKeys() : true;
+    bool ReValidateKeys(const NTable::TScheme& scheme) {
+        return WriteTx ? WriteTx->ReValidateKeys(scheme) : true;
     }
 
     void MarkAsUsingSnapshot() {
@@ -270,9 +205,8 @@ public:
         return requiredMem;
     }
 
-    void ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase& provider, const TActorContext& ctx);
-    ERestoreDataStatus RestoreTxData(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx);
-    void FinalizeWriteTxPlan();
+    void ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase& provider);
+    ERestoreDataStatus RestoreTxData(TDataShard* self, NTable::TDatabase& db);
 
     // TOperation iface.
     void BuildExecutionPlan(bool loaded) override;
@@ -292,11 +226,11 @@ public:
     }
 
     ui64 LockTxId() const override {
-        return WriteTx ? WriteTx->LockTxId() : 0;
+        return WriteTx ? WriteTx->GetLockTxId() : 0;
     }
 
     ui32 LockNodeId() const override {
-        return WriteTx ? WriteTx->LockNodeId() : 0;
+        return WriteTx ? WriteTx->GetLockNodeId() : 0;
     }
 
     bool HasLockedWrites() const override {
@@ -313,14 +247,10 @@ public:
     TValidatedWriteTx::TPtr& GetWriteTx() {
         return WriteTx;
     }
-    TValidatedWriteTx::TPtr BuildWriteTx(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx);
+    TValidatedWriteTx::TPtr BuildWriteTx(TDataShard* self);
 
     void ClearWriteTx() { 
         WriteTx = nullptr; 
-    }
-
-    const NKikimrDataEvents::TEvWrite& GetRecord() const {
-        return Ev->Get()->Record;
     }
 
     const std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& GetWriteResult() const {
@@ -333,18 +263,20 @@ public:
     void SetError(const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg);
     void SetWriteResult(std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>&& writeResult);
 
+    bool OnStopping(TDataShard& self, const TActorContext& ctx) override;
 private:
     void TrackMemory() const;
     void UntrackMemory() const;
 
 private:
-    NEvents::TDataEvents::TEvWrite::TPtr Ev;
-    TValidatedWriteTx::TPtr WriteTx;
+    std::unique_ptr<NEvents::TDataEvents::TEvWrite> WriteRequest;
     std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> WriteResult;
 
-    const ui64 TabletId;
-    const TActorContext& Ctx;
+    TValidatedWriteTx::TPtr WriteTx;
 
+    const ui64 TabletId;
+
+    YDB_READONLY_DEF(TActorId, Recipient);
     YDB_READONLY_DEF(ui64, ArtifactFlags);
     YDB_ACCESSOR_DEF(ui64, TxCacheUsage);
     YDB_ACCESSOR_DEF(ui64, ReleasedTxDataSize);

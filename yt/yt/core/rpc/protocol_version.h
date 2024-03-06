@@ -13,11 +13,10 @@ struct TProtocolVersion
     int Major;
     int Minor;
 
+    bool operator==(const TProtocolVersion& other) const = default;
+
     static TProtocolVersion FromString(TStringBuf protocolVersionString);
 };
-
-bool operator == (const TProtocolVersion& lhs, const TProtocolVersion& rhs);
-bool operator != (const TProtocolVersion& lhs, const TProtocolVersion& rhs);
 
 void FormatValue(TStringBuilderBase* builder, TProtocolVersion version, TStringBuf spec);
 TString ToString(TProtocolVersion protocolVersion);

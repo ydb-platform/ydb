@@ -15,6 +15,7 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 
 import ydb.tests.fq.s3.s3_helpers as s3_helpers
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
+from google.protobuf import struct_pb2
 
 
 class TestS3(TestYdsBase):
@@ -309,6 +310,7 @@ Pear;15;33'''
         ("timestamp/simple_iso/test.csv", "csv_with_names"),
         ("timestamp/simple_iso/test.tsv", "tsv_with_names"),
         ("timestamp/simple_iso/test.json", "json_each_row"),
+        ("timestamp/simple_iso/test.parquet", "parquet")
     ])
     def test_timestamp_simple_iso(self, kikimr, s3, client, filename, type_format):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
@@ -332,7 +334,8 @@ Pear;15;33'''
     @pytest.mark.parametrize("filename, type_format", [
         ("timestamp/simple_iso/test.csv", "csv_with_names"),
         ("timestamp/simple_iso/test.tsv", "tsv_with_names"),
-        ("timestamp/simple_iso/test.json", "json_each_row")
+        ("timestamp/simple_iso/test.json", "json_each_row"),
+        ("timestamp/simple_iso/test.parquet", "parquet")
     ])
     def test_timestamp_simple_iso_insert(self, kikimr, s3, client, filename, type_format):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
@@ -357,6 +360,7 @@ Pear;15;33'''
         ("common/simple_posix/test.csv", "csv_with_names"),
         ("common/simple_posix/test.tsv", "tsv_with_names"),
         ("common/simple_posix/test.json", "json_each_row"),
+        ("common/simple_posix/test.parquet", "parquet")
     ])
     def test_timestamp_simple_posix(self, kikimr, s3, client, filename, type_format):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
@@ -381,6 +385,7 @@ Pear;15;33'''
         ("common/simple_posix/test.csv", "csv_with_names"),
         ("common/simple_posix/test.tsv", "tsv_with_names"),
         ("common/simple_posix/test.json", "json_each_row"),
+        ("common/simple_posix/test.parquet", "parquet")
     ])
     def test_timestamp_simple_posix_insert(self, kikimr, s3, client, filename, type_format):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
@@ -404,7 +409,8 @@ Pear;15;33'''
     @pytest.mark.parametrize("filename, type_format", [
         ("date_time/simple_iso/test.csv", "csv_with_names"),
         ("date_time/simple_iso/test.tsv", "tsv_with_names"),
-        ("date_time/simple_iso/test.json", "json_each_row")
+        ("date_time/simple_iso/test.json", "json_each_row"),
+        ("date_time/simple_iso/test.parquet", "parquet")
     ])
     def test_date_time_simple_iso(self, kikimr, s3, client, filename, type_format):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
@@ -428,7 +434,8 @@ Pear;15;33'''
     @pytest.mark.parametrize("filename, type_format", [
         ("date_time/simple_iso/test.csv", "csv_with_names"),
         ("date_time/simple_iso/test.tsv", "tsv_with_names"),
-        ("date_time/simple_iso/test.json", "json_each_row")
+        ("date_time/simple_iso/test.json", "json_each_row"),
+        ("date_time/simple_iso/test.parquet", "parquet")
     ])
     def test_date_time_simple_iso_insert(self, kikimr, s3, client, filename, type_format):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
@@ -452,7 +459,8 @@ Pear;15;33'''
     @pytest.mark.parametrize("filename, type_format", [
         ("common/simple_posix/test.csv", "csv_with_names"),
         ("common/simple_posix/test.tsv", "tsv_with_names"),
-        ("common/simple_posix/test.json", "json_each_row")
+        ("common/simple_posix/test.json", "json_each_row"),
+        ("common/simple_posix/test.parquet", "parquet")
     ])
     def test_date_time_simple_posix(self, kikimr, s3, client, filename, type_format):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
@@ -476,7 +484,8 @@ Pear;15;33'''
     @pytest.mark.parametrize("filename, type_format", [
         ("common/simple_posix/test.csv", "csv_with_names"),
         ("common/simple_posix/test.tsv", "tsv_with_names"),
-        ("common/simple_posix/test.json", "json_each_row")
+        ("common/simple_posix/test.json", "json_each_row"),
+        ("common/simple_posix/test.parquet", "parquet")
     ])
     def test_date_time_simple_posix_insert(self, kikimr, s3, client, filename, type_format):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
@@ -501,7 +510,8 @@ Pear;15;33'''
     @pytest.mark.parametrize("filename, type_format", [
         ("timestamp/unix_time/test.csv", "csv_with_names"),
         ("timestamp/unix_time/test.tsv", "tsv_with_names"),
-        ("timestamp/unix_time/test.json", "json_each_row")
+        ("timestamp/unix_time/test.json", "json_each_row"),
+        ("timestamp/unix_time/test.parquet", "parquet")
     ])
     def test_timestamp_unix_time_insert(self, kikimr, s3, client, filename, type_format, timestamp_format):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
@@ -525,7 +535,8 @@ Pear;15;33'''
     @pytest.mark.parametrize("filename, type_format", [
         ("common/simple_format/test.csv", "csv_with_names"),
         ("common/simple_format/test.tsv", "tsv_with_names"),
-        ("common/simple_format/test.json", "json_each_row")
+        ("common/simple_format/test.json", "json_each_row"),
+        ("common/simple_format/test.parquet", "parquet")
     ])
     def test_timestamp_simple_format_insert(self, kikimr, s3, client, filename, type_format):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
@@ -549,7 +560,8 @@ Pear;15;33'''
     @pytest.mark.parametrize("filename, type_format", [
         ("common/simple_format/test.csv", "csv_with_names"),
         ("common/simple_format/test.tsv", "tsv_with_names"),
-        ("common/simple_format/test.json", "json_each_row")
+        ("common/simple_format/test.json", "json_each_row"),
+        ("common/simple_format/test.parquet", "parquet")
     ])
     def test_date_time_simple_format_insert(self, kikimr, s3, client, filename, type_format):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
@@ -753,3 +765,122 @@ Pear;15;33'''
         assert result_set.columns[3].type.type_id == ydb.Type.INT32
 
         assert len(result_set.rows) == 6
+
+    @yq_all
+    @pytest.mark.parametrize("filename", [
+        ("date_null/as_default/test.csv"),
+        ("date_null/parse_error/test.csv")
+    ])
+    def test_date_null(self, kikimr, s3, client, filename):
+        self.create_bucket_and_upload_file(filename, s3, kikimr)
+        client.create_storage_connection("hcpp", "fbucket")
+
+        sql = '''
+            SELECT
+                `put`
+            FROM
+                `hcpp`.`{name}`
+            WITH (FORMAT="csv_with_names",
+                csv_delimiter=",",
+                SCHEMA=(
+                `put` Date
+                ))
+            LIMIT 10;
+            '''.format(name="/" + filename)
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        assert data.result.result_set.rows[0].items[0].null_flag_value == struct_pb2.NULL_VALUE, str(data.result.result_set)
+
+    @yq_all
+    @pytest.mark.parametrize("filename", [
+        ("date_null/as_default/test.csv"),
+        ("date_null/parse_error/test.csv")
+    ])
+    def test_date_null_with_not_null_type(self, kikimr, s3, client, filename):
+        self.create_bucket_and_upload_file(filename, s3, kikimr)
+        client.create_storage_connection("hcpp", "fbucket")
+
+        sql = '''
+            SELECT
+                `put`
+            FROM
+                `hcpp`.`{name}`
+            WITH (FORMAT="csv_with_names",
+                csv_delimiter=",",
+                SCHEMA=(
+                `put` Date NOT NULL
+                ))
+            LIMIT 10;
+            '''.format(name="/" + filename)
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        describe_result = client.describe_query(query_id).result
+        issues = describe_result.query.issue[0].issues
+        assert "Invalid data format" in str(issues), str(describe_result)
+        assert "name: put, type: Date, ERROR: text " in str(issues), str(describe_result)
+        assert "is not like Date" in str(issues), str(describe_result)
+
+    @yq_all
+    @pytest.mark.parametrize("filename", [
+        ("date_null/as_default/multi_null.csv"),
+        ("date_null/parse_error/multi_null.csv")
+    ])
+    def test_date_null_multi(self, kikimr, s3, client, filename):
+        self.create_bucket_and_upload_file(filename, s3, kikimr)
+        client.create_storage_connection("hcpp", "fbucket")
+
+        sql = '''
+            SELECT
+                `put`, `a`, `t`
+            FROM
+                `hcpp`.`{name}`
+            WITH (FORMAT="csv_with_names",
+                csv_delimiter=",",
+                SCHEMA=(
+                `put` Date,
+                `a` Date,
+                `t` Date
+                ))
+            LIMIT 10;
+            '''.format(name="/" + filename)
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        assert data.result.result_set.rows[0].items[0].null_flag_value == struct_pb2.NULL_VALUE, str(data.result.result_set)
+        assert data.result.result_set.rows[0].items[1].null_flag_value == struct_pb2.NULL_VALUE, str(data.result.result_set)
+        assert data.result.result_set.rows[0].items[2].null_flag_value == struct_pb2.NULL_VALUE, str(data.result.result_set)
+
+    @yq_all
+    @pytest.mark.parametrize("filename", [
+        ("date_null/as_default/multi_null.csv"),
+        ("date_null/parse_error/multi_null.csv")
+    ])
+    def test_string_not_null_multi(self, kikimr, s3, client, filename):
+        self.create_bucket_and_upload_file(filename, s3, kikimr)
+        client.create_storage_connection("hcpp", "fbucket")
+
+        sql = '''
+            SELECT
+                `put`, `a`, `t`
+            FROM
+                `hcpp`.`{name}`
+            WITH (FORMAT="csv_with_names",
+                csv_delimiter=",",
+                SCHEMA=(
+                `put` String NOT NULL,
+                `a` Utf8 NOT NULL,
+                `t` String NOT NULL
+                ))
+            LIMIT 10;
+            '''.format(name="/" + filename)
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        assert data.result.result_set.rows[0].items[0].bytes_value == b"", str(data.result.result_set)
+        assert data.result.result_set.rows[0].items[1].bytes_value == b"", str(data.result.result_set)
+        assert data.result.result_set.rows[0].items[2].bytes_value == b"", str(data.result.result_set)

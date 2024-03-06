@@ -18,16 +18,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         BLOG_D("TTxGetMetrics::Execute");
-        switch (Self->BackendType) {
-            case EBackendType::Memory:
-                Self->MemoryBackend.GetMetrics(Event->Get()->Record, Result);
-                return true;
-            case EBackendType::Local:
-                return Self->LocalBackend.GetMetrics(txc, Event->Get()->Record, Result);
-            case EBackendType::External:
-                break;
-        }
-        return true;
+        return Self->LocalBackend.GetMetrics(txc, Event->Get()->Record, Result);
     }
 
     void Complete(const TActorContext& ctx) override {
@@ -38,7 +29,21 @@ public:
 };
 
 void TGraphShard::ExecuteTxGetMetrics(TEvGraph::TEvGetMetrics::TPtr ev) {
-    Execute(new TTxGetMetrics(this, ev));
+    switch (BackendType) {
+        case EBackendType::Memory: {
+            NKikimrGraph::TEvMetricsResult result;
+            MemoryBackend.GetMetrics(ev->Get()->Record, result);
+            BLOG_TRACE("GetMetrics returned " << result.TimeSize() << " points for request " << ev->Cookie);
+            Send(ev->Sender, new TEvGraph::TEvMetricsResult(std::move(result)), 0, ev->Cookie);
+            break;
+        }
+        case EBackendType::Local:
+            Execute(new TTxGetMetrics(this, ev));
+            break;
+        case EBackendType::External:
+            // TODO
+            break;
+    }
 }
 
 } // NGraph

@@ -1902,7 +1902,7 @@ check_functions_in_node(Node *node, check_function_callback checker,
 
 bool
 expression_tree_walker(Node *node,
-					   bool (*walker) (),
+					   bool (*walker) (void*, void*),
 					   void *context)
 {
 	ListCell   *temp;
@@ -2353,7 +2353,7 @@ expression_tree_walker(Node *node,
  */
 bool
 query_tree_walker(Query *query,
-				  bool (*walker) (),
+				  bool (*walker) (void*, void*),
 				  void *context,
 				  int flags)
 {
@@ -2473,7 +2473,7 @@ range_table_walker(List *rtable,
  */
 bool
 range_table_entry_walker(RangeTblEntry *rte,
-						 bool (*walker) (),
+						 bool (*walker) (void*, void*),
 						 void *context,
 						 int flags)
 {
@@ -2596,7 +2596,7 @@ range_table_entry_walker(RangeTblEntry *rte,
 
 Node *
 expression_tree_mutator(Node *node,
-						Node *(*mutator) (),
+						Node *(*mutator) (void*, void*),
 						void *context)
 {
 	/*
@@ -3298,7 +3298,7 @@ expression_tree_mutator(Node *node,
  */
 Query *
 query_tree_mutator(Query *query,
-				   Node *(*mutator) (),
+				   Node *(*mutator) (void*, void*),
 				   void *context,
 				   int flags)
 {
@@ -3387,7 +3387,7 @@ query_tree_mutator(Query *query,
  */
 List *
 range_table_mutator(List *rtable,
-					Node *(*mutator) (),
+					Node *(*mutator) (void*, void*),
 					void *context,
 					int flags)
 {
@@ -3459,7 +3459,7 @@ range_table_mutator(List *rtable,
  */
 bool
 query_or_expression_tree_walker(Node *node,
-								bool (*walker) (),
+								bool (*walker) (void*, void*),
 								void *context,
 								int flags)
 {
@@ -3482,7 +3482,7 @@ query_or_expression_tree_walker(Node *node,
  */
 Node *
 query_or_expression_tree_mutator(Node *node,
-								 Node *(*mutator) (),
+								 Node *(*mutator) (void*, void*),
 								 void *context,
 								 int flags)
 {
@@ -3513,7 +3513,7 @@ query_or_expression_tree_mutator(Node *node,
  */
 bool
 raw_expression_tree_walker(Node *node,
-						   bool (*walker) (),
+						   bool (*walker) (void*, void*),
 						   void *context)
 {
 	ListCell   *temp;
@@ -3991,7 +3991,7 @@ raw_expression_tree_walker(Node *node,
  */
 bool
 planstate_tree_walker(PlanState *planstate,
-					  bool (*walker) (),
+					  bool (*walker) (void*, void*),
 					  void *context)
 {
 	Plan	   *plan = planstate->plan;
@@ -4072,7 +4072,7 @@ planstate_tree_walker(PlanState *planstate,
  */
 static bool
 planstate_walk_subplans(List *plans,
-						bool (*walker) (),
+						bool (*walker) (void*, void*),
 						void *context)
 {
 	ListCell   *lc;
@@ -4094,7 +4094,7 @@ planstate_walk_subplans(List *plans,
  */
 static bool
 planstate_walk_members(PlanState **planstates, int nplans,
-					   bool (*walker) (), void *context)
+					   bool (*walker) (void*, void*), void *context)
 {
 	int			j;
 

@@ -77,7 +77,7 @@ void TPartitionStreamImpl<UseMigrationProtocol>::Commit(ui64 startOffset, ui64 e
             Commits.EraseInterval(0, endOffset); // Drop only committed ranges;
         }
         for (auto range: toCommit) {
-            sessionShared->Commit(this, range.first, range.second);
+            sessionShared->Commit(this, range.first, Min(range.second, endOffset));
         }
     }
 }
@@ -224,6 +224,14 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDe
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TSingleClusterReadSessionImpl
+
+template<bool UseMigrationProtocol>
+TSingleClusterReadSessionImpl<UseMigrationProtocol>::~TSingleClusterReadSessionImpl() {
+    for (auto&& [_, partitionStream] : PartitionStreams) {
+        partitionStream->ClearQueue();
+    }
+}
+
 
 template<bool UseMigrationProtocol>
 TStringBuilder TSingleClusterReadSessionImpl<UseMigrationProtocol>::GetLogPrefix() const {
@@ -1057,6 +1065,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
         PartitionStreams[partitionStream->GetAssignId()];
     if (currentPartitionStream) {
         CookieMapping.RemoveMapping(currentPartitionStream->GetPartitionStreamId());
+
         bool pushRes = EventsQueue->PushEvent(
             currentPartitionStream,
              TReadSessionEvent::TPartitionStreamClosedEvent(

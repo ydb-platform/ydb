@@ -83,6 +83,7 @@ message TChannel {
     bool InMemory = 8;
     ECheckpointingMode CheckpointingMode = 9;
     EWatermarksMode WatermarksMode = 10;
+    bool EnableSpilling = 13;
 }
 
 message TUnionAllInput {

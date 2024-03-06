@@ -276,6 +276,8 @@ NSsa::TAssign TProgramBuilder::MakeConstant(const NSsa::TColumnInfo& name, const
             return TAssign(name, constant.GetFloat());
         case TId::kDouble:
             return TAssign(name, constant.GetDouble());
+        case TId::kTimestamp:
+            return TAssign::MakeTimestamp(name, constant.GetTimestamp());
         case TId::kBytes:
         {
             TString str = constant.GetBytes();

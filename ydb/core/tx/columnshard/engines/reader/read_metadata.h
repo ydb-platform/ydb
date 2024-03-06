@@ -80,6 +80,14 @@ private:
     const ESorting Sorting = ESorting::ASC; // Sorting inside returned batches
     std::optional<TPKRangesFilter> PKRangesFilter;
     TProgramContainer Program;
+    const TVersionedIndex* IndexVersionsPointer;
+    TSnapshot RequestSnapshot;
+protected:
+    std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
+    const TVersionedIndex& GetIndexVersions() const {
+        AFL_VERIFY(IndexVersionsPointer);
+        return *IndexVersionsPointer;
+    }
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadataBase>;
 
@@ -94,9 +102,37 @@ public:
         return *PKRangesFilter;
     }
 
-    TReadMetadataBase(const ESorting sorting, const TProgramContainer& ssaProgram)
+    ISnapshotSchema::TPtr GetSnapshotSchema(const TSnapshot& version) const {
+        if (version >= RequestSnapshot) {
+            return ResultIndexSchema;
+        }
+        return GetIndexVersions().GetSchema(version);
+    }
+
+    ISnapshotSchema::TPtr GetLoadSchema(const std::optional<TSnapshot>& version = {}) const {
+        if (!version) {
+            return ResultIndexSchema;
+        }
+        return GetIndexVersions().GetSchema(*version);
+    }
+
+    std::shared_ptr<arrow::Schema> GetBlobSchema(const ui64 version) const {
+        return GetIndexVersions().GetSchema(version)->GetIndexInfo().ArrowSchema();
+    }
+
+    const TIndexInfo& GetIndexInfo(const std::optional<TSnapshot>& version = {}) const {
+        if (version && version < RequestSnapshot) {
+            return GetIndexVersions().GetSchema(*version)->GetIndexInfo();
+        }
+        return ResultIndexSchema->GetIndexInfo();
+    }
+
+    TReadMetadataBase(const TVersionedIndex* index, const ESorting sorting, const TProgramContainer& ssaProgram, const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot)
         : Sorting(sorting)
         , Program(ssaProgram)
+        , IndexVersionsPointer(index)
+        , RequestSnapshot(requestSnapshot)
+        , ResultIndexSchema(schema)
     {
     }
     virtual ~TReadMetadataBase() = default;
@@ -108,12 +144,19 @@ public:
             << " " << Sorting << " sorted";
     }
 
+    std::set<ui32> GetProcessingColumnIds() const {
+        std::set<ui32> result;
+        for (auto&& i : GetProgram().GetProcessingColumns()) {
+            result.emplace(ResultIndexSchema->GetIndexInfo().GetColumnId(i));
+        }
+        return result;
+    }
     bool IsAscSorted() const { return Sorting == ESorting::ASC; }
     bool IsDescSorted() const { return Sorting == ESorting::DESC; }
     bool IsSorted() const { return IsAscSorted() || IsDescSorted(); }
 
-    virtual std::vector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const = 0;
     virtual std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const std::shared_ptr<NOlap::TReadContext>& readContext) const = 0;
+    virtual std::vector<TNameTypeInfo> GetKeyYqlSchema() const = 0;
 
     // TODO:  can this only be done for base class?
     friend IOutputStream& operator << (IOutputStream& out, const TReadMetadataBase& meta) {
@@ -124,15 +167,42 @@ public:
     const TProgramContainer& GetProgram() const {
         return Program;
     }
+
+    const TSnapshot& GetRequestSnapshot() const {
+        return RequestSnapshot;
+    }
+
+    std::shared_ptr<arrow::Schema> GetReplaceKey() const {
+        return ResultIndexSchema->GetIndexInfo().GetReplaceKey();
+    }
+
+    std::optional<std::string> GetColumnNameDef(const ui32 columnId) const {
+        if (!ResultIndexSchema) {
+            return {};
+        }
+        auto f = ResultIndexSchema->GetFieldByColumnIdOptional(columnId);
+        if (!f) {
+            return {};
+        }
+        return f->name();
+    }
+
+    std::optional<std::string> GetEntityName(const ui32 entityId) const {
+        if (!ResultIndexSchema) {
+            return {};
+        }
+        auto result = ResultIndexSchema->GetIndexInfo().GetColumnNameOptional(entityId);
+        if (!!result) {
+            return result;
+        }
+        return ResultIndexSchema->GetIndexInfo().GetIndexNameOptional(entityId);
+    }
+
 };
 
 // Holds all metadata that is needed to perform read/scan
 struct TReadMetadata : public TReadMetadataBase, public std::enable_shared_from_this<TReadMetadata> {
     using TBase = TReadMetadataBase;
-private:
-    TVersionedIndex IndexVersions;
-    TSnapshot Snapshot;
-    std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
 
@@ -143,60 +213,25 @@ public:
         return GetProgram().HasProcessingColumnIds();
     }
 
-    std::set<ui32> GetProcessingColumnIds() const {
-        std::set<ui32> result;
-        for (auto&& i : GetProgram().GetProcessingColumns()) {
-            result.emplace(ResultIndexSchema->GetIndexInfo().GetColumnId(i));
-        }
-        return result;
-    }
     std::shared_ptr<TSelectInfo> SelectInfo;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     std::vector<TCommittedBlob> CommittedBlobs;
     std::shared_ptr<TReadStats> ReadStats;
 
-    const TSnapshot& GetSnapshot() const {
-        return Snapshot;
-    }
-
     TReadMetadata(const TVersionedIndex& info, const TSnapshot& snapshot, const ESorting sorting, const TProgramContainer& ssaProgram)
-        : TBase(sorting, ssaProgram)
-        , IndexVersions(info)
-        , Snapshot(snapshot)
-        , ResultIndexSchema(info.GetSchema(Snapshot))
+        : TBase(&info, sorting, ssaProgram, info.GetSchema(snapshot), snapshot)
         , ReadStats(std::make_shared<TReadStats>())
     {
     }
 
+    virtual std::vector<TNameTypeInfo> GetKeyYqlSchema() const override {
+        return GetLoadSchema()->GetIndexInfo().GetPrimaryKeyColumns();
+    }
+
     bool Init(const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor, std::string& error);
 
-    ISnapshotSchema::TPtr GetSnapshotSchema(const TSnapshot& version) const {
-        if (version >= Snapshot){
-            return ResultIndexSchema;
-        }
-        return IndexVersions.GetSchema(version);
-    }
-
-    ISnapshotSchema::TPtr GetLoadSchema(const std::optional<TSnapshot>& version = {}) const {
-        if (!version) {
-            return ResultIndexSchema;
-        }
-        return IndexVersions.GetSchema(*version);
-    }
-
-    std::shared_ptr<arrow::Schema> GetBlobSchema(const ui64 version) const {
-        return IndexVersions.GetSchema(version)->GetIndexInfo().ArrowSchema();
-    }
-
-    const TIndexInfo& GetIndexInfo(const std::optional<TSnapshot>& version = {}) const {
-        if (version && version < Snapshot) {
-            return IndexVersions.GetSchema(*version)->GetIndexInfo();
-        }
-        return ResultIndexSchema->GetIndexInfo();
-    }
-
     std::vector<std::string> GetColumnsOrder() const {
-        auto loadSchema = GetLoadSchema(Snapshot);
+        auto loadSchema = GetLoadSchema(GetRequestSnapshot());
         std::vector<std::string> result;
         for (auto&& i : loadSchema->GetSchema()->fields()) {
             result.emplace_back(i->name());
@@ -210,14 +245,6 @@ public:
     bool Empty() const {
         Y_ABORT_UNLESS(SelectInfo);
         return SelectInfo->PortionsOrderedPK.empty() && CommittedBlobs.empty();
-    }
-
-    std::shared_ptr<arrow::Schema> GetReplaceKey() const {
-        return ResultIndexSchema->GetIndexInfo().GetReplaceKey();
-    }
-
-    std::vector<TNameTypeInfo> GetKeyYqlSchema() const override {
-        return ResultIndexSchema->GetIndexInfo().GetPrimaryKeyColumns();
     }
 
     size_t NumIndexedChunks() const {
@@ -237,7 +264,7 @@ public:
             << " index blobs: " << NumIndexedBlobs()
             << " committed blobs: " << CommittedBlobs.size()
       //      << " with program steps: " << (Program ? Program->Steps.size() : 0)
-            << " at snapshot: " << Snapshot.GetPlanStep() << ":" << Snapshot.GetTxId();
+            << " at snapshot: " << GetRequestSnapshot().DebugString();
         TBase::Dump(out);
         if (SelectInfo) {
             out << ", " << *SelectInfo;
@@ -253,8 +280,6 @@ public:
 struct TReadStatsMetadata : public TReadMetadataBase, public std::enable_shared_from_this<TReadStatsMetadata> {
 private:
     using TBase = TReadMetadataBase;
-    TSnapshot RequestSnapshot;
-    std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
 public:
     using TConstPtr = std::shared_ptr<const TReadStatsMetadata>;
 
@@ -263,28 +288,13 @@ public:
     std::vector<ui32> ResultColumnIds;
     std::deque<std::shared_ptr<NOlap::TPortionInfo>> IndexPortions;
 
-    const TSnapshot& GetRequestSnapshot() const { return RequestSnapshot; }
-
-    std::optional<std::string> GetColumnNameDef(const ui32 columnId) const { 
-        if (!ResultIndexSchema) {
-            return {};
-        }
-        auto f = ResultIndexSchema->GetFieldByColumnIdOptional(columnId);
-        if (!f) {
-            return {};
-        }
-        return f->name();
-    }
-
-    explicit TReadStatsMetadata(ui64 tabletId, const ESorting sorting, const TProgramContainer& ssaProgram, const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot)
-        : TBase(sorting, ssaProgram)
-        , RequestSnapshot(requestSnapshot)
-        , ResultIndexSchema(schema)
+    explicit TReadStatsMetadata(const TVersionedIndex* info, ui64 tabletId, const ESorting sorting, const TProgramContainer& ssaProgram, const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot)
+        : TBase(info, sorting, ssaProgram, schema, requestSnapshot)
         , TabletId(tabletId)
     {
     }
 
-    std::vector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const override;
+    virtual std::vector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const override;
 
     std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const std::shared_ptr<NOlap::TReadContext>& readContext) const override;
 };

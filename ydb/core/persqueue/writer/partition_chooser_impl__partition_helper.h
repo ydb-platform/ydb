@@ -47,8 +47,11 @@ public:
         NTabletPipe::SendData(ctx, Pipe, ev.Release());
     }
 
-    void SendCheckPartitionStatusRequest(ui32 partitionId, const TActorContext& ctx) {
+    void SendCheckPartitionStatusRequest(ui32 partitionId, const TString& sourceId, const TActorContext& ctx) {
         auto ev = MakeHolder<NKikimr::TEvPQ::TEvCheckPartitionStatusRequest>(partitionId);
+        if (sourceId) {
+            ev->Record.SetSourceId(sourceId);
+        }
 
         NTabletPipe::SendData(ctx, Pipe, ev.Release());
     }

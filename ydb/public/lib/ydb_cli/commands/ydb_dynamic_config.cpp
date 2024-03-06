@@ -61,11 +61,18 @@ int TCommandConfigFetch::Run(TConfig& config) {
 
     auto cfg = result.GetConfig();
 
-    auto metadata = NYamlConfig::GetMetadata(cfg);
-    ui64 version = metadata.Version.value();
+    ui64 version = 0;
 
-    if (StripMetadata) {
-        cfg = NYamlConfig::StripMetadata(cfg);
+    if (cfg) {
+        auto metadata = NYamlConfig::GetMetadata(cfg);
+        version = metadata.Version.value();
+
+        if (StripMetadata) {
+            cfg = NYamlConfig::StripMetadata(cfg);
+        }
+    } else {
+        Cerr << "YAML config is absent on this cluster." << Endl;
+        return EXIT_FAILURE;
     }
 
     if (!OutDir) {

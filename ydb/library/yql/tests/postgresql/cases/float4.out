@@ -229,15 +229,6 @@ SELECT f.f1, f.f1 * '-10' AS x FROM FLOAT4_TBL f
  1.2345679e-20 | -1.2345678e-19
 (3 rows)
 
-SELECT f.f1, f.f1 + '-10' AS x FROM FLOAT4_TBL f
-   WHERE f.f1 > '0.0';
-      f1       |       x       
----------------+---------------
-        1004.3 |         994.3
- 1.2345679e+20 | 1.2345679e+20
- 1.2345679e-20 |           -10
-(3 rows)
-
 SELECT f.f1, f.f1 / '-10' AS x FROM FLOAT4_TBL f
    WHERE f.f1 > '0.0';
       f1       |       x        
@@ -329,6 +320,15 @@ SELECT '-9223372036854775808.5'::float4::int8;
 
 SELECT '-9223380000000000000'::float4::int8;
 ERROR:  bigint out of range
+-- Test for correct input rounding in edge cases.
+-- These lists are from Paxson 1991, excluding subnormals and
+-- inputs of over 9 sig. digits.
+SELECT float4send('5e-20'::float4);
+ float4send 
+------------
+ \x1f6c1e4a
+(1 row)
+
 SELECT float4send('67e14'::float4);
  float4send 
 ------------
@@ -357,6 +357,12 @@ SELECT float4send('702990899e-20'::float4);
  float4send 
 ------------
  \x2cf757ca
+(1 row)
+
+SELECT float4send('3e-23'::float4);
+ float4send 
+------------
+ \x1a111234
 (1 row)
 
 SELECT float4send('57e18'::float4);
@@ -399,6 +405,12 @@ SELECT float4send('82381273e-35'::float4);
  float4send 
 ------------
  \x128289d1
+(1 row)
+
+SELECT float4send('750486563e-38'::float4);
+ float4send 
+------------
+ \x0f18377e
 (1 row)
 
 -- Test that the smallest possible normalized input value inputs

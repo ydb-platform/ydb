@@ -6,7 +6,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
-#include <ydb/core/tx/datashard/sys_tables.h>
+#include <ydb/core/tx/locks/sys_tables.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
@@ -1048,6 +1048,23 @@ NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeInfo type) {
         }
         case NYql::NProto::TypeIds::Interval: {
             NUdf::TDataType<NUdf::TInterval>::TLayout v = cell.AsValue<i64>();
+            return NUdf::TUnboxedValuePod(v);
+        }
+
+        case NYql::NProto::TypeIds::Date32: {
+            NUdf::TDataType<NUdf::TDate32>::TLayout v = cell.AsValue<i32>();
+            return NUdf::TUnboxedValuePod(v);
+        }
+        case NYql::NProto::TypeIds::Datetime64: {
+            NUdf::TDataType<NUdf::TDatetime64>::TLayout v = cell.AsValue<i64>();
+            return NUdf::TUnboxedValuePod(v);
+        }
+        case NYql::NProto::TypeIds::Timestamp64: {
+            NUdf::TDataType<NUdf::TTimestamp64>::TLayout v = cell.AsValue<i64>();
+            return NUdf::TUnboxedValuePod(v);
+        }
+        case NYql::NProto::TypeIds::Interval64: {
+            NUdf::TDataType<NUdf::TInterval64>::TLayout v = cell.AsValue<i64>();
             return NUdf::TUnboxedValuePod(v);
         }
 

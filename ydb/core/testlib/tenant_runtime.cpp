@@ -39,9 +39,9 @@ using namespace NSchemeShard;
 using namespace NConsole;
 using namespace NTenantSlotBroker;
 
-const ui64 SCHEME_SHARD1_ID = 0x0000000000840100;
-const ui64 SCHEME_SHARD2_ID = 0x0000000000840101;
-const ui64 HIVE_ID = 0x0000000000840102;
+const ui64 SCHEME_SHARD1_ID = MakeTabletID(false, 0x0000000000840100);
+const ui64 SCHEME_SHARD2_ID = MakeTabletID(false, 0x0000000000840101);
+const ui64 HIVE_ID = MakeTabletID(false, 0x0000000000840102);
 
 const TString DOMAIN1_NAME = "dc-1";
 const TString TENANT1_1_NAME = "/dc-1/users/tenant-1";
@@ -823,6 +823,9 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
     app.ClearDomainsAndHive();
 
     ui32 planResolution = 500;
+
+    Y_ABORT_UNLESS(Config.Domains.size() == 1);
+
     // Add domains info.
     for (ui32 i = 0; i < Config.Domains.size(); ++i) {
         auto &domain = Config.Domains[i];
@@ -837,12 +840,10 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         poolTypes["hdd-2"] = hddPool;
         poolTypes["hdd-3"] = hddPool;
         auto domainPtr = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(domain.Name, i, domain.SchemeShardId,
-                                                                i, i, TVector<ui32>{i},
-                                                                i, TVector<ui32>{i},
                                                                 planResolution,
-                                                                TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(i, 1)},
-                                                                TVector<ui64>{TDomainsInfo::MakeTxMediatorIDFixed(i, 1)},
-                                                                TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(i, 1)},
+                                                                TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(1)},
+                                                                TVector<ui64>{TDomainsInfo::MakeTxMediatorIDFixed(1)},
+                                                                TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(1)},
                                                                 poolTypes);
 
         TVector<ui64> ids = GetTxAllocatorTabletIds();
@@ -850,7 +851,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         SetTxAllocatorTabletIds(ids);
 
         app.AddDomain(domainPtr.Release());
-        app.AddHive(i, Config.HiveId);
+        app.AddHive(Config.HiveId);
     }
 
     for (size_t i = 0; i< Config.Nodes.size(); ++i) {
@@ -865,8 +866,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         Register(NTabletMonitoringProxy::CreateTabletMonitoringProxy());
     }
 
-    for (auto &pr : GetAppData().DomainsInfo->Domains) {
-        auto &domain = pr.second;
+    if (const auto& domain = GetAppData().DomainsInfo->Domain) {
         for (auto id : domain->TxAllocators) {
             auto aid = CreateTestBootstrapper(*this, CreateTestTabletInfo(id, TTabletTypes::TxAllocator), &CreateTxAllocator);
             EnableScheduleForActor(aid, true);
@@ -977,7 +977,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 
     // Create BS Controller.
     {
-        auto info = CreateTestTabletInfo(MakeBSControllerID(0), TTabletTypes::BSController);
+        auto info = CreateTestTabletInfo(MakeBSControllerID(), TTabletTypes::BSController);
         TActorId actorId = CreateTestBootstrapper(*this, info, [](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* {
                 //return new TFakeBSController(tablet, info);
                 return CreateFlatBsController(tablet, info);
@@ -1007,7 +1007,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-        SendToPipe(MakeBSControllerID(0), Sender, request.Release(), 0, pipeConfig);
+        SendToPipe(MakeBSControllerID(), Sender, request.Release(), 0, pipeConfig);
 
         auto reply2 = GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(reply2->Record.GetResponse().GetSuccess(), true);
@@ -1034,7 +1034,12 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
                 labels[label.GetName()] = label.GetValue();
             }
             labels.emplace("node_id", ToString(i));
-            auto aid = Register(CreateConfigsDispatcher(Extension, labels));
+            auto aid = Register(CreateConfigsDispatcher(
+                    NKikimr::NConsole::TConfigsDispatcherInitInfo {
+                        .InitialConfig = Extension,
+                        .Labels = labels,
+                    }
+                ));
             EnableScheduleForActor(aid, true);
             RegisterService(MakeConfigsDispatcherID(GetNodeId(0)), aid, 0);
         }
@@ -1052,7 +1057,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 
     // Create Console
     {
-        auto info = CreateTestTabletInfo(MakeConsoleID(0), TTabletTypes::Console, TErasureType::ErasureNone);
+        auto info = CreateTestTabletInfo(MakeConsoleID(), TTabletTypes::Console, TErasureType::ErasureNone);
         TActorId actorId = CreateTestBootstrapper(*this, info, [](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* {
                 return CreateConsole(tablet, info);
             });
@@ -1119,7 +1124,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 
     // Create Tenant Slot Broker
     {
-        auto info = CreateTestTabletInfo(MakeTenantSlotBrokerID(0), TTabletTypes::TenantSlotBroker, TErasureType::ErasureNone);
+        auto info = CreateTestTabletInfo(MakeTenantSlotBrokerID(), TTabletTypes::TenantSlotBroker, TErasureType::ErasureNone);
         TActorId actorId = CreateTestBootstrapper(*this, info, [&config=this->Config](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* {
                 if (config.FakeTenantSlotBroker)
                     return new TFakeTenantSlotBroker(tablet, info);
@@ -1157,12 +1162,12 @@ void TTenantTestRuntime::WaitForHiveState(const TVector<TEvTest::TEvWaitHiveStat
 
 void TTenantTestRuntime::SendToBroker(IEventBase* event)
 {
-    SendToPipe(MakeTenantSlotBrokerID(0), Sender, event, 0, GetPipeConfigWithRetries());
+    SendToPipe(MakeTenantSlotBrokerID(), Sender, event, 0, GetPipeConfigWithRetries());
 }
 
 void TTenantTestRuntime::SendToConsole(IEventBase* event)
 {
-    SendToPipe(MakeConsoleID(0), Sender, event, 0, GetPipeConfigWithRetries());
+    SendToPipe(MakeConsoleID(), Sender, event, 0, GetPipeConfigWithRetries());
 }
 
 NKikimrTenantPool::TSlotStatus MakeSlotStatus(const TString &id, const TString &type, const TString &tenant,
@@ -1179,11 +1184,11 @@ NKikimrTenantPool::TSlotStatus MakeSlotStatus(const TString &id, const TString &
     return res;
 }
 
-void CheckTenantPoolStatus(TTenantTestRuntime &runtime, ui32 domain,
+void CheckTenantPoolStatus(TTenantTestRuntime &runtime,
                            THashMap<TString, NKikimrTenantPool::TSlotStatus> status,
                            ui32 nodeId)
 {
-    runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(nodeId), domain),
+    runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(nodeId)),
                                   runtime.Sender,
                                   new TEvTenantPool::TEvGetStatus));
     TAutoPtr<IEventHandle> handle;

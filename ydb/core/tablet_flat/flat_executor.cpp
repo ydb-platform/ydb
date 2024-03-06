@@ -4224,13 +4224,17 @@ TString TExecutor::CheckBorrowConsistency() {
             [&](const TIntrusiveConstPtr<NTable::TColdPart>& part) {
                 knownBundles.insert(part->Label);
             });
+        Database->EnumerateTableTxStatusParts(tableId,
+            [&](const TIntrusiveConstPtr<NTable::TTxStatusPart>& part) {
+                knownBundles.insert(part->Label);
+            });
     }
     return BorrowLogic->DebugCheckBorrowConsistency(knownBundles);
 }
 
 TTransactionWaitPad::TTransactionWaitPad(THolder<TSeat> seat)
     : Seat(std::move(seat))
-    , WaitingSpan(NWilson::TSpan(TWilsonTablet::Tablet, Seat->GetTxTraceId(), "Tablet.Transaction.Wait"))
+    , WaitingSpan(NWilson::TSpan(TWilsonTablet::TabletDetailed, Seat->GetTxTraceId(), "Tablet.Transaction.Wait"))
 {}
 
 TTransactionWaitPad::~TTransactionWaitPad()

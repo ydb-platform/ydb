@@ -11,14 +11,14 @@
 #include <ydb/core/sys_view/scan.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
+#include <ydb/library/yql/dq/actors/compute/dq_sync_compute_actor_base.h>
 
 
 namespace NKikimr {
 namespace NKqp {
 
-class TKqpComputeActor : public TDqComputeActorBase<TKqpComputeActor> {
-    using TBase = TDqComputeActorBase<TKqpComputeActor>;
+class TKqpComputeActor : public TDqSyncComputeActorBase<TKqpComputeActor> {
+    using TBase = TDqSyncComputeActorBase<TKqpComputeActor>;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -37,6 +37,8 @@ public:
 
 protected:
     ui64 CalcMkqlMemoryLimit() override;
+
+    void CheckRunStatus() override;
 
 public:
     void FillExtraStats(NDqProto::TDqComputeActorStats* dst, bool last);

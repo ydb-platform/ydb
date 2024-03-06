@@ -60,7 +60,7 @@ protected:
     }
     virtual bool DoExecute() override {
         if (MergingContext->IsExclusiveInterval()) {
-            ResultBatch = Sources.begin()->second->GetStageData().GetBatch();
+            ResultBatch = Sources.begin()->second->GetStageResult().GetBatch();
             if (ResultBatch && ResultBatch->num_rows()) {
                 LastPK = Sources.begin()->second->GetLastPK();
                 ResultBatch = NArrow::ExtractColumnsValidate(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
@@ -81,8 +81,8 @@ protected:
         }
         std::shared_ptr<NIndexedReader::TMergePartialStream> merger = Context->BuildMerger();
         for (auto&& [_, i] : Sources) {
-            if (auto rb = i->GetStageData().GetBatch()) {
-                merger->AddSource(rb, i->GetStageData().GetNotAppliedFilter());
+            if (auto rb = i->GetStageResult().GetBatch()) {
+                merger->AddSource(rb, i->GetStageResult().GetNotAppliedFilter());
             }
         }
         AFL_VERIFY(merger->GetSourcesCount() <= Sources.size());
@@ -146,7 +146,7 @@ void TFetchingInterval::ConstructResult() {
     } else {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "start_construct_result")("interval_idx", IntervalIdx);
     }
-    if (AtomicCas(&ResultConstructionInProgress, 1, 0)) {
+    if (AtomicCas(&SourcesFinalized, 1, 0)) {
         auto task = std::make_shared<TMergeTask>(std::move(MergingContext), Context, std::move(Sources));
         task->SetPriority(NConveyor::ITask::EPriority::High);
         NConveyor::TScanServiceOperator::SendTaskToExecute(task);

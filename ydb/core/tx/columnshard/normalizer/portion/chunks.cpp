@@ -40,7 +40,7 @@ class TRowsAndBytesChangesTask: public NConveyor::ITask {
 public:
     using TDataContainer = std::vector<TChunksNormalizer::TChunkInfo>;
 private:
-    THashMap<NKikimr::NOlap::TBlobRange, TString> Blobs;
+    NBlobOperations::NRead::TCompositeReadBlobs Blobs;
     std::vector<TChunksNormalizer::TChunkInfo> Chunks;
     TNormalizationContext NormContext;
 protected:
@@ -48,13 +48,12 @@ protected:
         for (auto&& chunkInfo : Chunks) {
             const auto& blobRange = chunkInfo.GetBlobRange();
 
-            auto blobIt = Blobs.find(blobRange);
-            Y_ABORT_UNLESS(blobIt != Blobs.end());
+            auto blobData = Blobs.Extract(IStoragesManager::DefaultStorageId, blobRange);
 
             auto columnLoader = chunkInfo.GetLoader();
             Y_ABORT_UNLESS(!!columnLoader);
 
-            TPortionInfo::TAssembleBlobInfo assembleBlob(blobIt->second);
+            TPortionInfo::TAssembleBlobInfo assembleBlob(blobData);
             auto batch = assembleBlob.BuildRecordBatch(*columnLoader);
             Y_ABORT_UNLESS(!!batch);
 
@@ -68,7 +67,7 @@ protected:
     }
 
 public:
-    TRowsAndBytesChangesTask(THashMap<NKikimr::NOlap::TBlobRange, TString>&& blobs, const TNormalizationContext& nCtx, std::vector<TChunksNormalizer::TChunkInfo>&& chunks, THashMap<ui64, ISnapshotSchema::TPtr>&&)
+    TRowsAndBytesChangesTask(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TNormalizationContext& nCtx, std::vector<TChunksNormalizer::TChunkInfo>&& chunks, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>>)
         : Blobs(std::move(blobs))
         , Chunks(std::move(chunks))
         , NormContext(nCtx)

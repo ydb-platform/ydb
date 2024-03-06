@@ -50,21 +50,12 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
             if (result.GetStatus() == EStatus::SUCCESS)
                 continue;
 
-            if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-                UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
-                    [](const NYql::TIssue& issue){
-                        return issue.GetMessage().Contains("has no snapshot at");
-                    }), result.GetIssues().ToString());
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
+                [](const NYql::TIssue& issue){
+                    return issue.GetMessage().Contains("has no snapshot at");
+                }), result.GetIssues().ToString());
 
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::ABORTED);
-            } else {
-                UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
-                    [](const NYql::TIssue& issue){
-                        return issue.GetMessage().Contains("stale snapshot");
-                    }), result.GetIssues().ToString());
-
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-            }
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::ABORTED);
 
             caught = true;
             break;

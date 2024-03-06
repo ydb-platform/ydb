@@ -52,6 +52,7 @@ SET(ORIG_SOURCES
     mkql_match_recognize_matched_vars_ut.cpp
     mkql_match_recognize_list_ut.cpp
     mkql_match_recognize_nfa_ut.cpp
+    mkql_match_recognize_ut.cpp
     mkql_safe_circular_buffer_ut.cpp
     mkql_sort_ut.cpp
     mkql_switch_ut.cpp
@@ -78,9 +79,13 @@ PEERDIR(
     ydb/library/yql/sql/pg_dummy
 )
 
+IF (ARCH_X86_64)
+
 CFLAGS(
     -mprfchw
 )
+
+ENDIF()
 
 YQL_LAST_ABI_VERSION()
 

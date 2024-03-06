@@ -526,13 +526,24 @@ public:
         std::shared_ptr<TDqGatewaySession> session;
         with_lock(Mutex) {
             auto it = Sessions.find(sessionId);
-            if (it == Sessions.end()) {
-                YQL_CLOG(ERROR, ProviderDq) << "Session was closed: " << sessionId;
-                return MakeErrorFuture<TResult>(std::make_exception_ptr(std::runtime_error("Session was closed")));
+            if (it != Sessions.end()) {
+                session = it->second;
             }
-            session = it->second;
         }
-        return session->ExecutePlan(std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard);
+        if (!session) {
+            YQL_CLOG(ERROR, ProviderDq) << "Session was closed: " << sessionId;
+            return MakeFuture(NCommon::ResultFromException<TResult>(yexception() << "Session was closed"));
+        }
+        return session->ExecutePlan(std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard)
+            .Apply([](const TFuture<TResult>& f) {
+                try {
+                    f.TryRethrow();
+                } catch (const std::exception& e) {
+                    YQL_CLOG(ERROR, ProviderDq) << e.what();
+                    return MakeFuture(NCommon::ResultFromException<TResult>(e));
+                }
+                return f;
+            });
     }
 
 private:

@@ -769,7 +769,7 @@ TEST_F(TSchedulerTest, CancelInApplyUnique)
     BIND([=] () {
         auto promise = NewPromise<int>();
 
-        auto f2 = promise.ToFuture().ApplyUnique(BIND([] (TErrorOr<int>&& /* error */) {
+        auto f2 = promise.ToFuture().ApplyUnique(BIND([] (TErrorOr<int>&& /*error*/) {
             auto canceler = NYT::NConcurrency::GetCurrentFiberCanceler();
             canceler(TError("kek"));
 
@@ -1042,15 +1042,15 @@ TEST_W(TSchedulerTest, TraceDisableSendBaggage)
     parentContext->PackBaggage(parentBaggage);
     auto parentBaggageString = ConvertToYsonString(parentBaggage);
 
-    auto originalConfig = GetTracingConfig();
+    auto originalConfig = GetTracingTransportConfig();
     auto guard = Finally([&] {
-        SetTracingConfig(originalConfig);
+        SetTracingTransportConfig(originalConfig);
     });
 
     {
-        auto config = New<TTracingConfig>();
+        auto config = New<TTracingTransportConfig>();
         config->SendBaggage = true;
-        SetTracingConfig(std::move(config));
+        SetTracingTransportConfig(std::move(config));
         NTracing::NProto::TTracingExt tracingExt;
         ToProto(&tracingExt, parentContext);
         auto traceContext = TTraceContext::NewChildFromRpc(tracingExt, "Span");
@@ -1060,9 +1060,9 @@ TEST_W(TSchedulerTest, TraceDisableSendBaggage)
     }
 
     {
-        auto config = New<TTracingConfig>();
+        auto config = New<TTracingTransportConfig>();
         config->SendBaggage = false;
-        SetTracingConfig(std::move(config));
+        SetTracingTransportConfig(std::move(config));
         NTracing::NProto::TTracingExt tracingExt;
         ToProto(&tracingExt, parentContext);
         auto traceContext = TTraceContext::NewChildFromRpc(tracingExt, "Span");

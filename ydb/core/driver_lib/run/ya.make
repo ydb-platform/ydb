@@ -7,8 +7,6 @@ SRCS(
     config_parser.cpp
     config_parser.h
     driver.h
-    dummy.cpp
-    dummy.h
     factories.h
     factories.cpp
     kikimr_services_initializers.cpp
@@ -74,6 +72,7 @@ PEERDIR(
     ydb/core/grpc_services/auth_processor
     ydb/core/health_check
     ydb/core/http_proxy
+    ydb/core/jaeger_tracing
     ydb/core/kesus/proxy
     ydb/core/kesus/tablet
     ydb/core/keyvalue

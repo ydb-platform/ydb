@@ -71,6 +71,7 @@
   - cxxabi.h
   - deque
   - exception
+  - expected
   - filesystem
   - forward_list
   - fstream
@@ -102,6 +103,7 @@
   - scoped_allocator
   - set
   - shared_mutex
+  - source_location
   - span
   - sstream
   - stack

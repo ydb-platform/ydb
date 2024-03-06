@@ -39,6 +39,7 @@ message TStorageFileContent {
         uint64 Timestamp = 3;
         fixed64 Key = 4;
         TPDiskMetadataRecord Meta = 5;
+        bool Unformatted = 6;
     }
 
     repeated TRecord Record = 1;
@@ -93,6 +94,7 @@ message TEvNodeConfigGather {
         message TDiskIdentifier {
             TNodeIdentifier NodeId = 1;
             string Path = 2;
+            optional fixed64 Guid = 3;
         }
         message TPersistentConfig {
             repeated TDiskIdentifier Disks = 1; // disks with the same config
@@ -116,7 +118,13 @@ message TEvNodeConfigGather {
             TNodeIdentifier NodeId = 1;
             EStatus Status = 2;
             string Reason = 3;
-            repeated string SuccessfulDrives = 4;
+
+            message TDrive {
+                string Path = 1;
+                optional fixed64 Guid = 2;
+            }
+            reserved 4;
+            repeated TDrive SuccessfulDrives = 5;
         }
         repeated TStatus Status = 1;
     }
@@ -126,5 +134,42 @@ message TEvNodeConfigGather {
     oneof Response {
         TCollectConfigs CollectConfigs = 2;
         TProposeStorageConfig ProposeStorageConfig = 3;
+    }
+}
+
+// Some kind of RPC -- this event can be sent to any NW, it will forward the request to root node.
+message TEvNodeConfigInvokeOnRoot {
+    message TUpdateConfig {
+        TStorageConfig Config = 1;
+    }
+
+    oneof Request {
+        TUpdateConfig UpdateConfig = 1;
+    }
+}
+
+// Result of RPC invocation.
+message TEvNodeConfigInvokeOnRootResult {
+    enum EStatus {
+        OK = 0; // request fulfilled successfully
+        NO_QUORUM = 1; // root node did not have quorum of following nodes
+        ERROR = 2; // failure during request execution
+        RACE = 3; // race in requests with other entities
+    }
+
+    message TScepter {
+        uint64 Id = 1;
+        uint32 NodeId = 2;
+    }
+
+    message TUpdateConfig {
+    }
+
+    EStatus Status = 1;
+    optional string ErrorReason = 2;
+    TScepter Scepter = 3;
+
+    oneof Response {
+        TUpdateConfig UpdateConfig = 4;
     }
 }

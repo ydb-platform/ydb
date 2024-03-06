@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
@@ -366,7 +367,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     if (buildResult.ExpectedMaxRanges.Defined()) {
         prompt.SetExpectedMaxRanges(buildResult.ExpectedMaxRanges.GetRef());
     }
-    prompt.SetPointPrefixLen(buildResult.UsedPrefixLen);
+    prompt.SetPointPrefixLen(buildResult.PointPrefixLen);
 
     YQL_CLOG(DEBUG, ProviderKqp) << "Ranges extracted: " << KqpExprToPrettyString(*ranges, ctx);
     YQL_CLOG(DEBUG, ProviderKqp) << "Residual lambda: " << KqpExprToPrettyString(*residualLambda, ctx);
@@ -466,10 +467,6 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
                         .Done();
                 }
             }
-        } else if (buildResult.PointPrefixLen == tableDesc.Metadata->KeyColumnNames.size()) {
-            YQL_ENSURE(prefixPointsExpr);
-            residualLambda = pointsExtractionResult.PrunedLambda;
-            buildLookup(prefixPointsExpr, input);
         }
     }
 

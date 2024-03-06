@@ -1158,9 +1158,17 @@ private:
                 TVector<TStringBuf> sortKeys;
                 if (const auto sorted = list.Ref().GetConstraint<TSortedConstraintNode>()) {
                     for (const auto& key : sorted->GetContent()) {
-                        if (key.second && !key.first.empty() && key.first.front().size() == 1U) {
-                            sortKeys.emplace_back(key.first.front().front());
-                        } else {
+                        bool appropriate = false;
+                        if (key.second && !key.first.empty()) {
+                            for (auto& alt: key.first) {
+                                if (alt.size() == 1U) {
+                                    sortKeys.emplace_back(alt.front());
+                                    appropriate = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!appropriate) {
                             break;
                         }
                     }
@@ -1169,46 +1177,50 @@ private:
             }
         }
 
-        // Only Lookup and Merge strategies use a table sort
-        if (state->Configuration->JoinMergeTablesLimit.Get().GetOrElse(0)
-            || (state->Configuration->LookupJoinLimit.Get().GetOrElse(0) && state->Configuration->LookupJoinMaxRows.Get().GetOrElse(0))) {
-            TVector<const TExprNode*> joinTreeNodes;
-            joinTreeNodes.push_back(equiJoin.Arg(equiJoin.ArgCount() - 2).Raw());
-            while (!joinTreeNodes.empty()) {
-                const TExprNode* joinTree = joinTreeNodes.back();
-                joinTreeNodes.pop_back();
+        // Only Lookup, Merge, and Star strategies use a table sort
+        if (!state->Configuration->JoinMergeTablesLimit.Get().GetOrElse(0)
+            && !(state->Configuration->LookupJoinLimit.Get().GetOrElse(0) && state->Configuration->LookupJoinMaxRows.Get().GetOrElse(0))
+            && !(state->Configuration->JoinEnableStarJoin.Get().GetOrElse(false) && state->Configuration->JoinAllowColumnRenames.Get().GetOrElse(true))
+        ) {
+            return tableSortKeys;
+        }
 
-                if (!joinTree->Child(1)->IsAtom()) {
-                    joinTreeNodes.push_back(joinTree->Child(1));
-                }
+        TVector<const TExprNode*> joinTreeNodes;
+        joinTreeNodes.push_back(equiJoin.Arg(equiJoin.ArgCount() - 2).Raw());
+        while (!joinTreeNodes.empty()) {
+            const TExprNode* joinTree = joinTreeNodes.back();
+            joinTreeNodes.pop_back();
 
-                if (!joinTree->Child(2)->IsAtom()) {
-                    joinTreeNodes.push_back(joinTree->Child(2));
-                }
+            if (!joinTree->Child(1)->IsAtom()) {
+                joinTreeNodes.push_back(joinTree->Child(1));
+            }
 
-                if (joinTree->Child(0)->Content() != "Cross") {
-                    THashMap<TStringBuf, THashSet<TStringBuf>> tableJoinKeys;
-                    for (auto keys: {joinTree->Child(3), joinTree->Child(4)}) {
-                        for (ui32 i = 0; i < keys->ChildrenSize(); i += 2) {
-                            auto tableName = keys->Child(i)->Content();
-                            auto column = keys->Child(i + 1)->Content();
-                            tableJoinKeys[tableName].insert(column);
-                        }
+            if (!joinTree->Child(2)->IsAtom()) {
+                joinTreeNodes.push_back(joinTree->Child(2));
+            }
+
+            if (joinTree->Child(0)->Content() != "Cross") {
+                THashMap<TStringBuf, THashSet<TStringBuf>> tableJoinKeys;
+                for (auto keys: {joinTree->Child(3), joinTree->Child(4)}) {
+                    for (ui32 i = 0; i < keys->ChildrenSize(); i += 2) {
+                        auto tableName = keys->Child(i)->Content();
+                        auto column = keys->Child(i + 1)->Content();
+                        tableJoinKeys[tableName].insert(column);
                     }
+                }
 
-                    for (auto& [label, joinKeys]: tableJoinKeys) {
-                        if (auto sortKeys = tableSortKeys.FindPtr(label)) {
-                            if (joinKeys.size() <= sortKeys->first.size()) {
-                                bool matched = true;
-                                for (size_t i = 0; i < joinKeys.size(); ++i) {
-                                    if (!joinKeys.contains(sortKeys->first[i])) {
-                                        matched = false;
-                                        break;
-                                    }
+                for (auto& [label, joinKeys]: tableJoinKeys) {
+                    if (auto sortKeys = tableSortKeys.FindPtr(label)) {
+                        if (joinKeys.size() <= sortKeys->first.size()) {
+                            bool matched = true;
+                            for (size_t i = 0; i < joinKeys.size(); ++i) {
+                                if (!joinKeys.contains(sortKeys->first[i])) {
+                                    matched = false;
+                                    break;
                                 }
-                                if (matched) {
-                                    ++sortKeys->second;
-                                }
+                            }
+                            if (matched) {
+                                ++sortKeys->second;
                             }
                         }
                     }
@@ -3388,6 +3400,13 @@ private:
             return {};
         }
         TYtOutTableInfo outTable(outItemType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+
+        {
+            auto path = write.Table().Name().StringValue();
+            auto commitEpoch = TEpochInfo::Parse(write.Table().CommitEpoch().Ref()).GetOrElse(0);
+            auto dstRowSpec = State_->TablesData->GetTable(cluster, path, commitEpoch).RowSpec;
+            outTable.RowSpec->SetColumnOrder(dstRowSpec->GetColumnOrder());
+        }
         auto content = write.Content();
         if (auto sorted = content.Ref().GetConstraint<TSortedConstraintNode>()) {
             const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
@@ -5831,7 +5850,8 @@ private:
 
         const bool tryReorder = State_->Types->CostBasedOptimizer != ECostBasedOptimizerType::Disable
             && equiJoin.Input().Size() > 2
-            && HasOnlyOneJoinType(*equiJoin.Joins().Ptr(), "Inner");
+            && HasOnlyOneJoinType(*equiJoin.Joins().Ptr(), "Inner")
+            && !HasSetting(equiJoin.JoinOptions().Ref(), "cbo_passed");
 
         const bool waitAllInputs = State_->Configuration->JoinWaitAllInputs.Get().GetOrElse(false) || tryReorder;
 
@@ -7002,22 +7022,17 @@ private:
                         continue;
                     }
 
-                    if (NYql::HasSetting(innerMerge.Settings().Ref(), EYtSettingType::KeepSorted)) {
-                        if (!AllOf(innerMergeSection.Paths(), [](const auto& path) {
-                            auto op = path.Table().template Maybe<TYtOutput>().Operation();
-                            return op && (op.template Maybe<TYtTouch>() || (op.Raw()->HasResult() && op.Raw()->GetResult().IsWorld()));
-                        })) {
-                            continue;
-                        }
+                    auto mergeOutRowSpec = TYqlRowSpecInfo(innerMerge.Output().Item(0).RowSpec());
+                    const bool sortedMerge = mergeOutRowSpec.IsSorted();
+                    if (hasTakeSkip && sortedMerge && NYql::HasSetting(innerMerge.Settings().Ref(), EYtSettingType::KeepSorted)) {
+                        continue;
                     }
                     if (hasTakeSkip && AnyOf(innerMergeSection.Paths(), [](const auto& path) { return !path.Ranges().template Maybe<TCoVoid>(); })) {
                         continue;
                     }
 
                     const bool unordered = IsUnorderedOutput(path.Table().Cast<TYtOutput>());
-                    auto mergeOutRowSpec = TYqlRowSpecInfo(innerMerge.Output().Item(0).RowSpec());
                     if (innerMergeSection.Paths().Size() > 1) {
-                        const bool sortedMerge = mergeOutRowSpec.IsSorted();
                         if (hasTakeSkip && sortedMerge) {
                             continue;
                         }
@@ -7435,6 +7450,14 @@ private:
         if (!rowSpec.IsSorted()) {
             return node;
         }
+        TMaybeNode<TExprBase> columns;
+        if (rowSpec.HasAuxColumns()) {
+            TSet<TStringBuf> members;
+            for (auto item: rowSpec.GetType()->GetItems()) {
+                members.insert(item->GetName());
+            }
+            columns = TExprBase(ToAtomList(members, merge.Pos(), ctx));
+        }
 
         auto mergeSection = merge.Input().Item(0);
         if (NYql::HasSettingsExcept(mergeSection.Settings().Ref(), EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2)) {
@@ -7467,7 +7490,10 @@ private:
                         .Input()
                             .Add()
                                 .Paths()
-                                    .Add(path)
+                                    .Add<TYtPath>()
+                                        .InitFrom(path)
+                                        .Columns(columns.IsValid() ? columns.Cast() : path.Columns())
+                                    .Build()
                                 .Build()
                                 .Settings(section.Settings())
                             .Build()

@@ -22,7 +22,7 @@ enum ETxTypes {
     TXTYPE_INIT_SCHEMA = 1                                [(TxTypeOpts) = {Name: "TxInitSchema"}];
     TXTYPE_MONITORING = 2                                 [(TxTypeOpts) = {Name: "TxMonitoring"}];
     TXTYPE_STORE_METRICS = 3                              [(TxTypeOpts) = {Name: "TxStoreMetrics"}];
-    TXTYPE_CLEAR_DATA = 4                                 [(TxTypeOpts) = {Name: "TxClearData"}];
+    TXTYPE_AGGREGATE_DATA = 4                             [(TxTypeOpts) = {Name: "TxAggregateData"}];
     TXTYPE_GET_METRICS = 5                                [(TxTypeOpts) = {Name: "TxGetMetrics"}];
     TXTYPE_STARTUP = 6                                    [(TxTypeOpts) = {Name: "TxStartup"}];
     TXTYPE_CHANGE_BACKEND = 7                             [(TxTypeOpts) = {Name: "TxChangeBackend"}];

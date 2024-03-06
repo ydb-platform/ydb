@@ -58,10 +58,12 @@ void ServicesInitializer::InitReadService() {
 
 void ServicesInitializer::InitSchemaService() {
     auto serviceId = NGRpcProxy::V1::GetPQSchemaServiceActorID();
+    static NGRpcProxy::V1::IClustersCfgProvider* providerService; 
     if (RequiresServiceRegistration(serviceId)) {
-        auto service = NGRpcProxy::V1::CreatePQSchemaService(SchemeCache, Counters);
+        auto service = NGRpcProxy::V1::CreatePQSchemaService(&providerService);
         RegisterService(serviceId, service);
     }
+    *ClusterCfgProvider = providerService;
 }
 
 } // namespace V1

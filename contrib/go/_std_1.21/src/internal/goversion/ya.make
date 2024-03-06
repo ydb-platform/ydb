@@ -1,7 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    goversion.go
-)
-
+IF (TRUE)
+    SRCS(
+		goversion.go
+    )
+ENDIF()
 END()

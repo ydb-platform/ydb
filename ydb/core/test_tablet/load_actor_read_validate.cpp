@@ -53,6 +53,7 @@ namespace NKikimr::NTestShard {
         {
             // ensure no concurrent operations are running
             Y_ABORT_UNLESS(self.WritesInFlight.empty());
+            Y_ABORT_UNLESS(self.PatchesInFlight.empty());
             Y_ABORT_UNLESS(self.DeletesInFlight.empty());
             Y_ABORT_UNLESS(self.TransitionInFlight.empty());
             for (auto& [key, info] : KeysBefore) {

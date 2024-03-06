@@ -422,6 +422,61 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         ReadSession->Close(TDuration::MilliSeconds(10));
     }
 
+    Y_UNIT_TEST(FallbackToSingleDbAfterBadRequest) {
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME, false);
+        setup->Start(true, true);
+        TFederationDiscoveryServiceMock fdsMock;
+        ui16 newServicePort = setup->GetPortManager()->GetPort(4285);
+        fdsMock.Port = setup->GetGrpcPort();
+
+        Cerr << "PORTS " << fdsMock.Port << " " << newServicePort << Endl;
+        auto grpcServer = setup->StartGrpcService(newServicePort, &fdsMock);
+
+        // Create topic client.
+        NYdb::TDriverConfig cfg;
+        cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
+        cfg.SetDatabase("/Root");
+        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        NYdb::TDriver driver(cfg);
+        auto clientSettings = TFederatedTopicClientSettings();
+        NYdb::NFederatedTopic::TFederatedTopicClient topicClient(driver, clientSettings);
+
+        // Create read session.
+        NYdb::NFederatedTopic::TFederatedReadSessionSettings readSettings;
+        readSettings
+            .ConsumerName("shared/user")
+            .MaxMemoryUsageBytes(1_MB)
+            .AppendTopics(setup->GetTestTopic());
+
+        auto ReadSession = topicClient.CreateReadSession(readSettings);
+        Cerr << "Session was created" << Endl;
+
+        ReadSession->WaitEvent().Wait(TDuration::Seconds(1));
+        TMaybe<NYdb::NFederatedTopic::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
+        Y_ASSERT(!event);
+
+        {
+            auto fdsRequest = fdsMock.GetNextPendingRequest();
+            Y_ASSERT(fdsRequest.has_value());
+            Ydb::FederationDiscovery::ListFederationDatabasesResponse response;
+            auto op = response.mutable_operation();
+            op->set_status(Ydb::StatusIds::BAD_REQUEST);
+            response.mutable_operation()->set_ready(true);
+            response.mutable_operation()->set_id("12345");
+            fdsRequest->Result.SetValue({std::move(response), grpc::Status::OK});
+        }
+
+        ReadSession->WaitEvent().Wait();
+        TMaybe<NYdb::NFederatedTopic::TReadSessionEvent::TEvent> event2 = ReadSession->GetEvent(true);
+        Cerr << "Got new read session event: " << DebugString(*event2) << Endl;
+
+        auto* sessionEvent = std::get_if<NYdb::NFederatedTopic::TSessionClosedEvent>(&*event2);
+        // At this point the SDK should connect to Topic API, but in this test we have it on a separate port,
+        // so SDK connects back to FederationDiscovery service and the CLIENT_CALL_UNIMPLEMENTED status is expected.
+        UNIT_ASSERT_EQUAL(sessionEvent->GetStatus(), EStatus::CLIENT_CALL_UNIMPLEMENTED);
+        ReadSession->Close(TDuration::MilliSeconds(10));
+    }
+
     Y_UNIT_TEST(SimpleHandlers) {
         auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME, false);
         setup->Start(true, true);
@@ -513,6 +568,164 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         for (auto i = 0u; i < count; i++) {
             auto res = session->Write(sentMessages[i]);
             UNIT_ASSERT(res);
+        }
+
+        f.GetValueSync();
+        ReadSession->Close();
+        AtomicSet(check, 0);
+    }
+
+    Y_UNIT_TEST(ReadMirrored) {
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME, false);
+        setup->Start(true, true);
+        setup->CreateTopic(setup->GetTestTopic() + "-mirrored-from-dc2", setup->GetLocalCluster());
+        setup->CreateTopic(setup->GetTestTopic() + "-mirrored-from-dc3", setup->GetLocalCluster());
+
+        TFederationDiscoveryServiceMock fdsMock;
+        fdsMock.Port = setup->GetGrpcPort();
+
+        ui16 newServicePort = setup->GetPortManager()->GetPort(4285);
+        auto grpcServer = setup->StartGrpcService(newServicePort, &fdsMock);
+
+        std::shared_ptr<NYdb::NFederatedTopic::IFederatedReadSession> ReadSession;
+
+        // Create topic client.
+        NYdb::TDriverConfig cfg;
+        cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
+        cfg.SetDatabase("/Root");
+        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        NYdb::TDriver driver(cfg);
+        auto clientSettings = TFederatedTopicClientSettings()
+            .RetryPolicy(NTopic::IRetryPolicy::GetFixedIntervalPolicy(
+                TDuration::Seconds(10),
+                TDuration::Seconds(10)
+            ));
+        NYdb::NFederatedTopic::TFederatedTopicClient topicClient(driver, clientSettings);
+
+        ui64 count = 5u;
+
+        TString messageBase = "message----";
+        TVector<TString> sentMessages;
+        std::unordered_set<TString> sentSet;
+
+        for (auto i = 0u; i < count; i++) {
+            sentMessages.emplace_back(messageBase * (10 * i + 1));
+            sentSet.emplace(sentMessages.back() + "-from-dc1");
+            sentSet.emplace(sentMessages.back() + "-from-dc2");
+            sentSet.emplace(sentMessages.back() + "-from-dc3");
+        }
+
+        NThreading::TPromise<void> checkedPromise = NThreading::NewPromise<void>();
+        auto totalReceived = 0u;
+
+        auto f = checkedPromise.GetFuture();
+        TAtomic check = 1;
+
+        // Create read session.
+        NYdb::NFederatedTopic::TFederatedReadSessionSettings readSettings;
+        readSettings
+            .ReadMirrored("dc1")
+            .ConsumerName("shared/user")
+            .MaxMemoryUsageBytes(16_MB)
+            .AppendTopics(setup->GetTestTopic());
+
+        readSettings.FederatedEventHandlers_.SimpleDataHandlers([&](TReadSessionEvent::TDataReceivedEvent& ev) mutable {
+            Cerr << ">>> event from dataHandler: " << DebugString(ev) << Endl;
+            Y_VERIFY_S(AtomicGet(check) != 0, "check is false");
+            auto& messages = ev.GetMessages();
+            Cerr << ">>> get " << messages.size() << " messages in this event" << Endl;
+            for (size_t i = 0u; i < messages.size(); ++i) {
+                auto& message = messages[i];
+                UNIT_ASSERT(message.GetFederatedPartitionSession()->GetReadSourceDatabaseName() == "dc1");
+                UNIT_ASSERT(message.GetFederatedPartitionSession()->GetTopicPath() == setup->GetTestTopic());
+                UNIT_ASSERT(message.GetData().EndsWith(message.GetFederatedPartitionSession()->GetTopicOriginDatabaseName()));
+
+                UNIT_ASSERT(!sentSet.empty());
+                UNIT_ASSERT_C(sentSet.erase(message.GetData()), "no such element is sentSet: " + message.GetData());
+                totalReceived++;
+            }
+            if (totalReceived == 3 * sentMessages.size()) {
+                UNIT_ASSERT(sentSet.empty());
+                checkedPromise.SetValue();
+            }
+        });
+
+        ReadSession = topicClient.CreateReadSession(readSettings);
+        Cerr << ">>> Session was created" << Endl;
+
+        Sleep(TDuration::MilliSeconds(50));
+
+        auto events = ReadSession->GetEvents(false);
+        UNIT_ASSERT(events.empty());
+
+        std::optional<TFederationDiscoveryServiceMock::TManualRequest> fdsRequest;
+        do {
+            fdsRequest = fdsMock.GetNextPendingRequest();
+            if (!fdsRequest.has_value()) {
+                Sleep(TDuration::MilliSeconds(50));
+            }
+        } while (!fdsRequest.has_value());
+
+        fdsRequest->Result.SetValue(fdsMock.ComposeOkResult());
+
+        {
+            NPersQueue::TWriteSessionSettings writeSettings;
+            writeSettings.Path(setup->GetTestTopic()).MessageGroupId("src_id");
+            writeSettings.Codec(NPersQueue::ECodec::RAW);
+            NPersQueue::IExecutor::TPtr executor = new NPersQueue::TSyncExecutor();
+            writeSettings.CompressionExecutor(executor);
+
+            auto& client = setup->GetPersQueueClient();
+            auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
+
+            for (auto i = 0u; i < count; i++) {
+                auto res = session->Write(sentMessages[i] + "-from-dc1");
+                UNIT_ASSERT(res);
+            }
+
+            session->Close();
+
+            Cerr << ">>> Writes to test-topic successful" << Endl;
+        }
+
+        {
+            NPersQueue::TWriteSessionSettings writeSettings;
+            writeSettings.Path(setup->GetTestTopic() + "-mirrored-from-dc2").MessageGroupId("src_id");
+            writeSettings.Codec(NPersQueue::ECodec::RAW);
+            NPersQueue::IExecutor::TPtr executor = new NPersQueue::TSyncExecutor();
+            writeSettings.CompressionExecutor(executor);
+
+            auto& client = setup->GetPersQueueClient();
+            auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
+
+            for (auto i = 0u; i < count; i++) {
+                auto res = session->Write(sentMessages[i] + "-from-dc2");
+                UNIT_ASSERT(res);
+            }
+
+            session->Close();
+
+            Cerr << ">>> Writes to test-topic-mirrored-from-dc2 successful" << Endl;
+        }
+
+        {
+            NPersQueue::TWriteSessionSettings writeSettings;
+            writeSettings.Path(setup->GetTestTopic() + "-mirrored-from-dc3").MessageGroupId("src_id");
+            writeSettings.Codec(NPersQueue::ECodec::RAW);
+            NPersQueue::IExecutor::TPtr executor = new NPersQueue::TSyncExecutor();
+            writeSettings.CompressionExecutor(executor);
+
+            auto& client = setup->GetPersQueueClient();
+            auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
+
+            for (auto i = 0u; i < count; i++) {
+                auto res = session->Write(sentMessages[i] + "-from-dc3");
+                UNIT_ASSERT(res);
+            }
+
+            session->Close();
+
+            Cerr << ">>> Writes to test-topic-mirrored-from-dc3 successful" << Endl;
         }
 
         f.GetValueSync();

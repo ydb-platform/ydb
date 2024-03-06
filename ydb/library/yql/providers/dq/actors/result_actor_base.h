@@ -16,6 +16,64 @@
 
 namespace NYql::NDqs::NExecutionHelpers {
 
+struct TQueueItem {
+    TQueueItem(NDq::TDqSerializedBatch&& data, const TString& messageId)
+        : Data(std::move(data))
+        , MessageId(messageId)
+        , SentProcessedEvent(false)
+        , IsFinal(false)
+        , Size(Data.Size())
+        {
+        }
+
+    static TQueueItem Final() {
+        TQueueItem item({}, "FinalMessage");
+        item.SentProcessedEvent = true;
+        item.IsFinal = true;
+        return item;
+    }
+
+    NDq::TDqSerializedBatch Data;
+    const TString MessageId;
+    bool SentProcessedEvent = false;
+    bool IsFinal = false;
+    ui64 Size = 0;
+};
+
+struct TWriteQueue {
+    TQueue<TQueueItem> Queue;
+    ui64 ByteSize = 0;
+
+    template< class... Args >
+    decltype(auto) emplace( Args&&... args) {
+        Queue.emplace(std::forward<Args>(args)...);
+        ByteSize += Queue.back().Size;
+    }
+
+    auto& front() {
+        return Queue.front();
+    }
+
+    auto& back() {
+        return Queue.back();
+    }
+
+    auto pop() {
+        YQL_ENSURE(ByteSize >= Queue.front().Size);
+        ByteSize -= Queue.front().Size;
+        return Queue.pop();
+    }
+
+    auto empty() const {
+        return Queue.empty();
+    }
+
+    void clear() {
+        Queue.clear();
+        ByteSize = 0;
+    }
+};
+
     template <class TDerived>
     class TResultActorBase : public NYql::TSynchronizableRichActor<TDerived>, public NYql::TCounters {
     protected:
@@ -178,6 +236,10 @@ namespace NYql::NDqs::NExecutionHelpers {
                     YQL_CLOG(DEBUG, ProviderDq) << "Unexpected event " << etype;
                     break;
             }
+        }
+
+        ui64 InflightBytes() {
+            return WriteQueue.ByteSize;
         }
 
     private:
@@ -349,29 +411,6 @@ namespace NYql::NDqs::NExecutionHelpers {
             TBase::Send(FullResultWriterID, std::move(req));
         }
 
-    private:
-        struct TQueueItem {
-            TQueueItem(NDq::TDqSerializedBatch&& data, const TString& messageId)
-                : Data(std::move(data))
-                , MessageId(messageId)
-                , SentProcessedEvent(false)
-                , IsFinal(false)
-            {
-            }
-
-            static TQueueItem Final() {
-                TQueueItem item({}, "FinalMessage");
-                item.SentProcessedEvent = true;
-                item.IsFinal = true;
-                return item;
-            }
-
-            NDq::TDqSerializedBatch Data;
-            const TString MessageId;
-            bool SentProcessedEvent = false;
-            bool IsFinal = false;
-        };
-
     protected:
         const NActors::TActorId ExecuterID;
         const TString TraceId;
@@ -383,7 +422,7 @@ namespace NYql::NDqs::NExecutionHelpers {
         const bool FullResultTableEnabled;
         const NActors::TActorId GraphExecutionEventsId;
         const bool Discard;
-        TQueue<TQueueItem> WriteQueue;
+        TWriteQueue WriteQueue;
         ui64 SizeLimit;
         TMaybe<ui64> RowsLimit;
         ui64 Rows;

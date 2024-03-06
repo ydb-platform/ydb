@@ -103,7 +103,7 @@ private:
         auto req = MakeHolder<NDq::TEvDqCompute::TEvChannelDataAck>();
         req->Record.SetChannelId(message->Get()->Record.GetChannelData().GetChannelId());
         req->Record.SetSeqNo(message->Get()->Record.GetSeqNo());
-        req->Record.SetFreeSpace(256_MB);
+        req->Record.SetFreeSpace((i64)256_MB - (i64)InflightBytes());
         req->Record.SetFinish(EarlyFinish);  // set if premature finish started (when response limit reached and FullResultTable not enabled)
 
         Send(message->Sender, req.Release());

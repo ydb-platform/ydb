@@ -1,3 +1,5 @@
+Registering pre-existing tables
+	tenk1
 <sql-statement>
 --
 -- SELECT_DISTINCT
@@ -77,10 +79,14 @@ SELECT count(*) FROM
 SELECT count(*) FROM
   (SELECT DISTINCT two, four, two FROM tenk1) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgSelect, At function: PgSetItem
+    	SELECT count(*) FROM
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: two
+        	SELECT count(*) FROM
+	^
 <sql-statement>
 --
 -- Compare results between plans using sorting and plans using hash

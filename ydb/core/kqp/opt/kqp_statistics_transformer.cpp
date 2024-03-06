@@ -3,6 +3,9 @@
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
 #include <ydb/library/yql/core/yql_cost_function.h>
 
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+
+
 #include <charconv>
 
 using namespace NYql;
@@ -187,7 +190,7 @@ IGraphTransformer::TStatus TKqpStatisticsTransformer::DoTransform(TExprNode::TPt
     TExprNode::TPtr& output, TExprContext& ctx) {
 
     output = input;
-    if (!Config->HasOptEnableCostBasedOptimization()) {
+    if (Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel) == 0) {
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -238,6 +241,6 @@ bool TKqpStatisticsTransformer::AfterLambdasSpecific(const TExprNode::TPtr& inpu
 }
 
 TAutoPtr<IGraphTransformer> NKikimr::NKqp::CreateKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-    TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config) {
-    return THolder<IGraphTransformer>(new TKqpStatisticsTransformer(kqpCtx, typeCtx, config));
+    TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, const TKqpProviderContext& pctx) {
+    return THolder<IGraphTransformer>(new TKqpStatisticsTransformer(kqpCtx, typeCtx, config, pctx));
 }

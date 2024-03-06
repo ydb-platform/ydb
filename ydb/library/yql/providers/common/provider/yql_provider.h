@@ -209,7 +209,7 @@ bool NeedToRenamePgSelectColumns(const NNodes::TCoPgSelect& pgSelect);
 bool RenamePgSelectColumns(
     const NNodes::TCoPgSelect& node,
     TExprNode::TPtr& output,
-    TMaybe<TVector<TString>> tableColumnOrder,
+    const TMaybe<TColumnOrder>& tableColumnOrder,
     TExprContext& ctx,
     TTypeAnnotationContext& types);
 } // namespace NCommon

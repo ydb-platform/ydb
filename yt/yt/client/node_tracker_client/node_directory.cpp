@@ -371,11 +371,6 @@ bool operator == (const TNodeDescriptor& lhs, const TNodeDescriptor& rhs)
         GetSortedTags(lhs.GetTags()) == GetSortedTags(rhs.GetTags());
 }
 
-bool operator != (const TNodeDescriptor& lhs, const TNodeDescriptor& rhs)
-{
-    return !(lhs == rhs);
-}
-
 bool operator == (const TNodeDescriptor& lhs, const NProto::TNodeDescriptor& rhs)
 {
     if (std::ssize(lhs.Addresses()) != rhs.addresses().entries_size()) {
@@ -419,11 +414,6 @@ bool operator == (const TNodeDescriptor& lhs, const NProto::TNodeDescriptor& rhs
     }
 
     return true;
-}
-
-bool operator != (const TNodeDescriptor& lhs, const NProto::TNodeDescriptor& rhs)
-{
-    return !(lhs == rhs);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

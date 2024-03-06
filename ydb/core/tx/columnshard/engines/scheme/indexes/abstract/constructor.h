@@ -16,7 +16,7 @@ namespace NKikimr::NOlap::NIndexes {
 class IIndexMetaConstructor {
 protected:
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) = 0;
-    virtual std::shared_ptr<IIndexMeta> DoCreateIndexMeta(const ui32 indexId, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const = 0;
+    virtual std::shared_ptr<IIndexMeta> DoCreateIndexMeta(const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const = 0;
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& proto) = 0;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const = 0;
 public:
@@ -29,8 +29,8 @@ public:
         return DoDeserializeFromJson(jsonInfo);
     }
 
-    std::shared_ptr<IIndexMeta> CreateIndexMeta(const ui32 indexId, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
-        return DoCreateIndexMeta(indexId, currentSchema, errors);
+    std::shared_ptr<IIndexMeta> CreateIndexMeta(const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
+        return DoCreateIndexMeta(indexId, indexName, currentSchema, errors);
     }
 
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& proto) {

@@ -54,8 +54,13 @@ public:
         return TActor<TDerived>::SelfId();
     }
 
-    void Initialize(const NActors::TActorContext& ctx) {
-        TableHelper.Initialize(ctx, SourceId);
+    [[nodiscard]] bool Initialize(const NActors::TActorContext& ctx) {
+        if (TableHelper.Initialize(ctx, SourceId)) {
+            return true;
+        }
+        StartIdle();        
+        TThis::ReplyError(ErrorCode::BAD_REQUEST, "Bad SourceId", ctx);
+        return false;
     }
 
     void PassAway() {
@@ -73,8 +78,10 @@ protected:
     void InitTable(const NActors::TActorContext& ctx) {
         TThis::Become(&TThis::StateInitTable);
         const auto& pqConfig = AppData(ctx)->PQConfig;
+        TRACE("InitTable: SourceId="<< SourceId 
+              << " TopicsAreFirstClassCitizen=" << pqConfig.GetTopicsAreFirstClassCitizen()
+              << " UseSrcIdMetaMappingInFirstClass=" <<pqConfig.GetUseSrcIdMetaMappingInFirstClass());
         if (SourceId && pqConfig.GetTopicsAreFirstClassCitizen() && pqConfig.GetUseSrcIdMetaMappingInFirstClass()) {
-            DEBUG("InitTable");
             TableHelper.SendInitTableRequest(ctx);
         } else {
             StartKqpSession(ctx);
@@ -162,7 +169,7 @@ protected:
             DEBUG("Update the table");
             TableHelper.SendUpdateRequest(Partition->PartitionId, SeqNo, ctx);
         } else {
-            StartGetOwnership(ctx);
+            ReplyResult(ctx);
         }
     }
 
@@ -190,7 +197,7 @@ protected:
             // Use tx only for query after select. Updating AccessTime without transaction.
             TableHelper.CloseKqpSession(ctx);
 
-            return StartGetOwnership(ctx);
+            ReplyResult(ctx);
         }
 
         StartIdle();
@@ -207,13 +214,18 @@ protected:
 protected:
     void StartCheckPartitionRequest(const TActorContext &ctx) {
         TThis::Become(&TThis::StateCheckPartition);
+
+        if (!Partition) {
+            return ReplyError(ErrorCode::INITIALIZING, "Partition not choosed", ctx);
+        }
+
         PartitionHelper.Open(Partition->TabletId, ctx);
-        PartitionHelper.SendCheckPartitionStatusRequest(Partition->PartitionId, ctx);
+        PartitionHelper.SendCheckPartitionStatusRequest(Partition->PartitionId, "", ctx);
     }
 
     void Handle(NKikimr::TEvPQ::TEvCheckPartitionStatusResponse::TPtr& ev, const NActors::TActorContext& ctx) {
+        PartitionHelper.Close(ctx);
         if (NKikimrPQ::ETopicPartitionStatus::Active == ev->Get()->Record.GetStatus()) {
-            PartitionHelper.Close(ctx);
             return SendUpdateRequests(ctx);
         }
         ReplyError(ErrorCode::INITIALIZING, TStringBuilder() << "Partition isn`t active", ctx);
@@ -230,43 +242,6 @@ protected:
     }
 
 protected:
-    void StartGetOwnership(const TActorContext &ctx) {
-        TThis::Become(&TThis::StateOwnership);
-        if (!Partition) {
-            return ReplyError(ErrorCode::INITIALIZING, "Partition not choosed", ctx);
-        }
-
-        DEBUG("GetOwnership Partition TabletId=" << Partition->TabletId);
-
-        PartitionHelper.Open(Partition->TabletId, ctx);
-        PartitionHelper.SendGetOwnershipRequest(Partition->PartitionId, SourceId, true, ctx);
-    }
-
-    void HandleOwnership(TEvPersQueue::TEvResponse::TPtr& ev, const NActors::TActorContext& ctx) {
-        DEBUG("HandleOwnership");
-        auto& record = ev->Get()->Record;
-
-        TString error;
-        if (!BasicCheck(record, error)) {
-            return ReplyError(ErrorCode::INITIALIZING, std::move(error), ctx);
-        }
-
-        const auto& response = record.GetPartitionResponse();
-        if (!response.HasCmdGetOwnershipResult()) {
-            return ReplyError(ErrorCode::INITIALIZING, "Absent Ownership result", ctx);
-        }
-
-        if (NKikimrPQ::ETopicPartitionStatus::Active != response.GetCmdGetOwnershipResult().GetStatus()) {
-            return ReplyError(ErrorCode::INITIALIZING, "Partition is not active", ctx);
-        }
-
-        OwnerCookie = response.GetCmdGetOwnershipResult().GetOwnerCookie();
-
-        PartitionHelper.Close(ctx);
-
-        OnOwnership(ctx);
-    }
-
     void HandleOwnership(TEvTabletPipe::TEvClientConnected::TPtr& ev, const NActors::TActorContext& ctx) {
         auto msg = ev->Get();
         if (PartitionHelper.IsPipe(ev->Sender) && msg->Status != NKikimrProto::OK) {
@@ -281,19 +256,6 @@ protected:
             ReplyError(ErrorCode::INITIALIZING, "Pipe closed", ctx);
         }
     }
-
-    virtual void OnOwnership(const TActorContext &ctx) = 0;
-
-    STATEFN(StateOwnership) {
-        TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPersQueue::TEvResponse, HandleOwnership);
-            HFunc(TEvTabletPipe::TEvClientConnected, HandleOwnership);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, HandleOwnership);
-            sFunc(TEvents::TEvPoison, ScheduleStop);
-        }
-    }
-
 
 protected:
     void StartIdle() {
@@ -331,7 +293,8 @@ protected:
 
 protected:
     void ReplyResult(const NActors::TActorContext& ctx) {
-        ctx.Send(Parent, new TEvPartitionChooser::TEvChooseResult(Partition->PartitionId, Partition->TabletId, TThis::OwnerCookie, SeqNo));
+        DEBUG("ReplyResult: Partition=" << Partition->PartitionId << ", SeqNo=" << SeqNo);
+        ctx.Send(Parent, new TEvPartitionChooser::TEvChooseResult(Partition->PartitionId, Partition->TabletId, SeqNo));
     }
 
     void ReplyError(ErrorCode code, TString&& errorMessage, const NActors::TActorContext& ctx) {
@@ -355,7 +318,6 @@ protected:
 
     bool PartitionPersisted = false;
 
-    TString OwnerCookie;
     std::optional<ui64> SeqNo = 0;
 };
 

@@ -50,10 +50,24 @@ public:
         return *result;
     }
 
+    TResult& MutableResult() {
+        auto result = std::get_if<TResult>(&Result);
+        Y_ABORT_UNLESS(result, "incorrect object for result request");
+        return *result;
+    }
+
     TResult&& DetachResult() {
         auto result = std::get_if<TResult>(&Result);
         Y_ABORT_UNLESS(result, "incorrect object for result request");
         return std::move(*result);
+    }
+
+    const TResult* operator->() const {
+        return &GetResult();
+    }
+
+    TResult* operator->() {
+        return &MutableResult();
     }
 
     const TResult& operator*() const {
@@ -66,6 +80,10 @@ public:
 
     explicit operator bool() const {
         return IsSuccess();
+    }
+
+    operator TConclusionStatus() const {
+        return GetError();
     }
 
     const TString& GetErrorMessage() const {

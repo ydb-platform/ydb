@@ -1,4 +1,5 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
+#include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/change_exchange/change_sender_common_ops.h>
@@ -22,6 +23,7 @@
 namespace NKikimr {
 
 using namespace NDataShard;
+using namespace NDataShard::NKqpHelpers;
 using namespace Tests;
 
 Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
@@ -787,7 +789,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         static THolder<TDataStreamsClient> MakeClient(const NYdb::TDriver& driver, const TString& database) {
             return MakeHolder<TDataStreamsClient>(driver, NYdb::TCommonClientSettings().Database(database));
         }
-    }; 
+    };
 
     class TTestTopicEnv: public TTestEnv<TTestTopicEnv, NYdb::NTopic::TTopicClient> {
     public:
@@ -796,7 +798,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         static THolder<NYdb::NTopic::TTopicClient> MakeClient(const NYdb::TDriver& driver, const TString& database) {
             return MakeHolder<NYdb::NTopic::TTopicClient>(driver, NYdb::NTopic::TTopicClientSettings().Database(database));
         }
-    }; 
+    };
 
     TShardedTableOptions SimpleTable() {
         return TShardedTableOptions()
@@ -1342,7 +1344,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (3, 30);
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
-        )"}, { 
+        )"}, {
             R"({"update":{},"key":[1]})",
             R"({"update":{},"key":[2]})",
             R"({"update":{},"key":[3]})",
@@ -1358,7 +1360,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (3, 30);
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
-        )"}, { 
+        )"}, {
             {DebeziumBody("u", nullptr, nullptr), {{"__key", R"({"payload":{"key":1}})"}}},
             {DebeziumBody("u", nullptr, nullptr), {{"__key", R"({"payload":{"key":2}})"}}},
             {DebeziumBody("u", nullptr, nullptr), {{"__key", R"({"payload":{"key":3}})"}}},
@@ -1374,7 +1376,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (3, 30);
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
-        )"}, { 
+        )"}, {
             R"({"update":{"value":10},"key":[1]})",
             R"({"update":{"value":20},"key":[2]})",
             R"({"update":{"value":30},"key":[3]})",
@@ -1395,7 +1397,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (3, 300);
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
-        )"}, { 
+        )"}, {
             R"({"update":{},"newImage":{"value":10},"key":[1]})",
             R"({"update":{},"newImage":{"value":20},"key":[2]})",
             R"({"update":{},"newImage":{"value":30},"key":[3]})",
@@ -1419,7 +1421,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (3, 300);
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
-        )"}, { 
+        )"}, {
             {DebeziumBody("c", nullptr, R"({"key":1,"value":10})"), {{"__key", R"({"payload":{"key":1}})"}}},
             {DebeziumBody("c", nullptr, R"({"key":2,"value":20})"), {{"__key", R"({"payload":{"key":2}})"}}},
             {DebeziumBody("c", nullptr, R"({"key":3,"value":30})"), {{"__key", R"({"payload":{"key":3}})"}}},
@@ -1443,7 +1445,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (3, 300);
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
-        )"}, { 
+        )"}, {
             {DebeziumBody("u", nullptr, nullptr), {{"__key", R"({"payload":{"key":1}})"}}},
             {DebeziumBody("u", nullptr, nullptr), {{"__key", R"({"payload":{"key":2}})"}}},
             {DebeziumBody("u", nullptr, nullptr), {{"__key", R"({"payload":{"key":3}})"}}},
@@ -1454,7 +1456,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
-    Y_UNIT_TEST(NewImageLogDebezium) { 
+    Y_UNIT_TEST(NewImageLogDebezium) {
         TopicRunner::Read(SimpleTable(), NewImage(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (1, 10),
@@ -1467,7 +1469,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (3, 300);
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
-        )"}, { 
+        )"}, {
             {DebeziumBody("u", nullptr, R"({"key":1,"value":10})"), {{"__key", R"({"payload":{"key":1}})"}}},
             {DebeziumBody("u", nullptr, R"({"key":2,"value":20})"), {{"__key", R"({"payload":{"key":2}})"}}},
             {DebeziumBody("u", nullptr, R"({"key":3,"value":30})"), {{"__key", R"({"payload":{"key":3}})"}}},
@@ -1484,7 +1486,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (1, 10),
             (2, 20),
             (3, 30);
-        )"}, { 
+        )"}, {
             R"({"update":{},"key":[1],"ts":"***"})",
             R"({"update":{},"key":[2],"ts":"***"})",
             R"({"update":{},"key":[3],"ts":"***"})",
@@ -1510,7 +1512,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             UPSERT INTO `/Root/Table` (__Hash, id_shard, id_sort, __RowData) VALUES (
                 1, "10", "100", JsonDocument('{"M":{"color":{"S":"pink"},"weight":{"N":"4.5"}}}')
             );
-        )"}, { 
+        )"}, {
             WriteJson(NJson::TJsonMap({
                 {"awsRegion", ""},
                 {"dynamodb", NJson::TJsonMap({
@@ -1539,7 +1541,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             );
         )", R"(
             DELETE FROM `/Root/Table` WHERE __Hash = 1;
-        )"}, { 
+        )"}, {
             WriteJson(NJson::TJsonMap({
                 {"awsRegion", ""},
                 {"dynamodb", NJson::TJsonMap({
@@ -1637,7 +1639,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 (1, 0.0%s/0.0%s),
                 (2, 1.0%s/0.0%s),
                 (3, -1.0%s/0.0%s);
-            )", s, s, s, s, s, s)}, { 
+            )", s, s, s, s, s, s)}, {
                 R"({"update":{"value":"nan"},"key":[1]})",
                 R"({"update":{"value":"inf"},"key":[2]})",
                 R"({"update":{"value":"-inf"},"key":[3]})",
@@ -1672,7 +1674,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         TopicRunner::Read(table, KeysOnly(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson), {Sprintf(R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             ("%s", 1);
-        )", key.c_str())}, { 
+        )", key.c_str())}, {
             {DebeziumBody("u", nullptr, nullptr), {{"__key", Sprintf(R"({"payload":{"key":"%s"}})", key.c_str())}}},
         });
     }
@@ -1864,11 +1866,13 @@ Y_UNIT_TEST_SUITE(Cdc) {
     void WaitForContent(TServer::TPtr server, const TActorId& sender, const TString& path, const TVector<TString>& expected) {
         while (true) {
             const auto records = GetRecords(*server->GetRuntime(), sender, path, 0);
-            if (records.size() == expected.size()) {
-                for (ui32 i = 0; i < expected.size(); ++i) {
-                    AssertJsonsEqual(records.at(i).second, expected.at(i));
-                }
+            for (ui32 i = 0; i < std::min(records.size(), expected.size()); ++i) {
+                AssertJsonsEqual(records.at(i).second, expected.at(i));
+            }
 
+            if (records.size() >= expected.size()) {
+                UNIT_ASSERT_VALUES_EQUAL_C(records.size(), expected.size(),
+                    "Unexpected record: " << records.at(expected.size()).second);
                 break;
             }
 
@@ -2039,7 +2043,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         ExecSQL(env.GetServer(), env.GetEdgeActor(), R"(
             UPSERT INTO `/Root/TableAux` (key, value)
             VALUES (1, 10);
-        )"); 
+        )");
 
         SetSplitMergePartCountLimit(&runtime, -1);
         const auto tabletIds = GetTableShards(env.GetServer(), env.GetEdgeActor(), "/Root/Table");
@@ -2288,7 +2292,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         auto tabletIds = GetTableShards(env.GetServer(), env.GetEdgeActor(), "/Root/Table");
         UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
 
-        WaitTxNotification(env.GetServer(), env.GetEdgeActor(), 
+        WaitTxNotification(env.GetServer(), env.GetEdgeActor(),
             AsyncSplitTable(env.GetServer(), env.GetEdgeActor(), "/Root/Table", tabletIds.at(0), 4));
 
         // execute on old partitions
@@ -2372,7 +2376,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
             case TSchemeBoardEvents::EvUpdate:
                 if (auto* msg = ev->Get<TSchemeBoardEvents::TEvUpdate>()) {
-                    const auto desc = msg->GetRecord().GetDescribeSchemeResult();
+                    NKikimrScheme::TEvDescribeSchemeResult desc;
+                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(desc, *msg->GetRecord().GetDescribeSchemeResultSerialized().begin()));
                     if (desc.GetPath() == "/Root/Table/Stream" && desc.GetPathDescription().GetSelf().GetCreateFinished()) {
                         delayed.emplace_back(ev.Release());
                         return TTestActorRuntime::EEventAction::DROP;
@@ -2442,7 +2447,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         ExecSQL(env.GetServer(), env.GetEdgeActor(), R"(
             UPSERT INTO `/Root/Table` (key, value)
             VALUES (1, 10);
-        )"); 
+        )");
 
         SetSplitMergePartCountLimit(&runtime, -1);
         const auto tabletIds = GetTableShards(env.GetServer(), env.GetEdgeActor(), "/Root/Table");
@@ -3157,6 +3162,103 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
+    Y_UNIT_TEST(ResolvedTimestampsVolatileOutOfOrder) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableDataShardVolatileTransactions(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table1", SimpleTable());
+        CreateShardedTable(server, edgeActor, "/Root", "Table2", SimpleTable());
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table1",
+            WithResolvedTimestamps(TDuration::Seconds(3), Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table2",
+            WithResolvedTimestamps(TDuration::Seconds(3), Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        WaitForContent(server, edgeActor, "/Root/Table1/Stream", {
+            R"({"resolved":"***"})",
+        });
+        WaitForContent(server, edgeActor, "/Root/Table2/Stream", {
+            R"({"resolved":"***"})",
+        });
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table1` (key, value) VALUES (1, 10);
+            UPSERT INTO `/Root/Table2` (key, value) VALUES (2, 20);
+        )");
+
+        WaitForContent(server, edgeActor, "/Root/Table1/Stream", {
+            R"({"resolved":"***"})",
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"resolved":"***"})",
+        });
+        WaitForContent(server, edgeActor, "/Root/Table2/Stream", {
+            R"({"resolved":"***"})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"resolved":"***"})",
+        });
+
+        // Block readset exchange
+        std::vector<std::unique_ptr<IEventHandle>> readSets;
+        auto blockReadSets = runtime.AddObserver<TEvTxProcessing::TEvReadSet>([&](TEvTxProcessing::TEvReadSet::TPtr& ev) {
+            readSets.emplace_back(ev.Release());
+        });
+
+        // Start a distributed write to both tables
+        TString sessionId = CreateSessionRPC(runtime, "/Root");
+        auto upsertResult = SendRequest(
+            runtime,
+            MakeSimpleRequestRPC(R"(
+                UPSERT INTO `/Root/Table1` (key, value) VALUES (3, 30);
+                UPSERT INTO `/Root/Table2` (key, value) VALUES (4, 40);
+                )", sessionId, /* txId */ "", /* commitTx */ true),
+            "/Root");
+        WaitFor(runtime, [&]{ return readSets.size() >= 4; }, "readsets");
+
+        // Stop blocking further readsets
+        blockReadSets.Remove();
+
+        // Start another distributed write to both tables, it should succeed
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table1` (key, value) VALUES (5, 50);
+            UPSERT INTO `/Root/Table2` (key, value) VALUES (6, 60);
+        )");
+
+        runtime.SimulateSleep(TDuration::Seconds(10));
+
+        // Unblock readsets
+        for (auto& ev : readSets) {
+            runtime.Send(ev.release(), 0, true);
+        }
+        readSets.clear();
+
+        // There should be only one resolved timestamp after out of order writes
+        WaitForContent(server, edgeActor, "/Root/Table1/Stream", {
+            R"({"resolved":"***"})",
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"resolved":"***"})",
+            R"({"update":{"value":50},"key":[5]})",
+            R"({"update":{"value":30},"key":[3]})",
+            R"({"resolved":"***"})",
+        });
+        WaitForContent(server, edgeActor, "/Root/Table2/Stream", {
+            R"({"resolved":"***"})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"resolved":"***"})",
+            R"({"update":{"value":60},"key":[6]})",
+            R"({"update":{"value":40},"key":[4]})",
+            R"({"resolved":"***"})",
+        });
+    }
+
     Y_UNIT_TEST(SequentialSplitMerge) {
         TTestPqEnv env(SimpleTable(), Updates(NKikimrSchemeOp::ECdcStreamFormatJson), false);
         SetSplitMergePartCountLimit(env.GetServer()->GetRuntime(), -1);
@@ -3165,7 +3267,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         auto tabletIds = GetTableShards(env.GetServer(), env.GetEdgeActor(), "/Root/Table");
         UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
 
-        WaitTxNotification(env.GetServer(), env.GetEdgeActor(), 
+        WaitTxNotification(env.GetServer(), env.GetEdgeActor(),
             AsyncSplitTable(env.GetServer(), env.GetEdgeActor(), "/Root/Table", tabletIds.at(0), 4));
 
         // merge
@@ -3197,7 +3299,7 @@ template <>
 void Out<std::pair<TString, TString>>(IOutputStream& output, const std::pair<TString, TString>& x) {
     output << x.first << ":" << x.second;
 }
- 
+
 void AppendToString(TString& dst, const std::pair<TString, TString>& x) {
     TStringOutput output(dst);
     output << x;

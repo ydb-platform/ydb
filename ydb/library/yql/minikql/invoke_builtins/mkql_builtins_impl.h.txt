@@ -866,12 +866,12 @@ struct TBinaryKernelExecsBase {
 };
 
 template<typename TInput1, typename TInput2, typename TOutput,
-         typename TFuncInstance, bool DefaultNulls>
+         typename TFuncInstance, TKernel::ENullMode NullMode>
 struct TBinaryKernelExecs;
 
 template<typename TInput1, typename TInput2, typename TOutput,
         typename TFuncInstance>
-struct TBinaryKernelExecs<TInput1, TInput2, TOutput, TFuncInstance, true> : TBinaryKernelExecsBase<TBinaryKernelExecs<TInput1, TInput2, TOutput, TFuncInstance, true>>
+struct TBinaryKernelExecs<TInput1, TInput2, TOutput, TFuncInstance, TKernel::ENullMode::Default> : TBinaryKernelExecsBase<TBinaryKernelExecs<TInput1, TInput2, TOutput, TFuncInstance, TKernel::ENullMode::Default>>
 {
     static arrow::Status ExecScalarScalar(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
@@ -948,7 +948,7 @@ struct TBinaryKernelExecs<TInput1, TInput2, TOutput, TFuncInstance, true> : TBin
 
 template<typename TInput1, typename TInput2, typename TOutput,
         typename TFuncInstance>
-struct TBinaryKernelExecs<TInput1, TInput2, TOutput, TFuncInstance, false> : TBinaryKernelExecsBase<TBinaryKernelExecs<TInput1, TInput2, TOutput, TFuncInstance, false>>
+struct TBinaryKernelExecs<TInput1, TInput2, TOutput, TFuncInstance, TKernel::ENullMode::AlwaysNull> : TBinaryKernelExecsBase<TBinaryKernelExecs<TInput1, TInput2, TOutput, TFuncInstance, TKernel::ENullMode::AlwaysNull>>
 {
     static arrow::Status ExecScalarScalar(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
@@ -1075,8 +1075,8 @@ struct TBinaryKernelExecs<TInput1, TInput2, TOutput, TFuncInstance, false> : TBi
 
 class TPlainKernel : public TKernel {
 public:
-    TPlainKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes, NUdf::TDataTypeId returnType, const arrow::compute::ScalarKernel& arrowKernel)
-        : TKernel(family, argTypes, returnType)
+    TPlainKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes, NUdf::TDataTypeId returnType, const arrow::compute::ScalarKernel& arrowKernel, TKernel::ENullMode nullMode)
+        : TKernel(family, argTypes, returnType, nullMode)
         , ArrowKernel(arrowKernel)
     {
     }
@@ -1133,8 +1133,18 @@ void AddUnaryKernel(TKernelFamilyBase& owner) {
     NUdf::TDataTypeId returnType = TOutput::Id;
 
     arrow::compute::ScalarKernel k({ GetPrimitiveInputArrowType<TInputLayout>() }, GetPrimitiveOutputArrowType<TOutputLayout>(), &TExecs::Exec);
-    k.null_handling = owner.NullMode == TKernelFamily::ENullMode::Default ? arrow::compute::NullHandling::INTERSECTION : arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
-    owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, k));
+    switch (TFuncInstance::NullMode) {
+        case TKernel::ENullMode::Default:
+            k.null_handling = arrow::compute::NullHandling::INTERSECTION;
+            break;
+        case TKernel::ENullMode::AlwaysNull:
+            k.null_handling = arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+            break;
+        case TKernel::ENullMode::AlwaysNotNull:
+            k.null_handling = arrow::compute::NullHandling::OUTPUT_NOT_NULL;
+            break;
+    }
+    owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, k, TFuncInstance::NullMode));
 }
 
 template<typename TInput1, typename TInput2, typename TOutput,
@@ -1145,15 +1155,25 @@ void AddBinaryKernel(TKernelFamilyBase& owner) {
     using TOutputLayout = typename TOutput::TLayout;
 
     using TFuncInstance = TFunc<TInput1Layout, TInput2Layout, TOutputLayout>;
-    using TExecs = TBinaryKernelExecs<TInput1Layout, TInput2Layout, TOutputLayout, TFuncInstance, TFuncInstance::DefaultNulls>;
+    using TExecs = TBinaryKernelExecs<TInput1Layout, TInput2Layout, TOutputLayout, TFuncInstance, TFuncInstance::NullMode>;
 
     std::vector<NUdf::TDataTypeId> argTypes({ TInput1::Id, TInput2::Id });
     NUdf::TDataTypeId returnType = TOutput::Id;
 
     arrow::compute::ScalarKernel k({ GetPrimitiveInputArrowType<TInput1Layout>(), GetPrimitiveInputArrowType<TInput2Layout>() },
                                    GetPrimitiveOutputArrowType<TOutputLayout>(), &TExecs::Exec);
-    k.null_handling = owner.NullMode == TKernelFamily::ENullMode::Default ? arrow::compute::NullHandling::INTERSECTION : arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
-    owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, k));
+    switch (TFuncInstance::NullMode) {
+        case TKernel::ENullMode::Default:
+            k.null_handling = arrow::compute::NullHandling::INTERSECTION;
+            break;
+        case TKernel::ENullMode::AlwaysNull:
+            k.null_handling = arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+            break;
+        case TKernel::ENullMode::AlwaysNotNull:
+            k.null_handling = arrow::compute::NullHandling::OUTPUT_NOT_NULL;
+            break;
+    }
+    owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, k, TFuncInstance::NullMode));
 }
 
 template<typename TInput1, typename TInput2, typename TOutput,
@@ -1164,15 +1184,25 @@ void AddBinaryKernelPoly(TKernelFamilyBase& owner) {
     using TOutputLayout = typename TOutput::TLayout;
 
     using TFuncInstance = TFunc<TInput1, TInput2, TOutput>;
-    using TExecs = TBinaryKernelExecs<TInput1Layout, TInput2Layout, TOutputLayout, TFuncInstance, TFuncInstance::DefaultNulls>;
+    using TExecs = TBinaryKernelExecs<TInput1Layout, TInput2Layout, TOutputLayout, TFuncInstance, TFuncInstance::NullMode>;
 
     std::vector<NUdf::TDataTypeId> argTypes({ TInput1::Id, TInput2::Id });
     NUdf::TDataTypeId returnType = TOutput::Id;
 
     arrow::compute::ScalarKernel k({ GetPrimitiveInputArrowType<TInput1Layout>(), GetPrimitiveInputArrowType<TInput2Layout>() },
                                    GetPrimitiveOutputArrowType<TOutputLayout>(), &TExecs::Exec);
-    k.null_handling = owner.NullMode == TKernelFamily::ENullMode::Default ? arrow::compute::NullHandling::INTERSECTION : arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
-    owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, k));
+    switch (TFuncInstance::NullMode) {
+        case TKernel::ENullMode::Default:
+            k.null_handling = arrow::compute::NullHandling::INTERSECTION;
+            break;
+        case TKernel::ENullMode::AlwaysNull:
+            k.null_handling = arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+            break;
+        case TKernel::ENullMode::AlwaysNotNull:
+            k.null_handling = arrow::compute::NullHandling::OUTPUT_NOT_NULL;
+            break;
+    }
+    owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, k, TFuncInstance::NullMode));
 }
 
 template<template<typename, typename> class TFunc>
@@ -1186,6 +1216,12 @@ void AddUnaryIntegralKernels(TKernelFamilyBase& owner) {
     AddUnaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, TFunc>(owner);
     AddUnaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc>(owner);
     AddUnaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc>(owner);
+}
+
+template<template<typename, typename> class TFunc>
+void AddUnaryRealKernels(TKernelFamilyBase& owner) {
+    AddUnaryKernel<NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc>(owner);
+    AddUnaryKernel<NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc>(owner);
 }
 
 template<template<typename, typename, typename> class TFunc>
@@ -1264,22 +1300,70 @@ void AddBinaryIntegralKernels(TKernelFamilyBase& owner) {
 }
 
 template<template<typename, typename, typename> class TFunc>
+void AddBinaryRealKernels(TKernelFamilyBase& owner) {
+    AddBinaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<i8>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<i8>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<ui8>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<ui8>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<i16>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<i16>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<ui16>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<ui16>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<i32>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<i32>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<ui32>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<ui32>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<i64>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<i64>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<ui64>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<ui64>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<float>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+}
+
+template<template<typename, typename, typename> class TFuncForIntegral, template<typename, typename, typename> class TFuncForReal>
 class TBinaryNumericKernelFamily : public TKernelFamilyBase {
 public:
-    TBinaryNumericKernelFamily(TKernelFamily::ENullMode nullMode = TKernelFamily::ENullMode::Default)
-        : TKernelFamilyBase(nullMode)
+    TBinaryNumericKernelFamily()
     {
-        AddBinaryIntegralKernels<TFunc>(*this);
+        AddBinaryIntegralKernels<TFuncForIntegral>(*this);
+        AddBinaryRealKernels<TFuncForReal>(*this);
     }
 };
 
 template<template<typename, typename> class TFunc>
 class TUnaryNumericKernelFamily : public TKernelFamilyBase {
 public:
-    TUnaryNumericKernelFamily(TKernelFamily::ENullMode nullMode = TKernelFamily::ENullMode::Default)
-        : TKernelFamilyBase(nullMode)
+    TUnaryNumericKernelFamily()
     {
         AddUnaryIntegralKernels<TFunc>(*this);
+        AddUnaryRealKernels<TFunc>(*this);
     }
 };
 

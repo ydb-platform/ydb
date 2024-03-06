@@ -104,7 +104,7 @@ private:
         }
 
         auto functionRegistryFactory = [this](const NKikimr::NScheme::TTypeRegistry&) {
-            return Settings_.FunctionRegistry;
+            return Settings_.FunctionRegistry.Get();
         };
 
         serverSettings.SetFrFactory(functionRegistryFactory);
@@ -140,7 +140,7 @@ private:
     }
 
     void InitializeYqlLogger() {
-        if (!Settings_.TraceOpt) {
+        if (!Settings_.TraceOptEnabled) {
             return;
         }
 
@@ -159,7 +159,7 @@ private:
             entry->SetLevel(NActors::NLog::PRI_TRACE);
         }
 
-        NYql::NLog::InitLogger(CreateLogBackend());
+        NYql::NLog::InitLogger(NActors::CreateNullBackend());
     }
 
 public:
@@ -184,12 +184,14 @@ public:
         return RunKqpProxyRequest<NKikimr::NKqp::TEvKqp::TEvScriptRequest, NKikimr::NKqp::TEvKqp::TEvScriptResponse>(std::move(event));
     }
 
-    NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const {
+    NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, std::vector<Ydb::ResultSet>& resultSets) const {
         auto event = MakeHolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest>();
         FillScriptRequest(query, action, traceId, event->Record);
 
         auto promise = NThreading::NewPromise<NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr>();
-        GetRuntime()->Register(CreateRunScriptActorMock(std::move(event), promise, Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultSizeLimit()));
+        auto rowsLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultRowsLimit();
+        auto sizeLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultSizeLimit();
+        GetRuntime()->Register(CreateRunScriptActorMock(std::move(event), promise, rowsLimit, sizeLimit, resultSets));
 
         return promise.GetFuture().GetValueSync();
     }
@@ -201,15 +203,28 @@ public:
         return RunKqpProxyRequest<NKikimr::NKqp::TEvGetScriptExecutionOperation, NKikimr::NKqp::TEvGetScriptExecutionOperationResponse>(std::move(event));
     }
 
-    NKikimr::NKqp::TEvKqp::TEvFetchScriptResultsResponse::TPtr FetchScriptExecutionResultsRequest(const TString& operation, i32 resultSetId, i64 limit) const {
+    NKikimr::NKqp::TEvKqp::TEvFetchScriptResultsResponse::TPtr FetchScriptExecutionResultsRequest(const TString& operation, i32 resultSetId) const {
         TString executionId = *NKikimr::NKqp::ScriptExecutionIdFromOperation(operation);
 
         NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor();
-        NActors::IActor* fetchActor = NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, Settings_.DomainName, executionId, resultSetId, 0, limit);
+        auto rowsLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultRowsLimit();
+        NActors::IActor* fetchActor = NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, Settings_.DomainName, executionId, resultSetId, 0, rowsLimit ? rowsLimit : std::numeric_limits<i64>::max());
 
         GetRuntime()->Register(fetchActor);
 
         return GetRuntime()->GrabEdgeEvent<NKikimr::NKqp::TEvKqp::TEvFetchScriptResultsResponse>(edgeActor);
+    }
+
+    void StartTraceOpt() const {
+        if (!Settings_.TraceOptEnabled) {
+            ythrow yexception() << "Trace opt was disabled";
+        }
+
+        NYql::NLog::YqlLogger().ResetBackend(CreateLogBackend());
+    }
+
+    static void StopTraceOpt() {
+        NYql::NLog::YqlLogger().ResetBackend(NActors::CreateNullBackend());
     }
 
 private:
@@ -308,8 +323,8 @@ TRequestResult TYdbSetup::ScriptRequest(const TString& script, NKikimrKqp::EQuer
     return TRequestResult(scriptExecutionOperation->Get()->Status, scriptExecutionOperation->Get()->Issues);
 }
 
-TRequestResult TYdbSetup::QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta) const {
-    auto queryOperationResponse = Impl_->QueryRequest(query, action, traceId)->Get()->Record.GetRef();
+TRequestResult TYdbSetup::QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const {
+    auto queryOperationResponse = Impl_->QueryRequest(query, action, traceId, resultSets)->Get()->Record.GetRef();
 
     meta.Ast = queryOperationResponse.GetResponse().GetQueryAst();
     meta.Plan = queryOperationResponse.GetResponse().GetQueryPlan();
@@ -339,8 +354,8 @@ TRequestResult TYdbSetup::GetScriptExecutionOperationRequest(const TString& oper
     return TRequestResult(scriptExecutionOperation->Get()->Status, scriptExecutionOperation->Get()->Issues);
 }
 
-TRequestResult TYdbSetup::FetchScriptExecutionResultsRequest(const TString& operation, i32 resultSetId, i64 limit, Ydb::ResultSet& resultSet) const {
-    auto scriptExecutionResults = Impl_->FetchScriptExecutionResultsRequest(operation, resultSetId, limit)->Get()->Record;
+TRequestResult TYdbSetup::FetchScriptExecutionResultsRequest(const TString& operation, i32 resultSetId, Ydb::ResultSet& resultSet) const {
+    auto scriptExecutionResults = Impl_->FetchScriptExecutionResultsRequest(operation, resultSetId)->Get()->Record;
 
     resultSet = scriptExecutionResults.GetResultSet();
 
@@ -348,6 +363,14 @@ TRequestResult TYdbSetup::FetchScriptExecutionResultsRequest(const TString& oper
     NYql::IssuesFromMessage(scriptExecutionResults.GetIssues(), issues);
 
     return TRequestResult(scriptExecutionResults.GetStatus(), issues);
+}
+
+void TYdbSetup::StartTraceOpt() const {
+    Impl_->StartTraceOpt();
+}
+
+void TYdbSetup::StopTraceOpt() {
+    TYdbSetup::TImpl::StopTraceOpt();
 }
 
 }  // namespace NKqpRun

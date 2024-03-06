@@ -6,6 +6,7 @@
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/data_events/shards_splitter.h>
@@ -15,11 +16,12 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
 
 
 namespace {
     struct TWriteActorBackoffSettings {
-        TDuration StartRetryDelay = TDuration::MilliSeconds(100);
+        TDuration StartRetryDelay = TDuration::MilliSeconds(150);
         TDuration MaxRetryDelay = TDuration::Seconds(5);
         double UnsertaintyRatio = 0.5;
         double Multiplier = 2.0;
@@ -81,13 +83,13 @@ public:
         , Counters(counters)
         , TypeEnv(args.TypeEnv)
         , TxId(args.TxId)
-        , TableId(Settings.GetTable().GetOwnerId(), Settings.GetTable().GetTableId())
+        , TableId(
+            Settings.GetTable().GetOwnerId(),
+            Settings.GetTable().GetTableId(),
+            Settings.GetTable().GetVersion())
     {
         YQL_ENSURE(std::holds_alternative<ui64>(TxId));
         EgressStats.Level = args.StatsLevel;
-
-        BuildColumns();
-        PrepareBatchBuilder();
     }
 
     void Bootstrap() {
@@ -114,7 +116,9 @@ private:
     }
 
     i64 GetFreeSpace() const final {
-        return MemoryLimit - (MemoryInFlight + BatchBuilder->Bytes());
+        return SchemeEntry
+            ? MemoryLimit - (MemoryInFlight + BatchBuilder->Bytes())
+            : std::numeric_limits<i64>::min(); // Can't use zero here because compute can use overcommit!
     }
 
     void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64, const TMaybe<NYql::NDqProto::TCheckpoint>&, bool finished) final {
@@ -128,18 +132,19 @@ private:
     }
 
     void AddToInputQueue(NMiniKQL::TUnboxedValueBatch&& data) {
+        YQL_ENSURE(SchemeEntry);
+        YQL_ENSURE(BatchBuilder);
+
         TVector<TCell> cells(Columns.size());
         data.ForEachRow([&](const auto& row) {
             for (size_t index = 0; index < Columns.size(); ++index) {
-                cells[index] = MakeCell(
+                cells[SendIndexToWriteIndexMapping[index]] = MakeCell(
                     Columns[index].PType,
                     row.GetElement(index),
                     TypeEnv,
                     /* copy */ false);
             }
-            BatchBuilder->AddRow(
-                TConstArrayRef<TCell>{cells.begin(), cells.begin() + KeyColumns.size()},
-                TConstArrayRef<TCell>{cells.begin() + KeyColumns.size(), cells.end()});
+            BatchBuilder->AddRow(TConstArrayRef<TCell>{cells.begin(), cells.end()});
         });
     }
 
@@ -176,16 +181,21 @@ private:
             RuntimeError(TStringBuilder() << "Failed to get table: "
                 << TableId << "'", NYql::NDqProto::StatusIds::SCHEME_ERROR);
         }
-
         auto& resultSet = ev->Get()->Request->ResultSet;
         YQL_ENSURE(resultSet.size() == 1);
         SchemeEntry = resultSet[0];
 
         YQL_ENSURE(SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
 
-        CA_LOG_D("Resolved TableId=" << TableId);
+        CA_LOG_D("Resolved TableId=" << TableId << " (" << SchemeEntry->TableId.PathId.ToString() << " " << SchemeEntry->TableId.SchemaVersion << ")");
 
-        ProcessRows();
+        if (SchemeEntry->TableId.SchemaVersion != TableId.SchemaVersion) {
+            RuntimeError(TStringBuilder() << "Schema was updated.", NYql::NDqProto::StatusIds::SCHEME_ERROR);
+        }
+
+        Prepare();
+
+        Callbacks->ResumeExecution();
     }
 
     void Handle(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
@@ -224,9 +234,13 @@ private:
         } else if (ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
             CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId() << ", TabletId=" << ev->Get()->Record.GetOrigin());
             auto& batchesQueue = InFlightBatches.at(ev->Get()->Record.GetOrigin());
-            YQL_ENSURE(!batchesQueue.empty());
 
-            if (ev->Get()->Record.GetTxId() == batchesQueue.front().TxId) {
+            if (!batchesQueue.empty()
+                && (ev->Get()->Record.GetTxId() == batchesQueue.front().TxId
+                    || std::find(
+                        std::begin(batchesQueue.front().OldTxIds),
+                        std::end(batchesQueue.front().OldTxIds),
+                        ev->Get()->Record.GetTxId()) != std::end(batchesQueue.front().OldTxIds))) {
                 const bool needToResume = (GetFreeSpace() <= 0);
 
                 EgressStats.Bytes += batchesQueue.front().Data.size();
@@ -247,7 +261,7 @@ private:
 
     void ProcessRows() {
         SplitBatchByShards();
-        SendNewBatchesToShards();
+        SendBatchesToShards();
 
         if (Finished && SchemeEntry && IsInFlightBatchesEmpty()) {
             Callbacks->OnAsyncOutputFinished(GetOutputIndex());
@@ -290,9 +304,9 @@ private:
         }
     }
 
-    void SendNewBatchesToShards() {
+    void SendBatchesToShards() {
         for (auto& [shardId, batches] : InFlightBatches) {
-            if (!batches.empty() && batches.front().SendAttempts == 0) {
+            if (!batches.empty() && batches.front().TxId == 0) {
                 if (const auto txId = AllocateTxId(); txId) {
                     batches.front().TxId = *txId;
                     SendRequestShard(shardId);
@@ -321,7 +335,7 @@ private:
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(
             inFlightBatch.TxId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
-        ui64 payloadIndex = NKikimr::NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite)
+        ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite)
             .AddDataToPayload(TString(inFlightBatch.Data));
 
         evWrite->AddOperation(
@@ -331,7 +345,7 @@ private:
                 Settings.GetTable().GetTableId(),
                 Settings.GetTable().GetVersion() + 1 // TODO: SchemeShard returns wrong version.
             },
-            ColumnIds,
+            WriteColumnIds,
             payloadIndex,
             NKikimrDataEvents::FORMAT_ARROW);
 
@@ -348,6 +362,19 @@ private:
         ++inFlightBatch.SendAttempts;
     }
 
+    void RetryShard(const ui64 shardId) {
+        if (!InFlightBatches.contains(shardId) || InFlightBatches.at(shardId).empty()) {
+            return;
+        }
+        CA_LOG_D("Retry ShardID=" << shardId);
+        auto& inFlightBatch = InFlightBatches.at(shardId).front();
+        if (inFlightBatch.TxId != 0) {
+            inFlightBatch.OldTxIds.push_back(inFlightBatch.TxId);
+            inFlightBatch.TxId = 0;
+        }
+        RequestNewTxId();
+    }
+
     void Handle(TEvPrivate::TEvShardRequestTimeout::TPtr& ev) {
         if (!InFlightBatches.contains(ev->Get()->ShardId)) {
             return;
@@ -359,7 +386,7 @@ private:
             return;
         }
 
-        SendRequestShard(ev->Get()->ShardId);
+        RetryShard(ev->Get()->ShardId);
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -367,7 +394,7 @@ private:
         if (!InFlightBatches.contains(ev->Get()->TabletId)) {
             return;
         }
-        SendRequestShard(ev->Get()->TabletId);
+        RetryShard(ev->Get()->TabletId);
     }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
@@ -383,8 +410,8 @@ private:
         if (FreeTxIds.empty()) {
             return std::nullopt;
         }
-        const ui64 result = FreeTxIds.back();
-        FreeTxIds.pop_back();
+        const ui64 result = FreeTxIds.front();
+        FreeTxIds.pop_front();
         return result;
     }
 
@@ -401,52 +428,55 @@ private:
     }
 
     void PassAway() override {
+        Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
         TActorBootstrapped<TKqpWriteActor>::PassAway();
     }
 
-    void BuildColumns() {
-        KeyColumns.reserve(Settings.KeyColumnsSize());
-        i32 number = 0;
-        for (const auto& column : Settings.GetKeyColumns()) {
-            KeyColumns.emplace_back(
-                column.GetName(),
-                column.GetId(),
-                NScheme::TTypeInfo {
-                    static_cast<NScheme::TTypeId>(column.GetTypeId()),
-                    column.GetTypeId() == NScheme::NTypeIds::Pg
-                        ? NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())
-                        : nullptr
-                },
-                column.GetTypeInfo().GetPgTypeMod(),
-                number++
-            );
+    void Prepare() {
+        YQL_ENSURE(SchemeEntry);
+        std::vector<std::pair<TString, NScheme::TTypeInfo>> batchBuilderColumns;
+        THashMap<ui32, ui32> writeColumnIdToIndex;
+        {
+            batchBuilderColumns.reserve(Settings.ColumnsSize());
+            WriteColumnIds.reserve(Settings.ColumnsSize());
+            if (!SchemeEntry->ColumnTableInfo) {
+                RuntimeError("Expected column table.", NYql::NDqProto::StatusIds::SCHEME_ERROR);
+            }
+            if (!SchemeEntry->ColumnTableInfo->Description.HasSchema()) {
+                RuntimeError("Unknown schema for column table.", NYql::NDqProto::StatusIds::SCHEME_ERROR);
+            }
+            i32 number = 0;
+            for (const auto& column : SchemeEntry->ColumnTableInfo->Description.GetSchema().GetColumns()) {
+                Y_ABORT_UNLESS(column.HasTypeId());
+                auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
+                    column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
+                batchBuilderColumns.emplace_back(column.GetName(), typeInfoMod.TypeInfo);
+                WriteColumnIds.push_back(column.GetId());
+                writeColumnIdToIndex[column.GetId()] = number++;
+            }
         }
 
-        ColumnIds.reserve(Settings.ColumnsSize());
-        Columns.reserve(Settings.ColumnsSize());
-        number = 0;
-        for (const auto& column : Settings.GetColumns()) {
-            ColumnIds.push_back(column.GetId());
-            Columns.emplace_back(
-                column.GetName(),
-                column.GetId(),
-                NScheme::TTypeInfo {
-                    static_cast<NScheme::TTypeId>(column.GetTypeId()),
-                    column.GetTypeId() == NScheme::NTypeIds::Pg
-                        ? NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())
-                        : nullptr
-                },
-                column.GetTypeInfo().GetPgTypeMod(),
-                number++
-            );
+        {
+            SendIndexToWriteIndexMapping.resize(Settings.ColumnsSize());
+            Columns.reserve(Settings.ColumnsSize());
+            i32 number = 0;
+            for (const auto& column : Settings.GetColumns()) {
+                SendIndexToWriteIndexMapping[number] = writeColumnIdToIndex.at(column.GetId());
+                Columns.emplace_back(
+                    column.GetName(),
+                    column.GetId(),
+                    NScheme::TTypeInfo {
+                        static_cast<NScheme::TTypeId>(column.GetTypeId()),
+                        column.GetTypeId() == NScheme::NTypeIds::Pg
+                            ? NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())
+                            : nullptr
+                    },
+                    column.GetTypeInfo().GetPgTypeMod(),
+                    number++
+                );
+            }
         }
-    }
 
-    void PrepareBatchBuilder() {
-        std::vector<std::pair<TString, NScheme::TTypeInfo>> columns;
-        for (const auto& column : Columns) {
-            columns.emplace_back(column.Name, column.PType);
-        }
         std::set<std::string> notNullColumns;
         for (const auto& column : Settings.GetColumns()) {
             if (column.GetNotNull()) {
@@ -457,7 +487,7 @@ private:
         BatchBuilder = std::make_unique<NArrow::TArrowBatchBuilder>(arrow::Compression::UNCOMPRESSED, notNullColumns);
 
         TString err;
-        if (!BatchBuilder->Start(columns, 0, 0, err)) {
+        if (!BatchBuilder->Start(batchBuilderColumns, 0, 0, err)) {
             RuntimeError("Failed to start batch builder: " + err, NYql::NDqProto::StatusIds::PRECONDITION_FAILED);
         }
     }
@@ -498,9 +528,9 @@ private:
     const NYql::NDq::TTxId TxId;
     const TTableId TableId;
 
-    TVector<TSysTables::TTableColumnInfo> KeyColumns;
     TVector<TSysTables::TTableColumnInfo> Columns;
-    std::vector<ui32> ColumnIds;
+    TVector<ui32> SendIndexToWriteIndexMapping;
+    std::vector<ui32> WriteColumnIds;
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
 
@@ -510,6 +540,7 @@ private:
         TString Data;
         ui32 SendAttempts = 0;
         ui64 TxId = 0;
+        TVector<ui64> OldTxIds;
     };
     THashMap<ui64, std::deque<TInFlightBatch>> InFlightBatches;
     bool Finished = false;
@@ -517,7 +548,7 @@ private:
     const i64 MemoryLimit = kInFlightMemoryLimitPerActor;
     i64 MemoryInFlight = 0;
 
-    std::vector<ui64> FreeTxIds;
+    std::deque<ui64> FreeTxIds;
 };
 
 void RegisterKqpWriteActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<TKqpCounters> counters) {

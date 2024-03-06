@@ -6,7 +6,6 @@ RECURSE(
     canonical
     clickbench
     cms
-    cms_config_cache
     dynumber
     encryption
     hive

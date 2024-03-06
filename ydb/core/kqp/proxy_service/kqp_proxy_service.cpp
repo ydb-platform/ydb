@@ -17,6 +17,7 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -67,15 +68,6 @@ static constexpr TDuration DEFAULT_CREATE_SESSION_TIMEOUT = TDuration::MilliSeco
 using namespace NKikimrConfig;
 
 
-std::optional<ui32> GetDefaultStateStorageGroupId(const TString& database) {
-    if (auto* domainInfo = AppData()->DomainsInfo->GetDomainByName(ExtractDomain(database))) {
-        return domainInfo->DefaultStateStorageGroup;
-    }
-
-    return std::nullopt;
-}
-
-
 std::optional<ui32> TryDecodeYdbSessionId(const TString& sessionId) {
     if (sessionId.empty()) {
         return std::nullopt;
@@ -108,6 +100,32 @@ TString EncodeSessionId(ui32 nodeId, const TString& id) {
     NOperationId::AddOptionalValue(opId, "id", Base64Encode(id));
     return NOperationId::ProtoToString(opId);
 }
+
+class TKqpTempTablesAgentActor: public TActorBootstrapped<TKqpTempTablesAgentActor> {
+public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::KQP_PROXY_ACTOR;
+    }
+
+    explicit TKqpTempTablesAgentActor()
+    {}
+
+    void Bootstrap() {
+        Become(&TKqpTempTablesAgentActor::StateWork);
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NSchemeShard::TEvSchemeShard::TEvOwnerActorAck, HandleNoop)
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
+    }
+
+private:
+    template<typename T>
+    void HandleNoop(T&) {
+    }
+};
 
 class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
     struct TEvPrivate {
@@ -263,6 +281,8 @@ public:
 
         KqpRmServiceActor = MakeKqpRmServiceID(SelfId().NodeId());
 
+        KqpTempTablesAgentActor = Register(new TKqpTempTablesAgentActor());
+
         Become(&TKqpProxyService::MainState);
         StartCollectPeerProxyData();
         PublishResourceUsage();
@@ -394,16 +414,9 @@ public:
             return;
         }
 
-        auto groupId = GetDefaultStateStorageGroupId(AppData()->TenantName);
-        if (!groupId) {
-            KQP_PROXY_LOG_D("Unable to determine default state storage group id for database " <<
-                AppData()->TenantName);
-            return;
-        }
-
         NodeResources.SetActiveWorkersCount(LocalSessions->size());
         PublishBoardPath = MakeKqpProxyBoardPath(AppData()->TenantName);
-        auto actor = CreateBoardPublishActor(PublishBoardPath, NodeResources.SerializeAsString(), SelfId(), *groupId, 0, true);
+        auto actor = CreateBoardPublishActor(PublishBoardPath, NodeResources.SerializeAsString(), SelfId(), 0, true);
         BoardPublishActor = Register(actor);
         LastPublishResourcesAt = TAppData::TimeProvider->Now();
     }
@@ -433,6 +446,8 @@ public:
 
     void PassAway() override {
         Send(CompileService, new TEvents::TEvPoisonPill());
+
+        Send(KqpTempTablesAgentActor, new TEvents::TEvPoisonPill());
 
         if (TableServiceConfig.GetEnableAsyncComputationPatternCompilation()) {
             Send(CompileComputationPatternService, new TEvents::TEvPoisonPill());
@@ -566,7 +581,8 @@ public:
         const auto deadline = TInstant::MicroSeconds(event.GetDeadlineUs());
 
         if (CheckRequestDeadline(requestInfo, deadline, result) &&
-            CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), true, request.GetDatabase(), event.GetSupportsBalancing(), event.GetPgWire(), result))
+            CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), true, request.GetDatabase(),
+                request.GetApplicationName(), event.GetSupportsBalancing(), event.GetPgWire(), result))
         {
             auto& response = *responseEv->Record.MutableResponse();
             response.SetSessionId(result.Value->SessionId);
@@ -595,15 +611,16 @@ public:
         const auto queryAction = ev->Get()->GetAction();
         TKqpRequestInfo requestInfo(traceId);
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvQueryRequest);
+        bool explicitSession = true;
         if (ev->Get()->GetSessionId().empty()) {
             TProcessResult<TKqpSessionInfo*> result;
             if (!CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), false,
-                database, false, false, result))
+                database, {}, false, false, result))
             {
                 ReplyProcessError(result.YdbStatus, result.Error, requestId);
                 return;
             }
-
+            explicitSession = false;
             ev->Get()->SetSessionId(result.Value->SessionId);
         }
 
@@ -617,6 +634,20 @@ public:
         auto dbCounters = sessionInfo ? sessionInfo->DbCounters : nullptr;
         if (!dbCounters) {
             dbCounters = Counters->GetDbCounters(database);
+        }
+
+        if (queryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY ||
+            queryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY) {
+
+            if (explicitSession &&
+                sessionInfo &&
+                !sessionInfo->PgWire && // pg wire bypasses rpc layer and doesn't perform attach
+                !sessionInfo->AttachedRpcId)
+            {
+                TString error = "Attempt to execute query on explicit session without attach";
+                ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId);
+                return;
+            }
         }
 
         PendingRequests.SetSessionId(requestId, sessionId, dbCounters);
@@ -657,8 +688,8 @@ public:
         if (cancelAfter) {
             timerDuration = Min(timerDuration, cancelAfter);
         }
-        KQP_PROXY_LOG_D("Ctx: " << *ev->Get()->GetUserRequestContext() << ". TEvQueryRequest, set timer for: " << timerDuration 
-            << " timeout: " << timeout << " cancelAfter: " << cancelAfter 
+        KQP_PROXY_LOG_D("Ctx: " << *ev->Get()->GetUserRequestContext() << ". TEvQueryRequest, set timer for: " << timerDuration
+            << " timeout: " << timeout << " cancelAfter: " << cancelAfter
             << ". " << "Send request to target, requestId: " << requestId << ", targetId: " << targetId);
         auto status = timerDuration == cancelAfter ? NYql::NDqProto::StatusIds::CANCELLED : NYql::NDqProto::StatusIds::TIMEOUT;
         StartQueryTimeout(requestId, timerDuration, status);
@@ -866,14 +897,8 @@ public:
             return;
         }
 
-        auto groupId = GetDefaultStateStorageGroupId(AppData()->TenantName);
-        if (!groupId) {
-            KQP_PROXY_LOG_W("Unable to determine default state storage group id");
-            return;
-        }
-
         if (PublishBoardPath) {
-            auto actor = CreateBoardLookupActor(PublishBoardPath, SelfId(), *groupId, EBoardLookupMode::Majority);
+            auto actor = CreateBoardLookupActor(PublishBoardPath, SelfId(), EBoardLookupMode::Majority);
             BoardLookupActor = Register(actor);
         }
     }
@@ -1375,8 +1400,8 @@ private:
         }
     }
 
-    bool CreateNewSessionWorker(const TKqpRequestInfo& requestInfo,
-        const TString& cluster, bool longSession, const TString& database, bool supportsBalancing, bool pgWire, TProcessResult<TKqpSessionInfo*>& result)
+    bool CreateNewSessionWorker(const TKqpRequestInfo& requestInfo, const TString& cluster, bool longSession,
+        const TString& database, const TMaybe<TString>& applicationName, bool supportsBalancing, bool pgWire, TProcessResult<TKqpSessionInfo*>& result)
     {
         if (!database.empty() && AppData()->TenantName.empty()) {
             TString error = TStringBuilder() << "Node isn't ready to serve database requests.";
@@ -1414,12 +1439,14 @@ private:
 
         auto dbCounters = Counters->GetDbCounters(database);
 
-        TKqpWorkerSettings workerSettings(cluster, database, TableServiceConfig, QueryServiceConfig, dbCounters);
+        TKqpWorkerSettings workerSettings(cluster, database, applicationName, TableServiceConfig, QueryServiceConfig, dbCounters);
         workerSettings.LongSession = longSession;
 
         auto config = CreateConfig(KqpSettings, workerSettings);
 
-        IActor* sessionActor = CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, FederatedQuerySetup, AsyncIoFactory, ModuleResolverState, Counters, QueryServiceConfig, MetadataProviderConfig);
+        IActor* sessionActor = CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings,
+            FederatedQuerySetup, AsyncIoFactory, ModuleResolverState, Counters,
+            QueryServiceConfig, MetadataProviderConfig, KqpTempTablesAgentActor);
         auto workerId = TlsActivationContext->ExecutorThread.RegisterActor(sessionActor, TMailboxType::HTSwap, AppData()->UserPoolId);
         TKqpSessionInfo* sessionInfo = LocalSessions->Create(
             sessionId, workerId, database, dbCounters, supportsBalancing, GetSessionIdleDuration(), pgWire);
@@ -1651,6 +1678,7 @@ private:
     EScriptExecutionsCreationStatus ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::NotStarted;
     std::deque<THolder<IEventHandle>> DelayedEventsQueue;
     bool IsLookupByRmScheduled = false;
+    TActorId KqpTempTablesAgentActor;
 };
 
 } // namespace

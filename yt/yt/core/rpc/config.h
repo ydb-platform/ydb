@@ -152,7 +152,9 @@ class TMethodConfig
 public:
     std::optional<bool> Heavy;
     std::optional<int> QueueSizeLimit;
+    std::optional<i64> QueueByteSizeLimit;
     std::optional<int> ConcurrencyLimit;
+    std::optional<i64> ConcurrencyByteLimit;
     std::optional<NLogging::ELogLevel> LogLevel;
     std::optional<TDuration> LoggingSuppressionTimeout;
     NConcurrency::TThroughputThrottlerConfigPtr RequestBytesThrottler;

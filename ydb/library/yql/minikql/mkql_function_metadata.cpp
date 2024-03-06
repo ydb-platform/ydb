@@ -4,8 +4,8 @@ namespace NKikimr {
 
 namespace NMiniKQL {
 
-TKernelFamilyBase::TKernelFamilyBase(ENullMode nullMode, const arrow::compute::FunctionOptions* functionOptions)
-    : TKernelFamily(nullMode, functionOptions)
+TKernelFamilyBase::TKernelFamilyBase(const arrow::compute::FunctionOptions* functionOptions)
+    : TKernelFamily(functionOptions)
 {}
 
 const TKernel* TKernelFamilyBase::FindKernel(const NUdf::TDataTypeId* argTypes, size_t argTypesCount, NUdf::TDataTypeId returnType) const {

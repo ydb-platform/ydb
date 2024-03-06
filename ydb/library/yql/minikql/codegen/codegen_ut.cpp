@@ -265,6 +265,7 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
     Y_UNIT_TEST(BadFib) {
         auto codegen = ICodegen::Make(ETarget::Native);
         auto func = CreateBadFibFunction(codegen->GetModule(), codegen->GetContext());
+        Y_UNUSED(func);
         UNIT_ASSERT_EXCEPTION(codegen->Verify(), yexception);
     }
 
@@ -298,6 +299,7 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
     Y_UNIT_TEST(LinkWithGeneratedFunction) {
         auto codegen = ICodegen::Make(ETarget::Native);
         auto mulFunc = CreateMulFunction(codegen->GetModule(), codegen->GetContext());
+        Y_UNUSED(mulFunc);
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
         codegen->LoadBitCode(bitcode, "Funcs");
         auto func = codegen->GetModule().getFunction("sum_sqr");

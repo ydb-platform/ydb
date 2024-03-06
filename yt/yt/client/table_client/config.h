@@ -244,10 +244,23 @@ public:
     //! Recommended to be ~100 times less than weight of samples for that column.
     i64 ColumnDictionarySize;
 
+    //! Level of compression algorithm.
+    //! Applied to digested compression dictionary upon its construction.
+    int CompressionLevel;
+
     //! Subset of all dictionary building policies.
     //! Will build and apply dictionaries only from this subset.
     //! Upon each chunk compression will independently decide which dictionary fits best.
     THashSet<EDictionaryCompressionPolicy> AppliedPolicies;
+
+    //! Upon each chunk compression will first accumulate samples of that weight
+    //! before deciding dictionary of which policy fits the best.
+    i64 PolicyProbationSamplesSize;
+    //! Upper limit on acceptable compression ratio. No chunk compression is performed if this limit is exceeded.
+    double MaxAcceptableCompressionRatio;
+
+    //! Upper limit on content size of a batch that can be decompressed within a single iteration.
+    i64 MaxDecompressionBlobSize;
 
     REGISTER_YSON_STRUCT(TDictionaryCompressionConfig);
 

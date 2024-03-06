@@ -12,9 +12,8 @@
 using namespace NKikimr;
 using namespace NKikimr::NDataShard;
 
-TKeyValidator::TKeyValidator(const TDataShard& self, const NTable::TDatabase& db) 
+TKeyValidator::TKeyValidator(const TDataShard& self) 
     : Self(self)
-    , Db(db)
 {
 
 }
@@ -65,11 +64,19 @@ void TKeyValidator::AddWriteRange(const TTableId& tableId, const TTableRange& ra
     Info.SetLoaded();
 }
 
-TKeyValidator::TValidateOptions::TValidateOptions(const TDataShardUserDb& userDb)
-    : LockTxId(userDb.GetLockTxId())
-    , LockNodeId(userDb.GetLockNodeId())
-    , IsRepeatableSnapshot(userDb.GetIsRepeatableSnapshot())
-    , IsImmediateTx(userDb.GetIsImmediateTx())
+TKeyValidator::TValidateOptions::TValidateOptions(
+        ui64 LockTxId,
+        ui32 LockNodeId,
+        bool isRepeatableSnapshot,
+        bool isImmediateTx,
+        bool isWriteTx,
+        const NTable::TScheme& scheme)
+    : IsLockTxId(static_cast<bool>(LockTxId))
+    , IsLockNodeId(static_cast<bool>(LockNodeId))
+    , IsRepeatableSnapshot(isRepeatableSnapshot)
+    , IsImmediateTx(isImmediateTx)
+    , IsWriteTx(isWriteTx)
+    , Scheme(scheme)
 {
 }
 
@@ -77,24 +84,23 @@ bool TKeyValidator::IsValidKey(TKeyDesc& key, const TValidateOptions& opt) const
     if (TSysTables::IsSystemTable(key.TableId))
         return true;
 
-    if (opt.LockTxId) {
+    if (key.RowOperation != TKeyDesc::ERowOperation::Read && !opt.IsWriteTx) {
         // Prevent updates/erases with LockTxId set, unless it's allowed for immediate mvcc txs
-        if (key.RowOperation != TKeyDesc::ERowOperation::Read &&
-            (!Self.GetEnableLockedWrites() || !opt.IsImmediateTx || !opt.IsRepeatableSnapshot || !opt.LockNodeId))
-        {
-            key.Status = TKeyDesc::EStatus::OperationNotSupported;
-            return false;
+        if (opt.IsLockTxId) {
+            if (!(Self.GetEnableLockedWrites() && opt.IsImmediateTx && opt.IsRepeatableSnapshot && opt.IsLockNodeId)) {
+                key.Status = TKeyDesc::EStatus::OperationNotSupported;
+                return false;
+            }
         }
-    } else if (opt.IsRepeatableSnapshot) {
         // Prevent updates/erases in repeatable mvcc txs
-        if (key.RowOperation != TKeyDesc::ERowOperation::Read) {
+        else if (opt.IsRepeatableSnapshot) {
             key.Status = TKeyDesc::EStatus::OperationNotSupported;
             return false;
         }
     }
 
     ui64 localTableId = Self.GetLocalTableId(key.TableId);
-    return NMiniKQL::IsValidKey(Db.GetScheme(), localTableId, key);
+    return NMiniKQL::IsValidKey(opt.Scheme, localTableId, key);
 }
 
 ui64 TKeyValidator::GetTableSchemaVersion(const TTableId& tableId) const {

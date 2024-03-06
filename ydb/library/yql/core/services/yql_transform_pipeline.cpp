@@ -190,9 +190,8 @@ TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<
     Transformers_.push_back(TTransformStage(
         CreateFunctorTransformer(
             [typeCtx = TypeAnnotationContext_, &lineageOut](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-                Y_UNUSED(ctx);
                 output = input;
-                lineageOut = CalculateLineage(*input, *typeCtx);
+                lineageOut = CalculateLineage(*input, *typeCtx, ctx);
                 return IGraphTransformer::TStatus::Ok;
             }
         ),

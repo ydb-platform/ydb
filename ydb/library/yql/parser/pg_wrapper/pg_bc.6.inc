@@ -1,13 +1,12 @@
 LLVM_BC(
-    postgresql/src/backend/access/brin/brin_minmax.c
-    postgresql/src/backend/access/gin/ginfast.c
+    postgresql/src/backend/access/hash/hash.c
     postgresql/src/backend/access/tablesample/system.c
+    postgresql/src/backend/access/transam/xlogfuncs.c
     postgresql/src/backend/catalog/namespace.c
-    postgresql/src/backend/commands/extension.c
+    postgresql/src/backend/commands/sequence.c
     postgresql/src/backend/commands/trigger.c
+    postgresql/src/backend/tsearch/wparser_def.c
     postgresql/src/backend/utils/adt/domains.c
-    postgresql/src/backend/utils/adt/float.c
-    postgresql/src/backend/utils/adt/name.c
     postgresql/src/backend/utils/adt/pgstatfuncs.c
     postgresql/src/backend/utils/misc/pg_controldata.c
     pg_kernels.6.cpp
@@ -15,176 +14,41 @@ LLVM_BC(
     NAME PgFuncs6
 
     SYMBOLS
-    arrow_brin_minmax_add_value
-    arrow_brin_minmax_consistent
-    arrow_brin_minmax_opcinfo
-    arrow_brin_minmax_union
-    arrow_btfloat48cmp
-    arrow_btfloat4cmp
-    arrow_btfloat4sortsupport
-    arrow_btfloat84cmp
-    arrow_btfloat8cmp
-    arrow_btfloat8sortsupport
-    arrow_btnamecmp
-    arrow_btnamesortsupport
-    arrow_current_schema
-    arrow_current_schemas
-    arrow_current_user
-    arrow_dacos
-    arrow_dacosd
-    arrow_dacosh
-    arrow_dasin
-    arrow_dasind
-    arrow_dasinh
-    arrow_datan
-    arrow_datan2
-    arrow_datan2d
-    arrow_datand
-    arrow_datanh
-    arrow_dcbrt
-    arrow_dceil
-    arrow_dcos
-    arrow_dcosd
-    arrow_dcosh
-    arrow_dcot
-    arrow_dcotd
-    arrow_degrees
-    arrow_dexp
-    arrow_dfloor
-    arrow_dlog1
-    arrow_dlog10
+    arrow_currval_oid
     arrow_domain_in
     arrow_domain_recv
-    arrow_dpi
-    arrow_dpow
-    arrow_drandom
-    arrow_dround
-    arrow_dsign
-    arrow_dsin
-    arrow_dsind
-    arrow_dsinh
-    arrow_dsqrt
-    arrow_dtan
-    arrow_dtand
-    arrow_dtanh
-    arrow_dtof
-    arrow_dtoi2
-    arrow_dtoi4
-    arrow_dtrunc
-    arrow_float48div
-    arrow_float48eq
-    arrow_float48ge
-    arrow_float48gt
-    arrow_float48le
-    arrow_float48lt
-    arrow_float48mi
-    arrow_float48mul
-    arrow_float48ne
-    arrow_float48pl
-    arrow_float4_accum
-    arrow_float4abs
-    arrow_float4div
-    arrow_float4eq
-    arrow_float4ge
-    arrow_float4gt
-    arrow_float4in
-    arrow_float4larger
-    arrow_float4le
-    arrow_float4lt
-    arrow_float4mi
-    arrow_float4mul
-    arrow_float4ne
-    arrow_float4out
-    arrow_float4pl
-    arrow_float4recv
-    arrow_float4send
-    arrow_float4smaller
-    arrow_float4um
-    arrow_float4up
-    arrow_float84div
-    arrow_float84eq
-    arrow_float84ge
-    arrow_float84gt
-    arrow_float84le
-    arrow_float84lt
-    arrow_float84mi
-    arrow_float84mul
-    arrow_float84ne
-    arrow_float84pl
-    arrow_float8_accum
-    arrow_float8_avg
-    arrow_float8_combine
-    arrow_float8_corr
-    arrow_float8_covar_pop
-    arrow_float8_covar_samp
-    arrow_float8_regr_accum
-    arrow_float8_regr_avgx
-    arrow_float8_regr_avgy
-    arrow_float8_regr_combine
-    arrow_float8_regr_intercept
-    arrow_float8_regr_r2
-    arrow_float8_regr_slope
-    arrow_float8_regr_sxx
-    arrow_float8_regr_sxy
-    arrow_float8_regr_syy
-    arrow_float8_stddev_pop
-    arrow_float8_stddev_samp
-    arrow_float8_var_pop
-    arrow_float8_var_samp
-    arrow_float8abs
-    arrow_float8div
-    arrow_float8eq
-    arrow_float8ge
-    arrow_float8gt
-    arrow_float8in
-    arrow_float8larger
-    arrow_float8le
-    arrow_float8lt
-    arrow_float8mi
-    arrow_float8mul
-    arrow_float8ne
-    arrow_float8out
-    arrow_float8pl
-    arrow_float8recv
-    arrow_float8send
-    arrow_float8smaller
-    arrow_float8um
-    arrow_float8up
-    arrow_ftod
-    arrow_ftoi2
-    arrow_ftoi4
-    arrow_gin_clean_pending_list
-    arrow_i2tod
-    arrow_i2tof
-    arrow_i4tod
-    arrow_i4tof
-    arrow_in_range_float4_float8
-    arrow_in_range_float8_float8
-    arrow_nameconcatoid
-    arrow_nameeq
-    arrow_namege
-    arrow_namegt
-    arrow_namein
-    arrow_namele
-    arrow_namelt
-    arrow_namene
-    arrow_nameout
-    arrow_namerecv
-    arrow_namesend
+    arrow_hashhandler
+    arrow_lastval
+    arrow_nextval_oid
     arrow_pg_backend_pid
+    arrow_pg_backup_start_time
     arrow_pg_collation_is_visible
     arrow_pg_control_checkpoint
     arrow_pg_control_init
     arrow_pg_control_recovery
     arrow_pg_control_system
     arrow_pg_conversion_is_visible
-    arrow_pg_extension_config_dump
+    arrow_pg_create_restore_point
+    arrow_pg_current_wal_flush_lsn
+    arrow_pg_current_wal_insert_lsn
+    arrow_pg_current_wal_lsn
     arrow_pg_function_is_visible
+    arrow_pg_get_wal_replay_pause_state
+    arrow_pg_is_in_backup
+    arrow_pg_is_in_recovery
     arrow_pg_is_other_temp_schema
+    arrow_pg_is_wal_replay_paused
+    arrow_pg_last_wal_receive_lsn
+    arrow_pg_last_wal_replay_lsn
+    arrow_pg_last_xact_replay_timestamp
     arrow_pg_my_temp_schema
     arrow_pg_opclass_is_visible
     arrow_pg_operator_is_visible
     arrow_pg_opfamily_is_visible
+    arrow_pg_promote
+    arrow_pg_sequence_last_value
+    arrow_pg_sequence_parameters
+    arrow_pg_start_backup
     arrow_pg_stat_clear_snapshot
     arrow_pg_stat_get_analyze_count
     arrow_pg_stat_get_archiver
@@ -285,6 +149,8 @@ LLVM_BC(
     arrow_pg_stat_reset_single_table_counters
     arrow_pg_stat_reset_slru
     arrow_pg_statistics_obj_is_visible
+    arrow_pg_stop_backup
+    arrow_pg_switch_wal
     arrow_pg_table_is_visible
     arrow_pg_trigger_depth
     arrow_pg_ts_config_is_visible
@@ -292,9 +158,17 @@ LLVM_BC(
     arrow_pg_ts_parser_is_visible
     arrow_pg_ts_template_is_visible
     arrow_pg_type_is_visible
-    arrow_radians
-    arrow_session_user
-    arrow_setseed
+    arrow_pg_wal_lsn_diff
+    arrow_pg_wal_replay_pause
+    arrow_pg_wal_replay_resume
+    arrow_pg_walfile_name
+    arrow_pg_walfile_name_offset
+    arrow_prsd_end
+    arrow_prsd_headline
+    arrow_prsd_lextype
+    arrow_prsd_nexttoken
+    arrow_prsd_start
+    arrow_setval3_oid
+    arrow_setval_oid
     arrow_tsm_system_handler
-    arrow_width_bucket_float8
 )

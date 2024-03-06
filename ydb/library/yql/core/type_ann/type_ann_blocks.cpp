@@ -62,6 +62,77 @@ IGraphTransformer::TStatus ReplicateScalarWrapper(const TExprNode::TPtr& input, 
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus ReplicateScalarsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    if (!EnsureMinArgsCount(*input, 1, ctx.Expr) || !EnsureMaxArgsCount(*input, 2, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    TTypeAnnotationNode::TListType blockItemTypes;
+    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto flowItemTypes = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+    YQL_ENSURE(flowItemTypes.size() > 0);
+
+    TMaybe<THashSet<ui32>> replicateIndexes;
+    if (input->ChildrenSize() == 2) {
+        if (!EnsureTupleOfAtoms(*input->Child(1), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        replicateIndexes.ConstructInPlace();
+        for (auto& atom : input->Child(1)->ChildrenList()) {
+            ui32 idx;
+            if (!TryFromString(atom->Content(), idx)) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(atom->Pos()),
+                    TStringBuilder() << "Expecting integer as replicate index, got: " << atom->Content()));
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (idx >= flowItemTypes.size() - 1) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(atom->Pos()),
+                    TStringBuilder() << "Replicate index too big: " << idx << ", should be less than " << (flowItemTypes.size() - 1)));
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (!replicateIndexes->insert(idx).second) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(atom->Pos()), TStringBuilder() << "Duplicate replicate index " << idx));
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (flowItemTypes[idx]->GetKind() != ETypeAnnotationKind::Scalar) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(atom->Pos()), TStringBuilder() << "Invalid replicate index " << idx << ": input item is not scalar"));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+    }
+
+    bool hasScalarsToConvert = false;
+    size_t inputScalarsCount = 0;
+    for (size_t i = 0; i + 1 < flowItemTypes.size(); ++i) {
+        auto& itemType = flowItemTypes[i];
+        if (itemType->IsScalar()) {
+            ++inputScalarsCount;
+            if (!replicateIndexes.Defined() || replicateIndexes->contains(i)) {
+                hasScalarsToConvert = true;
+                itemType = ctx.Expr.MakeType<TBlockExprType>(itemType->Cast<TScalarExprType>()->GetItemType());
+            }
+        }
+    }
+
+    if (!hasScalarsToConvert) {
+        output = input->HeadPtr();
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    if (replicateIndexes.Defined() && replicateIndexes->size() == inputScalarsCount) {
+        auto children = input->ChildrenList();
+        children.resize(1);
+        output = ctx.Expr.ChangeChildren(*input, std::move(children));
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(ctx.Expr.MakeType<TMultiExprType>(flowItemTypes)));
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus BlockCompressWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 2U, ctx.Expr)) {
@@ -115,13 +186,24 @@ IGraphTransformer::TStatus BlockExpandChunkedWrapper(const TExprNode::TPtr& inpu
         return IGraphTransformer::TStatus::Error;
     }
 
+    TTypeAnnotationNode::TListType itemTypes;
     TTypeAnnotationNode::TListType blockItemTypes;
-    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
 
-    auto flowItemTypes = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
-    bool allScalars = AllOf(flowItemTypes, [](const TTypeAnnotationNode* item) { return item->GetKind() == ETypeAnnotationKind::Scalar; });
+    if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream) {
+        if (!EnsureWideStreamBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        itemTypes = input->Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+    } else {
+        if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        itemTypes = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+    }
+    
+    bool allScalars = AllOf(itemTypes, [](const TTypeAnnotationNode* item) { return item->GetKind() == ETypeAnnotationKind::Scalar; });
     if (allScalars) {
         output = input->HeadPtr();
         return IGraphTransformer::TStatus::Repeat;

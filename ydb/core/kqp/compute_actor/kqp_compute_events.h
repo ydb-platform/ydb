@@ -3,10 +3,10 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <ydb/core/formats/arrow/serializer/full.h>
 
 namespace NKikimr::NKqp {
 

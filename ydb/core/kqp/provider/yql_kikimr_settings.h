@@ -58,7 +58,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptEnableOlapPushdown;
     NCommon::TConfSetting<bool, false> OptEnableOlapProvideComputeSharding;
     NCommon::TConfSetting<bool, false> OptUseFinalizeByKey;
-    NCommon::TConfSetting<bool, false> OptEnableCostBasedOptimization;
+    NCommon::TConfSetting<ui32, false> CostBasedOptimizationLevel;
     NCommon::TConfSetting<bool, false> OptEnableConstantFolding;
 
     NCommon::TConfSetting<ui32, false> MaxDPccpDPTableSize;
@@ -81,7 +81,6 @@ struct TKikimrSettings {
     bool HasOptEnableOlapPushdown() const;
     bool HasOptEnableOlapProvideComputeSharding() const;
     bool HasOptUseFinalizeByKey() const;
-    bool HasOptEnableCostBasedOptimization() const;
     bool HasOptEnableConstantFolding() const;
 
 
@@ -150,11 +149,8 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableKqpDataQueryStreamLookup = false;
     bool EnableKqpScanQueryStreamIdxLookupJoin = false;
     bool EnableKqpDataQueryStreamIdxLookupJoin = false;
-    bool EnablePredicateExtractForScanQuery = true;
-    bool EnablePredicateExtractForDataQuery = false;
     bool PredicateExtract20 = false;
     bool EnableKqpImmediateEffects = false;
-    bool EnableSequentialReads = false;
     bool EnablePreparedDdl = false;
     bool EnableSequences = false;
     bool EnableColumnsWithDefault = false;
@@ -163,6 +159,8 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableAstCache = false;
     bool EnablePgConstsToParams = false;
     ui64 ExtractPredicateRangesLimit = 0;
+    bool EnablePerStatementQueryExecution = false;
+    bool EnableCreateTableAs = false;
 };
 
 }

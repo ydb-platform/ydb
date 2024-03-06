@@ -8,6 +8,18 @@ const TDiskOperationCostEstimator TBsCostModelBase::HDDEstimator{
     { 6.089e+06, 8.1 }, // HugeWriteCoefficients
 };
 
+const TDiskOperationCostEstimator TBsCostModelBase::SSDEstimator{
+    { 180000, 3.00 },   // ReadCoefficients
+    { 430, 4.2 },     // WriteCoefficients
+    { 110000, 3.6 },     // HugeWriteCoefficients
+};
+
+const TDiskOperationCostEstimator TBsCostModelBase::NVMEEstimator{
+    { 10000, 1.3 },   // ReadCoefficients
+    { 3300, 1.5 },     // WriteCoefficients
+    { 50000, 1.83 }, // HugeWriteCoefficients
+};
+
 class TBsCostModelMirror3dc : public TBsCostModelBase {
 public:
     TBsCostModelMirror3dc(NPDisk::EDeviceType deviceType)
@@ -30,7 +42,7 @@ public:
 };
 
 TBsCostTracker::TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::EDeviceType diskType,
-        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 burstThresholdNs)
     : GroupType(groupType)
     , CostCounters(counters->GetSubgroup("subsystem", "advancedCost"))
     , UserDiskCost(CostCounters->GetCounter("UserDiskCost", true))
@@ -38,7 +50,10 @@ TBsCostTracker::TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::E
     , ScrubDiskCost(CostCounters->GetCounter("ScrubDiskCost", true))
     , DefragDiskCost(CostCounters->GetCounter("DefragDiskCost", true))
     , InternalDiskCost(CostCounters->GetCounter("InternalDiskCost", true))
+    , BucketCapacity(burstThresholdNs / GroupType.BlobSubgroupSize())
+    , Bucket(&DiskTimeAvailableNs, &BucketCapacity, nullptr, nullptr, nullptr, nullptr, true)
 {
+    BurstDetector.Initialize(CostCounters, "BurstDetector");
     switch (GroupType.GetErasure()) {
     case TBlobStorageGroupType::ErasureMirror3dc:
         CostModel = std::make_unique<TBsCostModelMirror3dc>(diskType);

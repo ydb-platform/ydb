@@ -204,6 +204,7 @@ void DeserializeProtoWithCompression(
     TRef data,
     NCompression::ECodec codecId = NCompression::ECodec::None);
 
+TSharedRef PushEnvelope(const TSharedRef& data, NCompression::ECodec codec);
 TSharedRef PushEnvelope(const TSharedRef& data);
 TSharedRef PopEnvelope(const TSharedRef& data);
 

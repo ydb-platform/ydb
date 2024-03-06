@@ -9,33 +9,31 @@ namespace NKikimr::NOlap {
 
 void TTTLColumnEngineChanges::DoDebugString(TStringOutput& out) const {
     TBase::DoDebugString(out);
-    if (PortionsToEvict.size()) {
-        out << "eviction=(count=" << PortionsToEvict.size() << ";portions=[";
-        for (auto& info : PortionsToEvict) {
-            out << info.GetPortionInfo() << ";to=" << info.GetFeatures().TargetTierName << ";";
-        }
-        out << "];";
-    }
+    out << "eviction=" << PortionsToEvict.size() << ";";
 }
 
 void TTTLColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     Y_ABORT_UNLESS(PortionsToEvict.size() || PortionsToRemove.size());
+    THashMap<TString, THashSet<TBlobRange>> blobRanges;
+    auto& index = self.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
     for (const auto& p : PortionsToEvict) {
         Y_ABORT_UNLESS(!p.GetPortionInfo().Empty());
-
-        auto agent = BlobsAction.GetReading(p.GetPortionInfo());
-        for (const auto& rec : p.GetPortionInfo().Records) {
-            agent->AddRange(rec.BlobRange);
+        p.GetPortionInfo().FillBlobRangesByStorage(blobRanges, index);
+    }
+    for (auto&& i : blobRanges) {
+        auto action = BlobsAction.GetReading(i.first);
+        for (auto&& b : i.second) {
+            action->AddRange(b);
         }
     }
-    self.BackgroundController.StartTtl(*this);
+    self.BackgroundController.StartTtl();
 }
 
 void TTTLColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& /*context*/) {
     self.BackgroundController.FinishTtl();
 }
 
-std::optional<TPortionInfoWithBlobs> TTTLColumnEngineChanges::UpdateEvictedPortion(TPortionForEviction& info, THashMap<TBlobRange, TString>& srcBlobs,
+std::optional<TPortionInfoWithBlobs> TTTLColumnEngineChanges::UpdateEvictedPortion(TPortionForEviction& info, NBlobOperations::NRead::TCompositeReadBlobs& srcBlobs,
     TConstructionContext& context) const {
     const TPortionInfo& portionInfo = info.GetPortionInfo();
     auto& evictFeatures = info.GetFeatures();
@@ -43,30 +41,21 @@ std::optional<TPortionInfoWithBlobs> TTTLColumnEngineChanges::UpdateEvictedPorti
 
     auto* tiering = Tiering.FindPtr(evictFeatures.PathId);
     Y_ABORT_UNLESS(tiering);
-    auto compression = tiering->GetCompression(evictFeatures.TargetTierName);
-    if (!compression) {
-        // Nothing to recompress. We have no other kinds of evictions yet.
-        evictFeatures.DataChanges = false;
-        auto result = TPortionInfoWithBlobs::RestorePortion(portionInfo, srcBlobs);
-        result.GetPortionInfo().InitOperator(evictFeatures.StorageOperator, true);
-        result.GetPortionInfo().MutableMeta().SetTierName(evictFeatures.TargetTierName);
-        return result;
-    }
-
+    auto serializer = tiering->GetSerializer(evictFeatures.TargetTierName);
     auto blobSchema = context.SchemaVersions.GetSchema(portionInfo.GetMinSnapshot());
+    auto portionWithBlobs = TPortionInfoWithBlobs::RestorePortion(portionInfo, srcBlobs, blobSchema->GetIndexInfo(), SaverContext.GetStoragesManager());
+    portionWithBlobs.GetPortionInfo().MutableMeta().SetTierName(evictFeatures.TargetTierName);
     auto resultSchema = context.SchemaVersions.GetLastSchema();
+    TSaverContext saverContext(SaverContext.GetStoragesManager());
+    if (serializer) {
+        saverContext.SetExternalSerializer(*serializer);
+    }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("portion_for_eviction", portionInfo.DebugString());
-
-    TSaverContext saverContext(evictFeatures.StorageOperator, SaverContext.GetStoragesManager());
-    saverContext.SetTierName(evictFeatures.TargetTierName).SetExternalCompression(compression);
-    auto withBlobs = TPortionInfoWithBlobs::RestorePortion(portionInfo, srcBlobs);
-    withBlobs.GetPortionInfo().InitOperator(evictFeatures.StorageOperator, true);
-    withBlobs.GetPortionInfo().MutableMeta().SetTierName(evictFeatures.TargetTierName);
-    return withBlobs.ChangeSaver(resultSchema, saverContext);
+    return portionWithBlobs.ChangeSaver(resultSchema, saverContext);
 }
 
 NKikimr::TConclusionStatus TTTLColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
-    Y_ABORT_UNLESS(!Blobs.empty());
+    Y_ABORT_UNLESS(!Blobs.IsEmpty());
     Y_ABORT_UNLESS(!PortionsToEvict.empty());
 
     for (auto&& info : PortionsToEvict) {

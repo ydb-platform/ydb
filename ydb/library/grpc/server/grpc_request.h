@@ -204,8 +204,8 @@ public:
         WriteDataOk(resp, status);
     }
 
-    void Reply(grpc::ByteBuffer* resp, ui32 status) override {
-        WriteByteDataOk(resp, status);
+    void Reply(grpc::ByteBuffer* resp, ui32 status, EStreamCtrl ctrl) override {
+        WriteByteDataOk(resp, status, ctrl);
     }
 
     void ReplyError(grpc::StatusCode code, const TString& msg, const TString& details) override {
@@ -314,7 +314,7 @@ private:
         }
     }
 
-    void WriteByteDataOk(grpc::ByteBuffer* resp, ui32 status) {
+    void WriteByteDataOk(grpc::ByteBuffer* resp, ui32 status, EStreamCtrl ctrl) {
         auto sz = resp->Length();
         if (Writer_) {
             GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# byteString peer# %s", this, Name_,
@@ -332,14 +332,23 @@ private:
             // because of std::function cannot hold move-only captured object
             // we allocate shared object on heap to avoid buffer copy
             auto uResp = MakeIntrusive<TUniversalResponse<TOut>>(resp);
-            auto cb = [this, uResp = std::move(uResp), sz, status]() {
+            const bool finish = ctrl == EStreamCtrl::FINISH;
+            auto cb = [this, uResp = std::move(uResp), sz, status, finish]() {
                 GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# byteString peer# %s (pushed to grpc)",
                     this, Name_, this->Context.peer().c_str());
-                StateFunc_ = &TThis::NextReply;
+
+                StateFunc_ = finish ? &TThis::SetFinishDone : &TThis::NextReply;
+
                 ResponseSize += sz;
                 ResponseStatus = status;
                 OnBeforeCall();
-                StreamWriter_->Write(*uResp, GetGRpcTag());
+                if (finish) {
+                    Finished_ = true;
+                    const auto option = grpc::WriteOptions().set_last_message();
+                    StreamWriter_->WriteAndFinish(*uResp, option, grpc::Status::OK, GetGRpcTag());
+                } else {
+                    StreamWriter_->Write(*uResp, GetGRpcTag());
+                }
             };
             StreamAdaptor_->Enqueue(std::move(cb), false);
         }

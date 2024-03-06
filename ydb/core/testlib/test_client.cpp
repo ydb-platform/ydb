@@ -45,6 +45,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/immediate_controls_configurator.h>
+#include <ydb/core/cms/console/jaeger_tracing_configurator.h>
 #include <ydb/core/formats/clickhouse_block.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/security/ldap_auth_provider.h>
@@ -154,14 +155,6 @@ namespace Tests {
         return freg.Release();
     }
 
-    ui64 ChangeDomain(ui64 tabletId, ui32 domainUid) {
-        return MakeTabletID(StateStorageGroupFromTabletID(tabletId), domainUid, UniqPartFromTabletID(tabletId));
-    }
-
-    ui64 ChangeStateStorage(ui64 tabletId, ui32 ssUid) {
-        return MakeTabletID(ssUid, HiveUidFromTabletID(tabletId), UniqPartFromTabletID(tabletId));
-    }
-
     TServer::TServer(TServerSettings::TConstPtr settings, bool init)
         : Settings(settings)
         , UseStoragePools(!Settings->StoragePoolTypes.empty())
@@ -217,7 +210,7 @@ namespace Tests {
         SetupMessageBus(Settings->Port);
         SetupDomains(app);
 
-        app.AddHive(Settings->Domain, ChangeStateStorage(Hive, Settings->Domain));
+        app.AddHive(ChangeStateStorage(Hive, Settings->Domain));
         app.SetFnRegistry(Settings->FrFactory);
         app.SetFormatsFactory(Settings->Formats);
 
@@ -225,7 +218,7 @@ namespace Tests {
             NKikHouse::RegisterFormat(*Settings->Formats);
         }
 
-        NKikimr::SetupChannelProfiles(app, Settings->Domain);
+        NKikimr::SetupChannelProfiles(app);
 
         Runtime->SetupMonitoring();
         Runtime->SetLogBackend(Settings->LogBackend);
@@ -245,6 +238,7 @@ namespace Tests {
             appData.DataStreamsAuthFactory = Settings->DataStreamsAuthFactory.get();
             appData.PersQueueMirrorReaderFactory = Settings->PersQueueMirrorReaderFactory.get();
             appData.HiveConfig.MergeFrom(Settings->AppConfig->GetHiveConfig());
+            appData.GraphConfig.MergeFrom(Settings->AppConfig->GetGraphConfig());
 
             appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
             auto dnConfig = appData.DynamicNameserviceConfig;
@@ -309,13 +303,18 @@ namespace Tests {
         grpcRequestProxies.reserve(proxyCount);
 
         auto& appData = Runtime->GetAppData();
+        NJaegerTracing::TSamplingThrottlingConfigurator tracingConfigurator(appData.TimeProvider, appData.RandomProvider);
 
         for (size_t i = 0; i < proxyCount; ++i) {
-            auto grpcRequestProxy = NGRpcService::CreateGRpcRequestProxy(*Settings->AppConfig, appData.Icb);
+            auto grpcRequestProxy = NGRpcService::CreateGRpcRequestProxy(*Settings->AppConfig, tracingConfigurator.GetControl());
             auto grpcRequestProxyId = system->Register(grpcRequestProxy, TMailboxType::ReadAsFilled);
             system->RegisterLocalService(NGRpcService::CreateGRpcRequestProxyId(), grpcRequestProxyId);
             grpcRequestProxies.push_back(grpcRequestProxyId);
         }
+
+        system->Register(
+            NConsole::CreateJaegerTracingConfigurator(std::move(tracingConfigurator), Settings->AppConfig->GetTracingConfig())
+        );
 
         auto grpcMon = system->Register(NGRpcService::CreateGrpcMonService(), TMailboxType::ReadAsFilled);
         system->RegisterLocalService(NGRpcService::GrpcMonServiceId(), grpcMon);
@@ -331,8 +330,8 @@ namespace Tests {
             desc->Ssl = !options.SslData.Empty();
 
             TVector<TString> rootDomains;
-            for (auto &domain : appData.DomainsInfo->Domains) {
-                rootDomains.emplace_back("/" + domain.second->Name);
+            if (const auto& domain = appData.DomainsInfo->Domain) {
+                rootDomains.emplace_back("/" + domain->Name);
             }
             desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
 
@@ -387,7 +386,7 @@ namespace Tests {
         GRpcServer->AddService(new NQuoter::TRateLimiterGRpcService(system, counters, grpcRequestProxies[0]));
         GRpcServer->AddService(new NGRpcService::TGRpcDataStreamsService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcMonitoringService(system, counters, grpcRequestProxies[0], true));
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbQueryService(system, counters, grpcRequestProxies[0], true));
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbQueryService(system, counters, grpcRequestProxies, true, 1));
         if (Settings->EnableYq) {
             GRpcServer->AddService(new NGRpcService::TGRpcFederatedQueryService(system, counters, grpcRequestProxies[0]));
             GRpcServer->AddService(new NGRpcService::TGRpcFqPrivateTaskService(system, counters, grpcRequestProxies[0]));
@@ -462,12 +461,10 @@ namespace Tests {
             planResolution = Settings->UseRealThreads ? 7 : 500;
         }
         auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(Settings->DomainName, domainId, ChangeStateStorage(SchemeRoot, domainId),
-                                                                                  domainId, domainId, TVector<ui32>{domainId},
-                                                                                  domainId, TVector<ui32>{domainId},
                                                                                   planResolution,
-                                                                                  TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(domainId, 1)},
-                                                                                  TVector<ui64>{TDomainsInfo::MakeTxMediatorIDFixed(domainId, 1)},
-                                                                                  TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(domainId, 1)},
+                                                                                  TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(1)},
+                                                                                  TVector<ui64>{TDomainsInfo::MakeTxMediatorIDFixed(1)},
+                                                                                  TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(1)},
                                                                                   Settings->StoragePoolTypes);
         app.AddDomain(domain.Release());
     }
@@ -524,20 +521,20 @@ namespace Tests {
 
     void TServer::CreateBootstrapTablets() {
         const ui32 domainId = Settings->Domain;
-        Y_ABORT_UNLESS(TDomainsInfo::MakeTxAllocatorIDFixed(domainId, 1) == ChangeStateStorage(TxAllocator, domainId));
+        Y_ABORT_UNLESS(TDomainsInfo::MakeTxAllocatorIDFixed(1) == ChangeStateStorage(TxAllocator, domainId));
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(TxAllocator, domainId), TTabletTypes::TxAllocator), &CreateTxAllocator);
-        Y_ABORT_UNLESS(TDomainsInfo::MakeTxCoordinatorIDFixed(domainId, 1) == ChangeStateStorage(Coordinator, domainId));
+        Y_ABORT_UNLESS(TDomainsInfo::MakeTxCoordinatorIDFixed(1) == ChangeStateStorage(Coordinator, domainId));
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(Coordinator, domainId), TTabletTypes::Coordinator), &CreateFlatTxCoordinator);
-        Y_ABORT_UNLESS(TDomainsInfo::MakeTxMediatorIDFixed(domainId, 1) == ChangeStateStorage(Mediator, domainId));
+        Y_ABORT_UNLESS(TDomainsInfo::MakeTxMediatorIDFixed(1) == ChangeStateStorage(Mediator, domainId));
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(Mediator, domainId), TTabletTypes::Mediator), &CreateTxMediator);
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(SchemeRoot, domainId), TTabletTypes::SchemeShard), &CreateFlatTxSchemeShard);
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(Hive, domainId), TTabletTypes::Hive), &CreateDefaultHive);
-        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(MakeBSControllerID(domainId), TTabletTypes::BSController), &CreateFlatBsController);
-        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(MakeTenantSlotBrokerID(domainId), TTabletTypes::TenantSlotBroker), &NTenantSlotBroker::CreateTenantSlotBroker);
+        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(MakeBSControllerID(), TTabletTypes::BSController), &CreateFlatBsController);
+        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(MakeTenantSlotBrokerID(), TTabletTypes::TenantSlotBroker), &NTenantSlotBroker::CreateTenantSlotBroker);
         if (Settings->EnableConsole) {
-            CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(MakeConsoleID(domainId), TTabletTypes::Console), &NConsole::CreateConsole);
+            CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(MakeConsoleID(), TTabletTypes::Console), &NConsole::CreateConsole);
         }
-        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(MakeNodeBrokerID(domainId), TTabletTypes::NodeBroker), &NNodeBroker::CreateNodeBroker);
+        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(MakeNodeBrokerID(), TTabletTypes::NodeBroker), &NNodeBroker::CreateNodeBroker);
     }
 
     void TServer::SetupStorage() {
@@ -579,7 +576,7 @@ namespace Tests {
             }
         }
 
-        Runtime->SendToPipe(MakeBSControllerID(Settings->Domain), sender, bsConfigureRequest.Release(), 0, pipeConfig);
+        Runtime->SendToPipe(MakeBSControllerID(), sender, bsConfigureRequest.Release(), 0, pipeConfig);
 
         TAutoPtr<IEventHandle> handleConfigureResponse;
         auto configureResponse = Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(handleConfigureResponse);
@@ -739,7 +736,10 @@ namespace Tests {
             if (!initial.HasImmediateControlsConfig()) {
                 initial.MutableImmediateControlsConfig()->CopyFrom(Settings->Controls);
             }
-            auto *dispatcher = NConsole::CreateConfigsDispatcher(initial, {});
+            auto *dispatcher = NConsole::CreateConfigsDispatcher(
+                    NKikimr::NConsole::TConfigsDispatcherInitInfo {
+                        .InitialConfig = initial,
+                    });
             auto aid = Runtime->Register(dispatcher, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }

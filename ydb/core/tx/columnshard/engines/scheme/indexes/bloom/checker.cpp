@@ -1,5 +1,5 @@
 #include "checker.h"
-#include <ydb/core/formats/arrow/serializer/full.h>
+#include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/formats/arrow/common/validation.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
@@ -14,7 +14,7 @@ void TBloomFilterChecker::DoSerializeToProtoImpl(NKikimrSSA::TProgram::TOlapInde
 
 bool TBloomFilterChecker::DoCheckImpl(const std::vector<TString>& blobs) const {
     for (auto&& blob : blobs) {
-        auto rb = NArrow::TStatusValidator::GetValid(NArrow::NSerialization::TFullDataDeserializer().Deserialize(blob));
+        auto rb = NArrow::TStatusValidator::GetValid(NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer()->Deserialize(blob));
         AFL_VERIFY(rb);
         AFL_VERIFY(rb->schema()->num_fields() == 1);
         AFL_VERIFY(rb->schema()->field(0)->type()->id() == arrow::Type::BOOL);
@@ -27,6 +27,7 @@ bool TBloomFilterChecker::DoCheckImpl(const std::vector<TString>& blobs) const {
             }
         }
         if (found) {
+//            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("size", bArray.length())("data", bArray.ToString())("index_id", GetIndexId());
             return true;
         }
     }

@@ -1,34 +1,21 @@
 {
     "meta": {
-        "version": "0.2",
-        "type": "script"
+        "type": "script",
+        "version": "0.2"
     },
     "queries": [
         {
-            "tables": [
-                {
-                    "name": "/local/base_simple_ct_script_script/Questions",
-                    "writes": [
-                        {
-                            "columns": [
-                                "idx",
-                                "text"
-                            ],
-                            "type": "MultiUpsert"
-                        }
-                    ]
-                }
-            ],
             "Plan": {
+                "Node Type": "Query",
+                "PlanNodeType": "Query",
                 "Plans": [
                     {
+                        "Node Type": "Effect",
                         "PlanNodeId": 2,
                         "Plans": [
                             {
-                                "Tables": [
-                                    "base_simple_ct_script_script/Questions"
-                                ],
-                                "PlanNodeId": 1,
+                                "CTE Name": "precompute_0_0",
+                                "Node Type": "Upsert-ConstantExpr",
                                 "Operators": [
                                     {
                                         "Inputs": [
@@ -45,16 +32,29 @@
                                         "Name": "Iterator"
                                     }
                                 ],
-                                "Node Type": "Upsert-ConstantExpr",
-                                "CTE Name": "precompute_0_0"
+                                "PlanNodeId": 1,
+                                "Tables": [
+                                    "base_simple_ct_script_script/Questions"
+                                ]
                             }
-                        ],
-                        "Node Type": "Effect"
+                        ]
                     }
-                ],
-                "Node Type": "Query",
-                "PlanNodeType": "Query"
-            }
+                ]
+            },
+            "tables": [
+                {
+                    "name": "/local/base_simple_ct_script_script/Questions",
+                    "writes": [
+                        {
+                            "columns": [
+                                "idx",
+                                "text"
+                            ],
+                            "type": "MultiUpsert"
+                        }
+                    ]
+                }
+            ]
         }
     ]
 }

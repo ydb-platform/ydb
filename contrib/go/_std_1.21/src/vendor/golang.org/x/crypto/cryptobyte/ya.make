@@ -1,13 +1,9 @@
 GO_LIBRARY()
-
-SRCS(
-    asn1.go
-    builder.go
-    string.go
-)
-
+IF (TRUE)
+    SRCS(
+		asn1.go
+		builder.go
+		string.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-    asn1
-)

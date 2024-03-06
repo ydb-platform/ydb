@@ -79,12 +79,21 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
+            let externalContributorLabel = 'external';
+            
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: 'Hi! Thank you for contributing!\nThe tests on this PR will run after a maintainer adds an `ok-to-test` label to this PR manually. Thank you for your patience!'
             });
+
+            github.rest.issues.addLabels({
+                ...context.repo,
+                issue_number: context.issue.number,
+                labels: [externalContributorLabel]
+            });
+
       - name: cleanup-test-label
         uses: actions/github-script@v6
         with:
@@ -195,6 +204,24 @@ jobs:
       test_size: "small,medium"
       test_type: "unittest,py3test,py2test,pytest"
       test_threads: 52
+      runner_label: auto-provisioned
+      put_build_results_to_cache: true
+      commit_sha: ${{ needs.check-running-allowed.outputs.commit_sha }}
+    secrets: inherit
+  build:
+    needs:
+      - check-running-allowed
+    if: needs.check-running-allowed.outputs.result == 'true' && needs.check-running-allowed.outputs.commit_sha != ''
+    strategy:
+      fail-fast: false
+      matrix:
+        build_preset: ["release-cmake14"]
+    name: Build and test ${{ matrix.build_preset }}
+    uses: ./.github/workflows/build_and_test_ya_provisioned.yml
+    with:
+      build_preset: ${{ matrix.build_preset }}
+      build_target: "ydb/"
+      run_tests: false
       runner_label: auto-provisioned
       put_build_results_to_cache: true
       commit_sha: ${{ needs.check-running-allowed.outputs.commit_sha }}

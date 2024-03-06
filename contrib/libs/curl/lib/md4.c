@@ -60,7 +60,7 @@
 #endif /* USE_MBEDTLS */
 
 #if defined(USE_GNUTLS)
-#include <nettle/md4.h>
+#error #include <nettle/md4.h>
 /* When OpenSSL or wolfSSL is available, we use their MD4 functions. */
 #elif defined(USE_WOLFSSL) && !defined(WOLFSSL_NO_MD4)
 #error #include <wolfssl/openssl/md4.h>

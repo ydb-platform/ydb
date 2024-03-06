@@ -15,6 +15,9 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <util/system/env.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/netclassifier.pb.h>
+#include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/shared_cache.pb.h>
 
 #include "single_thread_ic_mock.h"
 
@@ -147,6 +150,7 @@ class TTestActorSystem {
     std::unordered_map<TString, TActorStats> ActorStats;
     std::unordered_map<IActor*, TString> ActorName;
 
+public:
     class TEdgeActor : public TActor<TEdgeActor> {
         std::unique_ptr<IEventHandle> *HandlePtr = nullptr;
         TString Tag;

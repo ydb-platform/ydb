@@ -761,7 +761,7 @@ Y_UNIT_TEST_SUITE(Charge) {
         });
 
         me.To(102).CheckByKeys(5, 13, 7, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {1, 2, 3, 4_I}},
+            {TGroupId{0}, {1, 2, 3, 4_f}},
             {TGroupId{1}, {1_g, 2_g, 3, 4}}, // pages 3, 4 are always needed
             {TGroupId{2}, {3_g, 4_g, 5_g, 6, 7, 8, 9_g}} // pages 6, 7, 8 are always needed
         });
@@ -773,19 +773,19 @@ Y_UNIT_TEST_SUITE(Charge) {
         });
 
         me.To(104).CheckByKeys(5, 13, 5, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {1, 2, 3_f, 4_f}},
+            {TGroupId{0}, {1, 2, 3_f}},
             {TGroupId{1}, {1_g, 2_g, 3, 4}},
             {TGroupId{2}, {3_g, 4_g, 5_g, 6, 7, 8}}
         });
 
         me.To(105).CheckByKeys(5, 13, 4, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {1, 2, 3_f, 4_f}},
+            {TGroupId{0}, {1, 2, 3_f}},
             {TGroupId{1}, {1_g, 2_g, 3, 4_f}}, // here we touch extra pages, but it's fine
             {TGroupId{2}, {3_g, 4_g, 5_g, 6, 7, 8_f}} // here we touch extra pages, but it's fine
         });
 
         me.To(106).CheckByKeys(7, 13, 3, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {1, 2, 3_f, 4_f}},
+            {TGroupId{0}, {1, 2, 3_f}},
             {TGroupId{1}, {2_g, 3, 4}},
             {TGroupId{2}, {5_g, 6, 7, 8}}
         });
@@ -933,7 +933,7 @@ Y_UNIT_TEST_SUITE(Charge) {
         });
 
         me.To(202).CheckByKeysReverse(15, 5, 5, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {3, 2, 1_f, 0_f}},
+            {TGroupId{0}, {3, 2, 1_f}},
             {TGroupId{2}, {11_g, 10_g, 9_g, 8, 7, 6}}
         });
 

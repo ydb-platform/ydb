@@ -89,10 +89,8 @@ public:
     //! Plain text formatter options.
     bool EnableSourceLocation;
 
-    //! Enable writing instant field.
-    bool EnableInstant;
-
     //! Structured formatter options.
+    bool EnableSystemFields;
     THashMap<TString, NYTree::INodePtr> CommonFields;
     NJson::TJsonFormatConfigPtr JsonFormat;
 

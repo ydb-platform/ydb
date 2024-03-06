@@ -32,7 +32,7 @@ public:
     THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
     TString GetWorkloadName() const override;
     ui64 MinPartitions = KvWorkloadConstants::MIN_PARTITIONS;
-    const ui64 MaxPartitions = KvWorkloadConstants::MAX_PARTITIONS;
+    ui64 MaxPartitions = KvWorkloadConstants::MAX_PARTITIONS;
     ui64 PartitionSizeMb = KvWorkloadConstants::PARTITION_SIZE_MB;
     ui64 InitRowCount = KvWorkloadConstants::INIT_ROW_COUNT;
     ui64 MaxFirstKey = KvWorkloadConstants::MAX_FIRST_KEY;
@@ -42,11 +42,11 @@ public:
     ui64 KeyColumnsCnt = KvWorkloadConstants::KEY_COLUMNS_CNT;
     ui64 RowsCnt = KvWorkloadConstants::ROWS_CNT;
     bool PartitionsByLoad = KvWorkloadConstants::PARTITIONS_BY_LOAD;
-    
+
     ui64 MixedChangePartitionsSize = KvWorkloadConstants::MIXED_CHANGE_PARTITIONS_SIZE;
     ui64 MixedDoReadRows = KvWorkloadConstants::MIXED_DO_READ_ROWS;
     ui64 MixedDoSelect = KvWorkloadConstants::MIXED_DO_SELECT;
-    
+
     const std::string TableName = "kv_test";
 };
 

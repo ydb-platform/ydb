@@ -96,7 +96,6 @@ struct TNetworkAddressFormatOptions
 TString ToString(const TNetworkAddress& address, const TNetworkAddressFormatOptions& options = {});
 
 bool operator == (const TNetworkAddress& lhs, const TNetworkAddress& rhs);
-bool operator != (const TNetworkAddress& lhs, const TNetworkAddress& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -131,7 +130,6 @@ void FormatValue(TStringBuilderBase* builder, const TIP6Address& address, TStrin
 TString ToString(const TIP6Address& address);
 
 bool operator == (const TIP6Address& lhs, const TIP6Address& rhs);
-bool operator != (const TIP6Address& lhs, const TIP6Address& rhs);
 
 TIP6Address operator & (const TIP6Address& lhs, const TIP6Address& rhs);
 TIP6Address operator | (const TIP6Address& lhs, const TIP6Address& rhs);

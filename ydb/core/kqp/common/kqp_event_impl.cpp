@@ -20,7 +20,8 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     const ::Ydb::Operations::OperationParams* operationParams,
     bool keepSession,
     bool useCancelAfter,
-    const ::Ydb::Query::Syntax syntax)
+    const ::Ydb::Query::Syntax syntax,
+    bool supportsStreamTrailingResult)
     : RequestCtx(ctx)
     , RequestActorId(requestActorId)
     , Database(CanonizePath(ctx->GetDatabaseName().GetOrElse("")))
@@ -36,6 +37,7 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     , HasOperationParams(operationParams)
     , KeepSession(keepSession)
     , Syntax(syntax)
+    , SupportsStreamTrailingResult(supportsStreamTrailingResult)
 {
     if (HasOperationParams) {
         OperationTimeout = GetDuration(operationParams->operation_timeout());

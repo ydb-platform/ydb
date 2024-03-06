@@ -16,7 +16,6 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-
 void ProduceOutput(
     ICommandContextPtr context,
     const std::function<void(IYsonConsumer*)>& producer)

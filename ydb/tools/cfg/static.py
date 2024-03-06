@@ -14,6 +14,7 @@ from google.protobuf import json_format
 from ydb.core.protos import (
     auth_pb2,
     blobstorage_vdisk_config_pb2,
+    bootstrap_pb2,
     cms_pb2,
     config_pb2,
     feature_flags_pb2,
@@ -113,14 +114,13 @@ class StaticConfigGenerator(object):
             )
         )
         self._enable_cms_config_cache = template.get("enable_cms_config_cache", enable_cms_config_cache)
-        if "tracing" in template:
-            tracing = template["tracing"]
+        tracing = template.get("tracing_config")
+        if tracing is not None:
             self.__tracing = (
-                tracing["host"],
-                tracing["port"],
-                tracing["root_ca"],
-                tracing["service_name"],
-                tracing.get("auth_config")
+                tracing["backend"],
+                tracing.get("uploader"),
+                tracing.get("sampling", []),
+                tracing.get("external_throttling", []),
             )
         else:
             self.__tracing = None
@@ -594,7 +594,7 @@ class StaticConfigGenerator(object):
         return all_tablets
 
     def __generate_boot_txt(self):
-        self.__proto_configs["boot.txt"] = config_pb2.TBootstrap()
+        self.__proto_configs["boot.txt"] = bootstrap_pb2.TBootstrap()
 
         for tablet_type, tablet_count in self.__system_tablets:
             for index in range(int(tablet_count)):
@@ -1121,37 +1121,130 @@ class StaticConfigGenerator(object):
             self.__generate_sys_txt_advanced()
 
     def __generate_tracing_txt(self):
+        def get_selectors(selectors):
+            selectors_pb = config_pb2.TTracingConfig.TSelectors()
+
+            request_type = selectors["request_type"]
+            if request_type is not None:
+                selectors_pb.RequestType = request_type
+
+            return selectors_pb
+
+        def get_sampling_scope(sampling):
+            sampling_scope_pb = config_pb2.TTracingConfig.TSamplingRule()
+            selectors = sampling.get("scope")
+            if selectors is not None:
+                sampling_scope_pb.Scope.CopyFrom(get_selectors(selectors))
+            sampling_scope_pb.Fraction = sampling['fraction']
+            sampling_scope_pb.Level = sampling['level']
+            sampling_scope_pb.MaxTracesPerMinute = sampling['max_traces_per_minute']
+            sampling_scope_pb.MaxTracesBurst = sampling.get('max_traces_burst', 0)
+            return sampling_scope_pb
+
+        def get_external_throttling(throttling):
+            throttling_scope_pb = config_pb2.TTracingConfig.TExternalThrottlingRule()
+            selectors = throttling.get("scope")
+            if selectors is not None:
+                throttling_scope_pb.Scope.CopyFrom(get_selectors(selectors))
+            throttling_scope_pb.MaxTracesPerMinute = throttling['max_traces_per_minute']
+            throttling_scope_pb.MaxTracesBurst = throttling.get('max_traces_burst', 0)
+            return throttling_scope_pb
+
+        def get_auth_config(auth):
+            auth_pb = config_pb2.TTracingConfig.TBackendConfig.TAuthConfig()
+            tvm = auth.get("tvm")
+            if tvm is not None:
+                tvm_pb = auth_pb.Tvm
+
+                if "host" in tvm:
+                    tvm_pb.Host = tvm["host"]
+                if "port" in tvm:
+                    tvm_pb.Port = tvm["port"]
+                tvm_pb.SelfTvmId = tvm["self_tvm_id"]
+                tvm_pb.TracingTvmId = tvm["tracing_tvm_id"]
+                tvm_pb.DiskCacheDir = tvm["disk_cache_dir"]
+
+                if "plain_text_secret" in tvm:
+                    tvm_pb.PlainTextSecret = tvm["plain_text_secret"]
+                elif "secret_file" in tvm:
+                    tvm_pb.SecretFile = tvm["secret_file"]
+                elif "secret_environment_variable" in tvm:
+                    tvm_pb.SecretEnvironmentVariable = tvm["secret_environment_variable"]
+            return auth_pb
+
+        def get_opentelemetry(opentelemetry):
+            opentelemetry_pb = config_pb2.TTracingConfig.TBackendConfig.TOpentelemetryBackend()
+
+            opentelemetry_pb.CollectorUrl = opentelemetry["collector_url"]
+            opentelemetry_pb.ServiceName = opentelemetry["service_name"]
+
+            return opentelemetry_pb
+
+        def get_backend(backend):
+            backend_pb = config_pb2.TTracingConfig.TBackendConfig()
+
+            auth = backend.get("auth_config")
+            if auth is not None:
+                backend_pb.AuthConfig.CopyFrom(get_auth_config(auth))
+
+            opentelemetry = backend["opentelemetry"]
+            if opentelemetry is not None:
+                backend_pb.Opentelemetry.CopyFrom(get_opentelemetry(opentelemetry))
+
+            return backend_pb
+
+        def get_uploader(uploader):
+            uploader_pb = config_pb2.TTracingConfig.TUploaderConfig()
+
+            max_exported_spans_per_second = uploader.get("max_exported_spans_per_second")
+            if max_exported_spans_per_second is not None:
+                uploader_pb.MaxExportedSpansPerSecond = max_exported_spans_per_second
+
+            max_spans_in_batch = uploader.get("max_spans_in_batch")
+            if max_spans_in_batch is not None:
+                uploader_pb.MaxSpansInBatch = max_spans_in_batch
+
+            max_bytes_in_batch = uploader.get("max_bytes_in_batch")
+            if max_bytes_in_batch is not None:
+                uploader_pb.MaxBytesInBatch = max_bytes_in_batch
+
+            max_batch_accumulation_milliseconds = uploader.get("max_batch_accumulation_milliseconds")
+            if max_batch_accumulation_milliseconds is not None:
+                uploader_pb.MaxBatchAccumulationMilliseconds = max_batch_accumulation_milliseconds
+
+            span_export_timeout_seconds = uploader.get("span_export_timeout_seconds")
+            if span_export_timeout_seconds is not None:
+                uploader_pb.SpanExportTimeoutSeconds = span_export_timeout_seconds
+
+            max_export_requests_inflight = uploader.get("max_export_requests_inflight")
+            if max_export_requests_inflight is not None:
+                uploader_pb.MaxExportRequestsInflight = max_export_requests_inflight
+
+            return uploader_pb
+
         pb = config_pb2.TAppConfig()
         if self.__tracing:
             tracing_pb = pb.TracingConfig
             (
-                tracing_pb.Host,
-                tracing_pb.Port,
-                tracing_pb.RootCA,
-                tracing_pb.ServiceName,
-                auth_config
+                backend,
+                uploader,
+                sampling,
+                external_throttling
             ) = self.__tracing
 
-            if auth_config:
-                auth_pb = tracing_pb.AuthConfig
-                if "tvm" in auth_config:
-                    tvm = auth_config.get("tvm")
-                    tvm_pb = auth_pb.Tvm
+            assert isinstance(sampling, list)
+            assert isinstance(external_throttling, list)
 
-                    if "host" in tvm:
-                        tvm_pb.Host = tvm["host"]
-                    if "port" in tvm:
-                        tvm_pb.Port = tvm["port"]
-                    tvm_pb.SelfTvmId = tvm["self_tvm_id"]
-                    tvm_pb.TracingTvmId = tvm["tracing_tvm_id"]
-                    tvm_pb.DiskCacheDir = tvm["disk_cache_dir"]
+            tracing_pb.Backend.CopyFrom(get_backend(backend))
 
-                    if "plain_text_secret" in tvm:
-                        tvm_pb.PlainTextSecret = tvm["plain_text_secret"]
-                    elif "secret_file" in tvm:
-                        tvm_pb.SecretFile = tvm["secret_file"]
-                    elif "secret_environment_variable" in tvm:
-                        tvm_pb.SecretEnvironmentVariable = tvm["secret_environment_variable"]
+            if uploader is not None:
+                tracing_pb.Uploader.CopyFrom(get_uploader(uploader))
+
+            for sampling_scope in sampling:
+                tracing_pb.Sampling.append(get_sampling_scope(sampling_scope))
+
+            for throttling_scope in external_throttling:
+                tracing_pb.ExternalThrottling.append(get_external_throttling(throttling_scope))
 
         self.__proto_configs["tracing.txt"] = pb
 

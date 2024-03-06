@@ -113,7 +113,7 @@ int main(int argc, char* argv[])
             throw yexception() << usage;
         }
 
-        auto config = New<NTracing::TJaegerTracerConfig>();
+        static auto config = New<NTracing::TJaegerTracerConfig>();
         config->CollectorChannelConfig = New<NRpc::NGrpc::TChannelConfig>();
         config->CollectorChannelConfig->Address = argv[1];
 

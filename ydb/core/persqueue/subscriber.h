@@ -1,7 +1,8 @@
 #pragma once
 
-#include "header.h"
 #include "blob.h"
+#include "header.h"
+#include "partition_id.h"
 
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/base/appdata.h>
@@ -78,7 +79,7 @@ struct TReadInfo {
         const TActorContext& ctx,
         const TEvPQ::TEvBlobResponse& response,
         const ui64 endOffset,
-        const ui32 partition,
+        const TPartitionId& partition,
         TUserInfo* ui,
         const ui64 dst, 
         const ui64 sizeLag,
@@ -89,7 +90,7 @@ struct TReadInfo {
     TReadAnswer FormAnswer(
         const TActorContext& ctx,
         const ui64 endOffset,
-        const ui32 partition,
+        const TPartitionId& partition,
         TUserInfo* ui,
         const ui64 dst,
         const ui64 sizeLag,
@@ -127,7 +128,7 @@ private:
 
 class TSubscriber : public TNonCopyable {
 public:
-    TSubscriber(const ui32 partition, TTabletCountersBase& counters, const TActorId& tablet);
+    TSubscriber(const TPartitionId& partition, TTabletCountersBase& counters, const TActorId& tablet);
 
     //will wait for new data or timeout for this read and set timer for timeout ms
     void AddSubscription(TReadInfo&& info, const ui32 timeout, const ui64 cookie, const TActorContext& ctx);
@@ -140,7 +141,7 @@ public:
 
 private:
     TSubscriberLogic Subscriber;
-    const ui32 Partition;
+    const TPartitionId Partition;
     TTabletCountersBase& Counters;
     TActorId Tablet;
 };

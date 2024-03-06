@@ -78,7 +78,9 @@ private:
     static inline auto Registrator = TFactory::TRegistrator<TOrIndexChecker>(GetClassNameStatic());
 protected:
     virtual bool DoCheck(const THashMap<ui32, std::vector<TString>>& blobsByIndexId) const override {
+//        ui32 idx = 0;
         for (auto&& i : Checkers) {
+//            NActors::TLogContextGuard gLog = NActors::TLogContextBuilder::Build()("branch", idx++);
             if (i->Check(blobsByIndexId)) {
                 return true;
             }

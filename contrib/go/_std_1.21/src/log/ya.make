@@ -1,17 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    log.go
-)
-
-GO_TEST_SRCS(log_test.go)
-
-GO_XTEST_SRCS(example_test.go)
-
+IF (TRUE)
+    SRCS(
+		log.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-    internal
-    slog
-    syslog
-)

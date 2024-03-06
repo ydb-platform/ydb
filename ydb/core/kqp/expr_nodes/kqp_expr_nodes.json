@@ -509,12 +509,18 @@
         {
             "Name": "TKqlDeleteRows",
             "Base": "TKqlDeleteRowsBase",
-            "Match": {"Type": "Callable", "Name": "KqlDeleteRows"}
+            "Match": {"Type": "Callable", "Name": "KqlDeleteRows"},
+            "Children": [
+                {"Index": 2, "Name": "ReturningColumns", "Type": "TCoAtomList"}
+            ]
         },
         {
             "Name": "TKqlDeleteRowsIndex",
             "Base": "TKqlDeleteRowsBase",
-            "Match": {"Type": "Callable", "Name": "KqlDeleteRowsIndex"}
+            "Match": {"Type": "Callable", "Name": "KqlDeleteRowsIndex"},
+            "Children": [
+                {"Index": 2, "Name": "ReturningColumns", "Type": "TCoAtomList"}
+            ]
         },
         {
             "Name": "TKqpDeleteRows",

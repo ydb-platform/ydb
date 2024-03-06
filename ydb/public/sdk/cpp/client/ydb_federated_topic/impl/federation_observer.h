@@ -35,11 +35,22 @@ public:
         , ControlPlaneEndpoint(result.control_plane_endpoint())
         , SelfLocation(result.self_location())
         {
-            // TODO remove copy
+            // TODO ensure that all databases have unique names?
             for (const auto& db : result.federation_databases()) {
                 DbInfos.push_back(std::make_shared<TDbInfo>(db));
             }
         }
+
+    std::shared_ptr<TDbInfo> TryGetDbInfo(const TString& name) const noexcept {
+        // There are few databases per federation usually, so the linear search is probably ok.
+        // TODO better profile this
+        for (const auto& dbInfo : DbInfos) {
+            if (AsciiEqualsIgnoreCase(dbInfo->name(), name)) {
+                return dbInfo;
+            }
+        }
+        return nullptr;
+    }
 };
 
 

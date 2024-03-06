@@ -427,7 +427,7 @@ namespace NKikimr::NDataStreams::V1 {
                 for (int i = 0; i < PutRecordsResult.failed_record_count(); ++i) {
                     PutRecordsResult.add_records()->set_error_code("ThrottlingException");
                 }
-                this->CheckFinish(ctx);
+                return this->CheckFinish(ctx);
             default:
                 return this->HandleWakeup(ev, ctx);
         }

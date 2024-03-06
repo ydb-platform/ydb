@@ -55,7 +55,11 @@ namespace {
     }
 
     TChild MakeChild(ui32 index) {
-        return TChild{index + 10000, index + 100, index + 1000, index + 30};
+        return {index + 10000, index + 100, index + 1000, index + 30};
+    }
+
+    TShortChild MakeShortChild(ui32 index) {
+        return {index + 10000, index + 100, index + 1000};
     }
 
     void Dump(TChild meta, const TPartScheme::TGroupInfo& groupInfo, const TStore& store, ui32 level = 0) noexcept
@@ -65,7 +69,14 @@ namespace {
             intend += " |";
         }
 
-        auto dumpChild = [&] (TChild child) {
+        auto dumpChild = [&] (TBtreeIndexNode node, TRecIdx pos) {
+            TChild child;
+            if (node.IsShortChildFormat()) {
+                auto shortChild = node.GetShortChild(pos);
+                child = {shortChild.PageId, shortChild.RowCount, shortChild.DataSize, 0};
+            } else {
+                child = node.GetChild(pos);
+            }
             if (child.PageId < 1000) {
                 Dump(child, groupInfo, store, level + 1);
             } else {
@@ -85,7 +96,7 @@ namespace {
             << label.Size << "b}"
             << Endl;
 
-        dumpChild(node.GetChild(0));
+        dumpChild(node, 0);
 
         for (TRecIdx i : xrange(node.GetKeysCount())) {
             Cerr << intend << " | > ";
@@ -101,7 +112,7 @@ namespace {
             }
 
             Cerr << Endl;
-            dumpChild(node.GetChild(i + 1));
+            dumpChild(node, i + 1);
         }
 
         Cerr << Endl;
@@ -143,6 +154,13 @@ namespace {
             UNIT_ASSERT_EQUAL(node.GetChild(i), children[i]);
             TShortChild shortChild{children[i].PageId, children[i].RowCount, children[i].DataSize};
             UNIT_ASSERT_EQUAL(node.GetShortChild(i), shortChild);
+        }
+    }
+
+    void CheckShortChildren(const NPage::TBtreeIndexNode& node, const TVector<TShortChild>& children) {
+        UNIT_ASSERT_VALUES_EQUAL(node.GetKeysCount() + 1, children.size());
+        for (TRecIdx i : xrange(node.GetKeysCount() + 1)) {
+            UNIT_ASSERT_EQUAL(node.GetShortChild(i), children[i]);
         }
     }
 }
@@ -271,9 +289,9 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
             keys.push_back(TSerializedCellVec::Serialize(cells));
         }
 
-        TVector<TChild> children;
+        TVector<TShortChild> children;
         for (ui32 i : xrange(keys.size() + 1)) {
-            children.push_back(MakeChild(i));
+            children.push_back(MakeShortChild(i));
         }
 
         for (auto k : keys) {
@@ -281,8 +299,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
             writer.AddKey(deserialized.GetCells());
         }
         for (auto &c : children) {
-            c.ErasedRowCount = 0;
-            writer.AddChild(c);
+            writer.AddChild({c.PageId, c.RowCount, c.DataSize, 0});
         }
 
         auto serialized = writer.Finish();
@@ -291,7 +308,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
 
         Dump(serialized, writer.GroupInfo);
         CheckKeys(node, keys, writer.GroupInfo);
-        CheckChildren(node, children);
+        CheckShortChildren(node, children);
     }
 
     Y_UNIT_TEST(History) {
@@ -316,9 +333,9 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
             keys.push_back(TSerializedCellVec::Serialize(cells));
         }
 
-        TVector<TChild> children;
+        TVector<TShortChild> children;
         for (ui32 i : xrange(keys.size() + 1)) {
-            children.push_back(MakeChild(i));
+            children.push_back(MakeShortChild(i));
         }
 
         for (auto k : keys) {
@@ -326,8 +343,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
             writer.AddKey(deserialized.GetCells());
         }
         for (auto &c : children) {
-            c.ErasedRowCount = 0;
-            writer.AddChild(c);
+            writer.AddChild({c.PageId, c.RowCount, c.DataSize, 0});
         }
 
         auto serialized = writer.Finish();
@@ -336,7 +352,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
 
         Dump(serialized, writer.GroupInfo);
         CheckKeys(node, keys, writer.GroupInfo);
-        CheckChildren(node, children);
+        CheckShortChildren(node, children);
 
         UNIT_ASSERT_VALUES_EQUAL(node.GetKeyCellsIter(12, writer.GroupInfo.ColsKeyIdx).At(0).AsValue<TRowId>(), 12);
         UNIT_ASSERT_VALUES_EQUAL(node.GetKeyCellsIter(12, writer.GroupInfo.ColsKeyIdx).At(1).AsValue<ui64>(), 120);

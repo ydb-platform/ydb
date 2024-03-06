@@ -48,25 +48,11 @@ class TFetchingInterval: public TNonCopyable, public NResourceBroker::NSubscribe
 private:
     using TTaskBase = NResourceBroker::NSubscribe::ITask;
     std::shared_ptr<TMergingContext> MergingContext;
-    TAtomic ResultConstructionInProgress = 0;
+    TAtomic SourcesFinalized = 0;
     std::shared_ptr<TSpecialReadContext> Context;
     NColumnShard::TCounterGuard TaskGuard;
     std::map<ui32, std::shared_ptr<IDataSource>> Sources;
     void ConstructResult();
-
-    IDataSource& GetSourceVerified(const ui32 idx) {
-        auto it = Sources.find(idx);
-        Y_ABORT_UNLESS(it != Sources.end());
-        return *it->second;
-    }
-
-    std::shared_ptr<IDataSource> ExtractSourceVerified(const ui32 idx) {
-        auto it = Sources.find(idx);
-        Y_ABORT_UNLESS(it != Sources.end());
-        auto result = it->second;
-        Sources.erase(it);
-        return result;
-    }
 
     std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
     const ui32 IntervalIdx;
@@ -91,8 +77,10 @@ public:
     }
 
     void Abort() {
-        for (auto&& i : Sources) {
-            i.second->Abort();
+        if (AtomicCas(&SourcesFinalized, 1, 0)) {
+            for (auto&& i : Sources) {
+                i.second->Abort();
+            }
         }
     }
 

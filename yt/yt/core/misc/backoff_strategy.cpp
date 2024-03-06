@@ -20,19 +20,6 @@ double BackoffStrategyDefaultRandomGenerator()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TConstantBackoffOptions::operator TExponentialBackoffOptions() const
-{
-    return TExponentialBackoffOptions{
-        .InvocationCount = InvocationCount,
-        .MinBackoff = Backoff,
-        .MaxBackoff = Backoff,
-        .BackoffMultiplier = 1.0,
-        .BackoffJitter = BackoffJitter
-    };
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 TBackoffStrategy::TBackoffStrategy(const TExponentialBackoffOptions& options)
     : Options_(options)
 {

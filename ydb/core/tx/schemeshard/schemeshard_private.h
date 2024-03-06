@@ -2,6 +2,7 @@
 #include "defs.h"
 
 #include "schemeshard_identificators.h"
+#include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -29,6 +30,8 @@ struct TEvPrivate {
         EvRunCdcStreamScan,
         EvPersistTopicStats,
         EvSendBaseStatsToSA,
+        EvRunBackgroundCleaning,
+        EvRetryNodeSubscribe,
         EvEnd
     };
 
@@ -183,6 +186,13 @@ struct TEvPrivate {
     struct TEvSendBaseStatsToSA: public TEventLocal<TEvSendBaseStatsToSA, EvSendBaseStatsToSA> {
     };
 
+    struct TEvRetryNodeSubscribe : public TEventLocal<TEvRetryNodeSubscribe, EvRetryNodeSubscribe> {
+        ui32 NodeId;
+
+        explicit TEvRetryNodeSubscribe(ui32 nodeId)
+            : NodeId(nodeId)
+        { }
+    };
 }; // TEvPrivate
 
 } // NSchemeShard

@@ -92,6 +92,8 @@ bool CheckTopLevelness(const TExprNode::TPtr& candidateRead, const TExprNode::TP
     });
 }
 
+}
+
 TExprNode::TPtr FindTopLevelRead(const TExprNode::TPtr& queryGraph) {
     const TExprNode::TPtr* lastReadInTopologicalOrder = nullptr;
     VisitExpr(
@@ -117,14 +119,14 @@ TExprNode::TPtr FindTopLevelRead(const TExprNode::TPtr& queryGraph) {
     return *lastReadInTopologicalOrder;
 }
 
-}
-
 TExprNode::TPtr RewriteReadFromView(
     const TExprNode::TPtr& node,
     TExprContext& ctx,
     const TString& query,
     const TString& cluster
 ) {
+    YQL_PROFILE_FUNC(DEBUG);
+
     const TCoRead readNode(node->ChildPtr(0));
     const auto worldBeforeThisRead = readNode.World().Ptr();
 

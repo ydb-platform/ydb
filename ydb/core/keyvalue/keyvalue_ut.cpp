@@ -1,6 +1,7 @@
 #include "defs.h"
 #include "keyvalue.h"
 #include "keyvalue_flat_impl.h"
+#include "keyvalue_intermediate.h"
 #include "keyvalue_state.h"
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -82,7 +83,7 @@ struct TTestContext {
 
     TTestContext() {
         TabletType = TTabletTypes::KeyValue;
-        TabletId = MakeTabletID(0, 0, 1);
+        TabletId = MakeTabletID(false, 1);
         TabletIds.push_back(TabletId);
     }
 
@@ -173,6 +174,44 @@ void CmdWrite(const TDeque<TString> &keys, const TDeque<TString> &values,
                 UNIT_ASSERT(writeResult.GetStatusFlags() & ui32(NKikimrBlobStorage::StatusIsValid));
             }
         }
+        return true;
+    });
+}
+
+struct TDiff {
+    ui32 Offset;
+    TString Buffer;
+};
+
+void CmdPatch(const TString &originalKey, const TString &patchedKey, const TVector<TDiff> &diffs,
+        const NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel, TTestContext &tc) {
+    TAutoPtr<IEventHandle> handle;
+    TEvKeyValue::TEvResponse *result;
+    THolder<TEvKeyValue::TEvRequest> request;
+    DoWithRetry([&] {
+        tc.Runtime->ResetScheduledCount();
+        request.Reset(new TEvKeyValue::TEvRequest);
+        auto *patch = request->Record.AddCmdPatch();
+        patch->SetOriginalKey(originalKey);
+        patch->SetPatchedKey(patchedKey);
+        patch->SetStorageChannel(storageChannel);
+        for (ui64 idx = 0; idx < diffs.size(); ++idx) {
+            auto diff = patch->AddDiffs();
+            diff->SetOffset(diffs[idx].Offset);
+            diff->SetValue(diffs[idx].Buffer);
+        }
+        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+        result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+        UNIT_ASSERT(result);
+        UNIT_ASSERT(result->Record.HasStatus());
+        UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.PatchResultSize(), 1);
+        
+        const auto &patchResult = result->Record.GetPatchResult(0);
+        UNIT_ASSERT(patchResult.HasStatus());
+        UNIT_ASSERT_EQUAL(patchResult.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT(patchResult.HasStatusFlags());
+        UNIT_ASSERT(patchResult.GetStatusFlags() & ui32(NKikimrBlobStorage::StatusIsValid));
         return true;
     });
 }
@@ -961,6 +1000,20 @@ Y_UNIT_TEST(TestWriteReadDeleteWithRestartsThenResponseOk) {
     });
 }
 
+Y_UNIT_TEST(TestWriteReadPatchRead) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, [](TTestActorRuntime &){}, activeZone);
+    CmdWrite("key", "value", NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+    CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME,
+        {"value"}, {}, tc);
+    TVector<TDiff> diffs = {TDiff{0, "m"}, TDiff{2, "t"}, TDiff{4, "r"}};
+    CmdPatch("key", "key2", diffs, NKikimrClient::TKeyValueRequest::MAIN, tc);
+    CmdRead({"key2"}, NKikimrClient::TKeyValueRequest::REALTIME,
+        {"matur"}, {}, tc);
+}
 
 Y_UNIT_TEST(TestWriteReadDeleteWithRestartsAndCatchCollectGarbageEvents) {
     TTestContext tc;

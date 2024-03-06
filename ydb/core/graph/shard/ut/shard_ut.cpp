@@ -258,6 +258,41 @@ Y_UNIT_TEST_SUITE(GraphShard) {
         }
     }
 
+    Y_UNIT_TEST(NormalizeAndDownsample6) {
+        NGraph::TBaseBackend::TMetricsValues values;
+        values.Timestamps = {
+            TInstant::Seconds( 100 ),
+            TInstant::Seconds( 200 ),
+            TInstant::Seconds( 300 ),
+            TInstant::Seconds( 400 ),
+            TInstant::Seconds( 500 ),
+            TInstant::Seconds( 510 ),
+            TInstant::Seconds( 520 ),
+            TInstant::Seconds( 530 ),
+            TInstant::Seconds( 540 ),
+            TInstant::Seconds( 550 ),
+            TInstant::Seconds( 560 ),
+            TInstant::Seconds( 570 ),
+            TInstant::Seconds( 580 ),
+            TInstant::Seconds( 590 ),
+            TInstant::Seconds( 600 )
+        };
+        values.Values.push_back({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15});
+
+        {
+            NGraph::TBaseBackend::NormalizeAndDownsample(values, 1);
+            Ctest << values.Timestamps << Endl;
+            Ctest << values.Values << Endl;
+            std::vector<TInstant> canonTimestamps = {
+                TInstant::Seconds( 600 )
+            };
+            std::vector<double> canonValues = {8};
+            UNIT_ASSERT(values.Timestamps == canonTimestamps);
+            UNIT_ASSERT(values.Values.size() == 1);
+            UNIT_ASSERT(values.Values[0] == canonValues);
+        }
+    }
+
     Y_UNIT_TEST(CheckHistogramToPercentileConversions) {
         TVector<ui64> bounds = {2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, std::numeric_limits<ui64>::max()};
         TVector<ui64> values = {10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 0};

@@ -20,6 +20,7 @@ message TMemoryLimits
 
     optional int64 uncompressed_block_cache = 6;
     optional int64 versioned_chunk_meta = 7;
+    optional int64 reserved = 8;
 }
 
 message TInstanceResources
@@ -28,6 +29,24 @@ message TInstanceResources
     optional int64 net = 2;
     optional string type = 3;
     optional int32 vcpu = 4;
+}
+
+message TDefaultInstanceConfig
+{
+    optional TCpuLimits cpu_limits = 1;
+    optional TMemoryLimits memory_limits = 2;
+}
+
+message TInstanceSize
+{
+    optional TInstanceResources resource_guarantee = 1;
+    optional TDefaultInstanceConfig default_config = 2;
+}
+
+message TBundleConfigConstraints
+{
+    repeated TInstanceSize rpc_proxy_sizes = 1;
+    repeated TInstanceSize tablet_node_sizes = 2;
 }
 
 message TBundleConfig
@@ -42,6 +61,12 @@ message TBundleConfig
     optional TInstanceResources tablet_node_resource_guarantee = 6;
 }
 
+message TResourceQuota
+{
+    optional int32 vcpu = 1;
+    optional int64 memory = 2;
+}
+
 message TReqGetBundleConfig
 {
     required string bundle_name = 1;
@@ -51,6 +76,8 @@ message TRspGetBundleConfig
 {
     optional string bundle_name = 1;
     optional TBundleConfig bundle_config = 2;
+    optional TBundleConfigConstraints bundle_constraints = 3;
+    optional TResourceQuota resource_quota = 4;
 }
 
 message TReqSetBundleConfig

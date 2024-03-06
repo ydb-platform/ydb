@@ -34,7 +34,7 @@
 #include "transfer.h"
 #include "warnless.h"
 #include <curl/curl.h>
-#include <librtmp/rtmp.h>
+#error #include <librtmp/rtmp.h>
 #include "curl_memory.h"
 /* The last #include file should be: */
 #include "memdebug.h"

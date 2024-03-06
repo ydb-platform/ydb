@@ -46,13 +46,14 @@ private:
 
     static ui32 CrossSize(const ui32 s1, const ui32 f1, const ui32 s2, const ui32 f2);
     class TMergerImpl;
-    void Add(const bool value, const ui32 count = 1);
     void Reset(const ui32 count);
     void ResetCaches() const {
         FilterPlain.reset();
         FilteredCount.reset();
     }
 public:
+    void Append(const TColumnFilter& filter);
+    void Add(const bool value, const ui32 count = 1);
     std::optional<ui32> GetFilteredCount() const;
     const std::vector<bool>& BuildSimpleFilter() const;
     std::shared_ptr<arrow::BooleanArray> BuildArrowFilter(const ui32 expectedSize, const std::optional<ui32> startPos = {}, const std::optional<ui32> count = {}) const;

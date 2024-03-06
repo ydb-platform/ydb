@@ -76,32 +76,35 @@ Parameter name | Parameter Description | Default value
 `--consumer-threads`, `-t` | Number of consumer threads | `1`
 `--consumers`, `-c` | Number of consumers | `1`
 `--message-size`, `-m` | Message size in bytes. It is possible to specify in KB, MB, GB by adding suffixes `K`, `M`, `G` respectively | `10240`
-`--message-rate` | Target total write speed. In messages per second. Excludes the use of the `--byte-rate` | `0` parameter
-`--byte-rate` | Target total write speed. In bytes per second. Excludes the use of the --message-rate parameter. It is possible to specify in KB/s, MB/s, GB/s by adding suffixes `K`, `M`, `G` respectively | `0`
+`--message-rate` | Target total write speed. In messages per second. Excludes the use of the `--byte-rate` parameter | `0`
+`--byte-rate` | Target total write speed. In bytes per second. Excludes the use of the `--message-rate` parameter. It is possible to specify in KB/s, MB/s, GB/s by adding suffixes `K`, `M`, `G` respectively | `0`
 `--commit-period` | The period between `COMMIT` calls. In seconds | `10`
+`--commit-messages` | The period between `COMMIT` calls. In number of messages | `1000000`
+`--only-topic-in-tx` | Only topic partitions are forced to participate in transactions. Excludes the use of the `--only-table-in-tx` parameter | `0`
+`--only-table-in-tx` | Only table shards are forced to participate in transactions. Excludes the use of the `--only-topic-in-tx` parameter | `0`
 
 For example, the command `{{ ydb-cli }} --profile quickstart workload transfer topic-to-table run` will run a test lasting 60 seconds. The data for the first 5 seconds will not be taken into account in the work statistics. Example of console output:
 
 ```text
-Window  Write speed     Write time      Inflight        Lag             Lag time        Read speed      Full time
-#       msg/s   MB/s    percentile,ms   percentile,msg  percentile,msg  percentile,ms   msg/s   MB/s    percentile,ms
-1       0       0       0               0               0               0               0       0       0
-2       0       0       0               0               0               0               0       0       0
-3       0       0       0               0               0               0               0       0       0
-4       0       0       0               0               0               0               0       0       0
-5       0       0       0               0               0               0               0       0       0
-6       103     1       911             78              0               0               103     1       914
-7       103     1       983             78              0               0               103     1       984
-8       103     1       1103            80              0               0               103     1       1106
-9       103     1       1003            85              0               0               103     1       1004
-10      103     1       1003            86              0               0               103     1       1006
-11      103     1       1015            85              0               0               103     1       1019
-12      103     1       1047            91              0               0               103     1       1043
-13      103     1       999             88              0               0               103     1       1003
-14      103     1       1063            85              0               0               103     1       1064
-15      103     1       1003            89              0               0               103     1       1008
-16      103     1       999             88              0               0               103     1       1003
-17      103     1       1071            78              0               0               103     1       1077
+Window  Write speed     Write time      Inflight        Read speed      Topic time      Select time     Upsert time     Commit time
+#       msg/s   MB/s    percentile,ms   percentile,msg  msg/s   MB/s    percentile,ms   percentile,ms   percentile,ms   percentile,ms
+1       0       0       0               0               0       0       0               0               0               0
+2       0       0       0               0               0       0       0               0               0               0
+3       0       0       0               0               0       0       0               0               0               0
+4       0       0       0               0               0       0       0               0               0               0
+5       0       0       0               0               0       0       0               0               0               0
+6       103     1       1023            83              103     1       1025            0               0               0
+7       103     1       999             78              103     1       1001            0               0               0
+8       103     1       1003            93              103     1       1002            0               0               0
+9       103     1       1003            88              103     1       1003            0               0               0
+10      103     1       999             79              103     1       999             0               0               0
+11      103     1       1119            89              0       0       0               0               0               0
+12      103     1       1023            90              206     2       1028            90              223             695
+13      103     1       975             84              103     1       976             0               0               0
+14      103     1       1003            91              103     1       1006            0               0               0
+15      103     1       1003            93              103     1       1005            0               0               0
+16      103     1       1103            89              103     1       1100            0               0               0
+17      103     1       1063            89              103     1       1061            0               0               0
 ...
 ```
 
@@ -112,7 +115,8 @@ Window  Write speed     Write time      Inflight        Lag             Lag time
 * `Lag` — the specified percentile of maximum number of messages waiting to be read in the statistics collection window. Messages for all batches are taken into account.
 * `Lag time` — the specified percentile of message delay time in ms.
 * `Read speed` — the speed of reading messages by consumers. In messages per second and in megabytes per second.
-* `Full time` — the specified percentile of the time of complete processing of the message, from writing by the producer to reading by the consumer in ms.
+* `Select time`, `Upsert time`, `Commit time` — the specified percentile of the execution time of Select, Insert, Commit operations in ms.
+<!-- * `Full time` — the specified percentile of the time of complete processing of the message, from writing by the producer to reading by the consumer in ms. -->
 
 ## Removing the test environment {#clean}
 

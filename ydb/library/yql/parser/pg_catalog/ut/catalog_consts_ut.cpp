@@ -3,6 +3,17 @@
 
 extern "C" {
 #include "catalog/pg_collation_d.h"
+#include "catalog/pg_type_d.h"
+#include "catalog/pg_database_d.h"
+#include "catalog/pg_tablespace_d.h"
+#include "catalog/pg_shdescription_d.h"
+#include "catalog/pg_trigger_d.h"
+#include "catalog/pg_inherits_d.h"
+#include "catalog/pg_description_d.h"
+#include "catalog/pg_am_d.h"
+#include "catalog/pg_namespace_d.h"
+#include "catalog/pg_auth_members_d.h"
+#include "catalog/pg_class_d.h"
 #include "access/stratnum.h"
 }
 
@@ -40,5 +51,21 @@ Y_UNIT_TEST_SUITE(TConstantsTests) {
         UNIT_ASSERT_VALUES_EQUAL(typeDesc.TypeId, VarcharOid);
         typeDesc = LookupType("text");
         UNIT_ASSERT_VALUES_EQUAL(typeDesc.TypeId, TextOid);
+        typeDesc = LookupType("anynonarray");
+        UNIT_ASSERT_VALUES_EQUAL(typeDesc.TypeId, AnyNonArrayOid);
+    }
+
+    Y_UNIT_TEST(TRelationOidConsts) {
+        UNIT_ASSERT_VALUES_EQUAL(TypeRelationOid, TypeRelationId);
+        UNIT_ASSERT_VALUES_EQUAL(DatabaseRelationOid, DatabaseRelationId);
+        UNIT_ASSERT_VALUES_EQUAL(TableSpaceRelationOid, TableSpaceRelationId);
+        UNIT_ASSERT_VALUES_EQUAL(SharedDescriptionRelationOid, SharedDescriptionRelationId);
+        UNIT_ASSERT_VALUES_EQUAL(TriggerRelationOid, TriggerRelationId);
+        UNIT_ASSERT_VALUES_EQUAL(InheritsRelationOid, InheritsRelationId);
+        UNIT_ASSERT_VALUES_EQUAL(DescriptionRelationOid, DescriptionRelationId);
+        UNIT_ASSERT_VALUES_EQUAL(AccessMethodRelationOid, AccessMethodRelationId);
+        UNIT_ASSERT_VALUES_EQUAL(NamespaceRelationOid, NamespaceRelationId);
+        UNIT_ASSERT_VALUES_EQUAL(AuthMemRelationOid, AuthMemRelationId);
+        UNIT_ASSERT_VALUES_EQUAL(RelationRelationOid, RelationRelationId);
     }
 }

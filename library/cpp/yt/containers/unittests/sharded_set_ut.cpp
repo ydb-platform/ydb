@@ -21,7 +21,7 @@ using TSet = TShardedSet<int, 16, TIntToShard>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(CompactSetTest, Insert)
+TEST(TShardedSetTest, Insert)
 {
     TSet set;
 
@@ -41,7 +41,7 @@ TEST(CompactSetTest, Insert)
     EXPECT_EQ(0u, set.count(4));
 }
 
-TEST(CompactSetTest, Erase)
+TEST(TShardedSetTest, Erase)
 {
     TSet set;
 
@@ -65,7 +65,7 @@ TEST(CompactSetTest, Erase)
     EXPECT_EQ(0u, set.count(8));
 }
 
-TEST(CompactSetTest, StressTest)
+TEST(TShardedSetTest, StressTest)
 {
     TSet set;
 

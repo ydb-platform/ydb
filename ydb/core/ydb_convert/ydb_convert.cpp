@@ -3,6 +3,8 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
+#include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
@@ -615,8 +617,17 @@ void ConvertMiniKQLValueToYdbValue(const NKikimrMiniKQL::TType& inputType,
             break;
         }
         case NKikimrMiniKQL::ETypeKind::Pg: {
-            const auto& stringRef = inputValue.GetText();
-            output.set_text_value(stringRef.data(), stringRef.size());
+            if (inputValue.GetValueValueCase() == NKikimrMiniKQL::TValue::kNullFlagValue) {
+                output.Setnull_flag_value(::google::protobuf::NULL_VALUE);
+            } else if (inputValue.HasBytes()) {
+                const auto& stringRef = inputValue.GetBytes();
+                output.set_bytes_value(stringRef.data(), stringRef.size());
+            } else if (inputValue.HasText()) {
+                const auto& stringRef = inputValue.GetText();
+                output.set_text_value(stringRef.data(), stringRef.size());
+            } else {
+                Y_ENSURE(false, "malformed pg value");
+            }
             break;
         }
         default: {

@@ -1,7 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    typeparams.go
-)
-
+IF (TRUE)
+    SRCS(
+		typeparams.go
+    )
+ENDIF()
 END()

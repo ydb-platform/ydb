@@ -1,5 +1,5 @@
 /* Check UTF-8 string.
-   Copyright (C) 2002, 2006-2007, 2009-2022 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2006-2007, 2009-2024 Free Software Foundation, Inc.
    Written by Bruno Haible <bruno@clisp.org>, 2002.
 
    This file is free software: you can redistribute it and/or modify
@@ -57,13 +57,13 @@ u8_check (const uint8_t *s, size_t n)
                   continue;
                 }
             }
-          else if (c < 0xf8)
+          else if (c <= 0xf4)
             {
               if (s + 4 <= s_end
                   && (s[1] ^ 0x80) < 0x40 && (s[2] ^ 0x80) < 0x40
                   && (s[3] ^ 0x80) < 0x40
                   && (c >= 0xf1 || s[1] >= 0x90)
-                  && (c < 0xf4 || (c == 0xf4 && s[1] < 0x90)))
+                  && (c < 0xf4 || (/* c == 0xf4 && */ s[1] < 0x90)))
                 {
                   s += 4;
                   continue;

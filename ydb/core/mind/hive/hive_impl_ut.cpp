@@ -193,4 +193,10 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         Ctest << "HIVE_TABLET_BALANCE_STRATEGY_RANDOM" << Endl;
         CheckSpeedAndDistribution(allTablets, BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM>, EResourceToBalance::Memory);
     }
+
+    Y_UNIT_TEST(TestShortTabletTypes) {
+        // This asserts we don't have different tablet types with same short name
+        // In a world with constexpr maps this could have been a static_assert...
+        UNIT_ASSERT_VALUES_EQUAL(TABLET_TYPE_SHORT_NAMES.size(), TABLET_TYPE_BY_SHORT_NAME.size());
+    }
 }

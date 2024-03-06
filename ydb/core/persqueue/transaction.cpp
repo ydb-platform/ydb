@@ -2,7 +2,7 @@
 #include "utils.h"
 
 namespace NKikimr::NPQ {
- 
+
 TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& tx) :
     TDistributedTransaction()
 {
@@ -44,6 +44,10 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
 
     Y_ABORT_UNLESS(tx.HasSourceActor());
     SourceActor = ActorIdFromProto(tx.GetSourceActor());
+
+    if (tx.HasWriteId()) {
+        WriteId = tx.GetWriteId();
+    }
 }
 
 void TDistributedTransaction::InitDataTransaction(const NKikimrPQ::TTransaction& tx)
@@ -66,6 +70,8 @@ void TDistributedTransaction::InitConfigTransaction(const NKikimrPQ::TTransactio
     TabletConfig = tx.GetTabletConfig();
     BootstrapConfig = tx.GetBootstrapConfig();
 
+    Migrate(TabletConfig);
+
     InitPartitions();
 }
 
@@ -75,11 +81,11 @@ void TDistributedTransaction::InitPartitions()
 
     if (TabletConfig.PartitionsSize()) {
         for (const auto& partition : TabletConfig.GetPartitions()) {
-            Partitions.insert(partition.GetPartitionId());
+            Partitions.emplace(partition.GetPartitionId());
         }
     } else {
         for (auto partitionId : TabletConfig.GetPartitionIds()) {
-            Partitions.insert(partitionId);
+            Partitions.emplace(partitionId);
         }
     }
 }
@@ -133,6 +139,12 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TDataTransac
 
     InitPartitions(txBody.GetOperations());
 
+    if (txBody.HasWriteId()) {
+        WriteId = txBody.GetWriteId();
+    } else {
+        WriteId = Nothing();
+    }
+
     PartitionRepliesCount = 0;
     PartitionRepliesExpected = 0;
 
@@ -147,6 +159,8 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTrans
     TabletConfig = txBody.GetTabletConfig();
     BootstrapConfig = txBody.GetBootstrapConfig();
 
+    Migrate(TabletConfig);
+
     TPartitionGraph graph = MakePartitionGraph(TabletConfig);
 
     for (const auto& p : TabletConfig.GetPartitions()) {
@@ -155,6 +169,7 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTrans
             // Old configuration format without AllPartitions. Split/Merge is not supported.
             continue;
         }
+
         if (node->Children.empty()) {
             for (const auto* r : node->Parents) {
                 if (extractTabletId != r->TabletId) {
@@ -206,7 +221,7 @@ void TDistributedTransaction::OnPartitionResult(const E& event, EDecision decisi
     Y_ABORT_UNLESS(Step == event.Step);
     Y_ABORT_UNLESS(TxId == event.TxId);
 
-    Y_ABORT_UNLESS(Partitions.contains(event.Partition));
+    Y_ABORT_UNLESS(Partitions.contains(event.Partition.OriginalPartitionId));
 
     SetDecision(SelfDecision, decision);
 
@@ -246,7 +261,7 @@ void TDistributedTransaction::OnTxCommitDone(const TEvPQ::TEvTxCommitDone& event
     Y_ABORT_UNLESS(Step == event.Step);
     Y_ABORT_UNLESS(TxId == event.TxId);
 
-    Y_ABORT_UNLESS(Partitions.contains(event.Partition));
+    Y_ABORT_UNLESS(Partitions.contains(event.Partition.OriginalPartitionId));
 
     ++PartitionRepliesCount;
 }
@@ -332,6 +347,9 @@ void TDistributedTransaction::AddCmdWriteDataTx(NKikimrPQ::TTransaction& tx)
     }
     if (ParticipantsDecision != NKikimrTx::TReadSetData::DECISION_UNKNOWN) {
         tx.SetAggrPredicate(ParticipantsDecision == NKikimrTx::TReadSetData::DECISION_COMMIT);
+    }
+    if (WriteId.Defined()) {
+        tx.SetWriteId(*WriteId);
     }
 }
 

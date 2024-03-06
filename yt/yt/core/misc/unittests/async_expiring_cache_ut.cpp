@@ -320,14 +320,14 @@ public:
 
 private:
     virtual TFuture<int> DoGet(
-        const int& /* key */,
-        bool /* isPeriodicUpdate */) noexcept
+        const int& /*key*/,
+        bool /*isPeriodicUpdate*/) noexcept
     {
         YT_UNIMPLEMENTED();
     }
 
     virtual TFuture<int> DoGet(
-        const int& /* key */,
+        const int& /*key*/,
         const TErrorOr<int>* oldValue,
         EUpdateReason reason) noexcept
     {

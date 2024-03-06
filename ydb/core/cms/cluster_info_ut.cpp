@@ -199,33 +199,33 @@ void AddActions(TRequestInfo &request, const NKikimrCms::TAction &action, Ts... 
 }
 
 template<typename... Ts>
-TRequestInfo MakeRequest(const TString &id, const TString &owner, ui64 order, Ts... actions)
+TRequestInfo MakeRequest(const TString &id, const TString &owner, i32 priority, Ts... actions)
 {
     TRequestInfo res;
     res.RequestId = id;
     res.Owner = owner;
-    res.Order = order;
+    res.Priority = priority;
     AddActions(res, actions...);
     return res;
 }
 
 template<typename I>
-void CheckScheduledLocks(I pos, I end, const TString &id, const TString &owner, ui64 order)
+void CheckScheduledLocks(I pos, I end, const TString &id, const TString &owner, i32 priority)
 {
     UNIT_ASSERT(pos != end);
     UNIT_ASSERT_VALUES_EQUAL(pos->RequestId, id);
     UNIT_ASSERT_VALUES_EQUAL(pos->Owner, owner);
-    UNIT_ASSERT_VALUES_EQUAL(pos->Order, order);
+    UNIT_ASSERT_VALUES_EQUAL(pos->Priority, priority);
     UNIT_ASSERT(++pos == end);
 }
 
 template<typename I, typename... Ts>
-void CheckScheduledLocks(I pos, I end, const TString &id, const TString &owner, ui64 order, Ts... locks)
+void CheckScheduledLocks(I pos, I end, const TString &id, const TString &owner, i32 priority, Ts... locks)
 {
     UNIT_ASSERT(pos != end);
     UNIT_ASSERT_VALUES_EQUAL(pos->RequestId, id);
     UNIT_ASSERT_VALUES_EQUAL(pos->Owner, owner);
-    UNIT_ASSERT_VALUES_EQUAL(pos->Order, order);
+    UNIT_ASSERT_VALUES_EQUAL(pos->Priority, priority);
     CheckScheduledLocks(++pos, end, locks...);
 }
 
@@ -442,7 +442,7 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
                             "request-3", "user-3", 3,
                             "request-4", "user-4", 4);
 
-        cluster->DeactivateScheduledLocks(request2.Order);
+        cluster->DeactivateScheduledLocks(request2.Priority);
 
         TErrorInfo error;
         UNIT_ASSERT(cluster->Node(1).IsLocked(error, TDuration(), Now(), TDuration()));

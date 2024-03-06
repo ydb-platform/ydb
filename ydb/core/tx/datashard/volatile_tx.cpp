@@ -598,11 +598,19 @@ namespace NKikimr::NDataShard {
 
         UnblockWaitingRemovalOperations(info);
 
+        TRowVersion prevUncertain = GetMinUncertainVersion();
+
         for (ui64 commitTxId : info->CommitTxIds) {
             VolatileTxByCommitTxId.erase(commitTxId);
         }
         VolatileTxByVersion.erase(info);
         VolatileTxs.erase(txId);
+
+        if (prevUncertain < GetMinUncertainVersion()) {
+            Self->PromoteFollowerReadEdge();
+        }
+
+        Self->EmitHeartbeats();
 
         if (!WaitingSnapshotEvents.empty()) {
             TVolatileTxInfo* next = !VolatileTxByVersion.empty() ? *VolatileTxByVersion.begin() : nullptr;
@@ -816,7 +824,7 @@ namespace NKikimr::NDataShard {
             }
             info->DelayedConfirmations.clear();
 
-            // Send delayed acks on commit
+            // Send delayed acks when changes are persisted
             // TODO: maybe move it into a parameter?
             struct TDelayedAcksState : public TThrRefBase {
                 TVector<THolder<IEventHandle>> DelayedAcks;
@@ -825,7 +833,7 @@ namespace NKikimr::NDataShard {
                     : DelayedAcks(std::move(info->DelayedAcks))
                 {}
             };
-            txc.DB.OnCommit([state = MakeIntrusive<TDelayedAcksState>(info)]() {
+            txc.DB.OnPersistent([state = MakeIntrusive<TDelayedAcksState>(info)]() {
                 for (auto& ev : state->DelayedAcks) {
                     TActivationContext::Send(ev.Release());
                 }

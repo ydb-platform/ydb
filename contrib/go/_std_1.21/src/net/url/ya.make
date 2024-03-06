@@ -1,14 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    url.go
-)
-
-GO_TEST_SRCS(url_test.go)
-
-GO_XTEST_SRCS(example_test.go)
-
+IF (TRUE)
+    SRCS(
+		url.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

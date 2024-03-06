@@ -2,7 +2,7 @@
 
 #include "defs.h"
 #include "datashard.h"
-#include "datashard_locks.h"
+#include <ydb/core/tx/locks/locks.h>
 #include "datashard_outreadset.h"
 #include "datashard_snapshots.h"
 #include "execution_unit_kind.h"
@@ -27,6 +27,12 @@ namespace NDataShard {
 using NTabletFlatExecutor::TTableSnapshotContext;
 
 class TDataShard;
+
+enum class ERestoreDataStatus {
+    Ok,
+    Restart,
+    Error,
+};
 
 enum class ETxOrder {
     Unknown,
@@ -505,6 +511,33 @@ struct TExecutionProfile {
     THashMap<EExecutionUnitKind, TUnitProfile> UnitProfiles;
 };
 
+class TValidatedDataTx;
+class TValidatedWriteTx;
+
+class TValidatedTx {
+public:
+    using TPtr = std::shared_ptr<TValidatedTx>;
+
+    virtual ~TValidatedTx() = default;
+
+    enum class EType { 
+        DataTx,
+        WriteTx 
+    };
+
+public:
+    virtual EType GetType() const = 0;
+    virtual ui64 GetTxId() const = 0;
+    virtual ui64 GetMemoryConsumption() const = 0;
+
+    bool IsProposed() const {
+        return GetSource() != TActorId();
+    }
+
+    YDB_ACCESSOR_DEF(TActorId, Source);
+    YDB_ACCESSOR_DEF(ui64, TxCacheUsage);
+};
+
 struct TOperationAllListTag {};
 struct TOperationGlobalListTag {};
 struct TOperationDelayedReadListTag {};
@@ -811,6 +844,18 @@ public:
     NWilson::TTraceId GetTraceId() const noexcept {
         return OperationSpan.GetTraceId();
     }
+
+    /**
+     * Called when datashard is going to stop soon
+     *
+     * Operation may override this method to support sending notifications or
+     * results signalling that the operation will never complete. When result
+     * is sent operation is supposed to set its ResultSentFlag.
+     *
+     * When this method returns true the operation will be added to the
+     * pipeline as a candidate for execution.
+     */
+    virtual bool OnStopping(TDataShard& self, const TActorContext& ctx);
 
 protected:
     TOperation()

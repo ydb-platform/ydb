@@ -40,7 +40,7 @@ public:
         return SeqNo_;
     }
 
-    bool Initialize(const TActorContext& ctx, const TString& sourceId) {
+    [[nodiscard]] bool Initialize(const TActorContext& ctx, const TString& sourceId) {
         const auto& pqConfig = AppData(ctx)->PQConfig;
 
         TableGeneration = pqConfig.GetTopicsAreFirstClassCitizen() ? ESourceIdTableGeneration::PartitionMapping

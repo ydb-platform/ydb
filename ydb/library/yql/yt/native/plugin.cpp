@@ -1,26 +1,44 @@
+#include "dq_manager.h"
 #include "plugin.h"
 
 #include "error_helpers.h"
 #include "progress_merger.h"
 
+#include <ydb/library/yql/providers/yt/common/yql_names.h>
+#include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
 #include <ydb/library/yql/providers/yt/gateway/native/yql_yt_native.h>
 #include <ydb/library/yql/providers/yt/lib/log/yt_logger.h>
+#include <ydb/library/yql/providers/yt/lib/res_pull/res_or_pull.h>
+#include <ydb/library/yql/providers/yt/lib/row_spec/yql_row_spec.h>
+#include <ydb/library/yql/providers/yt/lib/schema/schema.h>
+#include <ydb/library/yql/providers/yt/lib/skiff/yql_skiff_schema.h>
 #include <ydb/library/yql/providers/yt/lib/yt_download/yt_download.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
 
+#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
+#include <ydb/library/yql/providers/common/codec/yql_codec.h>
+#include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 
+#include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
+#include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
+#include <ydb/library/yql/providers/dq/provider/yql_dq_state.h>
+#include <ydb/library/yql/providers/dq/provider/exec/yql_dq_exectransformer.h>
+
 #include <ydb/library/yql/ast/yql_expr.h>
+#include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
 #include <ydb/library/yql/core/facade/yql_facade.h>
 #include <ydb/library/yql/core/file_storage/file_storage.h>
 #include <ydb/library/yql/core/file_storage/proto/file_storage.pb.h>
 #include <ydb/library/yql/core/services/mounts/yql_mounts.h>
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/core/url_preprocessing/url_preprocessing.h>
+#include <ydb/library/yql/core/yql_type_helpers.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -55,6 +73,7 @@ namespace NYT::NYqlPlugin {
 namespace NNative {
 
 using namespace NYson;
+using namespace NKikimr::NMiniKQL;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -121,11 +140,62 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TSkiffConverter
+    : public ISkiffConverter
+{
+public:
+    TString ConvertNodeToSkiff(const TDqStatePtr state, const IDataProvider::TFillSettings& fillSettings, const NYT::TNode& rowSpec, const NYT::TNode& item) override
+    {
+        TMemoryUsageInfo memInfo("DqResOrPull");
+        TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), state->FunctionRegistry->SupportsSizedAllocators());
+        THolderFactory holderFactory(alloc.Ref(), memInfo, state->FunctionRegistry);
+        TTypeEnvironment env(alloc);
+        NYql::NCommon::TCodecContext codecCtx(env, *state->FunctionRegistry, &holderFactory);
+
+        auto skiffBuilder = MakeHolder<TSkiffExecuteResOrPull>(fillSettings.RowsLimitPerWrite, fillSettings.AllResultsBytesLimit, codecCtx, holderFactory, rowSpec, state->TypeCtx->OptLLVM.GetOrElse("OFF"));
+        if (item.IsList()) {
+            skiffBuilder->SetListResult();
+            for (auto& node : item.AsList()) {
+                skiffBuilder->WriteNext(node);
+            }
+        } else {
+            skiffBuilder->WriteNext(item);
+        }
+
+        return skiffBuilder->Finish();
+    }
+
+    TYtType ParseYTType(const TExprNode& node, TExprContext& ctx, const TMaybe<NYql::TColumnOrder>& columns) override
+    {
+        const auto sequenceItemType = GetSequenceItemType(node.Pos(), node.GetTypeAnn(), false, ctx);
+
+        auto rowSpecInfo = MakeIntrusive<TYqlRowSpecInfo>();
+        rowSpecInfo->SetType(sequenceItemType->Cast<TStructExprType>(), NTCF_ALL);
+        rowSpecInfo->SetColumnOrder(columns);
+
+        NYT::TNode tableSpec = NYT::TNode::CreateMap();
+        rowSpecInfo->FillCodecNode(tableSpec[YqlRowSpecAttribute]);
+
+        auto resultYTType = NodeToYsonString(RowSpecToYTSchema(tableSpec[YqlRowSpecAttribute], NTCF_ALL).ToNode());
+        auto resultRowSpec = NYT::TNode::CreateMap()(TString{YqlIOSpecTables}, NYT::TNode::CreateList().Add(tableSpec));
+        auto resultSkiffType = NodeToYsonString(TablesSpecToOutputSkiff(resultRowSpec));
+
+        return {
+            .Type = resultYTType,
+            .SkiffType = resultSkiffType,
+            .RowSpec = resultRowSpec
+        };
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TYqlPlugin
     : public IYqlPlugin
 {
 public:
     TYqlPlugin(TYqlPluginOptions options)
+        : DqManagerConfig_(options.DqManagerConfig ? NYTree::ConvertTo<TDqManagerConfigPtr>(options.DqManagerConfig) : nullptr)
     {
         try {
             auto singletonsConfig = NYTree::ConvertTo<TSingletonsConfigPtr>(options.SingletonsConfig);
@@ -147,6 +217,14 @@ public:
 
             NYson::TProtobufWriterOptions protobufWriterOptions;
             protobufWriterOptions.ConvertSnakeToCamelCase = true;
+
+            auto* gatewayDqConfig = GatewaysConfig_.MutableDq();
+            if (DqManagerConfig_) {
+                gatewayDqConfig->ParseFromStringOrThrow(NYson::YsonStringToProto(
+                    options.DqGatewayConfig,
+                    NYson::ReflectProtobufMessageType<NYql::TDqGatewayConfig>(),
+                    protobufWriterOptions));
+            }
 
             auto* gatewayYtConfig = GatewaysConfig_.MutableYt();
             gatewayYtConfig->ParseFromStringOrThrow(NYson::YsonStringToProto(
@@ -188,6 +266,14 @@ public:
                     continue;
                 }
                 FuncRegistry_->LoadUdfs(path, emptyRemappings, 0);
+                if (DqManagerConfig_) {
+                    DqManagerConfig_->UdfsWithMd5.emplace(path, MD5::File(path));
+                }
+            }
+
+            if (DqManagerConfig_) {
+                DqManagerConfig_->FileStorage = FileStorage_;
+                DqManager_ = New<TDqManager>(DqManagerConfig_);
             }
 
             gatewayYtConfig->ClearMrJobUdfsDir();
@@ -224,6 +310,17 @@ public:
             ytServices.FunctionRegistry = FuncRegistry_.Get();
             ytServices.FileStorage = FileStorage_;
             ytServices.Config = std::make_shared<NYql::TYtGatewayConfig>(*gatewayYtConfig);
+
+            if (DqManagerConfig_) {
+                auto dqGateway = NYql::CreateDqGateway("localhost", DqManagerConfig_->GrpcPort);
+                auto dqCompFactory = NKikimr::NMiniKQL::GetCompositeWithBuiltinFactory({
+                    NYql::GetCommonDqFactory(),
+                    NYql::GetDqYtFactory(),
+                    NKikimr::NMiniKQL::GetYqlFactory(),
+                });
+                dataProvidersInit.push_back(GetDqDataProviderInitializer(NYql::CreateDqExecTransformerFactory(MakeIntrusive<TSkiffConverter>()), dqGateway, dqCompFactory, {}, FileStorage_));
+            }
+
             auto ytNativeGateway = CreateYtNativeGateway(ytServices);
             dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
 
@@ -247,6 +344,13 @@ public:
             exit(1);
         }
         YQL_LOG(INFO) << "YQL plugin initialized";
+    }
+
+    void Start() override
+    {
+        if (DqManager_) {
+            DqManager_->Start();
+        }
     }
 
     TQueryResult GuardedRun(
@@ -296,6 +400,9 @@ public:
         }
         sqlSettings.SyntaxVersion = 1;
         sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
+        if (DqManager_) {
+            sqlSettings.DqDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::MakeAlwaysAllow();
+        }
 
         if (!program->ParseSql(sqlSettings)) {
             return TQueryResult{
@@ -435,6 +542,8 @@ public:
     }
 
 private:
+    const TDqManagerConfigPtr DqManagerConfig_;
+    TDqManagerPtr DqManager_;
     NYql::TFileStoragePtr FileStorage_;
     NYql::TExprContext ExprContext_;
     ::TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FuncRegistry_;

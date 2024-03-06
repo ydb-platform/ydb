@@ -103,8 +103,6 @@ public:
     void SetIsImmediateTx();
     void SetIsRepeatableSnapshot();
 
-    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion);
-
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const;
     void ResetCollectedChanges();
 

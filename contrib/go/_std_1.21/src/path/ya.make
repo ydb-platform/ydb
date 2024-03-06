@@ -1,18 +1,8 @@
 GO_LIBRARY()
-
-SRCS(
-    match.go
-    path.go
-)
-
-GO_XTEST_SRCS(
-    example_test.go
-    match_test.go
-    path_test.go
-)
-
+IF (TRUE)
+    SRCS(
+		match.go
+		path.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-    filepath
-)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "schemeshard_identificators.h"
+#include "schemeshard_types.h"
 
 #include <ydb/core/tablet/pipe_tracker.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
@@ -63,6 +64,8 @@ private:
     TVector<TActivateShardCreated> PendingActivateShardCreated;
     TDeque<TWaitPublication> WaitPublications;
     TDeque<TBarrierRec> Barriers;
+    THashMap<TActorId, TVector<TPathId>> TempTablesToCreateState;
+    THashMap<TActorId, TVector<TPathId>> TempTablesToDropState;
 
 public:
     using TPtr = TIntrusivePtr<TSideEffects>;
@@ -98,6 +101,9 @@ public:
     void UnbindMsgFromPipe(TOperationId opId, TTabletId dst, TPathId pathId);
     void UnbindMsgFromPipe(TOperationId opId, TTabletId dst, TShardIdx shardIdx);
     void UnbindMsgFromPipe(TOperationId opId, TTabletId dst, TPipeMessageId cookie);
+
+    void UpdateTempTablesToCreateState(const TActorId& ownerActorId, const TPathId& pathId);
+    void UpdateTempTablesToDropState(const TActorId& ownerActorId, const TPathId& pathId);
 
     void RouteByTabletsFromOperation(TOperationId opId);
     void RouteByTablet(TOperationId opId, TTabletId dst);
@@ -157,6 +163,9 @@ private:
     void DoActivateOps(TSchemeShard* ss, const TActorContext& ctx);
 
     void DoPersistDeleteShards(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);
+
+    void DoUpdateTempTablesToCreateState(TSchemeShard* ss, const TActorContext &ctx);
+    void DoUpdateTempTablesToDropState(TSchemeShard* ss, const TActorContext &ctx);
 
     void ResumeLongOps(TSchemeShard* ss, const TActorContext& ctx);
     void SetupRoutingLongOps(TSchemeShard* ss, const TActorContext& ctx);

@@ -1,7 +1,5 @@
 #pragma once
 
-#include "datashard.h"
-
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_database.h>
@@ -22,6 +20,7 @@ namespace NDataShard {
 struct TUserTable : public TThrRefBase {
     using TPtr = TIntrusivePtr<TUserTable>;
     using TCPtr = TIntrusiveConstPtr<TUserTable>;
+    using TTableInfos = THashMap<ui64, TUserTable::TCPtr>;
 
     struct TUserFamily {
         using ECodec = NTable::NPage::ECodec;

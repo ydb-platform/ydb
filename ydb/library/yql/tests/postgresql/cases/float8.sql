@@ -12,6 +12,8 @@ SELECT '10e400'::float8;
 SELECT '-10e400'::float8;
 SELECT '10e-400'::float8;
 SELECT '-10e-400'::float8;
+-- test smallest normalized input
+SELECT float8send('2.2250738585072014E-308'::float8);
 -- bad input
 INSERT INTO FLOAT8_TBL(f1) VALUES ('');
 INSERT INTO FLOAT8_TBL(f1) VALUES ('     ');
@@ -50,14 +52,9 @@ SELECT f.f1, f.f1 * '-10' AS x
 SELECT f.f1, f.f1 + '-10' AS x
    FROM FLOAT8_TBL f
    WHERE f.f1 > '0.0';
-SELECT f.f1, f.f1 / '-10' AS x
-   FROM FLOAT8_TBL f
-   WHERE f.f1 > '0.0';
 SELECT f.f1, f.f1 - '-10' AS x
    FROM FLOAT8_TBL f
    WHERE f.f1 > '0.0';
-SELECT f.f1 ^ '2.0' AS square_f1
-   FROM FLOAT8_TBL f where f.f1 = '1004.3';
 -- absolute value
 SELECT f.f1, @f.f1 AS abs_f1
    FROM FLOAT8_TBL f;
@@ -72,6 +69,9 @@ SET extra_float_digits = 0;
 -- square root
 SELECT sqrt(float8 '64') AS eight;
 SELECT |/ float8 '64' AS eight;
+SELECT f.f1, |/f.f1 AS sqrt_f1
+   FROM FLOAT8_TBL f
+   WHERE f.f1 > '0.0';
 -- power
 SELECT power(float8 '144', float8 '0.5');
 SELECT power(float8 'NaN', float8 '0.5');
@@ -109,8 +109,13 @@ SELECT power(float8 '-inf', float8 '3');
 SELECT power(float8 '-inf', float8 '3.5');
 SELECT power(float8 '-inf', float8 'inf');
 SELECT power(float8 '-inf', float8 '-inf');
--- check edge cases for exp
-SELECT exp('inf'::float8), exp('-inf'::float8), exp('nan'::float8);
+-- take exp of ln(f.f1)
+SELECT f.f1, exp(ln(f.f1)) AS exp_ln_f1
+   FROM FLOAT8_TBL f
+   WHERE f.f1 > '0.0';
+-- cube root
+SELECT ||/ float8 '27' AS three;
+SELECT f.f1, ||/f.f1 AS cbrt_f1 FROM FLOAT8_TBL f;
 SELECT * FROM FLOAT8_TBL;
 SELECT f.f1 * '1e200' from FLOAT8_TBL f;
 SELECT f.f1 ^ '1e200' from FLOAT8_TBL f;
@@ -118,7 +123,15 @@ SELECT 0 ^ 0 + 0 ^ 1 + 0 ^ 0.0 + 0 ^ 0.5;
 SELECT ln(f.f1) from FLOAT8_TBL f where f.f1 = '0.0' ;
 SELECT ln(f.f1) from FLOAT8_TBL f where f.f1 < '0.0' ;
 SELECT f.f1 / '0.0' from FLOAT8_TBL f;
+-- hyperbolic functions
+-- we run these with extra_float_digits = 0 too, since different platforms
+-- tend to produce results that vary in the last place.
+SELECT sinh(float8 '1');
+SELECT cosh(float8 '1');
+SELECT tanh(float8 '1');
 SELECT asinh(float8 '1');
+SELECT acosh(float8 '2');
+SELECT atanh(float8 '0.5');
 -- test Inf/NaN cases for hyperbolic functions
 SELECT sinh(float8 'infinity');
 SELECT sinh(float8 '-infinity');

@@ -207,6 +207,28 @@ ClassicDivision является [scoped](#pragmascope) настройкой.
 Не влияет на операции с числами с  плавающей точкой или `Decimal`.
 CheckedOps является [scoped](#pragmascope) настройкой.
 
+### UnicodeLiterals
+
+`UnicodeLiterals`/`DisableUnicodeLiterals`
+
+| Тип значения | По умолчанию |
+| --- | --- |
+| Флаг | false |
+
+При включенном режиме строковые литералы без суффиксов вида "foo"/'bar'/@@multiline@@ будут иметь тип `Utf8`, при выключенном - `String`.
+UnicodeLiterals является [scoped](#pragmascope) настройкой.
+
+### WarnUntypedStringLiterals
+
+`WarnUntypedStringLiterals`/`DisableWarnUntypedStringLiterals`
+
+| Тип значения | По умолчанию |
+| --- | --- |
+| Флаг | false |
+
+При включенном режиме для строковых литералов без суффиксов вида "foo"/'bar'/@@multiline@@ будет генерироваться предупреждение. Его можно подавить, если явно выбрать суффикс `s` для типа `String`, либо `u` для типа `Utf8`.
+WarnUntypedStringLiterals является [scoped](#pragmascope) настройкой.
+
 ### AllowDotInAlias
 
 | Тип значения | По умолчанию |

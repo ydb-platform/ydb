@@ -7,14 +7,19 @@
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include "ydb/library/yql/providers/yt/common/yql_names.h"
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
 #include <ydb/library/yql/providers/pg/provider/yql_pg_provider.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
+#include <ydb/library/yql/providers/yt/lib/schema/schema.h>
+#include <ydb/library/yql/core/services/mounts/yql_mounts.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/yson/public.h>
+#include "library/cpp/yson/node/node_io.h"
 #include <library/cpp/yt/yson_string/string.h>
 #include <fmt/format.h>
 
@@ -35,6 +40,8 @@
 
 using namespace NYql;
 using namespace NKikimr::NMiniKQL;
+using namespace NNodes;
+using NUdf::EDataSlot;
 
 namespace NMiniKQL = NKikimr::NMiniKQL;
 
@@ -655,8 +662,8 @@ TString GetFormattedStmt(const TStringBuf& stmt) {
     size_t pos = 0, next_pos = TStringBuf::npos;
 
     while (TStringBuf::npos != (next_pos = stmt.find('\n', pos))) {
-        if (1 < next_pos - pos) {
-            if (!(stmt[pos] == '\r' && 2 == next_pos - pos)) {
+        if (0 < next_pos - pos) {
+            if (!(stmt[pos] == '\r' && 1 == next_pos - pos)) {
                 result += stmt.substr(pos, next_pos - pos + 1);
             }
         }
@@ -762,13 +769,13 @@ const TString FormatFloat(const TString& value, std::function<TString(const TStr
 inline const TString FormatFloat4(const TString& value)
 {
     return FormatFloat(value,
-        [] (const TString& val) { return TString(fmt::format("{0}", std::stof(val))); });
+        [] (const TString& val) { return TString(fmt::format("{:.8g}", std::stof(val))); });
 }
 
 inline const TString FormatFloat8(const TString& value)
 {
     return FormatFloat(value,
-        [] (const TString& val) { return TString(fmt::format("{0}", std::stod(val))); });
+        [] (const TString& val) { return TString(fmt::format("{:.15g}", std::stod(val))); });
 }
 
 inline const TString FormatTransparent(const TString& value)
@@ -815,54 +822,57 @@ std::string FormatCell(const TString& data, const TColumn& column, size_t index,
 
 TString GetCellData(const NYT::TNode& cell, const TColumn& column) {
     if (column.Type == "bytea") {
-        if (cell.IsList()) {
-            TString result;
+        const auto rawValue = (cell.IsList())
+            ? Base64Decode(cell.AsList()[0].AsString())
+            : cell.AsString();
 
-            const auto rawValue = Base64Decode(cell.AsList()[0].AsString());
-            switch (byteaOutput) {
-                case EByteaOutput::hex: {
-                    const auto expectedSize = rawValue.size() * 2 + 2;
-                    result.resize(expectedSize);
-                    result[0] = '\\';
-                    result[1] = 'x';
-                    const auto cnt = HexEncode(rawValue.data(), rawValue.size(), result.begin() + 2);
+        switch (byteaOutput) {
+            case EByteaOutput::hex: {
+                TString result;
 
-                    Y_ASSERT(cnt + 2 == expectedSize);
+                const auto expectedSize = rawValue.size() * 2 + 2;
+                result.resize(expectedSize);
+                result[0] = '\\';
+                result[1] = 'x';
+                const auto cnt = HexEncode(rawValue.data(), rawValue.size(), result.begin() + 2);
 
-                    return result;
-                }
-                case EByteaOutput::escape: {
-                    ui64 expectedSize = std::accumulate(rawValue.cbegin(), rawValue.cend(), 0U,
-                        [] (ui64 acc, char c) {
-                            return acc + ((c == '\\')
-                                          ? 2
-                                          : ((ui8)c < 0x20 || 0x7e < (ui8)c)
-                                            ? 4
-                                            : 1);
-                        });
-                    result.resize(expectedSize);
-                    auto p = result.begin();
-                    for (const auto c : rawValue) {
-                        if (c == '\\') {
-                            *p++ = '\\';
-                            *p++ = '\\';
-                        } else if ((ui8)c < 0x20 || 0x7e < (ui8)c) {
-                            auto val = (ui8)c;
+                Y_ASSERT(cnt + 2 == expectedSize);
 
-                            *p++ = '\\';
-                            *p++ = ((val >> 6) & 03) + '0';
-                            *p++ = ((val >> 3) & 07) + '0';
-                            *p++ =  (val & 07) + '0';
-                        } else {
-                            *p++ = c;
-                        }
-                    }
-
-                    return result;
-                }
-                default:
-                    throw yexception() << "Unhandled EByteaOutput value";
+                return result;
             }
+            case EByteaOutput::escape: {
+                TString result;
+
+                ui64 expectedSize = std::accumulate(rawValue.cbegin(), rawValue.cend(), 0U,
+                    [] (ui64 acc, char c) {
+                        return acc + ((c == '\\')
+                                        ? 2
+                                        : ((ui8)c < 0x20 || 0x7e < (ui8)c)
+                                        ? 4
+                                        : 1);
+                    });
+                result.resize(expectedSize);
+                auto p = result.begin();
+                for (const auto c : rawValue) {
+                    if (c == '\\') {
+                        *p++ = '\\';
+                        *p++ = '\\';
+                    } else if ((ui8)c < 0x20 || 0x7e < (ui8)c) {
+                        auto val = (ui8)c;
+
+                        *p++ = '\\';
+                        *p++ = ((val >> 6) & 03) + '0';
+                        *p++ = ((val >> 3) & 07) + '0';
+                        *p++ =  (val & 07) + '0';
+                    } else {
+                        *p++ = c;
+                    }
+                }
+
+                return result;
+            }
+            default:
+                throw yexception() << "Unhandled EByteaOutput value";
         }
     }
     return cell.AsString();
@@ -936,34 +946,48 @@ std::pair<TString, TString> GetYtTableDataPaths(const TFsPath& dataDir, const TS
     return {dataFileName, attrFileName};
 }
 
-void CreateYtFileTable(const TFsPath& dataDir, const TString tableName, const TExprNode::TPtr columnsNode, THashMap<TString, TString>& tablesMapping) {
+void CreateYtFileTable(const TFsPath& dataDir, const TString tableName, const TExprNode::TPtr columnsNode,
+    THashMap<TString, TString>& tablesMapping, TExprContext& ctx, const TPosition& pos) {
   const auto [dataFilePath, attrFilePath] =
       GetYtTableDataPaths(dataDir, tableName);
 
-  TFile dataFile{dataFilePath, CreateNew};
-  TFile attrFile{attrFilePath, CreateNew};
+    TFile dataFile{dataFilePath, CreateNew};
+    TFile attrFile{attrFilePath, CreateNew};
 
-  THolder<TFixedBufferFileOutput> fo;
-  fo.Reset(new TFixedBufferFileOutput{attrFile.GetName()});
-  IOutputStream *attrS{fo.Get()};
+    auto rowSpec = MakeIntrusive<TYqlRowSpecInfo>();
 
-  *attrS << R"__({
-    "_yql_row_spec"={
-        "Type"=["StructType";[
-)__";
+    TColumnOrder columnOrder;
+    columnOrder.reserve(columnsNode->ChildrenSize());
 
-  for (const auto &columnNode : columnsNode->Children()) {
-    const auto &colName = columnNode->Child(0)->Content();
-    const auto &colTypeNode = columnNode->Child(1);
+    TStringBuilder ysonType;
+    ysonType << "[\"StructType\";[";
 
-    *attrS << fmt::format(R"__(            ["{0}";["{1}";"{2}";];];
-)__",
+    for (const auto &columnNode : columnsNode->Children()) {
+      const auto &colName = columnNode->Child(0)->Content();
+      const auto &colTypeNode = columnNode->Child(1);
+
+      columnOrder.emplace_back(colName);
+
+      ysonType << fmt::format("[\"{0}\";[\"{1}\";\"{2}\";];];",
                           colName, colTypeNode->Content(),
                           colTypeNode->Child(0)->Content());
     }
-    *attrS << R"__(        ];];
-    };
-})__";
+    ysonType << "];]";
+    const auto *typeNode = NCommon::ParseTypeFromYson(TStringBuf(ysonType), ctx, pos);
+
+    rowSpec->SetType(typeNode->Cast<TStructExprType>());
+    rowSpec->SetColumnOrder(std::move(columnOrder));
+
+    NYT::TNode attrs = NYT::TNode::CreateMap();
+    rowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], 0, false);
+
+    NYT::TNode spec;
+    rowSpec->FillCodecNode(spec[YqlRowSpecAttribute]);
+
+    attrs["schema"] = RowSpecToYTSchema(spec[YqlRowSpecAttribute], 0).ToNode();
+
+    TOFStream of(attrFile.GetName());
+    of.Write(NYT::NodeToYsonString(attrs, NYson::EYsonFormat::Pretty));
 
     tablesMapping[TString("yt.plato.") + tableName] = dataFile.GetName();
 }
@@ -1007,7 +1031,8 @@ int SplitStatements(int argc, char* argv[]) {
 void WriteToYtTableScheme(
     const NYql::TExprNode& writeNode,
     const TTempDir& tempDir,
-    const TIntrusivePtr<class NYql::NFile::TYtFileServices> yqlNativeServices) {
+    const TIntrusivePtr<class NYql::NFile::TYtFileServices> yqlNativeServices,
+    TExprContext& ctx) {
     const auto* keyNode = writeNode.Child(2);
 
     const auto* tableNameNode = keyNode->Child(0)->Child(1);
@@ -1028,7 +1053,7 @@ void WriteToYtTableScheme(
         Y_ENSURE(columnsNode);
 
         CreateYtFileTable(tempDir.Path(), TString(tableName), columnsNode->ChildPtr(1),
-                          yqlNativeServices->GetTablesMapping());
+                        yqlNativeServices->GetTablesMapping(), ctx, writeNode.Pos(ctx));
     }
     else if (mode == "drop") {
         DeleteYtFileTable(tempDir.Path(), TString(tableName), yqlNativeServices->GetTablesMapping());
@@ -1058,6 +1083,38 @@ void ProcessMetaCmd(const TStringBuf& cmd) {
     Cerr << "Metacommand " << cmd << " is not supported\n";
 }
 
+void ShowFinalAst(TProgramPtr& program, IOutputStream& stream) {
+    Cerr << "Final AST:\n";
+    PrintExprTo(program, stream);
+}
+
+void FillTablesMapping(const TFsPath& dataDir, THashMap<TString, TString>& tablesMapping) {
+    TVector<TFsPath> children;
+
+    dataDir.List(children);
+
+    bool regMsgLogged = false;
+    for (const auto& f: children) {
+        if (f.GetExtension() != "attr") {
+            continue;
+        }
+        auto tableName = f.Basename();
+        tableName.resize(tableName.length() - 5);
+
+        if (tableName.EndsWith(".tmp")) {
+            continue;
+        }
+        if (!regMsgLogged) {
+            regMsgLogged = true;
+
+            Cerr << "Registering pre-existing tables\n";
+        }
+        const auto fullTableName = f.Parent() / tableName;
+        Cerr << '\t' << tableName << '\n';
+        tablesMapping[TString("yt.plato.") + tableName] = f.Parent() / tableName;
+    }
+}
+
 int Main(int argc, char* argv[])
 {
     using namespace NLastGetopt;
@@ -1065,6 +1122,7 @@ int Main(int argc, char* argv[])
 
     const TString runnerName{"pgrun"};
     TVector<TString> udfsPaths;
+
     TString rawDataDir;
     THashMap<TString, TString> clusterMapping;
 
@@ -1074,10 +1132,16 @@ int Main(int argc, char* argv[])
     clusterMapping["information_schema"] = PgProviderName;
 
     opts.AddHelpOption();
+    opts.AddLongOption("print-ast", "print initial & final ASTs to stderr").NoArgument();
+    opts.AddLongOption("print-result", "print program execution result to stderr").NoArgument();
     opts.AddLongOption("datadir", "directory for tables").StoreResult<TString>(&rawDataDir);
+    opts.AddLongOption('u', "udf", "Load shared library with UDF by given path").AppendTo(&udfsPaths);
     opts.SetFreeArgsMax(0);
 
     TOptsParseResult res(&opts, argc, argv);
+
+    const auto needPrintAst = res.Has("print-ast");
+    const auto needPrintResult = res.Has("print-result");
 
     const bool tempDirExists = !rawDataDir.empty() && NFs::Exists(rawDataDir);
     TTempDir tempDir{rawDataDir.empty() ? TTempDir{} : TTempDir{rawDataDir}};
@@ -1093,21 +1157,35 @@ int Main(int argc, char* argv[])
     fileStorage = WithAsync(fileStorage);
 
     auto funcRegistry = CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace, CreateBuiltinRegistry(), false, udfsPaths);
+    IUdfResolver::TPtr udfResolver = NCommon::CreateSimpleUdfResolver(funcRegistry.Get(), fileStorage, true);;
 
     bool keepTempFiles = true;
     bool emulateOutputForMultirun = false;
 
     auto yqlNativeServices = NFile::TYtFileServices::Make(funcRegistry.Get(), {}, fileStorage, tempDir.Path(), keepTempFiles);
     auto ytNativeGateway = CreateYtFileGateway(yqlNativeServices, &emulateOutputForMultirun);
+    if (tempDirExists) {
+        FillTablesMapping(tempDir.Path(), yqlNativeServices->GetTablesMapping());
+    }
 
     TVector<TDataProviderInitializer> dataProvidersInit;
     dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
     dataProvidersInit.push_back(GetPgDataProviderInitializer());
 
     TExprContext ctx;
+
+    IModuleResolver::TPtr moduleResolver;
+    if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, clusterMapping, true)) {
+        Cerr << "Errors loading default YQL libraries:" << Endl;
+        ctx.IssueManager.GetIssues().PrintTo(Cerr);
+        return -1;
+    }
+
     TExprContext::TFreezeGuard freezeGuard(ctx);
 
     TProgramFactory factory(true, funcRegistry.Get(), ctx.NextUniqueId, dataProvidersInit, runnerName);
+    factory.SetModules(moduleResolver);
+    factory.SetUdfResolver(udfResolver);
     factory.SetGatewaysConfig(gatewaysConfig.Get());
 
     const TString username = GetUsername();
@@ -1184,6 +1262,11 @@ int Main(int argc, char* argv[])
         }
 #endif
 
+        if (needPrintAst) {
+            Cerr << "Initial AST:\n";
+            PrintExprTo(program, Cerr);
+        }
+
         static const THashSet<TString> ignoredNodes{"CommitAll!", "Commit!" };
         const auto opNode = NYql::FindNode(program->ExprRoot(),
                                            [] (const TExprNode::TPtr& node) { return !ignoredNodes.contains(node->Content()); });
@@ -1195,7 +1278,22 @@ int Main(int argc, char* argv[])
                 keyNode->Child(0)->Child(0)->IsAtom("tablescheme");
 
             if (isWriteToTableSchemeNode) {
-                WriteToYtTableScheme(*opNode, tempDir, yqlNativeServices);
+                try {
+                    WriteToYtTableScheme(*opNode, tempDir, yqlNativeServices, program->ExprCtx());
+                } catch (const yexception& e) {
+                    program->Issues().AddIssue(e.what());
+
+                    WriteErrorToStream(program);
+
+                    continue;
+                }
+
+                if (needPrintAst) {
+                    program->Optimize(username);
+
+                    ShowFinalAst(program, Cerr);
+                }
+
                 continue;
             }
         }
@@ -1207,10 +1305,14 @@ int Main(int argc, char* argv[])
             WriteErrorToStream(program);
             continue;
         }
+        if (needPrintAst) {
+            ShowFinalAst(program, Cerr);
+        }
 
         if (program->HasResults()) {
-            // PrintExprTo(program, Cout);
-            // Cout << program->ResultsAsString() << Endl;
+             if (needPrintResult) {
+                Cerr << program->ResultsAsString() << Endl;
+             }
 
             const auto root = ParseYson(program->ResultsAsString());
 

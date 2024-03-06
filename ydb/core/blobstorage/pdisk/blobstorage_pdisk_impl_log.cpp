@@ -13,27 +13,28 @@ class TLogFlushCompletionAction : public TCompletionAction {
     const ui32 EndChunkIdx;
     const ui32 EndSectorIdx;
     THolder<TLogWriter> &CommonLogger;
+    TCompletionAction* CompletionLogWrite;
 public:
     TLogFlushCompletionAction(ui32 endChunkIdx, ui32 endSectorIdx, THolder<TLogWriter> &commonLogger, TCompletionAction* completionLogWrite)
         : EndChunkIdx(endChunkIdx)
         , EndSectorIdx(endSectorIdx)
-        , CommonLogger(commonLogger) {
-            this->FlushAction = completionLogWrite;
-        }
+        , CommonLogger(commonLogger)
+        , CompletionLogWrite(completionLogWrite) { }
 
     void Exec(TActorSystem *actorSystem) override {
         CommonLogger->FirstUncommitted = TFirstUncommitted(EndChunkIdx, EndSectorIdx);
-
-        Y_DEBUG_ABORT_UNLESS(FlushAction);
-
-        // FlushAction here is a TCompletionLogWrite which will decrease owner's inflight count.
-        FlushAction->Exec(actorSystem);
+        
+        CompletionLogWrite->SetResult(Result);
+        CompletionLogWrite->SetErrorReason(ErrorReason);
+        CompletionLogWrite->Exec(actorSystem);
 
         delete this;
     }
 
     void Release(TActorSystem *actorSystem) override {
-        FlushAction->Release(actorSystem);
+        CompletionLogWrite->SetResult(Result);
+        CompletionLogWrite->SetErrorReason(ErrorReason);
+        CompletionLogWrite->Release(actorSystem);
 
         delete this;
     }

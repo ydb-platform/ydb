@@ -3,7 +3,7 @@
 #include "table_record.h"
 
 #include <ydb/core/protos/kqp_physical.pb.h>
-#include <ydb/core/tx/datashard/sys_tables.h>
+#include <ydb/core/tx/locks/sys_tables.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/conclusion/status.h>

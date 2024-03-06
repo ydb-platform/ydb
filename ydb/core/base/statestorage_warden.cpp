@@ -27,8 +27,6 @@
 namespace NKikimr {
 
 class TStateStorageWarden : public TActorBootstrapped<TStateStorageWarden> {
-    const ui32 GroupId; // for convenience
-
     TIntrusivePtr<TStateStorageInfo> StateStorageInfo;
     TIntrusivePtr<TStateStorageInfo> BoardInfo;
     TIntrusivePtr<TStateStorageInfo> SchemeBoardInfo;
@@ -96,7 +94,7 @@ class TStateStorageWarden : public TActorBootstrapped<TStateStorageWarden> {
 
         // Update proxy config
         if (hasChanges) {
-            Send(MakeStateStorageProxyID(GroupId), new TEvStateStorage::TEvUpdateGroupConfig(stateStorageInfo, boardInfo, schemeBoardInfo));
+            Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvUpdateGroupConfig(stateStorageInfo, boardInfo, schemeBoardInfo));
         }
     }
 
@@ -107,10 +105,8 @@ class TStateStorageWarden : public TActorBootstrapped<TStateStorageWarden> {
             return;
 
         for (const NKikimrConfig::TDomainsConfig::TStateStorage &config : record.GetConfig().GetDomainsConfig().GetStateStorage()) {
-            if (config.GetSSId() == GroupId) {
-                UpdateConfig(config);
-                break;
-            }
+            Y_ABORT_UNLESS(config.GetSSId() == 1);
+            UpdateConfig(config);
         }
     }
 
@@ -120,14 +116,10 @@ public:
     }
 
     TStateStorageWarden(const TIntrusivePtr<TStateStorageInfo> &info, const TIntrusivePtr<TStateStorageInfo> &board, const TIntrusivePtr<TStateStorageInfo> &schemeBoard)
-        : GroupId(info->StateStorageGroup)
-        , StateStorageInfo(info)
+        : StateStorageInfo(info)
         , BoardInfo(board)
         , SchemeBoardInfo(schemeBoard)
-    {
-        Y_ABORT_UNLESS(GroupId == board->StateStorageGroup);
-        Y_ABORT_UNLESS(GroupId == schemeBoard->StateStorageGroup);
-    }
+    {}
 
     void Bootstrap()
     {

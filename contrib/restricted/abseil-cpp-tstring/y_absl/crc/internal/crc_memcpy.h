@@ -20,12 +20,15 @@
 
 #include "y_absl/base/config.h"
 #include "y_absl/crc/crc32c.h"
+#include "y_absl/crc/internal/crc32_x86_arm_combined_simd.h"
 
 // Defined if the class AcceleratedCrcMemcpyEngine exists.
-#if defined(__x86_64__) && defined(__SSE4_2__)
+// TODO(b/299127771): Consider relaxing the pclmul requirement once the other
+// intrinsics are conditionally compiled without it.
+#if defined(Y_ABSL_CRC_INTERNAL_HAVE_X86_SIMD)
 #define Y_ABSL_INTERNAL_HAVE_X86_64_ACCELERATED_CRC_MEMCPY_ENGINE 1
-#elif defined(_MSC_VER) && defined(__AVX__)
-#define Y_ABSL_INTERNAL_HAVE_X86_64_ACCELERATED_CRC_MEMCPY_ENGINE 1
+#elif defined(Y_ABSL_CRC_INTERNAL_HAVE_ARM_SIMD)
+#define Y_ABSL_INTERNAL_HAVE_ARM_ACCELERATED_CRC_MEMCPY_ENGINE 1
 #endif
 
 namespace y_absl {

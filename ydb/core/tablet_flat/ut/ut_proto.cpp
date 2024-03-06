@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(NProto /* executor binary units */) {
         UNIT_ASSERT_VALUES_EQUAL(largeGlobId.BlobCount(), 8u);
 
         ui32 num = 0;
-        for (auto logo : largeGlobId.Blobs()) {
+        for (const auto& logo : largeGlobId.Blobs()) {
             ++num;
             LogoBlobIDFromLogoBlobID(logo, pageCollection.AddMetaId());
 

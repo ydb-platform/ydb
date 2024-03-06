@@ -48,7 +48,7 @@ TVector<std::pair<TReadInfo, ui64>> TSubscriberLogic::CompleteSubscriptions(cons
 }
 
 
-TSubscriber::TSubscriber(const ui32 partition, TTabletCountersBase& counters, const TActorId& tablet)
+TSubscriber::TSubscriber(const TPartitionId& partition, TTabletCountersBase& counters, const TActorId& tablet)
     : Subscriber()
     , Partition(partition)
     , Counters(counters)

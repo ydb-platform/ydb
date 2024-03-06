@@ -12,7 +12,7 @@ extern "C" {
 
 ssize_t BridgeGetAbiVersion()
 {
-    return 2; // EYqlPluginAbiVersion
+    return 3; // EYqlPluginAbiVersion::DqManager
 }
 
 TBridgeYqlPlugin* BridgeCreateYqlPlugin(const TBridgeYqlPluginOptions* bridgeOptions)
@@ -30,6 +30,8 @@ TBridgeYqlPlugin* BridgeCreateYqlPlugin(const TBridgeYqlPluginOptions* bridgeOpt
     TYqlPluginOptions options{
         .SingletonsConfig = singletonsConfig,
         .GatewayConfig = TYsonString(TStringBuf(bridgeOptions->GatewayConfig, bridgeOptions->GatewayConfigLength)),
+        .DqGatewayConfig = bridgeOptions->DqGatewayConfigLength ? TYsonString(TStringBuf(bridgeOptions->DqGatewayConfig, bridgeOptions->DqGatewayConfigLength)) : TYsonString(),
+        .DqManagerConfig = bridgeOptions->DqGatewayConfigLength ? TYsonString(TStringBuf(bridgeOptions->DqManagerConfig, bridgeOptions->DqManagerConfigLength)) : TYsonString(),
         .FileStorageConfig = TYsonString(TStringBuf(bridgeOptions->FileStorageConfig, bridgeOptions->FileStorageConfigLength)),
         .OperationAttributes = TYsonString(TStringBuf(bridgeOptions->OperationAttributes, bridgeOptions->OperationAttributesLength)),
         .YTTokenPath = TString(bridgeOptions->YTTokenPath),
@@ -37,6 +39,12 @@ TBridgeYqlPlugin* BridgeCreateYqlPlugin(const TBridgeYqlPluginOptions* bridgeOpt
     };
     auto nativePlugin = CreateYqlPlugin(std::move(options));
     return nativePlugin.release();
+}
+
+void BridgeStartYqlPlugin(TBridgeYqlPlugin* plugin)
+{
+    auto* nativePlugin = reinterpret_cast<IYqlPlugin*>(plugin);
+    nativePlugin->Start();
 }
 
 void BridgeFreeYqlPlugin(TBridgeYqlPlugin* plugin)
@@ -128,7 +136,7 @@ TBridgeAbortResult* BridgeAbort(TBridgeYqlPlugin* plugin, const char* queryId)
     auto* nativePlugin = reinterpret_cast<IYqlPlugin*>(plugin);
     auto* bridgeResult = new TBridgeAbortResult;
 
-    auto result = nativePlugin->GetProgress(NYT::TGuid::FromString(queryId));
+    auto result = nativePlugin->Abort(NYT::TGuid::FromString(queryId));
     FillString(bridgeResult->YsonError, bridgeResult->YsonErrorLength, result.YsonError);
 
     return bridgeResult;

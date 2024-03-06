@@ -17,7 +17,7 @@ namespace NYT {
 
 TRetryfulWriter::~TRetryfulWriter()
 {
-    NDetail::FinishOrDie(this, "TRetryfulWriter");
+    NDetail::FinishOrDie(this, AutoFinish_, "TRetryfulWriter");
 }
 
 void TRetryfulWriter::CheckWriterState()

@@ -15,10 +15,11 @@
 #include <util/generic/set.h>
 #include <util/stream/str.h>
 
-#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR
+#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_LEVEL
 #error log macro definition clash
 #endif
 
+#define BLOG_LEVEL(level, stream, marker) LOG_LOG_S(*TlsActivationContext, level, NKikimrServices::TABLET_MAIN, "Tablet: " << TabletID() << " " << stream << " Marker# " << marker)
 #define BLOG_D(stream, marker) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "Tablet: " << TabletID() << " " << stream << " Marker# " << marker)
 #define BLOG_I(stream, marker) LOG_INFO_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "Tablet: " << TabletID() << " " << stream << " Marker# " << marker)
 #define BLOG_ERROR(stream, marker) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "Tablet: " << TabletID() << " " << stream << " Marker# " << marker)
@@ -35,10 +36,6 @@ namespace {
     static constexpr TDuration OfflineFollowerWaitFirst = TDuration::Seconds(4);
     static constexpr TDuration OfflineFollowerWaitRetry = TDuration::Seconds(15);
 
-}
-
-ui64 TTablet::StateStorageGroup() const {
-    return StateStorageGroupFromTabletID(Info->TabletID);
 }
 
 ui64 TTablet::TabletID() const {
@@ -1745,7 +1742,10 @@ void TTablet::ReassignYellowChannels(TVector<ui32> &&yellowMoveChannels) {
 }
 
 void TTablet::CancelTablet(TEvTablet::TEvTabletDead::EReason reason, const TString &details) {
-    BLOG_ERROR(
+    BLOG_LEVEL(
+        reason == TEvTablet::TEvTabletDead::ReasonPill
+            ? NActors::NLog::PRI_NOTICE
+            : NActors::NLog::PRI_ERROR,
         " Type: " << TTabletTypes::TypeToStr((TTabletTypes::EType)Info->TabletType)
         << ", EReason: " << TEvTablet::TEvTabletDead::Str(reason)
         << ", SuggestedGeneration: " << SuggestedGeneration
@@ -1895,7 +1895,7 @@ void TTablet::BootstrapFollower() {
         IntrospectionTrace.Reset(NTracing::CreateTrace(NTracing::ITrace::TypeSysTabletBootstrap));
     }
 
-    StateStorageInfo.ProxyID = MakeStateStorageProxyID(StateStorageGroup());
+    StateStorageInfo.ProxyID = MakeStateStorageProxyID();
     Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvLookup(TabletID(), 0, TEvStateStorage::TProxyOptions(TEvStateStorage::TProxyOptions::SigAsync)));
     if (IntrospectionTrace) {
         IntrospectionTrace->Attach(MakeHolder<NTracing::TOnTabletBootstrap>(SuggestedGeneration, false, StateStorageInfo.ProxyID));
@@ -1914,7 +1914,7 @@ void TTablet::Bootstrap() {
         IntrospectionTrace.Reset(NTracing::CreateTrace(NTracing::ITrace::TypeSysTabletBootstrap));
     }
     ReportTabletStateChange(TTabletStateInfo::Created); // useless?
-    StateStorageInfo.ProxyID = MakeStateStorageProxyID(StateStorageGroup());
+    StateStorageInfo.ProxyID = MakeStateStorageProxyID();
     Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvLookup(TabletID(), 0, TEvStateStorage::TProxyOptions(TEvStateStorage::TProxyOptions::SigAsync)));
     if (IntrospectionTrace) {
         IntrospectionTrace->Attach(MakeHolder<NTracing::TOnTabletBootstrap>(SuggestedGeneration, true, StateStorageInfo.ProxyID));

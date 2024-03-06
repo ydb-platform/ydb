@@ -1062,14 +1062,14 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxDropExternalTable:
         return CreateDropExternalTable(NextPartId(), txState);
     case TTxState::ETxType::TxAlterExternalTable:
-        Y_ABORT("TODO: implement");
+        return CreateAlterExternalTable(NextPartId(), txState);
     case TTxState::ETxType::TxCreateExternalDataSource:
         return CreateNewExternalDataSource(NextPartId(), txState);
     case TTxState::ETxType::TxDropExternalDataSource:
         return CreateDropExternalDataSource(NextPartId(), txState);
     case TTxState::ETxType::TxAlterExternalDataSource:
-        Y_ABORT("TODO: implement");
-    
+        return CreateAlterExternalDataSource(NextPartId(), txState);
+
     // View
     case TTxState::ETxType::TxCreateView:
         return CreateNewView(NextPartId(), txState);
@@ -1282,7 +1282,7 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
 
     // ExternalTable
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
-        return CreateNewExternalTable(NextPartId(), tx);
+        Y_ABORT("operation is handled before");
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalTable:
         return CreateDropExternalTable(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalTable:
@@ -1290,7 +1290,7 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
 
     // ExternalDataSource
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource:
-        return CreateNewExternalDataSource(NextPartId(), tx);
+        Y_ABORT("operation is handled before");
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalDataSource:
         return CreateDropExternalDataSource(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalDataSource:
@@ -1351,6 +1351,10 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         return CreateConsistentMoveIndex(NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomain:
         return CreateCompatibleAlterExtSubDomain(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource:
+        return CreateNewExternalDataSource(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
+        return CreateNewExternalTable(NextPartId(), tx, context);
     default:
         return {ConstructPart(opType, tx)};
     }

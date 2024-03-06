@@ -41,8 +41,7 @@ public:
 
     const T& operator * () const;
 
-    bool operator == (const TPersistentQueueIterator& other) const;
-    bool operator != (const TPersistentQueueIterator& other) const;
+    bool operator==(const TPersistentQueueIterator& other) const = default;
 
 private:
     using TChunk = TPersistentQueueChunk<T, ChunkSize>;
@@ -55,7 +54,6 @@ private:
 
     TChunkPtr CurrentChunk_;
     size_t CurrentIndex_ = 0;
-
 };
 
 template <class T, size_t ChunkSize>

@@ -8,7 +8,7 @@ namespace NYT {
 
 TRetrylessWriter::~TRetrylessWriter()
 {
-    NDetail::FinishOrDie(this, "TRetrylessWriter");
+    NDetail::FinishOrDie(this, AutoFinish_, "TRetrylessWriter");
 }
 
 void TRetrylessWriter::DoFinish()

@@ -18,6 +18,227 @@ INSERT INTO empsalary VALUES
 ('sales', 3, 4800, '2007-08-01'),
 ('develop', 8, 6000, '2006-10-01'),
 ('develop', 11, 5200, '2007-08-15');
+-- empty window specification
+SELECT COUNT(*) OVER () FROM tenk1 WHERE unique2 < 10;
+ count 
+-------
+    10
+    10
+    10
+    10
+    10
+    10
+    10
+    10
+    10
+    10
+(10 rows)
+
+SELECT COUNT(*) OVER w FROM tenk1 WHERE unique2 < 10 WINDOW w AS ();
+ count 
+-------
+    10
+    10
+    10
+    10
+    10
+    10
+    10
+    10
+    10
+    10
+(10 rows)
+
+-- no window operation
+SELECT four FROM tenk1 WHERE FALSE WINDOW w AS (PARTITION BY ten);
+ four 
+------
+(0 rows)
+
+SELECT row_number() OVER (ORDER BY unique2) FROM tenk1 WHERE unique2 < 10;
+ row_number 
+------------
+          1
+          2
+          3
+          4
+          5
+          6
+          7
+          8
+          9
+         10
+(10 rows)
+
+SELECT count(*) OVER (PARTITION BY four), four FROM (SELECT * FROM tenk1 WHERE two = 1)s WHERE unique2 < 10;
+ count | four 
+-------+------
+     4 |    1
+     4 |    1
+     4 |    1
+     4 |    1
+     2 |    3
+     2 |    3
+(6 rows)
+
+-- opexpr with different windows evaluation.
+SELECT * FROM(
+  SELECT count(*) OVER (PARTITION BY four ORDER BY ten) +
+    sum(hundred) OVER (PARTITION BY two ORDER BY ten) AS total,
+    count(*) OVER (PARTITION BY four ORDER BY ten) AS fourcount,
+    sum(hundred) OVER (PARTITION BY two ORDER BY ten) AS twosum
+    FROM tenk1
+)sub
+WHERE total <> fourcount + twosum;
+ total | fourcount | twosum 
+-------+-----------+--------
+(0 rows)
+
+-- identical windows with different names
+SELECT sum(salary) OVER w1, count(*) OVER w2
+FROM empsalary WINDOW w1 AS (ORDER BY salary), w2 AS (ORDER BY salary);
+  sum  | count 
+-------+-------
+  3500 |     1
+  7400 |     2
+ 11600 |     3
+ 16100 |     4
+ 25700 |     6
+ 25700 |     6
+ 30700 |     7
+ 41100 |     9
+ 41100 |     9
+ 47100 |    10
+(10 rows)
+
+-- empty table
+SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 WHERE FALSE)s;
+ count 
+-------
+(0 rows)
+
+-- window function with ORDER BY an expression involving aggregates (9.1 bug)
+select ten,
+  sum(unique1) + sum(unique2) as res,
+  rank() over (order by sum(unique1) + sum(unique2)) as rank
+from tenk1
+group by ten order by ten;
+ ten |   res    | rank 
+-----+----------+------
+   0 |  9976146 |    4
+   1 | 10114187 |    9
+   2 | 10059554 |    8
+   3 |  9878541 |    1
+   4 |  9881005 |    2
+   5 |  9981670 |    5
+   6 |  9947099 |    3
+   7 | 10120309 |   10
+   8 |  9991305 |    6
+   9 | 10040184 |    7
+(10 rows)
+
+SELECT sum(unique1) over (rows between current row and unbounded following),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+ sum | unique1 | four 
+-----+---------+------
+  45 |       4 |    0
+  41 |       2 |    2
+  39 |       1 |    1
+  38 |       6 |    2
+  32 |       9 |    1
+  23 |       8 |    0
+  15 |       5 |    1
+  10 |       3 |    3
+   7 |       7 |    3
+   0 |       0 |    0
+(10 rows)
+
+SELECT sum(unique1) over (rows between 2 preceding and 2 following),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+ sum | unique1 | four 
+-----+---------+------
+   7 |       4 |    0
+  13 |       2 |    2
+  22 |       1 |    1
+  26 |       6 |    2
+  29 |       9 |    1
+  31 |       8 |    0
+  32 |       5 |    1
+  23 |       3 |    3
+  15 |       7 |    3
+  10 |       0 |    0
+(10 rows)
+
+SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude no others),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+ sum | unique1 | four 
+-----+---------+------
+   7 |       4 |    0
+  13 |       2 |    2
+  22 |       1 |    1
+  26 |       6 |    2
+  29 |       9 |    1
+  31 |       8 |    0
+  32 |       5 |    1
+  23 |       3 |    3
+  15 |       7 |    3
+  10 |       0 |    0
+(10 rows)
+
+SELECT sum(unique1) over (rows between 2 preceding and 1 preceding),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+ sum | unique1 | four 
+-----+---------+------
+     |       4 |    0
+   4 |       2 |    2
+   6 |       1 |    1
+   3 |       6 |    2
+   7 |       9 |    1
+  15 |       8 |    0
+  17 |       5 |    1
+  13 |       3 |    3
+   8 |       7 |    3
+  10 |       0 |    0
+(10 rows)
+
+SELECT sum(unique1) over (rows between 1 following and 3 following),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+ sum | unique1 | four 
+-----+---------+------
+   9 |       4 |    0
+  16 |       2 |    2
+  23 |       1 |    1
+  22 |       6 |    2
+  16 |       9 |    1
+  15 |       8 |    0
+  10 |       5 |    1
+   7 |       3 |    3
+   0 |       7 |    3
+     |       0 |    0
+(10 rows)
+
+SELECT sum(unique1) over (rows between unbounded preceding and 1 following),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+ sum | unique1 | four 
+-----+---------+------
+   6 |       4 |    0
+   7 |       2 |    2
+  13 |       1 |    1
+  22 |       6 |    2
+  30 |       9 |    1
+  35 |       8 |    0
+  38 |       5 |    1
+  45 |       3 |    3
+  45 |       7 |    3
+  45 |       0 |    0
+(10 rows)
+
 -- Test in_range for other numeric datatypes
 create temp table numerics(
     id int,
@@ -34,14 +255,450 @@ create temp table datetimes(
     f_timestamptz timestamptz,
     f_timestamp timestamp
 );
-insert into datetimes values
-(1, '11:00', '11:00 BST', '1 year', '2000-10-19 10:23:54+01', '2000-10-19 10:23:54'),
-(2, '12:00', '12:00 BST', '2 years', '2001-10-19 10:23:54+01', '2001-10-19 10:23:54'),
-(3, '13:00', '13:00 BST', '3 years', '2001-10-19 10:23:54+01', '2001-10-19 10:23:54'),
-(4, '14:00', '14:00 BST', '4 years', '2002-10-19 10:23:54+01', '2002-10-19 10:23:54'),
-(5, '15:00', '15:00 BST', '5 years', '2003-10-19 10:23:54+01', '2003-10-19 10:23:54'),
-(6, '15:00', '15:00 BST', '5 years', '2004-10-19 10:23:54+01', '2004-10-19 10:23:54'),
-(7, '17:00', '17:00 BST', '7 years', '2005-10-19 10:23:54+01', '2005-10-19 10:23:54'),
-(8, '18:00', '18:00 BST', '8 years', '2006-10-19 10:23:54+01', '2006-10-19 10:23:54'),
-(9, '19:00', '19:00 BST', '9 years', '2007-10-19 10:23:54+01', '2007-10-19 10:23:54'),
-(10, '20:00', '20:00 BST', '10 years', '2008-10-19 10:23:54+01', '2008-10-19 10:23:54');
+-- Show differences in offset interpretation between ROWS, RANGE, and GROUPS
+WITH cte (x) AS (
+        SELECT * FROM generate_series(1, 35, 2)
+)
+SELECT x, (sum(x) over w)
+FROM cte
+WINDOW w AS (ORDER BY x rows between 1 preceding and 1 following);
+ x  | sum 
+----+-----
+  1 |   4
+  3 |   9
+  5 |  15
+  7 |  21
+  9 |  27
+ 11 |  33
+ 13 |  39
+ 15 |  45
+ 17 |  51
+ 19 |  57
+ 21 |  63
+ 23 |  69
+ 25 |  75
+ 27 |  81
+ 29 |  87
+ 31 |  93
+ 33 |  99
+ 35 |  68
+(18 rows)
+
+WITH cte (x) AS (
+        select 1 union all select 1 union all select 1 union all
+        SELECT * FROM generate_series(5, 49, 2)
+)
+SELECT x, (sum(x) over w)
+FROM cte
+WINDOW w AS (ORDER BY x rows between 1 preceding and 1 following);
+ x  | sum 
+----+-----
+  1 |   2
+  1 |   3
+  1 |   7
+  5 |  13
+  7 |  21
+  9 |  27
+ 11 |  33
+ 13 |  39
+ 15 |  45
+ 17 |  51
+ 19 |  57
+ 21 |  63
+ 23 |  69
+ 25 |  75
+ 27 |  81
+ 29 |  87
+ 31 |  93
+ 33 |  99
+ 35 | 105
+ 37 | 111
+ 39 | 117
+ 41 | 123
+ 43 | 129
+ 45 | 135
+ 47 | 141
+ 49 |  96
+(26 rows)
+
+-- with UNION
+SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 UNION ALL SELECT * FROM tenk2)s LIMIT 0;
+ count 
+-------
+(0 rows)
+
+-- check some degenerate cases
+create temp table t1 (f1 int, f2 int8);
+insert into t1 values (1,1),(1,2),(2,2);
+-- ordering by a non-integer constant is allowed
+SELECT rank() OVER (ORDER BY length('abc'));
+ rank 
+------
+    1
+(1 row)
+
+SELECT * FROM rank() OVER (ORDER BY random());
+ERROR:  syntax error at or near "ORDER"
+LINE 1: SELECT * FROM rank() OVER (ORDER BY random());
+                                   ^
+SELECT rank() OVER (PARTITION BY four, ORDER BY ten) FROM tenk1;
+ERROR:  syntax error at or near "ORDER"
+LINE 1: SELECT rank() OVER (PARTITION BY four, ORDER BY ten) FROM te...
+                                               ^
+-- cleanup
+DROP TABLE empsalary;
+--
+-- Test various built-in aggregates that have moving-aggregate support
+--
+-- test inverse transition functions handle NULLs properly
+SELECT i,AVG(v::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+ i |        avg         
+---+--------------------
+ 1 | 1.5000000000000000
+ 2 | 2.0000000000000000
+ 3 |                   
+ 4 |                   
+(4 rows)
+
+SELECT i,AVG(v::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+ i |        avg         
+---+--------------------
+ 1 | 1.5000000000000000
+ 2 | 2.0000000000000000
+ 3 |                   
+ 4 |                   
+(4 rows)
+
+SELECT i,AVG(v::smallint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+ i |        avg         
+---+--------------------
+ 1 | 1.5000000000000000
+ 2 | 2.0000000000000000
+ 3 |                   
+ 4 |                   
+(4 rows)
+
+SELECT i,AVG(v::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1.5),(2,2.5),(3,NULL),(4,NULL)) t(i,v);
+ i |        avg         
+---+--------------------
+ 1 | 2.0000000000000000
+ 2 | 2.5000000000000000
+ 3 |                   
+ 4 |                   
+(4 rows)
+
+SELECT i,SUM(v::smallint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+ i | sum 
+---+-----
+ 1 |   3
+ 2 |   2
+ 3 |    
+ 4 |    
+(4 rows)
+
+SELECT i,SUM(v::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+ i | sum 
+---+-----
+ 1 |   3
+ 2 |   2
+ 3 |    
+ 4 |    
+(4 rows)
+
+SELECT i,SUM(v::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+ i | sum 
+---+-----
+ 1 |   3
+ 2 |   2
+ 3 |    
+ 4 |    
+(4 rows)
+
+SELECT i,SUM(v::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1.1),(2,2.2),(3,NULL),(4,NULL)) t(i,v);
+ i | sum 
+---+-----
+ 1 | 3.3
+ 2 | 2.2
+ 3 |    
+ 4 |    
+(4 rows)
+
+SELECT SUM(n::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1.01),(2,2),(3,3)) v(i,n);
+ sum  
+------
+ 6.01
+    5
+    3
+(3 rows)
+
+SELECT i,COUNT(*) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+ i | count 
+---+-------
+ 1 |     4
+ 2 |     3
+ 3 |     2
+ 4 |     1
+(4 rows)
+
+SELECT VAR_SAMP(n::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+       var_samp        
+-----------------------
+    27130.000000000000
+    18491.666666666667
+    16900.000000000000
+ 8450.0000000000000000
+                      
+(5 rows)
+
+SELECT VAR_SAMP(n::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+       var_samp        
+-----------------------
+    27130.000000000000
+    18491.666666666667
+    16900.000000000000
+ 8450.0000000000000000
+                      
+(5 rows)
+
+SELECT VAR_SAMP(n::smallint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+       var_samp        
+-----------------------
+    27130.000000000000
+    18491.666666666667
+    16900.000000000000
+ 8450.0000000000000000
+                      
+(5 rows)
+
+SELECT VAR_SAMP(n::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+       var_samp        
+-----------------------
+    27130.000000000000
+    18491.666666666667
+    16900.000000000000
+ 8450.0000000000000000
+                      
+(5 rows)
+
+SELECT VARIANCE(n::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+       variance        
+-----------------------
+    27130.000000000000
+    18491.666666666667
+    16900.000000000000
+ 8450.0000000000000000
+                      
+(5 rows)
+
+SELECT VARIANCE(n::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+       variance        
+-----------------------
+    27130.000000000000
+    18491.666666666667
+    16900.000000000000
+ 8450.0000000000000000
+                      
+(5 rows)
+
+SELECT VARIANCE(n::smallint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+       variance        
+-----------------------
+    27130.000000000000
+    18491.666666666667
+    16900.000000000000
+ 8450.0000000000000000
+                      
+(5 rows)
+
+SELECT VARIANCE(n::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+       variance        
+-----------------------
+    27130.000000000000
+    18491.666666666667
+    16900.000000000000
+ 8450.0000000000000000
+                      
+(5 rows)
+
+SELECT STDDEV_SAMP(n::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n);
+     stddev_samp     
+---------------------
+    164.711869639076
+    164.711869639076
+    135.984067694222
+    130.000000000000
+ 91.9238815542511782
+                    
+(6 rows)
+
+SELECT STDDEV_SAMP(n::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n);
+     stddev_samp     
+---------------------
+    164.711869639076
+    164.711869639076
+    135.984067694222
+    130.000000000000
+ 91.9238815542511782
+                    
+(6 rows)
+
+SELECT STDDEV_SAMP(n::smallint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n);
+     stddev_samp     
+---------------------
+    164.711869639076
+    164.711869639076
+    135.984067694222
+    130.000000000000
+ 91.9238815542511782
+                    
+(6 rows)
+
+SELECT STDDEV_SAMP(n::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n);
+     stddev_samp     
+---------------------
+    164.711869639076
+    164.711869639076
+    135.984067694222
+    130.000000000000
+ 91.9238815542511782
+                    
+(6 rows)
+
+SELECT STDDEV(n::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(0,NULL),(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+       stddev        
+---------------------
+    164.711869639076
+    164.711869639076
+    135.984067694222
+    130.000000000000
+ 91.9238815542511782
+                    
+(6 rows)
+
+SELECT STDDEV(n::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(0,NULL),(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+       stddev        
+---------------------
+    164.711869639076
+    164.711869639076
+    135.984067694222
+    130.000000000000
+ 91.9238815542511782
+                    
+(6 rows)
+
+SELECT STDDEV(n::smallint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(0,NULL),(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+       stddev        
+---------------------
+    164.711869639076
+    164.711869639076
+    135.984067694222
+    130.000000000000
+ 91.9238815542511782
+                    
+(6 rows)
+
+SELECT STDDEV(n::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(0,NULL),(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+       stddev        
+---------------------
+    164.711869639076
+    164.711869639076
+    135.984067694222
+    130.000000000000
+ 91.9238815542511782
+                    
+(6 rows)
+
+-- test that inverse transition functions work with various frame options
+SELECT i,SUM(v::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND CURRENT ROW)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+ i | sum 
+---+-----
+ 1 |   1
+ 2 |   2
+ 3 |    
+ 4 |    
+(4 rows)
+
+SELECT i,SUM(v::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+ i | sum 
+---+-----
+ 1 |   3
+ 2 |   2
+ 3 |    
+ 4 |    
+(4 rows)
+
+SELECT i,SUM(v::int) OVER (ORDER BY i ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,3),(4,4)) t(i,v);
+ i | sum 
+---+-----
+ 1 |   3
+ 2 |   6
+ 3 |   9
+ 4 |   7
+(4 rows)
+
+-- ensure aggregate over numeric properly recovers from NaN values
+SELECT a, b,
+       SUM(b) OVER(ORDER BY A ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
+FROM (VALUES(1,1::numeric),(2,2),(3,'NaN'),(4,3),(5,4)) t(a,b);
+ a |  b  | sum 
+---+-----+-----
+ 1 |   1 |   1
+ 2 |   2 |   3
+ 3 | NaN | NaN
+ 4 |   3 | NaN
+ 5 |   4 |   7
+(5 rows)
+
+-- It might be tempting for someone to add an inverse trans function for
+-- float and double precision. This should not be done as it can give incorrect
+-- results. This test should fail if anyone ever does this without thinking too
+-- hard about it.
+SELECT to_char(SUM(n::float8) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING),'999999999999999999999D9')
+  FROM (VALUES(1,1e20),(2,1)) n(i,n);
+         to_char          
+--------------------------
+  100000000000000000000
+                      1.0
+(2 rows)
+
+SELECT i, b, bool_and(b) OVER w, bool_or(b) OVER w
+  FROM (VALUES (1,true), (2,true), (3,false), (4,false), (5,true)) v(i,b)
+  WINDOW w AS (ORDER BY i ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING);
+ i | b | bool_and | bool_or 
+---+---+----------+---------
+ 1 | t | t        | t
+ 2 | t | f        | t
+ 3 | f | f        | f
+ 4 | f | f        | t
+ 5 | t | t        | t
+(5 rows)
+

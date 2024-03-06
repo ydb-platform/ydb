@@ -101,10 +101,10 @@ message TFeatureFlags {
     optional bool EnableTopicServiceTx = 86 [default = false];
     optional bool EnableLLVMCache = 87 [default = false];
     optional bool EnableExternalDataSources = 88 [default = false];
-    optional bool EnableTopicDiskSubDomainQuota = 89 [default = false];
+    optional bool EnableTopicDiskSubDomainQuota = 89 [default = true];
     optional bool EnableSeparationComputeActorsFromRead = 90 [default = false];
     optional bool EnablePQConfigTransactionsAtSchemeShard = 91 [default = false];
-    optional bool EnableScriptExecutionOperations = 92 [default = false];
+    optional bool EnableScriptExecutionOperations = 92 [default = true];
     optional bool EnableImplicitQueryParameterTypes = 93 [default = true];
     optional bool EnableForceImmediateEffectsExecution = 94 [default = false];
     optional bool EnableTopicSplitMerge = 95 [default = false];
@@ -128,4 +128,7 @@ message TFeatureFlags {
     optional bool EnableServerlessExclusiveDynamicNodes = 113 [default = false];
     optional bool EnableAccessServiceBulkAuthorization = 114 [default = false];
     optional bool EnableAddColumsWithDefaults = 115 [ default = false];
+    optional bool EnableReplaceIfExistsForExternalEntities = 116 [ default = false];
+    optional bool EnableCMSRequestPriorities = 117 [default = false];
+    optional bool EnableKeyvalueLogBatching = 118 [default = false];
 }

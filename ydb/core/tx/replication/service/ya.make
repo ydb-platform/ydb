@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/io_formats/cell_maker
     ydb/core/tx/replication/ydb_proxy
     ydb/library/actors/core
+    ydb/library/services
     library/cpp/json
 )
 
@@ -21,6 +22,14 @@ SRCS(
     worker.cpp
 )
 
+GENERATE_ENUM_SERIALIZATION(worker.h)
+
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut_table_writer
+    ut_topic_reader
+    ut_worker
+)

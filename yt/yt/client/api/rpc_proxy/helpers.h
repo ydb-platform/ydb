@@ -228,6 +228,14 @@ void FromProto(
     NApi::TBackupManifest* manifest,
     const NProto::TBackupManifest& protoManifest);
 
+void ToProto(
+    NProto::TQuery* protoQuery,
+    const NApi::TQuery& query);
+
+void FromProto(
+    NApi::TQuery* query,
+    const NProto::TQuery& protoQuery);
+
 NProto::EOperationType ConvertOperationTypeToProto(
     NScheduler::EOperationType operationType);
 
@@ -252,6 +260,17 @@ NProto::EJobState ConvertJobStateToProto(
 NJobTrackerClient::EJobState ConvertJobStateFromProto(
     NProto::EJobState proto);
 
+NProto::EQueryEngine ConvertQueryEngineToProto(
+    NQueryTrackerClient::EQueryEngine queryEngine);
+
+NQueryTrackerClient::EQueryEngine ConvertQueryEngineFromProto(
+    NProto::EQueryEngine proto);
+
+NProto::EQueryState ConvertQueryStateToProto(
+    NQueryTrackerClient::EQueryState queryState);
+
+NQueryTrackerClient::EQueryState ConvertQueryStateFromProto(
+    NProto::EQueryState proto);
 } // namespace NProto
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -280,7 +299,8 @@ std::vector<TSharedRef> SerializeRowset(
 template <class TRow>
 TIntrusivePtr<NApi::IRowset<TRow>> DeserializeRowset(
     const NProto::TRowsetDescriptor& descriptor,
-    const TSharedRef& data);
+    const TSharedRef& data,
+    NTableClient::TRowBufferPtr buffer = nullptr);
 
 std::vector<TSharedRef> SerializeRowset(
     const NTableClient::TTableSchema& schema,

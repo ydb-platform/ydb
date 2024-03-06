@@ -182,6 +182,7 @@ private:
     void Initialize(const TKikimrSettings& settings);
     void WaitForKqpProxyInit();
     void CreateSampleTables();
+    void SetupLogLevelFromTestParam(NKikimrServices::EServiceKikimr service);
 
 private:
     THolder<Tests::TServerSettings> ServerSettings;

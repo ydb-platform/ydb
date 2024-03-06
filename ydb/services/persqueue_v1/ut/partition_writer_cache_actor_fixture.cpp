@@ -109,6 +109,18 @@ void TPartitionWriterCacheActorFixture::SetupEventObserver()
 
                 ++DeletePartitionWriterCount;
             }
+        } else if (auto event = ev->CastAsLocal<NKqp::TEvKqp::TEvQueryRequest>(); event) {
+            if (event->GetAction() == NKikimrKqp::QUERY_ACTION_TOPIC) {
+                //
+                // If a request comes from TPartitionWriter, then we emulate the response from KQP.
+                // TPartitionWriter only needs a couple of fields
+                //
+                auto response = std::make_unique<NKqp::TEvKqp::TEvQueryResponse>();
+                response->Record.GetRef().SetYdbStatus(Ydb::StatusIds::SUCCESS);
+                response->Record.GetRef().MutableResponse()->MutableTopicOperations()->SetWriteId(NextWriteId++);
+                Ctx->Runtime->Send(ev->Sender, ev->Recipient, response.release(), 0, true);
+                return TTestActorRuntime::EEventAction::DROP;
+            }
         }
 
         return TTestActorRuntime::EEventAction::PROCESS;

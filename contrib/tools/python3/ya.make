@@ -9,14 +9,25 @@ ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.12.2.tar.gz)
 LICENSE(Python-2.0)
 
 PEERDIR(
+    contrib/libs/expat
+    contrib/libs/libbz2
     contrib/libs/libc_compat
-    contrib/tools/python3/Modules
+    contrib/libs/lzma
+    contrib/libs/openssl
+    contrib/libs/zlib
+    contrib/restricted/libffi
     library/cpp/sanitizer/include
 )
 
 ADDINCL(
+    contrib/libs/expat
+    contrib/libs/libbz2
+    contrib/restricted/libffi/include
     contrib/tools/python3/Include
     contrib/tools/python3/Include/internal
+    contrib/tools/python3/Modules
+    contrib/tools/python3/Modules/_decimal/libmpdec
+    contrib/tools/python3/Modules/_hacl/include
     contrib/tools/python3/PC
 )
 
@@ -26,6 +37,7 @@ NO_UTIL()
 
 CFLAGS(
     -DPy_BUILD_CORE
+    -DPy_BUILD_CORE_BUILTIN
 )
 
 IF (CLANG_CL)
@@ -54,6 +66,117 @@ ELSEIF (OS_WINDOWS)
 ENDIF()
 
 SRCS(
+    Modules/_abc.c
+    Modules/_asynciomodule.c
+    Modules/_bisectmodule.c
+    Modules/_blake2/blake2b_impl.c
+    Modules/_blake2/blake2module.c
+    Modules/_blake2/blake2s_impl.c
+    Modules/_bz2module.c
+    Modules/_codecsmodule.c
+    Modules/_collectionsmodule.c
+    Modules/_contextvarsmodule.c
+    Modules/_csv.c
+    Modules/_ctypes/_ctypes.c
+    Modules/_ctypes/callbacks.c
+    Modules/_ctypes/callproc.c
+    Modules/_ctypes/cfield.c
+    Modules/_ctypes/stgdict.c
+    Modules/_datetimemodule.c
+    Modules/_decimal/_decimal.c
+    Modules/_decimal/libmpdec/basearith.c
+    Modules/_decimal/libmpdec/constants.c
+    Modules/_decimal/libmpdec/context.c
+    Modules/_decimal/libmpdec/convolute.c
+    Modules/_decimal/libmpdec/crt.c
+    Modules/_decimal/libmpdec/difradix2.c
+    Modules/_decimal/libmpdec/fnt.c
+    Modules/_decimal/libmpdec/fourstep.c
+    Modules/_decimal/libmpdec/io.c
+    Modules/_decimal/libmpdec/mpalloc.c
+    Modules/_decimal/libmpdec/mpdecimal.c
+    Modules/_decimal/libmpdec/mpsignal.c
+    Modules/_decimal/libmpdec/numbertheory.c
+    Modules/_decimal/libmpdec/sixstep.c
+    Modules/_decimal/libmpdec/transpose.c
+    Modules/_elementtree.c
+    Modules/_functoolsmodule.c
+    Modules/_hacl/Hacl_Hash_MD5.c
+    Modules/_hacl/Hacl_Hash_SHA1.c
+    Modules/_hacl/Hacl_Hash_SHA2.c
+    Modules/_hacl/Hacl_Hash_SHA3.c
+    Modules/_hashopenssl.c
+    Modules/_heapqmodule.c
+    Modules/_io/_iomodule.c
+    Modules/_io/bufferedio.c
+    Modules/_io/bytesio.c
+    Modules/_io/fileio.c
+    Modules/_io/iobase.c
+    Modules/_io/stringio.c
+    Modules/_io/textio.c
+    Modules/_io/winconsoleio.c
+    Modules/_json.c
+    Modules/_localemodule.c
+    Modules/_lsprof.c
+    Modules/_lzmamodule.c
+    Modules/_multiprocessing/multiprocessing.c
+    Modules/_multiprocessing/posixshmem.c
+    Modules/_multiprocessing/semaphore.c
+    Modules/_opcode.c
+    Modules/_operator.c
+    Modules/_pickle.c
+    Modules/_queuemodule.c
+    Modules/_randommodule.c
+    Modules/_sre/sre.c
+    Modules/_ssl.c
+    Modules/_stat.c
+    Modules/_statisticsmodule.c
+    Modules/_struct.c
+    Modules/_threadmodule.c
+    Modules/_tracemalloc.c
+    Modules/_typingmodule.c
+    Modules/_weakref.c
+    Modules/_xxinterpchannelsmodule.c
+    Modules/_xxsubinterpretersmodule.c
+    Modules/_xxtestfuzz/_xxtestfuzz.c
+    Modules/_xxtestfuzz/fuzzer.c
+    Modules/_zoneinfo.c
+    Modules/arraymodule.c
+    Modules/atexitmodule.c
+    Modules/audioop.c
+    Modules/binascii.c
+    Modules/cjkcodecs/_codecs_cn.c
+    Modules/cjkcodecs/_codecs_hk.c
+    Modules/cjkcodecs/_codecs_iso2022.c
+    Modules/cjkcodecs/_codecs_jp.c
+    Modules/cjkcodecs/_codecs_kr.c
+    Modules/cjkcodecs/_codecs_tw.c
+    Modules/cjkcodecs/multibytecodec.c
+    Modules/cmathmodule.c
+    Modules/config.c
+    Modules/errnomodule.c
+    Modules/faulthandler.c
+    Modules/gcmodule.c
+    Modules/getbuildinfo.c
+    Modules/getpath.c
+    Modules/itertoolsmodule.c
+    Modules/main.c
+    Modules/mathmodule.c
+    Modules/md5module.c
+    Modules/mmapmodule.c
+    Modules/posixmodule.c
+    Modules/pyexpat.c
+    Modules/rotatingtree.c
+    Modules/selectmodule.c
+    Modules/sha1module.c
+    Modules/sha2module.c
+    Modules/sha3module.c
+    Modules/signalmodule.c
+    Modules/socketmodule.c
+    Modules/symtablemodule.c
+    Modules/timemodule.c
+    Modules/unicodedata.c
+    Modules/zlibmodule.c
     Objects/abstract.c
     Objects/boolobject.c
     Objects/bytearrayobject.c
@@ -177,6 +300,8 @@ SRCS(
 
 IF (OS_WINDOWS)
     SRCS(
+        Modules/_winapi.c
+        Modules/overlapped.c
         PC/WinMain.c
         PC/invalid_parameter_handler.c
         PC/msvcrtmodule.c
@@ -186,12 +311,29 @@ IF (OS_WINDOWS)
     )
 ELSE()
     SRCS(
+        Modules/_cryptmodule.c
+        Modules/_posixsubprocess.c
+        Modules/fcntlmodule.c
+        Modules/grpmodule.c
+        Modules/pwdmodule.c
+        Modules/resource.c
+        Modules/syslogmodule.c
+        Modules/termios.c
         Python/dynload_shlib.c
     )
 ENDIF()
 
-IF (OS_LINUX)
+IF (OS_DARWIN)
     SRCS(
+        Modules/_scproxy.c
+    )
+ELSEIF (OS_LINUX)
+    IF (NOT MUSL)
+        EXTRALIBS(crypt)
+    ENDIF()
+
+    SRCS(
+        Modules/spwdmodule.c
         Python/asm_trampoline.S
     )
 ENDIF()
@@ -204,7 +346,6 @@ END()
 
 RECURSE(
     Lib
-    Modules
     Modules/_sqlite
     bin
 )

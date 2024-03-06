@@ -33,6 +33,7 @@ __docformat__ = 'restructuredtext'
 from zope.interface import Interface
 from zope.interface.common import collections
 
+
 class IMinimalSequence(collections.IIterable):
     """Most basic sequence interface.
 

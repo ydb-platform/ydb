@@ -484,11 +484,8 @@ private:
         bool enableKqpDataQuerySourceRead = TableServiceConfig.GetEnableKqpDataQuerySourceRead();
         bool enableKqpScanQuerySourceRead = TableServiceConfig.GetEnableKqpScanQuerySourceRead();
 
-        bool enableKqpDataQueryPredicateExtract = TableServiceConfig.GetEnablePredicateExtractForDataQueries();
-        bool enableKqpScanQueryPredicateExtract = TableServiceConfig.GetEnablePredicateExtractForScanQueries();
         bool predicateExtract20 = TableServiceConfig.GetPredicateExtract20();
 
-        bool enableSequentialReads = TableServiceConfig.GetEnableSequentialReads();
         bool defaultSyntaxVersion = TableServiceConfig.GetSqlVersion();
         bool enableKqpImmediateEffects = TableServiceConfig.GetEnableKqpImmediateEffects();
 
@@ -516,10 +513,7 @@ private:
             TableServiceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin() != enableKqpDataQueryStreamIdxLookupJoin ||
             TableServiceConfig.GetEnableKqpDataQuerySourceRead() != enableKqpDataQuerySourceRead ||
             TableServiceConfig.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead ||
-            TableServiceConfig.GetEnablePredicateExtractForDataQueries() != enableKqpDataQueryPredicateExtract ||
-            TableServiceConfig.GetEnablePredicateExtractForScanQueries() != enableKqpScanQueryPredicateExtract ||
             TableServiceConfig.GetPredicateExtract20() != predicateExtract20 ||
-            TableServiceConfig.GetEnableSequentialReads() != enableSequentialReads ||
             TableServiceConfig.GetEnableKqpImmediateEffects() != enableKqpImmediateEffects ||
             TableServiceConfig.GetIndexAutoChooseMode() != indexAutoChooser ||
             TableServiceConfig.GetEnableSequences() != enableSequences ||

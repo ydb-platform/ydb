@@ -9,8 +9,6 @@ ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/kafka_proxy/ut KafkaProtocol.CreatePartitionsScenario
 ydb/core/kafka_proxy/ut KafkaProtocol.ProduceScenario
 ydb/core/keyvalue/ut TKeyValueTest.TestWriteReadWhileWriteWorks
-ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
-ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata
 ydb/core/kqp/ut/federated_query/generic *
 ydb/core/kqp/ut/olap *

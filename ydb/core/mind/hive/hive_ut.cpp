@@ -6371,8 +6371,8 @@ Y_UNIT_TEST_SUITE(TStorageBalanceTest) {
         }, 1);
         TActorId actor = runtime.AllocateEdgeActor();
         runtime.SetObserverFunc(bsc.GetObserver(runtime, actor));
-        const ui64 hiveTablet = MakeDefaultHiveID(0);
-        const ui64 testerTablet = MakeDefaultHiveID(1);
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
         NTestSuiteTHiveTest::MakeSureTabletIsUp(runtime, hiveTablet, 0);
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
@@ -6416,8 +6416,8 @@ Y_UNIT_TEST_SUITE(TStorageBalanceTest) {
         }, 1);
         TActorId actor = runtime.AllocateEdgeActor();
         runtime.SetObserverFunc(bsc.GetObserver(runtime, actor));
-        const ui64 hiveTablet = MakeDefaultHiveID(0);
-        const ui64 testerTablet = MakeDefaultHiveID(1);
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
         NTestSuiteTHiveTest::MakeSureTabletIsUp(runtime, hiveTablet, 0);
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
@@ -6463,8 +6463,8 @@ Y_UNIT_TEST_SUITE(TStorageBalanceTest) {
         }, 1);
         TActorId actor = runtime.AllocateEdgeActor();
         runtime.SetObserverFunc(bsc.GetObserver(runtime, actor));
-        const ui64 hiveTablet = MakeDefaultHiveID(0);
-        const ui64 testerTablet = MakeDefaultHiveID(1);
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
         NTestSuiteTHiveTest::MakeSureTabletIsUp(runtime, hiveTablet, 0);
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;

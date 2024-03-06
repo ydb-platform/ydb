@@ -154,7 +154,6 @@ public:
 
             TTabletChannelInfo* channel;
 
-
             if (channelId < tabletChannels.size()) {
                 channel = &tabletChannels[channelId];
                 Y_ABORT_UNLESS(channel->Channel == channelId);

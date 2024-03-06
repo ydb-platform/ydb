@@ -2897,7 +2897,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 --state.OperationsInProgress;
                 --inFlight->ChunkReads;
             };
-            auto completionSpan = request->SpanStack.CreateChild(TWilson::PDiskBasic, "PDisk.CompletionChunkRead");
+            auto completionSpan = request->SpanStack.CreateChild(TWilson::PDiskTopLevel, "PDisk.CompletionChunkRead");
             read->FinalCompletion = new TCompletionChunkRead(this, read, std::move(onDestroy), state.Nonce, std::move(completionSpan));
 
             static_cast<TChunkRead*>(request)->SelfPointer = std::move(read);
@@ -2983,7 +2983,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             };
             ev.Completion = MakeHolder<TCompletionChunkWrite>(ev.Sender, result.release(), &Mon, PDiskId,
                     ev.CreationTime, ev.TotalSize, ev.PriorityClass, std::move(onDestroy), ev.ReqId,
-                    ev.SpanStack.CreateChild(TWilson::PDiskBasic, "PDisk.CompletionChunkWrite"));
+                    ev.SpanStack.CreateChild(TWilson::PDiskTopLevel, "PDisk.CompletionChunkWrite"));
 
             return true;
         }

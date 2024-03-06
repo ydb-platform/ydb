@@ -581,6 +581,8 @@ NNodes::TExprBase DqPeepholeRewritePureJoin(const NNodes::TExprBase& node, TExpr
                 .RightLabel(join.RightLabel())
                 .JoinType(join.JoinType())
                 .JoinKeys(join.JoinKeys())
+                .LeftJoinKeyNames(join.LeftJoinKeyNames())
+                .RightJoinKeyNames(join.RightJoinKeyNames())
                 .Build()
             .Done();
     } else {
@@ -596,6 +598,8 @@ NNodes::TExprBase DqPeepholeRewritePureJoin(const NNodes::TExprBase& node, TExpr
                 .RightLabel(join.RightLabel())
                 .JoinType(join.JoinType())
                 .JoinKeys(join.JoinKeys())
+                .LeftJoinKeyNames(join.LeftJoinKeyNames())
+                .RightJoinKeyNames(join.RightJoinKeyNames())
                 .Build()
             .Done();
     }

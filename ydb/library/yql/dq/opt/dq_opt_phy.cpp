@@ -2646,6 +2646,8 @@ TMaybeNode<TDqJoin> DqFlipJoin(const TDqJoin& join, TExprContext& ctx) {
         .RightLabel(join.LeftLabel())
         .JoinType().Build(joinType)
         .JoinKeys(joinKeysBuilder.Done())
+        .LeftJoinKeyNames(join.RightJoinKeyNames())
+        .RightJoinKeyNames(join.LeftJoinKeyNames())
         .Done();
 }
 

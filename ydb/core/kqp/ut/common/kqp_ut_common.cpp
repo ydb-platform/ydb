@@ -70,6 +70,7 @@ SIMPLE_MODULE(TTestUdfsModule, TTestFilter, TTestFilterTerminate, TRandString);
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateJson2Module();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateRe2Module();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateStringModule();
+NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateDateTime2Module();
 
 NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegistry) {
     Y_UNUSED(typeRegistry);
@@ -78,6 +79,7 @@ NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegi
     funcRegistry->AddModule("", "Json2", CreateJson2Module());
     funcRegistry->AddModule("", "Re2", CreateRe2Module());
     funcRegistry->AddModule("", "String", CreateStringModule());
+    funcRegistry->AddModule("", "DateTime", CreateDateTime2Module());
     NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
     return funcRegistry.Release();
 }

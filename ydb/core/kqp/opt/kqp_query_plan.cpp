@@ -1394,6 +1394,7 @@ private:
 
         TOperator op;
         op.Properties["Name"] = name;
+        op.Properties["Condition"] = MakeJoinConditionString(join.LeftKeysColumnNames(), join.RightKeysColumnNames());
 
         auto operatorId = AddOperator(planNode, name, std::move(op));
 
@@ -1409,7 +1410,7 @@ private:
 
         TOperator op;
         op.Properties["Name"] = name;
-
+        op.Properties["Condition"] = MakeJoinConditionString(join.LeftKeysColumnNames(), join.RightKeysColumnNames());
         AddOptimizerEstimates(op, join);
 
         return AddOperator(planNode, name, std::move(op));

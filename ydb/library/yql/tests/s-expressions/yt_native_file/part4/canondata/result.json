@@ -2583,9 +2583,9 @@
     ],
     "test.test[GraceJoin-GraceJoinCore_Flow-Debug]": [
         {
-            "checksum": "1f0ddfaa727f597bb55967a1e07a649d",
-            "size": 1698,
-            "uri": "https://{canondata_backend}/1942415/4acfbe5e06722c23d8071c1dc3bfe75a66f1dc8b/resource.tar.gz#test.test_GraceJoin-GraceJoinCore_Flow-Debug_/opt.yql"
+            "checksum": "d9536a7d75487aefb0032d8afa6b9cc0",
+            "size": 1716,
+            "uri": "https://{canondata_backend}/1942671/4175e538954725c2d05e2b14c7642941d662c8b1/resource.tar.gz#test.test_GraceJoin-GraceJoinCore_Flow-Debug_/opt.yql"
         }
     ],
     "test.test[GraceJoin-GraceJoinCore_Flow-Plan]": [

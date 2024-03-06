@@ -1,7 +1,17 @@
 {
-    "test.test[Basic]": [
+    "test.test[DeserializationError]": [
         {
-            "uri": "file://test.test_Basic_/results.txt"
+            "uri": "file://test.test_DeserializationError_/results.txt"
+        }
+    ],
+    "test.test[LazyListSerialization]": [
+        {
+            "uri": "file://test.test_LazyListSerialization_/results.txt"
+        }
+    ],
+    "test.test[ListSerialization]": [
+        {
+            "uri": "file://test.test_ListSerialization_/results.txt"
         }
     ]
 }

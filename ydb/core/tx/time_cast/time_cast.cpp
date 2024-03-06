@@ -29,7 +29,10 @@ void TMediatorTimecastEntry::Update(ui64 step, ui64 *exemption, ui64 exsz) {
     Y_UNUSED(exemption);
     Y_UNUSED(exsz);
 
-    AtomicSet(Step, step);
+    // Mediator time shouldn't go back while shards are running
+    if (Get(0) < step) {
+        AtomicSet(Step, step);
+    }
 }
 
 class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {

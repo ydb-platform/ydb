@@ -673,11 +673,13 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
 
                     if (lock) {
                         lock->SetLastOpId(op->GetTxId());
-                        if (locksCache.Locks.contains(lockTxId) && lock->IsPersistent()) {
+                        if (locksCache.Locks.contains(lockTxId) && lock->IsPersistent() && !lock->IsFrozen()) {
                             // This lock was cached before, and since we know
                             // it's persistent, we know it was also frozen
                             // during that lock caching. Restore the frozen
                             // flag for this lock.
+                            // Note: this code path is only for older shards
+                            // which didn't persist the frozen flag.
                             lock->SetFrozen();
                         }
                     }

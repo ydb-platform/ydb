@@ -28,7 +28,7 @@ TCompatibilityInfo::TCompatibilityInfo() {
         .Application = "ydb",
         .Version = TVersionConstructor{
             .Year = 23,
-            .Major = 3,
+            .Major = 4,
         }
     }.ToPB();
 
@@ -79,13 +79,13 @@ const TStored* TCompatibilityInfo::GetDefault(TComponentId componentId) const {
 // obsolete version control
 TMaybe<NActors::TInterconnectProxyCommon::TVersionInfo> VERSION = NActors::TInterconnectProxyCommon::TVersionInfo{
     // version of this binary
-    "stable-23-3",
+    "stable-23-4",
 
     // compatible versions; must include all compatible old ones, including this one; version verification occurs on both
     // peers and connection is accepted if at least one of peers accepts the version of the other peer
     {
-        "stable-23-2",
-        "stable-23-3"
+        "stable-23-3",
+        "stable-23-4"
     }
 };
 

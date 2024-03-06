@@ -418,12 +418,15 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
         //      1.2. non-empty partition_id (explicit partitioning)
         //      1.3. non-empty partition_with_generation (explicit partitioning && direct write to partition host)
         //    2. Empty producer id (no deduplication, partition is selected using round-robin).
-        bool isScenarioSupported = 
-            !InitRequest.producer_id().empty() && (
-                InitRequest.has_message_group_id() && InitRequest.message_group_id() == InitRequest.producer_id() || 
-                InitRequest.has_partition_id() ||
-                InitRequest.has_partition_with_generation()) ||
-            InitRequest.producer_id().empty();
+
+
+        bool isScenarioSupported =
+             !InitRequest.producer_id().empty() && (
+                 InitRequest.has_message_group_id() && InitRequest.message_group_id() == InitRequest.producer_id() ||
+                 InitRequest.has_partition_id() ||
+                 InitRequest.has_partition_with_generation())
+             ||
+             InitRequest.producer_id().empty();
 
         if (!isScenarioSupported) {
             CloseSession("unsupported producer_id / message_group_id / partition_id settings in init request",
@@ -506,9 +509,10 @@ void TWriteSessionActor<UseMigrationProtocol>::InitAfterDiscovery(const TActorCo
                          PersQueue::ErrorCode::BAD_REQUEST, ctx);
             return;
         }
-    } else {
-        Y_VERIFY(!UseDeduplication);
-    }
+    } else if (UseDeduplication) {
+        CloseSession("Internal server error: got empty SourceId with enabled deduplication", PersQueue::ErrorCode::ERROR, ctx);
+        return;
+     }
 
     InitMeta = GetInitialDataChunk(InitRequest, FullConverter->GetClientsideName(), PeerName); // ToDo[migration] - check?
 
@@ -1172,9 +1176,6 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
 
     OwnerCookie = result.GetResult().OwnerCookie;
     const auto& maxSeqNo = result.GetResult().SourceIdInfo.GetSeqNo();
-    if (!UseDeduplication) {
-        Y_VERIFY(maxSeqNo == 0);
-    }
     MakeAndSentInitResponse(maxSeqNo, ctx);
 
 }

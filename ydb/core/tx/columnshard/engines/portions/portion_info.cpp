@@ -42,21 +42,6 @@ void TPortionInfo::AddMetadata(const ISnapshotSchema& snapshotSchema, const NArr
     Meta.SetTierName(tierName);
 }
 
-std::shared_ptr<arrow::Scalar> TPortionInfo::MinValue(ui32 columnId) const {
-    std::shared_ptr<arrow::Scalar> result;
-    for (auto&& i : Records) {
-        if (i.ColumnId == columnId) {
-            if (!i.GetMeta().GetMin()) {
-                return nullptr;
-            }
-            if (!result || NArrow::ScalarCompare(result, i.GetMeta().GetMin()) > 0) {
-                result = i.GetMeta().GetMin();
-            }
-        }
-    }
-    return result;
-}
-
 std::shared_ptr<arrow::Scalar> TPortionInfo::MaxValue(ui32 columnId) const {
     std::shared_ptr<arrow::Scalar> result;
     for (auto&& i : Records) {
@@ -119,14 +104,6 @@ ui64 TPortionInfo::GetRawBytes(const std::set<ui32>& columnIds) const {
     return sum;
 }
 
-int TPortionInfo::CompareSelfMaxItemMinByPk(const TPortionInfo& item, const TIndexInfo& info) const {
-    return CompareByColumnIdsImpl<TMaxGetter, TMinGetter>(item, info.KeyColumns);
-}
-
-int TPortionInfo::CompareMinByPk(const TPortionInfo& item, const TIndexInfo& info) const {
-    return CompareMinByColumnIds(item, info.KeyColumns);
-}
-
 TString TPortionInfo::DebugString(const bool withDetails) const {
     TStringBuilder sb;
     sb << "(portion_id:" << Portion << ";" <<
@@ -166,19 +143,6 @@ void TPortionInfo::AddRecord(const TIndexInfo& indexInfo, const TColumnRecord& r
         Meta.FirstPkColumn = indexInfo.GetPKFirstColumnId();
         Y_ABORT_UNLESS(Meta.DeserializeFromProto(*portionMeta, indexInfo));
     }
-}
-
-bool TPortionInfo::HasPkMinMax() const {
-    bool result = false;
-    for (auto&& i : Records) {
-        if (i.ColumnId == Meta.FirstPkColumn) {
-            if (!i.GetMeta().HasMinMax()) {
-                return false;
-            }
-            result = true;
-        }
-    }
-    return result;
 }
 
 std::vector<const NKikimr::NOlap::TColumnRecord*> TPortionInfo::GetColumnChunksPointers(const ui32 columnId) const {

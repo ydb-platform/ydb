@@ -1202,11 +1202,21 @@ namespace NActors {
                                     isEdgeMailbox = true;
                                     TEventsList events;
                                     mbox.second->Capture(events);
+
+                                    TEventsList eventsToPush;
                                     for (auto& ev : events) {
                                         TInverseGuard<TMutex> inverseGuard(Mutex);
-                                        ObserverFunc(*this, ev);
+
+                                        for (auto& observer : ObserverFuncs) {
+                                            observer(ev);
+                                            if (!ev) break;
+                                        }
+
+                                        if (ev && ObserverFunc(*this, ev) != EEventAction::DROP) {
+                                            eventsToPush.push_back(ev);
+                                        }
                                     }
-                                    mbox.second->PushFront(events);
+                                    mbox.second->PushFront(eventsToPush);
                                 }
 
                                 if (!isEdgeMailbox) {
@@ -1232,7 +1242,17 @@ namespace NActors {
                                     EEventAction action;
                                     {
                                         TInverseGuard<TMutex> inverseGuard(Mutex);
-                                        action = ObserverFunc(*this, ev);
+
+                                        for (auto& observer : ObserverFuncs) {
+                                            observer(ev);
+                                            if (!ev) break;
+                                        }
+
+                                        if (ev) {
+                                            action = ObserverFunc(*this, ev);
+                                        } else {
+                                            action = EEventAction::DROP;
+                                        }
                                     }
 
                                     switch (action) {

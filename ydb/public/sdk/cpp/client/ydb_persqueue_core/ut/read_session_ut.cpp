@@ -1576,8 +1576,8 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                 }
                 for (const auto& range : req.offset_ranges()) {
                     Cerr << "RANGE " << range.start_offset() << " " << range.end_offset() << "\n";
-                    if (range.start_offset() == 10 && range.end_offset() == 12) has1 = true;
-                    else if (range.start_offset() == 0 && range.end_offset() == 10) has2 = true;
+                    if (range.start_offset() == 3 && range.end_offset() == 12) has1 = true;
+                    else if (range.start_offset() == 0 && range.end_offset() == 3) has2 = true;
                     else UNIT_ASSERT(false);
                 }
             }));

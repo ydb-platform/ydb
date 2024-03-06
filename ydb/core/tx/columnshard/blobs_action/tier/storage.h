@@ -17,6 +17,7 @@ private:
     TAtomicCounter CurrentOperatorIdx = 0;
     std::deque<NWrappers::NExternalStorage::IExternalStorageOperator::TPtr> ExternalStorageOperators;
     std::shared_ptr<TGCInfo> GCInfo = std::make_shared<TGCInfo>();
+    std::optional<NKikimrSchemeOp::TS3Settings> CurrentS3Settings;
     NWrappers::NExternalStorage::IExternalStorageConfig::TPtr ExternalStorageConfig;
     NWrappers::NExternalStorage::IExternalStorageOperator::TPtr ExternalStorageOperator;
 

@@ -205,11 +205,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         auto ev = MakeRequest(PartitionId, PipeClient);
 
         auto& cmd = *ev->Record.MutablePartitionRequest()->MutableCmdGetOwnership();
-        if (Opts.UseDeduplication) {
-            cmd.SetOwner(SourceId);
-        } else {
-            cmd.SetOwner(CreateGuidAsString());
-        }
+        cmd.SetOwner(SourceId);
         cmd.SetForce(true);
 
         NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
@@ -659,7 +655,7 @@ public:
         , TabletId(tabletId)
         , PartitionId(partitionId)
         , ExpectedGeneration(expectedGeneration)
-        , SourceId(sourceId)
+        , SourceId(opts.UseDeduplication ? sourceId : CreateGuidAsString())
         , Opts(opts)
     {
         if (Opts.MeteringMode) {

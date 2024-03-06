@@ -545,7 +545,30 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         // UNIT_ASSERT(false);
     }
+} // Y_UNIT_TEST_SUITE(BasicUsage)
 
-}
+Y_UNIT_TEST_SUITE(TSettingsValidation) {
+    Y_UNIT_TEST(TWriteSessionProducerSettings) {
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+        TTopicClient client(setup->GetDriver());
 
-}
+        {
+            auto writeSettings = TWriteSessionSettings()
+                        .Path(setup->GetTestTopic())
+                        .ProducerId("something")
+                        .DeduplicationEnabled(false);
+            try {
+                auto writeSession = client.CreateWriteSession(writeSettings);
+                auto event = writeSession->GetEvent(true);
+                UNIT_ASSERT(event.Defined());
+                auto* closedEvent = std::get_if<TSessionClosedEvent>(&event.GetRef());
+                UNIT_ASSERT(closedEvent);
+            } catch (NYdb::TContractViolation&) {
+                //pass
+            }
+        }
+    }
+} // Y_UNIT_TEST_SUITE(TSettingsValidation)
+
+} // namespace
+

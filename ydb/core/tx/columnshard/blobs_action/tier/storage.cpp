@@ -48,6 +48,10 @@ void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager* ti
     } else {
         settings.SetEndpoint("nowhere");
     }
+    if (CurrentS3Settings && CurrentS3Settings->SerializeAsString() == settings.SerializeAsString()) {
+        return;
+    }
+    CurrentS3Settings = settings;
     auto extStorageConfig = NWrappers::NExternalStorage::IExternalStorageConfig::Construct(settings);
     AFL_VERIFY(extStorageConfig);
     auto extStorageOperator = extStorageConfig->ConstructStorageOperator(false);

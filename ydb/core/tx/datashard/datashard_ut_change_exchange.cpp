@@ -784,7 +784,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         static THolder<TDataStreamsClient> MakeClient(const NYdb::TDriver& driver, const TString& database) {
             return MakeHolder<TDataStreamsClient>(driver, NYdb::TCommonClientSettings().Database(database));
         }
-    }; 
+    };
 
     class TTestTopicEnv: public TTestEnv<TTestTopicEnv, NYdb::NTopic::TTopicClient> {
     public:
@@ -793,7 +793,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         static THolder<NYdb::NTopic::TTopicClient> MakeClient(const NYdb::TDriver& driver, const TString& database) {
             return MakeHolder<NYdb::NTopic::TTopicClient>(driver, NYdb::NTopic::TTopicClientSettings().Database(database));
         }
-    }; 
+    };
 
     TShardedTableOptions SimpleTable() {
         return TShardedTableOptions()
@@ -1168,7 +1168,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (3, 30);
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
-        )"}, { 
+        )"}, {
             R"({"update":{},"key":[1]})",
             R"({"update":{},"key":[2]})",
             R"({"update":{},"key":[3]})",
@@ -1184,7 +1184,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (3, 30);
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
-        )"}, { 
+        )"}, {
             R"({"update":{"value":10},"key":[1]})",
             R"({"update":{"value":20},"key":[2]})",
             R"({"update":{"value":30},"key":[3]})",
@@ -1205,7 +1205,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (3, 300);
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
-        )"}, { 
+        )"}, {
             R"({"update":{},"newImage":{"value":10},"key":[1]})",
             R"({"update":{},"newImage":{"value":20},"key":[2]})",
             R"({"update":{},"newImage":{"value":30},"key":[3]})",
@@ -1222,7 +1222,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (1, 10),
             (2, 20),
             (3, 30);
-        )"}, { 
+        )"}, {
             R"({"update":{},"key":[1],"ts":"***"})",
             R"({"update":{},"key":[2],"ts":"***"})",
             R"({"update":{},"key":[3],"ts":"***"})",
@@ -1248,7 +1248,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             UPSERT INTO `/Root/Table` (__Hash, id_shard, id_sort, __RowData) VALUES (
                 1, "10", "100", JsonDocument('{"M":{"color":{"S":"pink"},"weight":{"N":"4.5"}}}')
             );
-        )"}, { 
+        )"}, {
             WriteJson(NJson::TJsonMap({
                 {"awsRegion", ""},
                 {"dynamodb", NJson::TJsonMap({
@@ -1277,7 +1277,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             );
         )", R"(
             DELETE FROM `/Root/Table` WHERE __Hash = 1;
-        )"}, { 
+        )"}, {
             WriteJson(NJson::TJsonMap({
                 {"awsRegion", ""},
                 {"dynamodb", NJson::TJsonMap({
@@ -1375,7 +1375,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 (1, 0.0%s/0.0%s),
                 (2, 1.0%s/0.0%s),
                 (3, -1.0%s/0.0%s);
-            )", s, s, s, s, s, s)}, { 
+            )", s, s, s, s, s, s)}, {
                 R"({"update":{"value":"nan"},"key":[1]})",
                 R"({"update":{"value":"inf"},"key":[2]})",
                 R"({"update":{"value":"-inf"},"key":[3]})",
@@ -1761,7 +1761,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         ExecSQL(env.GetServer(), env.GetEdgeActor(), R"(
             UPSERT INTO `/Root/TableAux` (key, value)
             VALUES (1, 10);
-        )"); 
+        )");
 
         SetSplitMergePartCountLimit(&runtime, -1);
         const auto tabletIds = GetTableShards(env.GetServer(), env.GetEdgeActor(), "/Root/Table");
@@ -2010,7 +2010,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         auto tabletIds = GetTableShards(env.GetServer(), env.GetEdgeActor(), "/Root/Table");
         UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
 
-        WaitTxNotification(env.GetServer(), env.GetEdgeActor(), 
+        WaitTxNotification(env.GetServer(), env.GetEdgeActor(),
             AsyncSplitTable(env.GetServer(), env.GetEdgeActor(), "/Root/Table", tabletIds.at(0), 4));
 
         // execute on old partitions
@@ -2094,7 +2094,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
             case TSchemeBoardEvents::EvUpdate:
                 if (auto* msg = ev->Get<TSchemeBoardEvents::TEvUpdate>()) {
-                    const auto desc = msg->GetRecord().GetDescribeSchemeResult();
+                    NKikimrScheme::TEvDescribeSchemeResult desc;
+                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(desc, *msg->GetRecord().GetDescribeSchemeResultSerialized().begin()));
                     if (desc.GetPath() == "/Root/Table/Stream" && desc.GetPathDescription().GetSelf().GetCreateFinished()) {
                         delayed.emplace_back(ev.Release());
                         return TTestActorRuntime::EEventAction::DROP;
@@ -2164,7 +2165,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         ExecSQL(env.GetServer(), env.GetEdgeActor(), R"(
             UPSERT INTO `/Root/Table` (key, value)
             VALUES (1, 10);
-        )"); 
+        )");
 
         SetSplitMergePartCountLimit(&runtime, -1);
         const auto tabletIds = GetTableShards(env.GetServer(), env.GetEdgeActor(), "/Root/Table");
@@ -2709,7 +2710,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         auto tabletIds = GetTableShards(env.GetServer(), env.GetEdgeActor(), "/Root/Table");
         UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
 
-        WaitTxNotification(env.GetServer(), env.GetEdgeActor(), 
+        WaitTxNotification(env.GetServer(), env.GetEdgeActor(),
             AsyncSplitTable(env.GetServer(), env.GetEdgeActor(), "/Root/Table", tabletIds.at(0), 4));
 
         // merge

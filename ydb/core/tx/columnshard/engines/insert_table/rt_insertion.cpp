@@ -115,6 +115,9 @@ THashSet<NKikimr::NOlap::TWriteId> TInsertionSummary::GetDeprecatedInsertions(co
     for (auto& [writeId, data] : Inserted) {
         if (data.GetMeta().GetDirtyWriteTime() && data.GetMeta().GetDirtyWriteTime() < timeBorder) {
             toAbort.insert(writeId);
+            if (toAbort.size() == 20000) {
+                break;
+            }
         }
     }
     return toAbort;

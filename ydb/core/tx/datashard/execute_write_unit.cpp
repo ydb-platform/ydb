@@ -88,6 +88,20 @@ public:
         const TSerializedCellMatrix& matrix = writeTx->GetMatrix();
         const auto operationType = writeTx->GetOperationType();
 
+        auto fillOps = [&](ui32 rowIdx) {
+            ops.clear();
+            Y_ABORT_UNLESS(matrix.GetColCount() >= userTable.KeyColumnIds.size());
+            ops.reserve(matrix.GetColCount() - userTable.KeyColumnIds.size());
+
+            for (ui16 valueColIdx = userTable.KeyColumnIds.size(); valueColIdx < matrix.GetColCount(); ++valueColIdx) {
+                ui32 columnTag = writeTx->GetColumnIds()[valueColIdx];
+                const TCell& cell = matrix.GetCell(rowIdx, valueColIdx);
+
+                NScheme::TTypeInfo vtypeInfo = scheme.GetColumnInfo(tableInfo, columnTag)->PType;
+                ops.emplace_back(columnTag, NTable::ECellOp::Set, cell.IsNull() ? TRawTypeValue() : TRawTypeValue(cell.Data(), cell.Size(), vtypeInfo));
+            }
+        };
+
         for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx)
         {
             key.clear();
@@ -106,19 +120,13 @@ public:
             switch (operationType) {
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:
                 {
-                    ops.clear();
-                    Y_ABORT_UNLESS(matrix.GetColCount() >= userTable.KeyColumnIds.size());
-                    ops.reserve(matrix.GetColCount() - userTable.KeyColumnIds.size());
-
-                    for (ui16 valueColIdx = userTable.KeyColumnIds.size(); valueColIdx < matrix.GetColCount(); ++valueColIdx) {
-                        ui32 columnTag = writeTx->GetColumnIds()[valueColIdx];
-                        const TCell& cell = matrix.GetCell(rowIdx, valueColIdx);
-
-                        NScheme::TTypeInfo vtypeInfo = scheme.GetColumnInfo(tableInfo, columnTag)->PType;
-                        ops.emplace_back(columnTag, NTable::ECellOp::Set, cell.IsNull() ? TRawTypeValue() : TRawTypeValue(cell.Data(), cell.Size(), vtypeInfo));
-                    }
-
+                    fillOps(rowIdx);
                     userDb.UpdateRow(fullTableId, key, ops);
+                    break;
+                }
+                case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE: {
+                    fillOps(rowIdx);
+                    userDb.ReplaceRow(fullTableId, key, ops);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE:
@@ -133,7 +141,8 @@ public:
         }
 
         switch (operationType) {
-            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT: {
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE: {
                 DataShard.IncCounter(COUNTER_WRITE_ROWS, matrix.GetRowCount());
                 DataShard.IncCounter(COUNTER_WRITE_BYTES, matrix.GetBuffer().size());
                 break;

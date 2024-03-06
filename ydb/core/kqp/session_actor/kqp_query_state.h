@@ -63,7 +63,7 @@ public:
         SetQueryDeadlines(tableServiceConfig, queryServiceConfig);
         auto action = GetAction();
         KqpSessionSpan = NWilson::TSpan(
-            TWilsonKqp::KqpSession, std::move(RequestEv->GetWilsonTraceId()),
+            TWilsonKqp::KqpSession, std::move(ev->TraceId),
             "Session.query." + NKikimrKqp::EQueryAction_Name(action), NWilson::EFlags::AUTO_END);
         if (RequestEv->GetUserRequestContext()) {
             UserRequestContext = RequestEv->GetUserRequestContext();
@@ -121,6 +121,11 @@ public:
     std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameterTypes;
 
     TKqpTempTablesState::TConstPtr TempTablesState;
+
+    THolder<NYql::TExprContext> SplittedCtx;
+    TVector<NYql::TExprNode::TPtr> SplittedExprs;
+    NYql::TExprNode::TPtr SplittedWorld;
+    int NextSplittedExpr = 0;
 
     TString ReplayMessage;
 
@@ -423,11 +428,17 @@ public:
     // same the context of the compiled query to the query state.
     bool SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev);
     bool SaveAndCheckParseResult(TEvKqp::TEvParseResponse&& ev);
+    bool SaveAndCheckSplitResult(TEvKqp::TEvSplitResponse* ev);
     // build the compilation request.
     std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie);
     // TODO(gvit): get rid of code duplication in these requests,
     // use only one of these requests.
     std::unique_ptr<TEvKqp::TEvRecompileRequest> BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie);
+
+    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildSplitRequest(std::shared_ptr<std::atomic<bool>> cookie);
+    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileSplittedRequest(std::shared_ptr<std::atomic<bool>> cookie);
+
+    bool PrepareNextStatementPart();
 
     const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& GetYdbParameters() const {
         return RequestEv->GetYdbParameters();

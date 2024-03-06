@@ -142,6 +142,14 @@ protected:
         SendRequestToPipe(pipeClient, request.Release());
     }
 
+    void RequestBSControllerConfigWithStoragePools() {
+        TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+        THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        request->Record.MutableRequest()->AddCommand()->MutableQueryBaseConfig();
+        request->Record.MutableRequest()->AddCommand()->MutableReadStoragePool()->SetBoxId(Max<ui64>());
+        SendRequestToPipe(pipeClient, request.Release());
+    }
+
     void RequestBSControllerInfo() {
         TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
         THolder<TEvBlobStorage::TEvRequestControllerInfo> request = MakeHolder<TEvBlobStorage::TEvRequestControllerInfo>();

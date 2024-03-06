@@ -96,7 +96,6 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         auto client = kikimr.GetTableClient();
 
         auto it = client.StreamExecuteScanQuery(R"(
-            PRAGMA Kikimr.OptEnablePredicateExtract = "true";
             SELECT OwnerId, PartIdx, Path, PathId
             FROM `/Root/.sys/partition_stats`
             WHERE
@@ -137,7 +136,6 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
             DECLARE $l2 AS Int32;
             DECLARE $r2 AS Int32;
 
-            PRAGMA Kikimr.OptEnablePredicateExtract = "true";
             SELECT OwnerId, PartIdx, Path, PathId
             FROM `/Root/.sys/partition_stats`
             WHERE
@@ -164,10 +162,6 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
 
-        TString enablePredicateExtractor = R"(
-            PRAGMA Kikimr.OptEnablePredicateExtract = "true";
-        )";
-
         TString query = R"(
             SELECT OwnerId, PathId, PartIdx, Path
             FROM `/Root/.sys/partition_stats`
@@ -187,19 +181,11 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         auto it = client.StreamExecuteScanQuery(query).GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         CompareYson(expectedYson, StreamResultToYson(it));
-
-        it = client.StreamExecuteScanQuery(enablePredicateExtractor + query).GetValueSync();
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        CompareYson(expectedYson, StreamResultToYson(it));
     }
 
     Y_UNIT_TEST(PartitionStatsRange2) {
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
-        TString enablePredicateExtractor = R"(
-            PRAGMA Kikimr.OptEnablePredicateExtract = "true";
-        )";
-
         TString query = R"(
             SELECT OwnerId, PathId, PartIdx, Path
             FROM `/Root/.sys/partition_stats`
@@ -214,10 +200,6 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         ])";
 
         auto it = client.StreamExecuteScanQuery(query).GetValueSync();
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        CompareYson(expectedYson, StreamResultToYson(it));
-
-        it = client.StreamExecuteScanQuery(enablePredicateExtractor + query).GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         CompareYson(expectedYson, StreamResultToYson(it));
     }

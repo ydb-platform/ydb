@@ -67,6 +67,7 @@ namespace NKikimr {
 
         void AddDomain(TDomainsInfo::TDomain* domain);
         void AddHive(ui64 hive);
+        inline void AddHive(ui32, ui64 hive) { AddHive(hive); }
         void ClearDomainsAndHive();
         void SetChannels(TIntrusivePtr<TChannelProfiles> channels);
         void SetBSConf(NKikimrBlobStorage::TNodeWardenServiceSet config);

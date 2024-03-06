@@ -1405,11 +1405,15 @@ bool TSqlTranslation::FillFamilySettings(const TRule_family_settings& settingsNo
 
 
 
-bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCreateTableParameters& params)
+bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCreateTableParameters& params, const bool isCreateTableAs)
 {
     switch (node.Alt_case()) {
         case TRule_create_table_entry::kAltCreateTableEntry1:
         {
+            if (isCreateTableAs) {
+                Ctx.Error() << "Column types are not supported for CREATE TABLE AS";
+                return false;
+            }
             // column_schema
             auto columnSchema = ColumnSchemaImpl(node.GetAlt_create_table_entry1().GetRule_column_schema1());
             if (!columnSchema) {
@@ -1509,6 +1513,10 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
         }
         case TRule_create_table_entry::kAltCreateTableEntry4:
         {
+            if (isCreateTableAs) {
+                Ctx.Error() << "Column families are not supported for CREATE TABLE AS";
+                return false;
+            }
             // family_entry
             auto& family_entry = node.GetAlt_create_table_entry4().GetRule_family_entry1();
             TFamilyEntry family(IdEx(family_entry.GetRule_an_id2(), *this));
@@ -1526,6 +1534,19 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
             if (!CreateChangefeed(changefeed, expr, params.Changefeeds)) {
                 return false;
             }
+            break;
+        }
+        case TRule_create_table_entry::kAltCreateTableEntry6:
+        {
+            if (!isCreateTableAs) {
+                Ctx.Error() << "Column requires a type";
+                return false;
+            }
+            // an_id_schema
+            const TString name(Id(node.GetAlt_create_table_entry6().GetRule_an_id_schema1(), *this));
+            const TPosition pos(Context().Pos());
+
+            params.Columns.push_back(TColumnSchema(pos, name, nullptr, true, {}, false, nullptr));
             break;
         }
         default:

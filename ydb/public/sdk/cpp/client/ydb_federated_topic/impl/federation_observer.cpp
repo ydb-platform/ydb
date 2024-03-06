@@ -129,7 +129,10 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
             return;
         }
 
-        if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED) {
+        // BAD_REQUEST may be returned from FederationDiscovery:
+        //   1) The request was meant for a non-federated topic: fall back to single db mode.
+        //   2) The database path in the request is simply wrong: the client should get the BAD_REQUEST status.
+        if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED || status.GetStatus() == EStatus::BAD_REQUEST) {
             // fall back to single db mode
             FederatedDbState->Status = TPlainStatus{};  // SUCCESS
             auto dbState = Connections_->GetDriverState(Nothing(),Nothing(),Nothing(),Nothing(),Nothing());

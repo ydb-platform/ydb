@@ -117,6 +117,24 @@ void TDataShardUserDb::UpdateRow(
     Counters.UpdateRowBytes += keyBytes + valueBytes;
 }
 
+void TDataShardUserDb::ReplaceRow(
+    const TTableId& tableId,
+    const TArrayRef<const TRawTypeValue> key,
+    const TArrayRef<const NIceDb::TUpdateOp> ops
+)
+{
+    auto localTableId = Self.GetLocalTableId(tableId);
+    Y_ABORT_UNLESS(localTableId != 0, "Unexpected ReplaceRow for an unknown table");
+
+    UpdateRowInt(NTable::ERowOp::Reset, tableId, localTableId, key, ops);
+
+    ui64 valueBytes = CalculateValueBytes(ops);
+    ui64 keyBytes = CalculateKeyBytes(key);
+
+    Counters.NUpdateRow++;
+    Counters.UpdateRowBytes += keyBytes + valueBytes;
+}
+
 void TDataShardUserDb::EraseRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key)

@@ -10,7 +10,7 @@ void TTestTableDescription::TColumn::SerializeTo(NKikimrSchemeOp::TColumnDescrip
 }
 
 void TTestTableDescription::SerializeTo(NKikimrSchemeOp::TTableDescription& proto) const {
-    proto.SetName("Table");
+    proto.SetName(Name);
     proto.MutableReplicationConfig()->SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
     proto.MutableReplicationConfig()->SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK);
 

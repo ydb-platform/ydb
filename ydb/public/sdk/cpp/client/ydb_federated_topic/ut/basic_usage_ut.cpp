@@ -422,6 +422,61 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         ReadSession->Close(TDuration::MilliSeconds(10));
     }
 
+    Y_UNIT_TEST(FallbackToSingleDbAfterBadRequest) {
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME, false);
+        setup->Start(true, true);
+        TFederationDiscoveryServiceMock fdsMock;
+        ui16 newServicePort = setup->GetPortManager()->GetPort(4285);
+        fdsMock.Port = setup->GetGrpcPort();
+
+        Cerr << "PORTS " << fdsMock.Port << " " << newServicePort << Endl;
+        auto grpcServer = setup->StartGrpcService(newServicePort, &fdsMock);
+
+        // Create topic client.
+        NYdb::TDriverConfig cfg;
+        cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
+        cfg.SetDatabase("/Root");
+        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        NYdb::TDriver driver(cfg);
+        auto clientSettings = TFederatedTopicClientSettings();
+        NYdb::NFederatedTopic::TFederatedTopicClient topicClient(driver, clientSettings);
+
+        // Create read session.
+        NYdb::NFederatedTopic::TFederatedReadSessionSettings readSettings;
+        readSettings
+            .ConsumerName("shared/user")
+            .MaxMemoryUsageBytes(1_MB)
+            .AppendTopics(setup->GetTestTopic());
+
+        auto ReadSession = topicClient.CreateReadSession(readSettings);
+        Cerr << "Session was created" << Endl;
+
+        ReadSession->WaitEvent().Wait(TDuration::Seconds(1));
+        TMaybe<NYdb::NFederatedTopic::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
+        Y_ASSERT(!event);
+
+        {
+            auto fdsRequest = fdsMock.GetNextPendingRequest();
+            Y_ASSERT(fdsRequest.has_value());
+            Ydb::FederationDiscovery::ListFederationDatabasesResponse response;
+            auto op = response.mutable_operation();
+            op->set_status(Ydb::StatusIds::BAD_REQUEST);
+            response.mutable_operation()->set_ready(true);
+            response.mutable_operation()->set_id("12345");
+            fdsRequest->Result.SetValue({std::move(response), grpc::Status::OK});
+        }
+
+        ReadSession->WaitEvent().Wait();
+        TMaybe<NYdb::NFederatedTopic::TReadSessionEvent::TEvent> event2 = ReadSession->GetEvent(true);
+        Cerr << "Got new read session event: " << DebugString(*event2) << Endl;
+
+        auto* sessionEvent = std::get_if<NYdb::NFederatedTopic::TSessionClosedEvent>(&*event2);
+        // At this point the SDK should connect to Topic API, but in this test we have it on a separate port,
+        // so SDK connects back to FederationDiscovery service and the CLIENT_CALL_UNIMPLEMENTED status is expected.
+        UNIT_ASSERT_EQUAL(sessionEvent->GetStatus(), EStatus::CLIENT_CALL_UNIMPLEMENTED);
+        ReadSession->Close(TDuration::MilliSeconds(10));
+    }
+
     Y_UNIT_TEST(SimpleHandlers) {
         auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME, false);
         setup->Start(true, true);

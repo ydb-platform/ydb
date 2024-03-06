@@ -32,7 +32,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
         appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-        appConfig.MutableTableServiceConfig()->SetEnablePredicateExtractForDataQueries(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
         settings.SetAppConfig(appConfig);
 
@@ -3338,7 +3337,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(PushFlatmapInnerConnectionsToStageInput) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnablePredicateExtractForDataQueries(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(app);
         TKikimrRunner kikimr{settings};
@@ -3443,7 +3441,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(MultiUsageInnerConnection) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnablePredicateExtractForDataQueries(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(app);
 
@@ -3548,7 +3545,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(FlatmapLambdaMutiusedConnections) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnablePredicateExtractForDataQueries(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(app);
         TKikimrRunner kikimr{settings};
@@ -3596,7 +3592,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(FlatMapLambdaInnerPrecompute) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnablePredicateExtractForDataQueries(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(app);
         TKikimrRunner kikimr{settings};
@@ -3620,7 +3615,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
-        appConfig.MutableTableServiceConfig()->SetEnablePredicateExtractForDataQueries(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
         settings.SetAppConfig(appConfig);
 
@@ -3651,7 +3645,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        appConfig.MutableTableServiceConfig()->SetEnablePredicateExtractForDataQueries(true);
         settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
@@ -3672,7 +3665,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        appConfig.MutableTableServiceConfig()->SetEnablePredicateExtractForDataQueries(true);
         settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
@@ -3703,7 +3695,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
-        appConfig.MutableTableServiceConfig()->SetEnablePredicateExtractForDataQueries(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
         settings.SetAppConfig(appConfig);
 
@@ -3731,8 +3722,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
-        appConfig.MutableTableServiceConfig()->SetEnablePredicateExtractForDataQueries(true);
-        appConfig.MutableTableServiceConfig()->SetEnableSequentialReads(true);
         settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
@@ -3768,7 +3757,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
-        appConfig.MutableTableServiceConfig()->SetEnablePredicateExtractForDataQueries(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
         settings.SetAppConfig(appConfig);
 

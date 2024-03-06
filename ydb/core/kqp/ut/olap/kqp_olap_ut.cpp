@@ -1703,7 +1703,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TStringBuilder qBuilder;
         qBuilder << "--!syntax_v1" << Endl;
         qBuilder << "PRAGMA Kikimr.OptEnableOlapPushdown = '" << (pushEnabled ? "true" : "false") << "';" << Endl;
-        qBuilder << "PRAGMA Kikimr.OptEnablePredicateExtract = 'false';" << Endl;
         qBuilder << "SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE ";
         qBuilder << predicate;
         qBuilder << " ORDER BY `timestamp`";
@@ -2103,7 +2102,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto tableClient = kikimr.GetTableClient();
         auto query = R"(
-            PRAGMA Kikimr.OptEnablePredicateExtract = "false";
             SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE
                 `resource_id` = "10001" AND Unwrap(`level`/1) = `level` AND `level` > 1;
         )";
@@ -4857,9 +4855,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             builder << "--!syntax_v1" << Endl;
 
-            if (pushEnabled) {
-                builder << "PRAGMA Kikimr.OptEnablePredicateExtract=\"false\";" << Endl;
-            } else {
+            if (!pushEnabled) {
                 builder << "PRAGMA Kikimr.OptEnableOlapPushdown = \"false\";" << Endl;
             }
 

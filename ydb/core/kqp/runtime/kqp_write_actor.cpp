@@ -362,7 +362,9 @@ private:
 
         YQL_ENSURE(SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
 
-        CA_LOG_D("Resolved TableId=" << TableId << " (" << SchemeEntry->TableId.PathId.ToString() << " " << SchemeEntry->TableId.SchemaVersion << ")");
+        CA_LOG_D("Resolved TableId=" << TableId << " ("
+            << SchemeEntry->TableId.PathId.ToString() << " "
+            << SchemeEntry->TableId.SchemaVersion << ")");
 
         if (SchemeEntry->TableId.SchemaVersion != TableId.SchemaVersion) {
             RuntimeError(TStringBuilder() << "Schema was updated.", NYql::NDqProto::StatusIds::SCHEME_ERROR);
@@ -489,10 +491,7 @@ private:
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(
             std::get<ui64>(TxId),
-            NKikimrDataEvents::TEvWrite::MODE_PREPARE);
-            //isLastBatch
-            //    ? NKikimrDataEvents::TEvWrite::MODE_PREPARE
-            //    : NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE
+            NKikimrDataEvents::TEvWrite::MODE_PREPARE); // TODO: MODE_IMMEDIATE
 
         if (!inFlightBatch.Data.empty()) {
             const ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite)
@@ -603,19 +602,16 @@ private:
             return;
         }
 
-        // TODO: do smth else
-        TVector<NKikimrKqp::TKqpColumnMetadataProto> tmp;
+        TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata;
+        columnsMetadata.reserve(Settings.GetColumns().size());
         for (const auto & column : Settings.GetColumns()) {
-            tmp.push_back(column);
+            columnsMetadata.push_back(column);
         }
 
         try {
             Serializer = CreateColumnShardPayloadSerializer(
                 *SchemeEntry,
-                tmp,
-                //TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto>{
-                //    *Settings.GetColumns().data(),
-                //    static_cast<size_t>(Settings.GetColumns().size())},
+                columnsMetadata,
                 TypeEnv);
         } catch (...) {
             RuntimeError(

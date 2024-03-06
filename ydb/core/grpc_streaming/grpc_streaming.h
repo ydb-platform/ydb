@@ -350,9 +350,13 @@ private:
         auto dumpResultText = [&] {
             TString text;
             if (status == NYdbGrpc::EQueueEventStatus::OK) {
-                google::protobuf::TextFormat::Printer printer;
-                printer.SetSingleLineMode(true);
-                printer.PrintToString(ReadInProgress->Record, &text);
+                if (NYdbGrpc::LogBodyEnabled) {
+                    google::protobuf::TextFormat::Printer printer;
+                    printer.SetSingleLineMode(true);
+                    printer.PrintToString(ReadInProgress->Record, &text);
+                } else {
+                    text = "<hidden>";
+                }
             } else {
                 text = "<not ok>";
             }
@@ -402,9 +406,13 @@ private:
     bool Write(TOut&& message, const grpc::WriteOptions& options = { }, const grpc::Status* status = nullptr) {
         auto dumpMessageText = [&] {
             TString text;
-            google::protobuf::TextFormat::Printer printer;
-            printer.SetSingleLineMode(true);
-            printer.PrintToString(message, &text);
+            if (NYdbGrpc::LogBodyEnabled) {
+                google::protobuf::TextFormat::Printer printer;
+                printer.SetSingleLineMode(true);
+                printer.PrintToString(message, &text);
+            } else {
+                text = "<hidden>";
+            }
             return text;
         };
 

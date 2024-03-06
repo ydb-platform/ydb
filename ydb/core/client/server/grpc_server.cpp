@@ -10,7 +10,6 @@
 #include <library/cpp/json/json_writer.h>
 
 #include <util/string/join.h>
-#include <util/system/env.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -79,8 +78,6 @@ public:
         , InProgress_(false)
     {
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] created request Name# %s", this, Name);
-
-        LogBody = "BODY" == GetEnv("YDB_LOGGING");
     }
 
     ~TSimpleRequest() {
@@ -271,7 +268,7 @@ private:
     void Finish(const TOut& resp, ui32 status) {
         auto makeResponseString = [&] {
             TString x;
-            if (LogBody) {
+            if (NYdbGrpc::LogBodyEnabled) {
                 google::protobuf::TextFormat::Printer printer;
                 printer.SetSingleLineMode(true);
                 printer.PrintToString(resp, &x);
@@ -310,7 +307,7 @@ private:
         auto makeRequestString = [&] {
             TString resp;
             if (ok) {
-                if (LogBody) {
+                if (NYdbGrpc::LogBodyEnabled) {
                     google::protobuf::TextFormat::Printer printer;
                     printer.SetSingleLineMode(true);
                     printer.PrintToString(Request, &resp);
@@ -403,8 +400,6 @@ private:
     bool RequestDestroyed_ = false;
     bool CallInProgress_ = false;
     bool Finished_ = false;
-
-    bool LogBody;
 };
 
 } // namespace

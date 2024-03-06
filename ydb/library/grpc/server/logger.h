@@ -3,8 +3,12 @@
 #include <library/cpp/logger/priority.h>
 
 #include <util/generic/ptr.h>
+#include <util/system/env.h>
+
 
 namespace NYdbGrpc {
+
+static bool LogBodyEnabled = "BODY" == GetEnv("YDB_GRPC_SERVER_LOGGING");    
 
 class TLogger: public TThrRefBase {
 protected:

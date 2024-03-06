@@ -38,9 +38,15 @@ TFederatedWriteSession::TFederatedWriteSession(const TFederatedWriteSessionSetti
     , AsyncInit(Observer->WaitForFirstState())
     , FederationState(nullptr)
     , Log(Connections->GetLog())
-    , ClientEventsQueue(std::make_shared<NTopic::TWriteSessionEventsQueue>(SubsessionSettings))  // will crash because of handlers overwrite, TODO correct queue with original handlers
     , BufferFreeSpace(Settings.MaxMemoryUsage_)
 {
+    if (!SubsessionSettings.CompressionExecutor_) {
+        SubsessionSettings.CompressionExecutor(SubClientSetttings.DefaultCompressionExecutor_);
+    }
+    if (!SubsessionSettings.EventHandlers_.HandlersExecutor_) {
+        SubsessionSettings.EventHandlers_.HandlersExecutor(SubClientSetttings.DefaultHandlersExecutor_);
+    }
+    ClientEventsQueue = std::make_shared<NTopic::TWriteSessionEventsQueue>(SubsessionSettings);
 }
 
 TStringBuilder TFederatedWriteSession::GetLogPrefix() const {
@@ -77,8 +83,8 @@ void TFederatedWriteSession::OpenSubSessionImpl(std::shared_ptr<TDbInfo> db) {
     subclient->SetProvidedCodecs(ProvidedCodecs);
 
     auto handlers = NTopic::TWriteSessionSettings::TEventHandlers()
-        .HandlersExecutor(Settings.EventHandlers_.HandlersExecutor_)
-        .ReadyToAcceptHander([self = shared_from_this()](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& ev){
+        .HandlersExecutor(SubsessionSettings.EventHandlers_.HandlersExecutor_)
+        .ReadyToAcceptHandler([self = shared_from_this()](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& ev){
             TDeferredWrite deferred(self->Subsession);
             with_lock(self->Lock) {
                 Y_ABORT_UNLESS(self->PendingToken.Empty());
@@ -107,11 +113,12 @@ void TFederatedWriteSession::OpenSubSessionImpl(std::shared_ptr<TDbInfo> db) {
             }
         });
 
-    SubsessionSettings
+    auto wsSettings = SubsessionSettings;
+    wsSettings
         // .MaxMemoryUsage(Settings.MaxMemoryUsage_)  // to fix if split not by half on creation
         .EventHandlers(handlers);
 
-    Subsession = subclient->CreateWriteSession(SubsessionSettings);
+    Subsession = subclient->CreateWriteSession(wsSettings);
     CurrentDatabase = db;
 }
 

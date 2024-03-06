@@ -480,3 +480,11 @@ TAsyncStatus TTopicClient::CommitOffset(const TString& path, ui64 partitionId, c
 }
 
 } // namespace NYdb::NTopic
+
+Y_DECLARE_OUT_SPEC(, NYdb::NTopic::TDescribeTopicResult, o, x) {
+    return x.Out(o);
+}
+
+Y_DECLARE_OUT_SPEC(, NYdb::NTopic::TDescribeConsumerResult, o, x) {
+    return x.Out(o);
+}

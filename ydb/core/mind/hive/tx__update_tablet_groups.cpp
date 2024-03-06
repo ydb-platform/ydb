@@ -185,18 +185,6 @@ public:
             db.Table<Schema::TabletChannel>().Key(tablet->Id, channelId).Update<Schema::TabletChannel::NeedNewGroup>(false);
 
             ui32 fromGeneration;
-            bool skip = false;
-            if (tablet->ChannelProfileReassignReason == NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_BALANCE) {
-                // A reassign for balancing may be skipped
-                auto tabletChannel = tablet->GetChannel(channelId);
-                auto oldGroupId = channel->History.back().GroupID;
-                auto& pool = tablet->GetStoragePool(channelId);
-                auto& oldGroup = pool.GetStorageGroup(oldGroupId);
-                auto& newGroup = pool.GetStorageGroup(group->GetGroupID());
-                auto usageBefore = oldGroup.GetUsageForChannel(tabletChannel);
-                auto usageAfter = newGroup.GetUsageForChannel(tabletChannel);
-                skip = usageAfter > usageBefore;
-            }
             if (channel->History.empty()) {
                 fromGeneration = 0;
             } else {
@@ -204,7 +192,7 @@ public:
                 fromGeneration = tablet->KnownGeneration + 1;
             }
 
-            if (!changed && !skip) {
+            if (!changed) {
                 ++tabletStorageInfo->Version;
                 db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::TabletStorageVersion>(tabletStorageInfo->Version);
             }

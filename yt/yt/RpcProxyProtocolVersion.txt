@@ -16,7 +16,7 @@ SET(YT_RPC_PROXY_SERVER_PROTOCOL_VERSION_MINOR 2)
 SET(YT_RPC_MODIFY_ROWS_STRONG_LOCKS_VERSION 2)
 
 # RPC python client has protocol version plus some patch version
-SET(YT_RPC_PYTHON_BINDINGS_PATCH_VERSION 17)
+SET(YT_RPC_PYTHON_BINDINGS_PATCH_VERSION 18)
 
 # YT proto package has protocol version plus some patch version
 SET(YT_PROTO_PACKAGE_PATCH_VERSION 13)

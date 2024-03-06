@@ -21,6 +21,32 @@ import six
 logger = logging.getLogger(__name__ if __name__ != '__main__' else 'ymake_conf.py')
 
 
+class WindowsVersion(object):
+    """
+    Predefined values for _WIN32_WINNT macro.
+    This macro specifies minimal Windows version required by the binary being build.
+
+    A complete list of the values supported by the Windows SDK can be found at
+    https://docs.microsoft.com/en-us/cpp/porting/modifying-winver-and-win32-winnt
+    """
+    Windows07 = '0x0601'
+    Windows08 = '0x0602'
+    Windows10 = '0x0A00'
+
+
+# This is default Android API level unless `-DANDROID_API` is specified in cmdline
+# Android api level can be resolved to Android version using
+# https://android.googlesource.com/platform/bionic/+/master/docs/status.md
+ANDROID_API_DEFAULT = 21
+
+# This is default Linux SDK unless `-DOS_SDK` is specified in cmdline
+LINUX_SDK_DEFAULT = "ubuntu-14"
+
+MACOS_VERSION_MIN = "11.0"
+IOS_VERSION_MIN = "13.0"
+WINDOWS_VERSION_MIN = WindowsVersion.Windows07
+
+
 def init_logger(verbose):
     logging.basicConfig(level=logging.DEBUG if verbose else logging.INFO)
 
@@ -129,9 +155,7 @@ class Platform(object):
 
         self.is_android = self.os == 'android'
         if self.is_android:
-            # This is default Android API level unless `-DANDROID_API` is specified in cmdline
-            default_android_api = 21
-            self.android_api = int(preset('ANDROID_API', default_android_api))
+            self.android_api = int(preset('ANDROID_API', ANDROID_API_DEFAULT))
 
         self.is_cygwin = self.os == 'cygwin'
         self.is_yocto = self.os == 'yocto'
@@ -1073,7 +1097,7 @@ class GnuToolchainOptions(ToolchainOptions):
                 return 'ubuntu-18'
 
             # Default OS SDK for Linux builds
-            return 'ubuntu-14'
+            return LINUX_SDK_DEFAULT
 
 
 class Toolchain(object):
@@ -1155,13 +1179,10 @@ class GnuToolchain(Toolchain):
             for lib_path in build.host.library_path_variables:
                 self.env.setdefault(lib_path, []).append('{}/lib'.format(self.tc.name_marker))
 
-        macos_version_min = '11.0'
-        ios_version_min = '13.0'
-
         swift_target = select(default=None, selectors=[
-            (target.is_iossim and target.is_x86_64, 'x86_64-apple-ios{}-simulator'.format(ios_version_min)),
-            (target.is_iossim and target.is_x86, 'i386-apple-ios{}-simulator'.format(ios_version_min)),
-            (target.is_iossim and target.is_armv8, 'arm64-apple-ios{}-simulator'.format(ios_version_min)),
+            (target.is_iossim and target.is_x86_64, 'x86_64-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
+            (target.is_iossim and target.is_x86, 'i386-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
+            (target.is_iossim and target.is_armv8, 'arm64-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
             (not target.is_iossim and target.is_ios and target.is_armv8, 'arm64-apple-ios9'),
             (not target.is_iossim and target.is_ios and target.is_armv7, 'armv7-apple-ios9'),
         ])
@@ -1184,11 +1205,11 @@ class GnuToolchain(Toolchain):
                     (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'softfp', 'armv7-linux-gnueabi'),
                     (target.is_linux and target.is_powerpc, 'powerpc64le-linux-gnu'),
 
-                    (target.is_iossim and target.is_x86_64, 'x86_64-apple-ios{}-simulator'.format(ios_version_min)),
-                    (target.is_iossim and target.is_x86, 'i386-apple-ios{}-simulator'.format(ios_version_min)),
-                    (target.is_iossim and target.is_armv8, 'arm64-apple-ios{}-simulator'.format(ios_version_min)),
-                    (not target.is_iossim and target.is_ios and target.is_armv8, 'arm64-apple-ios{}'.format(ios_version_min)),
-                    (not target.is_iossim and target.is_ios and target.is_armv7, 'armv7-apple-ios{}'.format(ios_version_min)),
+                    (target.is_iossim and target.is_x86_64, 'x86_64-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
+                    (target.is_iossim and target.is_x86, 'i386-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
+                    (target.is_iossim and target.is_armv8, 'arm64-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
+                    (not target.is_iossim and target.is_ios and target.is_armv8, 'arm64-apple-ios{}'.format(IOS_VERSION_MIN)),
+                    (not target.is_iossim and target.is_ios and target.is_armv7, 'armv7-apple-ios{}'.format(IOS_VERSION_MIN)),
 
                     (target.is_apple and target.is_x86, 'i386-apple-darwin14'),
                     (target.is_apple and target.is_x86_64, 'x86_64-apple-darwin14'),
@@ -1266,9 +1287,9 @@ class GnuToolchain(Toolchain):
                 (target.is_linux and target.is_power8le, ['-mcpu=power8', '-mtune=power8', '-maltivec']),
                 (target.is_linux and target.is_power9le, ['-mcpu=power9', '-mtune=power9', '-maltivec']),
                 (target.is_linux and target.is_armv8, ['-march=armv8a']),
-                (target.is_macos, ['-mmacosx-version-min={}'.format(macos_version_min)]),
-                (target.is_ios and not target.is_iossim, ['-mios-version-min={}'.format(ios_version_min)]),
-                (target.is_iossim, ['-mios-simulator-version-min={}'.format(ios_version_min)]),
+                (target.is_macos, ['-mmacosx-version-min={}'.format(MACOS_VERSION_MIN)]),
+                (target.is_ios and not target.is_iossim, ['-mios-version-min={}'.format(IOS_VERSION_MIN)]),
+                (target.is_iossim, ['-mios-simulator-version-min={}'.format(IOS_VERSION_MIN)]),
                 (target.is_android and target.is_armv7, ['-march=armv7-a', '-mfloat-abi=softfp']),
                 (target.is_android and target.is_armv8, ['-march=armv8-a']),
                 (target.is_yocto and target.is_armv7, ['-march=armv7-a', '-mfpu=neon', '-mfloat-abi=hard', '-mcpu=cortex-a9', '-O1'])
@@ -1847,19 +1868,6 @@ class MSVCToolchainOptions(ToolchainOptions):
 
 
 class MSVC(object):
-    # noinspection PyPep8Naming
-    class WindowsVersion(object):
-        """
-        Predefined values for _WIN32_WINNT macro.
-        This macro specifies minimal Windows version required by the binary being build.
-
-        A complete list of the values supported by the Windows SDK can be found at
-        https://docs.microsoft.com/en-us/cpp/porting/modifying-winver-and-win32-winnt
-        """
-        Windows07 = '0x0601'
-        Windows08 = '0x0602'
-        Windows10 = '0x0A00'
-
     def __init__(self, tc, build):
         """
         :type tc: MSVCToolchainOptions
@@ -2062,8 +2070,7 @@ class MSVCCompiler(MSVC, Compiler):
                     '-Wno-unused-command-line-argument',
                 ]
 
-        win_version_min = self.WindowsVersion.Windows07
-        defines.append('/D_WIN32_WINNT={0}'.format(win_version_min))
+        defines.append('/D_WIN32_WINNT={0}'.format(WINDOWS_VERSION_MIN))
 
         if winapi_unicode:
             defines += ['/DUNICODE', '/D_UNICODE']

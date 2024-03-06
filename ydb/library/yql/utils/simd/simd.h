@@ -115,10 +115,30 @@ struct Perfomancer {
     };
 
     template <typename Trait>
-    struct Algo : Interface {
-
+    class Algo : public Interface {
+    public:
         Algo() {}
 
+        void MergeColumns(i8* result, i8* const data[4], size_t sizes[4], size_t length) override {
+            std::vector<Trait> reg(16);
+            std::vector<Trait> mask(15);
+
+            int pack = (sizes[0] + sizes[1] + sizes[2] + sizes[3]);
+            int block = Trait::SIZE / pack * pack;
+
+            PrepareMasks(sizes, mask);
+
+            size_t i = 0;
+
+            for (; i * sizes[0] + Trait::SIZE < length * sizes[0]; i += Trait::SIZE / pack * 2) {
+                Iteration(sizes, data, result, i, block * i, block, reg, mask);
+            }
+            MergeEnds(result, data, sizes, length, i, pack * i);
+        }
+
+        ~Algo() = default;
+    
+    private:
         Trait CreateBlendMask(size_t size1, size_t size2, bool shift) {
             i8 result[Trait::SIZE];
 
@@ -291,25 +311,6 @@ struct Perfomancer {
                 ind++;
             }
         }
-
-        void MergeColumns(i8* result, i8* const data[4], size_t sizes[4], size_t length) override {
-            std::vector<Trait> reg(16);
-            std::vector<Trait> mask(15);
-
-            int pack = (sizes[0] + sizes[1] + sizes[2] + sizes[3]);
-            int block = Trait::SIZE / pack * pack;
-
-            PrepareMasks(sizes, mask);
-
-            size_t i = 0;
-
-            for (; i * sizes[0] + Trait::SIZE < length * sizes[0]; i += Trait::SIZE / pack * 2) {
-                Iteration(sizes, data, result, i, block * i, block, reg, mask);
-            }
-            MergeEnds(result, data, sizes, length, i, pack * i);
-        }
-
-        ~Algo() = default;
     };
 
     template <typename Trait>

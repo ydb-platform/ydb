@@ -28,6 +28,9 @@ target_link_libraries(contrib-libs-c-ares PUBLIC
   yutil
   contrib-libs-libc_compat
 )
+target_link_options(contrib-libs-c-ares INTERFACE
+  -lresolv
+)
 target_sources(contrib-libs-c-ares PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares__addrinfo2hostent.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares__addrinfo_localhost.c

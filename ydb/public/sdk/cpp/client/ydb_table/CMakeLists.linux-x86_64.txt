@@ -36,8 +36,9 @@ target_link_libraries(cpp-client-ydb_table PUBLIC
   cpp-client-ydb_value
 )
 target_sources(cpp-client-ydb_table PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_table/table.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_table/out.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_table/proto_accessor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_table/table.cpp
 )
 generate_enum_serilization(cpp-client-ydb_table
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_table/table_enum.h

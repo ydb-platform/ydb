@@ -19,4 +19,5 @@ target_link_libraries(client-ydb_types-operation PUBLIC
 )
 target_sources(client-ydb_types-operation PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_types/operation/operation.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_types/operation/out.cpp
 )

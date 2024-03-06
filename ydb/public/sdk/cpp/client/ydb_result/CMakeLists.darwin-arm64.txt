@@ -18,6 +18,7 @@ target_link_libraries(cpp-client-ydb_result PUBLIC
   cpp-client-ydb_proto
 )
 target_sources(cpp-client-ydb_result PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_result/out.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_result/proto_accessor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_result/result.cpp
 )

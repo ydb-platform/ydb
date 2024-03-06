@@ -27,6 +27,7 @@ target_link_libraries(cpp-client-ydb_export PUBLIC
 )
 target_sources(cpp-client-ydb_export PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_export/export.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_export/out.cpp
 )
 generate_enum_serilization(cpp-client-ydb_export
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_export/export.h

@@ -33,6 +33,7 @@ target_link_libraries(cpp-client-ydb_topic PUBLIC
 )
 target_sources(cpp-client-ydb_topic PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/topic.h
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/out.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/proto_accessor.cpp
 )
 generate_enum_serilization(cpp-client-ydb_topic

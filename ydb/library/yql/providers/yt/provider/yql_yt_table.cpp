@@ -1957,8 +1957,8 @@ bool AdjustUpperValue(TString& upperValue, bool& upperInclude, EDataSlot upperDa
                 valMax = static_cast<i64>(std::numeric_limits<i64>::max());
                 break;
             case EDataSlot::Date32:
-                valMin = static_cast<i64>(MIN_DATE32);
-                valMax = static_cast<i64>(MAX_DATE32);
+                valMin = MIN_DATE32;
+                valMax = MAX_DATE32;
                 break;
             case EDataSlot::Datetime64:
                 valMin = MIN_DATETIME64;

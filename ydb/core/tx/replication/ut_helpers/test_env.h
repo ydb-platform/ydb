@@ -129,6 +129,10 @@ public:
         return TPathId(self.GetSchemeshardId(), self.GetPathId());
     }
 
+    ui64 GetSchemeshardId(const TString& path) {
+        return GetPathId(path).OwnerId;
+    }
+
     template <typename... Args>
     auto CreateTable(Args&&... args) {
         return Client.CreateTable(std::forward<Args>(args)...);

@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(Worker) {
         }
 
         env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
-            .Name = "Test",
+            .Name = "Table",
             .KeyColumns = {"key"},
             .Columns = {
                 {.Name = "key", .Type = "Uint32"},

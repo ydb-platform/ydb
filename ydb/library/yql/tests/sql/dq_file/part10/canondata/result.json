@@ -1366,19 +1366,16 @@
     ],
     "test.test[join-pullup_renaming--Analyze]": [
         {
-            "checksum": "05ef05873a6bba1ad1a2a505c6e78ea5",
-            "size": 6934,
-            "uri": "https://{canondata_backend}/1773845/6b405142992a5c77db0614b3fc396504b6ca928a/resource.tar.gz#test.test_join-pullup_renaming--Analyze_/plan.txt"
-        },
-        {
-            "uri": "file://test.test_join-pullup_renaming--Analyze_/extracted"
+            "checksum": "21b1cefd30e1410fbfbfcdbe51647898",
+            "size": 7016,
+            "uri": "https://{canondata_backend}/1946324/be96ad9cdb7bebb78c68ecc4a7b291982b0e9f1e/resource.tar.gz#test.test_join-pullup_renaming--Analyze_/plan.txt"
         }
     ],
     "test.test[join-pullup_renaming--Debug]": [
         {
-            "checksum": "f8cd11ac51b4a82e869dc9c556ae3c60",
-            "size": 3238,
-            "uri": "https://{canondata_backend}/1600758/32cfdeb8c6377a2e7e62c6c4adbb95f25af7669b/resource.tar.gz#test.test_join-pullup_renaming--Debug_/opt.yql_patched"
+            "checksum": "b15310dd84f175ec7427c8e2f330e891",
+            "size": 3252,
+            "uri": "https://{canondata_backend}/1946324/be96ad9cdb7bebb78c68ecc4a7b291982b0e9f1e/resource.tar.gz#test.test_join-pullup_renaming--Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-pullup_renaming--Plan]": [

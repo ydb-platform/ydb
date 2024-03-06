@@ -186,10 +186,10 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
     TVector<TString> leftJoinKeys;
     TVector<TString> rightJoinKeys;
 
-    for (size_t i=0; i<join.LeftKeysColumns().Size(); i++) {
+    for (size_t i=0; i<join.LeftKeysColumnNames().Size(); i++) {
         leftJoinKeys.push_back(RemoveAliases(join.LeftKeysColumnNames().Item(i).StringValue()));
     }
-    for (size_t i=0; i<join.RightKeysColumns().Size(); i++) {
+    for (size_t i=0; i<join.RightKeysColumnNames().Size(); i++) {
         rightJoinKeys.push_back(RemoveAliases(join.RightKeysColumnNames().Item(i).StringValue()));
     }
 

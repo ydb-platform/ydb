@@ -21,7 +21,6 @@ PEERDIR(
 )
 
 ADDINCL(
-    GLOBAL contrib/libs/c-ares
     GLOBAL contrib/libs/c-ares/include
     contrib/libs/c-ares/src/lib
 )

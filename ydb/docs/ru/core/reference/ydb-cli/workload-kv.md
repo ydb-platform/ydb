@@ -46,13 +46,13 @@
 
 ```yql
 CREATE TABLE `kv_test`(
-    c0 Uint64 NOT NULL,
-    c1 Uint64 NOT NULL,
+    c0 Uint64,
+    c1 Uint64,
     ...
-    cI Uint64 NOT NULL,
-    cI+1 String NOT NULL,
+    cI Uint64,
+    cI+1 String,
     ...
-    cN String NOT NULL,
+    cN String,
     PRIMARY KEY(c0, c1, ... cK)) WITH (
         AUTO_PARTITIONING_BY_LOAD = ENABLED,
         AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = partsNum,

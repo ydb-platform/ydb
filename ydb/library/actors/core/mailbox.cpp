@@ -20,7 +20,7 @@ namespace NActors {
     }
 
     bool IsGoodForCleanup(const TMailboxHeader* header) {
-        switch (AtomicLoad(&header->ExecutionState)) {
+        switch (header->ExecutionState.load(std::memory_order_acquire)) {
             case TMailboxHeader::TExecutionState::Inactive:
             case TMailboxHeader::TExecutionState::Scheduled:
                 return true;
@@ -46,7 +46,6 @@ namespace NActors {
         for (ui8* x = begin; x + sx <= end; x += sx) {
             TMailbox* mailbox = reinterpret_cast<TMailbox*>(x);
             Y_ABORT_UNLESS(IsGoodForCleanup(mailbox));
-            mailbox->ExecutionState = Max<ui32>();
             mailbox->~TMailbox();
         }
     }

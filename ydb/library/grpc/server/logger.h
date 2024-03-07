@@ -5,6 +5,8 @@
 #include <util/generic/ptr.h>
 #include <util/system/env.h>
 
+#include <google/protobuf/text_format.h>
+
 
 namespace NYdbGrpc {
 
@@ -43,5 +45,22 @@ using TLoggerPtr = TIntrusivePtr<TLogger>;
     if (logger && logger->IsEnabled(ELogPriority::TLOG_INFO)) { \
         logger->Write(ELogPriority::TLOG_INFO, format, __VA_ARGS__); \
     } else { }
+
+
+inline TString FormatMessage(const NProtoBuf::Message& message, bool ok = true) {
+    if (ok) {
+        if (LogBodyEnabled) {
+            TString text;
+            google::protobuf::TextFormat::Printer printer;
+            printer.SetSingleLineMode(true);
+            printer.PrintToString(message, &text);
+            return text;
+        } else {
+            return "<hidden>";
+        }
+    } else {
+        return "<not ok>";
+    }
+}
 
 } // namespace NYdbGrpc

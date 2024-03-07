@@ -67,7 +67,7 @@ public:
         if (resource.has_metering_config()) {
             auto self = static_cast<TDerived*>(this);
             const auto& userTokenStr = self->Request_->GetSerializedToken();
-            bool allowed = false;
+            bool allowed = AppData()->AdministrationAllowedSIDs.empty();
             if (userTokenStr) {
                 NACLib::TUserToken userToken(userTokenStr);
                 for (auto &sid : AppData()->AdministrationAllowedSIDs) {

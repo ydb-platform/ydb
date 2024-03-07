@@ -15,6 +15,7 @@ target_link_libraries(generic-connector-libcpp PUBLIC
   libs-apache-arrow
   contrib-libs-grpc
   formats-arrow-serializer
+  library-grpc-client
   library-yql-ast
   dq-actors-protos
   providers-common-proto

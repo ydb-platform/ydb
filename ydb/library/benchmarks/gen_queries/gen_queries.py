@@ -27,6 +27,7 @@ def main():
     parser.add_argument('--profile', default='dqrun', help='profile "dqrun" "dqrun_block" or "postgres"')
     parser.add_argument('--variant', default="h", help='variant "h" or "ds"')
     parser.add_argument('--output', default='q', help='output directory')
+    parser.add_argument('--dataset-size', default='1', help='dataset size (1, 10, 100, ...)')
     args = parser.parse_args()
     profile = None
     for p in profiles:
@@ -45,7 +46,7 @@ def main():
         os.makedirs(path, exist_ok=True)
     b = Builder()
     b.add_link("bindings.json", f"bindings_{args.variant}_{args.syntax}.json")
-    b.add_vars({"data": f"{args.variant}/1"})
+    b.add_vars({"data": f"{args.variant}/{args.dataset_size}"})
     if p.pragmas:
         b.add_link("pragmas.sql", p.pragmas)
     else:

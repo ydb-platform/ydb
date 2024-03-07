@@ -1830,7 +1830,7 @@ NProto::EMaintenanceType ConvertMaintenanceTypeToProto(EMaintenanceType type)
 
 } // namespace
 
-TFuture<TMaintenanceId> TClient::AddMaintenance(
+TFuture<TMaintenanceIdPerTarget> TClient::AddMaintenance(
     EMaintenanceComponent component,
     const TString& address,
     EMaintenanceType type,
@@ -1848,13 +1848,28 @@ TFuture<TMaintenanceId> TClient::AddMaintenance(
     req->set_address(address);
     req->set_type(ConvertMaintenanceTypeToProto(type));
     req->set_comment(comment);
+    req->set_supports_per_target_response(true);
 
-    return req->Invoke().Apply(BIND([] (const TErrorOr<TApiServiceProxy::TRspAddMaintenancePtr>& rsp) {
-        return FromProto<TMaintenanceId>(rsp.ValueOrThrow()->id());
-    }));
+    return req->Invoke().Apply(BIND(
+        [address] (const TErrorOr<TApiServiceProxy::TRspAddMaintenancePtr>& rsp) {
+            const auto& value = rsp.ValueOrThrow();
+
+            TMaintenanceIdPerTarget result;
+
+            // COMPAT(kvk1920): Compatibility with pre-24.2 RPC proxies.
+            if (value->has_id()) {
+                result[address] = FromProto<TMaintenanceId>(value->id());
+            } else {
+                result.reserve(value->id_per_target_size());
+                for (const auto& [target, id] : value->id_per_target()) {
+                    result.insert({target, FromProto<TMaintenanceId>(id)});
+                }
+            }
+            return result;
+        }));
 }
 
-TFuture<TMaintenanceCounts> TClient::RemoveMaintenance(
+TFuture<TMaintenanceCountsPerTarget> TClient::RemoveMaintenance(
     EMaintenanceComponent component,
     const TString& address,
     const TMaintenanceFilter& filter,
@@ -1884,26 +1899,39 @@ TFuture<TMaintenanceCounts> TClient::RemoveMaintenance(
             req->set_user(user);
         });
 
-    return req->Invoke().Apply(BIND([] (const TErrorOr<TApiServiceProxy::TRspRemoveMaintenancePtr>& rsp) {
+    req->set_supports_per_target_response(true);
+
+    return req->Invoke().Apply(BIND([address] (const TErrorOr<TApiServiceProxy::TRspRemoveMaintenancePtr>& rsp) {
         auto rspValue = rsp.ValueOrThrow();
+        TMaintenanceCountsPerTarget result;
 
-        const auto& protoCounts = rspValue->removed_maintenance_counts();
-        TMaintenanceCounts counts;
-
-        if (!rspValue->use_map_instead_of_fields()) {
-            counts[EMaintenanceType::Ban] = rspValue->ban();
-            counts[EMaintenanceType::Decommission] = rspValue->decommission();
-            counts[EMaintenanceType::DisableSchedulerJobs] = rspValue->disable_scheduler_jobs();
-            counts[EMaintenanceType::DisableWriteSessions] = rspValue->disable_write_sessions();
-            counts[EMaintenanceType::DisableTabletCells] = rspValue->disable_tablet_cells();
-            counts[EMaintenanceType::PendingRestart] = rspValue->pending_restart();
+        // COMPAT(kvk1920): Compatibility with pre-24.2 RPC proxies.
+        if (!rspValue->supports_per_target_response()) {
+            auto& counts = result[address];
+            // COMPAT(kvk1920): Compatibility with pre-23.2 RPC proxies.
+            if (!rspValue->use_map_instead_of_fields()) {
+                counts[EMaintenanceType::Ban] = rspValue->ban();
+                counts[EMaintenanceType::Decommission] = rspValue->decommission();
+                counts[EMaintenanceType::DisableSchedulerJobs] = rspValue->disable_scheduler_jobs();
+                counts[EMaintenanceType::DisableWriteSessions] = rspValue->disable_write_sessions();
+                counts[EMaintenanceType::DisableTabletCells] = rspValue->disable_tablet_cells();
+                counts[EMaintenanceType::PendingRestart] = rspValue->pending_restart();
+            } else {
+                for (const auto& [type, count] : rspValue->removed_maintenance_counts()) {
+                    counts[CheckedEnumCast<EMaintenanceType>(type)] = count;
+                }
+            }
         } else {
-            for (auto [type, count] : protoCounts) {
-                counts[CheckedEnumCast<EMaintenanceType>(type)] = count;
+            result.reserve(rspValue->removed_maintenance_counts_per_target_size());
+            for (const auto& [target, protoCounts] : rspValue->removed_maintenance_counts_per_target()) {
+                auto& counts = result[target];
+                for (const auto& [type, count] : protoCounts.counts()) {
+                    counts[CheckedEnumCast<EMaintenanceType>(type)] = count;
+                }
             }
         }
 
-        return counts;
+        return result;
     }));
 }
 

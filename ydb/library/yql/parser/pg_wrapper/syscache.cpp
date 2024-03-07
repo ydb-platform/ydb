@@ -5,6 +5,7 @@
 
 extern "C" {
 #include "utils/syscache.h"
+#include "utils/catcache.h"
 #include "catalog/pg_database.h"
 #include "catalog/pg_class.h"
 #include "catalog/pg_proc.h"
@@ -47,6 +48,13 @@ using THeapTupleHasher = std::function<size_t(const THeapTupleKey&)>;
 using THeapTupleEquals = std::function<bool(const THeapTupleKey&, const THeapTupleKey&)>;
 using TSysCacheHashMap = std::unordered_map<THeapTupleKey, HeapTuple, THeapTupleHasher, THeapTupleEquals>;
 
+struct TRangeItem {
+    TVector<HeapTuple> Items;
+    CatCList* CList = nullptr;
+};
+
+using TSysCacheRangeMap = std::unordered_map<THeapTupleKey, TRangeItem, THeapTupleHasher, THeapTupleEquals>;
+
 size_t OidHasher1(const THeapTupleKey& key) {
     return std::hash<Oid>()((Oid)std::get<0>(key));
 }
@@ -66,14 +74,110 @@ bool NsNameEquals(const THeapTupleKey& key1, const THeapTupleKey& key2) {
         (Oid)std::get<1>(key1) == (Oid)std::get<1>(key2);
 }
 
+size_t OidVectorHash(Datum d) {
+    oidvector *v = (oidvector *)d;
+    size_t hash = v->dim1;
+    for (int i = 0; i < v->dim1; ++i) {
+        hash = CombineHashes(hash, std::hash<Oid>()(v->values[i]));
+    }
+
+    return hash;
+}
+
+bool OidVectorEquals(Datum d1, Datum d2) {
+    oidvector *v1 = (oidvector *)d1;
+    oidvector *v2 = (oidvector *)d2;
+    if (v1->dim1 != v2->dim1) {
+        return false;
+    }
+
+    for (int i = 0; i < v1->dim1; ++i) {
+        if (v1->values[i] != v2->values[i]) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+size_t ByNameProcHasher1(const THeapTupleKey& key) {
+    return std::hash<std::string_view>()((const char*)std::get<0>(key));
+}
+
+size_t ByNameProcHasher3(const THeapTupleKey& key) {
+    return CombineHashes(CombineHashes(std::hash<std::string_view>()((const char*)std::get<0>(key)),
+        OidVectorHash(std::get<1>(key))),
+        std::hash<Oid>()((Oid)std::get<2>(key)));
+}
+
+bool ByNameProcEquals1(const THeapTupleKey& key1, const THeapTupleKey& key2) {
+    return strcmp((const char*)std::get<0>(key1), (const char*)std::get<0>(key2)) == 0;
+}
+
+bool ByNameProcEquals3(const THeapTupleKey& key1, const THeapTupleKey& key2) {
+    return strcmp((const char*)std::get<0>(key1), (const char*)std::get<0>(key2)) == 0 &&
+        OidVectorEquals(std::get<1>(key1), std::get<1>(key2)) &&
+        (Oid)std::get<2>(key1) == (Oid)std::get<2>(key2);
+}
+
 struct TSysCacheItem {
-    TSysCacheItem(THeapTupleHasher hasher, THeapTupleEquals equals, TupleDesc desc)
-        : Map(0, hasher, equals)
+    TSysCacheItem(THeapTupleHasher hasher, THeapTupleEquals equals, TupleDesc desc, ui32 numKeys = 1, 
+        THeapTupleHasher hasherRange1 = {}, THeapTupleEquals equalsRange1 = {})
+        : NumKeys(numKeys)
+        , LookupMap(0, hasher, equals)
+        , RangeMap1(numKeys > 1 ? TMaybe<TSysCacheRangeMap>(TSysCacheRangeMap(0, hasherRange1, equalsRange1)) : Nothing())
         , Desc(desc)
     {}
 
-    TSysCacheHashMap Map;
+    CatCList* BuildCList(const TVector<HeapTuple>& items) {
+        auto cl = (CatCList *)palloc(offsetof(CatCList, members) + items.size() * sizeof(CatCTup *));
+        cl->cl_magic = CL_MAGIC;
+        cl->my_cache = nullptr;
+        cl->refcount = 0;
+        cl->dead = false;
+        cl->ordered = false;
+        cl->nkeys = NumKeys;
+        cl->hash_value = 0;
+        cl->n_members = items.size();
+        for (size_t i = 0; i < items.size(); ++i) {
+            auto dtp = items[i];
+            auto ct = (CatCTup *) palloc(sizeof(CatCTup) + MAXIMUM_ALIGNOF + dtp->t_len);
+            ct->ct_magic = CT_MAGIC;
+            ct->my_cache = nullptr;
+            ct->c_list = NULL;
+            ct->refcount = 0;
+            ct->dead = false;
+            ct->negative = false;
+            ct->hash_value = 0;
+            Zero(ct->keys);
+
+            ct->tuple.t_len = dtp->t_len;
+            ct->tuple.t_self = dtp->t_self;
+            ct->tuple.t_tableOid = dtp->t_tableOid;
+            ct->tuple.t_data = (HeapTupleHeader)MAXALIGN(((char *) ct) + sizeof(CatCTup));
+            /* copy tuple contents */
+            std::memcpy((char *) ct->tuple.t_data, (const char *) dtp->t_data, dtp->t_len);
+            cl->members[i] = ct;
+        }
+
+        return cl;
+    }
+
+    void FinalizeRangeMaps() {
+        if (RangeMap1) {
+            for (auto& x : *RangeMap1) {
+                x.second.CList = BuildCList(x.second.Items);
+            }
+        }
+
+        EmptyCList = BuildCList({});
+    }
+
+    const ui32 NumKeys;
+    TSysCacheHashMap LookupMap;
+    TMaybe<TSysCacheRangeMap> RangeMap1;
     TupleDesc Desc;
+    CatCList* EmptyCList = nullptr;
 };
 
 struct TSysCache {
@@ -91,6 +195,12 @@ struct TSysCache {
         InitializeDatabase();
         InitializeAuthId();
         InitializeNameNamespaces();
+        for (auto& item : Items) {
+            if (item) {
+                item->FinalizeRangeMaps();
+            }
+        }
+
         Arena.Release();
     }
 
@@ -142,7 +252,11 @@ struct TSysCache {
         FillAttr(tupleDesc, Anum_pg_proc_proconfig, TEXTARRAYOID);
         FillAttr(tupleDesc, Anum_pg_proc_proacl, ACLITEMARRAYOID);
         auto& cacheItem = Items[PROCOID] = std::make_unique<TSysCacheItem>(OidHasher1, OidEquals1, tupleDesc);
-        auto& map = cacheItem->Map;
+        auto& lookupMap = cacheItem->LookupMap;
+
+        auto& byNameCacheItem = Items[PROCNAMEARGSNSP] = std::make_unique<TSysCacheItem>(ByNameProcHasher3, ByNameProcEquals3, tupleDesc, 3, ByNameProcHasher1, ByNameProcEquals1);
+        auto& byNameLookupMap = byNameCacheItem->LookupMap;
+        auto& byNameRangeMap1 = *byNameCacheItem->RangeMap1;
 
         const auto& oidDesc = NPg::LookupType(OIDOID);
         const auto& charDesc = NPg::LookupType(CHAROID);
@@ -236,7 +350,13 @@ struct TSysCache {
             Y_ENSURE(row->prorettype == desc.ResultType);
             Y_ENSURE(NameStr(row->proname) == desc.Name);
             Y_ENSURE(row->pronargs == desc.ArgTypes.size());
-            map.emplace(key, h);
+            lookupMap.emplace(key, h);
+
+            THeapTupleKey byNameLookupKey((Datum)name, (Datum)&row->proargtypes, PG_CATALOG_NAMESPACE, 0);
+            THeapTupleKey byNameRangeKey1((Datum)name, 0, 0, 0);
+
+            byNameLookupMap.emplace(byNameLookupKey, h);
+            byNameRangeMap1[byNameRangeKey1].Items.push_back(h);
         });
     }
 
@@ -274,8 +394,8 @@ struct TSysCache {
         FillAttr(tupleDesc, Anum_pg_type_typdefaultbin, PG_NODE_TREEOID);
         FillAttr(tupleDesc, Anum_pg_type_typdefault, TEXTOID);
         FillAttr(tupleDesc, Anum_pg_type_typacl, ACLITEMARRAYOID);
-        auto& cacheItems = Items[TYPEOID] = std::make_unique<TSysCacheItem>(OidHasher1, OidEquals1, tupleDesc);
-        auto& map = cacheItems->Map;
+        auto& cacheItem = Items[TYPEOID] = std::make_unique<TSysCacheItem>(OidHasher1, OidEquals1, tupleDesc);
+        auto& lookupMap = cacheItem->LookupMap;
 
         NPg::EnumTypes([&](ui32 oid, const NPg::TTypeDesc& desc){
             auto key = THeapTupleKey(oid, 0, 0, 0);
@@ -329,7 +449,7 @@ struct TSysCache {
             Y_ENSURE(row->typmodout == desc.TypeModOutFuncId);
             Y_ENSURE(row->typalign == desc.TypeAlign);
             Y_ENSURE(row->typstorage == storage);
-            map.emplace(key, h);
+            lookupMap.emplace(key, h);
         });
 
     }
@@ -350,8 +470,8 @@ struct TSysCache {
         FillAttr(tupleDesc, Anum_pg_database_datminmxid, XIDOID);
         FillAttr(tupleDesc, Anum_pg_database_dattablespace, OIDOID);
         FillAttr(tupleDesc, Anum_pg_database_datacl, ACLITEMARRAYOID);
-        auto& cacheItems = Items[DATABASEOID] = std::make_unique<TSysCacheItem>(OidHasher1, OidEquals1, tupleDesc);
-        auto& map = cacheItems->Map;
+        auto& cacheItem = Items[DATABASEOID] = std::make_unique<TSysCacheItem>(OidHasher1, OidEquals1, tupleDesc);
+        auto& lookupMap = cacheItem->LookupMap;
 
         for (ui32 oid = 1; oid <= 3; ++oid) {
             auto key = THeapTupleKey(oid, 0, 0, 0);
@@ -373,7 +493,7 @@ struct TSysCache {
             auto row = (Form_pg_database) GETSTRUCT(h);
             Y_ENSURE(row->oid == oid);
             Y_ENSURE(strcmp(NameStr(row->datname), name) == 0);
-            map.emplace(key, h);
+            lookupMap.emplace(key, h);
         }
     }
 
@@ -391,8 +511,8 @@ struct TSysCache {
         FillAttr(tupleDesc, Anum_pg_authid_rolconnlimit, INT4OID);
         FillAttr(tupleDesc, Anum_pg_authid_rolpassword, TEXTOID);
         FillAttr(tupleDesc, Anum_pg_authid_rolvaliduntil, TIMESTAMPTZOID);
-        auto& cacheItems = Items[AUTHOID] = std::make_unique<TSysCacheItem>(OidHasher1, OidEquals1, tupleDesc);
-        auto& map = cacheItems->Map;
+        auto& cacheItem = Items[AUTHOID] = std::make_unique<TSysCacheItem>(OidHasher1, OidEquals1, tupleDesc);
+        auto& lookupMap = cacheItem->LookupMap;
 
         auto key = THeapTupleKey(1, 0, 0, 0);
 
@@ -424,7 +544,7 @@ struct TSysCache {
         Y_ENSURE(row->rolreplication);
         Y_ENSURE(row->rolbypassrls);
         Y_ENSURE(row->rolconnlimit == -1);
-        map.emplace(key, h);
+        lookupMap.emplace(key, h);
     }
 
     void InitializeNameNamespaces() {
@@ -462,8 +582,8 @@ struct TSysCache {
         FillAttr(tupleDesc, Anum_pg_class_relacl, ACLITEMARRAYOID);
         FillAttr(tupleDesc, Anum_pg_class_reloptions, TEXTARRAYOID);
         FillAttr(tupleDesc, Anum_pg_class_relpartbound, PG_NODE_TREEOID);
-        auto& cacheItems = Items[RELNAMENSP] = std::make_unique<TSysCacheItem>(NsNameHasher, NsNameEquals, tupleDesc);
-        auto& map = cacheItems->Map;
+        auto& cacheItem = Items[RELNAMENSP] = std::make_unique<TSysCacheItem>(NsNameHasher, NsNameEquals, tupleDesc);
+        auto& lookupMap = cacheItem->LookupMap;
 
         Datum values[Natts_pg_class];
         bool nulls[Natts_pg_class];
@@ -485,7 +605,7 @@ struct TSysCache {
             Y_ENSURE(row->relnamespace == ns);
 
             auto key = THeapTupleKey(name, ns, 0, 0);
-            map.emplace(key, h);
+            lookupMap.emplace(key, h);
         }
     }
 };
@@ -501,9 +621,9 @@ HeapTuple SearchSysCache(int cacheId, Datum key1, Datum key2, Datum key3, Datum 
         return nullptr;
     }
 
-    const auto& map = cacheItem->Map;
-    auto it = map.find(std::make_tuple(key1, key2, key3, key4));
-    if (it == map.end()) {
+    const auto& lookupMap = cacheItem->LookupMap;
+    auto it = lookupMap.find(std::make_tuple(key1, key2, key3, key4));
+    if (it == lookupMap.end()) {
         return nullptr;
     }
 
@@ -554,3 +674,21 @@ Datum SysCacheGetAttr(int cacheId, HeapTuple tup, AttrNumber attributeNumber, bo
     Y_ENSURE(cacheItem);
     return heap_getattr(tup, attributeNumber, cacheItem->Desc, isNull);
 }
+
+struct catclist* SearchSysCacheList(int cacheId, int nkeys, Datum key1, Datum key2, Datum key3) {
+    Y_ENSURE(cacheId >= 0 && cacheId < SysCacheSize);
+    const auto& cacheItem = NYql::TSysCache::Instance().Items[cacheId];
+    Y_ENSURE(cacheItem);
+    if (nkeys == 1 && cacheItem->NumKeys > 1) {
+       const auto& rangeMap1 = *cacheItem->RangeMap1;
+        auto it = rangeMap1.find(std::make_tuple(key1, 0, 0, 0));
+        if (it == rangeMap1.end()) {
+            return cacheItem->EmptyCList;
+        }
+
+        return it->second.CList;
+    }
+
+    return cacheItem->EmptyCList;
+}
+

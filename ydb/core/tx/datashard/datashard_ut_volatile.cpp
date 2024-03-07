@@ -2214,6 +2214,75 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 4 } items { uint32_value: 40 } }");
     }
 
+    Y_UNIT_TEST(TwoAppendsMustBeVolatile) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetNodeCount(2)
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(100)
+            .SetEnableDataShardVolatileTransactions(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        // Insert initial values
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);"));
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 20);"));
+
+        size_t volatileTxs = 0;
+        auto proposeObserver = runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](TEvDataShard::TEvProposeTransaction::TPtr& ev) {
+            auto* msg = ev->Get();
+            if (msg->Record.GetFlags() & TTxFlags::VolatilePrepare) {
+                ++volatileTxs;
+            }
+        });
+
+        // This simulates a jepsen transaction that appends two values at different shards
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
+                $next_index = (
+                    SELECT COALESCE(MAX(key) + 1u, 0u)
+                    FROM (
+                        SELECT key FROM `/Root/table-1`
+                        UNION ALL
+                        SELECT key FROM `/Root/table-2`
+                    )
+                );
+                UPSERT INTO `/Root/table-1` (key, value) VALUES ($next_index, 30u);
+                )")),
+            "<empty>");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, Q_(R"(
+                $next_index = (
+                    SELECT COALESCE(MAX(key) + 1u, 0u)
+                    FROM (
+                        SELECT key FROM `/Root/table-1`
+                        UNION ALL
+                        SELECT key FROM `/Root/table-2`
+                    )
+                );
+                UPSERT INTO `/Root/table-2` (key, value) VALUES ($next_index, 40u);
+                )")),
+            "<empty>");
+
+        // There should have been volatile transactions at both shards
+        UNIT_ASSERT_VALUES_EQUAL(volatileTxs, 2u);
+    }
+
 } // Y_UNIT_TEST_SUITE(DataShardVolatile)
 
 } // namespace NKikimr

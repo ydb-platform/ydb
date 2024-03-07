@@ -35,6 +35,7 @@ SRCS(
     flat_executor_tx_env.h
     flat_executor_txloglogic.cpp
     flat_executor_txloglogic.h
+    flat_fwd_misc.cpp
     flat_iterator.h
     flat_load_blob_queue.cpp
     flat_mem_warm.cpp

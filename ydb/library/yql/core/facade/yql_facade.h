@@ -331,6 +331,11 @@ public:
         AbortHidden_ = std::move(func);
     }
 
+    TMaybe<TSet<TString>> GetUsedClusters() {
+        CollectUsedClusters();
+        return UsedClusters_;
+    }
+
 private:
     TProgram(
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,

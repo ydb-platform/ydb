@@ -12,7 +12,7 @@ extern "C" {
 
 ssize_t BridgeGetAbiVersion()
 {
-    return 3; // EYqlPluginAbiVersion::DqManager
+    return 4; // EYqlPluginAbiVersion::TemporaryTokens
 }
 
 TBridgeYqlPlugin* BridgeCreateYqlPlugin(const TBridgeYqlPluginOptions* bridgeOptions)
@@ -53,13 +53,23 @@ void BridgeFreeYqlPlugin(TBridgeYqlPlugin* plugin)
     delete nativePlugin;
 }
 
+void BridgeFreeClustersResult(TBridgeClustersResult* result)
+{
+    for (ssize_t i = 0; i < result->ClusterCount; i++) {
+        delete[] result->Clusters[i];
+    }
+    delete[] result->Clusters;
+    delete[] result->YsonError;
+    delete result;
+}
+
 void BridgeFreeQueryResult(TBridgeQueryResult* result)
 {
-    delete result->TaskInfo;
-    delete result->Statistics;
-    delete result->Plan;
-    delete result->YsonResult;
-    delete result->YsonError;
+    delete[] result->TaskInfo;
+    delete[] result->Statistics;
+    delete[] result->Plan;
+    delete[] result->YsonResult;
+    delete[] result->YsonError;
     delete result;
 }
 
@@ -76,10 +86,51 @@ void FillString(const char*& str, ssize_t& strLength, const std::optional<TStrin
     strLength = original->size();
 }
 
+TBridgeClustersResult* BridgeGetUsedClusters(
+    TBridgeYqlPlugin* plugin,
+    const char* queryText,
+    const char* settings,
+    int settingsLength,
+    const TBridgeQueryFile* bridgeFiles,
+    int bridgeFileCount)
+{
+    static const auto EmptyMap = TYsonString(TString("{}"));
+
+    auto* nativePlugin = reinterpret_cast<IYqlPlugin*>(plugin);
+    auto* bridgeClustersResult = new TBridgeClustersResult;
+
+    std::vector<TQueryFile> files(bridgeFileCount);
+    for (int index = 0; index < bridgeFileCount; index++) {
+        const auto& file = bridgeFiles[index];
+        files.push_back(TQueryFile {
+            .Name = TStringBuf(file.Name, file.NameLength),
+            .Content = TStringBuf(file.Content, file.ContentLength),
+            .Type = file.Type,
+        });
+    }
+
+    auto clustersResult = nativePlugin->GetUsedClusters(
+        TString(queryText),
+        settings ? TYsonString(TString(settings, settingsLength)) : EmptyMap,
+        files);
+
+    bridgeClustersResult->Clusters = new const char*[clustersResult.Clusters.size()];
+    for (size_t i = 0; i < clustersResult.Clusters.size(); i++) {
+        ssize_t clusterLength;
+        FillString(bridgeClustersResult->Clusters[i], clusterLength, clustersResult.Clusters[i]);
+    }
+    bridgeClustersResult->ClusterCount = clustersResult.Clusters.size();
+
+    FillString(bridgeClustersResult->YsonError, bridgeClustersResult->YsonErrorLength, clustersResult.YsonError);
+
+    return bridgeClustersResult;
+}
+
 TBridgeQueryResult* BridgeRun(
     TBridgeYqlPlugin* plugin,
     const char* queryId,
-    const char* impersonationUser,
+    const char* user,
+    const char* token,
     const char* queryText,
     const char* settings,
     int settingsLength,
@@ -104,7 +155,8 @@ TBridgeQueryResult* BridgeRun(
 
     auto result = nativePlugin->Run(
         NYT::TGuid::FromString(queryId),
-        TString(impersonationUser),
+        TString(user),
+        TString(token),
         TString(queryText),
         settings ? TYsonString(TString(settings, settingsLength)) : EmptyMap,
         files,
@@ -144,7 +196,7 @@ TBridgeAbortResult* BridgeAbort(TBridgeYqlPlugin* plugin, const char* queryId)
 
 void BridgeFreeAbortResult(TBridgeAbortResult* result)
 {
-    delete result->YsonError;
+    delete[] result->YsonError;
     delete result;
 }
 

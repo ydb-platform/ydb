@@ -95,6 +95,25 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(key[asc])");
     }
 
+    Y_UNIT_TEST(SortByStablePickle) {
+        const auto s = R"((
+            (let mr_sink (DataSink 'yt (quote plato)))
+            (let list (AsList
+                (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
+                (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
+                (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
+            ))
+            (let sorted (Sort list '((Bool 'False) (Bool 'True)) (lambda '(item) '((Member item 'key) (StablePickle (Member item 'subkey))))))
+            (let world (Write! world mr_sink (Key '('table (String 'Output))) sorted '('('mode 'renew))))
+            (let world (Commit! world mr_sink))
+            (return world)
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "");
+    }
+
     Y_UNIT_TEST(SortByTranspentIfPresent) {
         const auto s = R"((
             (let mr_sink (DataSink 'yt (quote plato)))
@@ -1471,6 +1490,34 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         (AsStruct '('key (Just (String '4))) '('subkey (Just (String 'b))) '('value (Just (String 'z))))
     ))
     (let extractor (lambda '(item) '((Member item 'key) (Member item 'subkey))))
+    (let aggr (PartitionsByKeys list extractor (Void) (Void)
+        (lambda '(stream) (Condense1 stream (lambda '(row) row)
+            (lambda '(row state) (IsKeySwitch row state extractor extractor))
+            (lambda '(row state) (AsStruct '('key (Member row 'key)) '('subkey (Member row 'subkey)) '('value (Coalesce (Member row 'value) (Member state 'value)))))
+        ))
+    ))
+    (let world (Write! world mr_sink (Key '('table (String 'Output))) (Skip aggr (Uint64 '1)) '('('mode 'renew))))
+    (let world (Commit! world mr_sink))
+    (return world)
+)
+    )";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Skip", "Unique((key,subkey))");
+        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Skip", "Distinct((key,subkey))");
+    }
+
+    Y_UNIT_TEST(PartitionsByKeysWithCondense1AndStablePickle) {
+        const auto s = R"(
+(
+    (let mr_sink (DataSink 'yt (quote plato)))
+    (let list (AsList
+        (AsStruct '('key (Just (String '4))) '('subkey (Just (String 'c))) '('value (Just (String 'x))))
+        (AsStruct '('key (Just (String '1))) '('subkey (Just (String 'b))) '('value (Just (String 'y))))
+        (AsStruct '('key (Just (String '4))) '('subkey (Just (String 'b))) '('value (Just (String 'z))))
+    ))
+    (let extractor (lambda '(item) '((Member item 'key) (StablePickle(Member item 'subkey)))))
     (let aggr (PartitionsByKeys list extractor (Void) (Void)
         (lambda '(stream) (Condense1 stream (lambda '(row) row)
             (lambda '(row state) (IsKeySwitch row state extractor extractor))

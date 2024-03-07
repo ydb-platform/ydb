@@ -28,6 +28,7 @@ namespace NYdb {
             TString ProducerId;
             ui32 PartitionId;
             bool Direct;
+            bool NoPartition;
             ui32 Codec = 0;
             bool UseTransactions = false;
         };

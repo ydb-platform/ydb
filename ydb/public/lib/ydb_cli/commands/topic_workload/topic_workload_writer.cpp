@@ -224,7 +224,10 @@ void TTopicWorkloadWriterWorker::CreateWorker() {
     settings.Codec((NYdb::NTopic::ECodec)Params.Codec);
     settings.Path(Params.TopicName);
     settings.ProducerId(Params.ProducerId);
-    settings.PartitionId(Params.PartitionId);
+    settings.MessageGroupId(Params.ProducerId);
+    if (!Params.NoPartition) {
+        settings.PartitionId(Params.PartitionId);
+    }
     settings.DirectWriteToPartition(Params.Direct);
     WriteSession = NYdb::NTopic::TTopicClient(Params.Driver).CreateWriteSession(settings);
 }

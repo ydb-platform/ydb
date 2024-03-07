@@ -102,6 +102,31 @@ using SSE42Trait = NSimd::NSSE42::TSimd8<i8>;
 
 using FallbackTrait = NSimd::NFallback::FallbackTrait<i8>;
 
+inline void FallbackMergeColumns(i8 *result, i8 *const data[4], size_t sizes[4],
+                                 size_t length, size_t from) {
+    if (length < from) {
+        return;
+    }
+
+    const i8 *srcs[4];
+    i8 *dst;
+    size_t col_sizes[4];
+
+    [&]<size_t... Is>(std::index_sequence<Is...>) {
+      const size_t pack_size = (... + sizes[Is]);
+      (..., (srcs[Is] = data[Is] + from * sizes[Is]));
+      dst = result + from * pack_size;
+      (..., (col_sizes[Is] = sizes[Is]));
+    }(std::make_index_sequence<4>{});
+
+    // merge_columns/Fallback_algo/fallback_algo.cpp
+    void FallbackMergeBlockImpl(const i8 *const(&src_cols)[4],
+                                i8 *const dst_rows, size_t size,
+                                const size_t(&col_sizes)[4]);
+
+    FallbackMergeBlockImpl(srcs, dst, length - from, col_sizes);
+}
+
 struct Perfomancer {
 
     Perfomancer() = default;
@@ -130,10 +155,10 @@ struct Perfomancer {
 
             size_t i = 0;
 
-            for (; i * sizes[0] + Trait::SIZE < length * sizes[0]; i += Trait::SIZE / pack * 2) {
+            for (; i * sizes[0] + Trait::SIZE < length * sizes[0]; i += Trait::SIZE / pack * 4) {
                 Iteration(sizes, data, result, i, pack * i, block, reg, mask);
             }
-            MergeEnds(result, data, sizes, length, i, pack * i);
+            FallbackMergeColumns(result, data, sizes, length, i);
         }
 
         ~Algo() = default;
@@ -318,6 +343,13 @@ struct Perfomancer {
         return MakeHolder<Interface>();
     }
 
+};
+
+template <> class Perfomancer::Algo<FallbackTrait> : public Interface {
+    void MergeColumns(i8 *result, i8 *const data[4], size_t sizes[4],
+                      size_t length) override {
+        FallbackMergeColumns(result, data, sizes, length, 0);
+    }
 };
 
 template<>

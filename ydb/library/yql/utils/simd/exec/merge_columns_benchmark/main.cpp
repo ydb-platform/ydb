@@ -91,15 +91,12 @@ void CompareAllImplementations(const char* msg, F f, Args&&... args)
         (bench.*f)(args...);
     }
 
-// TODO: uncomment when fallback will be implemented
-#if 0
     {
         NSimd::Perfomancer perfomancer;
         auto Fallbackworker = ChooseFallbackTrait(perfomancer);
         BenchmarkPerformancer bench{std::move(Fallbackworker)};
         (bench.*f)(args...);
     }
-#endif
 }
 
 // To add new method to benchmark just write wrapper-method in BenchmarkPerformancer class

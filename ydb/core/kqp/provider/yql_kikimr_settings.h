@@ -162,6 +162,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnablePerStatementQueryExecution = false;
     bool EnableCreateTableAs = false;
     ui64 IdxLookupJoinsPrefixPointLimit = 1;
+    bool OldLookupJoinBehaviour = true;
 };
 
 }

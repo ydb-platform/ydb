@@ -1367,6 +1367,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     Y_UNIT_TEST_TWIN(AllowJoinsForComplexPredicates, StreamLookup) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
+        appConfig.MutableTableServiceConfig()->SetOldLookupJoinBehaviour(false);
         appConfig.MutableTableServiceConfig()->SetIdxLookupJoinPointsLimit(10);
         //appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
 

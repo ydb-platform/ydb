@@ -594,6 +594,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnablePerStatementQueryExecution = serviceConfig.GetEnablePerStatementQueryExecution();
     kqpConfig.EnableCreateTableAs = serviceConfig.GetEnableCreateTableAs();
     kqpConfig.IdxLookupJoinsPrefixPointLimit = serviceConfig.GetIdxLookupJoinPointsLimit();
+    kqpConfig.OldLookupJoinBehaviour = serviceConfig.GetOldLookupJoinBehaviour();
 
     if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
         kqpConfig._KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));

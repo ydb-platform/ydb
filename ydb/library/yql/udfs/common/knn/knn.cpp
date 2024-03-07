@@ -44,9 +44,11 @@ NYql::NUdf::TUnboxedValue DeserializeDoubleVector(const IValueBuilder *valueBuil
     TUnboxedValue* items = nullptr;
     auto res = valueBuilder->NewArray(count, items);
     
+    TMemoryInput inStr(str);
     for (ui32 i = 0; i < count; ++i) {
         double element;
-        memcpy(&element, str.Data() + i * sizeof(double), sizeof(double));
+        if (inStr.Read(&element, sizeof(double)) != sizeof(double))
+            return {};
         *items++ = TUnboxedValuePod{element};
     }
 

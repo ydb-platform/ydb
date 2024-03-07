@@ -429,7 +429,7 @@ private:
                 continue;
             }
 
-            if (op == TYdbOperation::UpdateOn) {
+            if (op == TYdbOperation::UpdateOn || op == TYdbOperation::DeleteOn) {
                 continue;
             }
 

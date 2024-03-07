@@ -225,20 +225,22 @@ const TKikimrTableMetadata& TKqlCompileContext::GetTableMeta(const TKqpTable& ta
 TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext& ctx, TTypeAnnotationContext& typesCtx) {
     auto compiler = MakeIntrusive<NCommon::TMkqlCommonCallableCompiler>();
 
-    compiler->AddCallable({TDqSourceWideWrap::CallableName(), TDqSourceWideBlockWrap::CallableName(), TDqReadWideWrap::CallableName()},
+    compiler->AddCallable({TDqSourceWideWrap::CallableName(), TDqSourceWideBlockWrap::CallableName(), TDqReadWideWrap::CallableName(), TDqReadBlockWideWrap::CallableName()},
         [](const TExprNode& node, NCommon::TMkqlBuildContext&) {
             YQL_ENSURE(false, "Unsupported reader: " << node.Head().Content());
             return TRuntimeNode();
         });
 
+    std::unordered_set<TString> usedProviders;
     for (const auto& provider : typesCtx.DataSources) {
         if (auto* dqIntegration = provider->GetDqIntegration()) {
             dqIntegration->RegisterMkqlCompiler(*compiler);
+            usedProviders.emplace(provider->GetName());
         }
     }
 
     for (const auto& provider : typesCtx.DataSinks) {
-        if (auto* dqIntegration = provider->GetDqIntegration()) {
+        if (auto* dqIntegration = provider->GetDqIntegration(); dqIntegration && !usedProviders.contains(TString(provider->GetName()))) {
             dqIntegration->RegisterMkqlCompiler(*compiler);
         }
     }

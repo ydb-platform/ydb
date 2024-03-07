@@ -101,7 +101,8 @@ namespace NKikimr {
                 TReplQuoter::TPtr replPDiskWriteQuoter = nullptr,
                 TReplQuoter::TPtr replNodeRequestQuoter = nullptr,
                 TReplQuoter::TPtr replNodeResponseQuoter = nullptr,
-                ui64 burstThresholdNs = 1'000'000'000);
+                ui64 burstThresholdNs = 1'000'000'000,
+                float diskTimeAvailableScale = 1);
 
         // The function checks response from PDisk. Normally, it's OK.
         // Other alternatives are: 1) shutdown; 2) FAIL

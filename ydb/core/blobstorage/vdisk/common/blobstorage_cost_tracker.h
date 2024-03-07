@@ -317,17 +317,20 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr ScrubDiskCost;
     ::NMonitoring::TDynamicCounters::TCounterPtr DefragDiskCost;
     ::NMonitoring::TDynamicCounters::TCounterPtr InternalDiskCost;
+    ::NMonitoring::TDynamicCounters::TCounterPtr DiskTimeAvailableCtr;
 
     TAtomic BucketCapacity;  // 10^9 nsec
-    TAtomic DiskTimeAvailableNs = 1'000'000'000;
+    TAtomic DiskTimeAvailable = 1'000'000'000;
     TBucketQuoter<i64, TSpinLock, TAppDataTimerMs<TInstantTimerMs>> Bucket;
     TLight BurstDetector;
     std::atomic<ui64> SeqnoBurstDetector = 0;
     static constexpr ui32 ConcurrentHugeRequestsAllowed = 3;
+    float DiskTimeAvailableScale = 1;
 
 public:
     TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::EDeviceType diskType,
-            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 burstThresholdNs);
+            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 burstThresholdNs,
+            float diskTimeAvailableScale);
 
     template<class TEv>
     ui64 GetCost(const TEv& ev) const {
@@ -353,7 +356,9 @@ public:
     }
 
     void SetTimeAvailable(ui32 diskTimeAvailableNSec) {
-        AtomicSet(DiskTimeAvailableNs, diskTimeAvailableNSec);
+        ui64 diskTimeAvailable = diskTimeAvailableNSec * DiskTimeAvailableScale;
+        AtomicSet(DiskTimeAvailable, diskTimeAvailable);
+        *DiskTimeAvailableCtr = diskTimeAvailable;
     }
 
 public:

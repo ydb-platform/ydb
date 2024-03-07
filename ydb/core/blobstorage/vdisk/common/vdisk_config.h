@@ -209,7 +209,10 @@ namespace NKikimr {
         TDuration WhiteboardUpdateInterval;
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
+
+        ///////////// COST METRICS SETTINGS ////////////////
         ui64 BurstThresholdNs = 1'000'000'000;
+        float DiskTimeAvailableScale = 1;
 
         ///////////// FEATURE FLAGS ////////////////////////
         NKikimrConfig::TFeatureFlags FeatureFlags;

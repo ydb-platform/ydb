@@ -317,14 +317,16 @@ private:
 
 class TSpillingBucket {
     typedef std::optional<NThreading::TFuture<ISpiller::TKey>> TAsyncWriteOperation;
+    typedef std::optional<NThreading::TFuture<std::optional<TRope>>> TAsyncReadOperation;
 public:
     enum class EBucketState {
-        AcceptingState,
-        InMemory,
+        FullStateInMemory,
         SpillingState,
         SpillingData,
         AcceptingData,
-        Loading
+        SpillingFinished,
+        RecoveringState,
+        StateLoaded
     };
 
     bool CanAcceptData() const {
@@ -332,25 +334,37 @@ public:
     }
 
     bool IsSpilled() const {
-        return State == EBucketState::InMemory;
+        return State != EBucketState::FullStateInMemory;
     }
 
     void StartSpillingState() {
-        MKQL_ENSURE(State == EBucketState::InMemory, "Internal logic error");
+        MKQL_ENSURE(State == EBucketState::FullStateInMemory, "Internal logic error");
         State = EBucketState::SpillingState;
     }
 
-    void Update() {
+    void Update(TComputationContext& ctx) {
         switch (State) {
             case EBucketState::SpillingState:
                 ProcessStateSpilling();
-                return;
+                break;
             case EBucketState::SpillingData:
                 ProcessDataSpilling();
-                return;
+                break;
+            case EBucketState::AcceptingData:
+                if (IsFinalyzingData) {
+                    ProcessFinalyzeDataSpilling();
+                }
+                break;
+            case EBucketState::RecoveringState:
+                ProcessStateRecovering(ctx);
+                break;
             default:
-                return;
+                break;
         }
+    }
+
+    void FinalizeSpillingData() {
+        IsFinalyzingData = true;
     }
 
     EBucketState GetBucketState() const {
@@ -358,25 +372,64 @@ public:
     }
 
     TState& GetProcessingState() const {
-        MKQL_ENSURE(State == EBucketState::InMemory, "Internal logic error");
+        MKQL_ENSURE(State == EBucketState::FullStateInMemory, "Internal logic error");
         return *ProcessingState;
     }
 
-    NUdf::TUnboxedValuePod* GetTongue() const {
-        MKQL_ENSURE(State == EBucketState::InMemory, "Internal logic error");
-        return ProcessingState->Tongue;
+    void RecoverState() {
+        MKQL_ENSURE(State == EBucketState::SpillingFinished, "Internal logic error");
+        State = EBucketState::RecoveringState;
     }
 
-    NUdf::TUnboxedValuePod* GetThroat() const {
-        MKQL_ENSURE(State == EBucketState::InMemory, "Internal logic error");
-        return ProcessingState->Throat;
-    }   
+    void AddItem(NUdf::TUnboxedValue** fields, TUnboxedValueVector& key, TComputationContext& ctx) {
+        switch (State) {
+            case EBucketState::FullStateInMemory:
+                ProcessItem(fields, ctx);
+                return;
+            case EBucketState::AcceptingData:
+            case EBucketState::SpillingData:
+                AddDataToSpilling(fields, key);
+                return;
+            default:
+                MKQL_ENSURE(false, "Internal logic error");
+        }
+
+    }
 
 private:
-    void ProcessStateSpilling() {
-        if (HasRunningAsyncOperation()) return;
 
-        if (HasCompletedAsyncOperation()) {
+    void AddDataToSpilling(NUdf::TUnboxedValue** fields, TUnboxedValueVector& key) {
+        MKQL_ENSURE(!AsyncWriteOperation.has_value(), "Internal logic error");
+
+        for (size_t i = 0; i != Nodes.ItemNodes.size(); ++i) {
+            if (fields[i]) {
+                key.push_back(*fields[i]);
+            }
+        }
+
+        AsyncWriteOperation = SpilledData->WriteWideItem(key);
+        if (AsyncWriteOperation) {
+            State = EBucketState::SpillingData;
+        }
+    }
+
+    // TODO: Maybe pass key here
+    void ProcessItem(NUdf::TUnboxedValue** fields, TComputationContext& ctx) {
+        MKQL_ENSURE(State == EBucketState::FullStateInMemory || State == EBucketState::StateLoaded, "Internal logic error");
+
+        Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue *>(ProcessingState->Tongue));
+        const bool isNew = ProcessingState->TasteIt();
+        Nodes.ProcessItem(
+            ctx,
+            isNew ? nullptr : static_cast<NUdf::TUnboxedValue *>(ProcessingState->Tongue),
+            static_cast<NUdf::TUnboxedValue *>(ProcessingState->Throat)
+        );
+    }
+
+    void ProcessStateSpilling() {
+        if (HasRunningAsyncWriteOperation()) return;
+
+        if (HasCompletedAsyncWriteOperation()) {
             SpilledState->AsyncWriteCompleted(AsyncWriteOperation->ExtractValue());
             AsyncWriteOperation = std::nullopt;
         }
@@ -403,18 +456,26 @@ private:
         State = EBucketState::AcceptingData;
     }
 
-    bool HasRunningAsyncOperation() const {
+    bool HasRunningAsyncWriteOperation() const {
         return AsyncWriteOperation.has_value() && !AsyncWriteOperation->HasValue();
     }
 
-    bool HasCompletedAsyncOperation() const {
+    bool HasCompletedAsyncWriteOperation() const {
         return AsyncWriteOperation.has_value() && AsyncWriteOperation->HasValue();
+    }
+
+    bool HasRunningAsyncReadOperation() const {
+        return AsyncReadOperation.has_value() && !AsyncReadOperation->HasValue();
+    }
+
+    bool HasCompletedAsyncReadOperation() const {
+        return AsyncReadOperation.has_value() && AsyncReadOperation->HasValue();
     }
 
     void ProcessDataSpilling() {
         MKQL_ENSURE(AsyncWriteOperation.has_value(), "Internal logic error");
 
-        if (!HasCompletedAsyncOperation()) return;
+        if (!HasCompletedAsyncWriteOperation()) return;
 
         SpilledData->AsyncWriteCompleted(AsyncWriteOperation->ExtractValue());
         AsyncWriteOperation = std::nullopt;
@@ -422,7 +483,49 @@ private:
         State = EBucketState::AcceptingData;
     }
 
-private:
+    void ProcessFinalyzeDataSpilling() {
+        MKQL_ENSURE(State == EBucketState::AcceptingData, "Internal logic error");
+
+        if (AsyncWriteOperation = SpilledData->FinishWriting()) {
+            State = EBucketState::SpillingData;
+            return;
+        }
+        State = EBucketState::SpillingFinished;
+    }
+
+    void ProcessStateRecovering(TComputationContext& ctx) {
+        MKQL_ENSURE(State == EBucketState::RecoveringState, "Internal logic error");
+        if (HasRunningAsyncReadOperation()) return;
+
+        if (HasCompletedAsyncReadOperation()) {
+            SpilledState->AsyncReadCompleted(AsyncReadOperation->ExtractValue().value(), ctx.HolderFactory);
+            AsyncReadOperation = std::nullopt;
+        }
+
+        while(!SpilledState->Empty()) {
+            BufferForKeyAnsState.resize(ValueElementsCount);
+            AsyncReadOperation = SpilledState->ExtractWideItem(BufferForKeyAnsState);
+            if (AsyncReadOperation) {
+                BufferForKeyAnsState.resize(0);
+                return;
+            }
+            for (size_t i = 0; i != KeyWidth; ++i) {
+                //jumping into unsafe world, refusing ownership
+                static_cast<NUdf::TUnboxedValue&>(ProcessingState->Tongue[i]) = std::move(BufferForKeyAnsState[i]);
+            }
+            auto isNew = ProcessingState->TasteIt();
+            MKQL_ENSURE(isNew, "Internal logic error");
+            for (size_t i = KeyWidth; i != ValueElementsCount; ++i) {
+                //jumping into unsafe world, refusing ownership
+                static_cast<NUdf::TUnboxedValue&>(ProcessingState->Throat[i - KeyWidth]) = std::move(BufferForKeyAnsState[i]);
+            }
+            BufferForKeyAnsState.resize(0);
+        }
+
+        State = EBucketState::StateLoaded;
+    }
+
+public:
     EBucketState State;
     // KeyAndStateType->GetElementsCount()
     ui32 ValueElementsCount;
@@ -430,19 +533,25 @@ private:
     std::unique_ptr<TWideUnboxedValuesSpillerAdapter> SpilledState; //state collected before switching to spilling mode
     std::unique_ptr<TWideUnboxedValuesSpillerAdapter> SpilledData; //data collected in spilling mode
     TAsyncWriteOperation AsyncWriteOperation;
-    ISpiller::TPtr Spiller;
+    TAsyncReadOperation AsyncReadOperation;
+    bool IsFinalyzingData = false;
+
+    // should be common for all spillers
+    TUnboxedValueVector BufferForKeyAnsState;
+    ui32 KeyWidth;
+
+    const TCombinerNodes& Nodes;
+
 };
 
 class TSpillingSupportState : public TComputationValue<TSpillingSupportState> {
     typedef TComputationValue<TSpillingSupportState> TBase;
     typedef std::optional<NThreading::TFuture<ISpiller::TKey>> TAsyncWriteOperation;
     typedef std::optional<NThreading::TFuture<std::optional<TRope>>> TAsyncReadOperation;
-    struct TSpilledBucket;
 public:
     enum class EOperatingMode {
         InMemory, // try to perform all processing in memory
         Spilling,
-        ProcessInMemoryBuckets,
         ProcessSpilled //restore and process spilled data
     };
 
@@ -472,9 +581,6 @@ public:
     }
 
     EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
-        /* if (GetMode() != EOperatingMode::InMemory && !HasDataToProcess()) {
-            return EFetchResult::Yield;
-        }*/ 
         while (true) {
             switch(GetMode()) {
                 case EOperatingMode::InMemory: {
@@ -544,14 +650,14 @@ private:
 
     void ReduceMemoryUsage() {
         for (ui64 i = 0; i < SpilledBucketCount; ++i) {
-            if (SpilledBuckets[i].State == TSpilledBucket::EBucketState::SpillingState) {
+            if (SpilledBuckets[i].GetBucketState() == TSpillingBucket::EBucketState::SpillingState) {
                 return;
             }
         }
 
         for (ui64 i = 0; i < SpilledBucketCount; ++i) {
-            if (SpilledBuckets[i].State == TSpilledBucket::EState::InMemory) {
-                SpilledBuckets[i].State = TSpilledBucket::EState::SpillingState;
+            if (SpilledBuckets[i].GetBucketState() == TSpillingBucket::EBucketState::FullStateInMemory) {
+                SpilledBuckets[i].StartSpillingState();
                 return;
             }
         }
@@ -560,7 +666,7 @@ private:
     }
 
     void DoCalculateWithSpilling(TComputationContext& ctx) {
-        UpdateBuckets();
+        UpdateBuckets(ctx);
         if (!HasMemoryForProcessing()) {
             ReduceMemoryUsage();
             return;
@@ -568,14 +674,10 @@ private:
 
         if (LastInputItem.size()) {
             auto& bucket = SpilledBuckets[LastInputItemId];
-            if (bucket.) return;
-
-            const auto chunkIsBeingStored = bucket.Data->WriteWideItem(LastInputItem);
+            if (!bucket.CanAcceptData()) return;
+            bucket.AddDataToSpilling(std::move(LastInputItem));
+            // TODO: Maybe not needed
             LastInputItem.resize(0); //for freeing allocated key value asap
-            if (chunkIsBeingStored) {
-                bucket.AsyncWriteOperation = chunkIsBeingStored;
-            }
-
         }
 
         auto **fields = ctx.WideFields.data() + WideFieldsIndex;
@@ -591,230 +693,83 @@ private:
                 
                 auto bucketId = hash % SpilledBucketCount;
                 auto &bucket = SpilledBuckets[bucketId];
-                if (bucket.State == TSpilledBucket::EState::InMemory) {
+                BufferForKeyAnsState.resize(0);
 
-                    bucket.ProcessingState->Tongue = std::move(BufferForKeyAnsState.data());
-                    const bool isNew = bucket.ProcessingState->TasteIt();
-                    Nodes.ProcessItem(
-                        ctx,
-                        isNew ? nullptr : static_cast<NUdf::TUnboxedValue *>(bucket.ProcessingState->Tongue),
-                        static_cast<NUdf::TUnboxedValue *>(bucket.ProcessingState->Throat)
-                    );
-
+                if (bucket.CanAcceptData()) {
+                    bucket.AddItem(fields, BufferForUsedInputItems, ctx);
+                }
+                if (bucket.GetBucketState() == TSpillingBucket::EBucketState::FullStateInMemory) {
+                    bucket.ProcessItem(BufferForKeyAnsState, ctx);
                     BufferForKeyAnsState.resize(0);
-
                     return;
                 }
-
-                BufferForKeyAnsState.resize(0);
 
                 MKQL_ENSURE(!LastInputItem.size(), "Internal logic error");
                 for (size_t i = 0; i != Nodes.ItemNodes.size(); ++i) {
-                    if (fields[i]) {
-                        LastInputItem.push_back(*fields[i]);
+                    if (BufferForKeyAnsState[i]) {
+                        LastInputItem.push_back(BufferForKeyAnsState[i]);
                     }
                 }
                 
-                if (bucket.AsyncWriteOperation.has_value()) {
+                if (!bucket.CanAcceptData()) {
                     LastInputItemId = bucketId;
                     return;
                 }
-                const auto chunkIsBeingStored = bucket.Data->WriteWideItem(LastInputItem);
-                LastInputItem.resize(0); //for freeing allocated key value asap
-                if (chunkIsBeingStored) {
-                    bucket.AsyncWriteOperation = chunkIsBeingStored;
-                    return;
-                }
+
+                bucket.AddDataToSpilling(std::move(LastInputItem));
+
+                BufferForKeyAnsState.resize(0);
+                LastInputItem.resize(0);
+                
                 break;
             }
             case EFetchResult::Yield:
                 return;
             case EFetchResult::Finish:
+                FinalyzeDataSpillingInBuckets();
                 SwitchMode(EOperatingMode::ProcessSpilled, ctx);
                 break;
         }
-
-
     }
 
-    bool TryToSpillMoreState(TSpilledBucket& bucket) {
-        while (const auto keyAndState = bucket.ProcessingState->Extract()) {
-            auto chunkIsBeingStored = bucket.InitialState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
-            for (size_t i = 0; i != KeyAndStateType->GetElementsCount(); ++i) {
-                //releasing values stored in unsafe TUnboxedValue buffer
-                keyAndState[i].UnRef();
-            }
-            if (chunkIsBeingStored) {
-                bucket.AsyncWriteOperation = chunkIsBeingStored;
-                return true;
-            }
-        }
-
-        if (bucket.AsyncWriteOperation = bucket.InitialState->FinishWriting()) {
-            return true;
-        }
-
-        return false;
-    }
-
-    void UpdateBuckets() {
+    void UpdateBuckets(TComputationContext& ctx) {
         for (size_t i = 0; i < SpilledBucketCount; ++i) {
-            SpilledBuckets[i].Update();
+            SpilledBuckets[i].Update(ctx);
         }
     }
 
-    void SpillState(TComputationContext& ctx) {
-        // mini State machine that:
-        //1. Spills InMemoryProcessingState
-        //2. Finilizes buckets
-        //During each phase asyn operation may be returned
-        //On next call execution is continued
-        for (ui64 i = 0; i < SpilledBuckets.size(); ++i) {
-            if (SpilledBuckets[i].AsyncWriteOperation.has_value() && SpilledBuckets[i].AsyncWriteOperation->HasValue()) {
-                SpilledBuckets[i].InitialState->AsyncWriteCompleted(SpilledBuckets[i].AsyncWriteOperation->ExtractValue());
-                SpilledBuckets[i].AsyncWriteOperation = std::nullopt;
-            }
+    void FinalyzeDataSpillingInBuckets() {
+        for (size_t i = 0; i < SpilledBucketCount; ++i) {
+            SpilledBuckets[i].FinalizeSpillingData();
         }
-
-        while (true) {
-            auto keyAndState = NextValueToSave;
-            if (!NextValueToSave) {
-                keyAndState = InMemoryProcessingState.Extract();
-            }
-            if (!keyAndState) break;
-
-            NextValueToSave = nullptr;
-
-            auto hash = Hasher(keyAndState); //Hasher uses only key for hashing
-            auto bucketId = hash % SpilledBucketCount;
-            auto& bucket = SpilledBuckets[bucketId];
-
-            if (bucket.AsyncWriteOperation.has_value()) {
-                NextValueToSave = keyAndState;
-                return;
-            }
-            MKQL_ENSURE(bucket.InitialState, "Internal logic error");
-            if (auto chunkIsBeingStored = bucket.InitialState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()})) {
-                bucket.AsyncWriteOperation = chunkIsBeingStored;
-                for (size_t i = 0; i != KeyAndStateType->GetElementsCount(); ++i) {
-                //releasing values stored in unsafe TUnboxedValue buffer
-                keyAndState[i].UnRef();
-            }
-                return;
-            }
-            for (size_t i = 0; i != KeyAndStateType->GetElementsCount(); ++i) {
-                //releasing values stored in unsafe TUnboxedValue buffer
-                keyAndState[i].UnRef();
-            }
-        }
-
-        ui64 finishedCount = 0;
-        for (auto& bucket : SpilledBuckets) {
-            if (!bucket.AsyncWriteOperation.has_value()) {
-                auto writeOperation = bucket.InitialState->FinishWriting();
-                if (!writeOperation) {
-                    ++finishedCount;
-                } else {
-                    bucket.AsyncWriteOperation = writeOperation;
-                }
-            }
-        }
-
-        if (finishedCount != SpilledBuckets.size()) return;
-
-        InMemoryProcessingState.ReadMore<false>();
-        SwitchMode(EOperatingMode::SpillData, ctx);
-    }
-
-    void SpillData(TComputationContext& ctx) {
-        for (ui64 i = 0; i < SpilledBuckets.size(); ++i) {
-            if (SpilledBuckets[i].AsyncWriteOperation.has_value() && SpilledBuckets[i].AsyncWriteOperation->HasValue()) {
-                SpilledBuckets[i].Data->AsyncWriteCompleted(SpilledBuckets[i].AsyncWriteOperation->ExtractValue());
-                SpilledBuckets[i].AsyncWriteOperation = std::nullopt;
-            }
-        }
-
-        if (BufferForUsedInputItems.size()) {
-            auto& bucket = SpilledBuckets[BufferForUsedInputItemsBucketId];
-            if (bucket.AsyncWriteOperation.has_value()) return;
-
-            const auto chunkIsBeingStored = bucket.Data->WriteWideItem(BufferForUsedInputItems);
-            BufferForUsedInputItems.resize(0); //for freeing allocated key value asap
-            if (chunkIsBeingStored) {
-                bucket.AsyncWriteOperation = chunkIsBeingStored;
-            }
-
-        }
-
-        while (!FinalizingSpillerBuckets) {
-            auto **fields = ctx.WideFields.data() + WideFieldsIndex;
-            for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i) {
-                fields[i] = Nodes.GetUsedInputItemNodePtrOrNull(ctx, i);
-            }
-            InputDataFetchResult = Flow->FetchValues(ctx, fields);
-            switch (InputDataFetchResult) {
-                case EFetchResult::One: {
-                    BufferForKeyAnsState.resize(KeyWidth); //use only key part of the buffer
-                    Nodes.ExtractKey(ctx, fields, BufferForKeyAnsState.data());
-                    auto hash = Hasher(BufferForKeyAnsState.data());
-                    BufferForKeyAnsState.resize(0); //for freeing allocated key value asap
-                    auto bucketId = hash % SpilledBucketCount;
-                    MKQL_ENSURE(BufferForUsedInputItems.empty(), "Internal logic error");
-                    for (size_t i = 0; i != Nodes.ItemNodes.size(); ++i) {
-                        if (fields[i]) {
-                            BufferForUsedInputItems.push_back(*fields[i]);
-                        }
-                    }
-                    auto &bucket = SpilledBuckets[bucketId];
-                    if (bucket.AsyncWriteOperation.has_value()) {
-                        BufferForUsedInputItemsBucketId = bucketId;
-                        return;
-                    }
-                    const auto chunkIsBeingStored = bucket.Data->WriteWideItem(BufferForUsedInputItems);
-                    BufferForUsedInputItems.resize(0); //for freeing allocated key value asap
-                    if (chunkIsBeingStored) {
-                        bucket.AsyncWriteOperation = chunkIsBeingStored;
-                        return;
-                    }
-                    break;
-                }
-                case EFetchResult::Yield:
-                    return;
-                case EFetchResult::Finish:
-                    FinalizingSpillerBuckets = true;
-                    break;
-            }
-        }
-
-        ui64 finishedCount = 0;
-        for (auto& bucket : SpilledBuckets) {
-            if (!bucket.AsyncWriteOperation.has_value()) {
-                auto writeOperation = bucket.Data->FinishWriting();
-                if (!writeOperation) {
-                    ++finishedCount;
-                } else {
-                    bucket.AsyncWriteOperation = writeOperation;
-                }
-            }
-        }
-
-        if (finishedCount != SpilledBuckets.size()) return;
-
-        SwitchMode(EOperatingMode::ProcessSpilled, ctx);
     }
 
     EFetchResult ProcessSpilledData(TComputationContext& ctx, NUdf::TUnboxedValue*const* output){
-        if (AsyncReadOperation) {
-            if (!AsyncReadOperation->HasValue()) return EFetchResult::Yield;
-            if (RecoverState) {
-                SpilledBuckets[0].InitialState->AsyncReadCompleted(AsyncReadOperation->ExtractValue().value(), ctx.HolderFactory);
-            } else {
-                SpilledBuckets[0].Data->AsyncReadCompleted(AsyncReadOperation->ExtractValue().value(), ctx.HolderFactory);
-            }
-            AsyncReadOperation = std::nullopt;
-        }
-        while(!SpilledBuckets.empty()){
+        UpdateBuckets(ctx);
+
+        while(!SpilledBuckets.empty()) {
             auto& bucket = SpilledBuckets.front();
+
+            while (bucket.GetBucketState() != TSpillingBucket::EBucketState::FullStateInMemory) {
+                if (bucket.GetBucketState() == TSpillingBucket::EBucketState::SpillingFinished) {
+                    bucket.RecoverState();
+                    return EFetchResult::Yield;
+                }
+
+                if (bucket.GetBucketState() != TSpillingBucket::EBucketState::StateLoaded) return EFetchResult::Yield;
+
+                
+
+            }
+
+            if (const auto values = static_cast<NUdf::TUnboxedValue*>(bucket.GetProcessingState().Extract())) {
+                Nodes.FinishItem(ctx, values, output);
+                return EFetchResult::One;
+            }
+
+            bucket.GetProcessingState().ReadMore<false>();
+            SpilledBuckets.pop_front();
+
             //recover spilled state
             while(!bucket.InitialState->Empty()) {
                 RecoverState = true;
@@ -892,8 +847,8 @@ private:
             auto& bucket = SpilledBuckets[bucketId];
 
             auto& processingState = bucket.GetProcessingState();
-            bucket.ProcessingState->Tongue = std::move(keyAndState);
-            bucket.ProcessingState->TasteIt();
+            processingState.Tongue = std::move(keyAndState);
+            processingState.TasteIt();
 
             // TODO: Maybe need?
             /*
@@ -918,27 +873,19 @@ private:
 
                 SpilledBuckets.resize(SpilledBucketCount);
                 for (auto &b: SpilledBuckets) {
-                    b.Spiller = ctx.SpillerFactory->CreateSpiller();
-                    b.InitialState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(b.Spiller, KeyAndStateType, 1 << 20);
-                    b.Data = std::make_unique<TWideUnboxedValuesSpillerAdapter>(b.Spiller, UsedInputItemType, 1 << 20);
+                    auto spiller = ctx.SpillerFactory->CreateSpiller();
+                    b.SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, KeyAndStateType, 1 << 20);
+                    b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 1 << 20);
                     b.ProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal);
                     b.ValueElementsCount = KeyAndStateType->GetElementsCount();
+                    b.KeyWidth = KeyWidth;
                 }
 
                 SplitStateIntoBuckets();
                 break;
             }
-            case EOperatingMode::SpillData:
-                MKQL_ENSURE(EOperatingMode::SpillState == Mode, "Internal logic error");
-                MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
-                for (auto &b: SpilledBuckets) {
-                    b.Data = std::make_unique<TWideUnboxedValuesSpillerAdapter>(b.Spiller, UsedInputItemType, 1 << 20);
-                }
-                InputDataFetchResult = EFetchResult::Yield;
-                FinalizingSpillerBuckets = false;
-                break;
             case EOperatingMode::ProcessSpilled:
-                MKQL_ENSURE(EOperatingMode::SpillData == Mode, "Internal logic error");
+                MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
                 break;
         }
@@ -967,7 +914,7 @@ private:
 
     TAsyncReadOperation AsyncReadOperation;
     static constexpr size_t SpilledBucketCount = 128;
-    std::deque<TSpilledBucket> SpilledBuckets;
+    std::deque<TSpillingBucket> SpilledBuckets;
     EFetchResult InputDataFetchResult;
     // size_t CurrentAsyncOperationBucketId;
     ui64 BufferForUsedInputItemsBucketId;

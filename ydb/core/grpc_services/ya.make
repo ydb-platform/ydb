@@ -106,6 +106,7 @@ PEERDIR(
     ydb/core/io_formats/ydb_dump
     ydb/core/kesus/tablet
     ydb/core/kqp/common
+    ydb/core/kqp/federated_query
     ydb/core/protos
     ydb/core/scheme
     ydb/core/sys_view

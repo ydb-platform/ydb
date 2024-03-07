@@ -875,7 +875,8 @@ namespace Tests {
                     queryServiceConfig.GetS3(),
                     queryServiceConfig.GetGeneric(),
                     queryServiceConfig.GetYt(),
-                    NKqp::MakeYtGateway(GetFunctionRegistry(), queryServiceConfig)
+                    Settings->YtGateway ? Settings->YtGateway : NKqp::MakeYtGateway(GetFunctionRegistry(), queryServiceConfig),
+                    Settings->ComputationFactory
                 );
             }
 

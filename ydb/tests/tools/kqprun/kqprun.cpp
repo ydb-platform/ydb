@@ -11,6 +11,9 @@
 #include <util/system/env.h>
 
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
+#include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_comp_nodes.h>
+#include <ydb/library/yql/providers/yt/lib/yt_download/yt_download.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 
 
@@ -102,12 +105,14 @@ void RunMain(int argc, const char* argv[]) {
     TString scriptQueryPlanFile;
     TString logFile = "-";
     TString appConfigFile = "./configuration/app_config.conf";
+    std::vector<TString> tablesMappingList;
 
     TString traceOptType = "disabled";
     TString scriptQueryAction = "execute";
     TString planOutputFormat = "pretty";
     TString resultOutputFormat = "rows";
     i64 resultsRowsLimit = 1000;
+    bool emulateYt = false;
 
     TVector<TString> udfsPaths;
     TString udfsDirectory;
@@ -126,6 +131,10 @@ void RunMain(int argc, const char* argv[]) {
         .RequiredArgument("FILE")
         .DefaultValue(appConfigFile)
         .StoreResult(&appConfigFile);
+    options.AddLongOption('t', "table", "File with table (can be used by YT with -E flag), table@file")
+        .Optional()
+        .RequiredArgument("FILE")
+        .AppendTo(&tablesMappingList);
 
     options.AddLongOption("log-file", "File with execution logs (use '-' to write in stderr)")
         .Optional()
@@ -178,6 +187,11 @@ void RunMain(int argc, const char* argv[]) {
         .RequiredArgument("INT")
         .DefaultValue(resultsRowsLimit)
         .StoreResult(&resultsRowsLimit);
+    options.AddLongOption('E', "emulate-yt", "Emulate YT tables")
+        .Optional()
+        .NoArgument()
+        .DefaultValue(emulateYt)
+        .SetFlag(&emulateYt);
 
     options.AddLongOption('u', "udf", "Load shared library with UDF by given path")
         .Optional()
@@ -252,6 +266,27 @@ void RunMain(int argc, const char* argv[]) {
         ythrow yexception() << "Results rows limit less than zero";
     }
     runnerOptions.YdbSettings.AppConfig.MutableQueryServiceConfig()->SetScriptResultRowsLimit(resultsRowsLimit);
+
+    if (emulateYt) {
+        THashMap<TString, TString> tablesMapping;
+        for (const auto& tablesMappingItem: tablesMappingList) {
+            TStringBuf tableName;
+            TStringBuf filePath;
+            TStringBuf(tablesMappingItem).Split('@', tableName, filePath);
+            if (tableName.empty() || filePath.empty()) {
+                ythrow yexception() << "Incorrect table mapping, expected form table@file, e.g. yt.Root/plato.Input@input.txt";
+            }
+            tablesMapping[tableName] = filePath;
+        }
+
+        const auto& fileStorageConfig = runnerOptions.YdbSettings.AppConfig.GetQueryServiceConfig().GetFileStorage();
+        auto fileStorage = WithAsync(CreateFileStorage(fileStorageConfig, {MakeYtDownloader(fileStorageConfig)}));
+        auto ytFileServices = NYql::NFile::TYtFileServices::Make(runnerOptions.YdbSettings.FunctionRegistry.Get(), tablesMapping, fileStorage);
+        runnerOptions.YdbSettings.YtGateway = NYql::CreateYtFileGateway(ytFileServices);
+        runnerOptions.YdbSettings.ComputationFactory = NYql::NFile::GetYtFileFactory(ytFileServices);
+    } else if (!tablesMappingList.empty()) {
+        ythrow yexception() << "Tables mapping is not supported without emulate YT mode";
+    }
 
     RunScript(executionOptions, runnerOptions);
 }

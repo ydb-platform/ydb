@@ -47,7 +47,7 @@ public:
         const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& ExecuterSpan,
         TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
         bool useDataQueryPool, bool localComputeTasks, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, bool allowSinglePartitionOpt,
-        const TIntrusivePtr<TUserRequestContext>& userRequestContext);
+        const TIntrusivePtr<TUserRequestContext>& userRequestContext, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup);
 
     bool SendStartKqpTasksRequest(ui32 requestId, const TActorId& target);
     std::unique_ptr<IEventHandle> PlanExecution();
@@ -106,6 +106,7 @@ private:
     THashSet<ui64> PendingComputeTasks; // Not started yet, waiting resources
 
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
+    const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error
@@ -120,6 +121,6 @@ std::unique_ptr<TKqpPlanner> CreateKqpPlanner(TKqpTasksGraph& tasksGraph, ui64 t
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig,
     bool useDataQueryPool, bool localComputeTasks,
     ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, bool doOptimization,
-    const TIntrusivePtr<TUserRequestContext>& userRequestContext);
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup);
 
 } // namespace NKikimr::NKqp

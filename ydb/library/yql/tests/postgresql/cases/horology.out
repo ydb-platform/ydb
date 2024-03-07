@@ -1,9 +1,17 @@
+--
+-- HOROLOGY
+--
+SET DateStyle = 'Postgres, MDY';
 -- should fail in mdy mode:
 SELECT timestamp with time zone '27/12/2001 04:05:06.789-08';
 ERROR:  date/time field value out of range: "27/12/2001 04:05:06.789-08"
 LINE 1: SELECT timestamp with time zone '27/12/2001 04:05:06.789-08'...
                                         ^
 HINT:  Perhaps you need a different "datestyle" setting.
+set datestyle to dmy;
+reset datestyle;
+SET DateStyle = 'German';
+SET DateStyle = 'ISO';
 -- As of 7.4, allow time without time zone having a time zone specified
 SELECT time without time zone '040506.789+08';
      time     
@@ -65,6 +73,7 @@ SELECT time with time zone 'T040506.789 -08';
  04:05:06.789-08
 (1 row)
 
+SET DateStyle = 'Postgres, MDY';
 -- Shorthand values
 -- Not directly usable for regression testing since these are not constants.
 -- So, just try to test parser and hope for the best - thomas 97/04/26
@@ -314,6 +323,11 @@ SELECT '2020-10-05'::timestamptz >= '4714-11-24 BC'::timestamp as t;
  t
 (1 row)
 
+--
+-- Formats
+--
+SET DateStyle TO 'US,Postgres';
+SET DateStyle TO 'US,ISO';
 SELECT d1 AS us_iso FROM TIMESTAMP_TBL;
          us_iso         
 ------------------------
@@ -384,6 +398,11 @@ SELECT d1 AS us_iso FROM TIMESTAMP_TBL;
  2001-01-01 17:32:01
 (65 rows)
 
+SET DateStyle TO 'US,SQL';
+SET DateStyle TO 'European,Postgres';
+SET DateStyle TO 'European,ISO';
+SET DateStyle TO 'European,SQL';
+RESET DateStyle;
 SELECT to_timestamp('97/Feb/16', 'YYMonDD');
 ERROR:  invalid value "/Feb/16" for "Mon"
 DETAIL:  The given value did not match any of the allowed values for this field.

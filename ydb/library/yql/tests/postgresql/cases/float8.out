@@ -751,3 +751,25 @@ SELECT '-9223372036854775808.5'::float8::int8;
 
 SELECT '-9223372036854780000'::float8::int8;
 ERROR:  bigint out of range
+SELECT x,
+       tand(x),
+       tand(x) IN ('-Infinity'::float8,-1,0,
+                   1,'Infinity'::float8) AS tand_exact,
+       cotd(x),
+       cotd(x) IN ('-Infinity'::float8,-1,0,
+                   1,'Infinity'::float8) AS cotd_exact
+FROM (VALUES (0), (45), (90), (135), (180),
+      (225), (270), (315), (360)) AS t(x);
+  x  |   tand    | tand_exact |   cotd    | cotd_exact 
+-----+-----------+------------+-----------+------------
+   0 |         0 | t          |  Infinity | t
+  45 |         1 | t          |         1 | t
+  90 |  Infinity | t          |         0 | t
+ 135 |        -1 | t          |        -1 | t
+ 180 |         0 | t          | -Infinity | t
+ 225 |         1 | t          |         1 | t
+ 270 | -Infinity | t          |         0 | t
+ 315 |        -1 | t          |        -1 | t
+ 360 |         0 | t          |  Infinity | t
+(9 rows)
+

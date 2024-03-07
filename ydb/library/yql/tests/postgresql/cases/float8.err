@@ -870,13 +870,10 @@ FROM (VALUES (0), (30), (90), (150), (180),
     -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
     	-- test exact cases for trigonometric functions in degrees
 	^
-        -stdin-:<main>:4:16: Error: At function: PgIn, At function: AsList
+        -stdin-:<main>:4:16: Error: At function: PgIn
         	       sind(x) IN (-1,-0.5,0,0.5,1) AS sind_exact
 	               ^
-            -stdin-:<main>:4:16: Error: Cannot infer common type for int4 and numeric
-            	       sind(x) IN (-1,-0.5,0,0.5,1) AS sind_exact
-	               ^
-            -stdin-:<main>:4:16: Error: Cannot infer common type for numeric and int4
+            -stdin-:<main>:4:16: Error: Mismatch of types in IN expressions: float8 is not equal to numeric
             	       sind(x) IN (-1,-0.5,0,0.5,1) AS sind_exact
 	               ^
 <sql-statement>
@@ -891,13 +888,10 @@ FROM (VALUES (0), (60), (90), (120), (180),
     -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
     	SELECT x,
 	^
-        -stdin-:<main>:3:16: Error: At function: PgIn, At function: AsList
+        -stdin-:<main>:3:16: Error: At function: PgIn
         	       cosd(x) IN (-1,-0.5,0,0.5,1) AS cosd_exact
 	               ^
-            -stdin-:<main>:3:16: Error: Cannot infer common type for int4 and numeric
-            	       cosd(x) IN (-1,-0.5,0,0.5,1) AS cosd_exact
-	               ^
-            -stdin-:<main>:3:16: Error: Cannot infer common type for numeric and int4
+            -stdin-:<main>:3:16: Error: Mismatch of types in IN expressions: float8 is not equal to numeric
             	       cosd(x) IN (-1,-0.5,0,0.5,1) AS cosd_exact
 	               ^
 <sql-statement>
@@ -911,35 +905,6 @@ SELECT x,
 FROM (VALUES (0), (45), (90), (135), (180),
       (225), (270), (315), (360)) AS t(x);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
-    	SELECT x,
-	^
-        -stdin-:<main>:1:1: Error: At function: PgResultItem
-        	SELECT x,
-	^
-            -stdin-:<main>:3:16: Error: At function: PgIn, At function: AsList
-            	       tand(x) IN ('-Infinity'::float8,-1,0,
-	               ^
-                -stdin-:<main>:3:16: Error: Cannot infer common type for float8 and int4
-                	       tand(x) IN ('-Infinity'::float8,-1,0,
-	               ^
-                -stdin-:<main>:3:16: Error: Cannot infer common type for int4 and float8
-                	       tand(x) IN ('-Infinity'::float8,-1,0,
-	               ^
-        -stdin-:<main>:1:1: Error: At function: PgResultItem
-        	SELECT x,
-	^
-            -stdin-:<main>:6:16: Error: At function: PgIn, At function: AsList
-            	       cotd(x) IN ('-Infinity'::float8,-1,0,
-	               ^
-                -stdin-:<main>:6:16: Error: Cannot infer common type for float8 and int4
-                	       cotd(x) IN ('-Infinity'::float8,-1,0,
-	               ^
-                -stdin-:<main>:6:16: Error: Cannot infer common type for int4 and float8
-                	       cotd(x) IN ('-Infinity'::float8,-1,0,
-	               ^
 <sql-statement>
 SELECT x,
        asind(x),

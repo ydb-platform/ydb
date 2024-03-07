@@ -145,6 +145,7 @@ public:
         }
 
         ReadOnlyTx = IsReadOnlyTx();
+        Cerr << "TEST: READONLY: " << ReadOnlyTx << Endl;
     }
 
     void CheckExecutionComplete() {
@@ -1325,6 +1326,9 @@ private:
         for (const auto& tx : Request.Transactions) {
             for (const auto& stage : tx.Body->GetStages()) {
                 if (stage.GetIsEffectsStage()) {
+                    return false;
+                }
+                if (!stage.GetSinks().empty()) {
                     return false;
                 }
             }

@@ -68,6 +68,8 @@ public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         output = input;
 
+        Cerr << "TEST:: " << KqpExprToPrettyString(*input, ctx) << Endl;
+
         if (!TransformerFinished) {
             TransformerFinished = true;
             auto& preparedQuery = *TransformCtx.QueryCtx->PreparingQuery;

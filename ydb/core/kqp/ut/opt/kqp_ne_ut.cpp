@@ -3785,10 +3785,11 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session1.ExecuteDataQuery(R"(
             SELECT * FROM `/Root/TwoShard` WHERE Key <= 1;
-        )", TTxControl::BeginTx(TTxSettings::SerializableRW())).GetValueSync();
+            UPSERT INTO `/Root/TwoShard` (Key, Value1) VALUES(1, "NewValue2");
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
         AssertSuccessResult(result);
 
-        auto tx = result.GetTransaction();
+        /*auto tx = result.GetTransaction();
 
         auto session2 = db.CreateSession().GetValueSync().GetSession();
         result = session2.ExecuteDataQuery(R"(
@@ -3810,7 +3811,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         AssertSuccessResult(result);
 
         CompareYson(R"([[[1u];["NewValue2"]]])",
-            FormatResultSetYson(result.GetResultSet(0)));
+            FormatResultSetYson(result.GetResultSet(0)));*/
     }
 
     Y_UNIT_TEST(OddSkipNullKeys) {

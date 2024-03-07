@@ -953,6 +953,8 @@ public:
             return false;
         }
 
+        // TODO: Add check for sinks
+
         return true;
     }
 
@@ -1061,7 +1063,7 @@ public:
         bool literal = tx && tx->IsLiteralTx();
 
         if (commit) {
-            if (txCtx.TxHasEffects() || txCtx.Locks.HasLocks() || txCtx.TopicOperations.HasOperations()) {
+            if (txCtx.TxHasEffects() || txCtx.Locks.HasLocks() || txCtx.TopicOperations.HasOperations() /*|| TODO: sinks */) {
                 // Cannot perform commit in literal execution
                 literal = false;
             } else if (!tx) {

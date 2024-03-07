@@ -6,31 +6,29 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 class TMaybeFetchResult final {
-    union {
-        struct {
-            ui32 Flag;
-            EFetchResult Res;
-        } Opt;
+    ui64 Raw;
 
-        ui64 Raw;
-    };
-
-    TMaybeFetchResult() : Opt(0) {}
+    explicit TMaybeFetchResult(ui64 raw) : Raw(raw) {}
 
 public:
-    TMaybeFetchResult(EFetchResult res) : Opt(1, res) {}
+    /* implicit */ TMaybeFetchResult(EFetchResult res) : TMaybeFetchResult(static_cast<ui64>(static_cast<ui32>(res))) {}
 
-    [[nodiscard]] EFetchResult Get() const {
-        Y_ABORT_UNLESS(Opt.Flag);
-        return Opt.Res;
-    }
 
     [[nodiscard]] bool Empty() const {
-        return !Opt.Flag;
+        return Raw >> ui64(32);
+    }
+
+    [[nodiscard]] EFetchResult Get() const {
+        Y_ABORT_IF(Empty());
+        return static_cast<EFetchResult>(static_cast<ui32>(Raw));
+    }
+
+    [[nodiscard]] ui64 RawU64() const {
+        return Raw;
     }
 
     static TMaybeFetchResult None() {
-        return TMaybeFetchResult();
+        return TMaybeFetchResult(ui64(1) << ui64(32));
     }
 };
 
@@ -49,25 +47,6 @@ private:
         static_cast<const TDerived *>(this)->InitState(state, ctx);
     }
 
-    i32 DoProcessWrapper(NUdf::TUnboxedValue &state, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValuePod* inputValues, NUdf::TUnboxedValuePod* outputValues) const {
-        Fill(outputValues, outputValues + OutWidth, NUdf::TUnboxedValuePod());
-        TVector<NUdf::TUnboxedValue*> outputPtrsVec(OutWidth, nullptr);
-        for (size_t pos = 0; pos < OutWidth; pos++) {
-            outputPtrsVec[pos] = static_cast<NUdf::TUnboxedValue*>(outputValues + pos);
-        }
-        NUdf::TUnboxedValue*const* inputPtrs = nullptr;
-        inputPtrs = static_cast<const TDerived*>(this)->PrepareInput(state, ctx, outputPtrsVec.data());
-        if (inputPtrs) {
-            for (size_t pos = 0; pos < InWidth; pos++) {
-                if (auto in = inputPtrs[pos]) {
-                    *in = inputValues[pos];
-                }
-            }
-        }
-        TMaybeFetchResult res = static_cast<const TDerived*>(this)->DoProcess(state, ctx, inputPtrs ? fetchRes : TMaybeFetchResult::None(), outputPtrsVec.data());
-        return !res.Empty() ? static_cast<i32>(res.Get()) : std::numeric_limits<i32>::max();
-    }
-
 public:
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (state.IsInvalid()) {
@@ -76,8 +55,7 @@ public:
         }
         auto result = TMaybeFetchResult::None();
         while (result.Empty()) {
-            NUdf::TUnboxedValue*const* input = nullptr;
-            input = static_cast<const TDerived*>(this)->PrepareInput(state, ctx, output);
+            NUdf::TUnboxedValue*const* input = static_cast<const TDerived*>(this)->PrepareInput(state, ctx, output);
             TMaybeFetchResult fetchResult = input ? SourceFlow->FetchValues(ctx, input) : TMaybeFetchResult::None();
             result = static_cast<const TDerived*>(this)->DoProcess(state, ctx, fetchResult, output);
         }
@@ -85,67 +63,122 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtrVal, BasicBlock*& genToBlock) const {
+        // init stuff (mainly in global entry block)
+
         auto& context = ctx.Codegen.GetContext();
+
         const auto valueType = Type::getInt128Ty(context);
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
-        const auto main = BasicBlock::Create(context, "main", ctx.Func);
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
+        const auto loopFetch = BasicBlock::Create(context, "loop_fetch", ctx.Func);
+        const auto loopTail = BasicBlock::Create(context, "loop_tail", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
-
-        // block = block;
-
-        const auto load = new LoadInst(valueType, statePtr, "load", block);
-        BranchInst::Create(init, main, IsInvalid(load, block), block);
-
-        block = init;
+        const auto entryPos = &ctx.Func->getEntryBlock().back();
 
         const auto thisType = StructType::get(context)->getPointerTo();
-        const auto initFuncType = FunctionType::get(Type::getVoidTy(context), {thisType, statePtr->getType(), ctx.Ctx->getType()}, false);
+        const auto thisRawVal = ConstantInt::get(Type::getInt64Ty(context), reinterpret_cast<ui64>(this));
+        const auto thisVal = CastInst::Create(Instruction::IntToPtr, thisRawVal, thisType, "this", entryPos);
+        const auto valuePtrType = PointerType::getUnqual(valueType);
+        const auto valuePtrsPtrType = PointerType::getUnqual(valuePtrType);
+        const auto statePtrType = statePtrVal->getType();
+        const auto ctxType = ctx.Ctx->getType();
+        const auto i32Type = Type::getInt32Ty(context);
+        const auto valueNullptrVal = ConstantPointerNull::get(valuePtrType);
+        const auto valuePtrNullptrVal = ConstantPointerNull::get(valuePtrsPtrType);
+        const auto maybeResType = Type::getInt64Ty(context);
+        const auto noneVal = ConstantInt::get(maybeResType, TMaybeFetchResult::None().RawU64());
+
+        const auto outputArrayVal = new AllocaInst(valueType, 0, ConstantInt::get(i32Type, OutWidth), "output_array", entryPos);
+        const auto outputPtrsVal = new AllocaInst(valuePtrType, 0, ConstantInt::get(Type::getInt64Ty(context), OutWidth), "output_ptrs", entryPos);
+        for (ui32 pos = 0; pos < OutWidth; pos++) {
+            const auto posVal = ConstantInt::get(i32Type, pos);
+            const auto arrayPtrVal = GetElementPtrInst::CreateInBounds(valueType, outputArrayVal, {posVal}, "array_ptr", entryPos);
+            const auto ptrsPtrVal = GetElementPtrInst::CreateInBounds(valuePtrType, outputPtrsVal, {posVal}, "ptrs_ptr", entryPos);
+            new StoreInst(arrayPtrVal, ptrsPtrVal, &ctx.Func->getEntryBlock().back());
+        }
+
+        auto block = genToBlock; // >>> start of main code chunk
+
+        const auto stateVal = new LoadInst(valueType, statePtrVal, "state", block);
+        BranchInst::Create(init, loop, IsInvalid(stateVal, block), block);
+
+        block = init; // state initialization block:
+
+        const auto initFuncType = FunctionType::get(Type::getVoidTy(context), {thisType, statePtrType, ctxType}, false);
         const auto initFuncRawVal = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSimpleStatefulWideFlowCodegeneratorNode::InitStateWrapper));
         const auto initFuncVal = CastInst::Create(Instruction::IntToPtr, initFuncRawVal, PointerType::getUnqual(initFuncType), "init_func", block);
-        const auto thisRawVal = ConstantInt::get(Type::getInt64Ty(context), reinterpret_cast<ui64>(this));
-        const auto thisVal = CastInst::Create(Instruction::IntToPtr, thisRawVal, thisType, "this", block);
-        CallInst::Create(initFuncType, initFuncVal, {thisVal, statePtr, ctx.Ctx}, "", block);
-        BranchInst::Create(main, block);
-
-        block = main;
-
+        CallInst::Create(initFuncType, initFuncVal, {thisVal, statePtrVal, ctx.Ctx}, "", block);
         BranchInst::Create(loop, block);
 
-        block = loop;
+        block = loop; // loop head block: (prepare inputs and decide whether to calculate row or not)
+
+        const auto prepareFuncType = FunctionType::get(valuePtrsPtrType, {thisType, statePtrType, ctxType, valuePtrsPtrType}, false);
+        const auto prepareFuncRawVal = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TDerived::PrepareInput));
+        const auto prepareFuncVal = CastInst::Create(Instruction::IntToPtr, prepareFuncRawVal, PointerType::getUnqual(prepareFuncType), "prepare_func", block);
+        const auto inputPtrsVal = CallInst::Create(prepareFuncType, prepareFuncVal, {thisVal, statePtrVal, ctx.Ctx, outputPtrsVal}, "input_ptrs", block);
+        const auto skipFetchCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, inputPtrsVal, valuePtrNullptrVal, "skip_fetch", block);
+        BranchInst::Create(loopTail, loopFetch, skipFetchCond, block);
+
+        block = loopFetch; // loop fetch chunk: (calculate needed values in the row)
 
         const auto [fetchResVal, getters] = GetNodeValues(SourceFlow, ctx, block);
-        const auto inputValues = new AllocaInst(valueType, 0, ConstantInt::get(Type::getInt64Ty(context), InWidth), "inputValues", &ctx.Func->getEntryBlock().back());
-        for (size_t pos = 0; pos < InWidth; pos++) {
-            const auto offset = GetElementPtrInst::CreateInBounds(valueType, inputValues, {ConstantInt::get(Type::getInt64Ty(context), pos)}, "offset", block);
-            new StoreInst(getters[pos](ctx, block), offset, block);
+        const auto fetchResExtVal = new ZExtInst(fetchResVal, maybeResType, "res_ext", block);
+        for (ui32 pos = 0; pos < InWidth; pos++) {
+            const auto stor = BasicBlock::Create(context, "stor", ctx.Func);
+            const auto cont = BasicBlock::Create(context, "cont", ctx.Func);
+
+            auto innerBlock = block; // >>> start of inner chunk (calculates and stores the value if needed)
+
+            const auto posVal = ConstantInt::get(i32Type, pos);
+            const auto inputPtrPtrVal = GetElementPtrInst::CreateInBounds(valuePtrType, inputPtrsVal, {posVal}, "input_ptr_ptr", innerBlock);
+            const auto inputPtrVal = new LoadInst(valuePtrType, inputPtrPtrVal, "input_ptr", innerBlock);
+            const auto isNullCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, inputPtrVal, valueNullptrVal, "is_null", innerBlock);
+            BranchInst::Create(cont, stor, isNullCond, innerBlock);
+
+            innerBlock = stor; // calculate & store chunk:
+
+            new StoreInst(getters[pos](ctx, innerBlock), inputPtrVal, innerBlock);
+            BranchInst::Create(cont, innerBlock);
+
+            innerBlock = cont; // skip input value block:
+
+            /* nothing here yet */
+
+            block = innerBlock; // <<< end of inner chunk
         }
-        const auto outputValues = new AllocaInst(valueType, 0, ConstantInt::get(Type::getInt64Ty(context), OutWidth), "outputValues", &ctx.Func->getEntryBlock().back());
-        for (size_t pos = 0; pos < OutWidth; pos++) {
-            const auto offset = GetElementPtrInst::CreateInBounds(valueType, outputValues, {ConstantInt::get(Type::getInt64Ty(context), pos)}, "offset", block);
-            new StoreInst(ConstantInt::get(valueType, 0), offset, block);
-        }
-        const auto processFuncType = FunctionType::get(Type::getInt32Ty(context), {thisType, statePtr->getType(), ctx.Ctx->getType(), Type::getInt32Ty(context), inputValues->getType(), outputValues->getType()}, false);
-        const auto processFuncRawVal = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSimpleStatefulWideFlowCodegeneratorNode::DoProcessWrapper));
-        const auto thisRawVal2 = ConstantInt::get(Type::getInt64Ty(context), reinterpret_cast<ui64>(this));
-        const auto thisVal2 = CastInst::Create(Instruction::IntToPtr, thisRawVal2, thisType, "this", block);
+        const auto fetchSourceBlock = block;
+        BranchInst::Create(loopTail, block);
+
+        block = loopTail; // loop tail block: (process row)
+
+        const auto maybeFetchResVal = PHINode::Create(maybeResType, 2, "fetch_res", block);
+        maybeFetchResVal->addIncoming(fetchResExtVal, fetchSourceBlock);
+        maybeFetchResVal->addIncoming(noneVal, loop);
+        const auto processFuncType = FunctionType::get(maybeResType, {thisType, statePtrType, ctxType, maybeResType, valuePtrsPtrType}, false);
+        const auto processFuncRawVal = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TDerived::DoProcess));
         const auto processFuncVal = CastInst::Create(Instruction::IntToPtr, processFuncRawVal, PointerType::getUnqual(processFuncType), "process_func", block);
-        const auto processResVal = CallInst::Create(processFuncType, processFuncVal, {thisVal2, statePtr, ctx.Ctx, fetchResVal, inputValues, outputValues}, "process_res", block);
+        const auto processResVal = CallInst::Create(processFuncType, processFuncVal, {thisVal, statePtrVal, ctx.Ctx, maybeFetchResVal, outputPtrsVal}, "process_res", block);
+        const auto brkCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, processResVal, noneVal, "brk", block);
+        BranchInst::Create(done, loop, brkCond, block);
+
+        block = done; // finalization block:
+
+        const auto processResTruncVal = new TruncInst(processResVal, i32Type, "res_trunc", block);
+
+        genToBlock = block; // <<< end of main code chunk
+
         ICodegeneratorInlineWideNode::TGettersList new_getters;
         new_getters.reserve(OutWidth);
         for (size_t pos = 0; pos < OutWidth; pos++) {
-            new_getters.push_back([pos, outputValues, valueType] (const TCodegenContext& ctx, BasicBlock*& block) -> Value* {
-                const auto offset = GetElementPtrInst::CreateInBounds(valueType, outputValues, {ConstantInt::get(Type::getInt64Ty(ctx.Codegen.GetContext()), pos)}, "offset", block);
-                const auto value = new LoadInst(valueType, offset, "value", block);
-                return value;
+            new_getters.push_back([pos, outputArrayVal, i32Type, valueType] (const TCodegenContext&, BasicBlock*& block) -> Value* {
+                const auto posVal = ConstantInt::get(i32Type, pos);
+                const auto arrayPtrVal = GetElementPtrInst::CreateInBounds(valueType, outputArrayVal, {posVal}, "array_ptr", block);
+                const auto valueVal = new LoadInst(valueType, arrayPtrVal, "value", block);
+                return valueVal;
             });
         }
-        const auto brk = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, processResVal, ConstantInt::get(processResVal->getType(), std::numeric_limits<i32>::max() /* static_cast<i32>(EProcessResult::Again) */), "brk", block);
-        BranchInst::Create(done, loop, brk, block);
-
-        block = done;
-        return {processResVal, std::move(new_getters)};
+        return {processResTruncVal, std::move(new_getters)};
     }
 #endif
 

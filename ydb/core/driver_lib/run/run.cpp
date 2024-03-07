@@ -173,18 +173,27 @@ public:
             }
 
             bool isExplicitTabletIds = domain.ExplicitCoordinatorsSize() + domain.ExplicitMediatorsSize() + domain.ExplicitAllocatorsSize();
-            Y_ABORT_UNLESS(isExplicitTabletIds);
             Y_ABORT_UNLESS(domain.SSIdSize() == 0 || (domain.SSIdSize() == 1 && domain.GetSSId(0) == 1));
             Y_ABORT_UNLESS(domain.HiveUidSize() == 0 || (domain.HiveUidSize() == 1 && domain.GetHiveUid(0) == 1));
 
             TDomainsInfo::TDomain::TPtr domainPtr = nullptr;
             if (isExplicitTabletIds) {
                 domainPtr = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(domainName, domainId, schemeRoot,
-                                                                                     planResolution,
-                                                                                     domain.GetExplicitCoordinators(),
-                                                                                     domain.GetExplicitMediators(),
-                                                                                     domain.GetExplicitAllocators(),
-                                                                                     poolTypes);
+                    planResolution, domain.GetExplicitCoordinators(), domain.GetExplicitMediators(),
+                    domain.GetExplicitAllocators(), poolTypes);
+            } else { // compatibility code
+                std::vector<ui64> coordinators, mediators, allocators;
+                for (ui64 x : domain.GetCoordinator()) {
+                    coordinators.push_back(TDomainsInfo::MakeTxCoordinatorID(domainId, x));
+                }
+                for (ui64 x : domain.GetMediator()) {
+                    mediators.push_back(TDomainsInfo::MakeTxMediatorID(domainId, x));
+                }
+                for (ui64 x : domain.GetProxy()) {
+                    allocators.push_back(TDomainsInfo::MakeTxAllocatorID(domainId, x));
+                }
+                domainPtr = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(domainName, domainId, schemeRoot,
+                    planResolution, coordinators, mediators, allocators, poolTypes);
             }
 
             appData->DomainsInfo->AddDomain(domainPtr.Release());

@@ -168,7 +168,6 @@ target_sources(yt-yt-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/hedging_manager.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/histogram.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/adjusted_exponential_moving_average.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/hr_timer.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/id_generator.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/linear_probe.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/memory_reference_tracker.cpp

@@ -17,7 +17,6 @@ target_compile_options(contrib-libs-c-ares PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(contrib-libs-c-ares PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/libs/c-ares
   ${PROJECT_SOURCE_DIR}/contrib/libs/c-ares/include
 )
 target_include_directories(contrib-libs-c-ares PRIVATE

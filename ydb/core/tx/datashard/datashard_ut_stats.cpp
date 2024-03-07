@@ -105,7 +105,6 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         InitRoot(server, sender);
 
         auto opts = TShardedTableOptions()
-            .Shards(1)
             .Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}, {"value2", "Uint32", false, false, "hdd"}})
             .Families({{.Name = "default", .LogPoolKind = "ssd", .SysLogPoolKind = "ssd", .DataPoolKind = "ssd"}, {.Name = "hdd", .DataPoolKind = "hdd"}});
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
@@ -237,7 +236,6 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         InitRoot(server, sender);
 
         auto opts = TShardedTableOptions()
-            .Shards(1)
             .Columns({
                 {"key", "Uint32", true, false}, 
                 {"value", "String", false, false}, 
@@ -309,7 +307,6 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         InitRoot(server, sender);
 
         auto opts = TShardedTableOptions()
-            .Shards(1)
             .Columns({
                 {"key", "Uint32", true, false}, 
                 {"value", "String", true, false}});

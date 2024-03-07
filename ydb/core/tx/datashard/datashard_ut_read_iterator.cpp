@@ -72,7 +72,6 @@ std::tuple<TVector<ui64>, TTableId> CreateMoviesTable(Tests::TServer::TPtr serve
                        const TString &name)
 {
     auto opts = TShardedTableOptions()
-        .Shards(1)
         .Columns(GetMoviesColumns());
 
     return CreateShardedTable(server, sender, root, name, opts);
@@ -4101,11 +4100,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
         TDisableDataShardLogBatching disableDataShardLogBatching;
 
         auto opts = TShardedTableOptions()
-                .Shards(1)
-                .ExecutorCacheSize(1 /* byte */)
-                .Columns({
-                    {"key", "Uint32", true, false},
-                    {"value", "Uint32", false, false}});
+                .ExecutorCacheSize(1 /* byte */);
         auto [shards, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
 
         ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)"));

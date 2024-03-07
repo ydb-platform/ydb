@@ -291,8 +291,6 @@ Y_UNIT_TEST_SUITE(CheckMergeColumnsSSE42) {
     }
 }
 
-// TODO: make this test suite active when fallback will be implemented
-#if 0
 Y_UNIT_TEST_SUITE(CheckMergeColumnsFallback) {
     Y_UNIT_TEST(SizeEq1) {
         EQ_SIZE_CHECKER(1, Fallback);
@@ -349,4 +347,3 @@ Y_UNIT_TEST_SUITE(CheckMergeColumnsFallback) {
         UNIT_ASSERT_EQUAL(!memcmp(expected_result, result, (1 + 2 + 3 + 4) * 10), true);
     }
 }
-#endif

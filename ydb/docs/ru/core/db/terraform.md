@@ -23,7 +23,7 @@
 ## Настройка Terraform провайдера для работы с {{ ydb-short-name }} {#setup}
 
 1. Нужно скачать [код провайдера](https://github.com/ydb-platform/terraform-provider-ydb/)
-2. Собрать провайдер, выполнив `make local-build`
+2. Собрать провайдер, выполнив `$ make local-build` в корневой директории кода провайдера. Для этого вам необходимо дополнительно установить утилиту [make](https://www.gnu.org/software/make/) и [go](https://go.dev/)
 Провайдер установится в папку плагинов Terraform - `~/.terraform.d/plugins/terraform.storage.ydb.tech/...`
 3. Добавить провайдер в `~/.terraformrc`, дописав в секцию `provider_installation` следующее содержание (если такой секции ещё не было, то создать):
 
@@ -91,11 +91,11 @@ pqconfig:
   check_acl: false
 ```
 
-### Построчная таблица {#ydb-table}
+### Строковая таблица {#ydb-table}
 
 {% note info %}
 
-Работа с поколоночными таблицами через Terraform пока не доступна.
+Работа с колоночными таблицами через Terraform пока не доступна.
 
 {% endnote %}
 

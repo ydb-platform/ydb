@@ -1,5 +1,5 @@
 --lazy list serialization
-$vector = ListFromRange(1.0, 5.1);
+$vector = ListFromRange(1.0f, 5.1f);
 $vector_binary_str = Knn::ToBinaryString($vector);
 select $vector_binary_str;
 

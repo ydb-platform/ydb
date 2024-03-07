@@ -20,7 +20,7 @@
                 "Data" = [
                     [
                         [
-                            "ATMzMzMzM/M/ZmZmZmZmAkAzMzMzMzMLQAAAAAAAABJAZmZmZmZmFkA="
+                            "AZqZmT8zMxNAmplZQAAAkEAzM7NA"
                         ]
                     ]
                 ]
@@ -43,7 +43,7 @@
                                         "ListType";
                                         [
                                             "DataType";
-                                            "Double"
+                                            "Float"
                                         ]
                                     ]
                                 ]

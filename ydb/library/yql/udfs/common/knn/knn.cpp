@@ -7,47 +7,47 @@ using namespace NYql;
 using namespace NYql::NUdf;
 
 enum EFormat : unsigned char {
-    DoubleVector = 1
+    FloatVector = 1
 };
 
-TString SerializeDoubleVector(const TUnboxedValuePod x) {
-    const EFormat format = EFormat::DoubleVector;
+TString SerializeFloatVector(const TUnboxedValuePod x) {
+    const EFormat format = EFormat::FloatVector;
     
     TString str;
     TStringOutput outStr(str);
     if (const auto elements = x.GetElements()) {
         const auto size = x.GetListLength();
-        outStr.Reserve(1 + size * sizeof(double));
+        outStr.Reserve(1 + size * sizeof(float));
         outStr.Write(&format, sizeof(unsigned char));
         for (ui32 i = 0; i < size; ++i) {
-            double element = elements[i].Get<double>();
-            outStr.Write(&element, sizeof(double));
+            float element = elements[i].Get<float>();
+            outStr.Write(&element, sizeof(float));
         }
     } else {
         outStr.Write(&format, sizeof(unsigned char));
         const auto it = x.GetListIterator();
         TUnboxedValue v;
         while(it.Next(v)) {
-            double element = v.Get<double>();
-            outStr.Write(&element, sizeof(double));
+            float element = v.Get<float>();
+            outStr.Write(&element, sizeof(float));
         }
     }
     return str;
 }
 
-NYql::NUdf::TUnboxedValue DeserializeDoubleVector(const IValueBuilder *valueBuilder, TStringRef str) {
-    if (str.Size() % sizeof(double) != 0)    
+NYql::NUdf::TUnboxedValue DeserializeFloatVector(const IValueBuilder *valueBuilder, TStringRef str) {
+    if (str.Size() % sizeof(float) != 0)    
         return {};
     
-    const ui32 count = str.Size() / sizeof(double);
+    const ui32 count = str.Size() / sizeof(float);
 
     TUnboxedValue* items = nullptr;
     auto res = valueBuilder->NewArray(count, items);
     
     TMemoryInput inStr(str);
     for (ui32 i = 0; i < count; ++i) {
-        double element;
-        if (inStr.Read(&element, sizeof(double)) != sizeof(double))
+        float element;
+        if (inStr.Read(&element, sizeof(float)) != sizeof(float))
             return {};
         *items++ = TUnboxedValuePod{element};
     }
@@ -55,11 +55,11 @@ NYql::NUdf::TUnboxedValue DeserializeDoubleVector(const IValueBuilder *valueBuil
     return res.Release();
 }
 
-SIMPLE_STRICT_UDF(TToBinaryString, char*(TListType<double>)) {
-    return valueBuilder->NewString(SerializeDoubleVector(args[0]));
+SIMPLE_STRICT_UDF(TToBinaryString, char*(TListType<float>)) {
+    return valueBuilder->NewString(SerializeFloatVector(args[0]));
 }
 
-SIMPLE_STRICT_UDF(TFromBinaryString, TOptional<TListType<double>>(const char*)) {
+SIMPLE_STRICT_UDF(TFromBinaryString, TOptional<TListType<float>>(const char*)) {
     TStringRef str = args[0].AsStringRef();
     if (str.Size() == 0)
         return {};
@@ -67,14 +67,14 @@ SIMPLE_STRICT_UDF(TFromBinaryString, TOptional<TListType<double>>(const char*)) 
     const EFormat format = static_cast<EFormat>(str.Data()[0]);
     str = TStringRef{str.Data() + 1, str.Size() -1};
     switch (format) {
-        case EFormat::DoubleVector: 
-            return DeserializeDoubleVector(valueBuilder, str);
+        case EFormat::FloatVector: 
+            return DeserializeFloatVector(valueBuilder, str);
         default:
             return {};
     }
 }
 
-bool EnumerateVectors(const TUnboxedValuePod vector1, const TUnboxedValuePod vector2, std::function<void(double, double)> callback) {
+bool EnumerateVectors(const TUnboxedValuePod vector1, const TUnboxedValuePod vector2, std::function<void(float, float)> callback) {
     
     auto enumerateBothSized = [&callback] (const TUnboxedValuePod vector1, const TUnboxedValue* elements1, const TUnboxedValuePod vector2, const TUnboxedValue* elements2) {
         const auto size1 = vector1.GetListLength();
@@ -85,7 +85,7 @@ bool EnumerateVectors(const TUnboxedValuePod vector1, const TUnboxedValuePod vec
             return false;
 
         for (ui32 i = 0; i < size1; ++i) {
-            callback(elements1[i].Get<double>(), elements2[i].Get<double>());
+            callback(elements1[i].Get<float>(), elements2[i].Get<float>());
         }
         
         return true;
@@ -98,7 +98,7 @@ bool EnumerateVectors(const TUnboxedValuePod vector1, const TUnboxedValuePod vec
         const auto it = vector2.GetListIterator();          
 
         while (it.Next(value)) {
-            callback(elements1[idx++].Get<double>(), value.Get<double>());
+            callback(elements1[idx++].Get<float>(), value.Get<float>());
         }
 
         // Lenght mismatch
@@ -113,7 +113,7 @@ bool EnumerateVectors(const TUnboxedValuePod vector1, const TUnboxedValuePod vec
         const auto it1 = vector1.GetListIterator();
         const auto it2 = vector2.GetListIterator();    
         for (; it1.Next(value1) && it2.Next(value2);) {
-            callback(value1.Get<double>(), value2.Get<double>());
+            callback(value1.Get<float>(), value2.Get<float>());
         }
 
         // Lenght mismatch
@@ -142,16 +142,16 @@ bool EnumerateVectors(const TUnboxedValuePod vector1, const TUnboxedValuePod vec
     return true;
 }
 
-std::optional<double> InnerProductDistance(const TUnboxedValuePod vector1, const TUnboxedValuePod vector2) {
-    double ret = 0;
+std::optional<float> InnerProductDistance(const TUnboxedValuePod vector1, const TUnboxedValuePod vector2) {
+    float ret = 0;
 
-    if (!EnumerateVectors(vector1, vector2, [&ret](double el1, double el2) { ret += el1 * el2;}))
+    if (!EnumerateVectors(vector1, vector2, [&ret](float el1, float el2) { ret += el1 * el2;}))
         return {};
 
     return ret;
 }
 
-SIMPLE_STRICT_UDF(TInnerProductDistance, TOptional<double>(TOptional<TListType<double>>, TOptional<TListType<double>>)) {
+SIMPLE_STRICT_UDF(TInnerProductDistance, TOptional<float>(TOptional<TListType<float>>, TOptional<TListType<float>>)) {
     Y_UNUSED(valueBuilder);
 
     if (!args[0].HasValue() || !args[1].HasValue())

@@ -1,5 +1,5 @@
 --list serialization
-$vector = [1.2, 2.3, 3.4, 4.5, 5.6];
+$vector = [1.2f, 2.3f, 3.4f, 4.5f, 5.6f];
 $vector_binary_str = Knn::ToBinaryString($vector);
 select $vector_binary_str;
 

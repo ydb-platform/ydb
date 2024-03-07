@@ -20,7 +20,7 @@
                 "Data" = [
                     [
                         [
-                            "AQAAAAAAAPA/AAAAAAAAAEAAAAAAAAAIQAAAAAAAABBAAAAAAAAAFEA="
+                            "AQAAgD8AAABAAABAQAAAgEAAAKBA"
                         ]
                     ]
                 ]
@@ -43,7 +43,7 @@
                                         "ListType";
                                         [
                                             "DataType";
-                                            "Double"
+                                            "Float"
                                         ]
                                     ]
                                 ]

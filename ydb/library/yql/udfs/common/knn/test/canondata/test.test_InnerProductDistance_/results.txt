@@ -168,7 +168,7 @@
                                     "OptionalType";
                                     [
                                         "DataType";
-                                        "Double"
+                                        "Float"
                                     ]
                                 ]
                             ]
@@ -197,7 +197,7 @@
                                     "OptionalType";
                                     [
                                         "DataType";
-                                        "Double"
+                                        "Float"
                                     ]
                                 ]
                             ]

@@ -864,7 +864,9 @@ void TWriteSessionActor::LogSession(const TActorContext& ctx) {
 }
 
 void TWriteSessionActor::HandleWakeup(const TActorContext& ctx) {
-    Y_ABORT_UNLESS(State == ES_INITED);
+    if (State != ES_INITED) {
+        return;
+    }
 
     auto now = ctx.Now();
 

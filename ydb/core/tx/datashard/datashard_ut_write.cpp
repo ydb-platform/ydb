@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
     Y_UNIT_TEST_TWIN(ExecSQLUpsertImmediate, EvWrite) {
         auto [runtime, server, sender] = TestCreateServer();
 
-        auto opts = TShardedTableOptions();
+        TShardedTableOptions opts;
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
 
         auto rows = EvWrite ? TEvWriteRows{{{0, 1}}, {{2, 3}}, {{4, 5}}} : TEvWriteRows{};
@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         runtime.GetAppData().FeatureFlags.SetEnableDataShardVolatileTransactions(Volatile);
 
-        auto opts = TShardedTableOptions();
+        TShardedTableOptions opts;
         auto [shards1, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
         auto [shards2, tableId2] = CreateShardedTable(server, sender, "/Root", "table-2", opts);
 
@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
     Y_UNIT_TEST(UpsertImmediate) {
         auto [runtime, server, sender] = TestCreateServer();
 
-        auto opts = TShardedTableOptions().Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}});
+        TShardedTableOptions opts;
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
         const ui64 shard = shards[0];
         const ui32 rowCount = 3;
@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
     Y_UNIT_TEST(DeleteImmediate) {
         auto [runtime, server, sender] = TestCreateServer();
 
-        auto opts = TShardedTableOptions().Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}});
+        TShardedTableOptions opts;
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
         const ui64 shard = shards[0];
 
@@ -238,7 +238,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
     Y_UNIT_TEST(ReplaceImmediate) {
         auto [runtime, server, sender] = TestCreateServer();
 
-        auto opts = TShardedTableOptions().Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}});
+        TShardedTableOptions opts;
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
         const ui64 shard = shards[0];
         const ui32 rowCount = 3;
@@ -269,7 +269,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
     Y_UNIT_TEST(ReplaceImmediate_DefaultValue) {
         auto [runtime, server, sender] = TestCreateServer();
 
-        auto opts = TShardedTableOptions().Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}});
+        TShardedTableOptions opts;
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
         const ui64 shard = shards[0];
         const ui32 rowCount = 1;
@@ -480,7 +480,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
     Y_UNIT_TEST_TWIN(DeletePrepared, Volatile) {
         auto [runtime, server, sender] = TestCreateServer();
 
-        auto opts = TShardedTableOptions().Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}});
+        TShardedTableOptions opts;
         const TString tableName = "table-1";
         const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", tableName, opts);
         const ui64 shard = shards[0];
@@ -550,9 +550,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
-        auto opts = TShardedTableOptions()
-            .Columns({{"key", "Uint32", true, false},{"value", "Uint32", false, false}})
-            .Indexes({TShardedTableOptions::TIndex{"by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}});
+        auto opts = TShardedTableOptions().Indexes({{"by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}});
 
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
 

@@ -724,7 +724,6 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         InitRoot(server, sender);
 
         auto opts = TShardedTableOptions()
-                        .Shards(1)
                         .Columns({
                             {"key", "Uint32", true, false},
                             {"value", "Uint32", false, false},
@@ -975,7 +974,6 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         InitRoot(server, sender);
 
         auto opts = TShardedTableOptions()
-                        .Shards(1)
                         .Columns({
                             {"key", "Uint32", true, false},
                             {"value", "Uint32", false, false},
@@ -1105,7 +1103,6 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         InitRoot(server, sender);
 
         auto opts = TShardedTableOptions()
-                        .Shards(1)
                         .Columns({
                             {"key", "Uint32", true, false},
                             {"value", "Uint32", false, false},
@@ -1256,11 +1253,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         InitRoot(server, sender);
 
-        auto opts = TShardedTableOptions()
-                        .Shards(1)
-                        .Columns({
-                            {"key", "Uint32", true, false},
-                            {"value", "Uint32", false, false}});
+        TShardedTableOptions opts;
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         CreateShardedTable(server, sender, "/Root", "table-2", opts);
 
@@ -1374,14 +1367,9 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         InitRoot(server, sender);
 
         auto opts = TShardedTableOptions()
-                        .Shards(1)
-                        .Columns({
-                            {"key", "Uint32", true, false},
-                            {"value", "Uint32", false, false},
-                        })
-                        .Indexes({
-                            {"by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
-                        });
+            .Indexes({
+                {"by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
+            });
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         CreateShardedTable(server, sender, "/Root", "table-2", opts);
 
@@ -1434,7 +1422,6 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         InitRoot(server, sender);
 
         auto opts = TShardedTableOptions()
-                        .Shards(1)
                         .Columns({
                             {"key", "Uint32", true, false},
                             {"value", "Uint32", false, false},
@@ -1589,7 +1576,6 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         InitRoot(server, sender);
 
         auto opts = TShardedTableOptions()
-                        .Shards(1)
                         .Columns({
                             {"key", "Uint32", true, false},
                             {"value", "Uint32", false, false},
@@ -1724,11 +1710,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         InitRoot(server, sender);
 
-        auto opts = TShardedTableOptions()
-                        .Shards(1)
-                        .Columns({
-                            {"key", "Uint32", true, false},
-                            {"value", "Uint32", false, false}});
+        TShardedTableOptions opts;
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         CreateShardedTable(server, sender, "/Root", "table-2", opts);
 
@@ -2013,9 +1995,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         InitRoot(server, sender);
 
-        auto opts = TShardedTableOptions()
-                        .Shards(1)
-                        .Followers(1);
+        auto opts = TShardedTableOptions().Followers(1);
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         CreateShardedTable(server, sender, "/Root", "table-2", opts);
 

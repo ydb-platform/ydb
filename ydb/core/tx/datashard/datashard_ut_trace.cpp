@@ -344,7 +344,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
     Y_UNIT_TEST(TestTraceWriteImmediateOnShard) {
         auto [runtime, server, sender] = TestCreateServer();
 
-        auto opts = TShardedTableOptions().Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}});
+        TShardedTableOptions opts;
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
 
         TFakeWilsonUploader *uploader = new TFakeWilsonUploader();

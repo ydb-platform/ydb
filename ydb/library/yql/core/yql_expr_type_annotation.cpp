@@ -1354,18 +1354,20 @@ const TPgExprType* CommonType(TPositionHandle pos, const TPgExprType* one, const
     if (one->GetId() == two->GetId()) {
         return one;
     }
+    const NPg::TTypeDesc* commonTypeDesc = nullptr;
+    if (const auto issue = NPg::LookupCommonType({one->GetId(), two->GetId()},
+        [&ctx, &pos](size_t i) {
+            Y_UNUSED(i);
 
-    if (one->GetName() == "unknown") {
-        return two;
+            return ctx.GetPosition(pos);
+        }, commonTypeDesc))
+    {
+        if constexpr (!Silent) {
+            ctx.AddError(*issue);
+        }
+        return nullptr;
     }
-
-    if (two->GetName() == "unknown") {
-        return one;
-    }
-
-    if constexpr (!Silent)
-        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Cannot infer common type for " << one->GetName() << " and " << two->GetName()));
-    return nullptr;
+    return ctx.MakeType<TPgExprType>(commonTypeDesc->TypeId);
 }
 
 template<bool Silent>

@@ -340,7 +340,8 @@ ISubOperation::TPtr CreateForceDropUnsafe(TOperationId id, TTxState::ETxState st
 ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = { });
 ISubOperation::TPtr CreateNewTable(TOperationId id, TTxState::ETxState state);
 
-ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx,
+    const THashSet<TString>& localSequences = { });
 ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState state);
 TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 

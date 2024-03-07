@@ -10,11 +10,6 @@ Registering pre-existing tables
 --
 SET DateStyle = 'Postgres, MDY';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DateStyle
-    	--
-	^
 <sql-statement>
 SHOW TimeZone;  -- Many of these tests depend on the prevailing setting
 </sql-statement>
@@ -79,11 +74,6 @@ HINT:  Perhaps you need a different "datestyle" setting.
 <sql-statement>
 set datestyle to dmy;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: datestyle
-    	set datestyle to dmy;
-	^
 <sql-statement>
 SELECT timestamp with time zone '27/12/2001 04:05:06.789-08';
 </sql-statement>
@@ -100,11 +90,6 @@ HINT:  Perhaps you need a different "datestyle" setting.
 <sql-statement>
 reset datestyle;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
-    	reset datestyle;
-	^
 <sql-statement>
 SELECT timestamp with time zone 'Y2001M12D27H04M05S06.789+08';
 </sql-statement>
@@ -157,11 +142,6 @@ SELECT timestamp with time zone '12.27.2001 04:05:06.789-08';
 <sql-statement>
 SET DateStyle = 'German';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DateStyle
-    	SET DateStyle = 'German';
-	^
 <sql-statement>
 SELECT timestamp with time zone '27.12.2001 04:05:06.789+08';
 </sql-statement>
@@ -191,11 +171,6 @@ HINT:  Perhaps you need a different "datestyle" setting.
 <sql-statement>
 SET DateStyle = 'ISO';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DateStyle
-    	SET DateStyle = 'ISO';
-	^
 <sql-statement>
 -- As of 7.4, allow time without time zone having a time zone specified
 SELECT time without time zone '040506.789+08';
@@ -230,11 +205,6 @@ SELECT time with time zone 'T040506.789 -08';
 <sql-statement>
 SET DateStyle = 'Postgres, MDY';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DateStyle
-    	SET DateStyle = 'Postgres, MDY';
-	^
 <sql-statement>
 -- Check Julian dates BC
 SELECT date 'J1520447' AS "Confucius' Birthday";
@@ -859,11 +829,6 @@ RESET TimeZone;
 --
 SET DateStyle TO 'US,Postgres';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DateStyle
-    	--
-	^
 <sql-statement>
 SHOW DateStyle;
 </sql-statement>
@@ -878,22 +843,12 @@ SELECT d1 AS us_postgres FROM TIMESTAMP_TBL;
 <sql-statement>
 SET DateStyle TO 'US,ISO';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DateStyle
-    	SET DateStyle TO 'US,ISO';
-	^
 <sql-statement>
 SELECT d1 AS us_iso FROM TIMESTAMP_TBL;
 </sql-statement>
 <sql-statement>
 SET DateStyle TO 'US,SQL';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DateStyle
-    	SET DateStyle TO 'US,SQL';
-	^
 <sql-statement>
 SHOW DateStyle;
 </sql-statement>
@@ -908,11 +863,6 @@ SELECT d1 AS us_sql FROM TIMESTAMP_TBL;
 <sql-statement>
 SET DateStyle TO 'European,Postgres';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DateStyle
-    	SET DateStyle TO 'European,Postgres';
-	^
 <sql-statement>
 SHOW DateStyle;
 </sql-statement>
@@ -943,11 +893,6 @@ SELECT d1 AS european_postgres FROM TIMESTAMP_TBL;
 <sql-statement>
 SET DateStyle TO 'European,ISO';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DateStyle
-    	SET DateStyle TO 'European,ISO';
-	^
 <sql-statement>
 SHOW DateStyle;
 </sql-statement>
@@ -962,11 +907,6 @@ SELECT d1 AS european_iso FROM TIMESTAMP_TBL;
 <sql-statement>
 SET DateStyle TO 'European,SQL';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DateStyle
-    	SET DateStyle TO 'European,SQL';
-	^
 <sql-statement>
 SHOW DateStyle;
 </sql-statement>
@@ -981,11 +921,6 @@ SELECT d1 AS european_sql FROM TIMESTAMP_TBL;
 <sql-statement>
 RESET DateStyle;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
-    	RESET DateStyle;
-	^
 <sql-statement>
 --
 -- to_timestamp()

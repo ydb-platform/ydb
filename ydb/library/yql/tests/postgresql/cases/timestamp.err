@@ -294,11 +294,6 @@ INSERT INTO TIMESTAMP_TBL VALUES ('19970210 173201 PST');
 <sql-statement>
 set datestyle to ymd;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: datestyle
-    	set datestyle to ymd;
-	^
 <sql-statement>
 INSERT INTO TIMESTAMP_TBL VALUES ('97FEB10 5:32:01PM UTC');
 </sql-statement>
@@ -326,11 +321,6 @@ INSERT INTO TIMESTAMP_TBL VALUES ('97/02/10 17:32:01 UTC');
 <sql-statement>
 reset datestyle;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
-    	reset datestyle;
-	^
 <sql-statement>
 INSERT INTO TIMESTAMP_TBL VALUES ('1997.041 17:32:01 UTC');
 </sql-statement>

@@ -801,10 +801,18 @@ public:
     {}
 
     void InitState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        MakeState(ctx, state);
+#ifdef MKQL_DISABLE_CODEGEN
+        state = ctx.HolderFactory.Create<TState>(Nodes.KeyNodes.size(), Nodes.StateNodes.size(), TMyValueHasher(KeyTypes), TMyValueEqual(KeyTypes));
+#else
+        state = ctx.HolderFactory.Create<TState>(Nodes.KeyNodes.size(), Nodes.StateNodes.size(),
+            ctx.ExecuteLLVM && Hash ? THashFunc(std::ptr_fun(Hash)) : THashFunc(TMyValueHasher(KeyTypes)),
+            ctx.ExecuteLLVM && Equals ? TEqualsFunc(std::ptr_fun(Equals)) : TEqualsFunc(TMyValueEqual(KeyTypes))
+        );
+#endif
     }
 
-    NUdf::TUnboxedValue*const* PrepareInput(TState* state, TComputationContext& ctx, NUdf::TUnboxedValue*const*) const {
+    NUdf::TUnboxedValue*const* PrepareInput(NUdf::TUnboxedValue& stateUnboxed, TComputationContext& ctx, NUdf::TUnboxedValue*const*) const {
+        auto state = static_cast<TState*>(stateUnboxed.AsBoxed().Get());
         if (state->IsReading || state->ReadMore<SkipYields>()) {
             if (!state->IsReading) {
                 switch (state->InputStatus) {
@@ -827,7 +835,8 @@ public:
         return nullptr;
     }
 
-    TBaseComputation::EProcessResult DoProcess(TState* state, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValue*const* output) const {
+    TMaybeFetchResult DoProcess(NUdf::TUnboxedValue& stateUnboxed, TComputationContext& ctx, TMaybeFetchResult fetchRes, NUdf::TUnboxedValue*const* output) const {
+        auto state = static_cast<TState*>(stateUnboxed.AsBoxed().Get());
         if (state->IsReading || state->ReadMore<SkipYields>()) {
             if (!state->IsReading) {
                 switch (state->InputStatus) {
@@ -836,48 +845,38 @@ public:
                     case EFetchResult::Yield:
                         state->InputStatus = EFetchResult::One;
                         if constexpr (SkipYields) break;
-                        else return TBaseComputation::EProcessResult::Yield;
+                        else return EFetchResult::Yield;
                     case EFetchResult::Finish:
-                        return TBaseComputation::EProcessResult::Finish;
+                        return EFetchResult::Finish;
                 }
             }
             auto **fields = ctx.WideFields.data() + WideFieldsIndex;
-            state->InputStatus = fetchRes;
+            state->InputStatus = fetchRes.Get();
             state->IsReading = false;
             if constexpr (SkipYields) {
-                if (fetchRes == EFetchResult::Yield) {
-                    return TBaseComputation::EProcessResult::Yield;
-                } else if (fetchRes == EFetchResult::Finish) {
-                    return TBaseComputation::EProcessResult::Again;
+                if (fetchRes.Get() == EFetchResult::Yield) {
+                    return EFetchResult::Yield;
+                } else if (fetchRes.Get() == EFetchResult::Finish) {
+                    return TMaybeFetchResult::None();
                 }
             } else {
-                if (fetchRes != EFetchResult::One) {
-                    return TBaseComputation::EProcessResult::Again;
+                if (fetchRes.Get() != EFetchResult::One) {
+                    return TMaybeFetchResult::None();
                 }
             }
             state->IsReading = true;
             Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(state->Tongue));
             Nodes.ProcessItem(ctx, state->TasteIt() ? nullptr : static_cast<NUdf::TUnboxedValue*>(state->Tongue), static_cast<NUdf::TUnboxedValue*>(state->Throat));
-            return TBaseComputation::EProcessResult::Again;
+            return TMaybeFetchResult::None();
         }
         if (const auto values = static_cast<NUdf::TUnboxedValue*>(state->Extract())) {
             Nodes.FinishItem(ctx, values, output);
-            return TBaseComputation::EProcessResult::One;
+            return EFetchResult::One;
         }
-        return TBaseComputation::EProcessResult::Again;
-    }
-private:
-    void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
-#ifdef MKQL_DISABLE_CODEGEN
-        state = ctx.HolderFactory.Create<TState>(Nodes.KeyNodes.size(), Nodes.StateNodes.size(), TMyValueHasher(KeyTypes), TMyValueEqual(KeyTypes));
-#else
-        state = ctx.HolderFactory.Create<TState>(Nodes.KeyNodes.size(), Nodes.StateNodes.size(),
-            ctx.ExecuteLLVM && Hash ? THashFunc(std::ptr_fun(Hash)) : THashFunc(TMyValueHasher(KeyTypes)),
-            ctx.ExecuteLLVM && Equals ? TEqualsFunc(std::ptr_fun(Equals)) : TEqualsFunc(TMyValueEqual(KeyTypes))
-        );
-#endif
+        return TMaybeFetchResult::None();
     }
 
+private:
     void RegisterDependencies() const final {
         if (const auto flow = this->FlowDependsOn(Flow)) {
             Nodes.RegisterDependencies(

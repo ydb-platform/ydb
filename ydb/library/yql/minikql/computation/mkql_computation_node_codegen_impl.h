@@ -5,6 +5,35 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
+class TMaybeFetchResult final {
+    union {
+        struct {
+            ui32 Flag;
+            EFetchResult Res;
+        } Opt;
+
+        ui64 Raw;
+    };
+
+    TMaybeFetchResult() : Opt(0) {}
+
+public:
+    TMaybeFetchResult(EFetchResult res) : Opt(1, res) {}
+
+    [[nodiscard]] EFetchResult Get() const {
+        Y_ABORT_UNLESS(Opt.Flag);
+        return Opt.Res;
+    }
+
+    [[nodiscard]] bool Empty() const {
+        return !Opt.Flag;
+    }
+
+    static TMaybeFetchResult None() {
+        return TMaybeFetchResult();
+    }
+};
+
 template<typename TDerived, typename TState, EValueRepresentation StateKind = EValueRepresentation::Embedded>
 class TSimpleStatefulWideFlowCodegeneratorNode
         : public TStatefulWideFlowCodegeneratorNode<TSimpleStatefulWideFlowCodegeneratorNode<TDerived, TState, StateKind>> {
@@ -15,34 +44,19 @@ protected:
             : TBase(mutables, source, StateKind), SourceFlow(source), InWidth(inWidth), OutWidth(outWidth)
     {}
 
-    enum class EProcessResult : i32 {
-        Finish = -1,
-        Yield = 0,
-        One = 1,
-        Again = std::numeric_limits<i32>::max()
-    };
-
 private:
     void InitStateWrapper(NUdf::TUnboxedValue &state, TComputationContext &ctx) const {
-        if constexpr (StateKind == EValueRepresentation::Embedded) {
-            static_cast<const TDerived *>(this)->InitState(*static_cast<TState *>(state.GetRawPtr()), ctx);
-        } else {
-            static_cast<const TDerived *>(this)->InitState(state, ctx);
-        }
+        static_cast<const TDerived *>(this)->InitState(state, ctx);
     }
 
-    EProcessResult DoProcessWrapper(NUdf::TUnboxedValue &state, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValuePod* inputValues, NUdf::TUnboxedValuePod* outputValues) const {
+    i32 DoProcessWrapper(NUdf::TUnboxedValue &state, TComputationContext& ctx, EFetchResult fetchRes, NUdf::TUnboxedValuePod* inputValues, NUdf::TUnboxedValuePod* outputValues) const {
         Fill(outputValues, outputValues + OutWidth, NUdf::TUnboxedValuePod());
         TVector<NUdf::TUnboxedValue*> outputPtrsVec(OutWidth, nullptr);
         for (size_t pos = 0; pos < OutWidth; pos++) {
             outputPtrsVec[pos] = static_cast<NUdf::TUnboxedValue*>(outputValues + pos);
         }
         NUdf::TUnboxedValue*const* inputPtrs = nullptr;
-        if constexpr (StateKind == EValueRepresentation::Embedded) {
-            inputPtrs = static_cast<const TDerived*>(this)->PrepareInput(*static_cast<TState*>(state.GetRawPtr()), ctx, outputPtrsVec.data());
-        } else {
-            inputPtrs = static_cast<const TDerived*>(this)->PrepareInput(static_cast<TState*>(state.AsBoxed().Get()), ctx, outputPtrsVec.data());
-        }
+        inputPtrs = static_cast<const TDerived*>(this)->PrepareInput(state, ctx, outputPtrsVec.data());
         if (inputPtrs) {
             for (size_t pos = 0; pos < InWidth; pos++) {
                 if (auto in = inputPtrs[pos]) {
@@ -50,36 +64,24 @@ private:
                 }
             }
         }
-        if constexpr (StateKind == EValueRepresentation::Embedded) {
-            return static_cast<const TDerived*>(this)->DoProcess(*static_cast<TState*>(state.GetRawPtr()), ctx, fetchRes, outputPtrsVec.data());
-        } else {
-            return static_cast<const TDerived*>(this)->DoProcess(static_cast<TState*>(state.AsBoxed().Get()), ctx, fetchRes, outputPtrsVec.data());
-        }
+        TMaybeFetchResult res = static_cast<const TDerived*>(this)->DoProcess(state, ctx, inputPtrs ? fetchRes : TMaybeFetchResult::None(), outputPtrsVec.data());
+        return !res.Empty() ? static_cast<i32>(res.Get()) : std::numeric_limits<i32>::max();
     }
 
 public:
-    EFetchResult DoCalculate(NUdf::TUnboxedValue &state, TComputationContext &ctx,
-                             NUdf::TUnboxedValue *const *output) const {
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (state.IsInvalid()) {
             state = NUdf::TUnboxedValuePod();
             InitStateWrapper(state, ctx);
         }
-        EProcessResult res = EProcessResult::Again;
-        while (res == EProcessResult::Again) {
+        auto result = TMaybeFetchResult::None();
+        while (result.Empty()) {
             NUdf::TUnboxedValue*const* input = nullptr;
-            if constexpr (StateKind == EValueRepresentation::Embedded) {
-                input = static_cast<const TDerived*>(this)->PrepareInput(*static_cast<TState*>(state.GetRawPtr()), ctx, output);
-            } else {
-                input = static_cast<const TDerived*>(this)->PrepareInput(static_cast<TState*>(state.AsBoxed().Get()), ctx, output);
-            }
-            auto fetchRes = input ? SourceFlow->FetchValues(ctx, input) : EFetchResult::One;
-            if constexpr (StateKind == EValueRepresentation::Embedded) {
-                res = static_cast<const TDerived*>(this)->DoProcess(*static_cast<TState*>(state.GetRawPtr()), ctx, fetchRes, output);
-            } else {
-                res = static_cast<const TDerived*>(this)->DoProcess(static_cast<TState*>(state.AsBoxed().Get()), ctx, fetchRes, output);
-            }
+            input = static_cast<const TDerived*>(this)->PrepareInput(state, ctx, output);
+            TMaybeFetchResult fetchResult = input ? SourceFlow->FetchValues(ctx, input) : TMaybeFetchResult::None();
+            result = static_cast<const TDerived*>(this)->DoProcess(state, ctx, fetchResult, output);
         }
-        return static_cast<EFetchResult>(res);
+        return result.Get();
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -139,7 +141,7 @@ public:
                 return value;
             });
         }
-        const auto brk = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, processResVal, ConstantInt::get(processResVal->getType(), static_cast<i32>(EProcessResult::Again)), "brk", block);
+        const auto brk = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, processResVal, ConstantInt::get(processResVal->getType(), std::numeric_limits<i32>::max() /* static_cast<i32>(EProcessResult::Again) */), "brk", block);
         BranchInst::Create(done, loop, brk, block);
 
         block = done;

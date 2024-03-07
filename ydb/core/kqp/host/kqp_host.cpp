@@ -23,6 +23,7 @@
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <ydb/library/yql/providers/pg/provider/yql_pg_provider_impl.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
+#include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <library/cpp/cache/cache.h>
@@ -1645,6 +1646,28 @@ private:
         TypesCtx->AddDataSink(NYql::GenericProviderName, NYql::CreateGenericDataSink(state));
     }
 
+    void InitYtProvider() {
+        TString userName = CreateGuidAsString();
+        if (SessionCtx->GetUserToken() && SessionCtx->GetUserToken()->GetUserSID()) {
+            userName = SessionCtx->GetUserToken()->GetUserSID();
+        }
+
+        TString sessionId = CreateGuidAsString();
+        auto [ytState, statWriter] = CreateYtNativeState(FederatedQuerySetup->YtGateway, userName, sessionId, &FederatedQuerySetup->YtGatewayConfig, TypesCtx);
+
+        ytState->PassiveExecution = true;
+        ytState->Gateway->OpenSession(
+            IYtGateway::TOpenSessionOptions(sessionId)
+                .UserName(userName)
+                .RandomProvider(TAppData::RandomProvider)
+                .TimeProvider(TAppData::TimeProvider)
+                .StatWriter(statWriter)
+        );
+
+        TypesCtx->AddDataSource(YtProviderName, CreateYtDataSource(ytState));
+        TypesCtx->AddDataSink(YtProviderName, CreateYtDataSink(ytState));
+    }
+
     void InitPgProvider() {
         auto state = MakeIntrusive<NYql::TPgState>();
         state->Types = TypesCtx.Get();
@@ -1686,6 +1709,9 @@ private:
         if (addExternalDataSources && FederatedQuerySetup) {
             InitS3Provider(queryType);
             InitGenericProvider();
+            if (FederatedQuerySetup->YtGateway) {
+                InitYtProvider();
+            }
         }
 
         InitPgProvider();
@@ -1728,7 +1754,7 @@ private:
             .AddPreTypeAnnotation()
             .AddExpressionEvaluation(*FuncRegistry)
             .Add(new TFailExpressionEvaluation(), "FailExpressionEvaluation")
-            .AddIOAnnotation()
+            .AddIOAnnotation(false)
             .AddTypeAnnotation()
             .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
             .AddPostTypeAnnotation()

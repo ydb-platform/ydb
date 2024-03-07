@@ -661,9 +661,8 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
             if (!ExploreTx(child, ctx, dataSink, txRes, tablesData, types)) {
                 return false;
             }
-
-            return true;
         }
+        return true;
     }
 
     if (node.Maybe<TResWrite>() ||

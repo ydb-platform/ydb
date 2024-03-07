@@ -133,6 +133,8 @@ PEERDIR(
     ydb/library/pdisk_io
     ydb/library/security
     ydb/library/yql/minikql/comp_nodes/llvm14
+    ydb/library/yql/providers/yt/codec/codegen
+    ydb/library/yql/providers/yt/comp_nodes/llvm14
     ydb/library/yql/providers/pq/cm_client
     ydb/library/yql/public/udf/service/exception_policy
     ydb/public/lib/base

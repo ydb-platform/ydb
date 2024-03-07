@@ -155,6 +155,7 @@ PEERDIR(
     ydb/library/login/protos
     ydb/library/mkql_proto/protos
     ydb/public/api/protos
+    ydb/library/yql/core/file_storage/proto
     ydb/library/yql/core/issue/protos
     ydb/library/yql/dq/actors/protos
     ydb/library/yql/dq/proto

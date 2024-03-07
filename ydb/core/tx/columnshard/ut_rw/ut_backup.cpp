@@ -17,7 +17,7 @@
 #include <ydb/core/tx/columnshard/operations/write_data.h>
 #include <ydb/core/tx/columnshard/ut_rw/common.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
-#include <ydb/core/tx/data_events/backup_events.h>
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/wrappers/fake_storage.h>
 
 #include <ydb/library/actors/protos/unittests.pb.h>
@@ -101,7 +101,7 @@ Y_UNIT_TEST_SUITE(TColumnShardBackup) {
                                           TTestSchema::ExtractNames(schema)));
 
         TAutoPtr<NActors::IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<NEvents::TBackupEvents::TEvBackupShardResult>(handle);
+        auto event = runtime.GrabEdgeEvent<NColumnShard::TEvPrivate::TEvBackupShardResult>(handle);
 
         UNIT_ASSERT(event);
 

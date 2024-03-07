@@ -1023,6 +1023,12 @@ void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs:
     Execute(new TTxRemoveSharedBlobs(this, removeAction, NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId())), ctx);
 }
 
+void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvBackupShardBatchPersist::TPtr& ev, const TActorContext& ctx) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TColumnShard.Handle", "TEvBackupShardBatchPersist");
+    auto ProposePersist = std::make_unique<NColumnShard::TEvPrivate::TEvBackupShardBatchPersistResult>();
+    ctx.Send(ev->Sender, ProposePersist.release());
+}
+
 void TColumnShard::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
     Y_ABORT_UNLESS(Tiers);
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "TEvRefreshSubscriberData")("snapshot", ev->Get()->GetSnapshot()->SerializeToString());

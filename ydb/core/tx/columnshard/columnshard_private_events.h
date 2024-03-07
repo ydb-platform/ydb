@@ -3,6 +3,8 @@
 #include "blobs_action/abstract/gc.h"
 #include "defs.h"
 
+#include <ydb/core/base/events.h>
+#include <ydb/core/protos/backup_events.pb.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
@@ -35,6 +37,10 @@ struct TEvPrivate {
 
         EvWritingAddDataToBuffer,
         EvWritingFlushBuffer,
+
+        EvBackupShardBatchPersist,
+        EvBackupShardBatchPersistResult,
+        EvBackupShardResult,
 
         EvEnd
     };
@@ -155,6 +161,28 @@ struct TEvPrivate {
         NOlap::TWritingBuffer& MutableWritesBuffer() {
             return WritesBuffer;
         }
+    };
+
+    class TEvBackupShardBatchPersist
+        : public NActors::TEventPB<TEvBackupShardBatchPersist, NKikimrBackupEvents::TEvBackupShardBatchPersist,
+                                   EvBackupShardBatchPersist> {
+    public:
+        TEvBackupShardBatchPersist() = default;
+    };
+
+    class TEvBackupShardBatchPersistResult
+        : public NActors::TEventPB<TEvBackupShardBatchPersistResult,
+                                   NKikimrBackupEvents::TEvBackupShardBatchPersistResult,
+                                   EvBackupShardBatchPersistResult> {
+    public:
+        TEvBackupShardBatchPersistResult() = default;
+    };
+
+    class TEvBackupShardResult
+        : public NActors::TEventPB<TEvBackupShardResult, NKikimrBackupEvents::TEvBackupShardResult,
+                                   EvBackupShardResult> {
+    public:
+        TEvBackupShardResult() = default;
     };
 };
 

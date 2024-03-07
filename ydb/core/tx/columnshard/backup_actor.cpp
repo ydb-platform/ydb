@@ -6,7 +6,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/tier/storage.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/columnshard/operations/write_data.h>
-#include <ydb/core/tx/data_events/backup_events.h>
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/util/backoff.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -90,8 +90,7 @@ public:
             HFunc(NKqp::TEvKqpCompute::TEvScanError, Handle);
             HFunc(NKqp::TEvKqpCompute::TEvScanData, Handle);
             HFunc(TEvPrivate::TEvWriteBlobsResult, Handle);
-            HFunc(NEvents::TBackupEvents::TEvBackupShardBatchPersist, Handle);
-            HFunc(NEvents::TBackupEvents::TEvBackupShardBatchPersistResult, Handle);
+            HFunc(TEvPrivate::TEvBackupShardBatchPersistResult, Handle);
             default:
                 break;
         }
@@ -112,7 +111,7 @@ public:
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupActor.Handle", "TEvScanError");
 
         // @TODO discuss about error
-        auto result = std::make_unique<NEvents::TBackupEvents::TEvBackupShardResult>();
+        auto result = std::make_unique<TEvPrivate::TEvBackupShardResult>();
         ctx.Send(SenderActorId, result.release());
     }
 
@@ -122,11 +121,9 @@ public:
 
         auto batch = ev->Get()->ArrowBatch;
         if (batch) {
-            NArrow::TStatusValidator::Validate(batch->ValidateFull());
-            SendBackupShardPersist(ctx);
-
             // We read only one batch right now.
-            Batch = std::move(batch);
+            NArrow::TStatusValidator::Validate(batch->ValidateFull());
+            LoadBatchToStorage(ctx, std::move(batch));
         } else {
             AFL_VERIFY(ev->Get()->Finished);
         }
@@ -143,22 +140,12 @@ public:
 
     void Handle(TEvPrivate::TEvWriteBlobsResult::TPtr&, const TActorContext& ctx) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupActor.Handle", "TEvWriteBlobsResult");
-        ProcessState(ctx, EBackupActorState::Done);
+        SendBackupShardPersist(ctx);
     }
 
-    void Handle(NEvents::TBackupEvents::TEvBackupShardBatchPersist::TPtr&, const TActorContext& ctx) {
-        // temporary solution for persist
-
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupActor.Handle", "TEvBackupShardBatchPersist");
-        auto ProposePersist = std::make_unique<NEvents::TBackupEvents::TEvBackupShardBatchPersistResult>();
-        ctx.Send(SelfId(), ProposePersist.release());
-    }
-
-    void Handle(NEvents::TBackupEvents::TEvBackupShardBatchPersistResult::TPtr&, const TActorContext& ctx) {
+    void Handle(TEvPrivate::TEvBackupShardBatchPersistResult::TPtr&, const TActorContext& ctx) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupActor.Handle", "TEvBackupShardBatchPersistResult");
-
-        LoadBatchToStorage(ctx, Batch);
-        Batch.reset();
+        ProcessState(ctx, EBackupActorState::Done);
     }
 
 private:
@@ -252,15 +239,15 @@ private:
     }
 
     void SendBackupShardResult(const TActorContext& ctx) {
-        auto ProposeResult = std::make_unique<NEvents::TBackupEvents::TEvBackupShardResult>();
+        auto ProposeResult = std::make_unique<TEvPrivate::TEvBackupShardResult>();
         ctx.Send(SenderActorId, ProposeResult.release());
     }
 
     void SendBackupShardPersist(const TActorContext& ctx) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("BackupActor.SendBackupShardPersist", "call");
 
-        auto ProposePersist = std::make_unique<NEvents::TBackupEvents::TEvBackupShardBatchPersist>();
-        ctx.Send(SelfId(), ProposePersist.release());
+        auto ProposePersist = std::make_unique<TEvPrivate::TEvBackupShardBatchPersist>();
+        ctx.Send(CSActorId, ProposePersist.release());
     }
 
     void LoadBatchToStorage(const TActorContext& ctx, std::shared_ptr<arrow::RecordBatch> arrowBatch) {

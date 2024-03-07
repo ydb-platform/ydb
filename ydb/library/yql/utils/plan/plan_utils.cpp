@@ -111,7 +111,21 @@ TString AggrOpToStr(const TExprBase& aggr) {
 
 /* if lhs has lower priority than rhs */
 bool IsLowerPriority(const TString& lhs, const TString& rhs) {
-    return (lhs == "+" || lhs == "-") && (rhs == "*" || rhs == "/");
+    const static THashMap<TString, i64> OP_PRIORITY = {
+        {"+", 0},
+        {"-", 0},
+        {"*", 1},
+        {"/", 1}
+    };
+
+    auto lhsIt = OP_PRIORITY.find(lhs);
+    auto rhsIt = OP_PRIORITY.find(rhs);
+
+    if (lhsIt == OP_PRIORITY.end() || rhsIt == OP_PRIORITY.end()) {
+        return true;
+    }
+
+    return *lhsIt < *rhsIt;
 }
 
 TString BinaryOpToStr(const TExprBase& op) {

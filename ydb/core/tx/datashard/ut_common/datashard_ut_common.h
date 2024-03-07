@@ -420,6 +420,13 @@ struct TShardedTableOptions {
         TString DefaultFromSequence;
     };
 
+    static TVector<TColumn> DefaultColumns() {
+        return {
+            {"key",   "Uint32", true,  false}, 
+            {"value", "Uint32", false, false}
+        };
+    }
+
     struct TIndex {
         using EType = NKikimrSchemeOp::EIndexType;
 
@@ -468,7 +475,7 @@ struct TShardedTableOptions {
     TABLE_OPTION(bool, EnableOutOfOrder, true);
     TABLE_OPTION(const NLocalDb::TCompactionPolicy*, Policy, nullptr);
     TABLE_OPTION(EShadowDataMode, ShadowData, EShadowDataMode::Default);
-    TABLE_OPTION(TVector<TColumn>, Columns, (TVector<TColumn>{{"key", "Uint32", true, false}, {"value", "Uint32", false, false}}));
+    TABLE_OPTION(TVector<TColumn>, Columns, DefaultColumns());
     TABLE_OPTION(TVector<TIndex>, Indexes, {});
     TABLE_OPTION(TVector<TFamily>, Families, {});
     TABLE_OPTION(ui64, Followers, 0);

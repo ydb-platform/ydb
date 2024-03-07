@@ -801,11 +801,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
     };
 
     TShardedTableOptions SimpleTable() {
-        return TShardedTableOptions()
-            .Columns({
-                {"key", "Uint32", true, false},
-                {"value", "Uint32", false, false},
-            });
+        return TShardedTableOptions();
     }
 
     TCdcStream KeysOnly(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream") {

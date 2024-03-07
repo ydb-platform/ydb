@@ -1844,7 +1844,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         TDisableDataShardLogBatching disableDataShardLogBatching;
         CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
-            .Shards(1)
             .Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}, {"value2", "Uint32", false, false}}));
 
         auto shards = GetTableShards(server, sender, "/Root/table-1");
@@ -2003,7 +2002,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         TDisableDataShardLogBatching disableDataShardLogBatching;
         CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
-            .Shards(1)
             .Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}, {"value2", "Uint32", false, false}}));
 
         auto shards = GetTableShards(server, sender, "/Root/table-1");
@@ -3522,7 +3520,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         TDisableDataShardLogBatching disableDataShardLogBatching;
         auto opts = TShardedTableOptions()
-                        .Shards(1)
                         .Columns({
                             {"key", "Uint32", true, false},
                             {"value", "Uint32", false, false},
@@ -3635,11 +3632,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         InitRoot(server, sender);
 
         TDisableDataShardLogBatching disableDataShardLogBatching;
-        auto opts = TShardedTableOptions()
-                        .Shards(1)
-                        .Columns({
-                            {"key", "Uint32", true, false},
-                            {"value", "Uint32", false, false}});
+        TShardedTableOptions opts;
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         CreateShardedTable(server, sender, "/Root", "table-2", opts);
 
@@ -3756,11 +3749,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         InitRoot(server, sender);
 
         TDisableDataShardLogBatching disableDataShardLogBatching;
-        auto opts = TShardedTableOptions()
-                        .Shards(1)
-                        .Columns({
-                            {"key", "Uint32", true, false},
-                            {"value", "Uint32", false, false}});
+        TShardedTableOptions opts;
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         CreateShardedTable(server, sender, "/Root", "table-2", opts);
 

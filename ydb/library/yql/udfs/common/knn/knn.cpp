@@ -30,7 +30,7 @@ bool EnumerateVectors(const TUnboxedValuePod vector1, const TUnboxedValuePod vec
         const auto size1 = vector1.GetListLength();
         const auto size2 = vector2.GetListLength();
         
-        // Lenght mismatch
+        // Length mismatch
         if (size1 != size2)
             return false;
 
@@ -51,7 +51,7 @@ bool EnumerateVectors(const TUnboxedValuePod vector1, const TUnboxedValuePod vec
             callback(elements1[idx++].Get<float>(), value.Get<float>());
         }
 
-        // Lenght mismatch
+        // Length mismatch
         if (it.Next(value) || idx != size)
             return false;
 
@@ -66,7 +66,7 @@ bool EnumerateVectors(const TUnboxedValuePod vector1, const TUnboxedValuePod vec
             callback(value1.Get<float>(), value2.Get<float>());
         }
 
-        // Lenght mismatch
+        // Length mismatch
         if (it1.Next(value1) || it2.Next(value2))
             return false;
 
@@ -152,7 +152,7 @@ SIMPLE_STRICT_UDF(TFromBinaryString, TOptional<TListType<float>>(const char*)) {
     }
 }
 
-float CalcLenght(const TUnboxedValuePod vector) {
+float CalcLength(const TUnboxedValuePod vector) {
     float ret = 0;
 
     EnumerateVector(vector, [&ret](float el) { ret += el * el;});
@@ -188,8 +188,8 @@ SIMPLE_STRICT_UDF(TCosineSimilarity, TOptional<float>(TAutoMap<TListType<float>>
     if (!innerProduct)
         return {};
 
-    float len0 = CalcLenght(args[0]);
-    float len1 = CalcLenght(args[1]);
+    float len0 = CalcLength(args[0]);
+    float len1 = CalcLength(args[1]);
 
     float cosine = innerProduct.value() / len0 / len1;
 

@@ -270,6 +270,12 @@ class TCopyTable: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+    explicit TCopyTable(const TOperationId& id, const TTxTransaction& tx, const THashSet<TString>& localSequences)
+        : TSubOperation(id, tx)
+        , LocalSequences(localSequences)
+    {
+    }
+
     bool IsShadowDataAllowed() const {
         return AppData()->AllowShadowDataInSchemeShardForTests;
     }
@@ -636,9 +642,7 @@ namespace NKikimr::NSchemeShard {
 
 ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences)
 {
-    auto obj = MakeSubOperation<TCopyTable>(id, tx);
-    static_cast<TCopyTable*>(obj.Get())->SetLocalSequences(localSequences);
-    return obj;
+    return MakeSubOperation<TCopyTable>(id, tx, localSequences);
 }
 
 ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState state) {

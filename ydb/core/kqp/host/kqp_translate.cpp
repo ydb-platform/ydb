@@ -81,6 +81,7 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
     if (IsEnableExternalDataSources) {
         settings.DynamicClusterProvider = NYql::KikimrProviderName;
         settings.BindingsMode = BindingsMode;
+        settings.SaveWorldDependencies = true;
     }
 
     settings.InferSyntaxVersion = true;

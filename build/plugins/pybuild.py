@@ -332,6 +332,7 @@ def onpy_srcs(unit, *args):
     swigs_cpp = []
     swigs = swigs_cpp
     pys = []
+    pyis = []
     protos = []
     evs = []
     fbss = []
@@ -450,9 +451,8 @@ def onpy_srcs(unit, *args):
                 evs.append(pathmod)
             elif path.endswith('.swg'):
                 swigs.append(pathmod)
-            # Allow pyi files in PY_SRCS for autocomplete in IDE, but skip it during building
             elif path.endswith('.pyi'):
-                pass
+                pyis.append(pathmod)
             elif path.endswith('.fbs'):
                 fbss.append(pathmod)
             else:
@@ -628,6 +628,20 @@ def onpy_srcs(unit, *args):
             add_python_lint_checks(
                 unit, 2, [path for path, mod in pys] + unit.get(['_PY_EXTRA_LINT_FILES_VALUE']).split()
             )
+
+    if pyis:
+        pyis_seen = set()
+        pyis_dups = {m for _, m in pyis if (m in pyis_seen or pyis_seen.add(m))}
+        if pyis_dups:
+            pyis_dups = ', '.join(name for name in sorted(pyis_dups))
+            ymake.report_configure_error('Duplicate(s) is found in the PY_SRCS macro: {}'.format(pyis_dups))
+
+        res = []
+        for path, mod in pyis:
+            dest = 'py/' + mod.replace('.', '/') + '.pyi'
+            res += ['DEST', dest, path]
+
+        unit.onresource_files(res)
 
     use_vanilla_protoc = unit.get('USE_VANILLA_PROTOC') == 'yes'
     if use_vanilla_protoc:

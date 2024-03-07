@@ -11,6 +11,7 @@
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
 #include <ydb/library/yql/providers/yt/lib/schema/schema.h>
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
@@ -91,6 +92,15 @@ public:
         })
         , DqOptimizer_([this]() { return CreateYtDqOptimizers(State_); })
     {
+    }
+
+    void AddCluster(const TString& name, const THashMap<TString, TString>& properties) override {
+        State_->Configuration->AddValidCluster(name);
+
+        TYtClusterConfig cluster;
+        cluster.SetName(name);
+        cluster.SetCluster(properties.Value("location", ""));
+        State_->Gateway->AddCluster(cluster);
     }
 
     TStringBuf GetName() const override {
@@ -190,15 +200,19 @@ public:
 
     TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
         YQL_CLOG(INFO, ProviderYt) << "RewriteIO";
-        if (auto left = TMaybeNode<TCoLeft>(node)) {
-            return left.Input().Maybe<TYtRead>().World().Cast().Ptr();
+
+        auto read = TCoInputBase(node).Input().Cast<TYtRead>();
+        bool buildLeft = TCoLeft::Match(node.Get());
+        bool buildReadTableScheme = NYql::HasSetting(read.Arg(4).Ref(), EYtSettingType::Scheme);
+
+        if (buildLeft && (buildReadTableScheme || !State_->PassiveExecution)) {
+            return read.World().Ptr();
         }
 
-        auto read = TCoRight(node).Input().Cast<TYtRead>();
-        if (NYql::HasSetting(read.Arg(4).Ref(), EYtSettingType::Scheme)) {
+        if (buildReadTableScheme) {
             YQL_ENSURE(read.Arg(2).Maybe<TExprList>().Item(0).Maybe<TYtPath>());
 
-            auto newRead = InjectUdfRemapperOrView(read, ctx, true);
+            auto newRead = InjectUdfRemapperOrView(read, ctx, true, false);
 
             return Build<TCoRight>(ctx, node->Pos())
                 .Input<TYtReadTableScheme>()
@@ -213,7 +227,7 @@ public:
         }
 
         YQL_ENSURE(read.Arg(2).Maybe<TExprList>().Item(0).Maybe<TYtPath>()); // At least one table
-        return InjectUdfRemapperOrView(read, ctx, false);
+        return InjectUdfRemapperOrView(read, ctx, false, buildLeft);
     }
 
     void PostRewriteIO() final {
@@ -502,7 +516,7 @@ public:
     }
 
 private:
-    TExprNode::TPtr InjectUdfRemapperOrView(TYtRead readNode, TExprContext& ctx, bool fromReadSchema) {
+    TExprNode::TPtr InjectUdfRemapperOrView(TYtRead readNode, TExprContext& ctx, bool fromReadSchema, bool buildLeft) {
         const bool weakConcat = NYql::HasSetting(readNode.Arg(4).Ref(), EYtSettingType::WeakConcat);
         const bool ignoreNonExisting = NYql::HasSetting(readNode.Arg(4).Ref(), EYtSettingType::IgnoreNonExisting);
         const bool warnNonExisting = NYql::HasSetting(readNode.Arg(4).Ref(), EYtSettingType::WarnNonExisting);
@@ -582,7 +596,7 @@ private:
                 auto userSchema = GetSetting(table.Settings().Ref(), EYtSettingType::UserSchema);
                 if (userSchema) {
                     tableReads.push_back(ctx.Builder(table.Pos())
-                        .Callable("Right!")
+                        .Callable(buildLeft ? "Left!" : "Right!")
                             .Add(0, BuildEmptyTablesRead(table.Pos(), *userSchema, ctx))
                         .Seal()
                         .Build());
@@ -659,6 +673,15 @@ private:
                     .Build()
                 .Build()
                 .Done();
+
+            if (buildLeft) {
+                TExprNode::TPtr leftOverRead = Build<TCoLeft>(ctx, readNode.Pos())
+                        .Input(origReadNode)
+                        .Done().Ptr();
+
+                tableReads.push_back(leftOverRead);
+                continue;
+            }
 
             TExprNode::TPtr rightOverRead = inlineContent
                 ? Build<TYtTableContent>(ctx, readNode.Pos())
@@ -820,6 +843,10 @@ private:
             }
 
             tableReads.push_back(newReadNode);
+        }
+
+        if (buildLeft) {
+            return ctx.NewCallable(readNode.Pos(), TCoSync::CallableName(), std::move(tableReads));
         }
 
         if (tableReads.empty()) {

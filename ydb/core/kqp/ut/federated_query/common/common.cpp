@@ -36,7 +36,9 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             nullptr,
             databaseAsyncResolver,
             appConfig->GetQueryServiceConfig().GetS3(),
-            appConfig->GetQueryServiceConfig().GetGeneric());
+            appConfig->GetQueryServiceConfig().GetGeneric(),
+            appConfig->GetQueryServiceConfig().GetYt(),
+            nullptr);
 
         auto settings = TKikimrSettings()
                             .SetFeatureFlags(featureFlags)

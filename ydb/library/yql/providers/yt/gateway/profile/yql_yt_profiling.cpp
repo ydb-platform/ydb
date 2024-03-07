@@ -171,6 +171,9 @@ public:
         return Slave_->GetTablePartitions(std::move(options));
     }
 
+    void AddCluster(const TYtClusterConfig&) override {
+    }
+
 private:
     IYtGateway::TPtr Slave_;
 };

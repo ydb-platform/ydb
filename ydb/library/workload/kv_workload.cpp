@@ -78,10 +78,17 @@ void AddResultSet(const NYdb::TResultSet& resultSet, TVector<TRow>& rows) {
 
         for (size_t col = 0; col < parser.ColumnsCount(); col++) {
             auto& valueParser = parser.ColumnParser(col);
+            bool optional = valueParser.GetKind() == NYdb::TTypeParser::ETypeKind::Optional; 
+            if (optional) {
+                valueParser.OpenOptional();
+            }
             if (valueParser.GetPrimitiveType() == NYdb::EPrimitiveType::Uint64) {
                 row.Ints.push_back(valueParser.GetUint64());
             } else {
                 row.Strings.push_back(valueParser.GetString());
+            }
+            if (optional) {
+                valueParser.CloseOptional();
             }
         }
 
@@ -147,9 +154,9 @@ std::string TKvWorkloadGenerator::GetDDLQueries() const {
 
     for (size_t i = 0; i < Params.ColumnsCnt; ++i) {
         if (i < Params.IntColumnsCnt) {
-            ss << "c" << i << " Uint64 NOT NULL, ";
+            ss << "c" << i << " Uint64, ";
         } else {
-            ss << "c" << i << " String NOT NULL, ";
+            ss << "c" << i << " String, ";
         }
     }
 

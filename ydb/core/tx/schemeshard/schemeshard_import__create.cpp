@@ -850,7 +850,10 @@ private:
         }
 
         if (item.State == EState::CreateTable) {
-            item.DstPathId = Self->MakeLocalId(TLocalPathId(record.GetPathId()));
+            auto createPath = TPath::Resolve(item.DstPathName, Self);
+            Y_ABORT_UNLESS(createPath);
+
+            item.DstPathId = createPath.Base()->PathId;
             Self->PersistImportItemDstPathId(db, importInfo, itemIdx);
         }
 

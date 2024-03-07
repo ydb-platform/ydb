@@ -31,6 +31,7 @@ interfaces in this module.
 from zope.interface import Interface
 from zope.interface.common import collections
 
+
 class IItemMapping(Interface):
     """Simplest readable mapping object
     """

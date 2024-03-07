@@ -140,6 +140,7 @@ public:
     void Commit(const TString& server);
     void Finalize();
     void AbortAll();
+    void DetachSnapshotTxs();
 
 private:
     TMutex Lock_;

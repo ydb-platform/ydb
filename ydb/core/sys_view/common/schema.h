@@ -10,6 +10,7 @@ namespace NSysView {
 
 constexpr TStringBuf PartitionStatsName = "partition_stats";
 constexpr TStringBuf NodesName = "nodes";
+constexpr TStringBuf QuerySessions = "query_sessions";
 
 constexpr TStringBuf TopQueriesByDuration1MinuteName = "top_queries_by_duration_one_minute";
 constexpr TStringBuf TopQueriesByDuration1HourName = "top_queries_by_duration_one_hour";
@@ -410,7 +411,7 @@ struct Schema : NIceDb::Schema {
             Rows,
             RawBytes,
             PortionId,
-            ChunkIdx, 
+            ChunkIdx,
             EntityName,
             InternalEntityId,
             BlobId,
@@ -462,6 +463,20 @@ struct Schema : NIceDb::Schema {
             RowCount,
             IndexSize,
             InFlightTxCount>;
+    };
+
+    struct QuerySessions : Table<13> {
+        struct SessionId : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct NodeId : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct Status : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct QueryText : Column<4, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<SessionId>;
+        using TColumns = TableColumns<
+            SessionId,
+            NodeId,
+            Status,
+            QueryText>;
     };
 };
 

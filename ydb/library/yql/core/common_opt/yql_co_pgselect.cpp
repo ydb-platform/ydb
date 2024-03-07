@@ -924,6 +924,15 @@ TUsedColumns GatherUsedColumns(const TExprNode::TPtr& result, const TExprNode::T
         for (ui32 i = 0; i < groupTuple->ChildrenSize(); ++i) {
             auto join = groupTuple->Child(i);
             auto joinType = join->Child(0)->Content();
+            if (join->ChildrenSize() > 1 && join->Child(1)->Content() == "using") {
+
+                for (ui32 col = 0; col < join->Child(3)->ChildrenSize(); ++col) {
+                    auto lr = join->Child(3)->Child(col);
+                    usedColumns.insert(std::make_pair(TString(lr->Child(0)->Content()), std::make_pair(Max<ui32>(), TString())));
+                    usedColumns.insert(std::make_pair(TString(lr->Child(1)->Content()), std::make_pair(Max<ui32>(), TString())));
+                }
+                continue;
+            }
             if (joinType != "cross") {
                 AddColumnsFromType(join->Tail().Child(0)->GetTypeAnn(), usedColumns);
             }
@@ -1433,7 +1442,7 @@ bool GatherJoinInputs(const TExprNode& root, const TExprNode& row, ui32 rightInp
 }
 
 TExprNode::TPtr BuildEquiJoin(TPositionHandle pos, TStringBuf joinType, const TExprNode::TPtr& left, const TExprNode::TPtr& right,
-    const TExprNode::TListType& leftColumns, const TExprNode::TListType& rightColumns, TExprContext& ctx) {
+    const TExprNode::TListType& leftColumns, const TExprNode::TListType& rightColumns, TExprContext& ctx, bool isUsing = false) {
     auto join = ctx.Builder(pos)
         .Callable("EquiJoin")
             .List(0)
@@ -1475,7 +1484,7 @@ TExprNode::TPtr BuildEquiJoin(TPositionHandle pos, TStringBuf joinType, const TE
             .Seal()
         .Seal()
         .Build();
-
+    Y_UNUSED(isUsing);
     return ctx.Builder(pos)
         .Callable("OrderedMap")
             .Add(0, join)
@@ -1517,6 +1526,20 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
             auto cartesian = JoinColumns(pos, current, with, nullptr, 0, ctx);
             if (joinType == "cross") {
                 current = cartesian;
+                continue;
+            }
+            if (join->ChildrenSize() > 1 && join->Child(1)->Content() == "using") {
+                Y_ENSURE(join->ChildrenSize() > 3 && join->Child(3)->IsList(), "Excepted list of aliased columns in USING join");
+                auto left = current;
+                auto right = with;
+                TExprNode::TListType leftColumns;
+                TExprNode::TListType rightColumns;
+
+                for (auto& col: join->Child(3)->ChildrenList()) {
+                    leftColumns.push_back(col->Child(0));
+                    rightColumns.push_back(col->Child(1));
+                }
+                current = BuildEquiJoin(pos, joinType, left, right, leftColumns, rightColumns, ctx);
                 continue;
             }
 

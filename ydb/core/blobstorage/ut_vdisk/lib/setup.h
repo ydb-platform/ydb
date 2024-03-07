@@ -105,7 +105,7 @@ struct TFastCompactionGCNoSyncVDiskSetup : public TFastVDiskSetup {
 struct TFastVDiskSetupWODisk2 : public TFastVDiskSetup {
     bool SetUp(TAllVDisks::TVDiskInstance &vdisk, TAllPDisks *pdisks, ui32 id, ui32 d, ui32 j, ui32 pDiskID,
             ui32 slotId, bool runRepl, ui64 initOwnerRound) {
-        if (id == 4)
+        if (id == 2)
             return false;
 
         return TFastVDiskSetup::SetUp(vdisk, pdisks, id, d, j, pDiskID, slotId, runRepl, initOwnerRound);

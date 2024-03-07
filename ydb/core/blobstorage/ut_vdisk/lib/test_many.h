@@ -67,7 +67,7 @@ struct TManyMultiPutGet {
     const ui64 TabletId;
 
     TManyMultiPutGet(bool waitForCompaction, ui32 msgNum, ui32 msgSize, ui32 batchSize,
-            NKikimrBlobStorage::EPutHandleClass cls, ui64 tabletId = 1)
+            NKikimrBlobStorage::EPutHandleClass cls, ui64 tabletId = DefaultTestTabletId)
         : WaitForCompaction(waitForCompaction)
         , MsgNum(msgNum)
         , MsgSize(msgSize)

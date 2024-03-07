@@ -81,8 +81,8 @@ virtual void Scenario(const TActorContext &ctx) {
     TAutoPtr<IActor> readCmd;
     auto sendFunc = [this](const TActorContext &ctx) {
         TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
-        TLogoBlobID from(DefaultTestTabletId, 0, 0, 0, 0, 0, 1);
-        TLogoBlobID to  (DefaultTestTabletId, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
+        TLogoBlobID from(DefaultTestTabletId, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
+        TLogoBlobID to  (DefaultTestTabletId, 0, 0, 0, 0, 0, 1);
         LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data());
         auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID,
                                                                   TInstant::Max(),

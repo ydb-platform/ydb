@@ -263,14 +263,14 @@ Y_UNIT_TEST_SUITE(TBsVDiskManyPutGetCheckSize) {
             TMsgPackInfo(100'000, 672),
             TMsgPackInfo(17'026, 1)
         }));
-        TManyPutOneGet testOk(false, msgPacks, UNK, 0, 257, false);
+        TManyPutOneGet testOk(false, msgPacks, UNK, DefaultTestTabletId, 257, false);
         TestRun<TManyPutOneGet, TFastVDiskSetupHndOff>(&testOk, TDuration::Minutes(100), DefChunkSize, DefDiskSize,
                 1, 1, NKikimr::TErasureType::ErasureNone);
         std::shared_ptr<TVector<TMsgPackInfo>> failMsgPacks(std::unique_ptr<TVector<TMsgPackInfo>>(new TVector<TMsgPackInfo>{
             TMsgPackInfo(100'000, 672),
             TMsgPackInfo(17'027, 1)
         }));
-        TManyPutOneGet testError(false, failMsgPacks, UNK, 0, 257, true);
+        TManyPutOneGet testError(false, failMsgPacks, UNK, DefaultTestTabletId, 257, true);
         TestRun<TManyPutOneGet, TFastVDiskSetupHndOff>(&testError, TDuration::Minutes(100), DefChunkSize, DefDiskSize,
                 1, 1, NKikimr::TErasureType::ErasureNone);
     }

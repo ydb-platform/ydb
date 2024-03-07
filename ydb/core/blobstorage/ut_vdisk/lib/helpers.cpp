@@ -1781,7 +1781,6 @@ TString TExpectedSet::ToString() const {
 
 void TExpectedSet::Check(const TLogoBlobID &id, NKikimrProto::EReplyStatus status, const TString &data) {
     //fprintf(stderr, "Check: id=%s status=%s data=%s\n", ~id.ToString(), ~NKikimrProto::EReplyStatus_Name(status), ~data);
-    Cerr << "CHECH " << id.ToString() << " " << NKikimrProto::EReplyStatus_Name(status) << Endl;
     TMapType::iterator it = Map.find(id);
     Y_ABORT_UNLESS(it != Map.end(), "TExpectedSet::Check: can't find id=%s; data# '%s' map# %s", id.ToString().data(), data.data(),
            ToString().data());
@@ -1795,7 +1794,6 @@ void TExpectedSet::Check(const TLogoBlobID &id, NKikimrProto::EReplyStatus statu
 }
 
 void TExpectedSet::Finish() {
-    Cerr << ToString() << Endl;
     Y_ABORT_UNLESS(Map.empty());
 }
 

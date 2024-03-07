@@ -29,8 +29,8 @@ TSmallCommonDataSet::TSmallCommonDataSet() {
     };
 
     put(322, "xxxxxxxxxx");
-    put(346, "yyy");
-    put(409, "zzz");
+    put(370, "yyy");
+    put(424, "zzz");
     put(472, "pppp");
     put(915, "qqqqq");
 }

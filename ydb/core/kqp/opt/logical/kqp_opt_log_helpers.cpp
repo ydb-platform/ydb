@@ -189,7 +189,7 @@ TMaybe<TPrefixLookup> RewriteReadToPrefixLookup(TKqlReadTableRangesBase read, TE
         if (read.Maybe<TKqlReadTableIndexRanges>()) {
             rowsExpr = read.Cast<TKqlReadTableIndexRanges>().PrefixPointsExpr();
             filter = read.Cast<TKqlReadTableIndexRanges>().PredicateExpr();
-            usedColumnsList = read.Cast<TKqlReadTableRanges>().PredicateUsedColumns();
+            usedColumnsList = read.Cast<TKqlReadTableIndexRanges>().PredicateUsedColumns();
         }
 
         if (!rowsExpr.IsValid()) {

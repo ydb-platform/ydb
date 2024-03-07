@@ -46,43 +46,41 @@ datasources:
     jsonData:
       authKind: "UserPassword"
       endpoint: 'grpcs://<hostname>:2135'
-      dbLocation: 'location'
+      dbLocation: '/eu-central1/b1g/db-location'
       user: '<username>'
     secureJsonData:
       password: '<userpassword>'
-      certificate: 'certificate'
+      certificate: 'content of *.pem file'
 ```
 
 Here are fields that are supported in connection configuration:
 
-```typescript
-    jsonData:
-      authKind: "Anonymous" | "ServiceAccountKey" | "AccessToken" | "UserPassword" | "MetaData";
-      endpoint: string;
-      dbLocation: string;
-      user?: string;
-    secureJsonData:
-      serviceAccAuthAccessKey?: string;
-      accessToken?: string;
-      password?: string;
-      certificate?: string;
-```
+| Name  | Description         |         Type          |
+| :---- | :------------------ | :-------------------: |
+| authKind | Authentication type |       `"Anonymous" \| "ServiceAccountKey" \| "AccessToken" \| "UserPassword" \| "MetaData"`        |
+| endpoint | Database endpoint  | `string` |
+| dbLocation | Database location  | `string` |
+| user | User name  | `string` |
+| serviceAccAuthAccessKey | Service account access key  | `string` (secured) |
+| accessToken | OAuth access token  | `string` (secured) |
+| password | User password  | `string` (secured) |
+| certificate | Content of *.pem file  | `string` (secured) |
 
 ## Building queries
 
 {{ ydb-short-name }} is queried with a SQL dialect named [YQL](../yql/reference/index.md).
-Queries can contain macros which simplify syntax and allow for dynamic parts.
+Queries can contain macros which simplify syntax and allow for dynamic parts. It may be two kind of macro - [grafana-level](#macros) and ydb-level. Plugin will parse query text and, before sending it to YDB, substitute variables and grafana-level macroses with particular values. After that ydb-level macroses will be treated by ydb. 
 The query editor allows you to get data in different representation: time series, table or logs.
 
-### Time series
+### Time series (../_assets/grafana/time-series.png)
 
-Time series visualization options are selectable if the query returns at least one field with `Date`, `Datetime`, or `Timestamp` type type and at least one field with `number` type. Then you can select time series visualization options. Grafana interprets timestamp rows without explicit time zone as UTC. Any other column is treated as a value column.
+Time series visualization options are selectable if the query returns at least one field with `Date`, `Datetime`, or `Timestamp` type type and at least one field with `int`, `uint`, `double` or `float` type. Then you can select time series visualization options. Grafana interprets timestamp rows without explicit time zone as UTC. Any other column is treated as a value column.
 
 #### Multi-line time series
 
 To create multi-line time series, the query must return at least 3 fields in the following order:
 
-- field 1: time field
+- field 1: `Date`, `Datetime` or `Timestamp`
 - field 2: value to group by
 - field 3+: the metric values
 
@@ -95,13 +93,13 @@ GROUP BY `requestTime`, `timestamp`
 ORDER BY `timestamp`
 ```
 
-### Tables
+### Tables (../_assets/grafana/table.png)
 
-Table visualizations will always be available for any valid {{ ydb-short-name }} query.
+Table visualizations will always be available for any valid {{ ydb-short-name }} query (multi result sets are not supported).
 
-### Visualizing logs with the Logs Panel
+### Visualizing logs with the Logs Panel (../_assets/grafana/logs.png)
 
-To use the Logs panel your query must return a time and string values. You can select logs visualizations using the visualization options.
+To use the Logs panel your query must return a `Date`, `Datetime` or `Timestamp` and `String` values. You can select logs visualizations using the visualization options.
 
 By default, only the first text field will be represented as log line. This can be customized using the query builder.
 
@@ -122,7 +120,7 @@ WHERE $__timeFilter(`timeCol`)
 | _$\_\_timeFilter(columnName)_                | Replaced by a conditional that filters the data (using the provided column) based on the time range of the panel in microseconds | `foo >= CAST(1636717526371000 AS TIMESTAMP) AND foo <=  CAST(1668253526371000 AS TIMESTAMP)' )` |
 | _$\_\_fromTimestamp_                         | Replaced by the starting time of the range of the panel casted to Timestamp                                                      | `CAST(1636717526371000 AS TIMESTAMP)`                                                           |
 | _$\_\_toTimestamp_                           | Replaced by the ending time of the range of the panel casted to Timestamp                                                        | `CAST(1636717526371000 AS TIMESTAMP)`                                                           |
-| _$\_\_varFallback(condition, \$templateVar)_ | Replaced by the first parameter when the template variable in the second parameter is not provided.                              | `condition` or `templateVarValue`                                                               |
+| _$\_\_varFallback(condition, \$templateVar)_ | Replaced by the first parameter when the template variable in the second parameter is not provided.                              | _$\_\_varFallback('foo', \$bar)_ `foo` if variable `bar` is not provided, or `bar`'s value                                                               |
 
 ### Templates and variables
 

@@ -19,29 +19,27 @@ datasources:
   - name: YDB
     type: ydbtech-ydb-datasource
     jsonData:
-      authKind: "UserPassword",
-      endpoint: 'grpcs://endpoint',
-      dbLocation: 'location',
-      user: 'username',
+      authKind: "UserPassword"
+      endpoint: 'grpcs://<hostname>:2135'
+      dbLocation: '/eu-central1/b1g/db-location'
+      user: '<username>'
     secureJsonData:
-      password: 'userpassword',
-      certificate: 'certificate',
+      password: '<userpassword>'
+      certificate: 'content of *.pem file'
 ```
 
 Поддерживаемые поля для создания соединения:
 
-```typescript
-    jsonData:
-      authKind: "Anonymous" | "ServiceAccountKey" | "AccessToken" | "UserPassword" | "MetaData";
-      endpoint: string;
-      dbLocation: string;
-      user?: string;
-    secureJsonData:
-      serviceAccAuthAccessKey?: string;
-      accessToken?: string;
-      password?: string;
-      certificate?: string;
-```
+| Имя  | Описание         |         Тип          |
+| :---- | :------------------ | :-------------------: |
+| authKind | Тип аутентификации |       `"Anonymous" \| "ServiceAccountKey" \| "AccessToken" \| "UserPassword" \| "MetaData"`        |
+| endpoint | Эндпоинт  | `string` |
+| dbLocation | Путь к базе  | `string` |
+| user | Имя пользователя  | `string` |
+| serviceAccAuthAccessKey | Ключ доступа для сервисного аккаунта  | `string` (защищенное поле) |
+| accessToken | OAuth-токен  | `string` (защищенное поле) |
+| password | Пароль  | `string` (защищенное поле) |
+| certificate | Содержимое *.pem файла  | `string` (защищенное поле) |
 
 ### Пользователь YDB для источника данных { #ydb-user-setup }
 
@@ -54,16 +52,18 @@ datasources:
 * [Многострочные временные серии](#multiline-time-series).
 * [Таблицы](#tables) и [логи](#visual-logs).
 
+ В запросе могут содержаться два вида макросов - [уровня grafana](#macros) и уровня ydb. Перед отправкой запроса в YDB, плагин проанализирует текст запроса и заменит макросы уровня  grafana на конкретные значения.
+
 ### Временные серии { #time-series }
 
-Визуализировать данные как временные серии возможно при условии наличия в результатах запроса одного поля с типами `Date`, `Datetime` или `Timestamp` и как минимум одного поля с типом `number`. Визуализацию в виде временных серий можно выбрать с помощью настроек. Grafana интерпретирует `timestamp` строки без временной зоны как UTC. Все остальные колонки интерпретируются как значения.
+Визуализировать данные как временные серии возможно при условии наличия в результатах запроса одного поля с типами `Date`, `Datetime` или `Timestamp` и как минимум одного поля с типом `int`, `uint`, `double` или `float`. Визуализацию в виде временных серий можно выбрать с помощью настроек. Grafana интерпретирует `timestamp` строки без временной зоны как UTC. Все остальные колонки интерпретируются как значения.
 
 ![Time-series](../_assets/grafana/time-series.png)
 
 #### Многострочные временные серии { #multiline-time-series }
 
 Чтобы создать многострочную временную серию, результаты запроса должны содержать в себе как минимум три поля в следующем порядке:
-* field 1: временное поле
+* field 1: `Date`, `Datetime` или `Timestamp` поле
 * field 2: значение для группировки
 * field 3+: метрики
 
@@ -78,13 +78,13 @@ ORDER BY `timestamp`
 
 ### Таблицы { #tables }
 
-Табличное представление доступно для любого валидного YQL запроса.
+Табличное представление доступно для любого валидного YQL запроса (не поддерживаются запросы с более чем одним набором результатов).
 
 ![Table](../_assets/grafana/table.png)
 
 ### Визуализация логов { #visual-logs }
 
-Для визуализации данных в виде логов запрос должен возвращать временное и строковые значения. Выбрать тип визуализации можно с помощью настроек. По умолчанию только первое встреченное текстовое поле трактуется как строка лога, но это поведение может быть изменено с помощью конструктора запросов.
+Для визуализации данных в виде логов запрос должен возвращать `Date`, `Datetime` или `Timestamp` и `String` значения. Выбрать тип визуализации можно с помощью настроек. По умолчанию только первое встреченное текстовое поле трактуется как строка лога, но это поведение может быть изменено с помощью конструктора запросов.
 
 ![Logs](../_assets/grafana/logs.png)
 
@@ -103,7 +103,7 @@ WHERE $__timeFilter(`timeCol`)
 | _$\_\_timeFilter(columnName)_ | Заменяется условием, которое фильтрует данные в указанной колонке на основании временного диапазона, заданного на панели в микросекундах  | `foo >= CAST(1636717526371000 AS TIMESTAMP) AND foo <=  CAST(1668253526371000 AS TIMESTAMP)' )` |
 | _$\_\_fromTimestamp_ | Заменяется временем начала диапазона, заданного на панели в формате Timestamp | `CAST(1636717526371000 AS TIMESTAMP)` |
 | _$\_\_toTimestamp_ | Заменяется временем окончания диапазона, заданного на панели в формате Timestamp | `CAST(1636717526371000 AS TIMESTAMP)` |
-| _$\_\_varFallback(condition, \$templateVar)_ | Заменяется первым параметром в том случае, если второй параметр не определен. | `condition` или `templateVarValue` |
+| _$\_\_varFallback(condition, \$templateVar)_ | Заменяется первым параметром в том случае, если второй параметр не определен. | _$\_\_varFallback('foo', \$bar)_ `foo` если переменная `bar` не определена, или значение переменной `bar`  |
 
 ### Шаблоны и переменные Templates and variables { #templates-and-variables }
 

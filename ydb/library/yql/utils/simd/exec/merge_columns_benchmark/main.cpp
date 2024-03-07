@@ -18,14 +18,27 @@ public:
         m_worker->MergeColumns(result, data, sizes, length);
         auto end = std::chrono::steady_clock::now();
 
+        double time = std::chrono::duration<double>(end - begin).count();
         // Calculate size of data
         ui64 bytes = static_cast<ui64>(length) * static_cast<ui64>(std::accumulate(sizes, sizes + 4, 0ull));
         // Calculate speed of data processing as GB/sec
-        auto speed = static_cast<double>(bytes) / (GB * std::chrono::duration<double>(end - begin).count());
+        double speed;
+        const char* msg;
+        if (static_cast<double>(bytes) > static_cast<double>(GB) * time) {
+            speed = static_cast<double>(bytes) / (static_cast<double>(GB) * time);
+            msg = " [GB/sec]";
+        }
+        else if (static_cast<double>(bytes) > static_cast<double>(MB) * time) {
+            speed = static_cast<double>(bytes) / (static_cast<double>(MB) * time);
+            msg = " [MB/sec]";
+        }
+        else {
+            speed = static_cast<double>(bytes) / (static_cast<double>(KB) * time);
+            msg = " [KB/sec]";
+        }
 
-        Cerr << "Total time: "
-             << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << " [ms]" << Endl;
-        Cerr << "Speed: " << speed << " [GB/sec]" << Endl;
+        Cerr << "Total time: " << static_cast<ui64>(time * 1000.0 /* ms in sec */) << " [ms]" << Endl;
+        Cerr << "Speed: " << static_cast<ui64>(speed) << msg << Endl;
         Cerr << "Data size: " << bytes << " [bytes]" << Endl << Endl;
 
         std::memset(result, 0, bytes);
@@ -96,25 +109,30 @@ int main() {
     for (size_t length: {100'000, 1'000'000, 10'000'000})
     {
         Cerr << "Benchmark for length: " << length << Endl;
-        std::vector<ui32> result(length * 4);
-        std::vector<std::vector<ui32>> data_vectors{
-            std::vector<ui32>(length, 1),
-            std::vector<ui32>(length, 2),
-            std::vector<ui32>(length, 3),
-            std::vector<ui32>(length, 4)
-        };
+        ui32* pt1 = new ui32[length];
+        ui32* pt2 = new ui32[length];
+        ui32* pt3 = new ui32[length];
+        ui32* pt4 = new ui32[length];
+
         i8* data[4]{
-            reinterpret_cast<i8*>(data_vectors[0].data()),
-            reinterpret_cast<i8*>(data_vectors[1].data()),
-            reinterpret_cast<i8*>(data_vectors[2].data()),
-            reinterpret_cast<i8*>(data_vectors[3].data())
+            reinterpret_cast<i8*>(pt1),
+            reinterpret_cast<i8*>(pt2),
+            reinterpret_cast<i8*>(pt3),
+            reinterpret_cast<i8*>(pt4)
         };
+        ui32* result = new ui32[4 * length];
         size_t sizes[4]{sizeof(ui32), sizeof(ui32), sizeof(ui32), sizeof(ui32)};
 
         CompareAllImplementations(
-            "---- Benchmark of method MergeColumns ----", &NSimd::Perfomancer::Interface::MergeColumns,
-            reinterpret_cast<i8*>(result.data()), data, sizes, length);
+            "---- Benchmark of method MergeColumns ----\n", &NSimd::Perfomancer::Interface::MergeColumns,
+            reinterpret_cast<i8*>(result), data, sizes, length);
         Cerr << "------------------------------------------------" << Endl;
+
+        delete[] result;
+        delete[] pt4;
+        delete[] pt3;
+        delete[] pt2;
+        delete[] pt1;
     }
 
     return 0;

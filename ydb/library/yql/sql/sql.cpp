@@ -15,7 +15,7 @@
 namespace NSQLTranslation {
 
     NYql::TAstParseResult SqlToYql(const TString& query, const TTranslationSettings& settings,
-        NYql::TWarningRules* warningRules, ui16* actualSyntaxVersion)
+        NYql::TWarningRules* warningRules, ui16* actualSyntaxVersion, NYql::TStmtParsedInfo* stmtParsedInfo)
     {
         NYql::TAstParseResult result;
         TTranslationSettings parsedSettings(settings);
@@ -39,7 +39,7 @@ namespace NSQLTranslation {
         }
 
         if (parsedSettings.PgParser) {
-            return NSQLTranslationPG::PGToYql(query, parsedSettings);
+            return NSQLTranslationPG::PGToYql(query, parsedSettings, stmtParsedInfo);
         }
 
         switch (parsedSettings.SyntaxVersion) {
@@ -164,7 +164,7 @@ namespace NSQLTranslation {
     }
 
     TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const TTranslationSettings& settings,
-        NYql::TWarningRules* warningRules, ui16* actualSyntaxVersion)
+        NYql::TWarningRules* warningRules, ui16* actualSyntaxVersion, TVector<NYql::TStmtParsedInfo>* stmtParsedInfo)
     {
         TVector<NYql::TAstParseResult> result;
         NYql::TIssues issues;
@@ -189,7 +189,7 @@ namespace NSQLTranslation {
         }
 
         if (parsedSettings.PgParser) {
-            return NSQLTranslationPG::PGToYqlStatements(query, parsedSettings);
+            return NSQLTranslationPG::PGToYqlStatements(query, parsedSettings, stmtParsedInfo);
         }
 
         switch (parsedSettings.SyntaxVersion) {
@@ -198,7 +198,7 @@ namespace NSQLTranslation {
                     "V0 syntax is disabled"));
                 return {};
             case 1:
-                return NSQLTranslationV1::SqlToAstStatements(query, parsedSettings, warningRules);
+                return NSQLTranslationV1::SqlToAstStatements(query, parsedSettings, warningRules, stmtParsedInfo);
             default:
                 issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                     TStringBuilder() << "Unknown SQL syntax version: " << parsedSettings.SyntaxVersion));

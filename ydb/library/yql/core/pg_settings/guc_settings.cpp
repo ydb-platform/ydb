@@ -27,3 +27,21 @@ void TGUCSettings::Commit() {
 void TGUCSettings::RollBack() {
     Settings_ = SessionSettings_ = RollbackSettings_;
 }
+
+bool TGUCSettings::operator==(const TGUCSettings& other) const {
+    return Settings_ == other.Settings_ &&
+        RollbackSettings_ == other.RollbackSettings_ &&
+        SessionSettings_ == other.SessionSettings_;
+}
+
+std::unordered_map<std::string, std::string> TGUCSettings::GetSettings() const {
+    return Settings_;
+}
+
+std::unordered_map<std::string, std::string> TGUCSettings::GetRollbackSettings() const {
+    return RollbackSettings_;
+}
+
+std::unordered_map<std::string, std::string> TGUCSettings::GetSessionSettings() const {
+    return SessionSettings_;
+}

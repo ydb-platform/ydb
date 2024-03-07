@@ -262,6 +262,10 @@ struct TAstParseResult {
     void Destroy();
 };
 
+struct TStmtParsedInfo {
+    bool KeepInCache = true;
+};
+
 struct TAstPrintFlags {
     enum {
         Default = 0,

@@ -32,6 +32,7 @@
 
 #include <ydb/library/yql/utils/log/log.h>
 
+#include <iostream>
 
 namespace NKikimr {
 namespace NKqp {

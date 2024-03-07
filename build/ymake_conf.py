@@ -931,16 +931,16 @@ class CompilerDetector(object):
         gcc_version = version(gcc_vars)
         msvc_version = version(msvc_vars)
 
-        if clang_version:
+        if msvc_version:
+            logger.debug('Detected MSVC version %s', msvc_version)
+            self.type = 'msvc'
+        elif clang_version:
             logger.debug('Detected Clang version %s', clang_version)
             self.type = 'clang'
         elif gcc_version:
             logger.debug('Detected GCC version %s', gcc_version)
             # TODO(somov): Переименовать в gcc.
             self.type = 'gnu'
-        elif msvc_version:
-            logger.debug('Detected MSVC version %s', msvc_version)
-            self.type = 'msvc'
         else:
             raise ConfigureError('Could not determine custom compiler type: {}'.format(c_compiler))
 

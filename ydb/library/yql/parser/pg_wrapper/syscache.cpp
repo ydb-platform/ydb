@@ -16,6 +16,7 @@ extern "C" {
 #include "access/htup_details.h"
 #include "utils/fmgroids.h"
 #include "utils/array.h"
+#include "utils/builtins.h"
 }
 
 #undef TypeName
@@ -76,10 +77,6 @@ bool NsNameEquals(const THeapTupleKey& key1, const THeapTupleKey& key2) {
 
 size_t OidVectorHash(Datum d) {
     oidvector *v = (oidvector *)d;
-    if (!v->ndim) {
-        return 0;
-    }
-
     Y_DEBUG_ABORT_UNLESS(v->ndim == 1);
     size_t hash = v->dim1;
     for (int i = 0; i < v->dim1; ++i) {
@@ -92,15 +89,7 @@ size_t OidVectorHash(Datum d) {
 bool OidVectorEquals(Datum d1, Datum d2) {
     oidvector *v1 = (oidvector *)d1;
     oidvector *v2 = (oidvector *)d2;
-    if (v1->ndim != v2->ndim) {
-        return false;
-    }
-
-    if (v1->ndim == 0) {
-        return true;
-    }
-
-    Y_DEBUG_ABORT_UNLESS(v1->ndim == 1);
+    Y_DEBUG_ABORT_UNLESS(v1->ndim == 1 && v2->ndim == 1);
     if (v1->dim1 != v2->dim1) {
         return false;
     }
@@ -290,33 +279,18 @@ struct TSysCache {
             FillDatum(Natts_pg_proc, values, nulls, Anum_pg_proc_proname, (Datum)name);
             FillDatum(Natts_pg_proc, values, nulls, Anum_pg_proc_pronargs, (Datum)desc.ArgTypes.size());
             {
-                int dims[MAXDIM];
-                int lbs[MAXDIM];
-                dims[0] = desc.ArgTypes.size();
-                lbs[0] = 1;
-                std::unique_ptr<Datum[]> dvalues(new Datum[desc.ArgTypes.size()]);
-                std::unique_ptr<bool[]> dnulls(new bool[desc.ArgTypes.size()]);
-                std::copy(desc.ArgTypes.begin(), desc.ArgTypes.end(), dvalues.get());
-                std::fill_n(dnulls.get(), desc.ArgTypes.size(), false);
-
-                auto arr = construct_md_array(dvalues.get(), dnulls.get(), 1, dims, lbs, OIDOID, oidDesc.TypeLen, oidDesc.PassByValue, oidDesc.TypeAlign);
+                auto arr = buildoidvector(desc.ArgTypes.data(), (int)desc.ArgTypes.size());
                 FillDatum(Natts_pg_proc, values, nulls, Anum_pg_proc_proargtypes, (Datum)arr);
             }
 
             const ui32 fullArgsCount = desc.ArgTypes.size() + desc.OutputArgTypes.size();
             if (!desc.OutputArgTypes.empty())
             {
-                int dims[MAXDIM];
-                int lbs[MAXDIM];
-                dims[0] = fullArgsCount;
-                lbs[0] = 1;
-                std::unique_ptr<Datum[]> dvalues(new Datum[fullArgsCount]);
-                std::unique_ptr<bool[]> dnulls(new bool[fullArgsCount]);
-                std::copy(desc.ArgTypes.begin(), desc.ArgTypes.end(), dvalues.get());
-                std::copy(desc.OutputArgTypes.begin(), desc.OutputArgTypes.end(), dvalues.get() + desc.ArgTypes.size());
-                std::fill_n(dnulls.get(), fullArgsCount, false);
+                std::unique_ptr<Oid[]> allOids(new Oid[fullArgsCount]);
+                std::copy(desc.ArgTypes.begin(), desc.ArgTypes.end(), allOids.get());
+                std::copy(desc.OutputArgTypes.begin(), desc.OutputArgTypes.end(), allOids.get() + desc.ArgTypes.size());
 
-                auto arr = construct_md_array(dvalues.get(), dnulls.get(), 1, dims, lbs, OIDOID, oidDesc.TypeLen, oidDesc.PassByValue, oidDesc.TypeAlign);
+                auto arr = buildoidvector(allOids.get(), (int)fullArgsCount);
                 FillDatum(Natts_pg_proc, values, nulls, Anum_pg_proc_proallargtypes, (Datum)arr);
             }
             if (!desc.OutputArgTypes.empty())

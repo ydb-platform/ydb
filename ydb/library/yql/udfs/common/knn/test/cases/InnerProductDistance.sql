@@ -11,6 +11,12 @@ $lazy_vector2 = ListFromRange(4.0, 7.0);
 $distance = Knn::InnerProductDistance($lazy_vector1, $lazy_vector2);
 select $distance = $extected_distance;
 
+--lazy vector + fixed size vector
+$distance = Knn::InnerProductDistance($lazy_vector1, $vector2);
+select $distance = $extected_distance;
+$distance = Knn::InnerProductDistance($vector1, $lazy_vector2);
+select $distance = $extected_distance;
+
 --good deserialized vector
 $deserialized_vector2 = Knn::FromBinaryString(Knn::ToBinaryString($vector2));
 $distance =  Knn::InnerProductDistance($vector1, $deserialized_vector2);

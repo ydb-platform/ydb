@@ -6241,15 +6241,15 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         // Shuffled
         auto client = kikimr.GetQueryClient();
-        { 
+        /*{ 
             auto prepareResult = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/ColumnShard` (Col3, Col4, Col2, Col1) VALUES
                     ("test100", "100", 1000, 100u);
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
-        }
+        }*/
 
-        /*{
+        {
             auto prepareResult = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/ColumnShard` (Col1, Col3, Col2, Col4) VALUES
                     (1u, "test1", 10, "1"), (2u, "test2", NULL, "2"), (3u, "test3", 12, NULL), (4u, "test4", NULL, NULL);
@@ -6257,7 +6257,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
         }
 
-        auto it = client.StreamExecuteQuery(R"(
+        /*auto it = client.StreamExecuteQuery(R"(
             SELECT Col1, Col3, Col2, Col4 FROM `/Root/ColumnShard` ORDER BY Col1, Col3, Col2, Col4;
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());

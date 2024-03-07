@@ -1528,14 +1528,18 @@ private:
 
         std::unique_ptr<IEventBase> ev;
         if (isOlap) {
-            const ui32 flags =
-                (ImmediateTx ? NKikimrTxColumnShard::ETransactionFlag::TX_FLAG_IMMEDIATE: 0);
-            ev.reset(new TEvColumnShard::TEvProposeTransaction(
-                NKikimrTxColumnShard::TX_KIND_DATA,
-                SelfId(),
-                TxId,
-                dataTransaction.SerializeAsString(),
-                flags));
+            if (UseEvWrite) {
+                YQL_ENSURE(false);
+            } else {
+                const ui32 flags =
+                    (ImmediateTx ? NKikimrTxColumnShard::ETransactionFlag::TX_FLAG_IMMEDIATE: 0);
+                ev.reset(new TEvColumnShard::TEvProposeTransaction(
+                    NKikimrTxColumnShard::TX_KIND_DATA,
+                    SelfId(),
+                    TxId,
+                    dataTransaction.SerializeAsString(),
+                    flags));
+            }
         } else {
             const ui32 flags =
                 (ImmediateTx ? NTxDataShard::TTxFlags::Immediate : 0) |
@@ -1561,6 +1565,7 @@ private:
             ResponseEv->Orbit.Fork(evData->Orbit);
             ev = std::move(evData);
         }
+        YQL_ENSURE(false);
         auto traceId = ExecuterSpan.GetTraceId();
 
         LOG_D("ExecuteDatashardTransaction traceId.verbosity: " << std::to_string(traceId.GetVerbosity()));
@@ -1709,8 +1714,9 @@ private:
                     }
                 }
 
+                const bool hasOlapSink = HasOlapSink(stage);
                 if ((stageInfo.Meta.IsOlap() && HasDmlOperationOnOlap(tx.Body->GetType(), stage))
-                    || (!EnableOlapSink && HasOlapSink(stage))) {
+                    || (!EnableOlapSink && hasOlapSink)) {
                     auto error = TStringBuilder() << "Data manipulation queries do not support column shard tables.";
                     LOG_E(error);
                     ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
@@ -1828,7 +1834,9 @@ private:
         }
 
         TTopicTabletTxs topicTxs;
-        auto datashardTxs = BuildDatashardTxs(datashardTasks, topicTxs);
+        TDatashardTxs datashardTxs;
+        TEvWriteTxs evWriteTxs;
+        BuildDatashardTxs(datashardTasks, datashardTxs, evWriteTxs, topicTxs);
 
         // Single-shard transactions are always immediate
         ImmediateTx = (datashardTxs.size() + Request.TopicOperations.GetSize() + sourceScanPartitionsCount) <= 1 && !UnknownAffectedShardCount;
@@ -2005,6 +2013,7 @@ private:
     }
 
     using TDatashardTxs = THashMap<ui64, NKikimrTxDataShard::TKqpTransaction*>;
+    using TEvWriteTxs = THashMap<ui64, NKikimrDataEvents::TEvWrite*>;
     using TTopicTabletTxs = THashMap<ui64, NKikimrPQ::TDataTransaction>;
 
     void ContinueExecute() {
@@ -2028,9 +2037,13 @@ private:
         }
     }
 
-    TDatashardTxs BuildDatashardTxs(THashMap<ui64, TVector<NDqProto::TDqTask*>>& datashardTasks,
-                                    TTopicTabletTxs& topicTxs) {
-        TDatashardTxs datashardTxs;
+    void BuildDatashardTxs(
+            THashMap<ui64, TVector<NDqProto::TDqTask*>>& datashardTasks,
+            TDatashardTxs& datashardTxs,
+            TEvWriteTxs& evWriteTxs,
+            TTopicTabletTxs& topicTxs) {
+        std::vector<ui64> affectedShardsSet;
+        affectedShardsSet.reserve(datashardTasks.size());
 
         for (auto& [shardId, tasks]: datashardTasks) {
             auto [it, success] = datashardTxs.emplace(
@@ -2054,31 +2067,41 @@ private:
         // Materialize (possibly empty) txs for all shards with locks (either commit or rollback)
         for (auto& [shardId, locksList] : locksMap) {
             YQL_ENSURE(!locksList.empty(), "unexpected empty locks list in DataShardLocks");
+            NKikimrDataEvents::TKqpLocks* locks = nullptr;
 
-            auto it = datashardTxs.find(shardId);
-            if (it == datashardTxs.end()) {
-                auto [emplaced, success] = datashardTxs.emplace(
-                    shardId,
-                    TasksGraph.GetMeta().Allocate<NKikimrTxDataShard::TKqpTransaction>());
-
-                YQL_ENSURE(success, "unexpected failure to emplace a datashard transaction");
-                it = emplaced;
+            if (UseEvWrite) {
+                if (auto it = evWriteTxs.find(shardId); it != evWriteTxs.end()) {
+                    locks = it->second->MutableLocks();
+                } else {
+                    auto [eIt, success] = evWriteTxs.emplace(
+                        shardId,
+                        TasksGraph.GetMeta().Allocate<NKikimrDataEvents::TEvWrite>());
+                    locks = eIt->second->MutableLocks();
+                }
+            } else {
+                if (auto it = datashardTxs.find(shardId); it != datashardTxs.end()) {
+                    locks = it->second->MutableLocks();
+                } else {
+                    auto [eIt, success] = datashardTxs.emplace(
+                        shardId,
+                        TasksGraph.GetMeta().Allocate<NKikimrTxDataShard::TKqpTransaction>());
+                    locks = eIt->second->MutableLocks();
+                }
             }
 
-            NKikimrTxDataShard::TKqpTransaction* tx = it->second;
             switch (Request.LocksOp) {
                 case ELocksOp::Commit:
-                    tx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+                    locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
                     break;
                 case ELocksOp::Rollback:
-                    tx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Rollback);
+                    locks->SetOp(NKikimrDataEvents::TKqpLocks::Rollback);
                     break;
                 case ELocksOp::Unspecified:
                     break;
             }
 
             // Move lock descriptions to the datashard tx
-            auto* protoLocks = tx->MutableLocks()->MutableLocks();
+            auto* protoLocks = locks->MutableLocks();
             protoLocks->Reserve(locksList.size());
             bool hasWrites = false;
             for (auto& lock : locksList) {
@@ -2116,7 +2139,9 @@ private:
             (datashardTxs.size() + topicTxs.size()) > 1 &&
             // We cannot use volatile transactions with persistent channels
             // Note: currently persistent channels are never used
-            !HasPersistentChannels);
+            !HasPersistentChannels &&
+            // Can't use volatile transactions for EvWrite at current time
+            UseEvWrite);
 
         const bool useGenericReadSets = (
             // Use generic readsets when feature is explicitly enabled
@@ -2177,6 +2202,12 @@ private:
                     *shardTx->MutableLocks()->MutableReceivingShards() = receivingShards;
                 }
 
+                for (auto& [_, tx] : evWriteTxs) {
+                    tx->MutableLocks()->SetOp(locksOp);
+                    *tx->MutableLocks()->MutableSendingShards() = sendingShards;
+                    *tx->MutableLocks()->MutableReceivingShards() = receivingShards;
+                }
+
                 for (auto& [_, tx] : topicTxs) {
                     tx.SetOp(NKikimrPQ::TDataTransaction::Commit);
                     *tx.MutableSendingShards() = sendingShards;
@@ -2191,8 +2222,6 @@ private:
                 pr.second->SetUseGenericReadSets(true);
             }
         }
-
-        return datashardTxs;
     }
 
     void ExecuteTasks() {
@@ -2419,6 +2448,7 @@ private:
 private:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     bool EnableOlapSink = false;
+    bool UseEvWrite = true;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
     bool HasExternalSources = false;

@@ -274,6 +274,7 @@ private:
         NKikimrKqp::TEvKqpOutputActorResultInfo resultInfo;
         for (const auto& [_, shardInfo] : ShardsInfo.GetShards()) {
             if (const auto& lock = shardInfo.GetLock(); lock) {
+                // TODO: add evwrite flag????
                 resultInfo.AddLocks()->CopyFrom(*lock);
             }
         }
@@ -398,6 +399,15 @@ private:
         for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
             ShardsInfo.GetShard(ev->Get()->Record.GetOrigin()).AddAndCheckLock(lock);
         }
+        // TODO: remove when columnshards support locks
+        NKikimrDataEvents::TLock lock;
+        lock.SetLockId(1);
+        lock.SetDataShard(ev->Get()->Record.GetOrigin());
+        lock.SetSchemeShard(1);
+        lock.SetPathId(1);
+        lock.SetGeneration(1);
+        lock.SetCounter(1);
+        ShardsInfo.GetShard(ev->Get()->Record.GetOrigin()).AddAndCheckLock(lock);
         ProcessBatches();
     }
 

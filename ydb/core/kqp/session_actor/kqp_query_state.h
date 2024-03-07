@@ -315,7 +315,8 @@ public:
         }
 
         // we can merge commit with last tx only for read-only transactions
-        return !TxCtx->TxHasEffects();
+        //return !TxCtx->TxHasEffects();
+        return false;
     }
 
     bool ShouldAcquireLocks() {

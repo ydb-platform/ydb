@@ -2026,10 +2026,12 @@ class MSVCCompiler(MSVC, Compiler):
         cxx_warnings = []
 
         if self.tc.use_clang:
+            if not self.tc.is_system_cxx:
+                flags += [
+                    # Allow <windows.h> to be included via <Windows.h> in case-sensitive file-systems.
+                    '-fcase-insensitive-paths',
+                ]
             flags += [
-                # Allow <windows.h> to be included via <Windows.h> in case-sensitive file-systems.
-                '-fcase-insensitive-paths',
-
                 # At the time clang-cl identifies itself as MSVC 19.11:
                 # (actual value can be found in clang/lib/Driver/ToolChains/MSVC.cpp, the syntax would be like
                 # ```

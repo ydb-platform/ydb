@@ -73,6 +73,7 @@ void Init(
 {
     Y_ABORT_UNLESS(iyqSharedResources, "No YQ shared resources created");
     TYqSharedResources::TPtr yqSharedResources = TYqSharedResources::Cast(iyqSharedResources);
+    TComputeMappingHolder::TPtr computeMappingHolder = std::make_shared<TComputeMappingHolder>();
 
     auto yqCounters = appData->Counters->GetSubgroup("counters", "yq");
     const auto clientCounters = yqCounters->GetSubgroup("subsystem", "ClientMetrics");
@@ -91,10 +92,14 @@ void Init(
                 tenant);
         actorRegistrator(NFq::ControlPlaneStorageServiceActorId(), controlPlaneStorage);
 
+        computeMappingHolder->Mapping = std::make_shared<TNullComputeMapping>();
         actorRegistrator(NFq::ControlPlaneConfigActorId(),
-            CreateControlPlaneConfigActor(yqSharedResources, NKikimr::CreateYdbCredentialsProviderFactory, protoConfig.GetControlPlaneStorage(),
+            CreateControlPlaneConfigActor(yqSharedResources, computeMappingHolder, 
+                NKikimr::CreateYdbCredentialsProviderFactory, protoConfig.GetControlPlaneStorage(),
                 protoConfig.GetCompute(), yqCounters->GetSubgroup("subsystem", "ControlPlaneConfig"))
         );
+    } else {
+        computeMappingHolder->Mapping = std::make_shared<TFixedComputeMapping>(protoConfig.GetCompute());
     }
 
     NFq::TSigner::TPtr signer;
@@ -107,6 +112,7 @@ void Init(
             protoConfig.GetControlPlaneProxy(),
             protoConfig.GetControlPlaneStorage(),
             protoConfig.GetCompute(),
+            computeMappingHolder,
             protoConfig.GetCommon(),
             protoConfig.GetGateways().GetS3(),
             signer,
@@ -118,12 +124,15 @@ void Init(
     }
 
     if (protoConfig.GetCompute().GetYdb().GetEnable() && protoConfig.GetCompute().GetYdb().GetControlPlane().GetEnable()) {
-        auto computeDatabaseService = NFq::CreateComputeDatabaseControlPlaneServiceActor(protoConfig.GetCompute(), 
-                                                                                         NKikimr::CreateYdbCredentialsProviderFactory, 
-                                                                                         protoConfig.GetCommon(), 
-                                                                                         signer, 
-                                                                                         yqSharedResources, 
-                                                                                         yqCounters->GetSubgroup("subsystem", "DatabaseControlPlane"));
+        auto computeDatabaseService = NFq::CreateComputeDatabaseControlPlaneServiceActor(
+            protoConfig.GetCompute(),
+            computeMappingHolder,
+            NKikimr::CreateYdbCredentialsProviderFactory,
+            protoConfig.GetCommon(),
+            signer,
+            yqSharedResources,
+            yqCounters->GetSubgroup("subsystem", "DatabaseControlPlane")
+        );
         actorRegistrator(NFq::ComputeDatabaseControlPlaneServiceActorId(), computeDatabaseService.release());
     }
 
@@ -327,6 +336,7 @@ void Init(
             yqSharedResources,
             NKikimr::CreateYdbCredentialsProviderFactory,
             protoConfig,
+            computeMappingHolder,
             appData->FunctionRegistry,
             TAppData::TimeProvider,
             TAppData::RandomProvider,

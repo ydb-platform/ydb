@@ -31,6 +31,7 @@ NActors::IActor* CreateControlPlaneProxyActor(
     const NConfig::TControlPlaneProxyConfig& config,
     const NConfig::TControlPlaneStorageConfig& storageConfig,
     const NConfig::TComputeConfig& computeConfig,
+    const TComputeMappingHolder::TPtr& computeMappingHolder,
     const NConfig::TCommonConfig& commonConfig,
     const NYql::TS3GatewayConfig& s3Config,
     const ::NFq::TSigner::TPtr& signer,

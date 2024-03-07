@@ -279,13 +279,16 @@ class TComputeDatabaseControlPlaneServiceActor : public NActors::TActorBootstrap
 
 
 public:
-    TComputeDatabaseControlPlaneServiceActor(const NFq::NConfig::TComputeConfig& config,
-                                             const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-                                             const NConfig::TCommonConfig& commonConfig,
-                                             const TSigner::TPtr& signer,
-                                             const TYqSharedResources::TPtr& yqSharedResources,
-                                             const ::NMonitoring::TDynamicCounterPtr& counters)
-        : Config(config)
+    TComputeDatabaseControlPlaneServiceActor(
+        const NFq::NConfig::TComputeConfig& config,
+        const TComputeMappingHolder::TPtr& computeMappingHolder,
+        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+        const NConfig::TCommonConfig& commonConfig,
+        const TSigner::TPtr& signer,
+        const TYqSharedResources::TPtr& yqSharedResources,
+        const ::NMonitoring::TDynamicCounterPtr& counters
+    )   : Config(config)
+        , ComputeMappingHolder(computeMappingHolder)
         , Clients(std::make_shared<TDatabaseClients>())
         , CommonConfig(commonConfig)
         , Signer(signer)
@@ -297,12 +300,16 @@ public:
     static constexpr char ActorName[] = "FQ_COMPUTE_DATABASE_SERVICE_ACTOR";
 
     void Bootstrap() {
-        SynchronizationServiceActorId = Register(CreateSynchronizationServiceActor(CommonConfig,
-                                                                                          Config,
-                                                                                          Signer,
-                                                                                          YqSharedResources,
-                                                                                          CredentialsProviderFactory,
-                                                                                          Counters).release());
+        SynchronizationServiceActorId = Register(CreateSynchronizationServiceActor(
+            CommonConfig,
+            Config,
+            ComputeMappingHolder,
+            Signer,
+            YqSharedResources,
+            CredentialsProviderFactory,
+            Counters).release()
+        );
+
         const auto& controlPlane = Config.GetYdb().GetControlPlane();
         switch (controlPlane.type_case()) {
             case NConfig::TYdbComputeControlPlane::TYPE_NOT_SET:
@@ -428,10 +435,6 @@ public:
     )
 
     void Handle(TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& ev) {
-        if (Config.GetYdb().GetControlPlane().HasSingle()) {
-            Register(new TCreateDatabaseRequestActor(Clients, SynchronizationServiceActorId, Config, ev));
-            return;
-        }
         Register(new TCreateDatabaseRequestActor(Clients, SynchronizationServiceActorId, Config, ev));
     }
 
@@ -469,6 +472,7 @@ private:
 
     TActorId SynchronizationServiceActorId;
     NFq::NConfig::TComputeConfig Config;
+    TComputeMappingHolder::TPtr ComputeMappingHolder;
     std::shared_ptr<TDatabaseClients> Clients;
     NConfig::TCommonConfig CommonConfig;
     TSigner::TPtr Signer;
@@ -479,18 +483,24 @@ private:
     TActorId MonitoringActorId;
 };
 
-std::unique_ptr<NActors::IActor> CreateComputeDatabaseControlPlaneServiceActor(const NFq::NConfig::TComputeConfig& config,
-                                                                               const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-                                                                               const NConfig::TCommonConfig& commonConfig,
-                                                                               const TSigner::TPtr& signer,
-                                                                               const TYqSharedResources::TPtr& yqSharedResources,
-                                                                               const ::NMonitoring::TDynamicCounterPtr& counters) {
-    return std::make_unique<TComputeDatabaseControlPlaneServiceActor>(config,
-                                                                      credentialsProviderFactory,
-                                                                      commonConfig,
-                                                                      signer,
-                                                                      yqSharedResources,
-                                                                      counters);
+std::unique_ptr<NActors::IActor> CreateComputeDatabaseControlPlaneServiceActor(
+    const NFq::NConfig::TComputeConfig& config,
+    const TComputeMappingHolder::TPtr& computeMappingHolder,
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+    const NConfig::TCommonConfig& commonConfig,
+    const TSigner::TPtr& signer,
+    const TYqSharedResources::TPtr& yqSharedResources,
+    const ::NMonitoring::TDynamicCounterPtr& counters
+) {
+    return std::make_unique<TComputeDatabaseControlPlaneServiceActor>(
+        config,
+        computeMappingHolder,
+        credentialsProviderFactory,
+        commonConfig,
+        signer,
+        yqSharedResources,
+        counters
+    );
 }
 
 NActors::TActorId ComputeDatabaseControlPlaneServiceActorId() {

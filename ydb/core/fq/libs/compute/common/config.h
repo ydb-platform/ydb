@@ -1,9 +1,9 @@
 #pragma once
 
 #include <ydb/core/fq/libs/config/protos/compute.pb.h>
+#include <ydb/core/fq/libs/control_plane_config/control_plane_mapping.h>
 #include <ydb/core/fq/libs/protos/fq_private.pb.h>
 
-#include <util/digest/multi.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
@@ -12,12 +12,10 @@ namespace NFq {
 
 class TComputeConfig {
 public:
-    explicit TComputeConfig()
-        : TComputeConfig({})
-    {}
 
-    explicit TComputeConfig(const NFq::NConfig::TComputeConfig& computeConfig)
+    explicit TComputeConfig(const NFq::NConfig::TComputeConfig& computeConfig, const TComputeMappingHolder::TPtr& computeMappingHolder)
         : ComputeConfig(computeConfig)
+        , ComputeMappingHolder(computeMappingHolder)
         , DefaultCompute(ComputeConfig.GetDefaultCompute() != NFq::NConfig::EComputeType::UNKNOWN
                              ? ComputeConfig.GetDefaultCompute()
                              : NFq::NConfig::EComputeType::IN_PLACE) {
@@ -68,32 +66,6 @@ public:
         }
     }
 
-    NFq::NConfig::TYdbStorageConfig GetControlPlaneConnection(const TString& scope) const {
-        const auto& controlPlane = ComputeConfig.GetYdb().GetControlPlane();
-        switch (controlPlane.type_case()) {
-            case NConfig::TYdbComputeControlPlane::TYPE_NOT_SET:
-                return {};
-            case NConfig::TYdbComputeControlPlane::kSingle:
-                return controlPlane.GetSingle().GetConnection();
-            case NConfig::TYdbComputeControlPlane::kCms:
-                return GetControlPlaneConnection(scope, controlPlane.GetCms().GetDatabaseMapping());
-            case NConfig::TYdbComputeControlPlane::kYdbcp:
-                return GetControlPlaneConnection(scope, controlPlane.GetYdbcp().GetDatabaseMapping());
-        }
-    }
-
-    NFq::NConfig::TYdbStorageConfig GetControlPlaneConnection(const TString& scope, const ::NFq::NConfig::TDatabaseMapping& databaseMapping) const {
-        auto it = databaseMapping.GetScopeToComputeDatabase().find(scope);
-        if (it != databaseMapping.GetScopeToComputeDatabase().end()) {
-            return it->second.GetControlPlaneConnection();
-        }
-        return databaseMapping.GetCommon().empty()
-                   ? NFq::NConfig::TYdbStorageConfig{}
-                   : databaseMapping
-                         .GetCommon(MultiHash(scope) % databaseMapping.GetCommon().size())
-                         .GetControlPlaneConnection();
-    }
-
     NFq::NConfig::TYdbStorageConfig GetExecutionConnection(const TString& scope) const {
         const auto& controlPlane = ComputeConfig.GetYdb().GetControlPlane();
         switch (controlPlane.type_case()) {
@@ -113,11 +85,10 @@ public:
         if (it != databaseMapping.GetScopeToComputeDatabase().end()) {
             return it->second.GetExecutionConnection();
         }
-        return databaseMapping.GetCommon().empty()
-                   ? NFq::NConfig::TYdbStorageConfig{}
-                   : databaseMapping
-                         .GetCommon(MultiHash(scope) % databaseMapping.GetCommon().size())
-                         .GetExecutionConnection();
+        auto commonIndex = ComputeMappingHolder->Mapping->MapScopeToCommonTenant(scope);
+        return commonIndex && *commonIndex < static_cast<ui32>(databaseMapping.GetCommon().size())
+                   ? databaseMapping.GetCommon(*commonIndex).GetExecutionConnection()
+                   : NFq::NConfig::TYdbStorageConfig{};
     }
 
     bool YdbComputeControlPlaneEnabled(const TString& scope) const {
@@ -179,6 +150,7 @@ public:
 
 private:
     NFq::NConfig::TComputeConfig ComputeConfig;
+    NFq::TComputeMappingHolder::TPtr ComputeMappingHolder;
     NFq::NConfig::EComputeType DefaultCompute;
 };
 

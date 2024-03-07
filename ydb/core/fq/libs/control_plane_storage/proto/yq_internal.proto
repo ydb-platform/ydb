@@ -76,4 +76,5 @@ message ComputeDatabaseInternal {
     string id = 1;
     NFq.NConfig.TYdbStorageConfig connection = 2;
     bool synchronized = 3;
+    string database_id = 4;
 }

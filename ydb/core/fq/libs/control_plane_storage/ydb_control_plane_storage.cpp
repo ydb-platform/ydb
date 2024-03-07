@@ -54,6 +54,7 @@ void TYdbControlPlaneStorageActor::Bootstrap() {
     CreateTenantAcksTable();
     CreateMappingsTable();
     CreateComputeDatabasesTable();
+    CreateComputeTenantsTable();
 
     Become(&TThis::StateFunc);
 }
@@ -314,6 +315,18 @@ void TYdbControlPlaneStorageActor::CreateComputeDatabasesTable()
         .AddNullableColumn(CREATED_AT_COLUMN_NAME, EPrimitiveType::Timestamp)
         .AddNullableColumn(LAST_ACCESS_AT_COLUMN_NAME, EPrimitiveType::Timestamp)
         .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME})
+        .Build();
+
+    RunCreateTableActor(tablePath, TTableDescription(description));
+}
+
+void TYdbControlPlaneStorageActor::CreateComputeTenantsTable()
+{
+    auto tablePath = JoinPath(YdbConnection->TablePathPrefix, COMPUTE_TENANTS_TABLE_NAME);
+    auto description = TTableBuilder()
+        .AddNullableColumn(TENANT_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(STATE_COLUMN_NAME, EPrimitiveType::Uint32)
+        .SetPrimaryKeyColumns({TENANT_COLUMN_NAME})
         .Build();
 
     RunCreateTableActor(tablePath, TTableDescription(description));

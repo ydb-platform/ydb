@@ -97,10 +97,22 @@ SELECT ARRAY[1,2,3]::text[]::int[]::float8[] AS "{1,2,3}";
  {1,2,3}
 (1 row)
 
+SELECT pg_typeof(ARRAY[1,2,3]::text[]::int[]::float8[]) AS "double precision[]";
+ double precision[] 
+--------------------
+ double precision[]
+(1 row)
+
 SELECT ARRAY[['a','bc'],['def','hijk']]::text[]::varchar[] AS "{{a,bc},{def,hijk}}";
  {{a,bc},{def,hijk}} 
 ---------------------
  {{a,bc},{def,hijk}}
+(1 row)
+
+SELECT pg_typeof(ARRAY[['a','bc'],['def','hijk']]::text[]::varchar[]) AS "character varying[]";
+ character varying[] 
+---------------------
+ character varying[]
 (1 row)
 
 SELECT CAST(ARRAY[[[[[['a','bb','ccc']]]]]] as text[]) as "{{{{{{a,bb,ccc}}}}}}";

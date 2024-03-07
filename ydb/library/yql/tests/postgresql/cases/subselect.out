@@ -255,8 +255,18 @@ select * from (
 -- pointless.)
 --
 create temp table numeric_table (num_col numeric);
+insert into numeric_table values (1), (1.000000000000000000001), (2), (3);
 create temp table float_table (float_col float8);
 insert into float_table values (1), (2), (3);
+select * from float_table
+  where float_col in (select num_col from numeric_table);
+ float_col 
+-----------
+         1
+         2
+         3
+(3 rows)
+
 --
 -- Test case for bug #4290: bogus calculation of subplan param sets
 --

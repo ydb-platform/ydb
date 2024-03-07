@@ -291,7 +291,7 @@ select '(0,0)'::point in ('(0,0,0,0)'::box, point(0,0));
         -stdin-:<main>:6:23: Error: At function: PgIn, At function: AsList
         	select '(0,0)'::point in ('(0,0,0,0)'::box, point(0,0));
 	                      ^
-            -stdin-:<main>:6:23: Error: Cannot infer common type for box and point
+            -stdin-:<main>:6:23: Error: Cannot infer common type for types 603 and 600
             	select '(0,0)'::point in ('(0,0,0,0)'::box, point(0,0));
 	                      ^
 <sql-statement>

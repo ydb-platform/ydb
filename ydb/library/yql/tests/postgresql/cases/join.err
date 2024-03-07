@@ -1692,15 +1692,15 @@ group by t1.q2 order by 1;
 </sql-statement>
 -stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
     	select t1.q2, count(t2.*)
 	^
-        -stdin-:<main>:3:15: Error: At function: If
-        	  (select q1, case when q2=1 then 1 else q2 end as q2 from int8_tbl) t2
+        -stdin-:<main>:1:15: Error: At function: PgAgg
+        	select t1.q2, count(t2.*)
 	              ^
-            -stdin-:<main>:3:15: Error: Cannot infer common type for int4 and int8
-            	  (select q1, case when q2=1 then 1 else q2 end as q2 from int8_tbl) t2
-	              ^
+            -stdin-:<main>:1:21: Error: Expected PG type, but got: Struct
+            	select t1.q2, count(t2.*)
+	                    ^
 <sql-statement>
 --
 -- test incorrect failure to NULL pulled-up subexpressions

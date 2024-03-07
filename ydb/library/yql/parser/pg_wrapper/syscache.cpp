@@ -76,6 +76,11 @@ bool NsNameEquals(const THeapTupleKey& key1, const THeapTupleKey& key2) {
 
 size_t OidVectorHash(Datum d) {
     oidvector *v = (oidvector *)d;
+    if (!v->ndim) {
+        return 0;
+    }
+
+    Y_DEBUG_ABORT_UNLESS(v->ndim == 1);
     size_t hash = v->dim1;
     for (int i = 0; i < v->dim1; ++i) {
         hash = CombineHashes(hash, std::hash<Oid>()(v->values[i]));
@@ -87,6 +92,15 @@ size_t OidVectorHash(Datum d) {
 bool OidVectorEquals(Datum d1, Datum d2) {
     oidvector *v1 = (oidvector *)d1;
     oidvector *v2 = (oidvector *)d2;
+    if (v1->ndim != v2->ndim) {
+        return false;
+    }
+
+    if (v1->ndim == 0) {
+        return true;
+    }
+
+    Y_DEBUG_ABORT_UNLESS(v1->ndim == 1);
     if (v1->dim1 != v2->dim1) {
         return false;
     }

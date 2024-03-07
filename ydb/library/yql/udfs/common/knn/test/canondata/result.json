@@ -1,4 +1,9 @@
 {
+    "test.test[CosineSimilarity]": [
+        {
+            "uri": "file://test.test_CosineSimilarity_/results.txt"
+        }
+    ],
     "test.test[DeserializationError]": [
         {
             "uri": "file://test.test_DeserializationError_/results.txt"

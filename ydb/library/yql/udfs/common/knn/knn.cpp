@@ -6,73 +6,23 @@
 using namespace NYql;
 using namespace NYql::NUdf;
 
-enum EFormat : unsigned char {
-    FloatVector = 1
-};
-
-TString SerializeFloatVector(const TUnboxedValuePod x) {
-    const EFormat format = EFormat::FloatVector;
-    
-    TString str;
-    TStringOutput outStr(str);
-    if (const auto elements = x.GetElements()) {
-        const auto size = x.GetListLength();
-        outStr.Reserve(1 + size * sizeof(float));
-        outStr.Write(&format, sizeof(unsigned char));
+void EnumerateVector(const TUnboxedValuePod vector, std::function<void(float)> callback) {
+    const auto elements = vector.GetElements();
+    if (elements) {
+        const auto size = vector.GetListLength();
+        
         for (ui32 i = 0; i < size; ++i) {
-            float element = elements[i].Get<float>();
-            outStr.Write(&element, sizeof(float));
+            callback(elements[i].Get<float>());
         }
     } else {
-        outStr.Write(&format, sizeof(unsigned char));
-        const auto it = x.GetListIterator();
-        TUnboxedValue v;
-        while(it.Next(v)) {
-            float element = v.Get<float>();
-            outStr.Write(&element, sizeof(float));
+        TUnboxedValue value;
+        const auto it = vector.GetListIterator();
+        while (it.Next(value)) {
+            callback(value.Get<float>());
         }
     }
-    return str;
 }
 
-NYql::NUdf::TUnboxedValue DeserializeFloatVector(const IValueBuilder *valueBuilder, TStringRef str) {
-    if (str.Size() % sizeof(float) != 0)    
-        return {};
-    
-    const ui32 count = str.Size() / sizeof(float);
-
-    TUnboxedValue* items = nullptr;
-    auto res = valueBuilder->NewArray(count, items);
-    
-    TMemoryInput inStr(str);
-    for (ui32 i = 0; i < count; ++i) {
-        float element;
-        if (inStr.Read(&element, sizeof(float)) != sizeof(float))
-            return {};
-        *items++ = TUnboxedValuePod{element};
-    }
-
-    return res.Release();
-}
-
-SIMPLE_STRICT_UDF(TToBinaryString, char*(TAutoMap<TListType<float>>)) {
-    return valueBuilder->NewString(SerializeFloatVector(args[0]));
-}
-
-SIMPLE_STRICT_UDF(TFromBinaryString, TOptional<TListType<float>>(const char*)) {
-    TStringRef str = args[0].AsStringRef();
-    if (str.Size() == 0)
-        return {};
-
-    const EFormat format = static_cast<EFormat>(str.Data()[0]);
-    str = TStringRef{str.Data() + 1, str.Size() -1};
-    switch (format) {
-        case EFormat::FloatVector: 
-            return DeserializeFloatVector(valueBuilder, str);
-        default:
-            return {};
-    }
-}
 
 bool EnumerateVectors(const TUnboxedValuePod vector1, const TUnboxedValuePod vector2, std::function<void(float, float)> callback) {
     
@@ -142,6 +92,76 @@ bool EnumerateVectors(const TUnboxedValuePod vector1, const TUnboxedValuePod vec
     return true;
 }
 
+enum EFormat : unsigned char {
+    FloatVector = 1
+};
+
+TString SerializeFloatVector(const TUnboxedValuePod x) {
+    const EFormat format = EFormat::FloatVector;
+    
+    TString str;
+    TStringOutput outStr(str);
+
+    if (const auto elements = x.GetElements()) {
+        const auto size = x.GetListLength();
+        outStr.Reserve(1 + size * sizeof(float));
+    }
+    outStr.Write(&format, sizeof(unsigned char));
+
+    EnumerateVector(x,  [&outStr] (float element) { outStr.Write(&element, sizeof(float)); });
+
+    return str;
+}
+
+NYql::NUdf::TUnboxedValue DeserializeFloatVector(const IValueBuilder *valueBuilder, TStringRef str) {
+    if (str.Size() % sizeof(float) != 0)    
+        return {};
+    
+    const ui32 count = str.Size() / sizeof(float);
+
+    TUnboxedValue* items = nullptr;
+    auto res = valueBuilder->NewArray(count, items);
+    
+    TMemoryInput inStr(str);
+    for (ui32 i = 0; i < count; ++i) {
+        float element;
+        if (inStr.Read(&element, sizeof(float)) != sizeof(float))
+            return {};
+        *items++ = TUnboxedValuePod{element};
+    }
+
+    return res.Release();
+}
+
+SIMPLE_STRICT_UDF(TToBinaryString, char*(TAutoMap<TListType<float>>)) {
+    return valueBuilder->NewString(SerializeFloatVector(args[0]));
+}
+
+SIMPLE_STRICT_UDF(TFromBinaryString, TOptional<TListType<float>>(const char*)) {
+    TStringRef str = args[0].AsStringRef();
+    if (str.Size() == 0)
+        return {};
+
+    const EFormat format = static_cast<EFormat>(str.Data()[0]);
+    str = TStringRef{str.Data() + 1, str.Size() -1};
+    switch (format) {
+        case EFormat::FloatVector: 
+            return DeserializeFloatVector(valueBuilder, str);
+        default:
+            return {};
+    }
+}
+
+float CalcLenght(const TUnboxedValuePod vector) {
+    float ret = 0;
+
+    EnumerateVector(vector, [&ret](float el) { ret += el * el;});
+
+    ret = sqrt(ret);
+
+    return ret;
+}
+
 std::optional<float> InnerProductSimilarity(const TUnboxedValuePod vector1, const TUnboxedValuePod vector2) {
     float ret = 0;
 
@@ -154,17 +174,33 @@ std::optional<float> InnerProductSimilarity(const TUnboxedValuePod vector1, cons
 SIMPLE_STRICT_UDF(TInnerProductSimilarity, TOptional<float>(TAutoMap<TListType<float>>, TAutoMap<TListType<float>>)) {
     Y_UNUSED(valueBuilder);
 
-    auto distance = InnerProductSimilarity(args[0], args[1]);
-    if (!distance)
+    auto innerProduct = InnerProductSimilarity(args[0], args[1]);
+    if (!innerProduct)
         return {};
 
-    return TUnboxedValuePod{distance.value()};
+    return TUnboxedValuePod{innerProduct.value()};
+}
+
+SIMPLE_STRICT_UDF(TCosineSimilarity, TOptional<float>(TAutoMap<TListType<float>>, TAutoMap<TListType<float>>)) {
+    Y_UNUSED(valueBuilder);
+
+    auto innerProduct = InnerProductSimilarity(args[0], args[1]);
+    if (!innerProduct)
+        return {};
+
+    float len0 = CalcLenght(args[0]);
+    float len1 = CalcLenght(args[1]);
+
+    float cosine = innerProduct.value() / len0 / len1;
+
+    return TUnboxedValuePod{cosine};
 }
 
 SIMPLE_MODULE(TKnnModule,
     TFromBinaryString, 
     TToBinaryString,
-    TInnerProductSimilarity
+    TInnerProductSimilarity,
+    TCosineSimilarity
     )
 
 REGISTER_MODULES(TKnnModule)

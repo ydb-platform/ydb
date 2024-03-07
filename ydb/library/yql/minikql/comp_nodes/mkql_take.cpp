@@ -103,21 +103,21 @@ public:
         : TBaseComputation(mutables, flow, size, size), Flow(flow), Count(count)
     {}
 
-    void InitState(ui64 &count, TComputationContext& ctx) const {
-        count = Count->GetValue(ctx).Get<ui64>();
+    void InitState(NUdf::TUnboxedValue& cntToTake, TComputationContext& ctx) const {
+        cntToTake = Count->GetValue(ctx);
     }
 
-    NUdf::TUnboxedValue*const* PrepareInput(ui64& takeCount, TComputationContext&, NUdf::TUnboxedValue*const* output) const {
-        return takeCount != 0 ? output : nullptr;
+    NUdf::TUnboxedValue*const* PrepareInput(NUdf::TUnboxedValue& cntToTake, TComputationContext&, NUdf::TUnboxedValue*const* output) const {
+        return cntToTake.Get<ui64>() ? output : nullptr;
     }
 
-    EProcessResult DoProcess(ui64& takeCount, TComputationContext& , EFetchResult fetchRes, NUdf::TUnboxedValue*const*) const {
-        if (takeCount == 0) {
-            return EProcessResult::Finish;
-        } else if (fetchRes == EFetchResult::One) {
-            takeCount--;
+    TMaybeFetchResult DoProcess(NUdf::TUnboxedValue& cntToTake, TComputationContext& , TMaybeFetchResult fetchRes, NUdf::TUnboxedValue*const*) const {
+        if (fetchRes.Empty()) {
+            return EFetchResult::Finish;
+        } else if (fetchRes.Get() == EFetchResult::One) {
+            cntToTake = NUdf::TUnboxedValuePod(cntToTake.Get<ui64>() - 1);
         }
-        return static_cast<EProcessResult>(fetchRes);
+        return fetchRes;
     }
 
 private:

@@ -128,20 +128,20 @@ public:
         , StubsIndex(mutables.IncrementWideFieldsIndex(size))
     {}
 
-    void InitState(ui64& count, TComputationContext& ctx) const {
-        count = Count->GetValue(ctx).Get<ui64>();
+    void InitState(NUdf::TUnboxedValue& cntToSkip, TComputationContext& ctx) const {
+        cntToSkip = Count->GetValue(ctx);
     }
 
-    NUdf::TUnboxedValue*const* PrepareInput(ui64& skipCount, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-         return skipCount == 0 ? output : ctx.WideFields.data() + StubsIndex;
+    NUdf::TUnboxedValue*const* PrepareInput(NUdf::TUnboxedValue& cntToSkip, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+         return cntToSkip.Get<ui64>() ? ctx.WideFields.data() + StubsIndex : output;
      }
 
-    EProcessResult DoProcess(ui64& skipCount, TComputationContext&, EFetchResult fetchRes, NUdf::TUnboxedValue*const*) const {
-        if (fetchRes == EFetchResult::One && skipCount) {
-            skipCount--;
-            return EProcessResult::Again;
+    TMaybeFetchResult DoProcess(NUdf::TUnboxedValue& cntToSkip, TComputationContext&, TMaybeFetchResult fetchRes, NUdf::TUnboxedValue*const*) const {
+        if (fetchRes.Get() == EFetchResult::One && cntToSkip.Get<ui64>()) {
+            cntToSkip = NUdf::TUnboxedValuePod(cntToSkip.Get<ui64>() - 1);
+            return TMaybeFetchResult::None();
         }
-        return static_cast<EProcessResult>(fetchRes);
+        return fetchRes;
     }
 
 private:

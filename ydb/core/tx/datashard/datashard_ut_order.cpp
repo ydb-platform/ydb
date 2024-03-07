@@ -4279,6 +4279,7 @@ Y_UNIT_TEST(UncommittedReadSetAck) {
 
     bool capturePlanSteps = true;
     TVector<THolder<IEventHandle>> capturedPlanSteps;
+    TVector<ui64> capturedPlanTxIds;
     THashSet<ui64> passReadSetTxIds;
     ui64 observedReadSets = 0;
     TVector<THolder<IEventHandle>> capturedReadSets;
@@ -4294,6 +4295,12 @@ Y_UNIT_TEST(UncommittedReadSetAck) {
             case TEvTxProcessing::TEvPlanStep::EventType: {
                 if (nodeIndex == 1 && ev->GetRecipientRewrite() == table3actor && capturePlanSteps) {
                     Cerr << "... captured plan step for table-3" << Endl;
+                    auto* msg = ev->Get<TEvTxProcessing::TEvPlanStep>();
+                    for (const auto& tx : msg->Record.GetTransactions()) {
+                        ui64 txId = tx.GetTxId();
+                        capturedPlanTxIds.push_back(txId);
+                        Cerr << "... captured plan step tx " << txId << " for table-3" << Endl;
+                    }
                     capturedPlanSteps.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
                 }
@@ -4303,6 +4310,12 @@ Y_UNIT_TEST(UncommittedReadSetAck) {
                 if (nodeIndex == 1 && ev->GetRecipientRewrite() == table3actor) {
                     auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
                     ui64 txId = msg->Record.GetTxId();
+                    if ((msg->Record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET) &&
+                        (msg->Record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_NO_DATA))
+                    {
+                        Cerr << "... passing expectation for txid# " << txId << Endl;
+                        break;
+                    }
                     ++observedReadSets;
                     if (!passReadSetTxIds.contains(txId)) {
                         Cerr << "... readset for txid# " << txId << " was blocked" << Endl;
@@ -4353,20 +4366,11 @@ Y_UNIT_TEST(UncommittedReadSetAck) {
         }
     };
 
-    waitFor([&]{ return capturedPlanSteps.size() > 0; }, "plan step");
-    UNIT_ASSERT_VALUES_EQUAL(capturedPlanSteps.size(), 1u);
-    ui64 realTxId1, realTxId2;
-    {
-        auto* msg = capturedPlanSteps[0]->Get<TEvTxProcessing::TEvPlanStep>();
-        TVector<ui64> realTxIds;
-        for (const auto& tx : msg->Record.GetTransactions()) {
-            realTxIds.emplace_back(tx.GetTxId());
-        }
-        UNIT_ASSERT_VALUES_EQUAL(realTxIds.size(), 2u);
-        std::sort(realTxIds.begin(), realTxIds.end());
-        realTxId1 = realTxIds.at(0);
-        realTxId2 = realTxIds.at(1);
-    }
+    waitFor([&]{ return capturedPlanTxIds.size() >= 2; }, "captured transactions");
+    UNIT_ASSERT_C(capturedPlanTxIds.size(), 2u);
+    std::sort(capturedPlanTxIds.begin(), capturedPlanTxIds.end());
+    ui64 realTxId1 = capturedPlanTxIds.at(0);
+    ui64 realTxId2 = capturedPlanTxIds.at(1);
 
     // Unblock and resend the plan step message
     capturePlanSteps = false;
@@ -4375,7 +4379,7 @@ Y_UNIT_TEST(UncommittedReadSetAck) {
     }
     capturedPlanSteps.clear();
 
-    // Wait until there are 2 readset messages
+    // Wait until there are 2 readset messages (with data)
     waitFor([&]{ return capturedReadSets.size() >= 2; }, "initial readsets");
     SimulateSleep(runtime, TDuration::MilliSeconds(5));
 

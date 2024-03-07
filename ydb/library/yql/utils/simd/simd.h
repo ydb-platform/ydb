@@ -153,7 +153,7 @@ struct Perfomancer {
 
             PrepareMasks(sizes, mask);
 
-            const size_t stores = std::min(4ul, Trait::SIZE / sizes[0]);
+            const size_t stores = std::min(4ul, Trait::SIZE / sizes[3]);
             size_t i = 0;
 
             for (; i * sizes[0] + Trait::SIZE < length * sizes[0]; i += Trait::SIZE / pack * stores) {

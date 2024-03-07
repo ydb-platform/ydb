@@ -4,6 +4,7 @@ import "ydb/core/fq/libs/config/protos/fq_config.proto";
 import "ydb/core/protos/alloc.proto";
 import "ydb/core/protos/auth.proto";
 import "ydb/core/protos/blobstorage.proto";
+import "ydb/core/protos/blobstorage_base3.proto";
 import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/blobstorage_pdisk_config.proto";
 import "ydb/core/protos/blobstorage_vdisk_config.proto";
@@ -280,6 +281,18 @@ message TBlobStorageConfig {
     }
 
     optional TAutoconfigSettings AutoconfigSettings = 6;
+
+    message TCostMetricsConfig {
+        optional NKikimrBlobStorage.EPDiskType PDiskType = 1;
+        optional uint64 BurstThresholdNs = 2;
+        optional float DiskTimeAvailableScale = 3;
+    }
+
+    message TCostMetricsSettings {
+        repeated TCostMetricsConfig VDiskTypes = 1;
+    };
+
+    optional TCostMetricsSettings CostMetricsSettings = 7;
  }
 
 message TBlobStorageFormatConfig {

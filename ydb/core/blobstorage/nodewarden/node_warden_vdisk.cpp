@@ -176,6 +176,19 @@ namespace NKikimr::NStorage {
         vdiskConfig->EnableVPatch = EnableVPatch;
         vdiskConfig->FeatureFlags = Cfg->FeatureFlags;
 
+        if (Cfg->BlobStorageConfig.HasCostMetricsSettings()) {
+            for (auto type : Cfg->BlobStorageConfig.GetCostMetricsSettings().GetVDiskTypes()) {
+                if (type.HasPDiskType() && deviceType == PDiskTypeToPDiskType(type.GetPDiskType())) {
+                    if (type.HasBurstThresholdNs()) {
+                        vdiskConfig->BurstThresholdNs = type.GetBurstThresholdNs();
+                    }
+                    if (type.HasDiskTimeAvailableScale()) {
+                        vdiskConfig->DiskTimeAvailableScale = type.GetDiskTimeAvailableScale();
+                    }
+                }
+            }
+        }
+
         // issue initial report to whiteboard before creating actor to avoid races
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(vdiskId, groupInfo->GetStoragePoolName(),
             vslotId.PDiskId, vslotId.VDiskSlotId, pdiskGuid, kind, donorMode, whiteboardInstanceGuid, std::move(donors)));

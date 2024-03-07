@@ -30,6 +30,7 @@ target_link_options(ydb-core-blobstorage-storagepoolmon-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-blobstorage-storagepoolmon-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/storagepoolmon/ut/storagepoolmon_ut.cpp

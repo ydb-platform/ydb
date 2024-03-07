@@ -45,6 +45,7 @@ target_link_options(ydb-services-persqueue_v1-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-services-persqueue_v1-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/ut/test_utils.h

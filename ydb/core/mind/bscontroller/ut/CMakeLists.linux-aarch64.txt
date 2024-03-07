@@ -29,6 +29,7 @@ target_link_options(ydb-core-mind-bscontroller-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-mind-bscontroller-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/grouper_ut.cpp

@@ -32,6 +32,7 @@ target_link_options(quoter_performance_test PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(quoter_performance_test PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/quoter_performance_test/main.cpp

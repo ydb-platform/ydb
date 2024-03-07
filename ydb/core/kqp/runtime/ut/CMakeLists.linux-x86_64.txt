@@ -35,6 +35,7 @@ target_link_options(ydb-core-kqp-runtime-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-kqp-runtime-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_scan_data_ut.cpp

@@ -31,6 +31,7 @@ target_link_options(kqprun PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(kqprun PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/tests/tools/kqprun/kqprun.cpp

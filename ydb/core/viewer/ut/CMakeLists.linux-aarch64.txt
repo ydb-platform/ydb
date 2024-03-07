@@ -31,6 +31,7 @@ target_link_options(ydb-core-viewer-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-viewer-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/viewer_ut.cpp

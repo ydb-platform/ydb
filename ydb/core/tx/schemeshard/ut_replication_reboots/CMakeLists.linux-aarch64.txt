@@ -32,6 +32,7 @@ target_link_options(ydb-core-tx-schemeshard-ut_replication_reboots PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-tx-schemeshard-ut_replication_reboots PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_replication_reboots/ut_replication_reboots.cpp

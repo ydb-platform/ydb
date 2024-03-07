@@ -32,6 +32,7 @@ target_link_options(with_offset_ranges_mode_ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(with_offset_ranges_mode_ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/common_ut.cpp

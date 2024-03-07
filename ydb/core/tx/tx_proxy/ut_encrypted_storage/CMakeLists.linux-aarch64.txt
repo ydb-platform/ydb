@@ -36,6 +36,7 @@ target_link_options(ydb-core-tx-tx_proxy-ut_encrypted_storage PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-tx-tx_proxy-ut_encrypted_storage PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/proxy_ut_helpers.h

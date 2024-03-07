@@ -31,6 +31,7 @@ target_link_options(ydb-core-driver_lib-run-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-driver_lib-run-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/run/auto_config_initializer_ut.cpp

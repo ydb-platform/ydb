@@ -35,6 +35,7 @@ target_link_options(ydb-core-tablet-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-tablet-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet/pipe_tracker_ut.cpp

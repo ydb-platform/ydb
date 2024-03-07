@@ -34,6 +34,7 @@ target_link_options(ydb-core-kqp-ut-view PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-kqp-ut-view PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/view/view_ut.cpp

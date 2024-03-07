@@ -36,6 +36,7 @@ target_link_options(ydb-core-tx-tx_proxy-ut_ext_tenant PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-tx-tx_proxy-ut_ext_tenant PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/proxy_ext_tenant_ut.cpp

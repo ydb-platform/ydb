@@ -44,6 +44,7 @@ target_link_options(ydb-core-tx-datashard-ut_change_exchange PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-tx-datashard-ut_change_exchange PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_change_exchange.cpp

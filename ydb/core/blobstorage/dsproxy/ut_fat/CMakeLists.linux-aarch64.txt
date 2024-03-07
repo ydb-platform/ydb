@@ -35,6 +35,7 @@ target_link_options(ydb-core-blobstorage-dsproxy-ut_fat PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-blobstorage-dsproxy-ut_fat PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut_fat/dsproxy_ut.cpp

@@ -37,6 +37,7 @@ target_link_options(ydb-core-kqp-ut-opt PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-kqp-ut-opt PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_agg_ut.cpp

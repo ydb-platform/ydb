@@ -41,6 +41,7 @@ target_link_options(ydb-core-mind-ut_fat PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-mind-ut_fat PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/ut_fat/blobstorage_node_warden_ut_fat.cpp

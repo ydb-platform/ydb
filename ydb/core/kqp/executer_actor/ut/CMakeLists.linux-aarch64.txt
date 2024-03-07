@@ -36,6 +36,7 @@ target_link_options(ydb-core-kqp-executer_actor-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 set_property(
   TARGET

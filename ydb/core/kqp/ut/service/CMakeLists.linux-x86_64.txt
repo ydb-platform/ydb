@@ -39,6 +39,7 @@ target_link_options(ydb-core-kqp-ut-service PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-kqp-ut-service PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/service/kqp_document_api_ut.cpp

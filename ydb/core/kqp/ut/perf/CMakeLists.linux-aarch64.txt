@@ -33,6 +33,7 @@ target_link_options(ydb-core-kqp-ut-perf PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-kqp-ut-perf PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/perf/kqp_query_perf_ut.cpp

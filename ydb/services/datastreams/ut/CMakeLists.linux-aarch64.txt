@@ -35,6 +35,7 @@ target_link_options(ydb-services-datastreams-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-services-datastreams-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/services/datastreams/datastreams_ut.cpp

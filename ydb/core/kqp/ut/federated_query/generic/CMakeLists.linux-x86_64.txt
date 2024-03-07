@@ -38,6 +38,7 @@ target_link_options(ydb-core-kqp-ut-federated_query-generic PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-kqp-ut-federated_query-generic PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/federated_query/generic/ch_recipe_ut_helpers.cpp

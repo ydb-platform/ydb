@@ -34,6 +34,7 @@ target_link_options(ydb-core-tx-schemeshard-ut_cdc_stream_reboots PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-tx-schemeshard-ut_cdc_stream_reboots PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_cdc_stream_reboots/ut_cdc_stream_reboots.cpp

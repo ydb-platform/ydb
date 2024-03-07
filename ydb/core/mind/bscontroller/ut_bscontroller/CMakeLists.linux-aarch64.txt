@@ -34,6 +34,7 @@ target_link_options(ydb-core-mind-bscontroller-ut_bscontroller PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-mind-bscontroller-ut_bscontroller PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_bscontroller/main.cpp

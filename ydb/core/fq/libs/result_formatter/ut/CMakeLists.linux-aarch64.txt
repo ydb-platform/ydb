@@ -33,6 +33,7 @@ target_link_options(ydb-core-fq-libs-result_formatter-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-fq-libs-result_formatter-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/result_formatter/result_formatter_ut.cpp

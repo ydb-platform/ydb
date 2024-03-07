@@ -35,6 +35,7 @@ target_link_options(ydb-core-http_proxy-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-http_proxy-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/ut/json_proto_conversion_ut.cpp

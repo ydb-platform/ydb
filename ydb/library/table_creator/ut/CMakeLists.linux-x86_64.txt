@@ -36,6 +36,7 @@ target_link_options(ydb-library-table_creator-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-library-table_creator-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/table_creator/table_creator_ut.cpp

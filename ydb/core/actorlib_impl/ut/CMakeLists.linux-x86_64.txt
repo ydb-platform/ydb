@@ -38,6 +38,7 @@ target_link_options(ydb-core-actorlib_impl-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-actorlib_impl-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/actorlib_impl/actor_activity_ut.cpp

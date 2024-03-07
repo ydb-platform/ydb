@@ -40,6 +40,7 @@ target_link_options(ydb-services-bg_tasks-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-services-bg_tasks-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/services/bg_tasks/ut/ut_tasks.cpp

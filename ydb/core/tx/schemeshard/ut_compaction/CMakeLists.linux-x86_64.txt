@@ -38,6 +38,7 @@ target_link_options(ydb-core-tx-schemeshard-ut_compaction PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-tx-schemeshard-ut_compaction PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_compaction/ut_compaction.cpp

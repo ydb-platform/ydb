@@ -32,6 +32,7 @@ target_link_options(ydb-core-kqp-ut-cost PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-kqp-ut-cost PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/cost/kqp_cost_ut.cpp

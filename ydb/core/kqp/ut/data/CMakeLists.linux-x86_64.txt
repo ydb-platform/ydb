@@ -36,6 +36,7 @@ target_link_options(ydb-core-kqp-ut-data PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-kqp-ut-data PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/data/kqp_read_null_ut.cpp

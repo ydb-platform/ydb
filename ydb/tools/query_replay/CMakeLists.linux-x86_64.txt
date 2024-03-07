@@ -99,6 +99,7 @@ target_link_options(ydb_query_replay PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb_query_replay PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/tools/query_replay/query_replay.h

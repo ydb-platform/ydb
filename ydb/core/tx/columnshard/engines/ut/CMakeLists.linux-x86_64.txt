@@ -43,6 +43,7 @@ target_link_options(ydb-core-tx-columnshard-engines-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-tx-columnshard-engines-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut/ut_insert_table.cpp

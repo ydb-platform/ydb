@@ -45,6 +45,7 @@ target_link_options(ydb-services-fq-ut_integration PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-services-fq-ut_integration PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/services/fq/ut_integration/ut_utils.cpp

@@ -34,6 +34,7 @@ target_link_options(ydb-core-tx-scheme_board-ut_monitoring PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-tx-scheme_board-ut_monitoring PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/scheme_board/monitoring_ut.cpp

@@ -51,6 +51,7 @@ target_link_options(ydb-services-ydb-table_split_ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-services-ydb-table_split_ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_table_split_ut.cpp

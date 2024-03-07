@@ -38,6 +38,7 @@ target_link_options(ydb-core-tx-schemeshard-ut_export_reboots_s3 PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-tx-schemeshard-ut_export_reboots_s3 PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_export_reboots_s3/ut_export_reboots_s3.cpp

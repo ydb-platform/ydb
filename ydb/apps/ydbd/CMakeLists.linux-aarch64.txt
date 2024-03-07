@@ -59,6 +59,7 @@ target_link_options(ydbd PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydbd PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/apps/ydbd/export.h

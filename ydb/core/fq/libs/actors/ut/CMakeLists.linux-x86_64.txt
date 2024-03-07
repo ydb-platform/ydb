@@ -34,6 +34,7 @@ target_link_options(ydb-core-fq-libs-actors-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-fq-libs-actors-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/ut/database_resolver_ut.cpp

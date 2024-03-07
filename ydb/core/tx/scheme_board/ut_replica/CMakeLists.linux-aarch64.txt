@@ -33,6 +33,7 @@ target_link_options(ydb-core-tx-scheme_board-ut_replica PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-tx-scheme_board-ut_replica PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/scheme_board/replica_ut.cpp

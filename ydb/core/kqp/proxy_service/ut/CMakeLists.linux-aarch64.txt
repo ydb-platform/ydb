@@ -36,6 +36,7 @@ target_link_options(ydb-core-kqp-proxy_service-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-kqp-proxy_service-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/proxy_service/kqp_proxy_ut.cpp

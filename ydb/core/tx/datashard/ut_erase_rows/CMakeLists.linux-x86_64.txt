@@ -41,6 +41,7 @@ target_link_options(ydb-core-tx-datashard-ut_erase_rows PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-tx-datashard-ut_erase_rows PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_erase_rows.cpp

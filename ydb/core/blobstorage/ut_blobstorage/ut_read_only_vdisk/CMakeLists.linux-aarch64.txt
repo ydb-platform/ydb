@@ -28,6 +28,7 @@ target_link_options(ut_blobstorage-ut_read_only_vdisk PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ut_blobstorage-ut_read_only_vdisk PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/read_only_vdisk.cpp

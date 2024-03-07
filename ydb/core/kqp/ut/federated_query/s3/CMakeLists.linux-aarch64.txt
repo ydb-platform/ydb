@@ -35,6 +35,7 @@ target_link_options(ydb-core-kqp-ut-federated_query-s3 PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-kqp-ut-federated_query-s3 PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/federated_query/s3/kqp_federated_query_ut.cpp

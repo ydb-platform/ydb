@@ -36,6 +36,7 @@ target_link_options(ydb-core-blobstorage-vdisk-skeleton-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-blobstorage-vdisk-skeleton-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_oos_logic_ut.cpp

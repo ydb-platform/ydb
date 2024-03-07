@@ -33,6 +33,7 @@ target_link_options(ydb-core-kqp-ut-arrow PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-kqp-ut-arrow PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/arrow/kqp_arrow_in_channels_ut.cpp

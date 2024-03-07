@@ -33,6 +33,7 @@ target_link_options(ydb-core-graph-shard-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-graph-shard-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/graph/shard/ut/shard_ut.cpp

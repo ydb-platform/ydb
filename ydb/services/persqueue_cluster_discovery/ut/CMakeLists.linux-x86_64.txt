@@ -34,6 +34,7 @@ target_link_options(ydb-services-persqueue_cluster_discovery-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-services-persqueue_cluster_discovery-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_cluster_discovery/cluster_discovery_service_ut.cpp

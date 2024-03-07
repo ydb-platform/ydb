@@ -33,6 +33,7 @@ target_link_options(ydb-core-security-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-security-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/security/ticket_parser_ut.cpp

@@ -35,6 +35,7 @@ target_link_options(ydb-core-grpc_streaming-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-grpc_streaming-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_streaming/grpc_streaming_ut.cpp

@@ -32,6 +32,7 @@ target_link_options(ydb-core-kesus-proxy-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-kesus-proxy-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kesus/proxy/proxy_actor_ut.cpp

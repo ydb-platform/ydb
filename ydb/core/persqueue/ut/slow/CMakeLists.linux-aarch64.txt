@@ -35,6 +35,7 @@ target_link_options(ydb-core-persqueue-ut-slow PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-persqueue-ut-slow PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/slow/pq_ut.cpp

@@ -32,6 +32,7 @@ target_link_options(ydb-core-grpc_services-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-grpc_services-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_calls_ut.cpp

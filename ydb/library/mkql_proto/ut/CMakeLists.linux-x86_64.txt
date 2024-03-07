@@ -35,6 +35,7 @@ target_link_options(ydb-library-mkql_proto-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-library-mkql_proto-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/mkql_proto/mkql_proto_ut.cpp

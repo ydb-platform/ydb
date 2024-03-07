@@ -29,6 +29,7 @@ target_link_options(benchmark PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(benchmark PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/benchmark/b_part.cpp

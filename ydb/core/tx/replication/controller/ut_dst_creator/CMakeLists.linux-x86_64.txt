@@ -33,6 +33,7 @@ target_link_options(ydb-core-tx-replication-controller-ut_dst_creator PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-tx-replication-controller-ut_dst_creator PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/dst_creator_ut.cpp

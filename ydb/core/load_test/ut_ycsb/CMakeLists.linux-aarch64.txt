@@ -39,6 +39,7 @@ target_link_options(ydb-core-load_test-ut_ycsb PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-load_test-ut_ycsb PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/load_test/ut_ycsb.cpp

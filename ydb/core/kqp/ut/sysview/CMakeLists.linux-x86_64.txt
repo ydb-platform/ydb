@@ -33,6 +33,7 @@ target_link_options(ydb-core-kqp-ut-sysview PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-kqp-ut-sysview PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/sysview/kqp_sys_col_ut.cpp

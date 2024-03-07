@@ -33,6 +33,7 @@ target_link_options(ydb-core-kqp-ut-query PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-kqp-ut-query PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/query/kqp_explain_ut.cpp

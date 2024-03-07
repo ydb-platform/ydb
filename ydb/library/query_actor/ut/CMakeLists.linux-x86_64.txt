@@ -33,6 +33,7 @@ target_link_options(ydb-library-query_actor-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-library-query_actor-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/query_actor/query_actor_ut.cpp

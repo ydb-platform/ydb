@@ -36,6 +36,7 @@ target_link_options(ydb-core-client-server-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-client-server-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_pq_metarequest_ut.cpp

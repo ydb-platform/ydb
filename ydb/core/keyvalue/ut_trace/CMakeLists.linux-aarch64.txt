@@ -28,6 +28,7 @@ target_link_options(ydb-core-keyvalue-ut_trace PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-keyvalue-ut_trace PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_ut_trace.cpp

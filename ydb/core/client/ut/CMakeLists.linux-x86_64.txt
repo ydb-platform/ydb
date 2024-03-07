@@ -37,6 +37,7 @@ target_link_options(ydb-core-client-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-client-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/client/cancel_tx_ut.cpp

@@ -39,6 +39,7 @@ target_link_options(ydb-core-client-minikql_compile-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-client-minikql_compile-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/client/minikql_compile/yql_expr_minikql_compile_ut.cpp

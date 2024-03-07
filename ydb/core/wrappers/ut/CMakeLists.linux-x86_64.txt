@@ -38,6 +38,7 @@ target_link_options(ydb-core-wrappers-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-wrappers-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/wrappers/s3_wrapper_ut.cpp

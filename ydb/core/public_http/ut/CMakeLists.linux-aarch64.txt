@@ -34,6 +34,7 @@ target_link_options(ydb-core-public_http-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-public_http-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/public_http/http_router_ut.cpp

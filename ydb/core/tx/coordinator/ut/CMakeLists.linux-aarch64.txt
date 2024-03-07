@@ -33,6 +33,7 @@ target_link_options(ydb-core-tx-coordinator-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-tx-coordinator-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator_ut.cpp

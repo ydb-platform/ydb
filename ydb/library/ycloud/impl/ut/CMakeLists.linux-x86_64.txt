@@ -33,6 +33,7 @@ target_link_options(ydb-library-ycloud-impl-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-library-ycloud-impl-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/ycloud/impl/access_service_ut.cpp

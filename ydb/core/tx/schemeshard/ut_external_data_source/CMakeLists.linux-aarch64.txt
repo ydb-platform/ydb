@@ -37,6 +37,7 @@ target_link_options(ydb-core-tx-schemeshard-ut_external_data_source PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-tx-schemeshard-ut_external_data_source PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_external_data_source/ut_external_data_source.cpp

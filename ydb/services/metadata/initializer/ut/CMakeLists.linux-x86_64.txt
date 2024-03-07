@@ -37,6 +37,7 @@ target_link_options(ydb-services-metadata-initializer-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-services-metadata-initializer-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/services/metadata/initializer/ut/ut_init.cpp

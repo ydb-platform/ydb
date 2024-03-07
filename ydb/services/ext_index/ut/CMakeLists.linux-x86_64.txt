@@ -37,6 +37,7 @@ target_link_options(ydb-services-ext_index-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-services-ext_index-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/services/ext_index/ut/ut_ext_index.cpp

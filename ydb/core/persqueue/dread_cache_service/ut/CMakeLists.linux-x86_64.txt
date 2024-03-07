@@ -34,6 +34,7 @@ target_link_options(ydb-core-persqueue-dread_cache_service-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-persqueue-dread_cache_service-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/dread_cache_service/ut/caching_proxy_ut.cpp

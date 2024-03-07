@@ -35,6 +35,7 @@ target_link_options(ydb-core-tx-schemeshard-ut_ru_calculator PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-tx-schemeshard-ut_ru_calculator PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_ru_calculator/ut_ru_calculator.cpp

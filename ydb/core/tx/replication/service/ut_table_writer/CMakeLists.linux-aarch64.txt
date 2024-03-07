@@ -33,6 +33,7 @@ target_link_options(ydb-core-tx-replication-service-ut_table_writer PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-tx-replication-service-ut_table_writer PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/service/table_writer_ut.cpp

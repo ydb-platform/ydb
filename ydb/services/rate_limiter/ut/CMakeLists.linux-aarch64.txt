@@ -33,6 +33,7 @@ target_link_options(ydb-services-rate_limiter-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-services-rate_limiter-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/services/rate_limiter/rate_limiter_ut.cpp

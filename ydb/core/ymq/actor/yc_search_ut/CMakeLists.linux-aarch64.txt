@@ -28,6 +28,7 @@ target_link_options(ydb-core-ymq-actor-yc_search_ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-ymq-actor-yc_search_ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/ymq/actor/yc_search_ut/index_events_processor_ut.cpp

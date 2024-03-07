@@ -33,6 +33,7 @@ target_link_options(ydb-core-client-minikql_result_lib-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-client-minikql_result_lib-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/client/minikql_result_lib/converter_ut.cpp

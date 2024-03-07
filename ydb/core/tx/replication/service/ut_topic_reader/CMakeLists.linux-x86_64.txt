@@ -35,6 +35,7 @@ target_link_options(ydb-core-tx-replication-service-ut_topic_reader PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-tx-replication-service-ut_topic_reader PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/service/topic_reader_ut.cpp

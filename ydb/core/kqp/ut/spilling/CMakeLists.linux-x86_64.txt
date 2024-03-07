@@ -37,6 +37,7 @@ target_link_options(ydb-core-kqp-ut-spilling PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-kqp-ut-spilling PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/spilling/kqp_scan_spilling_ut.cpp

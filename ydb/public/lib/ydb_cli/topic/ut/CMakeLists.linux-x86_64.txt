@@ -41,6 +41,7 @@ target_link_options(ydb-public-lib-ydb_cli-topic-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-public-lib-ydb_cli-topic-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic/topic_write.h

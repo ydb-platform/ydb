@@ -35,6 +35,7 @@ target_link_options(ydb-core-tx-scheme_board-ut_populator PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-tx-scheme_board-ut_populator PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/scheme_board/populator_ut.cpp

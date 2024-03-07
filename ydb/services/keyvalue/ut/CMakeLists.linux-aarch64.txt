@@ -33,6 +33,7 @@ target_link_options(ydb-services-keyvalue-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-services-keyvalue-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/services/keyvalue/grpc_service_ut.cpp

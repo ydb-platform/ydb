@@ -52,6 +52,7 @@ target_link_options(ydb-core-tx-columnshard-splitter-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-tx-columnshard-splitter-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/ut/ut_splitter.cpp

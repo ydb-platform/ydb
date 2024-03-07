@@ -35,6 +35,7 @@ target_link_options(ydb-core-tx-tx_allocator_client-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-tx-tx_allocator_client-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_allocator_client/actor_client_ut.cpp

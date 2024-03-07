@@ -30,6 +30,7 @@ target_link_options(ydb-core-blobstorage-dsproxy-ut_ftol PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-blobstorage-dsproxy-ut_ftol PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut_ftol/dsproxy_fault_tolerance_ut.cpp

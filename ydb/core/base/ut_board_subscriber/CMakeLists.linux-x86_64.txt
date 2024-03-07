@@ -37,6 +37,7 @@ target_link_options(ydb-core-base-ut_board_subscriber PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-base-ut_board_subscriber PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/base/board_subscriber_ut.cpp

@@ -41,6 +41,7 @@ target_link_options(ydb-core-tx-columnshard-ut_rw PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-tx-columnshard-ut_rw PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_ut_common.cpp

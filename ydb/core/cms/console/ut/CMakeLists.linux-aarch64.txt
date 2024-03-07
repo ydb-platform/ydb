@@ -35,6 +35,7 @@ target_link_options(ydb-core-cms-console-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-cms-console-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/configs_cache_ut.cpp

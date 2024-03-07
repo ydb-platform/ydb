@@ -55,7 +55,7 @@ NYql::NUdf::TUnboxedValue DeserializeFloatVector(const IValueBuilder *valueBuild
     return res.Release();
 }
 
-SIMPLE_STRICT_UDF(TToBinaryString, char*(TListType<float>)) {
+SIMPLE_STRICT_UDF(TToBinaryString, char*(TAutoMap<TListType<float>>)) {
     return valueBuilder->NewString(SerializeFloatVector(args[0]));
 }
 
@@ -151,11 +151,8 @@ std::optional<float> InnerProductSimilarity(const TUnboxedValuePod vector1, cons
     return ret;
 }
 
-SIMPLE_STRICT_UDF(TInnerProductSimilarity, TOptional<float>(TOptional<TListType<float>>, TOptional<TListType<float>>)) {
+SIMPLE_STRICT_UDF(TInnerProductSimilarity, TOptional<float>(TAutoMap<TListType<float>>, TAutoMap<TListType<float>>)) {
     Y_UNUSED(valueBuilder);
-
-    if (!args[0].HasValue() || !args[1].HasValue())
-        return {};
 
     auto distance = InnerProductSimilarity(args[0], args[1]);
     if (!distance)

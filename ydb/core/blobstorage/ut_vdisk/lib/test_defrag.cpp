@@ -4,7 +4,7 @@
 
 using namespace NKikimr;
 
-#define STR Cnull
+#define STR Cerr
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Defrag empty database
@@ -54,7 +54,7 @@ virtual void Scenario(const TActorContext &ctx) {
 
     // prepare gc command -- it deletes all data from one tablet
     TGCSettings settings;
-    settings.TabletID = 0;
+    settings.TabletID = DefaultTestTabletId;
     settings.RecGen = 1;
     settings.RecGenCounter = 1;
     settings.Channel = 0;
@@ -98,7 +98,7 @@ virtual void Scenario(const TActorContext &ctx) {
     LOG_NOTICE(ctx, NActorsServices::TEST, "  Defrag completed");
 
     // check actually freed chunks
-    UNIT_ASSERT_VALUES_EQUAL(freedChunks, 3);
+    UNIT_ASSERT_VALUES_EQUAL(freedChunks, 4);
 }
 SYNC_TEST_END(TDefrag50PercentGarbage, TSyncTestBase)
 

@@ -4,6 +4,8 @@
 
 #include <util/generic/ptr.h>
 
+extern const ui64 DefaultTestTabletId;
+
 TString CreateData(const TString &orig, ui32 minHugeBlobSize, bool huge);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -142,7 +142,7 @@ bool EnumerateVectors(const TUnboxedValuePod vector1, const TUnboxedValuePod vec
     return true;
 }
 
-std::optional<float> InnerProductDistance(const TUnboxedValuePod vector1, const TUnboxedValuePod vector2) {
+std::optional<float> InnerProductSimilarity(const TUnboxedValuePod vector1, const TUnboxedValuePod vector2) {
     float ret = 0;
 
     if (!EnumerateVectors(vector1, vector2, [&ret](float el1, float el2) { ret += el1 * el2;}))
@@ -151,13 +151,13 @@ std::optional<float> InnerProductDistance(const TUnboxedValuePod vector1, const 
     return ret;
 }
 
-SIMPLE_STRICT_UDF(TInnerProductDistance, TOptional<float>(TOptional<TListType<float>>, TOptional<TListType<float>>)) {
+SIMPLE_STRICT_UDF(TInnerProductSimilarity, TOptional<float>(TOptional<TListType<float>>, TOptional<TListType<float>>)) {
     Y_UNUSED(valueBuilder);
 
     if (!args[0].HasValue() || !args[1].HasValue())
         return {};
 
-    auto distance = InnerProductDistance(args[0], args[1]);
+    auto distance = InnerProductSimilarity(args[0], args[1]);
     if (!distance)
         return {};
 
@@ -167,7 +167,7 @@ SIMPLE_STRICT_UDF(TInnerProductDistance, TOptional<float>(TOptional<TListType<fl
 SIMPLE_MODULE(TKnnModule,
     TFromBinaryString, 
     TToBinaryString,
-    TInnerProductDistance
+    TInnerProductSimilarity
     )
 
 REGISTER_MODULES(TKnnModule)

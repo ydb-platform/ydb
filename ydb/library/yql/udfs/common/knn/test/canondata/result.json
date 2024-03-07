@@ -4,9 +4,9 @@
             "uri": "file://test.test_DeserializationError_/results.txt"
         }
     ],
-    "test.test[InnerProductDistance]": [
+    "test.test[InnerProductSimilarity]": [
         {
-            "uri": "file://test.test_InnerProductDistance_/results.txt"
+            "uri": "file://test.test_InnerProductSimilarity_/results.txt"
         }
     ],
     "test.test[LazyListSerialization]": [

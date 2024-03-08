@@ -330,6 +330,12 @@ public:
         RecoveringData,
     };
 
+    TSpillingBucket(const TCombinerNodes& nodes)
+        : Nodes(nodes)
+    {
+
+    }
+
     bool CanAcceptData() const {
         return State == EBucketState::AcceptingData;
     }
@@ -580,7 +586,7 @@ private:
     }
 
 public:
-    EBucketState State;
+    EBucketState State = TSpillingBucket::EBucketState::FullStateInMemory;
     // KeyAndStateType->GetElementsCount()
     ui32 ValueElementsCount;
     // UsedInputItemType->GetElementsCount()
@@ -816,19 +822,27 @@ private:
             auto& bucket = SpilledBuckets[bucketId];
 
             auto& processingState = bucket.GetProcessingState();
-            processingState.Tongue = std::move(keyAndState);
+            for (size_t i = 0; i != KeyWidth; ++i) {
+                    //jumping into unsafe world, refusing ownership
+                    static_cast<NUdf::TUnboxedValue&>(processingState.Tongue[i]) = std::move(BufferForKeyAnsState[i]);
+            }
             processingState.TasteIt();
 
+            for (size_t i = KeyWidth; i != KeyAndStateType->GetElementsCount(); ++i) {
+                static_cast<NUdf::TUnboxedValue&>(processingState.Throat[i - KeyWidth]) = std::move(BufferForKeyAnsState[i]);
+            }
+            // BufferForKeyAnsState.resize(0);
+
             // TODO: Maybe need?
-            /*
-                for (size_t i = 0; i != KeyAndStateType->GetElementsCount(); ++i) {
+            
+            for (size_t i = 0; i != KeyAndStateType->GetElementsCount(); ++i) {
                 //releasing values stored in unsafe TUnboxedValue buffer
                 keyAndState[i].UnRef();
             }
-            */
+            
         }
 
-        InMemoryProcessingState.ReadMore<false>();
+        // InMemoryProcessingState.ReadMore<false>();
     }
 
     void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
@@ -840,9 +854,13 @@ private:
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 MKQL_ENSURE(ctx.SpillerFactory, "Internal logic error");
 
-                SpilledBuckets.resize(SpilledBucketCount);
-                for (auto &b: SpilledBuckets) {
+                for (ui64 i = 0; i < SpilledBucketCount; ++i) {
                     auto spiller = ctx.SpillerFactory->CreateSpiller();
+
+                    SpilledBuckets.emplace_back(
+                        Nodes
+                    );
+                    auto& b = SpilledBuckets.back();
                     b.SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, KeyAndStateType, 1 << 20);
                     b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 1 << 20);
                     b.ProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal);
@@ -865,7 +883,7 @@ private:
 
     bool IsSwitchToSpillingModeCondition() const {
         //TODO implement me
-        return !HasMemoryForProcessing();
+        return true;// !HasMemoryForProcessing();
     }
 
 private:

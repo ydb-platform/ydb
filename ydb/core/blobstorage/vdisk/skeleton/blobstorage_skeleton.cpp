@@ -448,6 +448,13 @@ namespace NKikimr {
                 return {NKikimrProto::ERROR, "buffer is too large"};
             }
 
+            if (id.TabletID() == 0) {
+                LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << evPrefix << ": TabletID cannot be empty;"
+                        << " id# " << id
+                        << " Marker# BSVS43");
+                return {NKikimrProto::ERROR, "empty TabletID"};
+            }
+
             auto status = Hull->CheckLogoBlob(ctx, id, ignoreBlock, extraBlockChecks, writtenBeyondBarrier);
             if (status.Status != NKikimrProto::OK) {
                 LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << evPrefix << ": failed to pass the Hull check;"

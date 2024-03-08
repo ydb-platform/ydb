@@ -352,7 +352,7 @@ SYNC_TEST_END(TTestReplProxyData, TSyncTestWithSmallCommonDataset)
 SYNC_TEST_BEGIN(TTestReplProxyKeepBits, TSyncTestWithSmallCommonDataset)
 virtual void Scenario(const TActorContext &ctx) {
     // prepare gc command
-    ui64 tabletID = 0;
+    ui64 tabletID = DefaultTestTabletId;
     ui32 recGen = 1;
     ui32 recGenCounter = 1;
     ui32 channel = 0;
@@ -360,7 +360,7 @@ virtual void Scenario(const TActorContext &ctx) {
     ui32 collectGen = 1;
     ui32 collectStep = 40;
     TAutoPtr<TVector<NKikimr::TLogoBlobID>> keep(new TVector<NKikimr::TLogoBlobID>());
-    keep->push_back(TLogoBlobID(0, 1, 37, 0, 0, 0));
+    keep->push_back(TLogoBlobID(DefaultTestTabletId, 1, 37, 0, 0, 0));
     TAutoPtr<IActor> gcCommand(PutGCToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, tabletID, recGen, recGenCounter,
                                                           channel, collect, collectGen, collectStep, keep, nullptr));
     // set gc settings
@@ -390,7 +390,7 @@ SYNC_TEST_BEGIN(TTestHandoffMoveDel, TSyncTestBase)
 virtual void Scenario(const TActorContext &ctx) {
     TDataSnapshotPtr data(new TDataSnapshot(Conf->GroupInfo.Get()));
     TString aaaa("aaaa");
-    TLogoBlobID id0(0, 1, 321, 0, aaaa.size(), 0);
+    TLogoBlobID id0(DefaultTestTabletId, 1, 322, 0, aaaa.size(), 0);
     // [0:0:0:0:0] - main
     // [0:0:0:1:1] - main
     // [0:0:0:2:0] - main
@@ -458,7 +458,7 @@ SYNC_TEST_END(TTestHandoffMoveDel, TSyncTestBase)
 SYNC_TEST_BEGIN(TTestCollectAllSimpleDataset, TSyncTestBase)
 virtual void Scenario(const TActorContext &ctx) {
     // prepare gc command
-    ui64 tabletID = 0;
+    ui64 tabletID = DefaultTestTabletId;
     ui32 recGen = 1;
     ui32 recGenCounter = 1;
     ui32 channel = 1;

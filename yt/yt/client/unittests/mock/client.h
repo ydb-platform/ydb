@@ -327,7 +327,7 @@ public:
         const TResumeTabletCellsOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TMaintenanceId>, AddMaintenance, (
+    MOCK_METHOD(TFuture<TMaintenanceIdPerTarget>, AddMaintenance, (
         EMaintenanceComponent component,
         const TString& address,
         EMaintenanceType type,
@@ -335,7 +335,7 @@ public:
         const TAddMaintenanceOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TMaintenanceCounts>, RemoveMaintenance, (
+    MOCK_METHOD(TFuture<TMaintenanceCountsPerTarget>, RemoveMaintenance, (
         EMaintenanceComponent component,
         const TString& address,
         const TMaintenanceFilter& filter,

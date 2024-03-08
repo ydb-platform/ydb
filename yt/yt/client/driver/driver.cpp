@@ -332,8 +332,8 @@ public:
         REGISTER_ALL(TSuspendTabletCellsCommand,           "suspend_tablet_cells",            Null,       Structured, false,  false);
         REGISTER_ALL(TResumeTabletCellsCommand,            "resume_tablet_cells",             Null,       Structured, false,  false);
 
-        REGISTER_ALL(TAddMaintenanceCommand,               "add_maintenance",                 Null,       Structured, true,   false);
-        REGISTER_ALL(TRemoveMaintenanceCommand,            "remove_maintenance",              Null,       Structured, true,   false);
+        REGISTER    (TAddMaintenanceCommand,               "add_maintenance",                 Null,       Structured, true,   false, ApiVersion4);
+        REGISTER    (TRemoveMaintenanceCommand,            "remove_maintenance",              Null,       Structured, true,   false, ApiVersion4);
         REGISTER_ALL(TDisableChunkLocationsCommand,        "disable_chunk_locations",         Null,       Structured, false,  false);
         REGISTER_ALL(TDestroyChunkLocationsCommand,        "destroy_chunk_locations",         Null,       Structured, false,  false);
         REGISTER_ALL(TResurrectChunkLocationsCommand,      "resurrect_chunk_locations",       Null,       Structured, false,  false);

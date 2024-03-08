@@ -12,4 +12,6 @@ GO_TEST_SRCS(json_test.go)
 
 END()
 
-RECURSE(gotest)
+RECURSE(
+    gotest
+)

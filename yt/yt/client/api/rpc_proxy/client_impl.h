@@ -394,14 +394,14 @@ public:
         const std::vector<NObjectClient::TCellId>& cellIds,
         const TResumeTabletCellsOptions& options) override;
 
-    TFuture<TMaintenanceId> AddMaintenance(
+    TFuture<TMaintenanceIdPerTarget> AddMaintenance(
         EMaintenanceComponent component,
         const TString& address,
         EMaintenanceType type,
         const TString& comment,
         const TAddMaintenanceOptions& options) override;
 
-    TFuture<TMaintenanceCounts> RemoveMaintenance(
+    TFuture<TMaintenanceCountsPerTarget> RemoveMaintenance(
         EMaintenanceComponent component,
         const TString& address,
         const TMaintenanceFilter& filter,

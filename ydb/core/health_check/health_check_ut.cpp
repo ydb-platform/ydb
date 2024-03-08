@@ -1427,7 +1427,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         Ctest << result.ShortDebugString() << Endl;
 
         UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::EMERGENCY);
-        UNIT_ASSERT_VALUES_EQUAL(result.database_status_size(), 2);
 
         bool bscTabletIssueFoundInResult = false;
         for (const auto &issue_log : result.issue_log()) {
@@ -1438,22 +1437,17 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 bscTabletIssueFoundInResult = true;
             }
         }
-
-        for (const auto &database_status : result.database_status()) {
-            if (!database_status.name()) {
-                UNIT_ASSERT_VALUES_EQUAL(database_status.overall(), Ydb::Monitoring::StatusFlag::RED);
-
-                UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::RED);
-                UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 0);
-            } else if (database_status.name() == "/Root") {
-                UNIT_ASSERT_VALUES_EQUAL(database_status.overall(), Ydb::Monitoring::StatusFlag::RED);
-
-                UNIT_ASSERT_VALUES_EQUAL(database_status.compute().overall(), Ydb::Monitoring::StatusFlag::RED);
-                UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::RED);
-                UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 0);
-            }
-        }
         UNIT_ASSERT(bscTabletIssueFoundInResult);
+
+        UNIT_ASSERT_VALUES_EQUAL(result.database_status_size(), 1);
+        const auto &database_status = result.database_status(0);
+
+        UNIT_ASSERT_VALUES_EQUAL(database_status.name(), "/Root");
+        UNIT_ASSERT_VALUES_EQUAL(database_status.overall(), Ydb::Monitoring::StatusFlag::RED);
+
+        UNIT_ASSERT_VALUES_EQUAL(database_status.compute().overall(), Ydb::Monitoring::StatusFlag::RED);
+        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::RED);
+        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 0);
     }
 }
 }

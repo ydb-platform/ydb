@@ -547,7 +547,7 @@ public:
         RootSchemeShardId = domain->SchemeRoot;
         ConsoleId = MakeConsoleID();
         RootHiveId = domains->GetHive();
-        BsControllerId = MakeBSControllerID(); //  MakeTabletID(false, 0x9888);
+        BsControllerId = MakeBSControllerID(); // MakeTabletID(false, 0x9888);
 
         if (ConsoleId) {
             TabletRequests.TabletStates[ConsoleId].Database = DomainPath;
@@ -2126,7 +2126,7 @@ public:
                 context.UpdateMaxStatus(tabletContext.GetOverallStatus());
             }
         }
-        if (!FilterDatabase) {
+        if (!FilterDatabase && BaseConfig) {
             TDatabaseState unknownDatabase;
             for (auto& [id, pool] : StoragePoolState) {
                 Cerr << "iiiiiiiiiii check poolId" << id << " pool.Name " << pool.Name << Endl;

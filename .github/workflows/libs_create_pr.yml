@@ -30,9 +30,11 @@ jobs:
         git config --global user.name "Alexander Smirnov"
         cd ydb
         git fetch --depth `expr $(git rev-list --count HEAD) + 1`
+        echo "Commits in rightlib: $(git rev-list --count HEAD)"
         echo "Fetch main..."
         git fetch origin main:main --shallow-exclude rightlib 
         git fetch --depth `expr $(git rev-list --count main) + 1`
+        echo "Commits in main: $(git rev-list --count main)"
         libsha=$(git rev-parse HEAD)
         echo "Dev branch..."
         devbranch="mergelibs-${{ steps.date.outputs.dtm }}"

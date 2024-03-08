@@ -17,6 +17,7 @@ SRCS(
     coroutines_ut.cpp
     count_down_latch_ut.cpp
     delayed_executor_ut.cpp
+    fair_share_action_queue_ut.cpp
     fair_share_invoker_pool_ut.cpp
     fair_share_thread_pool_ut.cpp
     fair_throttler_ut.cpp

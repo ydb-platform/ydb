@@ -2,7 +2,6 @@
 
 #include "guid.h"
 #include "mpl.h"
-#include "optional.h"
 #include "object_pool.h"
 #include "range.h"
 #include "serialize.h"
@@ -14,6 +13,7 @@
 
 #include <library/cpp/yt/memory/ref.h>
 
+#include <library/cpp/yt/misc/optional.h>
 #include <library/cpp/yt/misc/preprocessor.h>
 
 #include <google/protobuf/message.h>

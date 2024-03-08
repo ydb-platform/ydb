@@ -220,7 +220,6 @@ public:
 
     struct TStoragePoolState {
         TString Name;
-        TString Kind;
         THashSet<TGroupId> Groups;
     };
 
@@ -641,6 +640,8 @@ public:
     }
 
     void RequestDescribe(TTabletId schemeShardId, const TString& path) {
+        Cerr << "rrrrrrrrrr RequestDescribe schemeShardId " << schemeShardId << Endl;
+        Cerr << "rrrrrrrrrr RequestDescribe path " << path << Endl;
         THolder<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>();
         NKikimrSchemeOp::TDescribePath& record = request->Record;
         record.SetPath(path);
@@ -838,14 +839,13 @@ public:
             Cerr << "AAAAA TEvDescribeSchemeResult path " << path << Endl;
             for (const auto& storagePool : ev->Get()->GetRecord().pathdescription().domaindescription().storagepools()) {
                 TString storagePoolName = storagePool.name();
-                if (!storagePoolName) {
-                    storagePoolName = STATIC_STORAGE_POOL_NAME;
-                }
                 Cerr << "AAAAA TEvDescribeSchemeResult storagePoolName " << storagePoolName << Endl;
                 PathsByPoolName[storagePoolName].emplace(path); // no poolId in TEvDescribeSchemeResult, so it's neccesary to keep poolNames instead
             }
             if (path == DomainPath) {
                 state.StoragePools.emplace(0); // static group has poolId = 0
+                StoragePoolState[0].Name = STATIC_STORAGE_POOL_NAME;
+                Cerr << "AAAAA TEvDescribeSchemeResult static " << STATIC_STORAGE_POOL_NAME << Endl;
             }
             state.StorageUsage = ev->Get()->GetRecord().pathdescription().domaindescription().diskspaceusage().tables().totalsize();
             state.StorageQuota = ev->Get()->GetRecord().pathdescription().domaindescription().databasequotas().data_size_hard_quota();
@@ -1079,22 +1079,15 @@ public:
                 }
             }
             const NKikimrBlobStorage::TConfigResponse::TStatus& spStatus(pbRecord.GetResponse().GetStatus(1));
-            for (const NKikimrBlobStorage::TDefineStoragePool& pool : spStatus.GetStoragePool()) {
+            for (const NKikimrBlobStorage::TDefineStoragePool& pool : spStatus.GetStoragePool()) { // there is no specific pool for static group here
                 ui64 poolId = pool.GetStoragePoolId();
                 TString storagePoolName = pool.GetName();
-                if (!storagePoolName) {
-                    storagePoolName = STATIC_STORAGE_POOL_NAME;
-                }
-                Cerr << "zzzzzz pool storagePoolName " << storagePoolName << Endl;
+                Cerr << "zzzzzzz storagePoolName " << storagePoolName << Endl;
                 StoragePoolState[poolId].Name = storagePoolName;
-                StoragePoolState[poolId].Kind = pool.GetKind();
 
                 for (const TString& path : PathsByPoolName[storagePoolName]) {
                     Cerr << "zzzzzzz path " << path << Endl;
                     DatabaseState[path].StoragePools.emplace(poolId);
-                }
-                if (!IsSpecificDatabaseFilter()) {
-                    DatabaseState[DomainPath].StoragePools.emplace(poolId);
                 }
             }
         }
@@ -2452,6 +2445,7 @@ public:
     }
 
     void Handle(TEvSelfCheckRequest::TPtr& ev) {
+        Cerr << "!!!!!!!!!!!!!! Register " << Endl;
         Register(new TSelfCheckRequest(ev->Sender, ev.Get()->Release(), ev->Cookie));
     }
 

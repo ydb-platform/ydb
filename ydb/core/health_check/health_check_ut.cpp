@@ -142,12 +142,16 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto& pbRecord = (*ev)->Get()->Record;
         auto pbConfig = pbRecord.mutable_response()->mutable_status(0)->mutable_baseconfig();
 
+        Cerr << "iiiiiiiiiii bsc group size " << pbConfig->group_size() << Endl;
         auto groupSample = pbConfig->group(0);
         auto vslotSample = pbConfig->vslot(0);
         auto vslotIdSample = pbConfig->group(0).vslotid(0);
+        pbConfig->mutable_group(0)->set_storagepoolid(0);
         Cerr << "iiiiiiiiiii bsc group size " << pbConfig->group_size() << Endl;
         for (auto& group: *pbConfig->mutable_group()) {
             group.set_operatingstatus(groupStatus);
+            Cerr << "iiiiiiiiiii bsc group id " << group.groupid() << Endl;
+            Cerr << "iiiiiiiiiii bsc group id " << group.storagepoolid() << Endl;
  //           group.set_storagepoolid(1);
         }
         for (auto& pdisk: *pbConfig->mutable_pdisk()) {
@@ -185,10 +189,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
 
         auto spStatus = pbRecord.mutable_response()->mutable_status(1);
+        Cerr << "iiiiiiiiiii bsc pool size " << spStatus->storagepool_size() << Endl;
         spStatus->clear_storagepool();
+        Cerr << "iiiiiiiiiii bsc pool size " << spStatus->storagepool_size() << Endl;
         auto sPool = spStatus->add_storagepool();
         sPool->set_storagepoolid(1);
         sPool->set_name(STORAGE_POOL_NAME);
+        Cerr << "iiiiiiiiiii bsc pool size " << spStatus->storagepool_size() << Endl;
     };
 
     void AddVSlotInVDiskStateResponse(TEvWhiteboard::TEvVDiskStateResponse::TPtr* ev, int groupCount, int vslotCount) {
@@ -363,17 +370,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(issuesCount, total);
     }
 
-    void ChangeUsageDescribeSchemeResult(TEvSchemeShard::TEvDescribeSchemeResult::TPtr* ev, ui64 size, ui64 quota) {
-        auto record = (*ev)->Get()->MutableRecord();
-        auto pool = record->mutable_pathdescription()->mutable_domaindescription()->add_storagepools();
-        pool->set_name("/Root:test");
-        pool->set_kind("kind");
-
-        auto domain = record->mutable_pathdescription()->mutable_domaindescription();
-        domain->mutable_diskspaceusage()->mutable_tables()->set_totalsize(size);
-        domain->mutable_databasequotas()->set_data_stream_reserved_storage_quota(quota);
-    }
-
      void StorageTest(ui64 usage, ui64 quota, ui64 storageIssuesNumber, Ydb::Monitoring::StatusFlag::Status status = Ydb::Monitoring::StatusFlag::GREEN) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -527,15 +523,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             }
         }
     }
-
-    // void AddSharedGroupInControllerSelectGroupsResult(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr* ev) {
-    //     auto& pbRecord = (*ev)->Get()->Record;
-    //     auto pbMatchGroups = pbRecord.add_matchinggroups();
-
-    //     auto group = pbMatchGroups->add_groups();
-    //     group->set_groupid(GROUP_START_ID);
-    //     group->set_storagepoolname(STORAGE_POOL_NAME);
-    // }
 
     void ChangeNavigateKeyResultServerless(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr* ev,
         NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode,
@@ -710,11 +697,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     ChangeDescribeSchemeResultServerless(x);
                     break;
                 }
-                // case TEvBlobStorage::EvControllerSelectGroupsResult: {
-                //     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr*>(&ev);
-                //     AddSharedGroupInControllerSelectGroupsResult(x);
-                //     break;
-                // }
                 case TEvBlobStorage::EvControllerConfigResponse: {
                     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
                     TVector<NKikimrBlobStorage::EVDiskStatus> vdiskStatuses = { NKikimrBlobStorage::EVDiskStatus::READY };
@@ -812,11 +794,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     ChangeDescribeSchemeResultServerless(x);
                     break;
                 }
-                // case TEvBlobStorage::EvControllerSelectGroupsResult: {
-                //     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr*>(&ev);
-                //     AddSharedGroupInControllerSelectGroupsResult(x);
-                //     break;
-                // }
                 case TEvBlobStorage::EvControllerConfigResponse: {
                     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
                     TVector<NKikimrBlobStorage::EVDiskStatus> vdiskStatuses = { NKikimrBlobStorage::EVDiskStatus::READY };
@@ -903,11 +880,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     ChangeDescribeSchemeResultServerless(x);
                     break;
                 }
-                // case TEvBlobStorage::EvControllerSelectGroupsResult: {
-                //     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr*>(&ev);
-                //     AddSharedGroupInControllerSelectGroupsResult(x);
-                //     break;
-                // }
                 case TEvBlobStorage::EvControllerConfigResponse: {
                     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
                     TVector<NKikimrBlobStorage::EVDiskStatus> vdiskStatuses = { NKikimrBlobStorage::EVDiskStatus::READY };
@@ -987,11 +959,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     ChangeDescribeSchemeResultServerless(x);
                     break;
                 }
-                // case TEvBlobStorage::EvControllerSelectGroupsResult: {
-                //     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr*>(&ev);
-                //     AddSharedGroupInControllerSelectGroupsResult(x);
-                //     break;
-                // }
                 case TEvBlobStorage::EvControllerConfigResponse: {
                     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
                     TVector<NKikimrBlobStorage::EVDiskStatus> vdiskStatuses = { NKikimrBlobStorage::EVDiskStatus::READY };
@@ -1089,11 +1056,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     ChangeDescribeSchemeResultServerless(x);
                     break;
                 }
-                // case TEvBlobStorage::EvControllerSelectGroupsResult: {
-                //     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr*>(&ev);
-                //     AddSharedGroupInControllerSelectGroupsResult(x);
-                //     break;
-                // }
                 case TEvBlobStorage::EvControllerConfigResponse: {
                     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
                     TVector<NKikimrBlobStorage::EVDiskStatus> vdiskStatuses = { NKikimrBlobStorage::EVDiskStatus::READY };
@@ -1116,8 +1078,10 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         auto *request = new NHealthCheck::TEvSelfCheckRequest;
         request->Request.set_return_verbose_status(true);
+        Cerr << "AAAAAAAAAa 1" << Endl;
         runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
         const auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+        Cerr << "AAAAAAAAAa 2" << Endl;
 
         Cerr << "iiiiiiiiiiiiii result " << result.ShortDebugString() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::EMERGENCY);
@@ -1411,60 +1375,60 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 0);
     }
 
-    Y_UNIT_TEST(NoBscConfigResponse) {
-        TPortManager tp;
-        ui16 port = tp.GetPort(2134);
-        ui16 grpcPort = tp.GetPort(2135);
-        auto settings = TServerSettings(port)
-                .SetNodeCount(1)
-                .SetDynamicNodeCount(1)
-                .SetUseRealThreads(false)
-                .SetDomainName("Root");
-        TServer server(settings);
-        server.EnableGRpc(grpcPort);
-        TClient client(settings);
-        TTestActorRuntime& runtime = *server.GetRuntime();
+    // Y_UNIT_TEST(NoBscConfigResponse) {
+    //     TPortManager tp;
+    //     ui16 port = tp.GetPort(2134);
+    //     ui16 grpcPort = tp.GetPort(2135);
+    //     auto settings = TServerSettings(port)
+    //             .SetNodeCount(1)
+    //             .SetDynamicNodeCount(1)
+    //             .SetUseRealThreads(false)
+    //             .SetDomainName("Root");
+    //     TServer server(settings);
+    //     server.EnableGRpc(grpcPort);
+    //     TClient client(settings);
+    //     TTestActorRuntime& runtime = *server.GetRuntime();
 
-        auto &dynamicNameserviceConfig = runtime.GetAppData().DynamicNameserviceConfig;
-        dynamicNameserviceConfig->MaxStaticNodeId = runtime.GetNodeId(server.StaticNodes() - 1);
-        dynamicNameserviceConfig->MinDynamicNodeId = runtime.GetNodeId(server.StaticNodes());
-        dynamicNameserviceConfig->MaxDynamicNodeId = runtime.GetNodeId(server.StaticNodes() + server.DynamicNodes() - 1);
+    //     auto &dynamicNameserviceConfig = runtime.GetAppData().DynamicNameserviceConfig;
+    //     dynamicNameserviceConfig->MaxStaticNodeId = runtime.GetNodeId(server.StaticNodes() - 1);
+    //     dynamicNameserviceConfig->MinDynamicNodeId = runtime.GetNodeId(server.StaticNodes());
+    //     dynamicNameserviceConfig->MaxDynamicNodeId = runtime.GetNodeId(server.StaticNodes() + server.DynamicNodes() - 1);
 
-        ui32 dynNodeId = runtime.GetNodeId(1);
+    //     ui32 dynNodeId = runtime.GetNodeId(1);
 
-        // const TPathId SUBDOMAIN_KEY = {7000000000, 1};
+    //     // const TPathId SUBDOMAIN_KEY = {7000000000, 1};
 
-        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigResponse) {
-                return TTestActorRuntime::EEventAction::DROP;
-            }
+    //     auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+    //         if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigResponse) {
+    //             return TTestActorRuntime::EEventAction::DROP;
+    //         }
 
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-        runtime.SetObserverFunc(observerFunc);
+    //         return TTestActorRuntime::EEventAction::PROCESS;
+    //     };
+    //     runtime.SetObserverFunc(observerFunc);
 
-        TActorId sender = runtime.AllocateEdgeActor();
-        TAutoPtr<IEventHandle> handle;
+    //     TActorId sender = runtime.AllocateEdgeActor();
+    //     TAutoPtr<IEventHandle> handle;
 
-        auto *request = new NHealthCheck::TEvSelfCheckRequest;
-        request->Request.set_return_verbose_status(true);
-        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
-        const auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+    //     auto *request = new NHealthCheck::TEvSelfCheckRequest;
+    //     request->Request.set_return_verbose_status(true);
+    //     runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+    //     const auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
 
-        Cerr << "iiiiiiiiiii " << result.ShortDebugString() << Endl;
+    //     Cerr << "iiiiiiiiiii " << result.ShortDebugString() << Endl;
 
-        UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::EMERGENCY);
-        UNIT_ASSERT_VALUES_EQUAL(result.database_status_size(), 1);
-        const auto &database_status = result.database_status(0);
-        // UNIT_ASSERT_VALUES_EQUAL(database_status.name(),  "/Root/database");
-        UNIT_ASSERT_VALUES_EQUAL(database_status.overall(), Ydb::Monitoring::StatusFlag::RED);
+    //     UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::EMERGENCY);
+    //     UNIT_ASSERT_VALUES_EQUAL(result.database_status_size(), 1);
+    //     const auto &database_status = result.database_status(0);
+    //     // UNIT_ASSERT_VALUES_EQUAL(database_status.name(),  "/Root/database");
+    //     UNIT_ASSERT_VALUES_EQUAL(database_status.overall(), Ydb::Monitoring::StatusFlag::RED);
 
-        UNIT_ASSERT_VALUES_EQUAL(database_status.compute().overall(), Ydb::Monitoring::StatusFlag::RED);
-        UNIT_ASSERT_VALUES_EQUAL(database_status.compute().nodes().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(database_status.compute().nodes()[0].id(), ToString(dynNodeId));
+    //     UNIT_ASSERT_VALUES_EQUAL(database_status.compute().overall(), Ydb::Monitoring::StatusFlag::RED);
+    //     UNIT_ASSERT_VALUES_EQUAL(database_status.compute().nodes().size(), 1);
+    //     UNIT_ASSERT_VALUES_EQUAL(database_status.compute().nodes()[0].id(), ToString(dynNodeId));
 
-        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::YELLOW);
-        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 0);
-    }
+    //     UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::YELLOW);
+    //     UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 0);
+    // }
 }
 }

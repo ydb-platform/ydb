@@ -1,0 +1,61 @@
+name: Create PR to import libraries to main
+on:
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+env:
+  REPO: ${{ github.repository }}
+  TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Get current date
+      id: date
+      run: echo "::set-output name=dtm::$(date +'%y%m%d-%H%M')"
+    - name: Sync
+      run: |
+        currsha=$(curl -s -H "Accept: application/vnd.github.VERSION.sha" https://api.github.com/repos/$REPO/commits/rightlib)
+        echo "Current rightlib sha: ${currsha}"
+        lastsha=$(curl -s https://raw.githubusercontent.com/$REPO/main/ydb/ci/rightlib.txt)
+        echo "Last imported rightlib sha: ${lastsha}"
+        if [ "${currsha}" == "${lastsha}" ];then
+          echo "No new commits on the rightlib branch to merge, exiting"
+          exit 0
+        fi
+        echo "Git clone..."
+        git clone https://$TOKEN@github.com/$REPO.git ydb
+        git config --global user.email "alex@ydb.tech"
+        git config --global user.name "Alexander Smirnov"
+        cd ydb
+        # git fetch --depth `expr $(git rev-list --count HEAD) + 1`
+        # echo "Commits in rightlib: $(git rev-list --count HEAD)"
+        # echo "Fetch main..."
+        # git fetch origin main:main --shallow-exclude rightlib 
+        # git fetch --depth `expr $(git rev-list --count main) + 1`
+        # echo "Commits in main: $(git rev-list --count main)"
+        git checkout rightlib
+        libsha=$(git rev-parse HEAD)
+        echo "Libs sha: $libsha"
+        echo "Dev branch..."
+        git checkout main
+        devbranch="mergelibs-${{ steps.date.outputs.dtm }}"
+        git checkout -b ${devbranch}
+        prevsha=$(git rev-parse HEAD)
+        git merge rightlib --no-edit
+        currsha=$(git rev-parse HEAD)
+        if [ ${prevsha} == ${currsha} ];then
+          echo "Merge did not bring any changes, exiting"
+          exit
+        fi
+        echo ${mainsha} > ydb/ci/rightlib.txt
+        git add .
+        git commit -m "Import libraries ${{ steps.date.outputs.dtm }}"
+        git push --set-upstream origin mergelibs-${{ steps.date.outputs.dtm }}
+        curl -L -X POST --fail-with-body \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer $TOKEN" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          https://api.github.com/repos/$REPO/pulls \
+          -d '{"title":"Library import ${{ steps.date.outputs.dtm }}","body":"","head":"'${devbranch}'","base":"main"}'

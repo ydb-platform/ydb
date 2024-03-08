@@ -28,6 +28,7 @@ def main():
     parser.add_argument('--variant', default="h", help='variant "h" or "ds"')
     parser.add_argument('--output', default='q', help='output directory')
     parser.add_argument('--dataset-size', default='1', help='dataset size (1, 10, 100, ...)')
+    parser.add_argument('--pragma', default=[], action='append', help='custom pragmas')
     args = parser.parse_args()
     profile = None
     for p in profiles:
@@ -41,12 +42,21 @@ def main():
             print(f"  {p.syntax}/{p.profile}")
         return
 
+    pragma_keyword = "pragma"
+    custom_pragmas = ""
+    if args.syntax == "pg":
+        pragma_keyword = "set"
+    for pragma in args.pragma:
+        k, v = pragma.split('=')
+        custom_pragmas = custom_pragmas + f'{pragma_keyword} {k}="{v}";\n'
+
     path = f"{args.output}/{args.variant}"
     if not os.path.exists(path):
         os.makedirs(path, exist_ok=True)
     b = Builder()
     b.add_link("bindings.json", f"bindings_{args.variant}_{args.syntax}.json")
     b.add_vars({"data": f"{args.variant}/{args.dataset_size}"})
+    b.add("custom_pragmas", custom_pragmas)
     if p.pragmas:
         b.add_link("pragmas.sql", p.pragmas)
     else:

@@ -533,10 +533,6 @@ public:
     }
 
     void Bootstrap() {
-        Cerr << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< " << Endl;
-        Cerr << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< " << Endl;
-        Cerr << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< " << Endl;
-        Cerr << "!!!!!!!!!!!!!!! Bootstrap() " << Endl;
         FilterDatabase = Request->Database;
         if (Request->Request.operation_params().has_operation_timeout()) {
             Timeout = GetDuration(Request->Request.operation_params().operation_timeout());
@@ -547,7 +543,7 @@ public:
         RootSchemeShardId = domain->SchemeRoot;
         ConsoleId = MakeConsoleID();
         RootHiveId = domains->GetHive();
-        BsControllerId = MakeBSControllerID(); // MakeTabletID(false, 0x9888);
+        BsControllerId = MakeBSControllerID();
 
         if (ConsoleId) {
             TabletRequests.TabletStates[ConsoleId].Database = DomainPath;
@@ -615,12 +611,10 @@ public:
 
     void RequestDone(const char* name) {
         --Requests;
-        Cerr << "   Requests " << Requests << Endl;
         if (Requests == 0) {
             ReplyAndPassAway();
         }
         if (Requests < 0) {
-            Cerr << "   OOOOOPS!!!!!!!! " << Endl;
             BLOG_CRIT("Requests < 0 in RequestDone(" << name << ")");
         }
     }
@@ -640,8 +634,6 @@ public:
     }
 
     void RequestDescribe(TTabletId schemeShardId, const TString& path) {
-        Cerr << "rrrrrrrrrr RequestDescribe schemeShardId " << schemeShardId << Endl;
-        Cerr << "rrrrrrrrrr RequestDescribe path " << path << Endl;
         THolder<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>();
         NKikimrSchemeOp::TDescribePath& record = request->Record;
         record.SetPath(path);
@@ -681,7 +673,6 @@ public:
     }
 
     void RequestConfig() {
-        Cerr << "iiiiiii RequestConfig " << Endl;
         THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
         request->Record.MutableRequest()->AddCommand()->MutableQueryBaseConfig();
         request->Record.MutableRequest()->AddCommand()->MutableReadStoragePool()->SetBoxId(Max<ui64>());
@@ -790,7 +781,6 @@ public:
     }
 
     void HandleTimeout() {
-        Cerr << "!!!!!!!!!!!!!!! ReplyAndPassAway() " << Endl;
         ReplyAndPassAway();
     }
 
@@ -817,14 +807,11 @@ public:
     }
 
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
-        Cerr << "iiiiiii TEvControllerConfigResponse " << Endl;
         TabletRequests.CompleteRequest(ev->Cookie);
         const NKikimrBlobStorage::TEvControllerConfigResponse& pbRecord(ev->Get()->Record);
         if (pbRecord.HasResponse() && pbRecord.GetResponse().StatusSize() > 0) {
-            Cerr << "iiiii 1" << Endl;
             const NKikimrBlobStorage::TConfigResponse::TStatus& pbStatus(pbRecord.GetResponse().GetStatus(0));
             if (pbStatus.HasBaseConfig()) {
-                Cerr << "iiiii BaseConfig" << Endl;
                 BaseConfig = ev->Release();
             }
         }
@@ -836,21 +823,16 @@ public:
         if (ev->Get()->GetRecord().status() == NKikimrScheme::StatusSuccess) {
             TString path = ev->Get()->GetRecord().path();
             TDatabaseState& state(DatabaseState[path]);
-            Cerr << "AAAAA TEvDescribeSchemeResult path " << path << Endl;
             for (const auto& storagePool : ev->Get()->GetRecord().pathdescription().domaindescription().storagepools()) {
                 TString storagePoolName = storagePool.name();
-                Cerr << "AAAAA TEvDescribeSchemeResult storagePoolName " << storagePoolName << Endl;
                 PathsByPoolName[storagePoolName].emplace(path); // no poolId in TEvDescribeSchemeResult, so it's neccesary to keep poolNames instead
             }
             if (path == DomainPath) {
                 state.StoragePools.emplace(0); // static group has poolId = 0
                 StoragePoolState[0].Name = STATIC_STORAGE_POOL_NAME;
-                Cerr << "AAAAA TEvDescribeSchemeResult static " << STATIC_STORAGE_POOL_NAME << Endl;
             }
             state.StorageUsage = ev->Get()->GetRecord().pathdescription().domaindescription().diskspaceusage().tables().totalsize();
             state.StorageQuota = ev->Get()->GetRecord().pathdescription().domaindescription().databasequotas().data_size_hard_quota();
-            Cerr << "AAAAA TEvDescribeSchemeResult state.StorageUsage " << state.StorageUsage << path << Endl;
-            Cerr << "AAAAA TEvDescribeSchemeResult state.StorageQuota " << state.StorageQuota << path << Endl;
 
             DescribeByPath[path] = ev->Release();
         }
@@ -1046,7 +1028,6 @@ public:
     }
 
     void AggregateBSControllerState() {
-        Cerr << "AAAAAAA AggregateBSControllerState" << Endl;
         if (BaseConfig) {
             const NKikimrBlobStorage::TEvControllerConfigResponse& pbRecord(BaseConfig->Record);
             const NKikimrBlobStorage::TConfigResponse::TStatus& pbStatus(pbRecord.GetResponse().GetStatus(0));
@@ -1068,8 +1049,6 @@ public:
                     auto groupId = group.GetGroupId();
                     auto poolId = group.GetStoragePoolId();
                     ValidGroups.emplace(groupId);
-                    Cerr << "AAAAA groupId " << groupId << Endl;
-                    Cerr << "AAAAA poolId " << group.GetStoragePoolId() << Endl;
                     BSConfigGroups.emplace(groupId, &group);
                     StoragePoolState[poolId].Groups.emplace(group.groupid());
                 }
@@ -1082,11 +1061,9 @@ public:
             for (const NKikimrBlobStorage::TDefineStoragePool& pool : spStatus.GetStoragePool()) { // there is no specific pool for static group here
                 ui64 poolId = pool.GetStoragePoolId();
                 TString storagePoolName = pool.GetName();
-                Cerr << "zzzzzzz storagePoolName " << storagePoolName << Endl;
                 StoragePoolState[poolId].Name = storagePoolName;
 
                 for (const TString& path : PathsByPoolName[storagePoolName]) {
-                    Cerr << "zzzzzzz path " << path << Endl;
                     DatabaseState[path].StoragePools.emplace(poolId);
                 }
             }
@@ -1850,14 +1827,12 @@ public:
     }
 
     void FillGroupStatus(TGroupId groupId, Ydb::Monitoring::StorageGroupStatus& storageGroupStatus, TSelfCheckContext context) {
-        Cerr << "iiiiiiiiii FILL GroupStatus " << Endl;
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_id()->Clear();
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->add_id(ToString(groupId));
         storageGroupStatus.set_id(ToString(groupId));
 
         auto itGroup = BSConfigGroups.find(groupId);
         if (itGroup == BSConfigGroups.end()) {
-            Cerr << "iiiiiiiiii System tablet BSC !! " << Endl;
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet BSC didn't provide information", ETags::GroupState);
             storageGroupStatus.set_overall(context.GetOverallStatus());
             return;
@@ -1918,7 +1893,6 @@ public:
     }
 
     void FillPoolStatus(const TStoragePoolState& pool, Ydb::Monitoring::StoragePoolStatus& storagePoolStatus, TSelfCheckContext context) {
-        Cerr << "iiiiiiiiii FILL PoolStatus poolName " << pool.Name << Endl;
         context.Location.mutable_storage()->mutable_pool()->set_name(pool.Name);
         storagePoolStatus.set_id(pool.Name);
         for (auto groupId : pool.Groups) {
@@ -1945,18 +1919,12 @@ public:
     }
 
     void FillStorage(TDatabaseState& databaseState, Ydb::Monitoring::StorageStatus& storageStatus, TSelfCheckContext context) {
-        Cerr << "iiiiiiiiii FILL Storage " << Endl;
         if (!BaseConfig) {
-            Cerr << "iiiii !BaseConfig" << Endl;
-            Cerr << "iiiii S1" << Endl;
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "System tablet BSC didn't provide information", ETags::StorageState);
         } else if (databaseState.StoragePools.empty()) {
-            Cerr << "iiiii no storage pool " << Endl;
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no storage pools", ETags::StorageState);
         } else {
-            Cerr << "iiiii S2" << Endl;
             for (const ui64 poolId : databaseState.StoragePools) {
-                Cerr << "iiiii poolId " << poolId << Endl;
                 auto itStoragePoolState = StoragePoolState.find(poolId);
                 if (itStoragePoolState != StoragePoolState.end()) {
                     FillPoolStatus(itStoragePoolState->second, *storageStatus.add_pools(), {&context, "STORAGE_POOL"});
@@ -1978,8 +1946,6 @@ public:
                     break;
             }
         }
-        Cerr << "SSSSSSSSSSSS databaseState.StorageUsage " << databaseState.StorageUsage << Endl;
-        Cerr << "SSSSSSSSSSSS databaseState.StorageQuota " << databaseState.StorageQuota << Endl;
         if (databaseState.StorageQuota > 0) {
             auto usage = (float)databaseState.StorageUsage / databaseState.StorageQuota;
             if (usage > 0.9) {
@@ -2044,7 +2010,6 @@ public:
     };
 
     void FillDatabaseResult(TOverallStateContext& context, const TString& path, TDatabaseState& state) {
-        Cerr << "iiiiiiiiii FILL Database path " << path << Endl;
         Ydb::Monitoring::DatabaseStatus& databaseStatus(*context.Result->add_database_status());
         TSelfCheckResult dbContext;
         dbContext.Type = "DATABASE";
@@ -2111,7 +2076,6 @@ public:
             FillDatabaseResult(context, FilterDatabase, DatabaseState[FilterDatabase]);
         } else {
             for (auto& [path, state] : DatabaseState) {
-                Cerr << "OOO path " << path << Endl;
                 FillDatabaseResult(context, path, state);
             }
         }
@@ -2129,14 +2093,11 @@ public:
         if (!FilterDatabase && BaseConfig) {
             TDatabaseState unknownDatabase;
             for (auto& [id, pool] : StoragePoolState) {
-                Cerr << "iiiiiiiiiii check poolId" << id << " pool.Name " << pool.Name << Endl;
                 if (StoragePoolSeen.count(id) == 0) {
-                    Cerr << "iiiiiiiiiii unknownDatabase poolId" << id << " pool.Name " << pool.Name << Endl;
                     unknownDatabase.StoragePools.insert(id);
                 }
             }
             if (!unknownDatabase.StoragePools.empty()) {
-                Cerr << "iiiiiiiiiii unknownDatabase not empty" << Endl;
                 Ydb::Monitoring::DatabaseStatus& databaseStatus(*context.Result->add_database_status());
                 TSelfCheckResult storageContext;
                 FillStorage(unknownDatabase, *databaseStatus.mutable_storage(), {&storageContext, "STORAGE"});
@@ -2186,7 +2147,6 @@ public:
     }
 
     void ReplyAndPassAway() {
-        Cerr << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< " << Endl;
         THolder<TEvSelfCheckResult> response = MakeHolder<TEvSelfCheckResult>();
         Ydb::Monitoring::SelfCheckResult& result = response->Result;
 
@@ -2445,7 +2405,6 @@ public:
     }
 
     void Handle(TEvSelfCheckRequest::TPtr& ev) {
-        Cerr << "!!!!!!!!!!!!!! Register " << Endl;
         Register(new TSelfCheckRequest(ev->Sender, ev.Get()->Release(), ev->Cookie));
     }
 

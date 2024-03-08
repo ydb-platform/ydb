@@ -222,7 +222,6 @@ public:
         TString Name;
         TString Kind;
         THashSet<TGroupId> Groups;
-        THashSet<TGroupId> AuthenticGroups;
     };
 
     struct TDatabaseState {
@@ -878,15 +877,17 @@ public:
         if (ev->Get()->GetRecord().status() == NKikimrScheme::StatusSuccess) {
             TString path = ev->Get()->GetRecord().path();
             TDatabaseState& state(DatabaseState[path]);
+            Cerr << "AAAAA TEvDescribeSchemeResult path " << path << Endl;
             for (const auto& storagePool : ev->Get()->GetRecord().pathdescription().domaindescription().storagepools()) {
-                // no poolId here, so it's neccesary to keep poolNames until AggregateBSControllerState()
                 TString storagePoolName = storagePool.name();
                 Cerr << "AAAAA TEvDescribeSchemeResult storagePoolName " << storagePoolName << Endl;
-                PathsByPoolName[storagePoolName].emplace(path);
+                PathsByPoolName[storagePoolName].emplace(path); // no poolId in TEvDescribeSchemeResult, so it's neccesary to keep poolNames instead
             }
             if (path == DomainPath) {
                 state.StoragePools.emplace(0); // static group has poolId = 0
             }
+            Cerr << "AAAAA TEvDescribeSchemeResult state.StorageUsage " << state.StorageUsage << path << Endl;
+            Cerr << "AAAAA TEvDescribeSchemeResult state.StorageQuota " << state.StorageQuota << path << Endl;
             state.StorageUsage = ev->Get()->GetRecord().pathdescription().domaindescription().diskspaceusage().tables().totalsize();
             state.StorageQuota = ev->Get()->GetRecord().pathdescription().domaindescription().databasequotas().data_size_hard_quota();
 
@@ -1110,7 +1111,6 @@ public:
                     Cerr << "AAAAA poolId " << group.GetStoragePoolId() << Endl;
                     BSConfigGroups.emplace(groupId, &group);
                     StoragePoolState[poolId].Groups.emplace(group.groupid());
-                    StoragePoolState[poolId].AuthenticGroups.emplace(group.groupid());
                 }
                 for (const NKikimrBlobStorage::TBaseConfig::TNode& node : pbConfig.GetNode()) {
                     auto nodeId = node.GetNodeId();
@@ -2008,9 +2008,6 @@ public:
                 Cerr << "iiiii poolId " << poolId << Endl;
                 auto itStoragePoolState = StoragePoolState.find(poolId);
                 if (itStoragePoolState != StoragePoolState.end()) {
-                    if (!itStoragePoolState->second.AuthenticGroups.empty()) {
-                        itStoragePoolState->second.Groups = itStoragePoolState->second.AuthenticGroups;
-                    }
                     FillPoolStatus(itStoragePoolState->second, *storageStatus.add_pools(), {&context, "STORAGE_POOL"});
                     StoragePoolSeen.emplace(poolId);
                 }
@@ -2161,6 +2158,7 @@ public:
             FillDatabaseResult(context, FilterDatabase, DatabaseState[FilterDatabase]);
         } else {
             for (auto& [path, state] : DatabaseState) {
+                Cerr << "OOO path " << path << Endl;
                 FillDatabaseResult(context, path, state);
             }
         }

@@ -35,8 +35,11 @@ jobs:
         # git fetch origin main:main --shallow-exclude rightlib 
         # git fetch --depth `expr $(git rev-list --count main) + 1`
         # echo "Commits in main: $(git rev-list --count main)"
-        libsha=$(git rev-parse rightlib)
+        git checkout rightlib
+        libsha=$(git rev-parse HEAD)
+        echo "Libs sha: $libsha"
         echo "Dev branch..."
+        git checkout main
         devbranch="mergelibs-${{ steps.date.outputs.dtm }}"
         git checkout -b ${devbranch}
         prevsha=$(git rev-parse HEAD)

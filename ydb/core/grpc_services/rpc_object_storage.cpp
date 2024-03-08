@@ -777,7 +777,7 @@ private:
             lastDirectory = CommonPrefixesRows[CommonPrefixesRows.size() - 1];
         }
         
-        if (lastDirectory || lastFile) {
+        if (isTruncated && (lastDirectory || lastFile)) {
             Ydb::ObjectStorage::ContinuationToken token;
             
             if (lastDirectory > lastFile) {

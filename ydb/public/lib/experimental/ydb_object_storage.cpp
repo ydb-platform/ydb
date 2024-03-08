@@ -15,10 +15,12 @@
 namespace NYdb {
 namespace NObjectStorage {
 
-TObjectStorageListingResult::TObjectStorageListingResult(std::vector<std::string>&& commonPrefixes, TResultSet&& contents, TStatus&& status)
+TObjectStorageListingResult::TObjectStorageListingResult(std::vector<std::string>&& commonPrefixes, TResultSet&& contents, TString nextContinuationToken, bool isTruncated, TStatus&& status)
     : TStatus(std::move(status))
     , CommonPrefixes(std::move(commonPrefixes))
     , Contents(std::move(contents))
+    , NextContinuationToken(nextContinuationToken)
+    , IsTruncated(isTruncated)
 {}
 
 const std::vector<std::string>& TObjectStorageListingResult::GetCommonPrefixes() const {
@@ -27,6 +29,14 @@ const std::vector<std::string>& TObjectStorageListingResult::GetCommonPrefixes()
 
 const TResultSet& TObjectStorageListingResult::GetContents() const {
     return Contents;
+}
+
+const TString& TObjectStorageListingResult::GetContinuationToken() const {
+    return NextContinuationToken;
+}
+
+bool TObjectStorageListingResult::GetIsTruncated() const {
+    return IsTruncated;
 }
 
 void SetProtoValue(Ydb::TypedValue& out, TValue&& in) {
@@ -44,6 +54,7 @@ public:
                            TValue&& keyPrefix,
                            const TString& pathColumnPrefix,
                            const TString& pathColumnDelimiter,
+                           TString& continuationToken,
                            TValue&& startAfterKeySuffix,
                            ui32 maxKeys,
                            const TVector<TString> columnsToReturn,
@@ -54,6 +65,9 @@ public:
         SetProtoValue(*request.mutable_key_prefix(), std::move(keyPrefix));
         request.set_path_column_prefix(pathColumnPrefix);
         request.set_path_column_delimiter(pathColumnDelimiter);
+        if (continuationToken) {
+            request.Setcontinuation_token(continuationToken);
+        }
         SetProtoValue(*request.mutable_start_after_key_suffix(), std::move(startAfterKeySuffix));
         request.set_max_keys(maxKeys);
         for (auto& c : columnsToReturn) {
@@ -78,7 +92,7 @@ public:
                     contents = std::move(response->Getcontents());
                 }
 
-                TObjectStorageListingResult val(std::move(commonPrefixes), std::move(contents), TStatus(std::move(status)));
+                TObjectStorageListingResult val(std::move(commonPrefixes), std::move(contents), response->next_continuation_token(), response->is_truncated(), TStatus(std::move(status)));
                 promise.SetValue(std::move(val));
             };
 
@@ -102,6 +116,7 @@ TAsyncObjectStorageListingResult TObjectStorageClient::List(const TString& table
                                           TValue&& keyPrefix,
                                           const TString& pathColumnPrefix,
                                           const TString& pathColumnDelimiter,
+                                          TString continuationToken,
                                           TValue&& startAfterKeySuffix,
                                           ui32 maxKeys,
                                           const TVector<TString>& columnsToReturn,
@@ -111,6 +126,7 @@ TAsyncObjectStorageListingResult TObjectStorageClient::List(const TString& table
                             std::move(keyPrefix),
                             pathColumnPrefix,
                             pathColumnDelimiter,
+                            continuationToken,
                             std::move(startAfterKeySuffix),
                             maxKeys,
                             columnsToReturn,

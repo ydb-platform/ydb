@@ -1,6 +1,6 @@
 #include "ydb_common_ut.h"
 
-#include <ydb/public/lib/experimental/ydb_s3_internal.h>
+#include <ydb/public/lib/experimental/ydb_object_storage.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(YdbS3Internal) {
 
         // List
         auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(location));
-        NS3Internal::TS3InternalClient s3conn(connection);
+        NObjectStorage::TObjectStorageClient s3conn(connection);
 
         TValueBuilder keyPrefix;
         keyPrefix.BeginTuple()
@@ -67,10 +67,11 @@ Y_UNIT_TEST_SUITE(YdbS3Internal) {
                 .EndTuple();
         TValueBuilder suffix;
         suffix.BeginTuple().EndTuple();
-        auto res = s3conn.S3Listing("/Root/ListingObjects",
+        auto res = s3conn.List("/Root/ListingObjects",
                                     keyPrefix.Build(),
                                     "/home/",
                                     "/",
+                                    "",
                                     suffix.Build(),
                                     100,
                                     {"Name", "Data", "Timestamp"}
@@ -78,6 +79,9 @@ Y_UNIT_TEST_SUITE(YdbS3Internal) {
 
         Cerr << res.GetStatus() << Endl;
         UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
+
+        UNIT_ASSERT(!res.GetIsTruncated());
+        UNIT_ASSERT(!res.GetContinuationToken());
 
         {
             UNIT_ASSERT_VALUES_EQUAL(res.GetCommonPrefixes().size(), 1);
@@ -118,7 +122,7 @@ Y_UNIT_TEST_SUITE(YdbS3Internal) {
 
     NYdb::EStatus MakeListingRequest(TString location, TString userToken) {
         auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken(userToken));
-        NS3Internal::TS3InternalClient s3conn(connection);
+        NObjectStorage::TObjectStorageClient s3conn(connection);
 
         TValueBuilder keyPrefix;
         keyPrefix.BeginTuple()
@@ -127,10 +131,11 @@ Y_UNIT_TEST_SUITE(YdbS3Internal) {
                 .EndTuple();
         TValueBuilder suffix;
         suffix.BeginTuple().EndTuple();
-        auto res = s3conn.S3Listing("/Root/ListingObjects",
+        auto res = s3conn.List("/Root/ListingObjects",
                                     keyPrefix.Build(),
                                     "/home/",
                                     "/",
+                                    "",
                                     suffix.Build(),
                                     100,
                                     {"Name", "Data", "Timestamp"}
@@ -158,11 +163,12 @@ Y_UNIT_TEST_SUITE(YdbS3Internal) {
         UNIT_ASSERT_EQUAL(MakeListingRequest(location, "badguy@builtin"), EStatus::UNAUTHORIZED);
     }
 
-    NYdb::EStatus TestRequest(NS3Internal::TS3InternalClient s3conn, TValue&& keyPrefix, TValue&& suffix) {
-        auto res = s3conn.S3Listing("/Root/ListingObjects",
+    NYdb::EStatus TestRequest(NObjectStorage::TObjectStorageClient s3conn, TValue&& keyPrefix, TValue&& suffix) {
+        auto res = s3conn.List("/Root/ListingObjects",
                                     std::move(keyPrefix),
                                     "/home/",
                                     "/",
+                                    "",
                                     std::move(suffix),
                                     100,
                                     {"Name", "Data", "Timestamp"}
@@ -172,14 +178,14 @@ Y_UNIT_TEST_SUITE(YdbS3Internal) {
     }
 
     // Test request with good suffix
-    NYdb::EStatus TestKeyPrefixRequest(NS3Internal::TS3InternalClient s3conn, TValue&& keyPrefix) {
+    NYdb::EStatus TestKeyPrefixRequest(NObjectStorage::TObjectStorageClient s3conn, TValue&& keyPrefix) {
         return TestRequest(s3conn,
                            std::move(keyPrefix),
                            TValueBuilder().BeginTuple().EndTuple().Build());
     }
 
     // Test request with good keyPrefix
-    NYdb::EStatus TestKeySuffixRequest(NS3Internal::TS3InternalClient s3conn, TValue&& keySuffix) {
+    NYdb::EStatus TestKeySuffixRequest(NObjectStorage::TObjectStorageClient s3conn, TValue&& keySuffix) {
         return TestRequest(s3conn,
                            TValueBuilder()
                               .BeginTuple()
@@ -197,7 +203,7 @@ Y_UNIT_TEST_SUITE(YdbS3Internal) {
         PrepareData(location);
 
         auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(location));
-        NS3Internal::TS3InternalClient s3conn(connection);
+        NObjectStorage::TObjectStorageClient s3conn(connection);
 
         UNIT_ASSERT_VALUES_EQUAL(TestKeyPrefixRequest(s3conn,
                                                       TValueBuilder()

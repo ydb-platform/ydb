@@ -297,8 +297,8 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         grpc::Status status = stub->List(&rcontext, *request, &res);
     }
 
-    std::unique_ptr<Ydb::ObjectStorage::ContinuationToken> DoS3Listing(ui16 grpcPort, ui64 bucket, const TString& pathPrefix, const TString& pathDelimiter, const TString& startAfter,
-                    std::unique_ptr<Ydb::ObjectStorage::ContinuationToken> continuationToken,
+    TString DoS3Listing(ui16 grpcPort, ui64 bucket, const TString& pathPrefix, const TString& pathDelimiter, const TString& startAfter,
+                    TString continuationToken,
                     const TVector<TString>& columnsToReturn, ui32 maxKeys,
                     TVector<TString>& commonPrefixes, TVector<TString>& contents)
     {
@@ -353,7 +353,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         request->Setpath_column_prefix(pathPrefix);
         request->Settable_name("/dc-1/Dir/Table");
         request->Setpath_column_delimiter(pathDelimiter);
-        request->set_allocated_continuation_token(continuationToken.release());
+        request->set_continuation_token(continuationToken);
         for (const TString& c : columnsToReturn) {
             request->Addcolumns_to_return(c);
         }
@@ -393,11 +393,13 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
             }
         }
 
-        if (listingResult.Hasnext_continuation_token()) {
-            return std::make_unique<Ydb::ObjectStorage::ContinuationToken>(listingResult.Getnext_continuation_token());
+        if (listingResult.next_continuation_token().size()) {
+            TString token = listingResult.next_continuation_token();
+
+            return token;
         }
 
-        return nullptr;
+        return "";
     }
 
     void CompareS3Listing(TFlatMsgBusClient& annoyingClient, ui64 bucket, const TString& pathPrefix, const TString& pathDelimiter,
@@ -775,7 +777,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         CompareS3Listing(annoyingClient, 100, "/Videos/", "/", "", 1000, {});
     }
 
-    Y_UNIT_TEST(BorderCases) {
+    Y_UNIT_TEST(CornerCases) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -799,35 +801,35 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         TVector<TString> commonPrefixes;
         TVector<TString> contents;
 
-        auto continuationToken = std::move(DoS3Listing(GRPC_PORT, 750, "foo/", "/", "", nullptr, {}, 1, commonPrefixes, contents));
+        auto continuationToken = DoS3Listing(GRPC_PORT, 750, "foo/", "/", "", "", {}, 1, commonPrefixes, contents);
         
         UNIT_ASSERT(continuationToken);
         UNIT_ASSERT_EQUAL(1, contents.size());
         UNIT_ASSERT_EQUAL(0, commonPrefixes.size());
         UNIT_ASSERT_STRINGS_EQUAL("foo/1.mp4", contents[0]);
 
-        continuationToken = std::move(DoS3Listing(GRPC_PORT, 750, "foo/", "/", "", std::move(continuationToken), {}, 1, commonPrefixes, contents));
+        continuationToken = DoS3Listing(GRPC_PORT, 750, "foo/", "/", "", continuationToken, {}, 1, commonPrefixes, contents);
 
         UNIT_ASSERT(continuationToken);
         UNIT_ASSERT_EQUAL(0, contents.size());
         UNIT_ASSERT_EQUAL(1, commonPrefixes.size());
         UNIT_ASSERT_STRINGS_EQUAL("foo/bar/", commonPrefixes[0]);
 
-        continuationToken = std::move(DoS3Listing(GRPC_PORT, 750, "foo/", "/", "", std::move(continuationToken), {}, 1, commonPrefixes, contents));
+        continuationToken = DoS3Listing(GRPC_PORT, 750, "foo/", "/", "", continuationToken, {}, 1, commonPrefixes, contents);
 
         UNIT_ASSERT(continuationToken);
         UNIT_ASSERT_EQUAL(1, contents.size());
         UNIT_ASSERT_EQUAL(0, commonPrefixes.size());
         UNIT_ASSERT_STRINGS_EQUAL("foo/bar0", contents[0]);
 
-        continuationToken = std::move(DoS3Listing(GRPC_PORT, 750, "foo/", "/", "", std::move(continuationToken), {}, 1, commonPrefixes, contents));
+        continuationToken = DoS3Listing(GRPC_PORT, 750, "foo/", "/", "", continuationToken, {}, 1, commonPrefixes, contents);
 
         UNIT_ASSERT(continuationToken);
         UNIT_ASSERT_EQUAL(1, contents.size());
         UNIT_ASSERT_EQUAL(0, commonPrefixes.size());
         UNIT_ASSERT_STRINGS_EQUAL("foo/cat.jpg", contents[0]);
 
-        continuationToken = std::move(DoS3Listing(GRPC_PORT, 750, "foo/", "/", "", std::move(continuationToken), {}, 1, commonPrefixes, contents));
+        continuationToken = DoS3Listing(GRPC_PORT, 750, "foo/", "/", "", continuationToken, {}, 1, commonPrefixes, contents);
 
         UNIT_ASSERT(!continuationToken);
         UNIT_ASSERT_EQUAL(0, contents.size());

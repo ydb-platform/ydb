@@ -13,7 +13,7 @@ message ListingRequest {
     TypedValue key_prefix = 2; // A tuple representing all key columns that preceed path column
     string path_column_prefix = 3;
     string path_column_delimiter = 4;
-    ContinuationToken continuation_token = 5;
+    bytes continuation_token = 5;
     TypedValue start_after_key_suffix = 6; // A tuple representing key columns that succeed path column
     int32 max_keys = 7;
     repeated string columns_to_return = 8;
@@ -34,5 +34,5 @@ message ListingResult {
     repeated string common_prefixes = 1;    // Folders.
     Ydb.ResultSet contents = 2;           // Every Contents row starts with key suffix with KeySuffixSize columns
     bool is_truncated = 3;
-    ContinuationToken next_continuation_token = 4;
+    bytes next_continuation_token = 4;
 }

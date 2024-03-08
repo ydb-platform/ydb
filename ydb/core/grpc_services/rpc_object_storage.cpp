@@ -196,6 +196,7 @@ private:
 
     std::unique_ptr<IRequestOpCtx> GrpcRequest;
     const Ydb::ObjectStorage::ListingRequest* Request;
+    std::optional<Ydb::ObjectStorage::ContinuationToken> ContinuationToken;
     THolder<const NACLib::TUserToken> UserToken;
     ui32 MaxKeys;
     TActorId SchemeCache;
@@ -245,6 +246,14 @@ public:
 
         if (Request->Getmax_keys() > 0 && Request->Getmax_keys() <= DEFAULT_MAX_KEYS) {
             MaxKeys = Request->Getmax_keys();
+        }
+
+        if (Request->continuation_token()) {
+            Ydb::ObjectStorage::ContinuationToken token;
+            if (!token.ParseFromString(Request->continuation_token())) {
+                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "Invalid ContinuationToken", ctx);
+            }
+            ContinuationToken = std::move(token);
         }
 
         // TODO: respect timeout parameter
@@ -463,8 +472,8 @@ private:
             }
         }
 
-        if (Request->has_continuation_token()) {
-            TString lastPath = Request->Getcontinuation_token().Getlast_path();
+        if (ContinuationToken) {
+            TString lastPath = ContinuationToken->Getlast_path();
             fromValues[PathColumnInfo.KeyOrder] = TCell(lastPath.data(), lastPath.size());
         }
 
@@ -585,10 +594,10 @@ private:
             ev->Record.SetLastCommonPrefix(CommonPrefixesRows.back());
         }
 
-        if (Request->has_continuation_token()) {
-            ev->Record.SetLastPath(Request->Getcontinuation_token().Getlast_path());
-            if (CommonPrefixesRows.empty() && Request->Getcontinuation_token().is_folder()) {
-                ev->Record.SetLastCommonPrefix(Request->Getcontinuation_token().Getlast_path());
+        if (ContinuationToken) {
+            ev->Record.SetLastPath(ContinuationToken->Getlast_path());
+            if (CommonPrefixesRows.empty() && ContinuationToken->is_folder()) {
+                ev->Record.SetLastCommonPrefix(ContinuationToken->Getlast_path());
             }
         }
 
@@ -758,15 +767,19 @@ private:
         }
         
         if (lastDirectory || lastFile) {
-            auto token = resp.mutable_next_continuation_token();
+            Ydb::ObjectStorage::ContinuationToken token;
             
             if (lastDirectory > lastFile) {
-                token->set_last_path(lastDirectory);
-                token->set_is_folder(true);
+                token.set_last_path(lastDirectory);
+                token.set_is_folder(true);
             } else {
-                token->set_last_path(lastFile);
-                token->set_is_folder(false);
+                token.set_last_path(lastFile);
+                token.set_is_folder(false);
             }
+
+            TString serializedToken = token.SerializeAsString();
+            
+            resp.set_next_continuation_token(serializedToken);
         }
 
         try {

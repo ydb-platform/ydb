@@ -41,6 +41,7 @@ target_sources(blobstorage-ut_vdisk-lib PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/http_client.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/prepare.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/setup.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_bad_blobid.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_brokendevice.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_dbstat.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_defrag.h
@@ -59,6 +60,7 @@ target_sources(blobstorage-ut_vdisk-lib PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/helpers.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/http_client.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/prepare.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_bad_blobid.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_brokendevice.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_dbstat.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_defrag.cpp

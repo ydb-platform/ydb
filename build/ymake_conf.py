@@ -504,7 +504,7 @@ class Options(object):
         self.toolchain_params = self.options.toolchain_params
 
         self.presets = parse_presets(self.options.presets)
-        userify_presets(self.presets, ('CFLAGS', 'CXXFLAGS', 'CONLYFLAGS', 'LDFLAGS', 'GO_COMPILE_FLAGS', 'GO_LINK_FLAGS'))
+        userify_presets(self.presets, ('CFLAGS', 'CXXFLAGS', 'CONLYFLAGS', 'LDFLAGS', 'GO_COMPILE_FLAGS', 'GO_LINK_FLAGS', 'STD_CXX_VERSION'))
 
     Instance = None
 
@@ -1588,7 +1588,7 @@ class GnuCompiler(Compiler):
         emit('WERROR_MODE', self.tc.werror_mode)
         emit('_C_FLAGS', self.c_flags)
         emit('_C_FOPTIONS', self.c_foptions)
-        emit('_CXX_STD', '-std={}'.format(self.tc.cxx_std))
+        emit('_STD_CXX_VERSION', preset('USER_STD_CXX_VERSION') or self.tc.cxx_std)
         append('C_DEFINES', self.c_defines)
         append('C_WARNING_OPTS', self.c_warnings)
         append('CXX_WARNING_OPTS', self.cxx_warnings)
@@ -2111,7 +2111,7 @@ class MSVCCompiler(MSVC, Compiler):
         if self.build.is_ide:
             emit('CFLAGS_PER_TYPE', '@[debug|$CFLAGS_DEBUG]@[release|$CFLAGS_RELEASE]')
 
-        emit('_STD_CXX', '/std:{}'.format(self.tc.cxx_std))
+        emit('_STD_CXX_VERSION', preset('USER_STD_CXX_VERSION') or self.tc.cxx_std)
 
         emit('_MSVC_FLAGS', flags)
 

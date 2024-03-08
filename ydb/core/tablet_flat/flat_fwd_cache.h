@@ -59,12 +59,12 @@ namespace NFwd {
 
         TCache() = delete;
 
-        TCache(const TPart* part, IPages* env, TGroupId groupId, const TIntrusiveConstPtr<TSlices>& bounds = nullptr)
+        TCache(const TPart* part, IPages* env, TGroupId groupId, const TIntrusiveConstPtr<TSlices>& slices = nullptr)
             : Index(CreateIndexIter(part, env, groupId))
         { 
-            if (bounds && !bounds->empty()) {
-                BeginRowId = bounds->front().BeginRowId();
-                EndRowId = bounds->back().EndRowId();
+            if (slices && !slices->empty()) {
+                BeginRowId = slices->front().BeginRowId();
+                EndRowId = slices->back().EndRowId();
             } else {
                 BeginRowId = 0;
                 EndRowId = Index->GetEndRowId();
@@ -115,6 +115,10 @@ namespace NFwd {
                 }
                 ContinueNext = false;
             }
+
+            // Note: not an effective implementation, each Index->Next() page fault stops Forward
+            // and it continues only with a new Handle call that return Grow = true
+            // some index forward loading mechanism is needed here
 
             while (OnHold + OnFetch < upper && Index->IsValid() && Index->GetRowId() < EndRowId) {
                 AddToQueue(head, Index->GetPageId());
@@ -190,7 +194,10 @@ namespace NFwd {
                     Y_ABORT_UNLESS(ready == EReady::Page, "Slices are invalid");
                     return false;
                 }
-                Y_ABORT_UNLESS(Index->GetPageId() <= pageId, "Requested page is out of slice bounds");
+                Y_ABORT_UNLESS(Index->GetPageId() <= pageId, "Requested page is outside of slices");
+
+                // TODO: when pageId is somewhere in the middle of a part, spends lots of time doing Index->Next here
+                // should add Index->Seek(TPageId) method or seek TLead.Key instead
                 Started = true;
             }
 
@@ -201,7 +208,7 @@ namespace NFwd {
                     return false;
                 }
                 ContinueNext = false;
-                Y_ABORT_UNLESS(Index->GetRowId() < EndRowId, "Requested page is out of slice bounds");
+                Y_ABORT_UNLESS(Index->GetRowId() < EndRowId, "Requested page is outside of slices");
             }
 
             Y_ABORT_UNLESS(Index->IsValid(), "Requested page doesn't belong to the part");

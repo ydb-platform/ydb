@@ -53,10 +53,9 @@ jobs:
         git add .
         git commit -m "Import libraries ${{ steps.date.outputs.dtm }}"
         git push --set-upstream origin mergelibs-${{ steps.date.outputs.dtm }}
-        curl -L \
-          -X POST \
+        curl -L -X POST --fail-with-body \
           -H "Accept: application/vnd.github+json" \
           -H "Authorization: Bearer $TOKEN" \
           -H "X-GitHub-Api-Version: 2022-11-28" \
           https://api.github.com/repos/$REPO/pulls \
-          -d '{"title":"Amazing new feature","body":"Please pull these awesome changes in!","head":"'${devbranch}'","base":"main"}'
+          -d '{"title":"Library import ${{ steps.date.outputs.dtm }}","body":"","head":"'${devbranch}'","base":"main"}'

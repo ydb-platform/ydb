@@ -1,4 +1,4 @@
-name: Sync cmakebuild with main
+name: Create PR to import libraries to main
 on:
   workflow_dispatch:
 concurrency:

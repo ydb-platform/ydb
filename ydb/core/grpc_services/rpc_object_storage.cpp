@@ -194,7 +194,7 @@ private:
     static constexpr i32 DEFAULT_MAX_KEYS = 1001;
     static constexpr ui32 DEFAULT_TIMEOUT_SEC = 5*60;
 
-    std::unique_ptr<IRequestOpCtx> GrpcRequest;
+    std::unique_ptr<IRequestNoOpCtx> GrpcRequest;
     const Ydb::ObjectStorage::ListingRequest* Request;
     std::optional<Ydb::ObjectStorage::ContinuationToken> ContinuationToken;
     THolder<const NACLib::TUserToken> UserToken;
@@ -224,7 +224,7 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    TObjectStorageListingRequestGrpc(std::unique_ptr<IRequestOpCtx> request, TActorId schemeCache, THolder<const NACLib::TUserToken>&& userToken)
+    TObjectStorageListingRequestGrpc(std::unique_ptr<IRequestNoOpCtx> request, TActorId schemeCache, THolder<const NACLib::TUserToken>&& userToken)
         : GrpcRequest(std::move(request))
         , Request(TEvObjectStorageListingRequest::GetProtoRequest(GrpcRequest.get()))
         , UserToken(std::move(userToken))
@@ -306,11 +306,21 @@ private:
         WaitingResolveReply = true;
     }
 
+    Ydb::ObjectStorage::ListingResponse* CreateResponse() {
+        return google::protobuf::Arena::CreateMessage<Ydb::ObjectStorage::ListingResponse>(Request->GetArena());
+    }
+
     void ReplyWithError(Ydb::StatusIds::StatusCode grpcStatus, const TString& message, const TActorContext& ctx) {
+        auto* resp = CreateResponse();
+        resp->set_status(grpcStatus);
+
         if (!message.empty()) {
-            GrpcRequest->RaiseIssue(NYql::TIssue(message));
+            const NYql::TIssue& issue = NYql::TIssue(message);
+            auto* protoIssue = resp->add_issues();
+            NYql::IssueToMessage(issue, protoIssue);
         }
-        GrpcRequest->ReplyWithYdbStatus(grpcStatus);
+
+        GrpcRequest->Reply(resp, grpcStatus);
 
         Finished = true;
 
@@ -741,15 +751,16 @@ private:
     }
 
     void ReplySuccess(const NActors::TActorContext& ctx, bool isTruncated) {
-        Ydb::ObjectStorage::ListingResult resp;
+        auto* resp = CreateResponse();
+        resp->set_status(Ydb::StatusIds::SUCCESS);
 
-        resp.set_is_truncated(isTruncated);
+        resp->set_is_truncated(isTruncated);
 
         for (auto commonPrefix : CommonPrefixesRows) {
-            resp.add_common_prefixes(commonPrefix);
+            resp->add_common_prefixes(commonPrefix);
         }
 
-        auto &contents = *resp.mutable_contents();
+        auto &contents = *resp->mutable_contents();
         contents.set_truncated(false);
         FillResultRows(contents, ContentsColumns, ContentsRows);
 
@@ -779,11 +790,11 @@ private:
 
             TString serializedToken = token.SerializeAsString();
             
-            resp.set_next_continuation_token(serializedToken);
+            resp->set_next_continuation_token(serializedToken);
         }
 
         try {
-            GrpcRequest->SendResult(resp, Ydb::StatusIds::SUCCESS);
+            GrpcRequest->Reply(resp, Ydb::StatusIds::SUCCESS);
         } catch(std::exception ex) {
             GrpcRequest->RaiseIssue(NYql::ExceptionToIssue(ex));
             GrpcRequest->ReplyWithYdbStatus(Ydb::StatusIds::INTERNAL_ERROR);
@@ -794,13 +805,13 @@ private:
     }
 };
 
-IActor* CreateGrpcObjectStorageListingHandler(std::unique_ptr<IRequestOpCtx> request) {
+IActor* CreateGrpcObjectStorageListingHandler(std::unique_ptr<IRequestNoOpCtx> request) {
     TActorId schemeCache = MakeSchemeCacheID();
     auto token = THolder<const NACLib::TUserToken>(request->GetInternalToken() ? new NACLib::TUserToken(request->GetSerializedToken()) : nullptr);
     return new TObjectStorageListingRequestGrpc(std::move(request), schemeCache, std::move(token));
 }
 
-void DoObjectStorageListingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+void DoObjectStorageListingRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(CreateGrpcObjectStorageListingHandler(std::move(p)));
 }
 

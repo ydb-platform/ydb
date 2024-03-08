@@ -18,7 +18,7 @@ void TGRpcYdbObjectStorageService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr lo
         [this](NYdbGrpc::IRequestContextBase *ctx) { \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ActorSystem_->Send(GRpcRequestProxyId_, \
-                new NGRpcService::TGrpcRequestOperationCall<Ydb::ObjectStorage::IN, Ydb::ObjectStorage::OUT> \
+                new NGRpcService::TGrpcRequestNoOperationCall<Ydb::ObjectStorage::IN, Ydb::ObjectStorage::OUT> \
                     (ctx, &CB, NGRpcService::TRequestAuxSettings{NGRpcService::TRateLimiterMode::Off, nullptr})); \
         }, &Ydb::ObjectStorage::V1::ObjectStorageService::AsyncService::Request ## NAME, \
         #NAME, logger, getCounterBlock("object-storage-list", #NAME))->Run();

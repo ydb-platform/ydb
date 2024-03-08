@@ -5,10 +5,10 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-class IRequestOpCtx;
+class IRequestNoOpCtx;
 class IFacilityProvider;
 
-void DoObjectStorageListingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoObjectStorageListingRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 
 } // namespace NGRpcService
 } // namespace NKikimr

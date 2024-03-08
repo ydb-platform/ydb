@@ -366,23 +366,20 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         Ydb::ObjectStorage::ListingResponse response;
         grpc::Status status = stub->List(&rcontext, *request, &response);
 
-        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
-        
-        Ydb::ObjectStorage::ListingResult listingResult;
-        response.operation().result().UnpackTo(&listingResult);
+        UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SUCCESS);
         
         commonPrefixes.clear();
         contents.clear();
 
-        if (listingResult.common_prefixes_size() > 0) {
-            auto &folders = listingResult.common_prefixes();
+        if (response.common_prefixes_size() > 0) {
+            auto &folders = response.common_prefixes();
             for (auto row : folders) {
                 commonPrefixes.emplace_back(row);
             }
         }
         
-        if (listingResult.has_contents()) {
-            auto &files = listingResult.contents();
+        if (response.has_contents()) {
+            auto &files = response.contents();
             for (auto row : files.rows()) {
                 for (auto item : row.items()) {
                     if (item.has_text_value()) {
@@ -393,8 +390,8 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
             }
         }
 
-        if (listingResult.next_continuation_token().size()) {
-            TString token = listingResult.next_continuation_token();
+        if (response.next_continuation_token().size()) {
+            TString token = response.next_continuation_token();
 
             return token;
         }
@@ -534,13 +531,13 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         S3Listing(GRPC_PORT, "/dc-1/Dir/Table", pbPrefixCols, pathPrefix, pathDelimiter,
                     pbStartAfterSuffixCols, columnsToReturn, maxKeys, response);
 
-        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), expectedStatus);
+        UNIT_ASSERT_VALUES_EQUAL(response.status(), expectedStatus);
         if (expectedErrMessage) {
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().issues().size(), 1);
-            auto &issueMessage = response.operation().issues()[0];
+            UNIT_ASSERT_VALUES_EQUAL(response.issues().size(), 1);
+            auto &issueMessage = response.issues()[0];
             UNIT_ASSERT_VALUES_EQUAL(issueMessage.message(), expectedErrMessage);
         } else {
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().issues().size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(response.issues().size(), 0);
         }
     }
 

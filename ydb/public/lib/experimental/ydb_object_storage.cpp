@@ -49,7 +49,7 @@ public:
                            const TVector<TString> columnsToReturn,
                            const TObjectStorageListingSettings& settings)
     {
-        auto request = MakeOperationRequest<Ydb::ObjectStorage::ListingRequest>(settings);
+        auto request = MakeRequest<Ydb::ObjectStorage::ListingRequest>();
         request.set_table_name(tableName);
         SetProtoValue(*request.mutable_key_prefix(), std::move(keyPrefix));
         request.set_path_column_prefix(pathColumnPrefix);
@@ -63,27 +63,30 @@ public:
         auto promise = NThreading::NewPromise<TObjectStorageListingResult>();
 
         auto extractor = [promise]
-            (google::protobuf::Any* any, TPlainStatus status) mutable {
-                Ydb::ObjectStorage::ListingResult result;
-                if (any) {
-                    any->UnpackTo(&result);
-                }
+            (Ydb::ObjectStorage::ListingResponse* response, TPlainStatus status) mutable {
                 std::vector<std::string> commonPrefixes;
-                for (auto commonPrefix : result.Getcommon_prefixes()) {
-                    commonPrefixes.push_back(commonPrefix);
+                Ydb::ResultSet contents;
+                if (response) {
+                    Ydb::StatusIds::StatusCode msgStatus = response->status();
+                    NYql::TIssues issues;
+                    NYql::IssuesFromMessage(response->issues(), issues);
+                    status = TPlainStatus(static_cast<EStatus>(msgStatus), std::move(issues));    
+                    
+                    for (auto commonPrefix : response->Getcommon_prefixes()) {
+                        commonPrefixes.push_back(commonPrefix);
+                    }
+                    contents = std::move(response->Getcontents());
                 }
-                TResultSet contents(result.Getcontents());
 
                 TObjectStorageListingResult val(std::move(commonPrefixes), std::move(contents), TStatus(std::move(status)));
                 promise.SetValue(std::move(val));
             };
 
-        Connections_->RunDeferred<Ydb::ObjectStorage::V1::ObjectStorageService, Ydb::ObjectStorage::ListingRequest, Ydb::ObjectStorage::ListingResponse>(
+        Connections_->Run<Ydb::ObjectStorage::V1::ObjectStorageService, Ydb::ObjectStorage::ListingRequest, Ydb::ObjectStorage::ListingResponse>(
             std::move(request),
             extractor,
             &Ydb::ObjectStorage::V1::ObjectStorageService::Stub::AsyncList,
             DbDriverState_,
-            INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();

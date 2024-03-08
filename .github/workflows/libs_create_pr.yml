@@ -24,17 +24,17 @@ jobs:
           echo "No new commits on the rightlib branch to merge, exiting"
           exit 0
         fi
-        # Fetch rightlib
+        echo "Fetch rightlib..."
         git clone -b rightlib --shallow-exclude main https://$TOKEN@github.com/$REPO.git ydb
         git config --global user.email "alex@ydb.tech"
         git config --global user.name "Alexander Smirnov"
         cd ydb
         git fetch --depth `expr $(git rev-list --count HEAD) + 1`
-        # Fetch main
+        echo "Fetch main..."
         git fetch origin main:main --shallow-exclude rightlib 
-        git fetch --depth `expr $(git rev-list --count HEAD) + 1`
+        git fetch --depth `expr $(git rev-list --count main) + 1`
         libsha=$(git rev-parse HEAD)
-        # Dev branch
+        echo "Dev branch..."
         devbranch="mergelibs-${{ steps.date.outputs.dtm }}"
         git checkout main -b ${devbranch}
         prevsha=$(git rev-parse HEAD)

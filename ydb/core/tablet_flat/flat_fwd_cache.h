@@ -92,11 +92,15 @@ namespace NFwd {
             bool grow = OnHold + OnFetch <= lower;
 
             if (Offset == Pages.size()) { // isn't processed yet
-                SyncIndex(pageId);
+                if (!SyncIndex(pageId)) {
+                    return {nullptr, false, true};
+                }
                 AddToQueue(head, pageId);
             }
 
-            grow &= Index->IsValid() && Index->GetRowId() < EndRowId;
+            if (!ContinueNext) {
+                grow &= Index->IsValid() && Index->GetRowId() < EndRowId;
+            }
 
             return {Pages.at(Offset).Touch(pageId, Stat), grow, true};
         }
@@ -105,9 +109,19 @@ namespace NFwd {
         {
             Y_ABORT_UNLESS(Started, "Couldn't be called before Handle returns grow");
 
+            if (ContinueNext) {
+                if (auto ready = Index->Next(); ready == EReady::Page) {
+                    return;
+                }
+                ContinueNext = false;
+            }
+
             while (OnHold + OnFetch < upper && Index->IsValid() && Index->GetRowId() < EndRowId) {
                 AddToQueue(head, Index->GetPageId());
-                Y_ABORT_UNLESS(Index->Next() != EReady::Page);
+                if (auto ready = Index->Next(); ready == EReady::Page) {
+                    ContinueNext = true;
+                    return;
+                }
             }
         }
 
@@ -169,21 +183,35 @@ namespace NFwd {
             }
         }
 
-        void SyncIndex(TPageId pageId) noexcept
+        bool SyncIndex(TPageId pageId) noexcept
         {
             if (!Started) {
-                Y_ABORT_UNLESS(Index->Seek(BeginRowId) == EReady::Data);
+                if (auto ready = Index->Seek(BeginRowId); ready != EReady::Data) {
+                    Y_ABORT_UNLESS(ready == EReady::Page, "Slices are invalid");
+                    return false;
+                }
                 Y_ABORT_UNLESS(Index->GetPageId() <= pageId, "Requested page is out of slice bounds");
                 Started = true;
             }
 
-            while (Index->IsValid() && Index->GetPageId() < pageId) {
-                Y_ABORT_UNLESS(Index->Next() == EReady::Data);
+            while (ContinueNext || Index->IsValid() && Index->GetPageId() < pageId) {
+                if (auto ready = Index->Next(); ready != EReady::Data) {
+                    Y_ABORT_UNLESS(ready == EReady::Page, "Requested page doesn't belong to the part");
+                    ContinueNext = true;
+                    return false;
+                }
+                ContinueNext = false;
                 Y_ABORT_UNLESS(Index->GetRowId() < EndRowId, "Requested page is out of slice bounds");
             }
 
-            Y_ABORT_UNLESS(Index->GetPageId() == pageId, "Requested page doesn't belong to the part");
-            Y_ABORT_UNLESS(Index->Next() != EReady::Page);
+            Y_ABORT_UNLESS(Index->IsValid(), "Requested page doesn't belong to the part");
+            Y_ABORT_UNLESS(Index->GetPageId() == pageId, "Requested page doesn't belong to the part or index is out of sync");
+            
+            if (auto ready = Index->Next(); ready == EReady::Page) {
+                ContinueNext = true;
+            }
+            
+            return true;
         }
 
         void AddToQueue(IPageLoadingQueue *head, TPageId pageId) noexcept
@@ -201,6 +229,7 @@ namespace NFwd {
     private:
         THolder<IIndexIter> Index; /* Points on next to load page */
         bool Started = false;
+        bool ContinueNext = false;
         TRowId BeginRowId, EndRowId;
         TLoadedPagesCircularBuffer<TPart::Trace> Trace;
 

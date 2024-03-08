@@ -23,7 +23,62 @@
 
 namespace NFq {
 
-using TTenantExecuter = TDbExecuter<TTenantInfo::TPtr>;
+struct TFilteredComputeMapping final : NFq::TComputeMapping {
+    TFilteredComputeMapping(const NConfig::TComputeConfig& computeConfig, const TMap<TString, ui32> state) {
+        const auto& controlPlane = computeConfig.GetYdb().GetControlPlane();
+        switch (controlPlane.type_case()) {
+            case NConfig::TYdbComputeControlPlane::TYPE_NOT_SET:
+            case NConfig::TYdbComputeControlPlane::kSingle:
+                break;
+            case NConfig::TYdbComputeControlPlane::kCms: {
+                ui32 index = 0;
+                for (const auto& config: controlPlane.GetCms().GetDatabaseMapping().GetCommon()) {
+                    auto database = config.GetControlPlaneConnection().GetDatabase();
+                    if (state.Value(database, 0) == 0) {
+                        ActiveTenants.push_back(index);
+                    }
+                    index++;
+                }
+                break;
+            }
+            case NConfig::TYdbComputeControlPlane::kYdbcp: {
+                ui32 index = 0;
+                for (const auto& config: controlPlane.GetYdbcp().GetDatabaseMapping().GetCommon()) {
+                    auto database = config.GetControlPlaneConnection().GetDatabase();
+                    if (state.Value(database, 0) == 0) {
+                        ActiveTenants.push_back(index);
+                    }
+                    index++;
+                }
+                break;
+            }
+        }
+    }
+
+    ui32 GetAvailableCommontTenantCount() final {
+        return ActiveTenants.size();
+    }
+
+    std::optional<ui32> MapScopeToCommonTenant(const TString& scope) final {
+        switch (ActiveTenants.size()) {
+        case 0:
+            return std::nullopt;
+        case 1:
+            return 0; // no need to hash
+        default:
+            return ActiveTenants[MultiHash(scope) % ActiveTenants.size()];
+        }
+    }
+
+    std::vector<ui32> ActiveTenants;
+};
+
+struct TInfo {
+    TTenantInfo::TPtr TenantInfo;
+    TMap<TString, ui32> ComputeTenantState;
+};
+
+using TTenantExecuter = TDbExecuter<TInfo>;
 using TStateTimeExecuter = TDbExecuter<TInstant>;
 
 class TControlPlaneConfigActor : public NActors::TActorBootstrapped<TControlPlaneConfigActor> {
@@ -51,9 +106,6 @@ public:
         CPC_LOG_D("STARTING: " << SelfId());
         Become(&TControlPlaneConfigActor::StateFunc);
         if (Config.GetUseDbMapping()) {
-            // TO BE REMOVED - TMP STUB UNTIL LOAD IS IMPLEMENTED
-            ComputeMappingHolder->Mapping = std::make_shared<TFixedComputeMapping>(ComputeConfig);
-            /////////////////////////////////////////////////////
             YdbConnection = NewYdbConnection(Config.GetStorage(), CredProviderFactory, YqSharedResources->CoreYdbDriver);
             DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(static_cast<ui32>(EDbPoolId::MAIN));
             TablePathPrefix = YdbConnection->TablePathPrefix;
@@ -110,7 +162,8 @@ private:
         TDbExecutable::TPtr executable;
         auto& executer = TTenantExecuter::Create(executable, true, 
             [computeConfig=ComputeConfig, computeMappingHolder=ComputeMappingHolder](TTenantExecuter& executer) {
-                executer.State.reset(new TTenantInfo(computeConfig, computeMappingHolder)); 
+                executer.State.TenantInfo.reset(new TTenantInfo(computeConfig, computeMappingHolder));
+                executer.State.ComputeTenantState.clear();
             }
         );
 
@@ -127,7 +180,7 @@ private:
             },
             [=](TTenantExecuter& executer, const TVector<NYdb::TResultSet>& resultSets) {
 
-                auto& info = *executer.State;
+                auto& info = *executer.State.TenantInfo;
 
                 {
                     info.CommonVTenants.clear();
@@ -170,20 +223,22 @@ private:
                     while (parser.TryNextRow()) {
                         auto tenant = *parser.ColumnParser(TENANT_COLUMN_NAME).GetOptionalString();
                         auto state = *parser.ColumnParser(STATE_COLUMN_NAME).GetOptionalUint32();
-                        Y_UNUSED(tenant);
-                        Y_UNUSED(state);
+                        executer.State.ComputeTenantState.emplace(tenant, state);
                     }
                 }
             },
             "ReadTenants", true
         ).Process(SelfId(),
             [=, this](TTenantExecuter& executer) {
-                if (executer.State->CommonVTenants.size()) {
-                    std::sort(executer.State->CommonVTenants.begin(), executer.State->CommonVTenants.end());
+
+                ComputeMappingHolder->Mapping = std::make_shared<TFilteredComputeMapping>(ComputeConfig, executer.State.ComputeTenantState);
+
+                if (executer.State.TenantInfo->CommonVTenants.size()) {
+                    std::sort(executer.State.TenantInfo->CommonVTenants.begin(), executer.State.TenantInfo->CommonVTenants.end());
                 }
-                bool refreshed = !this->TenantInfo || (this->TenantInfo->StateTime < executer.State->StateTime);
+                bool refreshed = !this->TenantInfo || (this->TenantInfo->StateTime < executer.State.TenantInfo->StateTime);
                 auto oldInfo = this->TenantInfo;
-                this->TenantInfo = executer.State;
+                this->TenantInfo = executer.State.TenantInfo;
 
                 if (refreshed) {
                     CPC_LOG_D("LOADED TenantInfo: State CHANGED at " << this->TenantInfo->StateTime);

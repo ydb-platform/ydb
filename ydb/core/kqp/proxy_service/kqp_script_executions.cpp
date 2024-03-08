@@ -1907,13 +1907,13 @@ public:
               AND execution_id = $execution_id
               AND (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
 
-            SELECT row_id, result_set
+            SELECT database, execution_id, result_set_id, row_id, result_set
             FROM `.metadata/result_sets`
             WHERE database = $database
               AND execution_id = $execution_id
               AND result_set_id = $result_set_id
               AND row_id >= $offset
-            ORDER BY row_id
+            ORDER BY database, execution_id, result_set_id, row_id
             LIMIT $limit;
         )";
 

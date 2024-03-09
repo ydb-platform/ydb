@@ -112,7 +112,8 @@ public:
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const TNodeRegistrationSettings& regSettings,
-        const IEnv& env) const = 0;
+        const IEnv& env,
+        IInitLogger& logger) const = 0;
 };
 
 // ===
@@ -133,7 +134,8 @@ public:
         const TGrpcSslSettings& gs,
         const TVector<TString>& addrs,
         const TDynConfigSettings& settings,
-        const IEnv& env) const = 0;
+        const IEnv& env,
+        IInitLogger& logger) const = 0;
 };
 
 // ===

@@ -881,6 +881,7 @@ struct TAppInitDebugInfo {
 
 class TInitialConfiguratorImpl
     : public IInitialConfigurator
+    , private TInitialConfiguratorDependencies
 {
     ui32 NodeId = 0;
     TBasicKikimrServicesMask ServicesMask;
@@ -898,30 +899,9 @@ class TInitialConfiguratorImpl
 
     TAppInitDebugInfo InitDebug;
 
-    NConfig::IErrorCollector& ErrorCollector;
-    NConfig::IProtoConfigFileProvider& ProtoConfigFileProvider;
-    NConfig::IConfigUpdateTracer& ConfigUpdateTracer;
-    NConfig::IMemLogInitializer& MemLogInit;
-    NConfig::INodeBrokerClient& NodeBrokerClient;
-    NConfig::IDynConfigClient& DynConfigClient;
-    NConfig::IEnv& Env;
-
 public:
-    TInitialConfiguratorImpl(
-        NConfig::IErrorCollector& errorCollector,
-        NConfig::IProtoConfigFileProvider& protoConfigFileProvider,
-        NConfig::IConfigUpdateTracer& configUpdateTracer,
-        NConfig::IMemLogInitializer& memLogInit,
-        NConfig::INodeBrokerClient& nodeBrokerClient,
-        NConfig::IDynConfigClient& dynConfigClient,
-        NConfig::IEnv& env)
-            : ErrorCollector(errorCollector)
-            , ProtoConfigFileProvider(protoConfigFileProvider)
-            , ConfigUpdateTracer(configUpdateTracer)
-            , MemLogInit(memLogInit)
-            , NodeBrokerClient(nodeBrokerClient)
-            , DynConfigClient(dynConfigClient)
-            , Env(env)
+    TInitialConfiguratorImpl(TInitialConfiguratorDependencies deps)
+        : TInitialConfiguratorDependencies(deps)
     {}
 
     void ValidateOptions(const NLastGetopt::TOpts& opts, const NLastGetopt::TOptsParseResult& parseResult) override {

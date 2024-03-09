@@ -473,6 +473,19 @@ public:
     }
 };
 
+class TDefaultInitLogger
+    : public IInitLogger
+{
+public:
+    IOutputStream& Out() const noexcept override {
+        return Cout;
+    }
+
+    IOutputStream& Err() const noexcept override {
+        return Cerr;
+    }
+};
+
 std::unique_ptr<IEnv> MakeDefaultEnv() {
     return std::make_unique<TDefaultEnv>();
 }
@@ -499,6 +512,10 @@ std::unique_ptr<INodeBrokerClient> MakeDefaultNodeBrokerClient() {
 
 std::unique_ptr<IDynConfigClient> MakeDefaultDynConfigClient() {
     return std::make_unique<TDefaultDynConfigClient>();
+}
+
+std::unique_ptr<IInitLogger> MakeDefaultInitLogger() {
+    return std::make_unique<TDefaultInitLogger>();
 }
 
 void CopyNodeLocation(NActorsInterconnect::TNodeLocation* dst, const NYdb::NDiscovery::TNodeLocation& src) {
@@ -754,23 +771,8 @@ NKikimrConfig::TAppConfig GetActualDynConfig(
     return regularConfig;
 }
 
-std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(
-        NConfig::IErrorCollector& errorCollector,
-        NConfig::IProtoConfigFileProvider& protoConfigFileProvider,
-        NConfig::IConfigUpdateTracer& configUpdateTracer,
-        NConfig::IMemLogInitializer& memLogInit,
-        NConfig::INodeBrokerClient& nodeBrokerClient,
-        NConfig::IDynConfigClient& dynConfigClient,
-        NConfig::IEnv& env)
-{
-    return std::make_unique<TInitialConfiguratorImpl>(
-        errorCollector,
-        protoConfigFileProvider,
-        configUpdateTracer,
-        memLogInit,
-        nodeBrokerClient,
-        dynConfigClient,
-        env);
+std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(TInitialConfiguratorDependencies deps) {
+    return std::make_unique<TInitialConfiguratorImpl>(deps);
 }
 
 } // namespace NKikimr::NConfig

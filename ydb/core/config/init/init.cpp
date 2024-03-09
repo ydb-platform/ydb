@@ -618,7 +618,7 @@ void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErr
     }
 }
 
-void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConfig::TAppConfig& appConfig, const TSrcLocation location) {
+void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConfig::TAppConfig& appConfig, const NCompat::TSourceLocation location) {
     if (!yamlConfigFile) {
         return;
     }

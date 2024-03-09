@@ -399,7 +399,7 @@ public:
     bool AddItem(NUdf::TUnboxedValue** fields, TUnboxedValueVector& key, TComputationContext& ctx) {
         switch (State) {
             case EBucketState::FullStateInMemory:
-                AddItemToInMemoryState(fields, ctx);
+                AddItemToInMemoryState(fields, key, ctx);
                 return true;
             case EBucketState::AcceptingData:
             case EBucketState::SpillingData:
@@ -433,11 +433,20 @@ private:
     }
 
     // TODO: Maybe pass key here
-    void AddItemToInMemoryState(NUdf::TUnboxedValue** fields, TComputationContext& ctx) {
+    void AddItemToInMemoryState(NUdf::TUnboxedValue** fields, TUnboxedValueVector& key, TComputationContext& ctx) {
         MKQL_ENSURE(State == EBucketState::FullStateInMemory, "Internal logic error");
 
-        Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue *>(ProcessingState->Tongue));
+        for (size_t i = 0; i != KeyWidth; ++i) {
+            //jumping into unsafe world, refusing ownership
+            static_cast<NUdf::TUnboxedValue&>(ProcessingState->Tongue[i]) = std::move(key[i]);
+        }
+        
         const bool isNew = ProcessingState->TasteIt();
+
+        for (size_t i = KeyWidth; i != ValueElementsCount; ++i) {
+            //jumping into unsafe world, refusing ownership
+            static_cast<NUdf::TUnboxedValue&>(ProcessingState->Throat[i - KeyWidth]) = std::move(*fields[KeyWidth + i]);
+        }
         Nodes.ProcessItem(
             ctx,
             isNew ? nullptr : static_cast<NUdf::TUnboxedValue *>(ProcessingState->Tongue),
@@ -578,7 +587,7 @@ private:
                 }
             }
 
-            AddItemToInMemoryState(fields, ctx);
+            // AddItemToInMemoryState(fields, ctx);
             BufferForUsedInputItems.resize(0);
         }
 
@@ -657,7 +666,9 @@ public:
                 }
                 case EOperatingMode::Spilling: {
                     DoCalculateWithSpilling(ctx);
-                    return EFetchResult::Yield;
+                    if (IsAnyBucketBlocked)
+                        return EFetchResult::Yield;
+                    break;
                 }
                 case EOperatingMode::ProcessSpilled: {
                     return ProcessSpilled(ctx, output);
@@ -674,6 +685,33 @@ private:
     EFetchResult AsyncRead() {
         return EFetchResult::Yield;
     }
+
+    bool IsSplitted = false;
+
+    void DoSplitStateIntoBucketsOnce(TComputationContext& ctx) {
+        if (IsSplitted) return;
+
+        for (ui64 i = 0; i < SpilledBucketCount; ++i) {
+            auto spiller = ctx.SpillerFactory->CreateSpiller();
+
+            SpilledBuckets.emplace_back(
+                Nodes
+            );
+            auto& b = SpilledBuckets.back();
+            b.SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, KeyAndStateType, 1 << 20);
+            b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 1 << 20);
+            b.ProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal);
+            b.ValueElementsCount = KeyAndStateType->GetElementsCount();
+            b.ItemCount = UsedInputItemType->GetElementsCount();
+            b.KeyWidth = KeyWidth;
+            b.WideFieldsIndex = WideFieldsIndex;
+        }
+
+        SplitStateIntoBuckets();
+
+        IsSplitted = true;
+    }
+
     EFetchResult DoCalculateInMemory(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
         auto **fields = ctx.WideFields.data() + WideFieldsIndex;
         while (InputDataFetchResult != EFetchResult::Finish) {
@@ -702,6 +740,8 @@ private:
                     break;
             }
         }
+
+
         if (const auto values = static_cast<NUdf::TUnboxedValue*>(InMemoryProcessingState.Extract())) {
             Nodes.FinishItem(ctx, values, output);
             return EFetchResult::One;
@@ -738,10 +778,10 @@ private:
             }
             IsAnyBucketBlocked = false;
         }
-        if (!HasMemoryForProcessing()) {
+        /* if (!HasMemoryForProcessing()) {
             ReduceMemoryUsage();
             return;
-        }
+        }*/ 
 
         auto **fields = ctx.WideFields.data() + WideFieldsIndex;
         for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i) {
@@ -757,7 +797,8 @@ private:
                 auto bucketId = hash % SpilledBucketCount;
                 auto &bucket = SpilledBuckets[bucketId];
 
-                bool wasAdded = bucket.AddItem(fields, BufferForUsedInputItems, ctx);
+                bool wasAdded = bucket.AddItem(fields, BufferForKeyAnsState, ctx);
+                BufferForKeyAnsState.resize(0);
                 if (!wasAdded) {
                     IsAnyBucketBlocked = true;
                     BlockedBuckedId = bucketId;
@@ -775,7 +816,7 @@ private:
     }
 
     void UpdateBuckets(TComputationContext& ctx) {
-        for (size_t i = 0; i < SpilledBucketCount; ++i) {
+        for (size_t i = 0; i < SpilledBuckets.size(); ++i) {
             SpilledBuckets[i].Update(ctx);
         }
     }
@@ -824,21 +865,21 @@ private:
             auto& processingState = bucket.GetProcessingState();
             for (size_t i = 0; i != KeyWidth; ++i) {
                     //jumping into unsafe world, refusing ownership
-                    static_cast<NUdf::TUnboxedValue&>(processingState.Tongue[i]) = std::move(BufferForKeyAnsState[i]);
+                    static_cast<NUdf::TUnboxedValue&>(processingState.Tongue[i]) = std::move(keyAndState[i]);
             }
             processingState.TasteIt();
 
             for (size_t i = KeyWidth; i != KeyAndStateType->GetElementsCount(); ++i) {
-                static_cast<NUdf::TUnboxedValue&>(processingState.Throat[i - KeyWidth]) = std::move(BufferForKeyAnsState[i]);
+                static_cast<NUdf::TUnboxedValue&>(processingState.Throat[i - KeyWidth]) = std::move(keyAndState[i]);
             }
             // BufferForKeyAnsState.resize(0);
 
             // TODO: Maybe need?
             
-            for (size_t i = 0; i != KeyAndStateType->GetElementsCount(); ++i) {
+            /*for (size_t i = 0; i != KeyAndStateType->GetElementsCount(); ++i) {
                 //releasing values stored in unsafe TUnboxedValue buffer
                 keyAndState[i].UnRef();
-            }
+            }*/
             
         }
 
@@ -883,7 +924,7 @@ private:
 
     bool IsSwitchToSpillingModeCondition() const {
         //TODO implement me
-        return true;// !HasMemoryForProcessing();
+        return true; // true;// !HasMemoryForProcessing();
     }
 
 private:

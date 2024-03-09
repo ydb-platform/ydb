@@ -15,8 +15,18 @@
 #include <util/datetime/base.h>
 
 #include <memory>
+#include <source_location>
 
 namespace NKikimr::NConfig {
+
+struct TCallContext {
+    const char* File;
+    ui32 Line;
+
+    static TCallContext From(const std::source_location& location) {
+        return TCallContext{location.file_name(), static_cast<ui32>(location.line())};
+    }
+};
 
 class IEnv {
 public:
@@ -47,7 +57,13 @@ public:
 class IConfigUpdateTracer {
 public:
     virtual ~IConfigUpdateTracer() {}
-    virtual void Add(ui32 kind, TConfigItemInfo::TUpdate) = 0;
+    void AddUpdate(ui32 kind, TConfigItemInfo::EUpdateKind update, const std::source_location location = std::source_location::current()) {
+        return this->Add(kind, TConfigItemInfo::TUpdate{location.file_name(), location.line(), update});
+    }
+    void AddUpdate(ui32 kind, TConfigItemInfo::EUpdateKind update, TCallContext ctx) {
+        return this->Add(kind, TConfigItemInfo::TUpdate{ctx.File, ctx.Line, update});
+    }
+    virtual void Add(ui32 kind, TConfigItemInfo::TUpdate update) = 0;
     virtual THashMap<ui32, TConfigItemInfo> Dump() const = 0;
 };
 

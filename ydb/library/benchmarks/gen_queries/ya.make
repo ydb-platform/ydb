@@ -10,6 +10,9 @@ RESOURCE(
     pragmas_scalar.yql pragmas_scalar.yql
     pragmas_scalar_pg.yql pragmas_scalar_pg.yql
     pragmas_block.yql pragmas_block.yql
+    pragmas_ytsaurus.yql pragmas_ytsaurus.yql
+    pragmas_ytsaurus_pg.yql pragmas_ytsaurus_pg.yql
+    tables_ytsaurus_pg.jinja tables_ytsaurus_pg.jinja
     tables.jinja tables_bindings.jinja
     tables_postgres.jinja tables_postgres.jinja
     header.sql.jinja header.sql.jinja

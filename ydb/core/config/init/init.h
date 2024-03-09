@@ -14,14 +14,8 @@
 #include <util/generic/string.h>
 #include <util/datetime/base.h>
 
-#include <memory>
-#if __has_include(<source_location>)
-#include <source_location>
+#include <contrib/libs/cxxsupp/libcxx/include/source_location>
 using source_location = std::source_location;
-#else
-#include <experimental/source_location> // Y_IGNORE
-using source_location = std::experimental::source_location;
-#endif
 
 namespace NKikimr::NConfig {
 

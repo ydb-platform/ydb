@@ -14,8 +14,30 @@
 #include <util/generic/string.h>
 #include <util/datetime/base.h>
 
-#include <contrib/libs/cxxsupp/libcxx/include/source_location>
-using source_location = std::source_location;
+#if __has_builtin(__builtin_source_location)
+#include <source_location>
+using TSrcLocation = std::source_location;
+#else
+namespace NComapt {
+
+struct TSrcLocation {
+    static constexpr TSrcLocation current() noexcept {
+        return {};
+    }
+
+    constexpr const char* file_name() const noexcept {
+        return "";
+    }
+
+    constexpr uint_least32_t line() const noexcept {
+        return 0;
+    }
+};
+
+} // namespace NCompat
+
+using TSrcLocation = NCompat::TSrcLocation;
+#endif
 
 namespace NKikimr::NConfig {
 
@@ -23,7 +45,7 @@ struct TCallContext {
     const char* File;
     ui32 Line;
 
-    static TCallContext From(const source_location& location) {
+    static TCallContext From(const TSrcLocation& location) {
         return TCallContext{location.file_name(), static_cast<ui32>(location.line())};
     }
 };
@@ -57,7 +79,7 @@ public:
 class IConfigUpdateTracer {
 public:
     virtual ~IConfigUpdateTracer() {}
-    void AddUpdate(ui32 kind, TConfigItemInfo::EUpdateKind update, const source_location location = source_location::current()) {
+    void AddUpdate(ui32 kind, TConfigItemInfo::EUpdateKind update, const TSrcLocation location = TSrcLocation::current()) {
         return this->Add(kind, TConfigItemInfo::TUpdate{location.file_name(), location.line(), update});
     }
     void AddUpdate(ui32 kind, TConfigItemInfo::EUpdateKind update, TCallContext ctx) {

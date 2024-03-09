@@ -15,7 +15,7 @@ namespace NKikimr::NCompat {
 // as far as we use it only for debugging purposes
 // it is totally okay to lose this information
 struct TSourceLocation {
-    static constexpr TSrcLocation current() noexcept {
+    static constexpr TSourceLocation current() noexcept {
         return {};
     }
 

@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/event_filter.h>
 #include <ydb/core/cms/console/config_item_info.h>
+#include <ydb/core/config/init/source_location.h>
 #include <ydb/core/driver_lib/run/config.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -14,9 +15,16 @@
 #include <util/generic/string.h>
 #include <util/datetime/base.h>
 
-#include <memory>
-
 namespace NKikimr::NConfig {
+
+struct TCallContext {
+    const char* File;
+    ui32 Line;
+
+    static TCallContext From(const NCompat::TSourceLocation& location) {
+        return TCallContext{location.file_name(), static_cast<ui32>(location.line())};
+    }
+};
 
 class IEnv {
 public:
@@ -47,7 +55,13 @@ public:
 class IConfigUpdateTracer {
 public:
     virtual ~IConfigUpdateTracer() {}
-    virtual void Add(ui32 kind, TConfigItemInfo::TUpdate) = 0;
+    void AddUpdate(ui32 kind, TConfigItemInfo::EUpdateKind update, const NCompat::TSourceLocation location = NCompat::TSourceLocation::current()) {
+        return this->Add(kind, TConfigItemInfo::TUpdate{location.file_name(), location.line(), update});
+    }
+    void AddUpdate(ui32 kind, TConfigItemInfo::EUpdateKind update, TCallContext ctx) {
+        return this->Add(kind, TConfigItemInfo::TUpdate{ctx.File, ctx.Line, update});
+    }
+    virtual void Add(ui32 kind, TConfigItemInfo::TUpdate update) = 0;
     virtual THashMap<ui32, TConfigItemInfo> Dump() const = 0;
 };
 

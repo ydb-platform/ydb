@@ -618,12 +618,12 @@ void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErr
     }
 }
 
-void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConfig::TAppConfig& appConfig, TCallContext callCtx) {
+void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConfig::TAppConfig& appConfig, const NCompat::TSourceLocation location) {
     if (!yamlConfigFile) {
         return;
     }
 
-    IConfigUpdateTracer& ConfigUpdateTracer = refs.Tracer;
+    IConfigUpdateTracer& configUpdateTracer = refs.Tracer;
     IErrorCollector& errorCollector = refs.ErrorCollector;
     IProtoConfigFileProvider& protoConfigFileProvider = refs.ProtoConfigFileProvider;
 
@@ -654,7 +654,8 @@ void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConf
 
         if (reflection->HasField(parsedConfig, fieldDescriptor)) {
             reflection->SwapFields(&appConfig, &parsedConfig, {fieldDescriptor});
-            TRACE_CONFIG_CHANGE(callCtx, fieldIdx, ReplaceConfigWithConsoleProto);
+
+            configUpdateTracer.AddUpdate(fieldIdx, TConfigItemInfo::EUpdateKind::ReplaceConfigWithConsoleProto, location);
         }
     }
 }
@@ -737,9 +738,9 @@ NKikimrConfig::TAppConfig GetActualDynConfig(
     if (yamlConfig.GetYamlConfigEnabled()) {
         for (ui32 kind = NKikimrConsole::TConfigItem::EKind_MIN; kind <= NKikimrConsole::TConfigItem::EKind_MAX; kind = NextValidKind(kind)) {
             if (HasCorrespondingManagedKind(kind, yamlConfig)) {
-                TRACE_CONFIG_CHANGE_INPLACE(kind, ReplaceConfigWithConsoleProto);
+                ConfigUpdateTracer.AddUpdate(kind, TConfigItemInfo::EUpdateKind::ReplaceConfigWithConsoleProto);
             } else {
-                TRACE_CONFIG_CHANGE_INPLACE(kind, ReplaceConfigWithConsoleYaml);
+                ConfigUpdateTracer.AddUpdate(kind, TConfigItemInfo::EUpdateKind::ReplaceConfigWithConsoleYaml);
             }
         }
 
@@ -747,7 +748,7 @@ NKikimrConfig::TAppConfig GetActualDynConfig(
     }
 
     for (ui32 kind = NKikimrConsole::TConfigItem::EKind_MIN; kind <= NKikimrConsole::TConfigItem::EKind_MAX; kind = NextValidKind(kind)) {
-        TRACE_CONFIG_CHANGE_INPLACE(kind, ReplaceConfigWithConsoleProto);
+        ConfigUpdateTracer.AddUpdate(kind, TConfigItemInfo::EUpdateKind::ReplaceConfigWithConsoleProto);
     }
 
     return regularConfig;

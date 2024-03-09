@@ -21,6 +21,8 @@ def main():
         Profile("yql", "dqrun_block", "pragmas_block.yql", "tables_bindings.jinja", True),
         Profile("pg", "dqrun", "pragmas_scalar_pg.yql", "tables_bindings.jinja", True),
         Profile("pg", "postgres", None, "tables_postgres.jinja", False),
+        Profile("yql", "ytsaurus", "pragmas_ytsaurus.yql", "tables_postgres.jinja", False),
+        Profile("pg", "ytsaurus", "pragmas_ytsaurus_pg.yql", "tables_ytsaurus_pg.jinja", False),
     ]
     parser = argparse.ArgumentParser()
     parser.add_argument('--syntax', default='yql', help='syntax "pg" or "yql"')
@@ -29,6 +31,8 @@ def main():
     parser.add_argument('--output', default='q', help='output directory')
     parser.add_argument('--dataset-size', default='1', help='dataset size (1, 10, 100, ...)')
     parser.add_argument('--pragma', default=[], action='append', help='custom pragmas')
+    parser.add_argument('--table-path-prefix', default=None, help='table path prefix')
+    parser.add_argument('--cluster-name', default='hahn', help='YtSaurus cluster name')
     args = parser.parse_args()
     profile = None
     for p in profiles:
@@ -41,6 +45,13 @@ def main():
         for p in profiles:
             print(f"  {p.syntax}/{p.profile}")
         return
+
+    table_path_prefix = args.table_path_prefix
+    if table_path_prefix is None:
+        pg = ''
+        if args.syntax == 'pg':
+            pg = '/pg'
+        table_path_prefix = f'home/yql_perf/tpc{args.variant}{args.dataset_size}s{pg}'
 
     pragma_keyword = "pragma"
     custom_pragmas = ""
@@ -55,7 +66,7 @@ def main():
         os.makedirs(path, exist_ok=True)
     b = Builder()
     b.add_link("bindings.json", f"bindings_{args.variant}_{args.syntax}.json")
-    b.add_vars({"data": f"{args.variant}/{args.dataset_size}"})
+    b.add_vars({"data": f"{args.variant}/{args.dataset_size}", "cluster_name": args.cluster_name, "table_path_prefix": table_path_prefix})
     b.add("custom_pragmas", custom_pragmas)
     if p.pragmas:
         b.add_link("pragmas.sql", p.pragmas)

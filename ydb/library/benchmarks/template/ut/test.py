@@ -73,6 +73,14 @@ Content
         expected = "VAR"
         self.assertEqual(expected, text)
 
+    def test_expose_var_from_var(self):
+        b = Builder()
+        b.add_vars({"var": "VAR"})
+        b.add("name", '{% set abc = var + "ABC" %}{{abc}}')
+        text = b.build("name", True)
+        expected = "VARABC"
+        self.assertEqual(expected, text)
+
     def test_result_formatter(self):
         d = {
             'data': [{

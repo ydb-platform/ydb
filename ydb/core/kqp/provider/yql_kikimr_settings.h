@@ -161,6 +161,8 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     ui64 ExtractPredicateRangesLimit = 0;
     bool EnablePerStatementQueryExecution = false;
     bool EnableCreateTableAs = false;
+    ui64 IdxLookupJoinsPrefixPointLimit = 1;
+    bool OldLookupJoinBehaviour = true;
 };
 
 }

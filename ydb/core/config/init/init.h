@@ -15,7 +15,13 @@
 #include <util/datetime/base.h>
 
 #include <memory>
+#if __has_include(<source_location>)
 #include <source_location>
+using source_location = std::source_location;
+#else
+#include <experimental/source_location> // Y_IGNORE
+using source_location = std::experimental::source_location;
+#endif
 
 namespace NKikimr::NConfig {
 
@@ -23,7 +29,7 @@ struct TCallContext {
     const char* File;
     ui32 Line;
 
-    static TCallContext From(const std::source_location& location) {
+    static TCallContext From(const source_location& location) {
         return TCallContext{location.file_name(), static_cast<ui32>(location.line())};
     }
 };
@@ -57,7 +63,7 @@ public:
 class IConfigUpdateTracer {
 public:
     virtual ~IConfigUpdateTracer() {}
-    void AddUpdate(ui32 kind, TConfigItemInfo::EUpdateKind update, const std::source_location location = std::source_location::current()) {
+    void AddUpdate(ui32 kind, TConfigItemInfo::EUpdateKind update, const source_location location = source_location::current()) {
         return this->Add(kind, TConfigItemInfo::TUpdate{location.file_name(), location.line(), update});
     }
     void AddUpdate(ui32 kind, TConfigItemInfo::EUpdateKind update, TCallContext ctx) {

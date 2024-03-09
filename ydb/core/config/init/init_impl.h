@@ -38,7 +38,13 @@
 
 #include <filesystem>
 #include <variant>
+#if __has_include(<source_location>)
 #include <source_location>
+using source_location = std::source_location;
+#else
+#include <experimental/source_location> // Y_IGNORE
+using source_location = std::experimental::source_location;
+#endif
 
 namespace fs = std::filesystem;
 
@@ -168,7 +174,7 @@ auto MutableConfigPartMerge(
 
 void AddProtoConfigOptions(IProtoConfigFileProvider& out);
 void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErrorCollector& errorCollector, TVector<TString> configFiles, NKikimrConfig::TAppConfig& out);
-void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConfig::TAppConfig& appConfig, const std::source_location location = std::source_location::current());
+void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConfig::TAppConfig& appConfig, const source_location location = source_location::current());
 void CopyNodeLocation(NActorsInterconnect::TNodeLocation* dst, const NYdb::NDiscovery::TNodeLocation& src);
 void CopyNodeLocation(NYdb::NDiscovery::TNodeLocation* dst, const NActorsInterconnect::TNodeLocation& src);
 
@@ -1071,13 +1077,13 @@ public:
     }
 
     template <class TTag>
-    void Option(const char* optname, TTag tag, const std::source_location location = std::source_location::current()) {
+    void Option(const char* optname, TTag tag, const source_location location = source_location::current()) {
         NConfig::TConfigRefs refs{ConfigUpdateTracer, ErrorCollector, ProtoConfigFileProvider};
         MutableConfigPart(refs, optname, tag, BaseConfig, AppConfig, TCallContext::From(location));
     }
 
     template <class TTag, class TContinuation>
-    void Option(const char* optname, TTag tag, TContinuation continuation, const std::source_location location = std::source_location::current()) {
+    void Option(const char* optname, TTag tag, TContinuation continuation, const source_location location = source_location::current()) {
         NConfig::TConfigRefs refs{ConfigUpdateTracer, ErrorCollector, ProtoConfigFileProvider};
         if (auto* res = MutableConfigPart(refs, optname, tag, BaseConfig, AppConfig, TCallContext::From(location))) {
             (this->*continuation)(*res);
@@ -1085,7 +1091,7 @@ public:
     }
 
     template <class TTag>
-    void OptionMerge(const char* optname, TTag tag, const std::source_location location = std::source_location::current()) {
+    void OptionMerge(const char* optname, TTag tag, const source_location location = source_location::current()) {
         NConfig::TConfigRefs refs{ConfigUpdateTracer, ErrorCollector, ProtoConfigFileProvider};
         MutableConfigPartMerge(refs, optname, tag, AppConfig, TCallContext::From(location));
     }

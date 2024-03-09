@@ -1874,6 +1874,20 @@ TAutoPtr<IGraphTransformer> CreateKiSinkTypeAnnotationTransformer(TIntrusivePtr<
 }
 
 const TTypeAnnotationNode* GetReadTableRowType(TExprContext& ctx, const TKikimrTablesData& tablesData,
+    const TString& cluster, const TString& table, TPositionHandle pos, bool withSystemColumns)
+{
+    auto tableDesc = tablesData.EnsureTableExists(cluster, table, pos, ctx);
+    if (!tableDesc) {
+        return nullptr;
+    }
+    TVector<TCoAtom> columns;
+    for (auto&& [column, _] : tableDesc->Metadata->Columns) {
+        columns.push_back(Build<TCoAtom>(ctx, pos).Value(column).Done());
+    }
+    return GetReadTableRowType(ctx, tablesData, cluster, table, Build<TCoAtomList>(ctx, pos).Add(columns).Done(), withSystemColumns);
+}
+
+const TTypeAnnotationNode* GetReadTableRowType(TExprContext& ctx, const TKikimrTablesData& tablesData,
     const TString& cluster, const TString& table, TCoAtomList select, bool withSystemColumns)
 {
     auto tableDesc = tablesData.EnsureTableExists(cluster, table, select.Pos(), ctx);

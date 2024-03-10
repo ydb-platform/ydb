@@ -169,6 +169,8 @@ The rest of the sections and settings in the configuration file can remain uncha
 
 The minimum number of servers in a {{ ydb-short-name }} cluster is eight servers for the `block-4-2` redundancy model and nine servers for the `mirror-3-dc` redundancy model.
 
+In `mirror-3-dc` servers should be distributed across three availability zones or datacenters as evenly as possible.
+
 {% endnote %}
 
 The [repository](https://github.com/ydb-platform/ydb-ansible-examples) contains two ready sets of templates for deploying a {{ ydb-short-name }} cluster of eight (redundancy model `block-4-2`) and nine servers (`mirror-3-dc`). Either of the provided options can be scaled to any required number of servers, taking into account a number of technical requirements.

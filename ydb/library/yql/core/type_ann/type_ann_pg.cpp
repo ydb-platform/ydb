@@ -1612,6 +1612,7 @@ bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>&
                             if (x.Alias.empty() || node->Head().Content() != x.Alias) {
                                 continue;
                             }
+                        }
 
                         if (!x.Alias.empty()) {
                             if (node->Tail().Content() == x.Alias) {
@@ -1634,25 +1635,20 @@ bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>&
                                 return false;
                             }
 
-                            auto pos = x.Type->FindItemI(node->Tail().Content());
-                            if (pos) {
-                                foundAlias = x.Alias;
-                                ++matches;
-                                if (!scanColumnsOnly && matches > 1) {
-                                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()),
-                                        TStringBuilder() << "Column reference is ambiguous: " << node->Tail().Content()));
-                                    isError = true;
-                                    return false;
-                                }
-
-                                if (x.Priority == TInput::External) {
-                                    x.UsedExternalColumns.insert(TString(x.Type->GetItems()[*pos]->GetName()));
-                                }
+                            if (x.Priority == TInput::External) {
+                                x.UsedExternalColumns.insert(TString(x.Type->GetItems()[*pos]->GetName()));
                             }
                         }
+                    }
 
-                        if (matches) {
-                            break;
+                    if (matches) {
+                        break;
+                    }
+
+                    if (!matches && priority == TInput::External) {
+                        if (scanColumnsOnly) {
+                            // projection columns aren't available yet
+                            return true;
                         }
 
                         TInput* tableRefInput = nullptr;
@@ -1689,16 +1685,15 @@ bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>&
 
                         return true;
                     }
+                }
 
-                    if (foundAlias && qualifiedRefs) {
-                        (*qualifiedRefs)[foundAlias].insert(TString(node->Tail().Content()));
-                    } else {
-                        refs.insert(TString(node->Tail().Content()));
-                    }
+                if (foundAlias && qualifiedRefs) {
+                    (*qualifiedRefs)[foundAlias].insert(TString(node->Tail().Content()));
+                } else {
+                    refs.insert(TString(node->Tail().Content()));
                 }
             }
         }
-
         return true;
     });
 

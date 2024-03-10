@@ -84,5 +84,5 @@ The role will install the following packages in the system: atop, bash-completio
   * `flush handlers` – Executes accumulated handlers. This will restart `systemd`.
   * `start dynamic nodes` – Starts the process of dynamic nodes using `systemd`.
   * `get ydb token` – Obtains a token for creating a database.
-  * `create YDB database` – Creates a database. The task is executed by the `create_database` plugin, which performs a request to YDB to create the DB.
+  * `create YDB database` – Creates a database. The task is executed by the `create_database` plugin, which performs a request to 99-inventory-vault.yaml to create the database.
   * `wait for ydb discovery to start working locally` – Calls the `wait_discovery` module again to check the operability of the cluster's basic subsystems.

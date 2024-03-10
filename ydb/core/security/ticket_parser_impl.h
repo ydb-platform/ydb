@@ -61,7 +61,7 @@ private:
 
         TString Subject;
         bool Required = false;
-        TTypeCase SubjectType;
+        TTypeCase SubjectType = TTypeCase::TYPE_NOT_SET;
         TEvTicketParser::TError Error;
         TStackVec<std::pair<TString, TString>> Attributes;
 
@@ -117,6 +117,7 @@ protected:
         NKikimr::TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature Signature;
         THashMap<TString, TPermissionRecord> Permissions;
         TString Subject; // login
+        typename TPermissionRecord::TTypeCase SubjectType = TPermissionRecord::TTypeCase::TYPE_NOT_SET;
         TEvTicketParser::TError Error;
         TDeque<THolder<TEventHandle<TEvTicketParser::TEvAuthorizeTicket>>> AuthorizeRequests;
         ui64 ResponsesLeft = 0;
@@ -473,27 +474,22 @@ private:
 
     template <typename TTokenRecord>
     void AccessServiceAuthenticate(const TString& key, TTokenRecord& record) const {
-        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthentication");
-
         auto request = CreateAccessServiceRequest<TEvAccessServiceAuthenticateRequest>(key, record);
-
-        record.ResponsesLeft++;
         Send(AccessServiceValidatorV1, request.Release());
     }
 
     template <typename TTokenRecord>
     void NebiusAccessServiceAuthenticate(const TString& key, TTokenRecord& record) const {
-        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthentication");
-
         auto request = MakeHolder<TEvNebiusAccessServiceAuthenticateRequest>(key);
         request->Request.set_iam_token(record.Ticket);
-
-        record.ResponsesLeft++;
         Send(NebiusAccessServiceValidator, request.Release());
     }
 
     template <typename TTokenRecord>
     void RequestAccessServiceAuthentication(const TString& key, TTokenRecord& record) const {
+        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthentication");
+        record.ResponsesLeft++;
+
         if (NebiusAccessServiceValidator) {
             NebiusAccessServiceAuthenticate(key, record);
         } else {
@@ -501,32 +497,65 @@ private:
         }
     }
 
-
-    template <typename TSubject>
-    TString GetSubjectName(const TSubject& subject) {
-        switch (subject.type_case()) {
+    template <typename TSubject> // Yandex IAM v1/v2
+    bool GetSubjectId(const TSubject& subjectProto, TString& subjectId) {
+        switch (subjectProto.type_case()) {
         case TSubject::TypeCase::kUserAccount:
-            return subject.user_account().id() + "@" + AccessServiceDomain;
+            subjectId = subjectProto.user_account().id();
+            return true;
         case TSubject::TypeCase::kServiceAccount:
-            return subject.service_account().id() + "@" + AccessServiceDomain;
+            subjectId = subjectProto.service_account().id();
+            return true;
         case TSubject::TypeCase::kAnonymousAccount:
-            return "anonymous" "@" + AccessServiceDomain;
+            subjectId = "anonymous";
+            return true;
         default:
-            return "Unknown subject type";
+            return false;
         }
     }
 
-    template <>
-    TString GetSubjectName<nebius::iam::v1::Account>(const nebius::iam::v1::Account& account) {
-        using Subject = nebius::iam::v1::Account;
-        switch (account.type_case()) {
-        case Subject::TypeCase::kUserAccount:
-            return account.user_account().id() + "@" + AccessServiceDomain;
-        case Subject::TypeCase::kServiceAccount:
-            return account.service_account().id() + "@" + AccessServiceDomain;
+    bool GetSubjectId(const nebius::iam::v1::Account& accountProto, TString& subjectId) {
+        using Account = nebius::iam::v1::Account;
+        switch (accountProto.type_case()) {
+        case Account::TypeCase::kUserAccount:
+            subjectId = accountProto.user_account().id();
+            return true;
+        case Account::TypeCase::kServiceAccount:
+            subjectId = accountProto.service_account().id();
+            return true;
         default:
-            return "Unknown subject type";
+            return false;
         }
+    }
+
+    template <typename TProto>
+    bool ApplySubjectName(const TProto& subjectProto, TString& subject, TString& error) {
+        subject.clear();
+        if (!GetSubjectId(subjectProto, subject)) {
+            error = "Unknown subject type";
+            return false;
+        }
+
+        if (subject.empty()) {
+            error = "Empty subject id";
+            return false;
+        }
+
+        subject += '@';
+        subject += AccessServiceDomain;
+        return true;
+    }
+
+    bool ApplySubjectName(const yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse& response, TString& subject, TString& error) {
+        return ApplySubjectName(response.subject(), subject, error);
+    }
+
+    bool ApplySubjectName(const yandex::cloud::priv::accessservice::v2::BulkAuthorizeResponse& response, TString& subject, TString& error) {
+        return ApplySubjectName(response.subject(), subject, error);
+    }
+
+    bool ApplySubjectName(const nebius::iam::v1::AuthenticateResponse& response, TString& subject, TString& error) {
+        return ApplySubjectName(response.account(), subject, error);
     }
 
     template <typename TSubjectType>
@@ -544,6 +573,11 @@ private:
     }
 
     template <>
+    typename TPermissionRecord::TTypeCase ConvertSubjectType<yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse>(const yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse& response) {
+        return ConvertSubjectType(response.subject().type_case());
+    }
+
+    template <>
     typename TPermissionRecord::TTypeCase ConvertSubjectType<nebius::iam::v1::Account::TypeCase>(const nebius::iam::v1::Account::TypeCase& type) {
         using Account = nebius::iam::v1::Account;
         switch (type) {
@@ -554,6 +588,11 @@ private:
         default:
             return TPermissionRecord::TTypeCase::TYPE_NOT_SET;
         }
+    }
+
+    template <>
+    typename TPermissionRecord::TTypeCase ConvertSubjectType<nebius::iam::v1::AuthenticateResponse>(const nebius::iam::v1::AuthenticateResponse& response) {
+        return ConvertSubjectType(response.account().type_case());
     }
 
     template <typename TTokenRecord>
@@ -776,9 +815,59 @@ private:
         record.AuthorizeRequests.emplace_back(ev.Release());
     }
 
-    void Handle(NNebiusCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev) {
-        NNebiusCloud::TEvAccessService::TEvAuthenticateResponse* response = ev->Get();
-        TEvNebiusAccessServiceAuthenticateRequest* request = response->Request->Get<TEvNebiusAccessServiceAuthenticateRequest>();
+    static auto GetTokenType(TEvAccessServiceAuthenticateRequest* request) {
+        return request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
+    }
+
+    static auto GetTokenType(TEvAccessServiceAuthorizeRequest* request) {
+        return request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
+    }
+
+    static auto GetTokenType(TEvNebiusAccessServiceAuthenticateRequest*) {
+        return TDerived::ETokenType::AccessService; // the only supported
+    }
+
+    static auto GetTokenType(TEvNebiusAccessServiceAuthorizeRequest*) {
+        return TDerived::ETokenType::AccessService; // the only supported
+    }
+
+    template <typename TTokenRecord>
+    bool ResolveAccountName(TTokenRecord& record, const TString& key) { // Returns true when resolve request is sent
+        switch (record.SubjectType) {
+        case TPermissionRecord::TTypeCase::USER_ACCOUNT_TYPE:
+            if (UserAccountService) {
+                BLOG_TRACE("Ticket " << record.GetMaskedTicket()
+                            << " asking for UserAccount(" << record.Subject << ")");
+                THolder<TEvAccessServiceGetUserAccountRequest> request = MakeHolder<TEvAccessServiceGetUserAccountRequest>(key);
+                request->Token = record.Ticket;
+                request->Request.set_user_account_id(TString(TStringBuf(record.Subject).NextTok('@')));
+                Send(UserAccountService, request.Release());
+                record.ResponsesLeft++;
+                return true;
+            }
+            break;
+        case TPermissionRecord::TTypeCase::SERVICE_ACCOUNT_TYPE:
+            if (ServiceAccountService) {
+                BLOG_TRACE("Ticket " << record.GetMaskedTicket()
+                            << " asking for ServiceAccount(" << record.Subject << ")");
+                THolder<TEvAccessServiceGetServiceAccountRequest> request = MakeHolder<TEvAccessServiceGetServiceAccountRequest>(key);
+                request->Token = record.Ticket;
+                request->Request.set_service_account_id(TString(TStringBuf(record.Subject).NextTok('@')));
+                Send(ServiceAccountService, request.Release());
+                record.ResponsesLeft++;
+                return true;
+            }
+            break;
+        default:
+            break;
+        }
+        return false;
+    }
+
+    template <typename TEvRequest, typename TEvResponse>
+    void HandleIamAuthenticateResponse(typename TEvResponse::TPtr& ev) {
+        TEvResponse* response = ev->Get();
+        TEvRequest* request = response->Request->template Get<TEvRequest>();
         auto& userTokens = GetDerived()->GetUserTokens();
         auto it = userTokens.find(request->Key);
         if (it == userTokens.end()) {
@@ -789,24 +878,20 @@ private:
             auto& record = it->second;
             record.ResponsesLeft--;
             if (response->Status.Ok()) {
-                const auto& account = response->Response.account();
-                switch (account.type_case()) {
-                case nebius::iam::v1::Account::TypeCase::kUserAccount:
-                case nebius::iam::v1::Account::TypeCase::kServiceAccount:
-                    record.Subject = GetSubjectName(account);
-                    break;
-                default:
-                    record.Subject.clear();
-                    SetError(key, record, {"Unknown subject type", false});
-                    break;
-                }
-                record.TokenType = TDerived::ETokenType::AccessService; // the only supported
-                if (!record.Subject.empty()) {
+                record.TokenType = GetTokenType(request);
+                TString errorMessage;
+                if (ApplySubjectName(response->Response, record.Subject, errorMessage)) {
+                    record.SubjectType = ConvertSubjectType(response->Response);
+                    if (ResolveAccountName(record, key)) {
+                        return;
+                    }
                     SetToken(key, record, new NACLib::TUserToken({
                         .OriginalUserToken = record.Ticket,
                         .UserSID = record.Subject,
                         .AuthType = record.GetAuthType()
                     }));
+                } else {
+                    SetError(key, record, {errorMessage, false});
                 }
             } else {
                 if (record.ResponsesLeft == 0 && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::ApiKey)) {
@@ -820,76 +905,12 @@ private:
         }
     }
 
+    void Handle(NNebiusCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev) {
+        HandleIamAuthenticateResponse<TEvNebiusAccessServiceAuthenticateRequest, NNebiusCloud::TEvAccessService::TEvAuthenticateResponse>(ev);
+    }
+
     void Handle(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev) {
-        NCloud::TEvAccessService::TEvAuthenticateResponse* response = ev->Get();
-        TEvAccessServiceAuthenticateRequest* request = response->Request->Get<TEvAccessServiceAuthenticateRequest>();
-        auto& userTokens = GetDerived()->GetUserTokens();
-        auto it = userTokens.find(request->Key);
-        if (it == userTokens.end()) {
-            // wtf? it should be there
-            BLOG_ERROR("Ticket " << MaskTicket(request->Request.iam_token()) << " has expired during build");
-        } else {
-            const auto& key = it->first;
-            auto& record = it->second;
-            record.ResponsesLeft--;
-            if (response->Status.Ok()) {
-                switch (response->Response.subject().type_case()) {
-                case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kUserAccount:
-                case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kServiceAccount:
-                case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kAnonymousAccount:
-                    record.Subject = GetSubjectName(response->Response.subject());
-                    break;
-                default:
-                    record.Subject.clear();
-                    SetError(key, record, {"Unknown subject type", false});
-                    break;
-                }
-                record.TokenType = request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
-                if (!record.Subject.empty()) {
-                    switch (response->Response.subject().type_case()) {
-                    case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kUserAccount:
-                        if (UserAccountService) {
-                            BLOG_TRACE("Ticket " << record.GetMaskedTicket()
-                                        << " asking for UserAccount(" << record.Subject << ")");
-                            THolder<TEvAccessServiceGetUserAccountRequest> request = MakeHolder<TEvAccessServiceGetUserAccountRequest>(key);
-                            request->Token = record.Ticket;
-                            request->Request.set_user_account_id(TString(TStringBuf(record.Subject).NextTok('@')));
-                            Send(UserAccountService, request.Release());
-                            record.ResponsesLeft++;
-                            return;
-                        }
-                        break;
-                    case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kServiceAccount:
-                        if (ServiceAccountService) {
-                            BLOG_TRACE("Ticket " << record.GetMaskedTicket()
-                                        << " asking for ServiceAccount(" << record.Subject << ")");
-                            THolder<TEvAccessServiceGetServiceAccountRequest> request = MakeHolder<TEvAccessServiceGetServiceAccountRequest>(key);
-                            request->Token = record.Ticket;
-                            request->Request.set_service_account_id(TString(TStringBuf(record.Subject).NextTok('@')));
-                            Send(ServiceAccountService, request.Release());
-                            record.ResponsesLeft++;
-                            return;
-                        }
-                        break;
-                    default:
-                        break;
-                    }
-                    SetToken(key, record, new NACLib::TUserToken({
-                        .OriginalUserToken = record.Ticket,
-                        .UserSID = record.Subject,
-                        .AuthType = record.GetAuthType()
-                    }));
-                }
-            } else {
-                if (record.ResponsesLeft == 0 && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::ApiKey)) {
-                    bool retryable = IsRetryableGrpcError(response->Status);
-                    SetError(key, record, {response->Status.Msg, retryable});
-                }
-            }
-            if (record.ResponsesLeft == 0) {
-                Respond(record);
-            }
-        }
+        HandleIamAuthenticateResponse<TEvAccessServiceAuthenticateRequest, NCloud::TEvAccessService::TEvAuthenticateResponse>(ev);
     }
 
     void Handle(NCloud::TEvUserAccountService::TEvGetUserAccountResponse::TPtr& ev) {
@@ -963,6 +984,17 @@ private:
         SetError(key, record, {.Message = errorMessage, .Retryable = isRetryableError});
     }
 
+    static TString ConcatenateErrorMessages(const std::vector<typename THashMap<TString, TPermissionRecord>::iterator>& requiredPermissions) {
+        TStringBuilder errorMessage;
+        auto it = requiredPermissions.cbegin();
+        errorMessage << (*it)->second.Error.Message;
+        ++it;
+        for (; it != requiredPermissions.cend(); ++it) {
+            errorMessage << ", " << (*it)->second.Error.Message;
+        }
+        return std::move(errorMessage);
+    }
+
     void Handle(NNebiusCloud::TEvAccessService::TEvAuthorizeResponse::TPtr& ev) {
         NNebiusCloud::TEvAccessService::TEvAuthorizeResponse* response = ev->Get();
         TEvNebiusAccessServiceAuthorizeRequest* request = response->Request->Get<TEvNebiusAccessServiceAuthorizeRequest>();
@@ -989,25 +1021,32 @@ private:
                     bool hasRequiredPermissionFailed = false;
                     std::vector<typename THashMap<TString, TPermissionRecord>::iterator> requiredPermissions;
                     THashSet<TString> processedPermissions;
-                    bool internalError = false;
+                    bool processingError = false;
                     bool subjectIsResolved = false;
                     for (const auto& [resultKey, result] : response->Response.results()) {
                         const auto checkIt = request->Request.checks().find(resultKey);
                         if (checkIt == request->Request.checks().end()) {
                             SetAccessServiceBulkAuthorizeError(key, record, TStringBuilder() << "Internal error: unknown result key: " << resultKey, false);
                             BLOG_W("Internal error: unknown result key: " << resultKey << " for ticket " << record.GetMaskedTicket());
-                            internalError = true;
+                            processingError = true;
                             break;
                         }
                         const auto& check = checkIt->second;
 
-                        if (!subjectIsResolved) {
+                        if (!subjectIsResolved && result.authorized()) {
                             const auto& account = result.account();
-                            record.Subject = GetSubjectName(account);
-                            auto subjectType = ConvertSubjectType(account.type_case());
+                            TString errorMessage;
+                            if (!ApplySubjectName(account, record.Subject, errorMessage)) {
+                                SetAccessServiceBulkAuthorizeError(key, record, errorMessage, false);
+                                processingError = true;
+                                break;
+                            }
+                            record.SubjectType = ConvertSubjectType(account.type_case());
                             for (auto& [_, permissionRecord] : record.Permissions) {
-                                permissionRecord.Subject = record.Subject;
-                                permissionRecord.SubjectType = subjectType;
+                                if (permissionRecord.Error.empty()) {
+                                    permissionRecord.Subject = record.Subject;
+                                    permissionRecord.SubjectType = record.SubjectType;
+                                }
                             }
                             subjectIsResolved = true;
                         }
@@ -1038,7 +1077,7 @@ private:
                             BLOG_W("Received response for unknown permission " << permissionName << " for ticket " << record.GetMaskedTicket());
                         }
                     }
-                    if (!internalError) {
+                    if (!processingError) {
                         if (processedPermissions.size() != examinedPermissions.size()) {
                             auto printAbsentPermissions = [&]() -> TString {
                                 TStringBuilder b;
@@ -1065,14 +1104,7 @@ private:
                             }));
                         } else {
                             if (hasRequiredPermissionFailed) {
-                                TStringBuilder errorMessage;
-                                auto it = requiredPermissions.cbegin();
-                                errorMessage << (*it)->second.Error.Message;
-                                ++it;
-                                for (; it != requiredPermissions.cend(); ++it) {
-                                    errorMessage << ", " << (*it)->second.Error.Message;
-                                }
-                                SetError(key, record, {.Message = errorMessage, .Retryable = false});
+                                SetError(key, record, {.Message = ConcatenateErrorMessages(requiredPermissions), .Retryable = false});
                             } else {
                                 SetError(key, record, {.Message = "Access Denied", .Retryable = false});
                             }
@@ -1106,14 +1138,17 @@ private:
                 if (response->Response.has_unauthenticated_error()) {
                     SetAccessServiceBulkAuthorizeError(key, record, response->Response.unauthenticated_error().message(), false);
                 } else {
-                    const auto& subject = response->Response.subject();
-                    const TString subjectName = GetSubjectName(subject);
-                    const auto& subjectType = ConvertSubjectType(subject.type_case());
-                    for (auto& [permissionName, permissionRecord] : examinedPermissions) {
-                        permissionRecord.Subject = subjectName;
-                        permissionRecord.SubjectType = subjectType;
-                        permissionRecord.Error.clear();
+                    TString subjectNameErrorMessage;
+                    if (ApplySubjectName(response->Response, record.Subject, subjectNameErrorMessage)) {
+                        const auto& subject = response->Response.subject();
+                        record.SubjectType = ConvertSubjectType(subject.type_case());
+                        for (auto& [permissionName, permissionRecord] : examinedPermissions) {
+                            permissionRecord.Subject = record.Subject;
+                            permissionRecord.SubjectType = record.SubjectType;
+                            permissionRecord.Error.clear();
+                        }
                     }
+
                     size_t permissionDeniedCount = 0;
                     bool hasRequiredPermissionFailed = false;
                     std::vector<typename THashMap<TString, TPermissionRecord>::iterator> requiredPermissions;
@@ -1125,7 +1160,7 @@ private:
                             permissionDeniedCount++;
                             auto& permissionDeniedRecord = permissionDeniedIt->second;
                             permissionDeniedRecord.Subject.clear();
-                            BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " permission " << result.permission() << " access denied for subject \"" << subjectName << "\"");
+                            BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " permission " << result.permission() << " access denied for subject \"" << record.Subject << "\"");
                             TStringBuilder errorMessage;
                             if (permissionDeniedRecord.IsRequired()) {
                                 hasRequiredPermissionFailed = true;
@@ -1143,49 +1178,17 @@ private:
                             BLOG_W("Received response for unknown permission " << result.permission() << " for ticket " << record.GetMaskedTicket());
                         }
                     }
-                    if (permissionDeniedCount < examinedPermissions.size() && !hasRequiredPermissionFailed) {
+                    if (permissionDeniedCount < examinedPermissions.size() && !hasRequiredPermissionFailed && subjectNameErrorMessage.empty()) {
                         record.TokenType = request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
-                        switch (subjectType) {
-                        case TPermissionRecord::TTypeCase::USER_ACCOUNT_TYPE:
-                            if (UserAccountService) {
-                                BLOG_TRACE("Ticket " << record.GetMaskedTicket()
-                                            << " asking for UserAccount(" << subjectName << ")");
-                                THolder<TEvAccessServiceGetUserAccountRequest> request = MakeHolder<TEvAccessServiceGetUserAccountRequest>(key);
-                                request->Token = record.Ticket;
-                                request->Request.set_user_account_id(subject.user_account().id());
-                                record.ResponsesLeft++;
-                                Send(UserAccountService, request.Release());
-                                return;
-                            }
-                            break;
-                        case TPermissionRecord::TTypeCase::SERVICE_ACCOUNT_TYPE:
-                            if (ServiceAccountService) {
-                                BLOG_TRACE("Ticket " << record.GetMaskedTicket()
-                                            << " asking for ServiceAccount(" << subjectName << ")");
-                                THolder<TEvAccessServiceGetServiceAccountRequest> request = MakeHolder<TEvAccessServiceGetServiceAccountRequest>(key);
-                                request->Token = record.Ticket;
-                                request->Request.set_service_account_id(subject.service_account().id());
-                                record.ResponsesLeft++;
-                                Send(ServiceAccountService, request.Release());
-                                return;
-                            }
-                            break;
-                        default:
-                            break;
+                        if (ResolveAccountName(record, key)) {
+                            return;
                         }
-                        SetToken(request->Key, record, new NACLib::TUserToken(record.Ticket, subjectName, {}));
+                        SetToken(request->Key, record, new NACLib::TUserToken(record.Ticket, record.Subject, {}));
                     } else {
                         if (hasRequiredPermissionFailed) {
-                            TStringBuilder errorMessage;
-                            auto it = requiredPermissions.cbegin();
-                            errorMessage << (*it)->second.Error.Message;
-                            ++it;
-                            for (; it != requiredPermissions.cend(); ++it) {
-                                errorMessage << ", " << (*it)->second.Error.Message;
-                            }
-                            SetError(key, record, {.Message = errorMessage, .Retryable = false});
+                            SetError(key, record, {.Message = ConcatenateErrorMessages(requiredPermissions), .Retryable = false});
                         } else {
-                            SetError(key, record, {.Message = permissionDeniedError, .Retryable = false});
+                            SetError(key, record, {.Message = permissionDeniedError ? permissionDeniedError : subjectNameErrorMessage, .Retryable = false});
                         }
                     }
                 }
@@ -1209,23 +1212,25 @@ private:
         } else {
             auto& record = itToken->second;
             TString permission = request->Request.permission();
-            TString subject;
-            typename TPermissionRecord::TTypeCase subjectType = TPermissionRecord::TTypeCase::TYPE_NOT_SET;
             auto itPermission = record.Permissions.find(permission);
             if (itPermission != record.Permissions.end()) {
                 if (response->Status.Ok()) {
-                    subject = GetSubjectName(response->Response.subject());
-                    subjectType = ConvertSubjectType(response->Response.subject().type_case());
-                    itPermission->second.Subject = subject;
-                    itPermission->second.SubjectType = subjectType;
-                    itPermission->second.Error.clear();
-                    BLOG_TRACE("Ticket "
-                                << record.GetMaskedTicket()
-                                << " permission "
-                                << permission
-                                << " now has a valid subject \""
-                                << subject
-                                << "\"");
+                    TString errorMessage;
+                    if (ApplySubjectName(response->Response.subject(), itPermission->second.Subject, errorMessage)) {
+                        itPermission->second.SubjectType = ConvertSubjectType(response->Response.subject().type_case());
+                        itPermission->second.Error.clear();
+                        if (record.Subject.empty()) {
+                            record.Subject = itPermission->second.Subject;
+                            record.SubjectType = itPermission->second.SubjectType;
+                        }
+                        BLOG_TRACE("Ticket "
+                                    << record.GetMaskedTicket()
+                                    << " permission "
+                                    << permission
+                                    << " now has a valid subject \""
+                                    << record.Subject
+                                    << "\"");
+                    }
                 } else {
                     bool retryable = IsRetryableGrpcError(response->Status);
                     itPermission->second.Error = {response->Status.Msg, retryable};
@@ -1261,10 +1266,6 @@ private:
                 for (const auto& [permission, rec] : record.Permissions) {
                     if (rec.IsPermissionOk()) {
                         ++permissionsOk;
-                        if (subject.empty()) {
-                            subject = rec.Subject;
-                            subjectType = rec.SubjectType;
-                        }
                     } else if (rec.IsRequired()) {
                         TString id;
                         if (TString folderId = record.GetAttributeValue(permission, "folder_id")) {
@@ -1290,35 +1291,10 @@ private:
                 }
                 if (permissionsOk > 0 && retryableErrors == 0 && !requiredPermissionFailed) {
                     record.TokenType = request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
-                    switch (subjectType) {
-                    case TPermissionRecord::TTypeCase::USER_ACCOUNT_TYPE:
-                        if (UserAccountService) {
-                            BLOG_TRACE("Ticket " << record.GetMaskedTicket()
-                                        << " asking for UserAccount(" << subject << ")");
-                            THolder<TEvAccessServiceGetUserAccountRequest> request = MakeHolder<TEvAccessServiceGetUserAccountRequest>(key);
-                            request->Token = record.Ticket;
-                            request->Request.set_user_account_id(TString(TStringBuf(subject).NextTok('@')));
-                            Send(UserAccountService, request.Release());
-                            record.ResponsesLeft++;
-                            return;
-                        }
-                        break;
-                    case TPermissionRecord::TTypeCase::SERVICE_ACCOUNT_TYPE:
-                        if (ServiceAccountService) {
-                            BLOG_TRACE("Ticket " << record.GetMaskedTicket()
-                                        << " asking for ServiceAccount(" << subject << ")");
-                            THolder<TEvAccessServiceGetServiceAccountRequest> request = MakeHolder<TEvAccessServiceGetServiceAccountRequest>(key);
-                            request->Token = record.Ticket;
-                            request->Request.set_service_account_id(TString(TStringBuf(subject).NextTok('@')));
-                            Send(ServiceAccountService, request.Release());
-                            record.ResponsesLeft++;
-                            return;
-                        }
-                        break;
-                    default:
-                        break;
+                    if (ResolveAccountName(record, key)) {
+                        return;
                     }
-                    SetToken(request->Key, record, new NACLib::TUserToken(record.Ticket, subject, {}));
+                    SetToken(request->Key, record, new NACLib::TUserToken(record.Ticket, record.Subject, {}));
                 } else if (record.ResponsesLeft == 0 && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::ApiKey)) {
                     SetError(request->Key, record, error);
                 }

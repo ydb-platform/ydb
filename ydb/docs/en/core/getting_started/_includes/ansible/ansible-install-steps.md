@@ -3,7 +3,7 @@
   * `run the equivalent of "apt-get clean" as a separate step` – Cleans the apt cache, similarly to the `apt-get clean` command.
   * `run the equivalent of "apt-get update" as a separate step` – Updates the apt cache, akin to the `apt-get update` command.
   * `fix unconfigured packages` – Fixes packages that are not configured using the `dpkg --configure --pending` command.
-  * `set vars_for_distribution_version variables` – Sets variables for a specific distribution version.
+  * `set vars_for_distribution_version variables` – Sets variables for a specific Linux distribution version.
   * `setup apt repositories` – Configures apt repositories from a specified list.
   * `setup apt preferences` – Configures apt preferences (variable contents are specified in `roles/packages/vars/distributions/<distributive name>/<version>/main.yaml`).
   * `setup apt configs`– Configures apt settings.

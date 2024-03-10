@@ -225,7 +225,7 @@ You can test the cluster using the built-in load tests in YDB CLI. To do this, d
 
 Make the downloaded binary file executable – `chmod +x ydb` and execute the connection check command:
 ```shell
-ydb -d /Root/database \
+./ydb -d /Root/database \
 -e grpcs://static-node-1.ydb-cluster.com:2135 \
 --ca-file <path to generated certs>/ca.crt \
 --user root \

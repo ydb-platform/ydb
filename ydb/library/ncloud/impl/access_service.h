@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/library/nebius_cloud/api/access_service.h>
+#include <ydb/library/ncloud/api/access_service.h>
 #include <ydb/library/grpc/actor_client/grpc_service_client.h>
 
 namespace NNebiusCloud {

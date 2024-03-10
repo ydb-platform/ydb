@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/api/client/nebius_private/accessservice/access_service.grpc.pb.h>
+#include <ydb/public/api/client/nc_private/accessservice/access_service.grpc.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

@@ -12,7 +12,7 @@ SRCS(
 PEERDIR(
     ydb/library/actors/core
     ydb/library/grpc/actor_client
-    ydb/library/nebius_cloud/api
+    ydb/library/ncloud/api
     ydb/core/base
 )
 

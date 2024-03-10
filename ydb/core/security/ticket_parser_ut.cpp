@@ -237,19 +237,19 @@ void SetUseAccessService(NKikimrProto::TAuthConfig& authConfig);
 template <>
 void SetUseAccessService<NKikimr::TAccessServiceMock>(NKikimrProto::TAuthConfig& authConfig) {
     authConfig.SetUseAccessService(true);
-    authConfig.SetAccessServiceType("Yandex");
+    authConfig.SetAccessServiceType("Yandex_v2");
 }
 
 template <>
 void SetUseAccessService<TTicketParserAccessServiceMockV2>(NKikimrProto::TAuthConfig& authConfig) {
     authConfig.SetUseAccessService(true);
-    authConfig.SetAccessServiceType("Yandex");
+    authConfig.SetAccessServiceType("Yandex_v2");
 }
 
 template <>
 void SetUseAccessService<NKikimr::TNebiusAccessServiceMock>(NKikimrProto::TAuthConfig& authConfig) {
     authConfig.SetUseAccessService(true);
-    authConfig.SetAccessServiceType("Nebius");
+    authConfig.SetAccessServiceType("Nebius_v1");
 }
 
 template <class TAccessServiceMock>
@@ -1546,7 +1546,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetUseBlackBox(false);
         authConfig.SetUseLoginProvider(false);
         authConfig.SetUseAccessService(true);
-        authConfig.SetAccessServiceType("Nebius");
+        authConfig.SetAccessServiceType("Nebius_v1");
         authConfig.SetUseAccessServiceTLS(false);
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);

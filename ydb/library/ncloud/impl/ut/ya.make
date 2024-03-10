@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/library/nebius_cloud/impl)
+UNITTEST_FOR(ydb/library/ncloud/impl)
 
 FORK_SUBTESTS()
 

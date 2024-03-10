@@ -1,27 +1,30 @@
 #pragma once
-#include <ydb/library/actors/core/log.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <library/cpp/digest/md5/md5.h>
-#include <ydb/library/nebius_cloud/impl/access_service.h>
-#include <ydb/library/ycloud/api/access_service.h>
-#include <ydb/library/ycloud/api/user_account_service.h>
-#include <ydb/library/ycloud/api/service_account_service.h>
-#include <ydb/library/ycloud/impl/user_account_service.h>
-#include <ydb/library/ycloud/impl/service_account_service.h>
-#include <ydb/library/ycloud/impl/access_service.h>
-#include <ydb/library/grpc/actor_client/grpc_service_cache.h>
-#include <ydb/core/base/counters.h>
-#include <ydb/core/base/domain.h>
-#include <ydb/core/mon/mon.h>
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/base/ticket_parser.h>
-#include <ydb/library/security/util.h>
-#include <util/string/vector.h>
-#include <util/generic/queue.h>
 #include "ticket_parser_log.h"
 #include "ldap_auth_provider.h"
+
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
+#include <ydb/core/base/domain.h>
+#include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/mon/mon.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/grpc/actor_client/grpc_service_cache.h>
+#include <ydb/library/ncloud/impl/access_service.h>
+#include <ydb/library/security/util.h>
+#include <ydb/library/ycloud/api/access_service.h>
+#include <ydb/library/ycloud/api/service_account_service.h>
+#include <ydb/library/ycloud/api/user_account_service.h>
+#include <ydb/library/ycloud/impl/access_service.h>
+#include <ydb/library/ycloud/impl/service_account_service.h>
+#include <ydb/library/ycloud/impl/user_account_service.h>
+
+#include <library/cpp/digest/md5/md5.h>
+
+#include <util/generic/queue.h>
 #include <util/stream/file.h>
+#include <util/string/vector.h>
 
 namespace NKikimr {
 
@@ -1529,16 +1532,10 @@ protected:
         for (const TString& sid : record.AdditionalSIDs) {
             token->AddGroupSID(sid);
         }
-        Cerr << "EnrichUserTokenWithBuiltins. Permissions: " << record.Permissions.size() << "\n";
         if (!record.Permissions.empty()) {
             TString subject;
             TVector<TString> groups;
             for (const auto& [permission, rec] : record.Permissions) {
-                Cerr << "Perm " << permission << " Subj " << rec.Subject << " Err \"" << rec.Error.Message << "\"";
-                for (const auto& [k ,v] : rec.Attributes) {
-                    Cerr << " (" << k << ", " << v << ")";
-                }
-                Cerr << "\n";
                 if (rec.IsPermissionOk()) {
                     subject = rec.Subject;
                     AddPermissionSids(groups, record, permission);
@@ -1904,7 +1901,7 @@ protected:
         ServiceDomain = Config.GetServiceDomain();
 
         if (Config.GetUseAccessService()) {
-            if (Config.GetAccessServiceType() == "Yandex") {
+            if (Config.GetAccessServiceType() == "Yandex_v2") {
                 NCloud::TAccessServiceSettings settings;
                 FillAccessServiceSettings(settings);
 
@@ -1925,7 +1922,7 @@ protected:
                 }
 
                 AccessServiceValidatorV2 = Register(NCloud::CreateAccessServiceV2(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
-            } else if (Config.GetAccessServiceType() == "Nebius") {
+            } else if (Config.GetAccessServiceType() == "Nebius_v1") {
                 NNebiusCloud::TAccessServiceSettings settings;
                 FillAccessServiceSettings(settings);
                 NebiusAccessServiceValidator = Register(NNebiusCloud::CreateAccessServiceV1(settings), TMailboxType::HTSwap, AppData()->UserPoolId);

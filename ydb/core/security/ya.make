@@ -36,13 +36,13 @@ PEERDIR(
     library/cpp/openssl/io
     ydb/core/base
     ydb/core/protos
-    ydb/library/nebius_cloud/impl
-    ydb/library/ycloud/api
-    ydb/library/ycloud/impl
     ydb/library/aclib
     ydb/library/aclib/protos
     ydb/library/login
+    ydb/library/ncloud/impl
     ydb/library/security
+    ydb/library/ycloud/api
+    ydb/library/ycloud/impl
 )
 
 END()

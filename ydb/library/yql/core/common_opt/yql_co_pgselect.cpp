@@ -1584,25 +1584,7 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
                             .Seal()
                         .Seal()
                     .Seal()
-                    .Build();/*
-                for (size_t i = 0; i < leftColumns.size(); ++i) {
-                    current = ctx.Builder(pos)
-                        .Callable("OrderedMap")
-                            .Add(0, current)
-                            .Lambda(1)
-                                .Param("row")
-                                .Callable("AddMember")
-                                    .Arg(0, "row")
-                                    .Atom(1, rightColumns[i]->Content())
-                                    .Callable(2, "Member")
-                                        .Arg(0, "row")
-                                        .Atom(1, leftColumns[i]->Content())
-                                    .Seal()
-                                .Seal()
-                            .Seal()
-                        .Seal()
-                        .Build();
-                }*/
+                    .Build();
                 continue;
             }
 

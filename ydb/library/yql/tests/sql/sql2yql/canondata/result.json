@@ -11143,6 +11143,20 @@
             "uri": "https://{canondata_backend}/212715/a2f3e874c958798a09704f914d3bb2e1cc2cedfe/resource.tar.gz#test_sql2yql.test_pg-join_using9_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-join_using_case_insensetive1]": [
+        {
+            "checksum": "ec23c52cda3784e8c114aba6bba21c84",
+            "size": 797,
+            "uri": "https://{canondata_backend}/1946324/b251b495470fc7bbe14d7f6bb8d5683835429b9d/resource.tar.gz#test_sql2yql.test_pg-join_using_case_insensetive1_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[pg-join_using_case_insensetive2]": [
+        {
+            "checksum": "528a856ecd05db8b76a3ba4feea5a2f5",
+            "size": 877,
+            "uri": "https://{canondata_backend}/1946324/b251b495470fc7bbe14d7f6bb8d5683835429b9d/resource.tar.gz#test_sql2yql.test_pg-join_using_case_insensetive2_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-join_using_tables1]": [
         {
             "checksum": "b42972cff178545911e886de0e6d2b2e",

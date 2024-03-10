@@ -1492,7 +1492,7 @@ void ScanSublinks(TExprNode::TPtr root, TNodeSet& sublinks) {
 
 bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>& possibleAliases,
     bool* hasStar, bool& hasColumnRef, THashSet<TString>& refs, THashMap<TString, THashSet<TString>>* qualifiedRefs,
-    TExtContext& ctx, bool scanColumnsOnly, bool hasEmitPgStar = false, THashSet<TString> usedInUsing = {}) {
+    TExtContext& ctx, bool scanColumnsOnly, bool hasEmitPgStar = false, THashMap<TString, TString> usedInUsing = {}) {
     bool isError = false;
     VisitExpr(root, [&](const TExprNode::TPtr& node) {
         if (node->IsCallable("PgSubLink")) {
@@ -1591,8 +1591,9 @@ bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>&
                 isError = true;
                 return false;
             }
-            if (node->ChildrenSize() == 1 && usedInUsing.contains(node->Tail().Content())) {
-                refs.insert(TString(node->Tail().Content()));
+            auto lcase = to_lower(TString(node->Tail().Content()));
+            if (auto it = usedInUsing.find(lcase); node->ChildrenSize() == 1 && it != usedInUsing.end()) {
+                refs.insert(it->second);
             } else {
                 TString foundAlias;
                 bool matchedAlias = false;
@@ -1830,7 +1831,7 @@ const TItemExprType* RemoveAlias(const TItemExprType* item, TExprContext& ctx) {
 
 void AddColumns(const TInputs& inputs, const bool* hasStar, const THashSet<TString>& refs,
     const THashMap<TString, THashSet<TString>>* qualifiedRefs,
-    TVector<const TItemExprType*>& items, TExprContext& ctx, const THashSet<TString>& usedInUsing = {}) {
+    TVector<const TItemExprType*>& items, TExprContext& ctx, const THashMap<TString, TString>& usedInUsing = {}) {
     THashSet<TString> usedRefs;
     THashSet<TString> usedAliases;
     THashSet<TString> present;
@@ -1848,10 +1849,11 @@ void AddColumns(const TInputs& inputs, const bool* hasStar, const THashSet<TStri
                 for (ui32 i = 0; i < x.Type->GetSize(); ++i) {
                     auto item = x.Type->GetItems()[i];
                     if (!item->GetName().StartsWith("_yql_")) {
-                        if (usedInUsing.contains(item->GetName())) {
-                            if (!present.contains(item->GetName())) {
-                                items.push_back(item);
-                                present.emplace(item->GetName());
+                        TString lcase = to_lower(TString(item->GetName()));
+                        if (auto it = usedInUsing.find(lcase); it != usedInUsing.end()) {
+                            if (!present.contains(lcase)) {
+                                items.push_back(ctx.MakeType<TItemExprType>(it->second, item->GetItemType()));
+                                present.emplace(lcase);
                             }
                             continue;
                         }
@@ -1871,9 +1873,10 @@ void AddColumns(const TInputs& inputs, const bool* hasStar, const THashSet<TStri
                 auto pos = x.Type->FindItemI(ref);
                 if (pos) {
                     auto item = x.Type->GetItems()[*pos];
-                    if (usedInUsing.contains(item->GetName()) && !present.contains(item->GetName())) {
-                        items.push_back(item);
-                        present.emplace(item->GetName());
+                    TString lcase = to_lower(TString(item->GetName()));
+                    if (auto it = usedInUsing.find(lcase); it != usedInUsing.end() && !present.contains(lcase)) {
+                        items.push_back(ctx.MakeType<TItemExprType>(it->second, item->GetItemType()));
+                        present.emplace(lcase);
                     }
                     item = AddAlias(x.Alias, item, ctx);
                     items.push_back(item);
@@ -1903,7 +1906,7 @@ void AddColumns(const TInputs& inputs, const bool* hasStar, const THashSet<TStri
 
 IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, const TExprNode::TPtr& argNode,
     TExprNode::TPtr& newRoot, const TInputs& inputs, TExprNode::TPtr* expandedColumns, TExtContext& ctx,
-    THashSet<TString> usedInUsing={}) {
+    THashMap<TString, TString> usedInUsing={}) {
     bool hasExternalInput = false;
     for (const auto& i : inputs) {
         if (i.Priority == TInput::External) {
@@ -1939,14 +1942,17 @@ IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, con
                     for (const auto& item : x.Type->GetItems()) {
                         if (!item->GetName().StartsWith("_yql_")) {
                             if (!order) {
-                                if (usedFromUsing.contains(item->GetName())) {
+                                auto lcase = to_lower(TString(item->GetName()));
+                                if (usedFromUsing.contains(lcase)) {
                                     continue;
                                 }
-                                if (usedInUsing.contains(item->GetName())) {
-                                    usedFromUsing.emplace(item->GetName());
+                                if (usedInUsing.contains(lcase)) {
+                                    usedFromUsing.emplace(lcase);
+                                    orderAtoms.push_back(ctx.Expr.NewAtom(node->Pos(), usedInUsing[lcase]));
+                                } else {
+                                    orderAtoms.push_back(ctx.Expr.NewAtom(node->Pos(),
+                                        NTypeAnnImpl::MakeAliasedColumn(hasExternalInput ? x.Alias : "", item->GetName())));
                                 }
-                                orderAtoms.push_back(ctx.Expr.NewAtom(node->Pos(),
-                                    NTypeAnnImpl::MakeAliasedColumn(hasExternalInput ? x.Alias : "", item->GetName())));
                             }
                         }
                     }
@@ -1954,14 +1960,17 @@ IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, con
                     if (order) {
                         for (const auto& o : *order) {
                             if (!o.StartsWith("_yql_")) {
-                                if (usedFromUsing.contains(o)) {
+                                auto lcase = to_lower(o);
+                                if (usedFromUsing.contains(lcase)) {
                                     continue;
                                 }
-                                if (usedInUsing.contains(o)) {
-                                    usedFromUsing.emplace(o);
+                                if (usedInUsing.contains(lcase)) {
+                                    usedFromUsing.emplace(lcase);
+                                    orderAtoms.push_back(ctx.Expr.NewAtom(node->Pos(), usedInUsing[lcase]));
+                                } else {
+                                    orderAtoms.push_back(ctx.Expr.NewAtom(node->Pos(),
+                                        NTypeAnnImpl::MakeAliasedColumn(hasExternalInput ? x.Alias : "", o)));
                                 }
-                                orderAtoms.push_back(ctx.Expr.NewAtom(node->Pos(),
-                                    NTypeAnnImpl::MakeAliasedColumn(hasExternalInput ? x.Alias : "", o)));
                             }
                         }
                     }
@@ -3096,7 +3105,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
         TExprNode::TPtr groupExprs;
         TExprNode::TPtr result;
         bool isUsing = 0;
-        THashSet<TString> repeatedColumnsInUsing;
+        THashMap<TString, TString> repeatedColumnsInUsing;
         THashMap<TString, const TTypeAnnotationNode*> usingColumnsAnnotation;
         // pass 0 - from/values
         // pass 1 - join
@@ -3280,13 +3289,14 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                                 YQL_ENSURE(x.Order);
                                                 for (const auto& col : *x.Order) {
                                                     if (!col.StartsWith("_yql_")) {
-                                                        if (alreadyPresent.contains(col)) {
+                                                        auto lcase = to_lower(col);
+                                                        if (alreadyPresent.contains(lcase)) {
                                                             continue;
                                                         }
-                                                        if (repeatedColumnsInUsing.contains(col)) {
-                                                            alreadyPresent.emplace(col);
+                                                        if (repeatedColumnsInUsing.contains(lcase)) {
+                                                            alreadyPresent.emplace(lcase);
                                                             // coalesce of two inputs
-                                                            o.push_back(col);
+                                                            o.push_back(repeatedColumnsInUsing[lcase]);
                                                         } else {
                                                             o.push_back(MakeAliasedColumn(x.Alias, col));
                                                         }
@@ -3434,12 +3444,13 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                         outputItems[outputItemIndex[name]] = itemRef;
                                     } else {
                                         if (isUsing) {
-                                            if (repeatedColumnsInUsing.contains(itemRef->GetName())) {
-                                                usingColumnsAnnotation[itemRef->GetName()] = itemRef->GetItemType();
+                                            auto lcase = to_lower(TString(itemRef->GetName()));
+                                            if (auto it = repeatedColumnsInUsing.find(lcase); it != repeatedColumnsInUsing.end()) {
+                                                usingColumnsAnnotation[lcase] = itemRef->GetItemType();
                                                 outputItems.emplace_back(itemRef);
-                                                repeatedColumnsInUsing.erase(TString(itemRef->GetName()));
-                                            } else if (usingColumnsAnnotation.contains(itemRef->GetName())) {
-                                                if (usingColumnsAnnotation[itemRef->GetName()] != itemRef->GetItemType()) {
+                                                repeatedColumnsInUsing.erase(it);
+                                            } else if (usingColumnsAnnotation.contains(lcase)) {
+                                                if (usingColumnsAnnotation[lcase] != itemRef->GetItemType()) {
                                                     TStringStream ss;
                                                     ss << "Expected column of same type when USING: got " << *itemRef->GetItemType() << " != " << *usingColumnsAnnotation[itemRef->GetName()];
                                                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), ss.Str()));
@@ -3911,11 +3922,12 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                     auto columnNames = child->Child(2);
                                     needRewriteUsing = child->ChildrenSize() == 3;
                                     for (ui32 i = 0; i < columnNames->ChildrenSize(); ++i) {
-                                        if (repeatedColumnsInUsing.contains(columnNames->Child(i)->Content())) {
+                                        auto lcase = to_lower(TString(columnNames->Child(i)->Content()));
+                                        if (repeatedColumnsInUsing.contains(lcase)) {
                                             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Duplicated column in USING clause: " << columnNames->Child(i)->Content()));
                                             return IGraphTransformer::TStatus::Error;
                                         }
-                                        repeatedColumnsInUsing.emplace(columnNames->Child(i)->Content());
+                                        repeatedColumnsInUsing.emplace(lcase, columnNames->Child(i)->Content());
                                     }
                                 } else {
                                     const auto& quals = child->Tail();
@@ -4002,8 +4014,16 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                     for (ui32 colIdx = 0; colIdx < inp->ChildrenSize(); ++colIdx) {
                                         auto name = inp->Child(colIdx)->Content();
                                         TExprNode::TListType lrNames(2);
-                                        lrNames[0] = ctx.Expr.NewAtom(inp->Pos(), MakeAliasedColumn(groupInputs[0].Alias, name));
-                                        lrNames[1] = ctx.Expr.NewAtom(inp->Pos(), MakeAliasedColumn(groupInputs[1].Alias, name));
+                                        auto pos = groupInputs[0].Type->FindItemI(name);
+                                        if (!pos) {
+                                            return IGraphTransformer::TStatus::Error;
+                                        }
+                                        lrNames[0] = ctx.Expr.NewAtom(inp->Pos(), MakeAliasedColumn(groupInputs[0].Alias, groupInputs[0].Type->GetItems()[*pos]->GetName()));
+                                        pos = groupInputs[1].Type->FindItemI(name);
+                                        if (!pos) {
+                                            return IGraphTransformer::TStatus::Error;
+                                        }
+                                        lrNames[1] = ctx.Expr.NewAtom(inp->Pos(), MakeAliasedColumn(groupInputs[1].Alias, groupInputs[1].Type->GetItems()[*pos]->GetName()));
                                         nodes[colIdx] = ctx.Expr.NewList(inp->Pos(), std::move(lrNames));
                                     }
                                     TExprNode::TListType newJoin(4);

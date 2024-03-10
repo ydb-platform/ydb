@@ -92,14 +92,14 @@ void Init(
                 tenant);
         actorRegistrator(NFq::ControlPlaneStorageServiceActorId(), controlPlaneStorage);
 
-        computeMappingHolder->Mapping = std::make_shared<TNullComputeMapping>();
+        computeMappingHolder->SetMapping(std::make_shared<TNullComputeMapping>());
         actorRegistrator(NFq::ControlPlaneConfigActorId(),
             CreateControlPlaneConfigActor(yqSharedResources, computeMappingHolder, 
                 NKikimr::CreateYdbCredentialsProviderFactory, protoConfig.GetControlPlaneStorage(),
                 protoConfig.GetCompute(), yqCounters->GetSubgroup("subsystem", "ControlPlaneConfig"))
         );
     } else {
-        computeMappingHolder->Mapping = std::make_shared<TFixedComputeMapping>(protoConfig.GetCompute());
+        computeMappingHolder->SetMapping(std::make_shared<TFixedComputeMapping>(protoConfig.GetCompute()));
     }
 
     NFq::TSigner::TPtr signer;

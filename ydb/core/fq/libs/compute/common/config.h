@@ -85,7 +85,7 @@ public:
         if (it != databaseMapping.GetScopeToComputeDatabase().end()) {
             return it->second.GetExecutionConnection();
         }
-        auto commonIndex = ComputeMappingHolder->Mapping->MapScopeToCommonTenant(scope);
+        auto commonIndex = ComputeMappingHolder->GetMapping()->MapScopeToCommonTenant(scope);
         return commonIndex && *commonIndex < static_cast<ui32>(databaseMapping.GetCommon().size())
                    ? databaseMapping.GetCommon(*commonIndex).GetExecutionConnection()
                    : NFq::NConfig::TYdbStorageConfig{};

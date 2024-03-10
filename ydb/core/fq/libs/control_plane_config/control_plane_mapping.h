@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/digest/multi.h>
+#include <util/system/mutex.h>
 
 #include <ydb/core/fq/libs/config/protos/compute.pb.h>
 
@@ -60,6 +61,16 @@ struct TFixedComputeMapping final : NFq::TComputeMapping {
 
 struct TComputeMappingHolder {
     using TPtr = std::shared_ptr<TComputeMappingHolder>;
+    NFq::TComputeMapping::TPtr GetMapping() {
+        TGuard guard(Mutex);
+        return Mapping;
+    }
+    void SetMapping(NFq::TComputeMapping::TPtr mapping) {
+        TGuard guard(Mutex);
+        Mapping = mapping;
+    }
+private:
+    TMutex Mutex;
     NFq::TComputeMapping::TPtr Mapping;
 };
 

@@ -41,6 +41,10 @@ struct TDatabaseClients {
         TActorId MonitoringActorId;
     };
 
+    TDatabaseClients(const TComputeMappingHolder::TPtr& computeMappingHolder)
+        : ComputeMappingHolder(computeMappingHolder)
+    {}
+
     std::optional<TClientConfig> GetClient(const TString& scope, const TString& endpoint, const TString& database) const {
         auto currentClient = GetClient(scope);
         if (currentClient.Config.GetExecutionConnection().GetEndpoint() == endpoint && database.StartsWith(currentClient.Config.GetTenant())) {
@@ -61,10 +65,12 @@ struct TDatabaseClients {
         if (it != ScopeToDatabaseClient.end()) {
             return it->second;
         }
-        Y_ABORT_UNLESS(CommonDatabaseClients);
-        return CommonDatabaseClients[MultiHash(scope) % CommonDatabaseClients.size()];
+        auto commonIndex = ComputeMappingHolder->GetMapping()->MapScopeToCommonTenant(scope);
+        Y_ABORT_UNLESS(commonIndex && *commonIndex < CommonDatabaseClients.size());
+        return CommonDatabaseClients[*commonIndex];
     }
 
+    TComputeMappingHolder::TPtr ComputeMappingHolder;
     TVector<TClientConfig> CommonDatabaseClients;
     TMap<TString, TClientConfig> ScopeToDatabaseClient;
 };
@@ -289,7 +295,7 @@ public:
         const ::NMonitoring::TDynamicCounterPtr& counters
     )   : Config(config)
         , ComputeMappingHolder(computeMappingHolder)
-        , Clients(std::make_shared<TDatabaseClients>())
+        , Clients(std::make_shared<TDatabaseClients>(computeMappingHolder))
         , CommonConfig(commonConfig)
         , Signer(signer)
         , YqSharedResources(yqSharedResources)

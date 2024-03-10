@@ -111,7 +111,7 @@ public:
             TablePathPrefix = YdbConnection->TablePathPrefix;
             Schedule(TDuration::Zero(), new NActors::TEvents::TEvWakeup());
         } else {
-            ComputeMappingHolder->Mapping = std::make_shared<TFixedComputeMapping>(ComputeConfig);
+            ComputeMappingHolder->SetMapping(std::make_shared<TFixedComputeMapping>(ComputeConfig));
             TenantInfo.reset(new TTenantInfo(ComputeConfig, ComputeMappingHolder));
             const auto& mapping = Config.GetMapping();
             for (const auto& cloudToTenant : mapping.GetCloudIdToTenantName()) {
@@ -231,7 +231,7 @@ private:
         ).Process(SelfId(),
             [=, this](TTenantExecuter& executer) {
 
-                ComputeMappingHolder->Mapping = std::make_shared<TFilteredComputeMapping>(ComputeConfig, executer.State.ComputeTenantState);
+                ComputeMappingHolder->SetMapping(std::make_shared<TFilteredComputeMapping>(ComputeConfig, executer.State.ComputeTenantState));
 
                 if (executer.State.TenantInfo->CommonVTenants.size()) {
                     std::sort(executer.State.TenantInfo->CommonVTenants.begin(), executer.State.TenantInfo->CommonVTenants.end());

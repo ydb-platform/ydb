@@ -736,7 +736,7 @@ bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls, con
         return false;
     }
     if (force) {
-        TablesManager.MutablePrimaryIndex().OnTieringModified(Tiers, TablesManager.GetTtl());
+        TablesManager.MutablePrimaryIndex().OnTieringModified(Tiers, TablesManager.GetTtl(), {});
     }
     THashMap<ui64, NOlap::TTiering> eviction = pathTtls;
     for (auto&& i : eviction) {

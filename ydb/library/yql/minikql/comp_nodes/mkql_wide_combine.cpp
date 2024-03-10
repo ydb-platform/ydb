@@ -342,6 +342,8 @@ public:
         , KeyWidth(keyWidth)
         , Hasher(hash)
         , Mode(EOperatingMode::InMemory)
+        , MemInfo(memInfo)
+        , Equal(equal)
     {
         BufferForUsedInputItems.reserve(usedInputItemType->GetElementsCount());
         BufferForKeyAnsState.reserve(keyAndStateType->GetElementsCount());
@@ -391,7 +393,58 @@ private:
     EFetchResult AsyncRead() {
         return EFetchResult::Yield;
     }
+
+    bool StateBeenSplited = false;
+    void SplitStateIntoBucketsOnce() {
+        if (StateBeenSplited) return;
+
+        while (const auto keyAndState = InMemoryProcessingState.Extract()) {
+            auto hash = Hasher(keyAndState); //Hasher uses only key for hashing
+            auto bucketId = hash % SpilledBucketCount;
+            auto& bucket = SpilledBuckets[bucketId];
+
+            auto& processingState = *bucket.ProcessingState;
+
+            for (size_t i = 0; i != KeyWidth; ++i) {
+                //jumping into unsafe world, refusing ownership
+                static_cast<NUdf::TUnboxedValue&>(processingState.Tongue[i]) = (keyAndState[i]);
+            }
+            processingState.TasteIt();
+            for (size_t i = KeyWidth; i != KeyAndStateType->GetElementsCount(); ++i) {
+                //jumping into unsafe world, refusing ownership
+                static_cast<NUdf::TUnboxedValue&>(processingState.Throat[i - KeyWidth]) = (keyAndState[i]);
+            }
+
+            for (size_t i = 0; i != KeyAndStateType->GetElementsCount(); ++i) {
+                //releasing values stored in unsafe TUnboxedValue buffer
+                keyAndState[i].UnRef();
+            }
+        }
+
+        InMemoryProcessingState.ReadMore<false>();
+
+        StateBeenSplited = true;
+    }
+
+    bool BucketsBeenInit = false;
+
+    void InitBucketsOnce(TComputationContext& ctx) {
+
+        if (BucketsBeenInit) return;
+        SpilledBuckets.resize(SpilledBucketCount);
+        for (auto &b: SpilledBuckets) {
+            b.Spiller = ctx.SpillerFactory->CreateSpiller();
+            b.InitialState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(b.Spiller, KeyAndStateType, 1 << 20);
+            b.ProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal);
+        }
+
+        BucketsBeenInit = true;
+    }
+
     EFetchResult DoCalculateInMemory(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
+
+        InitBucketsOnce(ctx);
+
         auto **fields = ctx.WideFields.data() + WideFieldsIndex;
         while (InputDataFetchResult != EFetchResult::Finish) {
             for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i) {
@@ -419,10 +472,23 @@ private:
                     break;
             }
         }
-        if (const auto values = static_cast<NUdf::TUnboxedValue*>(InMemoryProcessingState.Extract())) {
+
+        SplitStateIntoBucketsOnce();
+
+        while(!SpilledBuckets.empty()) {
+            auto& bucket = SpilledBuckets.front();
+            if (const auto values = static_cast<NUdf::TUnboxedValue*>(bucket.ProcessingState->Extract())) {
+                Nodes.FinishItem(ctx, values, output);
+                return EFetchResult::One;
+            }
+            SpilledBuckets.pop_front();
+        }
+
+        /* if (const auto values = static_cast<NUdf::TUnboxedValue*>(InMemoryProcessingState.Extract())) {
             Nodes.FinishItem(ctx, values, output);
             return EFetchResult::One;
-        }
+        }*/ 
+
         return EFetchResult::Finish;
     }
 
@@ -661,6 +727,7 @@ private:
                 for (auto &b: SpilledBuckets) {
                     b.Spiller = ctx.SpillerFactory->CreateSpiller();
                     b.InitialState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(b.Spiller, KeyAndStateType, 1 << 20);
+                    b.ProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal);
                 }
                 FinalizingSpillerBuckets = false;
                 break;
@@ -684,7 +751,7 @@ private:
 
     bool IsSwitchToSpillingModeCondition() const {
         //TODO implement me
-        return true;
+        return false;
     }
 
 private:
@@ -703,6 +770,7 @@ private:
     struct TSpilledBucket {
         std::unique_ptr<TWideUnboxedValuesSpillerAdapter> InitialState; //state collected before switching to spilling mode
         std::unique_ptr<TWideUnboxedValuesSpillerAdapter> Data; //data collected in spilling mode
+        std::unique_ptr<TState> ProcessingState;
         TAsyncWriteOperation AsyncWriteOperation;
         ISpiller::TPtr Spiller;
     };
@@ -715,7 +783,10 @@ private:
     TUnboxedValueVector BufferForUsedInputItems;
     TUnboxedValueVector BufferForKeyAnsState;
 
-     NUdf::TUnboxedValuePod* NextValueToSave = nullptr;
+    NUdf::TUnboxedValuePod* NextValueToSave = nullptr;
+
+    TMemoryUsageInfo* MemInfo = nullptr;
+    TEqualsFunc const Equal;
 };
 
 #ifndef MKQL_DISABLE_CODEGEN

@@ -9,16 +9,14 @@ template <class TQueueImpl>
 TSingleQueueSchedulerThread<TQueueImpl>::TSingleQueueSchedulerThread(
     TInvokerQueuePtr<TQueueImpl> queue,
     TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
-    const TString& threadGroupName,
-    const TString& threadName,
-    NThreading::EThreadPriority threadPriority,
-    int shutdownPriority)
+    TString threadGroupName,
+    TString threadName,
+    NThreading::TThreadOptions options)
     : TSchedulerThread(
         std::move(callbackEventCount),
-        threadGroupName,
-        threadName,
-        threadPriority,
-        shutdownPriority)
+        std::move(threadGroupName),
+        std::move(threadName),
+        std::move(options))
     , Queue_(std::move(queue))
     , Token_(Queue_->MakeConsumerToken())
 { }
@@ -52,12 +50,14 @@ template <class TQueueImpl>
 TSuspendableSingleQueueSchedulerThread<TQueueImpl>::TSuspendableSingleQueueSchedulerThread(
     TInvokerQueuePtr<TQueueImpl> queue,
     TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
-    const TString& threadGroupName,
-    const TString& threadName)
+    TString threadGroupName,
+    TString threadName,
+    NThreading::TThreadOptions options)
     : TSchedulerThread(
         std::move(callbackEventCount),
-        threadGroupName,
-        threadName)
+        std::move(threadGroupName),
+        std::move(threadName),
+        std::move(options))
     , Queue_(std::move(queue))
     , Token_(Queue_->MakeConsumerToken())
 { }

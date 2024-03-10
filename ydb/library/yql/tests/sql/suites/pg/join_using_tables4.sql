@@ -2,5 +2,5 @@
 select key from (
     plato."Input" a
     full join
-    plato."Input3"
+    plato."Input5"
     using(key))

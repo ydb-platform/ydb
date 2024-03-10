@@ -11180,9 +11180,9 @@
     ],
     "test_sql2yql.test[pg-join_using_tables4]": [
         {
-            "checksum": "16dfefc00760c21b9d397f83dca51ecf",
+            "checksum": "ec7f9b9ea74d0bc701e7e695b3af1ce7",
             "size": 795,
-            "uri": "https://{canondata_backend}/1923547/22ddc1faed3b8b198450c51bf4f9456d594023fe/resource.tar.gz#test_sql2yql.test_pg-join_using_tables4_/sql.yql"
+            "uri": "https://{canondata_backend}/1937429/b8882b74418932fc54b9745c48372d13c8fb4979/resource.tar.gz#test_sql2yql.test_pg-join_using_tables4_/sql.yql"
         }
     ],
     "test_sql2yql.test[pg-long_ident]": [

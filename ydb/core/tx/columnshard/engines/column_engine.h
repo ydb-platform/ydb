@@ -362,6 +362,7 @@ public:
 
     virtual const TVersionedIndex& GetVersionedIndex() const = 0;
     virtual std::shared_ptr<TVersionedIndex> CopyVersionedIndexPtr() const = 0;
+    virtual const std::shared_ptr<arrow::Schema>& GetReplaceKey() const;
 
     virtual bool HasDataInPathId(const ui64 pathId) const = 0;
     virtual bool Load(IDbWrapper& db) = 0;

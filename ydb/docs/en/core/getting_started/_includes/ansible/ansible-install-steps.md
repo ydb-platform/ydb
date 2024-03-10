@@ -26,7 +26,7 @@ The role will install the following packages in the system: atop, bash-completio
     + `start timesyncd` - Starts and enables the `systemd-timesyncd.service`. Subsequently, the service will start automatically at system boot.
   * `configure systemd-journald` – A block of tasks for configuring the `systemd-journald` service:
     + `create conf.d directory for journald` - Creates the `/etc/systemd/journald.conf.d` directory for storing `systemd-journald` configuration files.
-    + `configure systemd-journald` - Creates a configuration file in `/etc/systemd/journald.conf.d/ydb.conf` for `systemd-journald`, specifying a `Journal` section with the option `ForwardToWall=no`. The `ForwardToWall=no` setting in the `systemd-journald` configuration means that system log messages will not be forwarded as "wall" messages to all logged-in users. After completing the task, a notification is sent to restart the `journald` service.
+    + `configure systemd-journald` - Creates a configuration file `/etc/systemd/journald.conf.d/ydb.conf` for `systemd-journald`, specifying a `Journal` section with the option `ForwardToWall=no`. The `ForwardToWall=no` setting in the `systemd-journald` configuration means that system log messages will not be forwarded as "wall" messages to all logged-in users. After completing the task, a notification is sent to restart the `journald` service.
     + `flush handlers` - Calls accumulated handlers. Executes the handler `restart journald`, which restarts the `systemd-journald` service.
     + `start journald` - Starts and enables the `systemd-journald.service`. Subsequently, the service will start automatically at system boot.
   * `configure kernel` – A block of tasks for kernel configuration:  

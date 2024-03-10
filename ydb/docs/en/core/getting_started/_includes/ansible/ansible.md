@@ -192,7 +192,7 @@ The sequence of role executions and their brief descriptions:
 4. The `ydb-static` role prepares and launches static nodes of {{ ydb-short-name }}, including checking necessary variables and secrets, formatting and preparing disks, creating and launching `systemd unit` for the storage node, as well as initializing the storage and managing database access.
 5. The `ydb-dynamic` role configures and manages dynamic nodes of {{ ydb-short-name }}, including checking necessary variables, creating configuration and `systemd unit` files for each dynamic node, launching these nodes, obtaining a token for {{ ydb-short-name }} access, and creating a database in {{ ydb-short-name }}.
 
-{% cut "Detailed step-by-step installation description for {{ ydb-short-name }}" %}
+{% cut "Detailed step-by-step installation process description" %}
 
 {% include [ansible-install-steps](./ansible-install-steps.md) %}
 

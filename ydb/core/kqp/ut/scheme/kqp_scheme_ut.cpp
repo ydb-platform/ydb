@@ -5279,15 +5279,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper::TColumnTable testTable;
         testTable.SetName(tableName).SetPrimaryKey({"id", "id_second"}).SetSharding({"id"}).SetSchema(schema).SetTTL("created_at", "Interval(\"PT1H\")");
         testHelper.CreateTable(testTable);
-
         testHelper.CreateTier("tier1");
-        const auto ruleName = testHelper.CreateTieringRule("tier1", "created_att");
-      //  testHelper.SetTiering(tableName, ruleName);
-
-        while (csController->GetTieringUpdates().Val() == 0) {
-            Cout << "Wait tiering..." << Endl;
-            Sleep(TDuration::Seconds(2));
-        }
 
         {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
@@ -5298,6 +5290,15 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
         while (csController->GetIndexations().Val() == 0) {
             Cout << "Wait indexation..." << Endl;
+            Sleep(TDuration::Seconds(2));
+        }
+
+        // const auto ruleName = testHelper.CreateTieringRule("tier1", "created_att");
+        const auto ruleName = testHelper.CreateTieringRule("tier1", "created_at");
+        testHelper.SetTiering(tableName, ruleName);
+
+        while (csController->GetTieringUpdates().Val() == 0) {
+            Cout << "Wait tiering..." << Endl;
             Sleep(TDuration::Seconds(2));
         }
 

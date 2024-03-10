@@ -1021,7 +1021,6 @@ void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs:
 void TColumnShard::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
     Y_ABORT_UNLESS(Tiers);
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "TEvRefreshSubscriberData")("snapshot", ev->Get()->GetSnapshot()->SerializeToString());
-    NYDBTest::TControllers::GetColumnShardController()->OnTieringUpdate(ev->Get()->GetSnapshot());
     Tiers->TakeConfigs(ev->Get()->GetSnapshot(), nullptr);
 }
 

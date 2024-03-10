@@ -405,15 +405,9 @@ private:
 
             auto& processingState = *bucket.ProcessingState;
 
-            for (size_t i = 0; i != KeyWidth; ++i) {
-                //jumping into unsafe world, refusing ownership
-                static_cast<NUdf::TUnboxedValue&>(processingState.Tongue[i]) = (keyAndState[i]);
-            }
+            processingState.Tongue = keyAndState;
+            
             processingState.TasteIt();
-            for (size_t i = KeyWidth; i != KeyAndStateType->GetElementsCount(); ++i) {
-                //jumping into unsafe world, refusing ownership
-                static_cast<NUdf::TUnboxedValue&>(processingState.Throat[i - KeyWidth]) = (keyAndState[i]);
-            }
 
             for (size_t i = 0; i != KeyAndStateType->GetElementsCount(); ++i) {
                 //releasing values stored in unsafe TUnboxedValue buffer

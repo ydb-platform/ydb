@@ -41,7 +41,6 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
         for (auto&& i : TablesManager.GetTables()) {
             ActivateTiering(i.first, i.second.GetTieringUsage(), true);
         }
-        OnTieringModified();
 
         Become(&TThis::StateWork);
         SignalTabletActive(ctx);

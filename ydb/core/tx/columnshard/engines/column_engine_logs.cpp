@@ -573,44 +573,47 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
     return out;
 }
 
-void TColumnEngineForLogs::OnTieringModified(std::shared_ptr<NColumnShard::TTiersManager> manager, const NColumnShard::TTtl& ttl) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnTieringModified");
-    std::optional<THashMap<ui64, TTiering>> tierings;
+void TColumnEngineForLogs::OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) {
+    if (!TiersInitialized) {
+        for (auto&& i : Tables) {
+            i.second->StartActualizationIndex();
+        }
+    }
+
+    TiersInitialized = true;
+    AFL_VERIFY(manager);
+    THashMap<ui64, TTiering> tierings;
     if (manager) {
         tierings = manager->GetTiering();
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnTieringModified")
-        ("new_count_tierings", tierings ? ::ToString(tierings->size()) : TString("undefined"))
-        ("new_count_ttls", ttl.PathsCount());
-    EvictionsController.RefreshTierings(std::move(tierings), ttl);
+    ttl.AddTtls(tierings);
 
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnTieringModified")
+        ("new_count_tierings", tierings.size())
+        ("new_count_ttls", ttl.PathsCount());
+    if (pathId) {
+        auto itGranule = Tables.find(*pathId);
+        AFL_VERIFY(itGranule != Tables.end());
+        auto it = tierings.find(*pathId);
+        if (it == tierings.end()) {
+            itGranule->second->RefreshTiering({});
+        } else {
+            itGranule->second->RefreshTiering(it->second);
+        }
+    } else {
+        for (auto&& g : Tables) {
+            auto it = tierings.find(g.first);
+            if (it == tierings.end()) {
+                g.second->RefreshTiering({});
+            } else {
+                g.second->RefreshTiering(it->second);
+            }
+        }
+    }
 }
 
 void TColumnEngineForLogs::DoRegisterTable(const ui64 pathId) {
     AFL_VERIFY(Tables.emplace(pathId, std::make_shared<TGranuleMeta>(pathId, GranulesStorage, SignalCounters.RegisterGranuleDataCounters(), VersionedIndex)).second);
-}
-
-TColumnEngineForLogs::TTieringProcessContext::TTieringProcessContext(const ui64 memoryUsageLimit,
-    std::shared_ptr<TTTLColumnEngineChanges> changes, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::shared_ptr<TColumnEngineChanges::IMemoryPredictor>& memoryPredictor)
-    : MemoryUsageLimit(memoryUsageLimit)
-    , MemoryPredictor(memoryPredictor)
-    , Now(TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now())
-    , Changes(changes)
-    , DataLocksManager(dataLocksManager)
-{
-
-}
-
-void TEvictionsController::RefreshTierings(std::optional<THashMap<ui64, TTiering>>&& tierings, const NColumnShard::TTtl& ttl) {
-    if (tierings) {
-        OriginalTierings = std::move(*tierings);
-    }
-    auto copy = OriginalTierings;
-    if (!ttl.AddTtls(copy)) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Broken ttl");
-    }
-    NextCheckInstantForTierings = BuildNextInstantCheckers(std::move(copy));
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "RefreshTierings")("count", NextCheckInstantForTierings.size());
 }
 
 } // namespace NKikimr::NOlap

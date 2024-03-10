@@ -123,7 +123,7 @@ static-node-9 static-node-9.ydb-cluster.com
   + `system_timezone`: Europe/Moscow
   + `system_ntp_servers`: [0.ru.pool.ntp.org, 1.ru.pool.ntp.org, ntp0.NL.net, ntp2.vniiftri.ru, ntp.ix.ru, ntps1-1.cs.tu-berlin.de] [Подробнее](https://cloud.yandex.ru/ru/docs/tutorials/infrastructure-management/ntp) о настройках NTP-серверов Yandex Cloud.
 * AWS:
-  + `system_timezone`: USA/<regioan_name>
+  + `system_timezone`: USA/<region_name>
   + `system_ntp_servers`: [169.254.169.123, time.aws.com] [Подробнее](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/set-time.html#configure-time-sync) о настройках NTP-серверов AWS.
 
 Для других облачных провайдеров процесс настройки NTP-серверов имеет свои особенности. О том как настраивается синхронизация времени на виртуальных машинах Azure можно прочесть в [данной](https://learn.microsoft.com/en-us/azure/virtual-machines/linux/time-sync) статье, а специфика подключения к NTP-серверам в Alibaba описана в этой [статье](https://www.alibabacloud.com/help/en/ecs/user-guide/alibaba-cloud-ntp-server).

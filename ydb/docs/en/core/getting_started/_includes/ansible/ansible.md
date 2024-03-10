@@ -198,7 +198,7 @@ The sequence of role executions and their brief descriptions:
 
 {% endcut %}
 
-As a result of executing the playbook, a {{ ydb-short-name }} cluster will be created, with a test database – `database`, a `root` user with maximum access rights created, and Embedded UI running on port 8765. To connect to the Embedded UI, you can set up SSH tunneling. For this, execute the command `ssh -L 8765:localhost:8765 -i <ssh private key> <user>@<first ydb static node ip>` on your local machine. After successfully establishing the connection, you can navigate to the URL [localhost:8765](http://localhost:8765):
+As a result of executing the playbook, a {{ ydb-short-name }} cluster will be created, with a test database named `database`, a `root` user with maximum access rights created, and [Embedded UI](../../../maintenance/embedded_monitoring/index.md) running on port 8765. To connect to the Embedded UI, you can set up SSH tunneling. For this, execute the command `ssh -L 8765:localhost:8765 -i <ssh private key> <user>@<first-ydb-static-node-ip>` on your local machine. After successfully establishing the connection, you can navigate to the URL [localhost:8765](http://localhost:8765):
 
 ![ydb-web-ui](../../_assets/ydb-web-console.png)
 

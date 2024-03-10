@@ -1,4 +1,4 @@
-1. [Role `packages`](https://github.com/ydb-platform/ydb-ansible/blob/refactor-use-collections/roles/packages/tasks/main.yaml). Tasks:
+1. [Role `packages`](https://github.com/ydb-platform/ydb-ansible/blob/main/roles/packages/tasks/main.yaml). Tasks:
   * `check dpkg audit` – Verifies the [dpkg](https://en.wikipedia.org/wiki/Dpkg) state using the `dpkg --audit` command and saves the command results in the `dpkg_audit_result` variable. The task will terminate with an error if the `dpkg_audit_result.rc` command returns a value other than 0 or 1.
   * `run the equivalent of "apt-get clean" as a separate step` – Cleans the apt cache, similarly to the `apt-get clean` command.
   * `run the equivalent of "apt-get update" as a separate step` – Updates the apt cache, akin to the `apt-get update` command.
@@ -10,16 +10,17 @@
   * `flush handlers` – Forcibly runs all accumulated handlers. In this context, it triggers a handler that updates the apt cache.
   * `install packages` – Installs apt packages considering specified parameters and cache validity.
 
-The role will install the following packages in the system: atop, bash-completion, bind9-host, ca-certificates, curl, dnsutils, gdisk, iperf, iptables, jq, logrotate, lsof, nvme-cli, procps, python3-apt, python3-pip, python3-requests, rsync, strace, tar, tmux, tzdata, unzip, wget, xfsprogs. This package set is installed for [Ubuntu 22.04](https://github.com/ydb-platform/ydb-ansible/blob/refactor-use-collections/roles/packages/vars/distributions/Ubuntu/22.04/main.yaml) and [Astra Linux 1.7](https://github.com/ydb-platform/ydb-ansible/blob/refactor-use-collections/roles/packages/vars/distributions/Astra%20Linux/1.7_x86-64/main.yaml).
+Links to the lists of packages that will be installed for Ubuntu 22.04 or Astra Linux 1.7:
+* [List](https://github.com/ydb-platform/ydb-ansible/blob/main/roles/packages/vars/distributions/Ubuntu/22.04/main.yaml) of packages for Ubuntu 22.04;
+* [List](https://github.com/ydb-platform/ydb-ansible/blob/main/roles/packages/vars/distributions/Astra%20Linux/1.7_x86-64/main.yaml) of packages for Astra Linux 1.7.
 
-
-2. [Role `system`](https://github.com/ydb-platform/ydb-ansible/blob/refactor-use-collections/roles/system/tasks/main.yaml). Tasks:
+2. [Role `system`](https://github.com/ydb-platform/ydb-ansible/blob/main/roles/system/tasks/main.yaml). Tasks:
   * `configure clock` – A block of tasks for setting up system clocks:
     + `assert required variables are defined` – Checks for the existence of the `system_timezone` variable. This check ensures that the necessary variable is available for the next task in the block.
     + `set system timezone` – Sets the system timezone. The timezone is determined by the value of the `system_timezone` variable, and the hardware clock (`hwclock`) is set to UTC. After completing the task, a notification is sent to restart the `cron` service.
     + `flush handlers` – Forces the execution of accumulated handlers using the `meta` directive. This will restart the following processes: `timesyncd`, `journald`, `cron`, `cpufrequtils`, and execute the `sysctl -p` command.
   * `configure systemd-timesyncd` – A task block for configuring `systemd-timesyncd`:
-    + `assert required variables are defined` - Asserts that the number of NTP servers (`system_ntp_servers`) is more than one if the `system_ntp_servers` variable is defined.
+    + `assert required variables are defined` asserts that the number of NTP servers (`system_ntp_servers`) is more than one if the variable `system_ntp_servers` is defined. If the variable `system_ntp_servers` is not defined, the execution of the `configure systemd-timesyncd` task block will be skipped, including the check for the number of NTP servers and the configuration of `systemd-timesyncd`.
     + `create conf.d directory for timesyncd` - Creates the `/etc/systemd/timesyncd.conf.d` directory if the `system_ntp_servers` variable is defined.
     + `configure systemd-timesyncd` - Creates a configuration file `/etc/systemd/timesyncd.conf.d/ydb.conf` for the `systemd-timesyncd` service with primary and backup NTP servers. The task is executed if the `system_ntp_servers` variable is defined. After completing the task, a notification is sent to restart the `timesyncd` service.
     + `flush handlers` - Calls accumulated handlers. Executes the handler `restart timesyncd`, which restarts the `systemd-timesyncd.service`.
@@ -42,7 +43,7 @@ The role will install the following packages in the system: atop, bash-completio
     + `flush handlers` - Calls accumulated handlers. Executes the handler `restart cpufrequtils`, which restarts the `cpufrequtils` service.
     + `start cpufrequtils` - Starts and enables the `cpufrequtils.service`. Subsequently, the service will start automatically at system boot.
 
-3. [Role](https://github.com/ydb-platform/ydb-ansible/blob/refactor-use-collections/roles/ydbd/tasks/main.yaml) `ydbd`. Tasks:
+3. [Role](https://github.com/ydb-platform/ydb-ansible/blob/main/roles/ydbd/tasks/main.yaml) `ydbd`. Tasks:
   * `check if required variables are defined` – Checks that the variables `ydb_archive`, `ydb_config`, `ydb_tls_dir` are defined. If any of these are undefined, Ansible will display an appropriate error message and stop the playbook execution.
   * `set vars_for_distribution variables` – Sets variables from the specified file in the `vars_for_distribution_file` variable during playbook execution. This task manages a set of variables dependent on the specific Linux distribution.
   * `ensure libaio is installed` – Ensures that the `libaio` package is installed.
@@ -61,7 +62,7 @@ The role will install the following packages in the system: atop, bash-completio
   * `copy configuration file` – Copies the configuration file `config.yaml` to the server.
   * `add configuration file updater script` – Copies the `update_config_file.sh` script to the server.
 
-4. [Role `ydbd_static`](https://github.com/ydb-platform/ydb-ansible/blob/refactor-use-collections/roles/ydbd_static/tasks/main.yaml). Tasks:
+4. [Role `ydbd_static`](https://github.com/ydb-platform/ydb-ansible/blob/main/roles/ydbd_static/tasks/main.yaml). Tasks:
   * `check if required variables are defined` – Checks that the variables `ydb_cores_static`, `ydb_disks`, `ydb_domain`, `ydb_user` are defined. If any of these variables are undefined, the task will fail and an appropriate error message will be displayed for each undefined variable.
   * `check if required secrets are defined` – Verifies that the secret variable `ydb_password` is defined. If this variable is undefined, the task will fail and an error message will be displayed.
   * `create static node configuration file` – Creates a static node configuration file by running the copied `update_config_file.sh` script with `ydbd-config.yaml` and `ydbd-config-static.yaml` configurations.
@@ -77,7 +78,7 @@ The role will install the following packages in the system: atop, bash-completio
   * `set cluster root password` – Sets the password for the YDB root user. The task is executed by the `set_user_password` plugin, which performs a grpcs request to YDB and sets a pre-defined password for the YDB root user. The password is specified in the `ydb_password` variable in the inventory file `/examples/9-nodes-mirror-3-dc/inventory/99-inventory-vault.yaml` in an encrypted form.
 
 
-5. [Role `ydbd_dynamic`](https://github.com/ydb-platform/ydb-ansible/blob/refactor-use-collections/roles/ydbd_dynamic/tasks/main.yaml). Tasks:
+5. [Role `ydbd_dynamic`](https://github.com/ydb-platform/ydb-ansible/blob/main/roles/ydbd_dynamic/tasks/main.yaml). Tasks:
   * `check if required variables are defined` – Verifies the presence of required variables (`ydb_domain`, `ydb_pool_kind`, `ydb_cores_dynamic`, `ydb_brokers`, `ydb_dbname`, `ydb_dynnodes`) and displays an error if any variable is missing.
   * `create dynamic node configuration file` – Creates a configuration file for dynamic nodes.
   * `create dynamic node systemd unit` – Creates a systemd service for dynamic nodes. After completing the task, a notification is sent to restart the `systemd` service.

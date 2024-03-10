@@ -1,4 +1,4 @@
-1. [Роль](https://github.com/ydb-platform/ydb-ansible/blob/refactor-use-collections/roles/packages/tasks/main.yaml) `packages`. Задачи:
+1. [Роль](https://github.com/ydb-platform/ydb-ansible/blob/main/roles/packages/tasks/main.yaml) `packages`. Задачи:
   * `check dpkg audit` – проверка состояния dpkg с помощью команды `dpkg --audit` и сохранение результатов команды в переменной `dpkg_audit_result`. Задача завершится с ошибкой, если команда `dpkg_audit_result.rc` вернет значение отличное от 0 или 1.
   * `run the equivalent of "apt-get clean" as a separate step` – очистка кеша apt, аналогично команде `apt-get clean`.
   * `run the equivalent of "apt-get update" as a separate step` – обновление кеша apt, аналогично команде `apt-get update`.
@@ -10,15 +10,17 @@
   * `flush handlers` – принудительный запуск всех накопленных обработчиков (хендлеров). В данном случае запускается хендлер, который обновляет кеш apt. 
   * `install packages` – установка пакетов apt с учетом заданных параметров и времени валидности кеша.
 
-Роль установит следующие пакеты в систему: atop, bash-completion, bind9-host, ca-certificates, curl, dnsutils, gdisk, iperf, iptables, jq, logrotate, lsof, nvme-cli, procps, python3-apt, python3-pip, python3-requests, rsync, strace, tar, tmux, tzdata, unzip, wget, xfsprogs. Это набор пакетов, который устанавливается для [Ubuntu 22.04](https://github.com/ydb-platform/ydb-ansible/blob/refactor-use-collections/roles/packages/vars/distributions/Ubuntu/22.04/main.yaml) и [Astra Linux 1.7](https://github.com/ydb-platform/ydb-ansible/blob/refactor-use-collections/roles/packages/vars/distributions/Astra%20Linux/1.7_x86-64/main.yaml). 
+Ссылки на списки пакетов, которые будут установлены для Ubuntu 22.04 или Astra Linux 1.7:
+* [Список](https://github.com/ydb-platform/ydb-ansible/blob/main/roles/packages/vars/distributions/Ubuntu/22.04/main.yaml) пакетов для Ubuntu 22.04;
+* [Список](https://github.com/ydb-platform/ydb-ansible/blob/main/roles/packages/vars/distributions/Astra%20Linux/1.7_x86-64/main.yaml) пакетов для Astra Linux 1.7.
 
-2. [Роль](https://github.com/ydb-platform/ydb-ansible/blob/refactor-use-collections/roles/system/tasks/main.yaml) `system`. Задачи:
+2. [Роль](https://github.com/ydb-platform/ydb-ansible/blob/main/roles/system/tasks/main.yaml) `system`. Задачи:
   * `configure clock` – блок задач настройки системных часов:
     + `assert required variables are defined` – проверка переменной `system_timezone` на существование. Эта проверка гарантирует, что необходимая переменная доступна для следующей задачи в блоке.
     + `set system timezone` – установка системного часового пояса. Часовой пояс задаётся значением переменной `system_timezone`, а аппаратные часы (`hwclock`) устанавливаются на UTC. После выполнения задачи отправляется уведомление для перезапуска службы `cron`.
     + `flush handlers` – принудительное выполнение накопленных обработчиков директивой `meta`. Будет произведен рестарт следующих процессов: `timesyncd`, `journald`, `cron`, `cpufrequtils`, и выполнена команда `sysctl -p`.
   * `configure systemd-timesyncd` – блок задач настройки `systemd-timesyncd`:
-    + `assert required variables are defined` - утверждает, что количество NTP серверов (`system_ntp_servers`) больше одного, если переменная `system_ntp_servers` определена.
+    + `assert required variables are defined` - утверждает, что количество NTP серверов (`system_ntp_servers`) больше одного, если переменная `system_ntp_servers` определена. Если переменная `system_ntp_servers` не определена, выполнение блока задач `configure systemd-timesyncd` будет пропущено, включая проверку количества NTP серверов и настройку `systemd-timesyncd`.
     + `create conf.d directory for timesyncd` - создаёт директорию `/etc/systemd/timesyncd.conf.d`, если переменная `system_ntp_servers` определена.
     + `configure systemd-timesyncd` - создаёт конфигурационный файл `/etc/systemd/timesyncd.conf.d/ydb.conf` для службы `systemd-timesyncd` с основным и резервными NTP серверами. Задача будет выполнена, если переменная `system_ntp_servers` определена. После выполнения задачи отправляется уведомление для перезапуска службы `timesyncd`.
     + `flush handlers` - вызываются накопленные обработчики. Выполняется обработчик `restart timesyncd`, который выполняет перезапуск сервиса `systemd-timesyncd.service`. 
@@ -40,7 +42,7 @@
     + `disable ondemand.service` - отключение сервиса `ondemand.service`, если он присутствует в системе. Сервис останавливается, его автоматический запуск отключается, и он маскируется (предотвращается его запуск). После выполнения задачи отправляется уведомление для перезапуска cpufrequtils.
     + `flush handlers` - вызывает накопленные хендлеры. Будет вызван хендлер `restart cpufrequtils`, который перезапустит сервис `cpufrequtils`.
     + `start cpufrequtils` - запуск и активация службы `cpufrequtils.service`. Далее служба будет стартовать автоматически при загрузке системы.
-3. [Роль](https://github.com/ydb-platform/ydb-ansible/blob/refactor-use-collections/roles/ydbd/tasks/main.yaml) `ydbd`. Задачи:
+3. [Роль](https://github.com/ydb-platform/ydb-ansible/blob/main/roles/ydbd/tasks/main.yaml) `ydbd`. Задачи:
   * `check if required variables are defined` – проверка, что переменные `ydb_archive`, `ydb_config`, `ydb_tls_dir` определены. Если какая-либо из них не определена, Ansible выведет соответствующее сообщение об ошибке и остановит выполнение плейбука.
   * `set vars_for_distribution variables` – установка переменных из указанного файла в переменной `vars_for_distribution_file` во время выполнения плейбука. Задача управляет набором переменных, зависящих от конкретного дистрибутива Linux.
   * `ensure libaio is installed` – проверка, что пакет `libaio` установлен.
@@ -58,7 +60,7 @@
     + `copy the TLS web.pem` – копирование TLS pem ключа `web.pem` из директории сгенерированных сертификатов.
   * `copy configuration file` – копирование конфигурационного файла `config.yaml` на сервер.
   * `add configuration file updater script` – копирование скрипта `update_config_file.sh` на сервер.
-4. [Роль](https://github.com/ydb-platform/ydb-ansible/blob/refactor-use-collections/roles/ydbd_static/tasks/main.yaml) `ydbd_static`. Задачи:
+4. [Роль](https://github.com/ydb-platform/ydb-ansible/blob/main/roles/ydbd_static/tasks/main.yaml) `ydbd_static`. Задачи:
   * `check if required variables are defined` – проверка, что переменные `ydb_cores_static`, `ydb_disks`, `ydb_domain`, `ydb_user` определены. Если хотя бы одна из этих переменных не определена, задача завершится с ошибкой, и будет выведено соответствующее сообщение об ошибке для каждой переменной, которая не была определена.
   * `check if required secrets are defined` – проверка определения секретной переменной `ydb_password`. Если эта переменная не определена, задача завершится с ошибкой, и будет выведено сообщение об ошибке.
   * `create static node configuration file` – создание конфигурационного файла статической ноды путём запуска скопированного скрипта `update_config_file.sh` и передачи в него конфигураций `ydbd-config.yaml`, `ydbd-config-static.yaml`.
@@ -72,7 +74,7 @@
   * `init YDB storage if not initialized` – инициализация хранилища в случае если оно еще не создано. В задаче вызывается плагин `init_storage`, который выполняет команду инициализации хранилища с помощью grpcs-запроса к статической ноде на порт 2135. Результат выполнения команды сохраняется в переменной `init_storage`.
   * `wait for ydb healthcheck switch to "GOOD" status` – ожидание получения статуса `GOOD` от системы проверки состояния YDB. В задаче вызывается плагин `wait_healthcheck`, который выполняет команду проверке состояния YDB.
   * `set cluster root password` – установка пароля для root пользователя YDB. В задаче выполняется плагин `set_user_password`, который выполняет grpcs запрос к YDB и устанавливает заранее заданный пароль для root пользователя YDB. Пароль задаётся переменной `ydb_password` в инвентаризационном файле `/examples/9-nodes-mirror-3-dc/inventory/99-inventory-vault.yaml` в зашифрованном виде.
-5. [Роль](https://github.com/ydb-platform/ydb-ansible/blob/refactor-use-collections/roles/ydbd_dynamic/tasks/main.yaml) `ydbd_dynamic`. Задачи:
+5. [Роль](https://github.com/ydb-platform/ydb-ansible/blob/main/roles/ydbd_dynamic/tasks/main.yaml) `ydbd_dynamic`. Задачи:
   *  `check if required variables are defined` – проверка наличия установленных переменных (`ydb_domain`,`ydb_pool_kind`, `ydb_cores_dynamic`, `ydb_brokers`, `ydb_dbname`, `ydb_dynnodes`) и вывод ошибки в случае отсутствия любой из переменных.
   * `create dynamic node configuration file` – создание конфигурационного файла для динамических нод.
   * `create dynamic node systemd unit` – создание сервиса для systemd динамических нод. После выполнения задачи отправляется уведомление для перезапуска службы `systemd`.

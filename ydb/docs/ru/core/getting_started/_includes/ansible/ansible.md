@@ -101,6 +101,7 @@ static-node-9 static-node-9.ydb-cluster.com
 
 Далее нужно внести следующие изменения в раздел `vars` инвентаризационного файла:
   * `ansible_user` – укажите пользователь для подключения Ansible по SSH.
+  * `ansible_ssh_common_args: "-o ProxyJump=<ansible_user>@<static-node-1 IP>"` – опция для подключения Ansible к серверу по IP, с которого будет устанавливаться {{ ydb-short-name }} (включая ProxyJump сервер). Используется при установки {{ ydb-short-name }} с локальной машины, не входящей в приватную DNS-зону.
   * `ansible_ssh_private_key_file` – измените дефолтное название ssh-ключа, на актуальное: `"../<ssh-private-key-name>"`.
   * `ydb_tls_dir` – укажите актуальную часть пути (`/files/CA/certs/<date_time create certs>`) к сертификатам безопасности после их генерации скриптом `ydb-ca-update.sh`.
   * `ydb_brokers` – укажите список FQDN нод брокеров. Например:
@@ -119,14 +120,24 @@ static-node-9 static-node-9.ydb-cluster.com
 
 
 Значение переменных `system_timezone` и `system_ntp_servers` зависит от свойств инфраструктуры, на которой развертывается YDB кластер. По умолчанию в `system_ntp_servers` указан набор NTP-серверов без учёта географического расположения инфраструктуры, на которой будет развертываться YDB кластер. Мы настоятельно рекомендуем использовать локальный NTP-сервер для on-premise инфраструктуры и следующие NTP-серверы для облачных провайдеров:
-* Yandex Cloud:
-  + `system_timezone`: Europe/Moscow
-  + `system_ntp_servers`: [0.ru.pool.ntp.org, 1.ru.pool.ntp.org, ntp0.NL.net, ntp2.vniiftri.ru, ntp.ix.ru, ntps1-1.cs.tu-berlin.de] [Подробнее](https://cloud.yandex.ru/ru/docs/tutorials/infrastructure-management/ntp) о настройках NTP-серверов Yandex Cloud.
-* AWS:
-  + `system_timezone`: USA/<region_name>
-  + `system_ntp_servers`: [169.254.169.123, time.aws.com] [Подробнее](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/set-time.html#configure-time-sync) о настройках NTP-серверов AWS.
 
-Для других облачных провайдеров процесс настройки NTP-серверов имеет свои особенности. О том как настраивается синхронизация времени на виртуальных машинах Azure можно прочесть в [данной](https://learn.microsoft.com/en-us/azure/virtual-machines/linux/time-sync) статье, а специфика подключения к NTP-серверам в Alibaba описана в этой [статье](https://www.alibabacloud.com/help/en/ecs/user-guide/alibaba-cloud-ntp-server).
+{% list tabs %}
+
+- Yandex Cloud
+  * `system_timezone`: Europe/Moscow
+  * `system_ntp_servers`: [0.ru.pool.ntp.org, 1.ru.pool.ntp.org, ntp0.NL.net, ntp2.vniiftri.ru, ntp.ix.ru, ntps1-1.cs.tu-berlin.de] [Подробнее](https://cloud.yandex.ru/ru/docs/tutorials/infrastructure-management/ntp) о настройках NTP-серверов Yandex Cloud.
+
+- AWS
+  * `system_timezone`: USA/<region_name>
+  * `system_ntp_servers`: [169.254.169.123, time.aws.com] [Подробнее](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/set-time.html#configure-time-sync) о настройках NTP-серверов AWS.
+
+- Azure
+  О том как настраивается синхронизация времени на виртуальных машинах Azure можно прочесть в [данной](https://learn.microsoft.com/en-us/azure/virtual-machines/linux/time-sync) статье. 
+
+- Alibaba  
+  Cпецифика подключения к NTP-серверам в Alibaba описана в этой [статье](https://www.alibabacloud.com/help/en/ecs/user-guide/alibaba-cloud-ntp-server).
+
+{% endlist %}
 
 Изменения других секций конфигурационного файла `50-inventory.yaml` не требуется. Далее можно изменить стандартный пароль root пользователя YDB, который содержится в зашифрованном инвентаризационном файле `99-inventory-vault.yaml` и файле `ansible_vault_password_file.txt`. Для изменения пароля – укажите новый пароль в файле `ansible_vault_password_file.txt` и продублируйте его в файле `99-inventory-vault.yaml` в формате:
   ```yaml
@@ -245,7 +256,7 @@ config profile create <profile name> \
 * `-e` – эндпоинт (endpoint) - строка в формате `protocol://host:port`. Можно указать FQDN любой ноды кластера и не указывать порт. По умолчанию будет использован 2135 порт.
 * `--ca-file` – путь к корневому сертификату для подключения к базе по `grpcs`. Сертификат создаётся скриптом `ydb-ca-update.sh` в директории `TLS` и располагается по пути `TLS/CA/certs/` относительно корня репозитория ydb-ansible-examples.
 * `--user` – пользователь для подключения к БД. По умолчанию при выполнении `setup_playbook.yaml` плейбука создаётся пользователь root. 
-* `--password-file` – путь к файлу с паролем. В каждой папке с шаблоном развертывания YDB кластера находится файл ansible_vault_password_file, который содержит пароль пользователя root.
+* `--password-file` – путь к файлу с паролем. В каждой папке с шаблоном развертывания YDB кластера находится файл `ansible_vault_password_file`, который содержит пароль пользователя `root`.
 
 Проверить создался ли профиль можно командой `./ydb config profile list` – будет выведен список профилей. После создания профиля, его нужно активировать командой `./ydb config profile activate <profile name>`. Проверить, что профиль был активирован можно повторным выполнением команды `./ydb config profile list` – активный профиль будет иметь отметку (active). 
 

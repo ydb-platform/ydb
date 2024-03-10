@@ -160,7 +160,7 @@ The default {{ ydb-short-name }} configuration file already includes almost all 
   ...        
   ```
 
-The rest of the sections and settings in the configuration file remain unchanged.
+The rest of the sections and settings in the configuration file can remain unchanged.
 
 
 ## Deploying the {{ ydb-short-name }} cluster {#erasure-setup}

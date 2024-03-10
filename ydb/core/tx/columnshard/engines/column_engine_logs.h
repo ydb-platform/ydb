@@ -85,11 +85,12 @@ class TColumnEngineForLogs : public IColumnEngine {
     friend class TCleanupColumnEngineChanges;
     friend class NDataSharing::TDestinationSession;
 private:
+    bool TiersInitialized = false;
     const NColumnShard::TEngineLogsCounters SignalCounters;
     std::shared_ptr<TGranulesStorage> GranulesStorage;
     std::shared_ptr<IStoragesManager> StoragesManager;
     TEvictionsController EvictionsController;
-    bool TiersInitialized = false;
+    class TTieringProcessContext {
     private:
         const ui64 MemoryUsageLimit;
         ui64 MemoryUsage = 0;

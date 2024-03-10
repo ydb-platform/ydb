@@ -371,7 +371,7 @@ public:
                 ProcessStateRecovering(ctx);
                 break;
             case EBucketState::RecoveringData:
-                ProcessStateRecovering(ctx);
+                ProcessDataRecovering(ctx);
                 break;
             default:
                 break;
@@ -433,25 +433,31 @@ private:
     }
 
     // TODO: Maybe pass key here
-    void AddItemToInMemoryState(NUdf::TUnboxedValue** fields, TUnboxedValueVector& key, TComputationContext& ctx) {
+    void AddItemToInMemoryState(NUdf::TUnboxedValue** fields, TUnboxedValueVector&, TComputationContext& ctx) {
         MKQL_ENSURE(State == EBucketState::FullStateInMemory, "Internal logic error");
-
-        for (size_t i = 0; i != KeyWidth; ++i) {
-            //jumping into unsafe world, refusing ownership
-            static_cast<NUdf::TUnboxedValue&>(ProcessingState->Tongue[i]) = std::move(key[i]);
+        BufferForUsedInputItems.resize(0);
+        for (size_t i = 0; i != Nodes.ItemNodes.size(); ++i) {
+            if (fields[i]) {
+                BufferForUsedInputItems.push_back(*fields[i]);
+            }
         }
-        
+
+        for (size_t i = 0, j = 0; i != Nodes.ItemNodes.size(); ++i) {
+            if (Nodes.IsInputItemNodeUsed(i)) {
+                fields[i] = &BufferForUsedInputItems[j++];
+            } else {
+                fields[i] = nullptr;
+            }
+        }
+
+        Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue *>(ProcessingState->Tongue));
         const bool isNew = ProcessingState->TasteIt();
-
-        for (size_t i = KeyWidth; i != ValueElementsCount; ++i) {
-            //jumping into unsafe world, refusing ownership
-            static_cast<NUdf::TUnboxedValue&>(ProcessingState->Throat[i - KeyWidth]) = std::move(*fields[KeyWidth + i]);
-        }
         Nodes.ProcessItem(
             ctx,
             isNew ? nullptr : static_cast<NUdf::TUnboxedValue *>(ProcessingState->Tongue),
             static_cast<NUdf::TUnboxedValue *>(ProcessingState->Throat)
         );
+        BufferForUsedInputItems.resize(0);
     }
 
     void ProcessStateSpilling() {
@@ -618,6 +624,8 @@ public:
     TUnboxedValueVector BlockingData;
 };
 
+
+
 class TSpillingSupportState : public TComputationValue<TSpillingSupportState> {
     typedef TComputationValue<TSpillingSupportState> TBase;
     typedef std::optional<NThreading::TFuture<ISpiller::TKey>> TAsyncWriteOperation;
@@ -686,32 +694,6 @@ private:
         return EFetchResult::Yield;
     }
 
-    bool IsSplitted = false;
-
-    void DoSplitStateIntoBucketsOnce(TComputationContext& ctx) {
-        if (IsSplitted) return;
-
-        for (ui64 i = 0; i < SpilledBucketCount; ++i) {
-            auto spiller = ctx.SpillerFactory->CreateSpiller();
-
-            SpilledBuckets.emplace_back(
-                Nodes
-            );
-            auto& b = SpilledBuckets.back();
-            b.SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, KeyAndStateType, 1 << 20);
-            b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 1 << 20);
-            b.ProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal);
-            b.ValueElementsCount = KeyAndStateType->GetElementsCount();
-            b.ItemCount = UsedInputItemType->GetElementsCount();
-            b.KeyWidth = KeyWidth;
-            b.WideFieldsIndex = WideFieldsIndex;
-        }
-
-        SplitStateIntoBuckets();
-
-        IsSplitted = true;
-    }
-
     EFetchResult DoCalculateInMemory(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
         auto **fields = ctx.WideFields.data() + WideFieldsIndex;
         while (InputDataFetchResult != EFetchResult::Finish) {
@@ -771,13 +753,13 @@ private:
     }
 
     void DoCalculateWithSpilling(TComputationContext& ctx) {
-        UpdateBuckets(ctx);
-        if (IsAnyBucketBlocked) {
+        // UpdateBuckets(ctx);
+        /*if (IsAnyBucketBlocked) {
             if (SpilledBuckets[BlockedBuckedId].IsBlocked())  {
                 return;
             }
             IsAnyBucketBlocked = false;
-        }
+        }*/
         /* if (!HasMemoryForProcessing()) {
             ReduceMemoryUsage();
             return;

@@ -344,10 +344,10 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
             continue;
         }
         auto portionSchema = VersionedIndex.GetSchema(info->GetMinSnapshot());
-        auto statOperator = portionSchema->GetIndexInfo().GetStatistics(NStatistics::TIdentifier(NStatistics::EType::Max, {ttlColumnId}));
+        auto statOperator = portionSchema->GetIndexInfo().GetStatistics(NStatistics::TIdentifier(NStatistics::EType::Max, {evictColumnId}));
         std::shared_ptr<arrow::Scalar> max;
         if (!statOperator) {
-            max = info->MaxValue(ttlColumnId);
+            max = info->MaxValue(evictColumnId);
             if (!max) {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "scalar_less_not_max");
                 SignalCounters.OnPortionNoBorder(info->BlobsBytes());

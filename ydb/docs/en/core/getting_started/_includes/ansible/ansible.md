@@ -137,6 +137,7 @@ The values of the `system_timezone` and `system_ntp_servers` variables depend on
 - Alibaba
   * The specifics of connecting to NTP servers in Alibaba are described in [this article](https://www.alibabacloud.com/help/en/ecs/user-guide/alibaba-cloud-ntp-server).
 
+{% endlist %}
 
 No changes to other sections of the `50-inventory.yaml` configuration file are required. Next, you can change the standard YDB root user password contained in the encrypted inventory file `99-inventory-vault.yaml` and in the file `ansible_vault_password_file.txt`. To change the password – specify the new password in the `ansible_vault_password_file.txt` file and duplicate it in the `99-inventory-vault.yaml` file in the format:
   ```yaml

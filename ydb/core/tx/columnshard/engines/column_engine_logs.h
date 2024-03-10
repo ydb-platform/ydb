@@ -89,7 +89,7 @@ private:
     std::shared_ptr<TGranulesStorage> GranulesStorage;
     std::shared_ptr<IStoragesManager> StoragesManager;
     TEvictionsController EvictionsController;
-    class TTieringProcessContext {
+    bool TiersInitialized = false;
     private:
         const ui64 MemoryUsageLimit;
         ui64 MemoryUsage = 0;

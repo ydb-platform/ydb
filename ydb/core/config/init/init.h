@@ -65,6 +65,13 @@ public:
     virtual THashMap<ui32, TConfigItemInfo> Dump() const = 0;
 };
 
+class IInitLogger {
+public:
+    virtual ~IInitLogger() {}
+    virtual IOutputStream& Out() const noexcept = 0;
+    virtual IOutputStream& Err() const noexcept = 0;
+};
+
 // ===
 
 class IMemLogInitializer {
@@ -105,7 +112,8 @@ public:
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const TNodeRegistrationSettings& regSettings,
-        const IEnv& env) const = 0;
+        const IEnv& env,
+        IInitLogger& logger) const = 0;
 };
 
 // ===
@@ -126,7 +134,8 @@ public:
         const TGrpcSslSettings& gs,
         const TVector<TString>& addrs,
         const TDynConfigSettings& settings,
-        const IEnv& env) const = 0;
+        const IEnv& env,
+        IInitLogger& logger) const = 0;
 };
 
 // ===
@@ -150,6 +159,17 @@ public:
         THashMap<ui32, TConfigItemInfo>& configInitInfo) const = 0;
 };
 
+struct TInitialConfiguratorDependencies {
+    NConfig::IErrorCollector& ErrorCollector;
+    NConfig::IProtoConfigFileProvider& ProtoConfigFileProvider;
+    NConfig::IConfigUpdateTracer& ConfigUpdateTracer;
+    NConfig::IMemLogInitializer& MemLogInit;
+    NConfig::INodeBrokerClient& NodeBrokerClient;
+    NConfig::IDynConfigClient& DynConfigClient;
+    NConfig::IEnv& Env;
+    NConfig::IInitLogger& Logger;
+};
+
 std::unique_ptr<IConfigUpdateTracer> MakeDefaultConfigUpdateTracer();
 std::unique_ptr<IProtoConfigFileProvider> MakeDefaultProtoConfigFileProvider();
 std::unique_ptr<IEnv> MakeDefaultEnv();
@@ -157,34 +177,14 @@ std::unique_ptr<IErrorCollector> MakeDefaultErrorCollector();
 std::unique_ptr<IMemLogInitializer> MakeDefaultMemLogInitializer();
 std::unique_ptr<INodeBrokerClient> MakeDefaultNodeBrokerClient();
 std::unique_ptr<IDynConfigClient> MakeDefaultDynConfigClient();
+std::unique_ptr<IInitLogger> MakeDefaultInitLogger();
 
-std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(
-        NConfig::IErrorCollector& errorCollector,
-        NConfig::IProtoConfigFileProvider& protoConfigFileProvider,
-        NConfig::IConfigUpdateTracer& configUpdateTracer,
-        NConfig::IMemLogInitializer& memLogInit,
-        NConfig::INodeBrokerClient& nodeBrokerClient,
-        NConfig::IDynConfigClient& DynConfigClient,
-        NConfig::IEnv& env);
+std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(TInitialConfiguratorDependencies deps);
 
 class TInitialConfigurator {
 public:
-    TInitialConfigurator(
-        NConfig::IErrorCollector& errorCollector,
-        NConfig::IProtoConfigFileProvider& protoConfigFileProvider,
-        NConfig::IConfigUpdateTracer& configUpdateTracer,
-        NConfig::IMemLogInitializer& memLogInit,
-        NConfig::INodeBrokerClient& nodeBrokerClient,
-        NConfig::IDynConfigClient& dynConfigClient,
-        NConfig::IEnv& env)
-            : Impl(MakeDefaultInitialConfigurator(
-                       errorCollector,
-                       protoConfigFileProvider,
-                       configUpdateTracer,
-                       memLogInit,
-                       nodeBrokerClient,
-                       dynConfigClient,
-                       env))
+    TInitialConfigurator(TInitialConfiguratorDependencies deps)
+            : Impl(MakeDefaultInitialConfigurator(deps))
     {}
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {

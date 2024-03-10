@@ -280,7 +280,8 @@ class TDefaultNodeBrokerClient
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const TNodeRegistrationSettings& settings,
-        const IEnv& env)
+        const IEnv& env,
+        IInitLogger& logger)
     {
         THolder<NClient::TRegistrationResult> result;
         while (!result || !result->IsSuccess()) {
@@ -291,10 +292,10 @@ class TDefaultNodeBrokerClient
                     settings,
                     env);
                 if (result->IsSuccess()) {
-                    Cout << "Success. Registered via legacy service as " << result->GetNodeId() << Endl;
+                    logger.Out() << "Success. Registered via legacy service as " << result->GetNodeId() << Endl;
                     break;
                 }
-                Cerr << "Registration error: " << result->GetErrorMessage() << Endl;
+                logger.Err() << "Registration error: " << result->GetErrorMessage() << Endl;
             }
             if (!result || !result->IsSuccess()) {
                 env.Sleep(TDuration::Seconds(1));
@@ -311,11 +312,12 @@ class TDefaultNodeBrokerClient
         return result;
     }
 
-   static  NYdb::NDiscovery::TNodeRegistrationResult RegisterDynamicNodeViaDiscoveryService(
+   static NYdb::NDiscovery::TNodeRegistrationResult RegisterDynamicNodeViaDiscoveryService(
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const NYdb::NDiscovery::TNodeRegistrationSettings& settings,
-        const IEnv& env)
+        const IEnv& env,
+        IInitLogger& logger)
     {
         NYdb::NDiscovery::TNodeRegistrationResult result;
         const size_t maxNumberReceivedCallUnimplemented = 5;
@@ -328,10 +330,10 @@ class TDefaultNodeBrokerClient
                     settings,
                     env);
                 if (result.IsSuccess()) {
-                    Cout << "Success. Registered via discovery service as " << result.GetNodeId() << Endl;
+                    logger.Out() << "Success. Registered via discovery service as " << result.GetNodeId() << Endl;
                     break;
                 }
-                Cerr << "Registration error: " << static_cast<NYdb::TStatus>(result) << Endl;
+                logger.Err() << "Registration error: " << static_cast<NYdb::TStatus>(result) << Endl;
             }
             if (!result.IsSuccess()) {
                 env.Sleep(TDuration::Seconds(1));
@@ -371,7 +373,8 @@ public:
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const TNodeRegistrationSettings& regSettings,
-        const IEnv& env) const override
+        const IEnv& env,
+        IInitLogger& logger) const override
     {
         auto newRegSettings = GetNodeRegistrationSettings(regSettings);
 
@@ -381,14 +384,16 @@ public:
                 grpcSettings,
                 addrs,
                 newRegSettings,
-                env);
+                env,
+                logger);
 
         if (!std::get<NYdb::NDiscovery::TNodeRegistrationResult>(result).IsSuccess()) {
             result = RegisterDynamicNodeViaLegacyService(
                 grpcSettings,
                 addrs,
                 regSettings,
-                env);
+                env,
+                logger);
         }
 
         return std::make_unique<TResult>(std::move(result));
@@ -403,6 +408,7 @@ class TDefaultDynConfigClient
         const TString &addr,
         const TDynConfigSettings& settings,
         const IEnv& env,
+        IInitLogger& logger,
         TMaybe<NKikimr::NClient::TConfigurationResult>& res,
         TString &error)
     {
@@ -412,7 +418,7 @@ class TDefaultDynConfigClient
                     env));
         auto configurator = kikimr.GetNodeConfigurator();
 
-        Cout << "Trying to get configs from " << addr << Endl;
+        logger.Out() << "Trying to get configs from " << addr << Endl;
 
         auto result = configurator.SyncGetNodeConfig(settings.NodeId,
                                                      settings.FQDNHostName,
@@ -425,11 +431,11 @@ class TDefaultDynConfigClient
 
         if (!result.IsSuccess()) {
             error = result.GetErrorMessage();
-            Cerr << "Configuration error: " << error << Endl;
+            logger.Err() << "Configuration error: " << error << Endl;
             return false;
         }
 
-        Cout << "Success." << Endl;
+        logger.Out() << "Success." << Endl;
 
         res = result;
 
@@ -440,7 +446,8 @@ public:
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const TDynConfigSettings& settings,
-        const IEnv& env) const override
+        const IEnv& env,
+        IInitLogger& logger) const override
     {
         TMaybe<NKikimr::NClient::TConfigurationResult> res;
         bool success = false;
@@ -451,7 +458,7 @@ public:
         int attempts = 0;
         while (!success && attempts < minAttempts) {
             for (auto addr : addrs) {
-                success = TryToLoadConfigForDynamicNodeFromCMS(grpcSettings, addr, settings, env, res, error);
+                success = TryToLoadConfigForDynamicNodeFromCMS(grpcSettings, addr, settings, env, logger, res, error);
                 ++attempts;
                 if (success) {
                     break;
@@ -466,10 +473,23 @@ public:
         }
 
         if (!success) {
-            Cerr << "WARNING: couldn't load config from CMS: " << error << Endl;
+            logger.Err() << "WARNING: couldn't load config from CMS: " << error << Endl;
         }
 
         return res;
+    }
+};
+
+class TDefaultInitLogger
+    : public IInitLogger
+{
+public:
+    IOutputStream& Out() const noexcept override {
+        return Cout;
+    }
+
+    IOutputStream& Err() const noexcept override {
+        return Cerr;
     }
 };
 
@@ -499,6 +519,10 @@ std::unique_ptr<INodeBrokerClient> MakeDefaultNodeBrokerClient() {
 
 std::unique_ptr<IDynConfigClient> MakeDefaultDynConfigClient() {
     return std::make_unique<TDefaultDynConfigClient>();
+}
+
+std::unique_ptr<IInitLogger> MakeDefaultInitLogger() {
+    return std::make_unique<TDefaultInitLogger>();
 }
 
 void CopyNodeLocation(NActorsInterconnect::TNodeLocation* dst, const NYdb::NDiscovery::TNodeLocation& src) {
@@ -754,23 +778,8 @@ NKikimrConfig::TAppConfig GetActualDynConfig(
     return regularConfig;
 }
 
-std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(
-        NConfig::IErrorCollector& errorCollector,
-        NConfig::IProtoConfigFileProvider& protoConfigFileProvider,
-        NConfig::IConfigUpdateTracer& configUpdateTracer,
-        NConfig::IMemLogInitializer& memLogInit,
-        NConfig::INodeBrokerClient& nodeBrokerClient,
-        NConfig::IDynConfigClient& dynConfigClient,
-        NConfig::IEnv& env)
-{
-    return std::make_unique<TInitialConfiguratorImpl>(
-        errorCollector,
-        protoConfigFileProvider,
-        configUpdateTracer,
-        memLogInit,
-        nodeBrokerClient,
-        dynConfigClient,
-        env);
+std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(TInitialConfiguratorDependencies deps) {
+    return std::make_unique<TInitialConfiguratorImpl>(deps);
 }
 
 } // namespace NKikimr::NConfig

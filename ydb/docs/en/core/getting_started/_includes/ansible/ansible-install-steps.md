@@ -53,7 +53,7 @@ The role will install the following packages in the system: atop, bash-completio
   * `install YDB server binary package from archive` – Installs {{ ydb-short-name }} from a downloaded archive.
   * `create YDB audit directory` – Creates an `audit` subdirectory in the {{ ydb-short-name }} installation directory.
   * `setup certificates` – A block of tasks for setting up security certificates:
-    + `create YDB certs directory` – Creates a `certs` subdirectory in the YDB installation directory.
+    + `create YDB certs directory` – Creates a `certs` subdirectory in the {{ ydb-short-name }} installation directory.
     + `copy the TLS ca.crt` – Copies the root certificate `ca.crt` to the server.
     + `copy the TLS node.crt` – Copies the TLS certificate `node.crt` from the generated certificates directory.
     + `copy the TLS node.key` – Copies the TLS certificate `node.key` from the generated certificates directory.

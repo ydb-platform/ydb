@@ -250,17 +250,6 @@ public:
 
         explicit TDescription(
                 TReplica* owner,
-                const TPathId& pathId,
-                TOpaquePathDescription&& pathDescription)
-            : Owner(owner)
-            , PathId(pathId)
-            , PathDescription(std::move(pathDescription))
-        {
-            TrackMemory();
-        }
-
-        explicit TDescription(
-                TReplica* owner,
                 const TString& path,
                 const TPathId& pathId,
                 TOpaquePathDescription&& pathDescription)
@@ -540,13 +529,13 @@ private:
     }
 
     // upsert description only by pathId
-    TDescription& UpsertDescription(const TPathId& pathId, TOpaquePathDescription&& pathDescription) {
+    TDescription& UpsertDescriptionByPathId(const TString& path, const TPathId& pathId, TOpaquePathDescription&& pathDescription) {
         SBR_LOG_I("Upsert description"
             << ": pathId# " << pathId
             << ", pathDescription# " << pathDescription.ToString()
         );
 
-        return Descriptions.Upsert(pathId, TDescription(this, pathId, std::move(pathDescription)));
+        return Descriptions.Upsert(pathId, TDescription(this, path, pathId, std::move(pathDescription)));
     }
 
     // upsert description by path AND pathId both
@@ -898,7 +887,7 @@ private:
             if (abandonedSchemeShards.contains(pathId.OwnerId)) { // TSS is ignored, present GSS reverted it
                 log("Replace GSS by TSS description is rejected, GSS implicitly knows that TSS has been reverted"
                     ", but still inject description only by pathId for safe");
-                UpsertDescription(pathId, std::move(pathDescription));
+                UpsertDescriptionByPathId(path, pathId, std::move(pathDescription));
                 return AckUpdate(ev);
             }
 
@@ -923,7 +912,7 @@ private:
             }
 
             log("Inject description only by pathId, it is update from GSS");
-            UpsertDescription(pathId, std::move(pathDescription));
+            UpsertDescriptionByPathId(path, pathId, std::move(pathDescription));
             return AckUpdate(ev);
         }
 

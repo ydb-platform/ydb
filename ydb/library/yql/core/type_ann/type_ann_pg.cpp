@@ -1492,7 +1492,7 @@ void ScanSublinks(TExprNode::TPtr root, TNodeSet& sublinks) {
 
 bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>& possibleAliases,
     bool* hasStar, bool& hasColumnRef, THashSet<TString>& refs, THashMap<TString, THashSet<TString>>* qualifiedRefs,
-    TExtContext& ctx, bool scanColumnsOnly, bool hasEmitPgStar = false) {
+    TExtContext& ctx, bool scanColumnsOnly, bool hasEmitPgStar = false, THashSet<TString> usedInUsing = {}) {
     bool isError = false;
     VisitExpr(root, [&](const TExprNode::TPtr& node) {
         if (node->IsCallable("PgSubLink")) {
@@ -1591,103 +1591,110 @@ bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>&
                 isError = true;
                 return false;
             }
-
-            TString foundAlias;
-            bool matchedAlias = false;
-            ui32 matchedAliasI = 0;
-            TMaybe<ui32> matchedAliasIndex;
-            TMaybe<ui32> matchedAliasIndexI;
-            for (ui32 priority : {TInput::Projection, TInput::Current, TInput::External}) {
-                ui32 matches = 0;
-                for (ui32 inputIndex = 0; inputIndex < inputs.size(); ++inputIndex) {
-                    auto& x = inputs[inputIndex];
-                    if (priority != x.Priority) {
-                        continue;
-                    }
-
-                    if (node->ChildrenSize() == 2) {
-                        if (x.Alias.empty() || node->Head().Content() != x.Alias) {
+            if (node->ChildrenSize() == 1 && usedInUsing.contains(node->Tail().Content())) {
+                refs.insert(TString(node->Tail().Content()));
+            } else {
+                TString foundAlias;
+                bool matchedAlias = false;
+                ui32 matchedAliasI = 0;
+                TMaybe<ui32> matchedAliasIndex;
+                TMaybe<ui32> matchedAliasIndexI;
+                for (ui32 priority : {TInput::Projection, TInput::Current, TInput::External}) {
+                    ui32 matches = 0;
+                    for (ui32 inputIndex = 0; inputIndex < inputs.size(); ++inputIndex) {
+                        auto& x = inputs[inputIndex];
+                        if (priority != x.Priority) {
                             continue;
                         }
-                    }
 
-                    if (!x.Alias.empty()) {
-                        if (node->Tail().Content() == x.Alias) {
-                            matchedAlias = true;
-                            matchedAliasIndex = inputIndex;
-                        } else if (AsciiEqualsIgnoreCase(node->Tail().Content(), x.Alias)) {
-                            ++matchedAliasI;
-                            matchedAliasIndexI = inputIndex;
+                        if (node->ChildrenSize() == 2) {
+                            if (x.Alias.empty() || node->Head().Content() != x.Alias) {
+                                continue;
+                            }
+
+                        if (!x.Alias.empty()) {
+                            if (node->Tail().Content() == x.Alias) {
+                                matchedAlias = true;
+                                matchedAliasIndex = inputIndex;
+                            } else if (AsciiEqualsIgnoreCase(node->Tail().Content(), x.Alias)) {
+                                ++matchedAliasI;
+                                matchedAliasIndexI = inputIndex;
+                            }
                         }
-                    }
 
-                    auto pos = x.Type->FindItemI(node->Tail().Content());
-                    if (pos) {
-                        foundAlias = x.Alias;
-                        ++matches;
-                        if (!scanColumnsOnly && matches > 1) {
+                        auto pos = x.Type->FindItemI(node->Tail().Content());
+                        if (pos) {
+                            foundAlias = x.Alias;
+                            ++matches;
+                            if (!scanColumnsOnly && matches > 1) {
+                                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()),
+                                    TStringBuilder() << "Column reference is ambiguous: " << node->Tail().Content()));
+                                isError = true;
+                                return false;
+                            }
+
+                            auto pos = x.Type->FindItemI(node->Tail().Content());
+                            if (pos) {
+                                foundAlias = x.Alias;
+                                ++matches;
+                                if (!scanColumnsOnly && matches > 1) {
+                                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()),
+                                        TStringBuilder() << "Column reference is ambiguous: " << node->Tail().Content()));
+                                    isError = true;
+                                    return false;
+                                }
+
+                                if (x.Priority == TInput::External) {
+                                    x.UsedExternalColumns.insert(TString(x.Type->GetItems()[*pos]->GetName()));
+                                }
+                            }
+                        }
+
+                        if (matches) {
+                            break;
+                        }
+
+                        TInput* tableRefInput = nullptr;
+                        if (matchedAlias) {
+                            tableRefInput = &inputs[*matchedAliasIndex];
+                        } else {
+                            if (matchedAliasI > 1) {
+                                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()),
+                                        TStringBuilder() << "Table reference is ambiguous: " << node->Tail().Content()));
+                                isError = true;
+                                return false;
+                            }
+
+                            if (matchedAliasI == 1) {
+                                tableRefInput = &inputs[*matchedAliasIndexI];
+                            }
+                        }
+
+                        if (!tableRefInput) {
                             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()),
-                                TStringBuilder() << "Column reference is ambiguous: " << node->Tail().Content()));
+                                TStringBuilder() << "No such column: " << node->Tail().Content()));
                             isError = true;
                             return false;
                         }
 
-                        if (x.Priority == TInput::External) {
-                            x.UsedExternalColumns.insert(TString(x.Type->GetItems()[*pos]->GetName()));
+                        for (const auto& item : tableRefInput->Type->GetItems()) {
+                            if (!item->GetName().StartsWith("_yql_")) {
+                                refs.insert(TString(item->GetName()));
+                                if (tableRefInput->Priority == TInput::External) {
+                                    tableRefInput->UsedExternalColumns.insert(TString(item->GetName()));
+                                }
+                            }
                         }
-                    }
-                }
 
-                if (matches) {
-                    break;
-                }
-
-                if (!matches && priority == TInput::External) {
-                    if (scanColumnsOnly) {
-                        // projection columns aren't available yet
                         return true;
                     }
 
-                    TInput* tableRefInput = nullptr;
-                    if (matchedAlias) {
-                        tableRefInput = &inputs[*matchedAliasIndex];
+                    if (foundAlias && qualifiedRefs) {
+                        (*qualifiedRefs)[foundAlias].insert(TString(node->Tail().Content()));
                     } else {
-                        if (matchedAliasI > 1) {
-                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()),
-                                    TStringBuilder() << "Table reference is ambiguous: " << node->Tail().Content()));
-                            isError = true;
-                            return false;
-                        }
-
-                        if (matchedAliasI == 1) {
-                            tableRefInput = &inputs[*matchedAliasIndexI];
-                        }
+                        refs.insert(TString(node->Tail().Content()));
                     }
-
-                    if (!tableRefInput) {
-                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()),
-                            TStringBuilder() << "No such column: " << node->Tail().Content()));
-                        isError = true;
-                        return false;
-                    }
-
-                    for (const auto& item : tableRefInput->Type->GetItems()) {
-                        if (!item->GetName().StartsWith("_yql_")) {
-                            refs.insert(TString(item->GetName()));
-                            if (tableRefInput->Priority == TInput::External) {
-                                tableRefInput->UsedExternalColumns.insert(TString(item->GetName()));
-                            }
-                        }
-                    }
-
-                    return true;
                 }
-            }
-
-            if (foundAlias && qualifiedRefs) {
-                (*qualifiedRefs)[foundAlias].insert(TString(node->Tail().Content()));
-            } else {
-                refs.insert(TString(node->Tail().Content()));
             }
         }
 
@@ -1841,11 +1848,12 @@ void AddColumns(const TInputs& inputs, const bool* hasStar, const THashSet<TStri
                 for (ui32 i = 0; i < x.Type->GetSize(); ++i) {
                     auto item = x.Type->GetItems()[i];
                     if (!item->GetName().StartsWith("_yql_")) {
-                        if (present.contains(item->GetName())) {
-                            continue;
-                        }
                         if (usedInUsing.contains(item->GetName())) {
-                            present.emplace(item->GetName());
+                            if (!present.contains(item->GetName())) {
+                                items.push_back(item);
+                                present.emplace(item->GetName());
+                            }
+                            continue;
                         }
                         item = AddAlias(x.Alias, item, ctx);
                         items.push_back(item);
@@ -1863,10 +1871,8 @@ void AddColumns(const TInputs& inputs, const bool* hasStar, const THashSet<TStri
                 auto pos = x.Type->FindItemI(ref);
                 if (pos) {
                     auto item = x.Type->GetItems()[*pos];
-                    if (present.contains(item->GetName())) {
-                        continue;
-                    }
-                    if (usedInUsing.contains(item->GetName())) {
+                    if (usedInUsing.contains(item->GetName()) && !present.contains(item->GetName())) {
+                        items.push_back(item);
                         present.emplace(item->GetName());
                     }
                     item = AddAlias(x.Alias, item, ctx);
@@ -1884,14 +1890,6 @@ void AddColumns(const TInputs& inputs, const bool* hasStar, const THashSet<TStri
                     auto pos = x.Type->FindItemI(ref);
                     if (pos) {
                         auto item = x.Type->GetItems()[*pos];
-
-                        if (present.contains(item->GetName())) {
-                            continue;
-                        }
-                        if (usedInUsing.contains(item->GetName())) {
-                            present.emplace(item->GetName());
-                        }
-
                         item = AddAlias(x.Alias, item, ctx);
                         items.push_back(item);
                     }
@@ -1904,7 +1902,8 @@ void AddColumns(const TInputs& inputs, const bool* hasStar, const THashSet<TStri
 }
 
 IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, const TExprNode::TPtr& argNode,
-    TExprNode::TPtr& newRoot, const TInputs& inputs, TExprNode::TPtr* expandedColumns, TExtContext& ctx, THashSet<TString> usedInUsing={}) {
+    TExprNode::TPtr& newRoot, const TInputs& inputs, TExprNode::TPtr* expandedColumns, TExtContext& ctx,
+    THashSet<TString> usedInUsing={}) {
     bool hasExternalInput = false;
     for (const auto& i : inputs) {
         if (i.Priority == TInput::External) {
@@ -1979,12 +1978,19 @@ IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, con
         if (node->IsCallable("PgColumnRef")) {
             const TInput* matchedAliasInput = nullptr;
             const TInput* matchedAliasInputI = nullptr;
+            if (node->ChildrenSize() == 1 && usedInUsing.contains(node->Tail().Content())) {
+                return ctx.Expr.Builder(node->Pos())
+                            .Callable("Member")
+                                .Add(0, argNode)
+                                .Atom(1, node->Tail().Content())
+                            .Seal()
+                            .Build();
+            }
             for (ui32 priority : { TInput::Projection, TInput::Current, TInput::External }) {
                 for (const auto& x : inputs) {
                     if (priority != x.Priority) {
                         continue;
                     }
-
                     if (node->ChildrenSize() == 2) {
                         if (x.Alias.empty() || node->Head().Content() != x.Alias) {
                             continue;
@@ -3279,8 +3285,11 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                                         }
                                                         if (repeatedColumnsInUsing.contains(col)) {
                                                             alreadyPresent.emplace(col);
+                                                            // coalesce of two inputs
+                                                            o.push_back(col);
+                                                        } else {
+                                                            o.push_back(MakeAliasedColumn(x.Alias, col));
                                                         }
-                                                        o.push_back(MakeAliasedColumn(x.Alias, col));
                                                     }
                                                 }
                                             }
@@ -3302,12 +3311,6 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                                 YQL_ENSURE(x.Order);
                                                 for (const auto& col : *x.Order) {
                                                     if (!col.StartsWith("_yql_")) {
-                                                        if (alreadyPresent.contains(col)) {
-                                                            continue;
-                                                        }
-                                                        if (repeatedColumnsInUsing.contains(col)) {
-                                                            alreadyPresent.emplace(col);
-                                                        }
                                                         o.push_back(MakeAliasedColumn(x.Alias, col));
                                                     }
                                                 }
@@ -3340,7 +3343,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                             ScanSublinks(lambda.TailPtr(), sublinks);
 
                             if (!ScanColumns(lambda.TailPtr(), joinInputs, possibleAliases, &hasStar, hasColumnRef,
-                                refs, &qualifiedRefs, ctx, scanColumnsOnly, hasEmitPgStar)) {
+                                refs, &qualifiedRefs, ctx, scanColumnsOnly, hasEmitPgStar, repeatedColumnsInUsing)) {
                                 return IGraphTransformer::TStatus::Error;
                             }
 
@@ -3416,25 +3419,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                     }
                                     outputItems[outputItemIndex[columnName]] = itemExpr;
                                 } else {
-                                    if (isUsing) {
-                                        if (repeatedColumnsInUsing.contains(itemExpr->GetName())) {
-                                            usingColumnsAnnotation[itemExpr->GetName()] = itemExpr->GetItemType();
-                                            outputItems.emplace_back(itemExpr);
-                                            repeatedColumnsInUsing.erase(TString(itemExpr->GetName()));
-                                        } else if (usingColumnsAnnotation.contains(itemExpr->GetName())) {
-                                            if (usingColumnsAnnotation[itemExpr->GetName()] != itemExpr->GetItemType()) {
-                                                TStringStream ss;
-                                                ss << "Expected column of same type when USING: got " << *itemExpr->GetItemType() << " != " << *usingColumnsAnnotation[itemExpr->GetName()];
-                                                
-                                                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), ss.Str()));
-                                                return IGraphTransformer::TStatus::Error;
-                                            }
-                                        } else {
-                                            outputItems.emplace_back(itemExpr);
-                                        }
-                                    } else {
-                                        outputItems.emplace_back(itemExpr);
-                                    }
+                                    outputItems.emplace_back(itemExpr);
                                 }
                             } else {
                                 // star or qualified star
@@ -3448,7 +3433,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                         }
                                         outputItems[outputItemIndex[name]] = itemRef;
                                     } else {
-                                        if (isUsing){
+                                        if (isUsing) {
                                             if (repeatedColumnsInUsing.contains(itemRef->GetName())) {
                                                 usingColumnsAnnotation[itemRef->GetName()] = itemRef->GetItemType();
                                                 outputItems.emplace_back(itemRef);
@@ -3457,7 +3442,6 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                                 if (usingColumnsAnnotation[itemRef->GetName()] != itemRef->GetItemType()) {
                                                     TStringStream ss;
                                                     ss << "Expected column of same type when USING: got " << *itemRef->GetItemType() << " != " << *usingColumnsAnnotation[itemRef->GetName()];
-                                                    
                                                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), ss.Str()));
                                                     return IGraphTransformer::TStatus::Error;
                                                 }
@@ -3926,7 +3910,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                     isUsing = 1;
                                     auto columnNames = child->Child(2);
                                     needRewriteUsing = child->ChildrenSize() == 3;
-                                    for (ui32 i = 0; i< columnNames->ChildrenSize(); ++i) {
+                                    for (ui32 i = 0; i < columnNames->ChildrenSize(); ++i) {
                                         if (repeatedColumnsInUsing.contains(columnNames->Child(i)->Content())) {
                                             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Duplicated column in USING clause: " << columnNames->Child(i)->Content()));
                                             return IGraphTransformer::TStatus::Error;

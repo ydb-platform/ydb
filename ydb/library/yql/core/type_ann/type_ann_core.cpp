@@ -4633,7 +4633,7 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus CoalesceMembersWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+        if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -4708,7 +4708,19 @@ namespace NTypeAnnImpl {
                     .Build();
             }
         }
-
+        if (input->ChildrenSize() > 2) {
+            output = ctx.Expr.Builder(input->Pos())
+                .Callable("CoalesceMembers")
+                    .Add(0, output)
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        for (ui32 i = 2; i < input->ChildrenSize(); ++i) {
+                            parent.Add(i - 1, input->Child(i));
+                        }
+                        return parent;
+                    })
+                .Seal()
+                .Build();
+        }
         return IGraphTransformer::TStatus::Repeat;
     }
 

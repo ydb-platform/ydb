@@ -1567,6 +1567,20 @@
             "uri": "https://{canondata_backend}/1781765/028f42f897160b53900546b39900217bb2eb9fb1/resource.tar.gz#test.test_pg-equals_where_over_cross-default.txt-Plan_/plan.txt"
         }
     ],
+    "test.test[pg-join_using2-default.txt-Debug]": [
+        {
+            "checksum": "b9e48a812c6d6803ada7f9cc6c8b5021",
+            "size": 863,
+            "uri": "https://{canondata_backend}/1936842/b5016605a05dac3457dfb6ae150637223d8431f4/resource.tar.gz#test.test_pg-join_using2-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg-join_using2-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1880306/51cf42e38aedb850f758a02645c1575dcd57d9e6/resource.tar.gz#test.test_pg-join_using2-default.txt-Plan_/plan.txt"
+        }
+    ],
     "test.test[pg-order_by_agg_extra_for_keys-default.txt-Debug]": [
         {
             "checksum": "ce32e7727fa30c52ace76c0a13ccbd68",

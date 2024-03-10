@@ -1926,6 +1926,48 @@
             "uri": "https://{canondata_backend}/1942415/14c2050022adcb6379d90c4a2a09abf0847e7643/resource.tar.gz#test.test_pg-distinct_on_single_projection_order_expr-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[pg-join_using2-default.txt-Debug]": [
+        {
+            "checksum": "e079fead69b471d375bd6d6e03a00168",
+            "size": 804,
+            "uri": "https://{canondata_backend}/1031349/a6529621512df25099c7ae9cdcdccc39b187ef1b/resource.tar.gz#test.test_pg-join_using2-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[pg-join_using2-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1937027/c733c92021e09996151cc1a5b3405a5a02c40568/resource.tar.gz#test.test_pg-join_using2-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-join_using2-default.txt-Results]": [
+        {
+            "checksum": "ae86e4f2224586240e955950c715bde6",
+            "size": 1359,
+            "uri": "https://{canondata_backend}/1937027/c733c92021e09996151cc1a5b3405a5a02c40568/resource.tar.gz#test.test_pg-join_using2-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[pg-join_using_tables1-default.txt-Debug]": [
+        {
+            "checksum": "bf858386e232cf02f2a3af363462f29f",
+            "size": 3460,
+            "uri": "https://{canondata_backend}/1942671/c1ab0a83029f7c74799a95ae958e67d80d8f8ecc/resource.tar.gz#test.test_pg-join_using_tables1-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[pg-join_using_tables1-default.txt-Plan]": [
+        {
+            "checksum": "8004fdef63fef69741adb1889297538d",
+            "size": 5983,
+            "uri": "https://{canondata_backend}/1942671/c1ab0a83029f7c74799a95ae958e67d80d8f8ecc/resource.tar.gz#test.test_pg-join_using_tables1-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-join_using_tables1-default.txt-Results]": [
+        {
+            "checksum": "44032e77794c7736ac66b0ac94b65dc0",
+            "size": 1642,
+            "uri": "https://{canondata_backend}/1937027/c733c92021e09996151cc1a5b3405a5a02c40568/resource.tar.gz#test.test_pg-join_using_tables1-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[pg-order_by_agg_input_columns_full-default.txt-Debug]": [
         {
             "checksum": "5aa8838361abedf603d1ea431bd2042f",

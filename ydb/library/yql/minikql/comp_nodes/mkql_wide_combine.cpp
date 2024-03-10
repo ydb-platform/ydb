@@ -447,13 +447,28 @@ private:
             InputDataFetchResult = Flow->FetchValues(ctx, fields);
             switch (InputDataFetchResult) {
                 case EFetchResult::One: {
-                    Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Tongue));
-                    const bool isNew = InMemoryProcessingState.TasteIt();
+                    BufferForKeyAnsState.resize(KeyWidth);
+                    Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue *>(BufferForKeyAnsState.data()));
+
+                    auto hash = Hasher(BufferForKeyAnsState.data());
+                    
+                    auto bucketId = hash % SpilledBucketCount;
+
+                    auto& bucket = SpilledBuckets[bucketId];
+
+                    for (size_t i = 0; i != KeyWidth; ++i) {
+                    //jumping into unsafe world, refusing ownership
+                        static_cast<NUdf::TUnboxedValue&>(bucket.ProcessingState->Tongue[i]) = std::move(BufferForKeyAnsState[i]);
+                    }
+                    auto isNew = bucket.ProcessingState->TasteIt();
+                    BufferForKeyAnsState.resize(0); //for freeing allocated key value asap
+
                     Nodes.ProcessItem(
                         ctx,
-                        isNew ? nullptr : static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Tongue),
-                        static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Throat)
+                        isNew ? nullptr : static_cast<NUdf::TUnboxedValue *>(bucket.ProcessingState->Tongue),
+                        static_cast<NUdf::TUnboxedValue *>(bucket.ProcessingState->Throat)
                     );
+
                     if (ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
                         SwitchMode(EOperatingMode::SpillState, ctx);
                         return EFetchResult::Yield;
@@ -467,7 +482,7 @@ private:
             }
         }
 
-        SplitStateIntoBucketsOnce();
+        // SplitStateIntoBucketsOnce();
 
         while(!SpilledBuckets.empty()) {
             auto& bucket = SpilledBuckets.front();

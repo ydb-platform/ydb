@@ -132,10 +132,10 @@ static-node-9 static-node-9.ydb-cluster.com
   * `system_ntp_servers`: [169.254.169.123, time.aws.com] [Подробнее](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/set-time.html#configure-time-sync) о настройках NTP-серверов AWS.
 
 - Azure
-  О том как настраивается синхронизация времени на виртуальных машинах Azure можно прочесть в [данной](https://learn.microsoft.com/en-us/azure/virtual-machines/linux/time-sync) статье. 
+  * О том как настраивается синхронизация времени на виртуальных машинах Azure можно прочесть в [данной](https://learn.microsoft.com/en-us/azure/virtual-machines/linux/time-sync) статье. 
 
 - Alibaba  
-  Cпецифика подключения к NTP-серверам в Alibaba описана в этой [статье](https://www.alibabacloud.com/help/en/ecs/user-guide/alibaba-cloud-ntp-server).
+  * Cпецифика подключения к NTP-серверам в Alibaba описана в этой [статье](https://www.alibabacloud.com/help/en/ecs/user-guide/alibaba-cloud-ntp-server).
 
 {% endlist %}
 

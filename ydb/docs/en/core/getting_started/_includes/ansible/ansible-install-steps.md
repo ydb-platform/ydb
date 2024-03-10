@@ -50,8 +50,8 @@ The role will install the following packages in the system: atop, bash-completio
   * `create certs group` – Creates a system group `certs`.
   * `create ydb group` – Creates a system group `ydb`.
   * `create ydb user` – Creates a system user `ydb` with a home directory.
-  * `install YDB server binary package from archive` – Installs YDB from a downloaded archive.
-  * `create YDB audit directory` – Creates an `audit` subdirectory in the YDB installation directory.
+  * `install YDB server binary package from archive` – Installs {{ ydb-short-name }} from a downloaded archive.
+  * `create YDB audit directory` – Creates an `audit` subdirectory in the {{ ydb-short-name }} installation directory.
   * `setup certificates` – A block of tasks for setting up security certificates:
     + `create YDB certs directory` – Creates a `certs` subdirectory in the YDB installation directory.
     + `copy the TLS ca.crt` – Copies the root certificate `ca.crt` to the server.

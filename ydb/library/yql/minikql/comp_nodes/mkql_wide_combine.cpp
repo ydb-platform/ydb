@@ -324,7 +324,8 @@ public:
         InMemory, // try to perform all processing in memory
         SpillState, //after switching to the spilling mode we spill collected state and free allocated memory
         SpillData, //store incoming data
-        ProcessSpilled //restore and process spilled data
+        ProcessSpilled, //restore and process spilled data
+        InMemorySpilled
     };
     TSpillingSupportState(
         TMemoryUsageInfo* memInfo,
@@ -382,6 +383,9 @@ public:
                 case EOperatingMode::ProcessSpilled: {
                     return ProcessSpilledData(ctx, output);
                 }
+                case EOperatingMode::InMemorySpilled: {
+                    return DoCalculateInMemorySpilled(ctx, output);
+                }
             }
         }
         Y_UNREACHABLE();
@@ -436,8 +440,43 @@ private:
     }
 
     EFetchResult DoCalculateInMemory(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
+        auto **fields = ctx.WideFields.data() + WideFieldsIndex;
+        while (InputDataFetchResult != EFetchResult::Finish) {
+            for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i) {
+                fields[i] = Nodes.GetUsedInputItemNodePtrOrNull(ctx, i);
+            }
+            InputDataFetchResult = Flow->FetchValues(ctx, fields);
+            switch (InputDataFetchResult) {
+                case EFetchResult::One: {
+                    Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Tongue));
+                    const bool isNew = InMemoryProcessingState.TasteIt();
+                    Nodes.ProcessItem(
+                        ctx,
+                        isNew ? nullptr : static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Tongue),
+                        static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Throat)
+                    );
+                    if (ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
+                        SwitchMode(EOperatingMode::InMemorySpilled, ctx);
+                        return EFetchResult::Yield;
+                    }
+                    continue;
+                }
+                case EFetchResult::Yield:
+                    return EFetchResult::Yield;
+                case EFetchResult::Finish:
+                    break;
+            }
+        }
 
-        InitBucketsOnce(ctx);
+
+        if (const auto values = static_cast<NUdf::TUnboxedValue*>(InMemoryProcessingState.Extract())) {
+            Nodes.FinishItem(ctx, values, output);
+            return EFetchResult::One;
+        }
+        return EFetchResult::Finish;
+    }
+
+    EFetchResult DoCalculateInMemorySpilled(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
 
         auto **fields = ctx.WideFields.data() + WideFieldsIndex;
         while (InputDataFetchResult != EFetchResult::Finish) {
@@ -469,10 +508,6 @@ private:
                         static_cast<NUdf::TUnboxedValue *>(bucket.ProcessingState->Throat)
                     );
 
-                    if (ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
-                        SwitchMode(EOperatingMode::SpillState, ctx);
-                        return EFetchResult::Yield;
-                    }
                     continue;
                 }
                 case EFetchResult::Yield:
@@ -754,13 +789,23 @@ private:
                 MKQL_ENSURE(EOperatingMode::SpillData == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
                 break;
+            case EOperatingMode::InMemorySpilled:
+                SpilledBuckets.resize(SpilledBucketCount);
+                for (auto &b: SpilledBuckets) {
+                    b.Spiller = ctx.SpillerFactory->CreateSpiller();
+                    b.InitialState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(b.Spiller, KeyAndStateType, 1 << 20);
+                    b.ProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal);
+                }
+                SplitStateIntoBucketsOnce();
+                break;
+
         }
         Mode = mode;
     }
 
     bool IsSwitchToSpillingModeCondition() const {
         //TODO implement me
-        return false;
+        return true;
     }
 
 private:

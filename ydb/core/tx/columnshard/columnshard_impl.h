@@ -256,7 +256,7 @@ class TColumnShard
     }
 
     void ActivateTiering(const ui64 pathId, const TString& useTiering, const bool onTabletInit = false);
-    void OnTieringModified();
+    void OnTieringModified(const std::optional<ui64> pathId = {});
 public:
     enum class EOverloadStatus {
         ShardTxInFly /* "shard_tx" */,

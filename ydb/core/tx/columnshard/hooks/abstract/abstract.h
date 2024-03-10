@@ -147,9 +147,6 @@ public:
     virtual void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& /*tiers*/) {
     }
 
-    virtual void OnTieringUpdate(NMetadata::NFetcher::ISnapshot::TPtr /* snapshotExt */) {
-    }
-
     virtual ILocalDBModifier::TPtr BuildLocalBaseModifier() const {
         return nullptr;
     }

@@ -146,7 +146,7 @@ protected:
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const override {
         return CompactionControl;
     }
-    void OnTieringUpdate(NMetadata::NFetcher::ISnapshot::TPtr /* snapshotExt */) override {
+    void OnTieringModified(const std::shared_ptr<NKikimr::NColumnShard::TTiersManager>& /*tiers*/) override {
         TieringUpdates.Inc();
     }
 

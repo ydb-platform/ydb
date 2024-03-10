@@ -606,7 +606,9 @@ void TEvictionsController::RefreshTierings(std::optional<THashMap<ui64, TTiering
         OriginalTierings = std::move(*tierings);
     }
     auto copy = OriginalTierings;
-    AFL_VERIFY(ttl.AddTtls(copy));
+    if (!ttl.AddTtls(copy)) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Broken ttl");
+    }
     NextCheckInstantForTierings = BuildNextInstantCheckers(std::move(copy));
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "RefreshTierings")("count", NextCheckInstantForTierings.size());
 }

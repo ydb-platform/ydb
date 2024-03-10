@@ -735,6 +735,9 @@ bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls) {
         ACFL_DEBUG("background", "ttl")("skip_reason", "in_progress");
         return false;
     }
+    if (force) {
+        TablesManager.MutablePrimaryIndex().OnTieringModified(Tiers, TablesManager.GetTtl(), {});
+    }
     THashMap<ui64, NOlap::TTiering> eviction = pathTtls;
     for (auto&& i : eviction) {
         ACFL_DEBUG("background", "ttl")("path", i.first)("info", i.second.GetDebugString());

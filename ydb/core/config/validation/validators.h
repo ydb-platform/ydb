@@ -7,6 +7,8 @@
 #include <map>
 #include <set>
 
+namespace NKikimr::NConfig {
+
 #define CHECK_ERR(x, err) if (!(x)) { \
     msg = err; \
     return EValidationResult::Error; \
@@ -43,7 +45,6 @@ bool IsSame(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& lhs, const 
 bool IsSame(const NKikimrBlobStorage::TVDiskID& lhs, const NKikimrBlobStorage::TVDiskID& rhs) {
     return
         lhs.GetGroupID() == rhs.GetGroupID() &&
-        lhs.GetGroupGeneration() == rhs.GetGroupGeneration() &&
         lhs.GetRing() == rhs.GetRing() &&
         lhs.GetDomain() == rhs.GetDomain() &&
         lhs.GetVDisk() == rhs.GetVDisk();
@@ -54,6 +55,21 @@ bool IsSame(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& lhs, const 
         IsSame(lhs.GetVDiskID(), rhs.GetVDiskID()) && IsSame(lhs.GetVDiskLocation(), rhs.GetVDiskLocation());
 }
 
+struct TPDiskKey {
+    ui32 NodeId;
+    ui32 PDiskId;
+
+    auto operator<=>(const TPDiskKey&) const = default;
+};
+
+struct TVDiskKey {
+    ui32 NodeId;
+    ui32 PDiskId;
+    ui32 VDiskSlotId;
+
+    auto operator<=>(const TVDiskKey&) const = default;
+};
+
 EValidationResult ValidateStaticGroup(const NKikimrConfig::TAppConfig& current, const NKikimrConfig::TAppConfig& proposed, TString& msg) {
     const auto& currentBsConfig = current.GetBlobStorageConfig();
     const auto& proposedBsConfig = proposed.GetBlobStorageConfig();
@@ -63,45 +79,30 @@ EValidationResult ValidateStaticGroup(const NKikimrConfig::TAppConfig& current, 
 
     size_t locMismatchCount = 0;
 
-    struct TPDiskKey {
-        ui32 NodeId;
-        ui32 PDiskId;
-
-        auto operator<=>(const TPDiskKey&) const = default;
-    };
-
     std::map<TPDiskKey, NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk> curPDisks;
     for (const auto& pdisk : currentServiceSet.GetPDisks()) {
         auto [it, assigned] = curPDisks.insert_or_assign(TPDiskKey{pdisk.GetNodeID(), pdisk.GetPDiskID()}, pdisk);
-        CHECK_ERR(!assigned, "Duplicate pdisk in current config");
+        CHECK_ERR(assigned, "Duplicate pdisk in current config");
     }
 
     std::map<TPDiskKey, NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk> proposedPDisks;
     for (const auto& pdisk : proposedServiceSet.GetPDisks()) {
         auto [it, assigned] = proposedPDisks.insert_or_assign(TPDiskKey{pdisk.GetNodeID(), pdisk.GetPDiskID()}, pdisk);
-        CHECK_ERR(!assigned, "Duplicate pdisk in proposed config");
+        CHECK_ERR(assigned, "Duplicate pdisk in proposed config");
     }
-
-    struct TVDiskKey {
-        ui32 NodeId;
-        ui32 PDiskId;
-        ui32 VDiskSlotId;
-
-        auto operator<=>(const TVDiskKey&) const = default;
-    };
 
     std::map<TVDiskKey, NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk> curVDisks;
     for (const auto& VDisk : currentServiceSet.GetVDisks()) {
         const auto& loc = VDisk.GetVDiskLocation();
         auto [it, assigned] = curVDisks.insert_or_assign(TVDiskKey{loc.GetNodeID(), loc.GetPDiskID(), loc.GetVDiskSlotID()}, VDisk);
-        CHECK_ERR(!assigned, "Duplicate VDisk in current config");
+        CHECK_ERR(assigned, "Duplicate VDisk in current config");
     }
 
     std::map<TVDiskKey, NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk> proposedVDisks;
     for (const auto& VDisk : proposedServiceSet.GetVDisks()) {
         const auto& loc = VDisk.GetVDiskLocation();
-        auto [it, assigned] = curVDisks.insert_or_assign(TVDiskKey{loc.GetNodeID(), loc.GetPDiskID(), loc.GetVDiskSlotID()}, VDisk);
-        CHECK_ERR(!assigned, "Duplicate VDisk in proposed config");
+        auto [it, assigned] = proposedVDisks.insert_or_assign(TVDiskKey{loc.GetNodeID(), loc.GetPDiskID(), loc.GetVDiskSlotID()}, VDisk);
+        CHECK_ERR(assigned, "Duplicate VDisk in proposed config");
     }
 
     std::set<TPDiskKey> proposedSGPDisks;
@@ -176,3 +177,5 @@ EValidationResult ValidateStaticGroup(const NKikimrConfig::TAppConfig& current, 
 
 #undef CHECK_ERR
 #undef CHECK_WARN
+
+} // namespace NKikimr::NConfig

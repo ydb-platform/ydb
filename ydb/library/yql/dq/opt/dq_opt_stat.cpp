@@ -238,10 +238,7 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
 
         double selectivity = ComputePredicateSelectivity(flatmap.Lambda().Body(), inputStats);
 
-        YQL_CLOG(TRACE, CoreDq) << "Selectivity = " << selectivity << ", Predicate: " << flatmap.Lambda().Body().Ptr()->Dump();
-
-
-        auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->Cost, inputStats->KeyColumns );
+        auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->ByteSize * selectivity, inputStats->Cost, inputStats->KeyColumns );
         outputStats.Selectivity *= selectivity;
 
         typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats) );
@@ -283,7 +280,7 @@ void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationConte
     
     double selectivity = ComputePredicateSelectivity(filterBody, inputStats);
 
-    auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->Cost, inputStats->KeyColumns);
+    auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->ByteSize * selectivity, inputStats->Cost, inputStats->KeyColumns);
     outputStats.Selectivity *= selectivity;
 
     typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats) );

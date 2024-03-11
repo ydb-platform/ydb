@@ -59,6 +59,7 @@ void TStatsIterator::ApplyRangePredicates(std::shared_ptr<arrow::RecordBatch>& b
 }
 
 void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const NOlap::TPortionInfo& portion) {
+    auto portionSchema = ReadMetadata->GetLoadSchema(portion.GetMinSnapshot());
     {
         std::vector<const NOlap::TColumnRecord*> records;
         for (auto&& r : portion.Records) {
@@ -83,9 +84,11 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
             NArrow::Append<arrow::UInt64Type>(*builders[10], r->BlobRange.Offset);
             NArrow::Append<arrow::UInt64Type>(*builders[11], r->BlobRange.Size);
             NArrow::Append<arrow::BooleanType>(*builders[12], !portion.HasRemoveSnapshot() || ReadMetadata->GetRequestSnapshot() < portion.GetRemoveSnapshot());
-            std::string strTierName(portion.GetMeta().GetTierName().data(), portion.GetMeta().GetTierName().size());
+
+            const auto tierName = portionSchema->GetIndexInfo().GetEntityStorageId(r->GetColumnId(), portion.GetMeta().GetTierName());
+            std::string strTierName(tierName.data(), tierName.size());
             NArrow::Append<arrow::StringType>(*builders[13], strTierName);
-            NArrow::Append<arrow::StringType>(*builders[14], "COLUMN");
+            NArrow::Append<arrow::StringType>(*builders[14], "COL");
         }
     }
     {
@@ -112,9 +115,10 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
             NArrow::Append<arrow::UInt64Type>(*builders[10], r->GetBlobRange().Offset);
             NArrow::Append<arrow::UInt64Type>(*builders[11], r->GetBlobRange().Size);
             NArrow::Append<arrow::BooleanType>(*builders[12], !portion.HasRemoveSnapshot() || ReadMetadata->GetRequestSnapshot() < portion.GetRemoveSnapshot());
-            std::string strTierName(portion.GetMeta().GetTierName().data(), portion.GetMeta().GetTierName().size());
+            const auto tierName = portionSchema->GetIndexInfo().GetEntityStorageId(r->GetIndexId(), portion.GetMeta().GetTierName());
+            std::string strTierName(tierName.data(), tierName.size());
             NArrow::Append<arrow::StringType>(*builders[13], strTierName);
-            NArrow::Append<arrow::StringType>(*builders[14], "INDEX");
+            NArrow::Append<arrow::StringType>(*builders[14], "IDX");
         }
     }
 }

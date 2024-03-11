@@ -32,7 +32,6 @@
 
 #include <ydb/library/yql/utils/log/log.h>
 
-
 namespace NKikimr {
 namespace NKqp {
 
@@ -1394,6 +1393,7 @@ private:
 
         TOperator op;
         op.Properties["Name"] = name;
+        op.Properties["Condition"] = MakeJoinConditionString(join.LeftKeysColumnNames(), join.RightKeysColumnNames());
 
         auto operatorId = AddOperator(planNode, name, std::move(op));
 
@@ -1409,7 +1409,7 @@ private:
 
         TOperator op;
         op.Properties["Name"] = name;
-
+        op.Properties["Condition"] = MakeJoinConditionString(join.LeftKeysColumnNames(), join.RightKeysColumnNames());
         AddOptimizerEstimates(op, join);
 
         return AddOperator(planNode, name, std::move(op));
@@ -1423,10 +1423,12 @@ private:
         if (auto stats = SerializerCtx.TypeCtx.GetStats(expr.Raw())) {
             op.Properties["E-Rows"] = stats->Nrows;
             op.Properties["E-Cost"] = stats->Cost;
+            op.Properties["E-Size"] = stats->ByteSize;
         }
         else {
             op.Properties["E-Rows"] = "No estimate";
             op.Properties["E-Cost"] = "No estimate";
+            op.Properties["E-Size"] = "No estimate";
 
         }
     }

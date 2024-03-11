@@ -160,12 +160,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         if (rr.important()) {
-            if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
-                return TMsgPqCodes(
-                    TStringBuilder() << "important flag is forbiden for consumer " << rr.consumer_name(),
-                    Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
-                );
-            }
             consumer->SetImportant(true);
             if (NPQ::ReadRuleCompatible()) {
                 config->MutablePartitionConfig()->AddImportantClientId(consumerName);

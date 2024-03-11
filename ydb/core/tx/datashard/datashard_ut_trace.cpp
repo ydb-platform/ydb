@@ -31,100 +31,8 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         auto &runtime = *server->GetRuntime();
         TAutoPtr<IEventHandle> handle;
 
-        THolder<NKqp::TEvKqp::TEvQueryRequest> request;
-        if (traceId) {
-            struct RequestCtx : NGRpcService::IRequestCtxMtSafe {
-                RequestCtx(NWilson::TTraceId &&traceId) : TraceId(std::move(traceId)) {}
-
-                NWilson::TTraceId GetWilsonTraceId() const override {
-                    return TraceId.Clone();
-                }
-
-                TMaybe<TString> GetTraceId() const override {
-                    return Nothing();
-                }
-
-                const TMaybe<TString> GetPeerMetaValues(const TString&) const override {
-                    return Nothing();
-                }
- 
-                TString GetPeerName() const override {
-                    return {};
-                }
-
-                const TString& GetRequestName() const override {
-                    static TString empty;
-                    return empty;
-                }
-
-                TMaybe<NRpcService::TRlPath> GetRlPath() const override {
-                    return Nothing();
-                }
-
-                TInstant GetDeadline() const override {
-                    return TInstant::Max();
-                }
-
-                const TMaybe<TString> GetDatabaseName() const override {
-                    return "";
-                }
-
-                const TIntrusiveConstPtr<NACLib::TUserToken>& GetInternalToken() const override {
-                    return Ptr;
-                }
-
-                const TString& GetSerializedToken() const override {
-                    return Token;
-                }
-
-                bool IsClientLost() const override {
-                    return false;
-                };
-
-                virtual const google::protobuf::Message* GetRequest() const override {
-                    return nullptr;
-                };
-
-                const TMaybe<TString> GetRequestType() const override {
-                    return "_document_api_request";
-                };
-
-                void SetFinishAction(std::function<void()>&& cb) override {
-                    Y_UNUSED(cb);
-                };
-
-                google::protobuf::Arena* GetArena() override {
-                    return nullptr;
-                };
-
-                TIntrusiveConstPtr<NACLib::TUserToken> Ptr;
-                TString Token;
-                NWilson::TTraceId TraceId;
-            };
-            
-            auto *txControl = google::protobuf::Arena::CreateMessage<Ydb::Table::TransactionControl>(&arena);
-            txControl->mutable_begin_tx()->mutable_serializable_read_write();
-            txControl->set_commit_tx(true);
-
-            auto ptr = std::make_shared<RequestCtx>(std::move(traceId));
-            request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
-                NKikimrKqp::QUERY_ACTION_EXECUTE,
-                NKikimrKqp::QUERY_TYPE_SQL_DML,
-                TActorId(),
-                ptr,
-                TString(), //sessionId
-                TString(sql),
-                TString(), //queryId
-                txControl, //tx_control
-                nullptr, //ydbParameters
-                Ydb::Table::QueryStatsCollection::STATS_COLLECTION_UNSPECIFIED, //collectStats
-                nullptr, // query_cache_policy
-                nullptr //operationParams
-            );
-        } else {
-            request = MakeSQLRequest(sql, true);
-        }
-        runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release(), 0, 0, nullptr));
+        THolder<NKqp::TEvKqp::TEvQueryRequest> request = MakeSQLRequest(sql, true);
+        runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release(), 0, 0, nullptr, std::move(traceId)));
         auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetRef().GetYdbStatus(), code);
     }
@@ -436,7 +344,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
     Y_UNIT_TEST(TestTraceWriteImmediateOnShard) {
         auto [runtime, server, sender] = TestCreateServer();
 
-        auto opts = TShardedTableOptions().Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}});
+        TShardedTableOptions opts;
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
 
         TFakeWilsonUploader *uploader = new TFakeWilsonUploader();

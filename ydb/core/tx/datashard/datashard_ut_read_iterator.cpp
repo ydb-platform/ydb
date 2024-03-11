@@ -72,7 +72,6 @@ std::tuple<TVector<ui64>, TTableId> CreateMoviesTable(Tests::TServer::TPtr serve
                        const TString &name)
 {
     auto opts = TShardedTableOptions()
-        .Shards(1)
         .Columns(GetMoviesColumns());
 
     return CreateShardedTable(server, sender, root, name, opts);
@@ -350,7 +349,7 @@ struct TTestHelper {
         auto &runtime = *Server->GetRuntime();
         Sender = runtime.AllocateEdgeActor();
 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_INFO);
 
         InitRoot(Server, Sender);
@@ -855,7 +854,11 @@ struct TTestHelper {
                     break;
                 }
                 case TEvTxProcessing::EvReadSet: {
-                    if (dropRS) {
+                    auto* msg = event->Get<TEvTxProcessing::TEvReadSet>();
+                    auto flags = msg->Record.GetFlags();
+                    auto isExpect = flags & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET;
+                    auto isNoData = flags & NKikimrTx::TEvReadSet::FLAG_NO_DATA;
+                    if (dropRS && !(isExpect && isNoData)) {
                         result.ReadSets.push_back(std::move(event));
                         return TTestActorRuntime::EEventAction::DROP;
                     }
@@ -889,7 +892,10 @@ struct TTestHelper {
             )"));
         }
 
-        waitFor([&]{ return result.ReadSets.size() == 1; }, "intercepted RS");
+        const bool usesVolatileTxs = runtime.GetAppData(0).FeatureFlags.GetEnableDataShardVolatileTransactions();
+        const size_t expectedReadSets = 1 + (finalUpserts && usesVolatileTxs ? 2 : 0);
+
+        waitFor([&]{ return result.ReadSets.size() == expectedReadSets; }, "intercepted RS");
 
         // restore original observer (note we used lambda function and stack variables)
         Server->GetRuntime()->SetObserverFunc(prevObserverFunc);
@@ -2613,7 +2619,9 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+            .SetUseRealThreads(false)
+            // Blocked volatile transactions block reads, disable
+            .SetEnableDataShardVolatileTransactions(false);
 
         const ui64 shardCount = 1;
         TTestHelper helper(serverSettings, shardCount);
@@ -4083,7 +4091,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
         auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_INFO);
         // runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_DEBUG);
 
@@ -4092,11 +4100,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
         TDisableDataShardLogBatching disableDataShardLogBatching;
 
         auto opts = TShardedTableOptions()
-                .Shards(1)
-                .ExecutorCacheSize(1 /* byte */)
-                .Columns({
-                    {"key", "Uint32", true, false},
-                    {"value", "Uint32", false, false}});
+                .ExecutorCacheSize(1 /* byte */);
         auto [shards, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
 
         ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)"));

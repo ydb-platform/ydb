@@ -675,19 +675,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
         TabletID,
         Counters
     ));
-    if (WriteQuotaTrackerActor == TActorId{} && AppData()->PQConfig.GetQuotingConfig().GetEnableQuoting()) {
-        WriteQuotaTrackerActor = Register(new TWriteQuoter(
-            TopicConverter,
-            Config,
-            Partition,
-            Tablet,
-            SelfId(),
-            TabletID,
-            IsLocalDC,
-            Counters,
-            ctx
-        ));
-    }
+
     TotalPartitionWriteSpeed = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
     WriteTimestamp = ctx.Now();
     LastUsedStorageMeterTimestamp = ctx.Now();

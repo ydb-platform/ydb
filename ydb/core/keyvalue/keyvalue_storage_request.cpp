@@ -78,7 +78,7 @@ public:
         , TabletGeneration(tabletGeneration)
         , IntermediateResults(std::move(intermediate))
         , TabletInfo(const_cast<TTabletStorageInfo*>(tabletInfo))
-        , Span(TWilsonTablet::Tablet, IntermediateResults->Span.GetTraceId(), "KeyValue.StorageRequest")
+        , Span(TWilsonTablet::TabletBasic, IntermediateResults->Span.GetTraceId(), "KeyValue.StorageRequest")
     {
         IntermediateResults->Stat.KeyvalueStorageRequestSentAt = TAppData::TimeProvider->Now();
     }

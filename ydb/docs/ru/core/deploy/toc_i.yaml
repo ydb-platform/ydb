@@ -1,6 +1,6 @@
 items:
 - name: VM / Baremetal
-  href: manual/deploy-ydb-on-premises.md
+  include: { mode: link, path: manual/toc_p.yaml }
 - name: Развертывание одноузлового кластера
   include: { mode: link, path: ../getting_started/self_hosted/toc_p.yaml }
 - name: Конфигурация

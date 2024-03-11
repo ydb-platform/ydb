@@ -318,7 +318,7 @@ private:
     void BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& config,
                                     const TActorContext& ctx);
     void OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorContext& ctx);
-    void EndChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& config,
+    void EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
                                   NPersQueue::TTopicConverterPtr topicConverter,
                                   const TActorContext& ctx);
     TString GetKeyConfig() const;
@@ -362,8 +362,8 @@ public:
     TPartition(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration, const TActorId& blobCache,
                const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace, ui32 numChannels,
-               bool newPartition = false,
-               TVector<TTransaction> distrTxs = {}, const TActorId& writeQuoterActorId = {});
+               const TActorId& writeQuoterActorId, bool newPartition = false,
+               TVector<TTransaction> distrTxs = {});
 
     void Bootstrap(const TActorContext& ctx);
 

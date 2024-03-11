@@ -873,7 +873,9 @@ namespace Tests {
                     Settings->CredentialsFactory,
                     databaseAsyncResolver,
                     queryServiceConfig.GetS3(),
-                    queryServiceConfig.GetGeneric()
+                    queryServiceConfig.GetGeneric(),
+                    queryServiceConfig.GetYt(),
+                    NKqp::MakeYtGateway(GetFunctionRegistry(), queryServiceConfig)
                 );
             }
 

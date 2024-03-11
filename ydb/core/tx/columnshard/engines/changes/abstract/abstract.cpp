@@ -73,7 +73,7 @@ void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinis
 }
 
 void TColumnEngineChanges::Start(NColumnShard::TColumnShard& self) {
-    self.DataLocksManager->RegisterLock(TypeString() + "::" + GetTaskIdentifier(), BuildDataLock());
+    self.DataLocksManager->RegisterLock(BuildDataLock());
     Y_ABORT_UNLESS(Stage == EStage::Created);
     DoStart(self);
     Stage = EStage::Started;

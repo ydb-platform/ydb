@@ -95,6 +95,25 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(key[asc])");
     }
 
+    Y_UNIT_TEST(SortByStablePickle) {
+        const auto s = R"((
+            (let mr_sink (DataSink 'yt (quote plato)))
+            (let list (AsList
+                (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
+                (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
+                (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
+            ))
+            (let sorted (Sort list '((Bool 'False) (Bool 'True)) (lambda '(item) '((Member item 'key) (StablePickle (Member item 'subkey))))))
+            (let world (Write! world mr_sink (Key '('table (String 'Output))) sorted '('('mode 'renew))))
+            (let world (Commit! world mr_sink))
+            (return world)
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "");
+    }
+
     Y_UNIT_TEST(SortByTranspentIfPresent) {
         const auto s = R"((
             (let mr_sink (DataSink 'yt (quote plato)))
@@ -1489,6 +1508,34 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         CheckConstraint<TDistinctConstraintNode>(exprRoot, "Skip", "Distinct((key,subkey))");
     }
 
+    Y_UNIT_TEST(PartitionsByKeysWithCondense1AndStablePickle) {
+        const auto s = R"(
+(
+    (let mr_sink (DataSink 'yt (quote plato)))
+    (let list (AsList
+        (AsStruct '('key (Just (String '4))) '('subkey (Just (String 'c))) '('value (Just (String 'x))))
+        (AsStruct '('key (Just (String '1))) '('subkey (Just (String 'b))) '('value (Just (String 'y))))
+        (AsStruct '('key (Just (String '4))) '('subkey (Just (String 'b))) '('value (Just (String 'z))))
+    ))
+    (let extractor (lambda '(item) '((Member item 'key) (StablePickle(Member item 'subkey)))))
+    (let aggr (PartitionsByKeys list extractor (Void) (Void)
+        (lambda '(stream) (Condense1 stream (lambda '(row) row)
+            (lambda '(row state) (IsKeySwitch row state extractor extractor))
+            (lambda '(row state) (AsStruct '('key (Member row 'key)) '('subkey (Member row 'subkey)) '('value (Coalesce (Member row 'value) (Member state 'value)))))
+        ))
+    ))
+    (let world (Write! world mr_sink (Key '('table (String 'Output))) (Skip aggr (Uint64 '1)) '('('mode 'renew))))
+    (let world (Commit! world mr_sink))
+    (return world)
+)
+    )";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Skip", "Unique((key,subkey))");
+        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Skip", "Distinct((key,subkey))");
+    }
+
     Y_UNIT_TEST(PartitionsByKeysWithCondense1WithSingleItemTupleKey) {
         const auto s = R"(
 (
@@ -1699,7 +1746,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let flow1 (ExpandMap (ToFlow list1) (lambda '(item) (Member item 'key1) (Member item 'subkey1) (Member item 'value1))))
     (let flow2 (ExpandMap (ToFlow list2) (lambda '(item) (Member item 'key2) (Member item 'subkey2) (Member item 'value2))))
 
-    (let join (GraceJoinCore flow1 flow2 'Inner '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '()))
+    (let join (GraceJoinCore flow1 flow2 'Inner '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(lk lv rk rs rv) (AsStruct '('lk lk) '('lv lv) '('rk rk) '('rs rs) '('rv rv))))))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -1742,7 +1789,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let flow1 (ExpandMap (ToFlow list1) (lambda '(item) (Member item 'key1) (Member item 'subkey1) (Member item 'value1))))
     (let flow2 (ExpandMap (ToFlow list2) (lambda '(item) (Member item 'key2) (Member item 'subkey2) (Member item 'value2))))
 
-    (let join (GraceJoinCore flow1 flow2 'Left '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '()))
+    (let join (GraceJoinCore flow1 flow2 'Left '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(lk lv rk rs rv) (AsStruct '('lk lk) '('lv lv) '('rk rk) '('rs rs) '('rv rv))))))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -1785,7 +1832,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let flow1 (ExpandMap (ToFlow list1) (lambda '(item) (Member item 'key1) (Member item 'subkey1) (Member item 'value1))))
     (let flow2 (ExpandMap (ToFlow list2) (lambda '(item) (Member item 'key2) (Member item 'subkey2) (Member item 'value2))))
 
-    (let join (GraceJoinCore flow1 flow2 'Full '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '()))
+    (let join (GraceJoinCore flow1 flow2 'Full '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(lk lv rk rs rv) (AsStruct '('lk lk) '('lv lv) '('rk rk) '('rs rs) '('rv rv))))))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -1828,7 +1875,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let flow1 (ExpandMap (ToFlow list1) (lambda '(item) (Member item 'key1) (Member item 'subkey1) (Member item 'value1))))
     (let flow2 (ExpandMap (ToFlow list2) (lambda '(item) (Member item 'key2) (Member item 'subkey2) (Member item 'value2))))
 
-    (let join (GraceJoinCore flow1 flow2 'Right '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '()))
+    (let join (GraceJoinCore flow1 flow2 'Right '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(lk lv rk rs rv) (AsStruct '('lk lk) '('lv lv) '('rk rk) '('rs rs) '('rv rv))))))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -1871,7 +1918,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let flow1 (ExpandMap (ToFlow list1) (lambda '(item) (Member item 'key1) (Member item 'subkey1) (Member item 'value1))))
     (let flow2 (ExpandMap (ToFlow list2) (lambda '(item) (Member item 'key2) (Member item 'subkey2) (Member item 'value2))))
 
-    (let join (GraceJoinCore flow1 flow2 'Exclusion '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '()))
+    (let join (GraceJoinCore flow1 flow2 'Exclusion '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(lk lv rk rs rv) (AsStruct '('lk lk) '('lv lv) '('rk rk) '('rs rs) '('rv rv))))))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -1914,7 +1961,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let flow1 (ExpandMap (ToFlow list1) (lambda '(item) (Member item 'key1) (Member item 'subkey1) (Member item 'value1))))
     (let flow2 (ExpandMap (ToFlow list2) (lambda '(item) (Member item 'key2) (Member item 'subkey2) (Member item 'value2))))
 
-    (let join (GraceJoinCore flow1 flow2 'LeftSemi '('0 '1) '('0 '1) '('0 '2 '1 '1 '2 '0) '() '()))
+    (let join (GraceJoinCore flow1 flow2 'LeftSemi '('0 '1) '('0 '1) '('0 '2 '1 '1 '2 '0) '() '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(lv ls lk) (AsStruct '('lk lk) '('lv lv) '('ls ls))))))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -1957,7 +2004,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let flow1 (ExpandMap (ToFlow list1) (lambda '(item) (Member item 'key1) (Member item 'subkey1) (Member item 'value1))))
     (let flow2 (ExpandMap (ToFlow list2) (lambda '(item) (Member item 'key2) (Member item 'subkey2) (Member item 'value2))))
 
-    (let join (GraceJoinCore flow1 flow2 'LeftOnly '('0 '1) '('0 '1) '('0 '1 '2 '0) '() '()))
+    (let join (GraceJoinCore flow1 flow2 'LeftOnly '('0 '1) '('0 '1) '('0 '1 '2 '0) '() '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(lv lk) (AsStruct '('lk lk) '('lv lv))))))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -2001,7 +2048,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let flow1 (ExpandMap (ToFlow list1) (lambda '(item) (Member item 'key1) (Member item 'subkey1) (Member item 'value1))))
     (let flow2 (ExpandMap (ToFlow list2) (lambda '(item) (Member item 'key2) (Member item 'subkey2) (Member item 'value2))))
 
-    (let join (GraceJoinCore flow1 flow2 'RightOnly '('0 '1) '('0 '1) '() '('0 '2 '1 '1 '2 '0) '()))
+    (let join (GraceJoinCore flow1 flow2 'RightOnly '('0 '1) '('0 '1) '() '('0 '2 '1 '1 '2 '0) '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(rv rs rk) (AsStruct '('rk rk) '('rv rv) '('rs rs))))))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -2044,7 +2091,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let flow1 (ExpandMap (ToFlow list1) (lambda '(item) (Member item 'key1) (Member item 'subkey1) (Member item 'value1))))
     (let flow2 (ExpandMap (ToFlow list2) (lambda '(item) (Member item 'key2) (Member item 'subkey2) (Member item 'value2))))
 
-    (let join (GraceJoinCore flow1 flow2 'RightSemi '('0 '1) '('0 '1) '() '('0 '1 '2 '0) '()))
+    (let join (GraceJoinCore flow1 flow2 'RightSemi '('0 '1) '('0 '1) '() '('0 '1 '2 '0) '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(rv rk) (AsStruct '('rk rk) '('rv rv))))))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -2087,7 +2134,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let flow1 (ExpandMap (ToFlow list1) (lambda '(item) (Member item 'key1) (Member item 'subkey1) (Member item 'value1))))
     (let flow2 (ExpandMap (ToFlow list2) (lambda '(item) (Member item 'key2) (Member item 'subkey2) (Member item 'value2))))
 
-    (let join (GraceJoinCore flow1 flow2 'Inner '('0 '1) '('0 '1) '('0 '0 '1 '1 '2 '2) '('0 '3 '1 '4 '2 '5) '('LeftAny 'RightAny)))
+    (let join (GraceJoinCore flow1 flow2 'Inner '('0 '1) '('0 '1) '('0 '0 '1 '1 '2 '2) '('0 '3 '1 '4 '2 '5) '() '() '('LeftAny 'RightAny)))
     (let list (Collect (NarrowMap join (lambda '(lk ls lv rk rs rv) (AsStruct '('lk lk) '('ls ls) '('lv lv) '('rk rk) '('rs rs) '('rv rv))))))
 
     (let res_sink (DataSink 'yt (quote plato)))

@@ -587,14 +587,6 @@ create temp table numeric_table (num_col numeric);
 <sql-statement>
 insert into numeric_table values (1), (1.000000000000000000001), (2), (3);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: AsList
-    	insert into numeric_table values (1), (1.000000000000000000001), (2), (3);
-	^
-        -stdin-:<main>:1:1: Error: Cannot infer common type for int4 and numeric
-        	insert into numeric_table values (1), (1.000000000000000000001), (2), (3);
-	^
 <sql-statement>
 create temp table float_table (float_col float8);
 </sql-statement>

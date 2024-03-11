@@ -1437,7 +1437,7 @@ GetSysCacheHashValue(int cacheId,
  * List-search interface
  */
 struct catclist *
-SearchSysCacheList(int cacheId, int nkeys,
+SearchSysCacheList_original(int cacheId, int nkeys,
 				   Datum key1, Datum key2, Datum key3)
 {
 	if (cacheId < 0 || cacheId >= SysCacheSize ||

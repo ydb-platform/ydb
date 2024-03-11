@@ -112,7 +112,9 @@ struct TEvYdbProxy {
         TString ToString() const override {
             auto ret = TStringBuilder() << this->ToStringHeader();
             if constexpr (THasOutFunc<TResult>::Value) {
-                ret << " { Result: " << Result << " }";
+                ret << " { Result: ";
+                Result.Out(ret.Out);
+                ret << " }";
             }
             return ret;
         }

@@ -244,7 +244,16 @@ public:
             }
         }
 
-        TKqpQuerySettings settings(NKikimrKqp::QUERY_TYPE_SQL_DML);
+        const google::protobuf::EnumDescriptor *descriptor = NKikimrKqp::EQueryType_descriptor();
+        auto queryType = NKikimrKqp::QUERY_TYPE_SQL_DML;
+        if (ReplayDetails.Has("query_type")) {
+            auto res = descriptor->FindValueByName(ReplayDetails["query_type"].GetStringSafe());
+            if (res) {
+                queryType = static_cast<NKikimrKqp::EQueryType>(res->number());
+            }
+        }
+
+        TKqpQuerySettings settings(queryType);
         Query = std::make_unique<NKikimr::NKqp::TKqpQueryId>(
             ReplayDetails["query_cluster"].GetStringSafe(),
             ReplayDetails["query_database"].GetStringSafe(),
@@ -260,7 +269,10 @@ public:
         }
 
         ui32 syntax = (ReplayDetails["query_syntax"].GetStringSafe() == "1") ? 1 : 0;
-        Config->_KqpYqlSyntaxVersion = syntax;
+        if (queryType == NKikimrKqp::QUERY_TYPE_SQL_SCAN) {
+            syntax = 1;
+        }
+	Config->_KqpYqlSyntaxVersion = syntax;
         Config->FreezeDefaults();
     }
 
@@ -275,7 +287,7 @@ public:
 
         Gateway = CreateKikimrIcGateway(Query->Cluster, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, Query->Database, std::move(loader),
             TlsActivationContext->ExecutorThread.ActorSystem, SelfId().NodeId(), counters);
-        auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}});
+        auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr});
         KqpHost = CreateKqpHost(Gateway, Query->Cluster, Query->Database, Config, ModuleResolverState->ModuleResolver,
             federatedQuerySetup, nullptr, Nothing(), FunctionRegistry, false);
 

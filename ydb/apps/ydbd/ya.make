@@ -28,6 +28,7 @@ IF (ARCH_X86_64)
 ENDIF()
 
 PEERDIR(
+    ydb/apps/version
     ydb/core/driver_lib/run
     ydb/core/protos
     ydb/core/security
@@ -83,6 +84,7 @@ CHECK_DEPENDENT_DIRS(
     tools/rorescompiler
     util
     ydb
+    yt
 )
 
 YQL_LAST_ABI_VERSION()

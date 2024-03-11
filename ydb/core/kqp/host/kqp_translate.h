@@ -59,6 +59,11 @@ public:
         return *this;
     }
 
+    TKqpTranslationSettingsBuilder& SetPerStatementResult(const bool value) {
+        PerStatementResult = value;
+        return *this;
+    }
+
 private:
     const NYql::EKikimrQueryType QueryType;
     const ui16 KqpYqlSyntaxVersion;
@@ -74,6 +79,7 @@ private:
     TMaybe<TString> ApplicationName = {};
     std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameters = {};
     TMaybe<ui16> SqlVersion;
+    bool PerStatementResult = false;
 };
 
 NSQLTranslation::EBindingsMode RemapBindingsMode(NKikimrConfig::TTableServiceConfig::EBindingsMode mode);

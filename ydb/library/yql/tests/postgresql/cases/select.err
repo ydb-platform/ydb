@@ -286,8 +286,6 @@ SELECT 2+2, 57
 UNION ALL
 TABLE int8_tbl;
 </sql-statement>
--stdin-:<main>: Fatal: ydb/library/yql/core/yql_expr_type_annotation.cpp:6766  CheckExpectedTypeAndColumnOrder(): requirement IsSameAnnotation(*node.GetTypeAnn(), *it->second) failed, message: Rewrite error, type should be : List<Struct<'column0':pgint8,'column1':pgnumeric>>, but it is: List<Struct<'column0':Error<'<main>':1:1:'Uncompatible member column0 types: pgint4 and pgint8'>,'column1':pgnumeric>> for node AssumeColumnOrder
-
 <sql-statement>
 -- corner case: VALUES with no columns
 CREATE TEMP TABLE nocols();

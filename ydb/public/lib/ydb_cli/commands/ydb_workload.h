@@ -49,6 +49,7 @@ protected:
     unsigned int CancelAfterTimeoutMs;
     unsigned int WindowSec;
     bool Quiet;
+    bool Verbose;
     bool PrintTimestamp;
     TString QueryExecuterType;
 

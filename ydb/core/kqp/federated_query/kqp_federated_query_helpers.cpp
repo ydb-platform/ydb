@@ -11,10 +11,20 @@
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
 
+#include <ydb/library/yql/providers/yt/gateway/native/yql_yt_native.h>
+#include <ydb/library/yql/providers/yt/lib/yt_download/yt_download.h>
+
 #include <util/system/file.h>
 #include <util/stream/file.h>
 
 namespace NKikimr::NKqp {
+    NYql::IYtGateway::TPtr MakeYtGateway(const NMiniKQL::IFunctionRegistry* functionRegistry, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
+        NYql::TYtNativeServices ytServices;
+        ytServices.FunctionRegistry = functionRegistry;
+        ytServices.FileStorage = WithAsync(CreateFileStorage(queryServiceConfig.GetFileStorage(), {MakeYtDownloader(queryServiceConfig.GetFileStorage())}));
+        ytServices.Config = std::make_shared<NYql::TYtGatewayConfig>(queryServiceConfig.GetYt());
+        return CreateYtNativeGateway(ytServices);
+    }
 
     NYql::THttpGatewayConfig DefaultHttpGatewayConfig() {
         NYql::THttpGatewayConfig config;
@@ -52,6 +62,9 @@ namespace NKikimr::NKqp {
         HttpGateway = NYql::IHTTPGateway::Make(&HttpGatewayConfig, httpGatewayGroup);
 
         S3GatewayConfig = queryServiceConfig.GetS3();
+
+        YtGatewayConfig = queryServiceConfig.GetYt();
+        YtGateway = MakeYtGateway(appData->FunctionRegistry, queryServiceConfig);
 
         // Initialize Token Accessor
         if (appConfig.GetAuthConfig().HasTokenAccessorConfig()) {
@@ -102,7 +115,9 @@ namespace NKikimr::NKqp {
             CredentialsFactory,
             nullptr,
             S3GatewayConfig,
-            GenericGatewaysConfig};
+            GenericGatewaysConfig,
+            YtGatewayConfig,
+            YtGateway};
 
         // Init DatabaseAsyncResolver only if all requirements are met
         if (DatabaseResolverActorId && GenericGatewaysConfig.HasMdbGateway() && MdbEndpointGenerator) {
@@ -128,4 +143,4 @@ namespace NKikimr::NKqp {
 
         return std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryDefault>(setup, appData, appConfig);
     }
-}
+}  // namespace NKikimr::NKqp

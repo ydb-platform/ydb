@@ -25,7 +25,7 @@ protected:
         NeedGranuleStatusProvide = false;
     }
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
-        return std::make_shared<NDataLocks::TListPortionsLock>(SwitchedPortions);
+        return std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier(), SwitchedPortions);
     }
 
 public:

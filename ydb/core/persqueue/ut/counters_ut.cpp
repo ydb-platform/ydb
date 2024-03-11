@@ -105,6 +105,7 @@ Y_UNIT_TEST(Partition) {
     }
 }
 
+
 Y_UNIT_TEST(PartitionWriteQuota) {
     TTestContext tc;
 
@@ -114,12 +115,25 @@ Y_UNIT_TEST(PartitionWriteQuota) {
     tc.Runtime->SetScheduledLimit(100);
     tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableQuoting(true);
 
-    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_KB}, {}, tc);
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 30_KB}, {}, tc);
     TVector<std::pair<ui64, TString>> data;
-    TString s{50_KB, 'c'};
+    TString s{32_KB, 'c'};
     data.push_back({1, s});
-    for (auto i = 0u; i < 7; i++) {
-        CmdWrite(0, "sourceid0", data, tc, false);
+    TVector<std::function<void()>> validators;
+    tc.Runtime->SetObserverFunc(
+        [&](TAutoPtr<IEventHandle>& ev) {
+            if (auto* msg = ev->CastAsLocal<TEvQuota::TEvRequest>()) {
+                Cerr << "Captured kesus quota request event from " << ev->Sender.ToString() << Endl;
+                tc.Runtime->Send(new IEventHandle(
+                    ev->Sender, TActorId{},
+                    new TEvQuota::TEvClearance(TEvQuota::TEvClearance::EResult::Success), 0, ev->Cookie)
+                );
+                return TTestActorRuntimeBase::EEventAction::DROP;
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+    for (auto i = 0u; i < 6; i++) {
+        CmdWrite(0, "sourceid0", data, tc);
         data[0].first++;
     }
 
@@ -139,7 +153,7 @@ Y_UNIT_TEST(PartitionWriteQuota) {
         histogram->OutputHtml(histogramStr);
         Cerr << "**** Total histogram: **** \n " << histogramStr.Str() << "**** **** **** ****" << Endl;
         UNIT_ASSERT_VALUES_EQUAL(histogram->FindNamedCounter("Interval", "1000ms")->Val(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(histogram->FindNamedCounter("Interval", "2500ms")->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(histogram->FindNamedCounter("Interval", "2500ms")->Val(), 2);
     }
 }
 
@@ -213,7 +227,7 @@ void CompareJsons(const TString& inputStr, const TString& referenceStr) {
         }
     }
 
-    Cerr << "Test diff count : " << inputJson["sensors"].GetArraySafe().size() 
+    Cerr << "Test diff count : " << inputJson["sensors"].GetArraySafe().size()
         << " " << referenceJson["sensors"].GetArraySafe().size() << Endl;
 
     ui64 inCount = inputJson["sensors"].GetArraySafe().size();

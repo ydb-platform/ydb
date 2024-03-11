@@ -363,7 +363,7 @@ public:
             const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, Counters).release());
             TActorId databaseMonitoringActor;
             const NConfig::TLoadControlConfig& loadConfig = config.GetLoadControlConfig().GetEnable()
-                ? Config.GetYdb().GetLoadControlConfig()
+                ? config.GetLoadControlConfig()
                 : globalLoadConfig;
             if (loadConfig.GetEnable()) {
                 TActorId clientActor;
@@ -386,7 +386,7 @@ public:
             const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, Counters).release());
             TActorId databaseMonitoringActor;
             const NConfig::TLoadControlConfig& loadConfig = config.GetLoadControlConfig().GetEnable()
-                ? Config.GetYdb().GetLoadControlConfig()
+                ? config.GetLoadControlConfig()
                 : globalLoadConfig;
             if (loadConfig.GetEnable()) {
                 TActorId clientActor;

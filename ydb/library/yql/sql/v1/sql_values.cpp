@@ -83,24 +83,8 @@ bool TSqlValues::BuildRow(const TRule_values_source_row& inRow, TVector<TNodePtr
     TSqlExpression sqlExpr(Ctx, Mode);
     return ExprList(sqlExpr, outRow, inRow.GetRule_expr_list2());
 }
-TSourcePtr TSqlIntoValues::Build(const TRule_into_values_source& node, const TString& operationName) {
-    switch (node.Alt_case()) {
-        case TRule_into_values_source::kAltIntoValuesSource1: {
-            auto alt = node.GetAlt_into_values_source1();
-            TVector<TString> columnsHint;
-            if (alt.HasBlock1()) {
-                PureColumnListStr(alt.GetBlock1().GetRule_pure_column_list1(), *this, columnsHint);
-            }
-            return ValuesSource(alt.GetRule_values_source2(), columnsHint, operationName);
-        }
-        default:
-            Ctx.IncrementMonCounter("sql_errors", "DefaultValuesOrOther");
-            AltNotImplemented("into_values_source", node);
-            return nullptr;
-    }
-}
 
-TSourcePtr TSqlIntoValues::ValuesSource(const TRule_values_source& node, TVector<TString>& columnsHint,
+TSourcePtr TSqlValues::ValuesSource(const TRule_values_source& node, const TVector<TString>& columnsHint,
     const TString& operationName)
 {
     Ctx.IncrementMonCounter("sql_features", "ValuesSource");
@@ -122,6 +106,40 @@ TSourcePtr TSqlIntoValues::ValuesSource(const TRule_values_source& node, TVector
                 return nullptr;
             }
             return BuildWriteValues(pos, "UPDATE", columnsHint, std::move(source));
+        }
+        default:
+            Ctx.IncrementMonCounter("sql_errors", "UnknownValuesSource");
+            AltNotImplemented("values_source", node);
+            return nullptr;
+    }
+}
+
+TSourcePtr TSqlIntoValues::Build(const TRule_into_values_source& node, const TString& operationName) {
+    switch (node.Alt_case()) {
+        case TRule_into_values_source::kAltIntoValuesSource1: {
+            auto alt = node.GetAlt_into_values_source1();
+            TVector<TString> columnsHint;
+            if (alt.HasBlock1()) {
+                PureColumnListStr(alt.GetBlock1().GetRule_pure_column_list1(), *this, columnsHint);
+            }
+            return ValuesSource(alt.GetRule_values_source2(), columnsHint, operationName);
+        }
+        default:
+            Ctx.IncrementMonCounter("sql_errors", "DefaultValuesOrOther");
+            AltNotImplemented("into_values_source", node);
+            return nullptr;
+    }
+}
+
+TSourcePtr TSqlAsValues::Build(const TRule_values_source& node, const TString& operationName) {
+    switch (node.Alt_case()) {
+        case TRule_values_source::kAltValuesSource1: {
+            Ctx.IncrementMonCounter("sql_errors", "UnknownValuesSource");
+            Error() << "AS VALUES statement is not supported for " << operationName << ".";
+            return nullptr;
+        }
+        case TRule_values_source::kAltValuesSource2: {
+            return ValuesSource(node, {}, operationName);
         }
         default:
             Ctx.IncrementMonCounter("sql_errors", "UnknownValuesSource");

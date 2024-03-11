@@ -1703,7 +1703,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TStringBuilder qBuilder;
         qBuilder << "--!syntax_v1" << Endl;
         qBuilder << "PRAGMA Kikimr.OptEnableOlapPushdown = '" << (pushEnabled ? "true" : "false") << "';" << Endl;
-        qBuilder << "PRAGMA Kikimr.OptEnablePredicateExtract = 'false';" << Endl;
         qBuilder << "SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE ";
         qBuilder << predicate;
         qBuilder << " ORDER BY `timestamp`";
@@ -2103,7 +2102,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto tableClient = kikimr.GetTableClient();
         auto query = R"(
-            PRAGMA Kikimr.OptEnablePredicateExtract = "false";
             SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE
                 `resource_id` = "10001" AND Unwrap(`level`/1) = `level` AND `level` > 1;
         )";
@@ -4857,9 +4855,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             builder << "--!syntax_v1" << Endl;
 
-            if (pushEnabled) {
-                builder << "PRAGMA Kikimr.OptEnablePredicateExtract=\"false\";" << Endl;
-            } else {
+            if (!pushEnabled) {
                 builder << "PRAGMA Kikimr.OptEnableOlapPushdown = \"false\";" << Endl;
             }
 
@@ -5477,7 +5473,23 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 #endif
             .SetExpectedReply(R"([[1;["val1"];#]])");
 
-        TestTableWithNulls({ testCase });
+        TestTableWithNulls({testCase});
+    }
+
+    Y_UNIT_TEST(Json_GetValue_Minus) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_VALUE(jsonval, "$.'col-abc'"), JSON_VALUE(jsondoc, "$.'col-abc'") FROM `/Root/tableWithNulls`
+                WHERE JSON_VALUE(jsonval, "$.'col-abc'") = "val-abc" AND id = 1;
+            )")
+#if SSA_RUNTIME_VERSION >= 3U
+            .AddExpectedPlanOptions("KqpOlapJsonValue")
+#else
+            .AddExpectedPlanOptions("Udf")
+#endif
+            .SetExpectedReply(R"([[1;["val-abc"];#]])");
+
+        TestTableWithNulls({testCase});
     }
 
     Y_UNIT_TEST(Json_GetValue_ToString) {

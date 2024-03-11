@@ -408,11 +408,14 @@ public:
 
     bool IsMvccSnapshotRead() const { return !MvccSnapshot.IsMax(); }
     const TRowVersion& GetMvccSnapshot() const { return MvccSnapshot; }
-    bool IsMvccSnapshotRepeatable() const { return MvccSnapshotRepeatable; }
+    bool IsMvccSnapshotRepeatable() const { return MvccSnapshotRepeatable_; }
     void SetMvccSnapshot(const TRowVersion& snapshot, bool isRepeatable = true) {
         MvccSnapshot = snapshot;
-        MvccSnapshotRepeatable = isRepeatable;
+        MvccSnapshotRepeatable_ = isRepeatable;
     }
+
+    bool IsProposeResultSentEarly() const { return ProposeResultSentEarly_; }
+    void SetProposeResultSentEarly(bool value = true) { ProposeResultSentEarly_ = value; }
 
     ///////////////////////////////////
     //     DEBUG AND MONITORING      //
@@ -435,7 +438,11 @@ protected:
 
     TSnapshotKey AcquiredSnapshotKey;
     TRowVersion MvccSnapshot = TRowVersion::Max();
-    bool MvccSnapshotRepeatable = false;
+
+private:
+    // Runtime flags
+    ui8 MvccSnapshotRepeatable_ : 1 = 0;
+    ui8 ProposeResultSentEarly_ : 1 = 0;
 };
 
 struct TRSData {

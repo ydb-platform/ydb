@@ -2529,7 +2529,7 @@ EValueRepresentation GetValueRepresentation(const TType* type) {
 }
 
 TArrayRef<TType* const> GetWideComponents(const TFlowType* type) {
-    if (RuntimeVersion > 35) {
+    if (type->GetItemType()->IsMulti()) {
         return AS_TYPE(TMultiType, type->GetItemType())->GetElements();
     }
     return AS_TYPE(TTupleType, type->GetItemType())->GetElements();

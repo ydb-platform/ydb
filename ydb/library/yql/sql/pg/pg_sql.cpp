@@ -455,6 +455,7 @@ public:
                     "row_security",                        // pg_dump
                     "escape_string_warning",               // zabbix
                     "bytea_output",                        // zabbix
+                    "datestyle",                           // pgadmin 4
                     NULL,
                 };
 

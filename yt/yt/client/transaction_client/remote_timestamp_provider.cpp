@@ -138,8 +138,8 @@ TAlienRemoteTimestampProvidersMap CreateAlienTimestampProvidersMap(
     for (const auto& foreignProviderConfig : configs) {
         auto alienClockCellTag = foreignProviderConfig->ClockClusterTag;
 
-        if(alienProvidersMap.contains(alienClockCellTag)) {
-            YT_LOG_ALERT("Duplicate entry for alien clock clusters %d",
+        if (alienProvidersMap.contains(alienClockCellTag)) {
+            YT_LOG_ALERT("Duplicate entry for alien clock clusters (ClockClusterTag: %v)",
                 alienClockCellTag);
             continue;
         }

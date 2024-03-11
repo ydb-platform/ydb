@@ -307,6 +307,29 @@ message TEvProcessResponse {
     optional bool WorkerIsClosing = 4 [default = false];
 }
 
+message TSessionInfo {
+    optional string SessionId = 1;
+    optional string Status = 2;
+    optional string QueryText = 3;
+}
+
+message TEvListSessionsRequest {
+    optional string SessionIdStart = 1;
+    optional bool SessionIdStartInclusive = 2;
+    optional string SessionIdEnd = 3;
+    optional bool SessionIdEndInclusive = 4;
+    repeated uint32 Columns = 5;
+    optional int64 FreeSpace = 6;
+    optional int64 Limit = 7;
+}
+
+message TEvListSessionsResponse {
+    optional int64 NodeId = 1;
+    repeated TSessionInfo Sessions = 2;
+    optional bool Finished = 3;
+    optional string ContinuationToken = 4;
+}
+
 message TKqpSetting {
     required string Name = 1;
     required string Value = 2;
@@ -669,6 +692,7 @@ message TKqpStreamLookupSettings {
      optional bool ImmediateTx = 6;
      repeated string LookupKeyColumns = 7;
      optional NKqpProto.EStreamLookupStrategy LookupStrategy = 8;
+     optional bool AllowInconsistentReads = 9 [default = false];
 }
 
 message TKqpSequencerSettings {

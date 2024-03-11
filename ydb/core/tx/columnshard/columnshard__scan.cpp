@@ -646,7 +646,7 @@ PrepareStatsReadMetadata(ui64 tabletId, const NOlap::TReadDescription& read, con
         }
     }
 
-    auto out = std::make_shared<NOlap::TReadStatsMetadata>(tabletId,
+    auto out = std::make_shared<NOlap::TReadStatsMetadata>(index ? index->CopyVersionedIndexPtr() : nullptr, tabletId,
                 isReverse ? NOlap::TReadStatsMetadata::ESorting::DESC : NOlap::TReadStatsMetadata::ESorting::ASC,
                 read.GetProgram(), index ? index->GetVersionedIndex().GetSchema(read.GetSnapshot()) : nullptr, read.GetSnapshot());
 

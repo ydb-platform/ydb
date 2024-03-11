@@ -113,8 +113,8 @@ bool TUploader::Push(TParams params) {
         auto transaction = NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx();
         auto settings = NTable::TExecDataQuerySettings()
             .RequestType(DOC_API_REQUEST_TYPE)
-            .OperationTimeout(TDuration::Seconds(30))
-            .ClientTimeout(TDuration::Seconds(35));
+            .OperationTimeout(TDuration::Seconds(100))
+            .ClientTimeout(TDuration::Seconds(120));
         return dataQuery.Execute(transaction, std::move(params), settings).GetValueSync();
     };
 
@@ -134,6 +134,8 @@ bool TUploader::Push(TParams params) {
 
         auto settings = NYdb::NTable::TRetryOperationSettings()
             .MaxRetries(Opts.RetryOperaionMaxRetries)
+            .FastBackoffSettings(NRetry::TBackoffSettings().SlotDuration(TDuration::MilliSeconds(10)).Ceiling(10))
+            .SlowBackoffSettings(NRetry::TBackoffSettings().SlotDuration(TDuration::Seconds(2)).Ceiling(6))
             .Idempotent(true);
 
         auto status = Client.RetryOperationSync(upload, settings);

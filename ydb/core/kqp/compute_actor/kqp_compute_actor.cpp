@@ -12,6 +12,7 @@
 #include <ydb/library/yql/providers/generic/actors/yql_generic_source_factory.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_sink_factory.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
+#include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
 #include <ydb/core/protos/ssa.pb.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 
@@ -27,11 +28,16 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
     MKQL_ENSURE_S(computeCtx);
 
     auto computeFactory = GetKqpBaseComputeFactory(computeCtx);
+    auto ytComputeFactory = NYql::GetDqYtFactory();
 
-    return [computeFactory, computeCtx]
+    return [computeFactory, ytComputeFactory, computeCtx]
         (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
             if (auto compute = computeFactory(callable, ctx)) {
                 return compute;
+            }
+
+            if (auto ytCompute = ytComputeFactory(callable, ctx)) {
+                return ytCompute;
             }
 
             auto name = callable.GetType()->GetName();

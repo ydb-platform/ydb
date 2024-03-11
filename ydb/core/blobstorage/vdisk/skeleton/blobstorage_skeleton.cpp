@@ -448,6 +448,13 @@ namespace NKikimr {
                 return {NKikimrProto::ERROR, "buffer is too large"};
             }
 
+            if (id.TabletID() == 0) {
+                LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << evPrefix << ": TabletID cannot be empty;"
+                        << " id# " << id
+                        << " Marker# BSVS43");
+                return {NKikimrProto::ERROR, "empty TabletID"};
+            }
+
             auto status = Hull->CheckLogoBlob(ctx, id, ignoreBlock, extraBlockChecks, writtenBeyondBarrier);
             if (status.Status != NKikimrProto::OK) {
                 LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << evPrefix << ": failed to pass the Hull check;"
@@ -592,8 +599,8 @@ namespace NKikimr {
 
                 info.Lsn = TLsnSeg(lsnBatch.First, lsnBatch.First);
                 lsnBatch.First++;
-                auto [logMsg, traceId] = CreatePutLogEvent(ctx, "TEvVMultiPut", vMultiPutActorId, cookie, std::move(orbit),
-                    info, std::move(result));
+                auto [logMsg, traceId] = CreatePutLogEvent(ctx, "TEvVMultiPut", vMultiPutActorId, cookie,
+                    (itemIdx ? NLWTrace::TOrbit{} : std::move(orbit)), info, std::move(result));
                 evLogs->AddLog(THolder<NPDisk::TEvLog>(logMsg.release()), std::move(traceId));
             }
 
@@ -2156,6 +2163,10 @@ namespace NKikimr {
                                 TABLER() {
                                     TABLED() {str << "BurstThresholdNs";}
                                     TABLED() {str << Config->BurstThresholdNs;}
+                                }
+                                TABLER() {
+                                    TABLED() {str << "DiskTimeAvailableScale";}
+                                    TABLED() {str << Config->DiskTimeAvailableScale;}
                                 }
                             }
                         }

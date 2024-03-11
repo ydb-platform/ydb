@@ -27,6 +27,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
+#include <ydb/core/sys_view/common/schema.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/core/services/mounts/yql_mounts.h>
@@ -669,6 +670,10 @@ public:
                 << ev->Get()->GetParametersSize() << "b > " << paramsLimitBytes << "b)";
             ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId);
             return;
+        }
+
+        if (sessionInfo) {
+            LocalSessions->AttachQueryText(sessionInfo, ev->Get()->GetQuery());
         }
 
         TActorId targetId;
@@ -1315,6 +1320,8 @@ public:
             hFunc(NKqp::TEvCancelScriptExecutionOperation, Handle);
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
+            hFunc(TEvKqp::TEvListSessionsRequest, Handle);
+            hFunc(TEvKqp::TEvListProxyNodesRequest, Handle);
         default:
             Y_ABORT("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->ToString().data());
@@ -1624,6 +1631,109 @@ private:
         for (const auto sessionInfo : sessions) {
             LocalSessions->StartIdleCheck(sessionInfo, IdleDurationAfterDisconnect);
         }
+    }
+
+    void Handle(TEvKqp::TEvListSessionsRequest::TPtr& ev) {
+        auto result = std::make_unique<TEvKqp::TEvListSessionsResponse>();
+        auto startIt = LocalSessions->GetOrderedLowerBound(ev->Get()->Record.GetSessionIdStart());
+        auto endIt = LocalSessions->GetOrderedEnd();
+        i32 freeSpace = ev->Get()->Record.GetFreeSpace();
+
+        struct TFieldsMap {
+            bool NeedSessionId = false;
+            bool NeedQueryText = false;
+            bool NeedStatus = false;
+            bool NeedNodeId = false;
+
+            explicit TFieldsMap(const ::google::protobuf::RepeatedField<ui32>& columns) {
+                for(const auto& column: columns) {
+                    switch(column) {
+                        case NKikimr::NSysView::Schema::QuerySessions::SessionId::ColumnId:
+                            NeedSessionId = true;
+                            break;
+                        case NKikimr::NSysView::Schema::QuerySessions::Status::ColumnId:
+                            NeedStatus = true;
+                            break;
+                        case NKikimr::NSysView::Schema::QuerySessions::QueryText::ColumnId:
+                            NeedQueryText = true;
+                            break;
+                         case NKikimr::NSysView::Schema::QuerySessions::NodeId::ColumnId:
+                            NeedNodeId = true;
+                            break;
+                        default: {
+                            Y_UNREACHABLE();
+                        }
+                    }
+                }
+            }
+        };
+
+        TFieldsMap fieldsMap(ev->Get()->Record.GetColumns());
+
+        const TString until = ev->Get()->Record.GetSessionIdEnd();
+        bool finished = false;
+
+        while(startIt != endIt && freeSpace > 0) {
+            auto* sessionInfo = startIt->second;
+
+            if (!until.empty()) {
+                if (sessionInfo->SessionId > until) {
+                    finished = true;
+                    break;
+                }
+
+                if (!ev->Get()->Record.GetSessionIdEndInclusive() && until == sessionInfo->SessionId) {
+                    finished = true;
+                    break;
+                }
+            }
+
+            auto* sessionProto = result->Record.AddSessions();
+            sessionProto->SetSessionId(sessionInfo->SessionId);
+            // last executed query or currently running query.
+            if (fieldsMap.NeedQueryText) {
+                sessionProto->SetQueryText(sessionInfo->QueryText);
+            }
+
+            if (fieldsMap.NeedStatus) {
+                if (LocalSessions->IsSessionIdle(sessionInfo)) {
+                    sessionProto->SetStatus("IDLE");
+                } else {
+                    sessionProto->SetStatus("RUNNING");
+                }
+            }
+
+            freeSpace -= sessionProto->ByteSizeLong();
+            ++startIt;
+        }
+
+        if (startIt == endIt) {
+            finished = true;
+        }
+
+        result->Record.SetNodeId(SelfId().NodeId());
+        if (finished) {
+            result->Record.SetFinished(true);
+        } else {
+            result->Record.SetContinuationToken(startIt->first);
+            result->Record.SetFinished(false);
+        }
+
+        Send(ev->Sender, result.release(), 0, ev->Cookie);
+    }
+
+    void Handle(TEvKqp::TEvListProxyNodesRequest::TPtr& ev) {
+        auto result = std::make_unique<TEvKqp::TEvListProxyNodesResponse>();
+        result->ProxyNodes.reserve(PeerProxyNodeResources.size());
+        for(const auto& resource: PeerProxyNodeResources) {
+            result->ProxyNodes.push_back(resource.GetNodeId());
+        }
+
+        if (result->ProxyNodes.size() < 1) {
+            result->ProxyNodes.push_back(SelfId().NodeId());
+        }
+
+        Send(ev->Sender, result.release(), 0, ev->Cookie);
     }
 
 private:

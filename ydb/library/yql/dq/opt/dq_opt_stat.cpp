@@ -16,8 +16,21 @@ namespace {
      * All other callables will not be evaluated
      */
     THashSet<TString> constantFoldingWhiteList = {
-        "Concat", "Just", "Optional","SafeCast",
+        "Concat", "Just", "Optional", "SafeCast", "AsList",
         "+", "-", "*", "/", "%"};
+
+    THashSet<TString> pgConstantFoldingWhiteList = {
+        "PgResolvedOp", "PgResolvedCall", "PgCast", "PgConst", "PgArray", "PgType"};
+
+
+    TString RemoveAliases(TString attributeName) {
+        for (size_t i = attributeName.size() - 1; i>0; i--) {
+            if (attributeName[i]=='.') {
+                return attributeName.substr(i+1);
+            }
+        }
+        return attributeName;
+    }
 }
 
 bool NeedCalc(NNodes::TExprBase node) {
@@ -60,6 +73,33 @@ bool NeedCalc(NNodes::TExprBase node) {
     return !node.Maybe<TCoDataCtor>();
 }
 
+bool IsConstantExprPg(const TExprNode::TPtr& input) {
+    if (input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
+        if (input->IsCallable("PgConst")) {
+            return true;
+        }
+    }
+
+    if (TMaybeNode<TCoAtom>(input)) {
+        return true;
+    }
+
+    if (input->IsCallable(pgConstantFoldingWhiteList) || input->IsList()) {
+        for (size_t i = 0; i < input->ChildrenSize(); i++) {
+            auto callableInput = input->Child(i);
+            if (callableInput->IsLambda() && !IsConstantExprPg(callableInput->Child(1))) {
+                return false;
+            }
+            if (!callableInput->IsCallable("PgType") && !IsConstantExprPg(callableInput)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    return false;
+}
+
 /***
  * Check if the expression is a constant expression
  * Its type annotation need to specify that its a data type, and then we check:
@@ -68,6 +108,10 @@ bool NeedCalc(NNodes::TExprBase node) {
  *   - If one of the child is a type expression, it also passes the check
  */
 bool IsConstantExpr(const TExprNode::TPtr& input) {
+    if (input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
+        return IsConstantExprPg(input);
+    }
+
     if (!IsDataOrOptionalOfData(input->GetTypeAnn())) {
         return false;
     }
@@ -111,10 +155,10 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
     TVector<TString> rightJoinKeys;
 
     for (size_t i=0; i<join.LeftKeysColumns().Size(); i++) {
-        leftJoinKeys.push_back(join.LeftKeysColumns().Item(i).StringValue());
+        leftJoinKeys.push_back(RemoveAliases(join.LeftKeysColumns().Item(i).StringValue()));
     }
     for (size_t i=0; i<join.RightKeysColumns().Size(); i++) {
-        rightJoinKeys.push_back(join.RightKeysColumns().Item(i).StringValue());
+        rightJoinKeys.push_back(RemoveAliases(join.RightKeysColumns().Item(i).StringValue()));
     }
 
     typeCtx->SetStats(join.Raw(), std::make_shared<TOptimizerStatistics>(
@@ -142,11 +186,11 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
     TVector<TString> leftJoinKeys;
     TVector<TString> rightJoinKeys;
 
-    for (size_t i=0; i<join.LeftKeysColumns().Size(); i++) {
-        leftJoinKeys.push_back(join.LeftKeysColumns().Item(i).StringValue());
+    for (size_t i=0; i<join.LeftKeysColumnNames().Size(); i++) {
+        leftJoinKeys.push_back(RemoveAliases(join.LeftKeysColumnNames().Item(i).StringValue()));
     }
-    for (size_t i=0; i<join.RightKeysColumns().Size(); i++) {
-        rightJoinKeys.push_back(join.RightKeysColumns().Item(i).StringValue());
+    for (size_t i=0; i<join.RightKeysColumnNames().Size(); i++) {
+        rightJoinKeys.push_back(RemoveAliases(join.RightKeysColumnNames().Item(i).StringValue()));
     }
 
     typeCtx->SetStats(join.Raw(), std::make_shared<TOptimizerStatistics>(
@@ -194,7 +238,8 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
 
         double selectivity = ComputePredicateSelectivity(flatmap.Lambda().Body(), inputStats);
 
-        auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->Cost, inputStats->KeyColumns );
+        auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->ByteSize * selectivity, inputStats->Cost, inputStats->KeyColumns );
+        outputStats.Selectivity *= selectivity;
 
         typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats) );
     }
@@ -235,7 +280,8 @@ void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationConte
     
     double selectivity = ComputePredicateSelectivity(filterBody, inputStats);
 
-    auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->Cost, inputStats->KeyColumns);
+    auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->ByteSize * selectivity, inputStats->Cost, inputStats->KeyColumns);
+    outputStats.Selectivity *= selectivity;
 
     typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats) );
 }

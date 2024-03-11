@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
 
         env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
-            .Name = "Test",
+            .Name = "Table",
             .KeyColumns = {"key"},
             .Columns = {
                 {.Name = "key", .Type = "Uint32"},
@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
 
         env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
-            .Name = "Test",
+            .Name = "Table",
             .KeyColumns = {"key"},
             .Columns = {
                 {.Name = "key", .Type = "Uint32"},

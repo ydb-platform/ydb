@@ -263,7 +263,19 @@ void TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
 
     NPersQueue::TTopicNamesConverterFactory factory(true, "/Root/PQ", "dc1");
     TopicConverter = factory.MakeTopicConverter(Config);
-
+    TActorId quoterId;
+    if (Ctx->Runtime->GetAppData(0).PQConfig.GetQuotingConfig().GetEnableQuoting()) {
+        quoterId = Ctx->Runtime->Register(new TWriteQuoter(
+                TopicConverter,
+                Config,
+                Ctx->Runtime->GetAppData().PQConfig,
+                id,
+                Ctx->Edge,
+                Ctx->TabletId,
+                Config.GetLocalDC(),
+                *TabletCounters
+        ));
+    }
     auto actor = new NPQ::TPartition(Ctx->TabletId,
                                      id,
                                      Ctx->Edge,
@@ -276,6 +288,7 @@ void TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
                                      *TabletCounters,
                                      false,
                                      1,
+                                     quoterId,
                                      newPartition,
                                      std::move(txs));
     ActorId = Ctx->Runtime->Register(actor);

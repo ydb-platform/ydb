@@ -504,27 +504,58 @@ public:
         if constexpr (PgString == EPgStringType::CString) {
             static_assert(Nullable);
             auto buf = PgBuilder->AsCStringBuffer(value);
-            auto prevCtx = GetMemoryContext(buf.Data());
-            ZeroMemoryContext((char*)buf.Data());
-            DoAdd(TBlockItem(TStringRef(buf.Data() - sizeof(void*), buf.Size() + sizeof(void*))));
-            SetMemoryContext((char*)buf.Data(), prevCtx);
+            AddPgItem(buf);
         } else if constexpr (PgString == EPgStringType::Text) {
             static_assert(Nullable);
             auto buf = PgBuilder->AsTextBuffer(value);
-            auto prevCtx = GetMemoryContext(buf.Data());
-            ZeroMemoryContext((char*)buf.Data());
-            DoAdd(TBlockItem(TStringRef(buf.Data() - sizeof(void*), buf.Size() + sizeof(void*))));
-            SetMemoryContext((char*)buf.Data(), prevCtx);
+            AddPgItem(buf);
         } else if constexpr (PgString == EPgStringType::Fixed) {
             static_assert(Nullable);
             auto buf = PgBuilder->AsFixedStringBuffer(value, TypeLen);
-            auto prevCtx = GetMemoryContext(buf.Data());
-            ZeroMemoryContext((char*)buf.Data());
-            DoAdd(TBlockItem(TStringRef(buf.Data() - sizeof(void*), buf.Size() + sizeof(void*))));
-            SetMemoryContext((char*)buf.Data(), prevCtx);
+            AddPgItem(buf);
         } else {
             DoAdd(TBlockItem(value.AsStringRef()));
         }
+    }
+
+    template <bool AddCStringZero = false, ui32 AddVarHdr = 0> 
+    ui8* AddPgItem(TStringRef buf) {
+        auto alignedSize = AlignUp(buf.Size() + sizeof(void*) + AddVarHdr + (AddCStringZero ? 1 : 0), sizeof(void*));
+        auto ptr = AddNoFill(alignedSize);
+        *(void**)ptr = nullptr;
+        if (alignedSize > sizeof(void*)) {
+            // clear padding too
+            *(void**)(ptr + alignedSize - sizeof(void*)) = nullptr;
+        }
+
+        std::memcpy(ptr + sizeof(void*) + AddVarHdr, buf.Data(), buf.Size());
+        if constexpr (AddCStringZero) {
+            ptr[sizeof(void*) + buf.Size()] = 0;
+        }
+
+        return ptr;
+    }
+
+    ui8* AddNoFill(size_t size) {
+        size_t currentLen = DataBuilder->Length();
+        // empty string can always be appended
+        if (size > 0 && currentLen + size > MaxBlockSizeInBytes) {
+            if (currentLen) {
+                FlushChunk(false);
+            }
+            if (size > MaxBlockSizeInBytes) {
+                DataBuilder->Reserve(size);
+            }
+        }
+
+        AppendCurrentOffset();
+        auto ret = DataBuilder->End();
+        DataBuilder->UnsafeAdvance(size);
+        if constexpr (Nullable) {
+            NullBuilder->UnsafeAppend(1);
+        }
+
+        return ret;
     }
 
     void DoAdd(TBlockItem value) final {
@@ -537,23 +568,8 @@ public:
         }
 
         const std::string_view str = value.AsStringRef();
-
-        size_t currentLen = DataBuilder->Length();
-        // empty string can always be appended
-        if (!str.empty() && currentLen + str.size() > MaxBlockSizeInBytes) {
-            if (currentLen) {
-                FlushChunk(false);
-            }
-            if (str.size() > MaxBlockSizeInBytes) {
-                DataBuilder->Reserve(str.size());
-            }
-        }
-
-        AppendCurrentOffset();
-        DataBuilder->UnsafeAppend((const ui8*)str.data(), str.size());
-        if constexpr (Nullable) {
-            NullBuilder->UnsafeAppend(1);
-        }
+        auto ptr = AddNoFill(str.size());
+        std::memcpy(ptr, str.data(), str.size());
     }
 
     void DoAdd(TInputBuffer& input) final {

@@ -255,8 +255,8 @@ class TColumnShard
         TabletCounters->Cumulative()[counter].Increment(num);
     }
 
-    void ActivateTiering(const ui64 pathId, const TString& useTiering, const bool onTabletInit = false);
-    void OnTieringModified();
+    void ActivateTiering(const ui64 pathId, const TString& useTiering);
+    void OnTieringModified(const std::optional<ui64> pathId = {});
 public:
     enum class EOverloadStatus {
         ShardTxInFly /* "shard_tx" */,
@@ -538,7 +538,7 @@ private:
     void StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dataToIndex, const i64 bytesToIndex);
     void SetupIndexation();
     void SetupCompaction();
-    bool SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {}, const bool force = false);
+    bool SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {});
     void SetupCleanup();
     void SetupCleanupInsertTable();
     void SetupGC();

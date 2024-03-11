@@ -402,6 +402,7 @@ message TStoragePoolInfo {
     float MaximumIOPS = 9;
     uint64 MaximumThroughput = 10;
     uint64 MaximumSize = 11;
+    string MediaType = 12;
 }
 
 message TStorageInfo {

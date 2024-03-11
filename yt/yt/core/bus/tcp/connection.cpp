@@ -2012,7 +2012,7 @@ void TTcpConnection::TryEstablishSslSession()
     switch (VerificationMode_) {
         case EVerificationMode::Full:
             // Because of the implementation of check_id() from libs/openssl/crypto/x509/x509_vfy.c,
-            // we can not set both ip and host checks. So we separate them as follows.
+            // we can not set both IP and host checks. So we separate them as follows.
             if (Config_->PeerAlternativeHostName) {
                 // Set hostname for peer certificate verification.
                 if (SSL_set1_host(Ssl_.get(), EndpointHostName_.c_str()) != 1) {
@@ -2026,10 +2026,10 @@ void TTcpConnection::TryEstablishSslSession()
                     return;
                 }
             } else if (auto networkAddress = TNetworkAddress::TryParse(EndpointHostName_); networkAddress.IsOK() && networkAddress.Value().IsIP()) {
-                // Set ip address for peer certificate verification.
+                // Set IP address for peer certificate verification.
                 auto address = ToString(networkAddress.Value(), {.IncludePort = false, .IncludeTcpProtocol = false});
                 if (X509_VERIFY_PARAM_set1_ip_asc(SSL_get0_param(Ssl_.get()), address.c_str()) != 1) {
-                    Abort(TError(NBus::EErrorCode::SslError, "Failed to set ip address %v for peer certificate verification", address));
+                    Abort(TError(NBus::EErrorCode::SslError, "Failed to set IP address %v for peer certificate verification", address));
                     return;
                 }
             } else {

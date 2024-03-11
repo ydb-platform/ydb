@@ -3,6 +3,7 @@
 
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/kqp/common/simple/query_id.h>
@@ -17,7 +18,8 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
         TMaybe<TKqpQueryId>&& query, bool keepInCache, bool isQueryActionPrepare, bool perStatementResult, TInstant deadline,
         TKqpDbCountersPtr dbCounters, const TMaybe<TString>& applicationName, std::shared_ptr<std::atomic<bool>> intrestedInResult, 
         const TIntrusivePtr<TUserRequestContext>& userRequestContext, NLWTrace::TOrbit orbit = {},
-        TKqpTempTablesState::TConstPtr tempTablesState = nullptr, bool collectDiagnostics = false, TMaybe<TQueryAst> queryAst = Nothing())
+        TKqpTempTablesState::TConstPtr tempTablesState = nullptr, bool collectDiagnostics = false, TMaybe<TQueryAst> queryAst = Nothing(),
+        bool split = false, NYql::TExprContext* splitCtx = nullptr, NYql::TExprNode::TPtr splitExpr = nullptr)
         : UserToken(userToken)
         , Uid(uid)
         , Query(std::move(query))
@@ -33,6 +35,9 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
         , IntrestedInResult(std::move(intrestedInResult))
         , CollectDiagnostics(collectDiagnostics)
         , QueryAst(queryAst)
+        , Split(split)
+        , SplitCtx(splitCtx)
+        , SplitExpr(splitExpr)
     {
         Y_ENSURE(Uid.Defined() != Query.Defined());
     }
@@ -58,6 +63,10 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
     bool CollectDiagnostics = false;
 
     TMaybe<TQueryAst> QueryAst;
+    bool Split = false;
+
+    NYql::TExprContext* SplitCtx = nullptr;
+    NYql::TExprNode::TPtr SplitExpr = nullptr;
 };
 
 struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::EvRecompileRequest> {
@@ -120,6 +129,19 @@ struct TEvParseResponse: public TEventLocal<TEvParseResponse, TKqpEvents::EvPars
     TVector<TQueryAst> AstStatements;
     TKqpQueryId Query;
     NLWTrace::TOrbit Orbit;
+};
+
+struct TEvSplitResponse: public TEventLocal<TEvSplitResponse, TKqpEvents::EvSplitResponse> {
+    TEvSplitResponse(const TKqpQueryId& query, TVector<NYql::TExprNode::TPtr> exprs, NYql::TExprNode::TPtr world, THolder<NYql::TExprContext> ctx)
+        : Query(query)
+        , Ctx(std::move(ctx))
+        , Exprs(std::move(exprs))
+        , World(std::move(world)) {}
+
+    TKqpQueryId Query;
+    THolder<NYql::TExprContext> Ctx;
+    TVector<NYql::TExprNode::TPtr> Exprs;
+    NYql::TExprNode::TPtr World;
 };
 
 struct TEvCompileInvalidateRequest: public TEventLocal<TEvCompileInvalidateRequest,

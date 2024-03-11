@@ -1,14 +1,15 @@
 #pragma once
 
 #include "test_store.h"
+#include <ydb/core/tablet_flat/flat_fwd_blobs.h>
+#include <ydb/core/tablet_flat/flat_fwd_cache.h>
+#include <ydb/core/tablet_flat/flat_part_iface.h>
+#include <ydb/core/tablet_flat/flat_part_index_iter.h>
+#include <ydb/core/tablet_flat/flat_part_laid.h>
+#include <ydb/core/tablet_flat/flat_row_scheme.h>
 #include <ydb/core/tablet_flat/flat_table_misc.h>
 #include <ydb/core/tablet_flat/flat_table_part.h>
 #include <ydb/core/tablet_flat/flat_table_subset.h>
-#include <ydb/core/tablet_flat/flat_part_laid.h>
-#include <ydb/core/tablet_flat/flat_part_iface.h>
-#include <ydb/core/tablet_flat/flat_fwd_cache.h>
-#include <ydb/core/tablet_flat/flat_fwd_blobs.h>
-#include <ydb/core/tablet_flat/flat_row_scheme.h>
 #include <ydb/core/tablet_flat/util_fmt_abort.h>
 
 #include <util/generic/cast.h>
@@ -175,6 +176,18 @@ namespace NTest {
             TPartIndexIt index(&part, &env, { });
             Y_ABORT_UNLESS(index.SeekLast() == EReady::Data);
             return index.GetLastRecord();
+        }
+
+        inline TRowId GetPageId(const TPart& part, ui32 pageIndex) {
+            TTestEnv env;
+            TPartIndexIt index(&part, &env, { });
+
+            Y_ABORT_UNLESS(index.Seek(0) == EReady::Data);
+            for (TPageId p = 0; p < pageIndex; p++) {
+                Y_ABORT_UNLESS(index.Next() == EReady::Data);
+            }
+
+            return index.GetPageId();
         }
 
         inline TRowId GetRowId(const TPart& part, ui32 pageIndex) {

@@ -212,8 +212,7 @@ TVector<TReadSessionEvent::TEvent> TFederatedReadSessionImpl::GetEvents(bool blo
     }
     with_lock(Lock) {
         if (Closing) {
-            // TODO correct conversion
-            return {NTopic::TSessionClosedEvent(FederationState->Status.GetStatus(), {})};
+            return {NTopic::TSessionClosedEvent(FederationState->Status.GetStatus(), NYql::TIssues(FederationState->Status.GetIssues()))};
         }
         // TODO!!! handle aborting or closing state
         //         via handler on SessionClosedEvent {

@@ -463,7 +463,7 @@ private:
             bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
         }
 
-        while (const auto keyAndState = bucket.InMemoryProcessingState->Extract()) {
+        while (const auto keyAndState = static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Extract())) {
             // std::cerr << "MISHA Spill more" << std::endl;
             bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
             for (size_t i = 0; i != KeyAndStateType->GetElementsCount(); ++i) {
@@ -696,7 +696,7 @@ private:
             case EOperatingMode::ProcessSpilled:
                 MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
-                std::cerr << "MISHA NextSpilledBucket: [" << NextBucketToSpill << "]" << std::endl;
+                std::cout << "MISHA NextSpilledBucket: [" << NextBucketToSpill << "]" << std::endl;
                 break;
 
         }
@@ -704,12 +704,14 @@ private:
     }
 
     bool HasMemoryForProcessing() const {
-        return !TlsAllocState->IsMemoryYellowZoneReached();
+        return false;
+        // return !TlsAllocState->IsMemoryYellowZoneReached();
     }
 
     bool IsSwitchToSpillingModeCondition() const {
         //TODO implement me
-        return !HasMemoryForProcessing();
+        // return !HasMemoryForProcessing();
+        return true;
     }
 
 private:

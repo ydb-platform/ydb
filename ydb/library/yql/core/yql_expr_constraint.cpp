@@ -754,19 +754,20 @@ private:
         return std::nullopt;
     }
 
-    static std::vector<std::pair<TPartOfConstraintBase::TPathType, bool>>
-    ExtractSimpleSortTraits(const TExprNode& sortDirections, const TExprNode& keySelectorLambda) {
+    using TPathsWithSirections = std::vector<std::pair<std::optional<TPartOfConstraintBase::TPathType>, bool>>;
+
+    static TPathsWithSirections ExtractSimpleSortTraits(const TExprNode& sortDirections, const TExprNode& keySelectorLambda) {
         const auto& keySelectorBody = keySelectorLambda.Tail();
         const auto& keySelectorArg = keySelectorLambda.Head().Head();
-        std::vector<std::pair<TPartOfConstraintBase::TPathType, bool>> columns;
+        TPathsWithSirections columns;
         if (const auto dir = GetDirection(sortDirections))
-            columns.emplace_back(TPartOfConstraintBase::TPathType(), *dir);
+            columns.emplace_back(std::nullopt, *dir);
         else if (sortDirections.IsList())
             if (const auto size = keySelectorBody.ChildrenSize()) {
                 columns.reserve(size);
                 for (auto i = 0U; i < size; ++i)
                     if (const auto dir = GetDirection(*sortDirections.Child(i)))
-                        columns.emplace_back(TPartOfConstraintBase::TPathType(), *dir);
+                        columns.emplace_back(std::nullopt, *dir);
                     else
                         return {};
             } else
@@ -778,7 +779,7 @@ private:
             if (const auto size = keySelectorBody.ChildrenSize()) {
                 TPartOfConstraintBase::TSetType set;
                 set.reserve(size);
-                columns.resize(size, std::make_pair(TPartOfConstraintBase::TPathType(), columns.back().second));
+                columns.resize(size, std::make_pair(std::nullopt, columns.back().second));
                 auto it = columns.begin();
                 for (auto i = 0U; i < size; ++i) {
                     if (auto path = GetPathToKey<true>(*keySelectorBody.Child(i), keySelectorArg)) {
@@ -787,7 +788,8 @@ private:
                         else if (columns.cend() != it)
                             it = columns.erase(it);
                     } else {
-                        return {};
+                        columns.resize(++i);
+                        break;
                     }
                 }
             } else
@@ -3190,8 +3192,8 @@ private:
     static const TSortedConstraintNode* DeduceSortConstraint(const TExprNode& directions, const TExprNode& keyExtractor, TExprContext& ctx) {
         if (const auto& columns = ExtractSimpleSortTraits(directions, keyExtractor); !columns.empty()) {
             TSortedConstraintNode::TContainerType content(columns.size());
-            std::transform(columns.cbegin(), columns.cend(), content.begin(), [](const std::pair<TPartOfConstraintBase::TPathType, bool>& item) {
-                return std::make_pair(TSortedConstraintNode::TSetType{item.first}, item.second);
+            std::transform(columns.cbegin(), columns.cend(), content.begin(), [](const TPathsWithSirections::value_type& item) {
+                return std::make_pair(item.first ? TSortedConstraintNode::TSetType{*item.first} : TSortedConstraintNode::TSetType(), item.second);
             });
             return ctx.MakeConstraint<TSortedConstraintNode>(std::move(content));
         }

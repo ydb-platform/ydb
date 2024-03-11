@@ -220,7 +220,6 @@ TSortedConstraintNode::TSortedConstraintNode(TExprContext& ctx, TContainerType&&
 {
     YQL_ENSURE(!Content_.empty());
     for (const auto& c : Content_) {
-        YQL_ENSURE(!c.first.empty());
         for (const auto& path : c.first)
             Hash_ = std::accumulate(path.cbegin(), path.cend(), c.second ? Hash_ : ~Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); });
     }
@@ -425,17 +424,21 @@ const TConstraintWithFieldsNode* TSortedConstraintNode::DoFilterFields(TExprCont
     TContainerType sorted;
     sorted.reserve(Content_.size());
     for (const auto& item : Content_) {
-        TSetType newSet;
-        newSet.reserve(item.first.size());
-        for (const auto& path : item.first) {
-            if (filter(path))
-                newSet.insert_unique(path);
-        }
+        if (item.first.empty())
+            sorted.emplace_back(item);
+        else {
+            TSetType newSet;
+            newSet.reserve(item.first.size());
+            for (const auto& path : item.first) {
+                if (filter(path))
+                    newSet.insert_unique(path);
+            }
 
-        if (newSet.empty())
-            break;
-        else
-            sorted.emplace_back(std::move(newSet), item.second);
+            if (newSet.empty())
+                break;
+            else
+                sorted.emplace_back(std::move(newSet), item.second);
+        }
     }
     return sorted.empty() ? nullptr : ctx.MakeConstraint<TSortedConstraintNode>(std::move(sorted));
 }
@@ -447,17 +450,21 @@ const TConstraintWithFieldsNode* TSortedConstraintNode::DoRenameFields(TExprCont
     TContainerType sorted;
     sorted.reserve(Content_.size());
     for (const auto& item : Content_) {
-        TSetType newSet;
-        newSet.reserve(item.first.size());
-        for (const auto& path : item.first) {
-            if (const auto& newPaths = reduce(path); !newPaths.empty())
-                newSet.insert_unique(newPaths.cbegin(), newPaths.cend());
-        }
+        if (item.first.empty())
+            sorted.emplace_back(item);
+        else {
+            TSetType newSet;
+            newSet.reserve(item.first.size());
+            for (const auto& path : item.first) {
+                if (const auto& newPaths = reduce(path); !newPaths.empty())
+                    newSet.insert_unique(newPaths.cbegin(), newPaths.cend());
+            }
 
-        if (newSet.empty())
-            break;
-        else
-            sorted.emplace_back(std::move(newSet), item.second);
+            if (newSet.empty())
+                break;
+            else
+                sorted.emplace_back(std::move(newSet), item.second);
+        }
     }
     return sorted.empty() ? nullptr : ctx.MakeConstraint<TSortedConstraintNode>(std::move(sorted));
 }
@@ -475,7 +482,7 @@ TSortedConstraintNode::DoGetComplicatedForType(const TTypeAnnotationNode& type, 
     const auto& rowType = GetSeqItemType(type);
     bool changed = false;
     auto content = Content_;
-    for (auto it = content.begin(); content.end() != it;) {
+    for (auto it = content.begin(); content.end() != it && !it->first.empty();) {
         const auto subType = GetSubTypeByPath(it->first.front(), rowType);
         auto fields = GetAllItemTypeFields(subType, ctx);
         for (auto j = it->first.cbegin(); it->first.cend() != ++j;) {
@@ -521,7 +528,7 @@ TSortedConstraintNode::DoGetSimplifiedForType(const TTypeAnnotationNode& type, T
     auto content = Content_;
     for (bool setChanged = true; setChanged;) {
         setChanged = false;
-        for (auto it = content.begin(); content.end() != it;) {
+        for (auto it = content.begin(); content.end() != it && !it->first.empty();) {
             if (it->first.size() > 1U) {
                 for (const auto& path : it->first) {
                     if (path.size() > 1U && path.back() == ctx.GetIndexAsString(0U)) {

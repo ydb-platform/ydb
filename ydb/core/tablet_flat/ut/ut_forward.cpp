@@ -186,7 +186,7 @@ namespace {
 
             Grow = Grow || got.Grow;
 
-            UNIT_ASSERT_VALUES_EQUAL_C(RescaleStat(Cache->Stat), stat, TStringBuilder() << CurrentStep());
+            UNIT_ASSERT_VALUES_EQUAL_C(RescaleStat(Cache->Stat), stat, CurrentStepStr());
 
             return *this;
         }
@@ -201,7 +201,7 @@ namespace {
             for (auto pageIndex : pageIndexes) {
                 pageIds.push_back(IndexTools::GetPageId(*Part, pageIndex));
             }
-            UNIT_ASSERT_VALUES_EQUAL_C(TVector<TPageId>(Queue.begin(), Queue.end()), pageIds, TStringBuilder() << CurrentStep());
+            UNIT_ASSERT_VALUES_EQUAL_C(TVector<TPageId>(Queue.begin(), Queue.end()), pageIds, CurrentStepStr());
 
             TVector<NPageCollection::TLoadedPage> load;
             NTest::TTestEnv testEnv;
@@ -213,7 +213,7 @@ namespace {
 
             Cache->Apply(load);
 
-            UNIT_ASSERT_VALUES_EQUAL_C(RescaleStat(Cache->Stat), stat, TStringBuilder() << CurrentStep());
+            UNIT_ASSERT_VALUES_EQUAL_C(RescaleStat(Cache->Stat), stat, CurrentStepStr());
 
             return *this;
         }
@@ -228,9 +228,9 @@ namespace {
             for (auto pageIndex : pageIndexes) {
                 pageIds.push_back(IndexTools::GetPageId(*Part, pageIndex));
             }
-            UNIT_ASSERT_VALUES_EQUAL_C(TVector<TPageId>(Queue.begin(), Queue.end()), pageIds, TStringBuilder() << CurrentStep());
+            UNIT_ASSERT_VALUES_EQUAL_C(TVector<TPageId>(Queue.begin(), Queue.end()), pageIds, CurrentStepStr());
             
-            UNIT_ASSERT_VALUES_EQUAL_C(RescaleStat(Cache->Stat), stat, TStringBuilder() << CurrentStep());
+            UNIT_ASSERT_VALUES_EQUAL_C(RescaleStat(Cache->Stat), stat, CurrentStepStr());
 
             return *this;
         }
@@ -570,6 +570,31 @@ Y_UNIT_TEST_SUITE(NFwd) {
             {10, 10, 4, 2, 0});
     }
 
+    Y_UNIT_TEST(Pages_Twice)
+    {
+        // 20 pages, 50 bytes each
+        const auto eggs = CookPart();
+
+        TPagesWrap wrap(eggs.Lone(), 200, 350);
+        
+        wrap.To(0).Get(5, false, true, true, 
+            {1, 0, 1, 0, 0});
+        wrap.To(1).Get(5, false, true, true, 
+            {1, 0, 1, 0, 0});
+        wrap.To(2).Fill({5, 6, 7, 8, 9, 10, 11}, 
+            {7, 7, 1, 0, 0});
+        
+        wrap.To(3).Get(5, true, false, true, 
+            {7, 7, 1, 0, 0});
+        wrap.To(4).Get(5, true, false, true, 
+            {7, 7, 1, 0, 0});
+
+        wrap.To(5).Get(6, true, false, true, 
+            {7, 7, 2, 0, 0});
+        wrap.To(6).Get(6, true, false, true, 
+            {7, 7, 2, 0, 0});
+    }
+
     Y_UNIT_TEST(Pages_Jump_Done)
     {
         // 20 pages, 50 bytes each
@@ -694,10 +719,10 @@ Y_UNIT_TEST_SUITE(NFwd) {
         const auto eggs = CookPart();
 
         TIntrusivePtr<TSlices> slices = new TSlices;
-        // pages 5 - 8
+        // pages 5 - 7
         slices->emplace_back(TSlice({ }, { }, 10, 16, true, false));
-        // pages 9 - 11
-        slices->emplace_back(TSlice({ }, { }, 19, 23, true, true));
+        // pages 10 - 11
+        slices->emplace_back(TSlice({ }, { }, 20, 23, true, true));
 
         TPagesWrap wrap(eggs.Lone(), slices, 1000, 1000);
         
@@ -705,6 +730,10 @@ Y_UNIT_TEST_SUITE(NFwd) {
             {1, 0, 1, 0, 0});
         wrap.To(1).Fill({5, 6, 7, 8, 9, 10, 11}, 
             {7, 7, 1, 0, 0});
+        wrap.To(2).Get(10, true, false, true, 
+            {7, 7, 2, 4, 0});
+        wrap.To(3).Get(11, true, false, true, 
+            {7, 7, 3, 4, 0});
     }
 
     Y_UNIT_TEST(TLoadedPagesCircularBuffer) {

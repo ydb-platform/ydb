@@ -155,6 +155,10 @@ namespace {
             return result;
         }
 
+        bool Has(ui64 shardId) const {
+            return ShardsInfo.contains(shardId);
+        }
+
         bool IsEmpty() const {
             for (const auto& [_, shard] : ShardsInfo) {
                 if (!shard.IsEmpty()) {
@@ -207,11 +211,9 @@ class TKqpWriteActor : public TActorBootstrapped<TKqpWriteActor>, public NYql::N
 
         struct TEvShardRequestTimeout : public TEventLocal<TEvShardRequestTimeout, EvShardRequestTimeout> {
             ui64 ShardId;
-            ui64 TxId;
 
-            TEvShardRequestTimeout(ui64 shardId, ui64 txId)
-                : ShardId(shardId)
-                , TxId(txId) {
+            TEvShardRequestTimeout(ui64 shardId)
+                : ShardId(shardId) {
             }
         };
     };
@@ -470,50 +472,35 @@ private:
         Send(
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, true),
-            0, //IEventHandle::FlagTrackDelivery,
+            0,
             inFlightBatch.Cookie);
         ++inFlightBatch.SendAttempts;
 
         TlsActivationContext->Schedule(
             CalculateNextAttemptDelay(inFlightBatch.SendAttempts),
-            new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvShardRequestTimeout(shardId, inFlightBatch.Cookie)));
+            new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvShardRequestTimeout(shardId), 0, inFlightBatch.Cookie));
     }
 
-    void RetryShard(const ui64 shardId) {
-        Y_UNUSED(shardId);
-        return;
-        /*if (!InFlightBatches.contains(shardId)) {
+    void RetryShard(const ui64 shardId, const std::optional<ui64> ifCookieEqual) {
+        if (!ShardsInfo.Has(shardId)) {
             return;
         }
-        CA_LOG_D("Retry ShardID=" << shardId);
-        auto& inFlightBatch = InFlightBatches.at(shardId);
-        if (inFlightBatch.TxId != 0) {
-            inFlightBatch.OldTxIds.push_back(inFlightBatch.TxId);
-            inFlightBatch.TxId = 0;
+        const auto& shard = ShardsInfo.GetShard(shardId);
+        if (shard.IsEmpty() || (ifCookieEqual && shard.CurrentBatch().Cookie != ifCookieEqual)) {
+            return;
         }
-        RequestNewTxId();*/
+
+        CA_LOG_D("Retry ShardID=" << shardId);
+        SendDataToShard(shardId);
     }
 
     void Handle(TEvPrivate::TEvShardRequestTimeout::TPtr& ev) {
-        //if (!InFlightBatches.contains(ev->Get()->ShardId)) {
-        //    return;
-        //}
-        //if (InFlightBatches.at(ev->Get()->ShardId).TxId != ev->Get()->TxId) {
-        //    return;
-        //}
-//
-        //RetryShard(ev->Get()->ShardId);
-        Y_UNUSED(ev);
-        YQL_ENSURE(false);
+        RetryShard(ev->Get()->ShardId, ev->Cookie);
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         CA_LOG_D("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
-        //if (!InFlightBatches.contains(ev->Get()->TabletId)) {
-        //    return;
-        //}
-        //RetryShard(ev->Get()->TabletId);
-        YQL_ENSURE(false);
+        RetryShard(ev->Get()->TabletId, std::nullopt);
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {

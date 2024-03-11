@@ -53,6 +53,10 @@ public:
             state = NUdf::TUnboxedValuePod();
             InitStateWrapper(state, ctx);
         }
+        NUdf::TUnboxedValue *const stub = nullptr;
+        if (!output && !OutWidth) {
+            output = &stub;
+        }
         auto result = TMaybeFetchResult::None();
         while (result.Empty()) {
             NUdf::TUnboxedValue*const* input = static_cast<const TDerived*>(this)->PrepareInput(state, ctx, output);

@@ -830,6 +830,7 @@ public:
                     fields[i] = &Nodes.ItemNodes[i]->RefValue(ctx);
                 }
             }
+            if (!fields) return FieldsStub;
             return fields;
         }
         return nullptr;
@@ -892,6 +893,8 @@ private:
     const ui64 MemLimit;
 
     const ui32 WideFieldsIndex;
+    constexpr static NUdf::TUnboxedValue*const StubFieldPtr = nullptr;
+    NUdf::TUnboxedValue*const* FieldsStub = &StubFieldPtr;
 
 #ifndef MKQL_DISABLE_CODEGEN
     TEqualsPtr Equals = nullptr;

@@ -872,6 +872,39 @@ Y_UNIT_TEST_SUITE(NFwd) {
             {4, 4, 1, 0, 0});
     }
 
+    Y_UNIT_TEST(Pages_PageFaults_SyncIndex_Forward)
+    {
+        // 20 pages, 50 bytes each
+        const auto eggs = CookPart();
+
+        TPagesWrap wrap(eggs.Lone(), 1000, 1000);
+        wrap.UseFaultyEnv();
+        
+        // Seek(0):
+        for (ui32 attempt : xrange(3)) { // 3-leveled B-Tree
+            wrap.To(attempt).Get(0, false, false, true, 
+                {0, 0, 0, 0, 0});
+            wrap.LoadTouched();
+        }
+
+        wrap.To(3).Get(0, false, true, true, 
+            {1, 0, 1, 0, 0});
+        wrap.To(4).Fill({0, 1, 2},
+            {3, 3, 1, 0, 0});
+
+        // ContinueNext = true but request further page
+        for (ui32 attempt : xrange(4)) {
+            wrap.To(5 + attempt).Get(9, false, false, true, 
+                {3, 3, 1, 2, 0});
+            wrap.LoadTouched();
+        }
+        wrap.To(9).Get(9, false, true, true, 
+            {4, 3, 2, 2, 0});
+
+        wrap.To(10).Fill({9, 10, 11},
+            {6, 6, 2, 2, 0});
+    }
+
     Y_UNIT_TEST(Pages_PageFaults_Fill)
     {
         // 20 pages, 50 bytes each

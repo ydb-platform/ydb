@@ -539,21 +539,6 @@ void CmdWrite(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender,
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse *result;
 
-
-    // runtime->SetObserverFunc(
-    //         [&](TAutoPtr<IEventHandle>& ev) {
-    //             if (auto* msg = ev->CastAsLocal<TEvQuota::TEvRequest>()) {
-    //                 Cerr << "Captured kesus quota request event\n";
-    //                 runtime->Send(new IEventHandle(
-    //                         ev->Sender, TActorId{},
-    //                         new TEvQuota::TEvClearance(TEvQuota::TEvClearance::EResult::Success), 0, ev->Cookie));
-
-    //                 return TTestActorRuntimeBase::EEventAction::DROP;
-    //             }
-    //             return TTestActorRuntimeBase::EEventAction::PROCESS;
-    //         }
-    // );
-
     if (msn != -1) msgSeqNo = msn;
     TString cookie = ownerCookie;
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {

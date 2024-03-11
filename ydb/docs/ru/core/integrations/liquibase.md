@@ -284,6 +284,8 @@ CREATE TOPIC `my_topic` (
 
 После исполнения `liquibase update` схема базы успешно обновится.
 
+![YDB UI после применения всех миграций](../_assets/liquibase-result-example.png =450x)
+
 ### Поддержка и контакты ###
 
 Если вы столкнулись с какой - то проблемой или у вас есть предложение по улучшению диалекта, то можно открыть issue в репозитории [ydb-java-dialects](https://github.com/ydb-platform/ydb-java-dialects) с тэгом `liquibase`.

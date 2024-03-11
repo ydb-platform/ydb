@@ -287,6 +287,8 @@ CREATE TOPIC `my_topic` (
 
 After executing `liquibase update`, the database schema will be successfully updated.
 
+![YDB UI after apply migrations](../_assets/liquibase-result-example.png =450x)
+
 ### Support and Contact
 
 For support, you can open issues in the [repository](https://github.com/ydb-platform/ydb-java-dialects/tree/main/liquibase-dialect) issue tracker with tag `liquibase`.

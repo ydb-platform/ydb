@@ -183,21 +183,213 @@ void FillDefaultServiceSet(NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet
     }
 }
 
+std::pair<NKikimrConfig::TAppConfig, NKikimrConfig::TAppConfig> PrepareStaticStorageTest() {
+    NKikimrConfig::TAppConfig cur;
+    NKikimrConfig::TAppConfig proposed;
+    auto& curServiceSet = *cur.MutableBlobStorageConfig()->MutableServiceSet();
+    auto& proposedServiceSet = *proposed.MutableBlobStorageConfig()->MutableServiceSet();
+
+    FillDefaultServiceSet(curServiceSet);
+    FillDefaultServiceSet(proposedServiceSet);
+
+    return {cur, proposed};
+}
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(ConfigValidation) {
     Y_UNIT_TEST(SameStaticGroup) {
-        NKikimrConfig::TAppConfig cur;
-        NKikimrConfig::TAppConfig proposed;
-        auto& curServiceSet = *cur.MutableBlobStorageConfig()->MutableServiceSet();
-        auto& proposedServiceSet = *proposed.MutableBlobStorageConfig()->MutableServiceSet();
-
-        FillDefaultServiceSet(curServiceSet);
-        FillDefaultServiceSet(proposedServiceSet);
+        auto [cur, proposed] = PrepareStaticStorageTest();
 
         TString err;
         auto res = ValidateStaticGroup(cur, proposed, err);
         UNIT_ASSERT_VALUES_EQUAL(err, "");
         UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+    }
+
+    Y_UNIT_TEST(StaticGroupSizesGrow) {
+        {
+            auto [cur, proposed] = PrepareStaticStorageTest();
+
+            WITH(auto& groups = *proposed.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups()) {
+                groups.erase(groups.begin());
+            }
+
+            TString err;
+            auto res = ValidateStaticGroup(cur, proposed, err);
+            UNIT_ASSERT_VALUES_EQUAL(err, "Group sizes must be the same");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+        }
+
+        {
+            auto [cur, proposed] = PrepareStaticStorageTest();
+
+            WITH(auto& group = *proposed.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(1)) {
+                WITH(auto& rings = *group.MutableRings()) {
+                    rings.erase(++rings.begin());
+                }
+            }
+
+            TString err;
+            auto res = ValidateStaticGroup(cur, proposed, err);
+            UNIT_ASSERT_VALUES_EQUAL(err, "Ring sizes must be the same");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+
+        }
+
+        {
+            auto [cur, proposed] = PrepareStaticStorageTest();
+
+            WITH(auto& group = *proposed.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(1)) {
+                WITH(auto& ring = *group.MutableRings(2)) {
+                    WITH(auto& failDomains = *ring.MutableFailDomains()) {
+                        failDomains.erase(failDomains.begin());
+                    }
+                }
+            }
+
+            TString err;
+            auto res = ValidateStaticGroup(cur, proposed, err);
+            UNIT_ASSERT_VALUES_EQUAL(err, "FailDomain sizes must be the same");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+
+        }
+
+        {
+            auto [cur, proposed] = PrepareStaticStorageTest();
+
+            WITH(auto& group = *proposed.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(1)) {
+                WITH(auto& ring = *group.MutableRings(2)) {
+                    WITH(auto& failDomain = *ring.MutableFailDomains(1)) {
+                        WITH(auto& vdiskLocs = *failDomain.MutableVDiskLocations()) {
+                            vdiskLocs.erase(++++vdiskLocs.begin());
+                        }
+                    }
+                }
+            }
+
+            TString err;
+            auto res = ValidateStaticGroup(cur, proposed, err);
+            UNIT_ASSERT_VALUES_EQUAL(err, "VDiskLocation sizes must be the same");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+        }
+    }
+
+    Y_UNIT_TEST(StaticGroupSizesShrink) {
+        {
+            auto [cur, proposed] = PrepareStaticStorageTest();
+
+            WITH(auto& groups = *cur.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups()) {
+                groups.erase(groups.begin());
+            }
+
+            TString err;
+            auto res = ValidateStaticGroup(cur, proposed, err);
+            UNIT_ASSERT_VALUES_EQUAL(err, "Group sizes must be the same");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+        }
+
+        {
+            auto [cur, proposed] = PrepareStaticStorageTest();
+
+            WITH(auto& group = *cur.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(1)) {
+                WITH(auto& rings = *group.MutableRings()) {
+                    rings.erase(++rings.begin());
+                }
+            }
+
+            TString err;
+            auto res = ValidateStaticGroup(cur, proposed, err);
+            UNIT_ASSERT_VALUES_EQUAL(err, "Ring sizes must be the same");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+
+        }
+
+        {
+            auto [cur, proposed] = PrepareStaticStorageTest();
+
+            WITH(auto& group = *cur.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(1)) {
+                WITH(auto& ring = *group.MutableRings(2)) {
+                    WITH(auto& failDomains = *ring.MutableFailDomains()) {
+                        failDomains.erase(failDomains.begin());
+                    }
+                }
+            }
+
+            TString err;
+            auto res = ValidateStaticGroup(cur, proposed, err);
+            UNIT_ASSERT_VALUES_EQUAL(err, "FailDomain sizes must be the same");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+
+        }
+
+        {
+            auto [cur, proposed] = PrepareStaticStorageTest();
+
+            WITH(auto& group = *cur.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(1)) {
+                WITH(auto& ring = *group.MutableRings(2)) {
+                    WITH(auto& failDomain = *ring.MutableFailDomains(1)) {
+                        WITH(auto& vdiskLocs = *failDomain.MutableVDiskLocations()) {
+                            vdiskLocs.erase(++++vdiskLocs.begin());
+                        }
+                    }
+                }
+            }
+
+            TString err;
+            auto res = ValidateStaticGroup(cur, proposed, err);
+            UNIT_ASSERT_VALUES_EQUAL(err, "VDiskLocation sizes must be the same");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+        }
+    }
+
+    Y_UNIT_TEST(VDiskChanged) {
+        auto [cur, proposed] = PrepareStaticStorageTest();
+
+        WITH(auto& group = *cur.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(1)) {
+            WITH(auto& ring = *group.MutableRings(2)) {
+                WITH(auto& failDomain = *ring.MutableFailDomains(1)) {
+                    WITH(auto& vdiskLoc = *failDomain.MutableVDiskLocations(1)) {
+                        vdiskLoc.SetNodeID(33); // replaced one disk
+                        vdiskLoc.SetPDiskID(2);
+                        vdiskLoc.SetVDiskSlotID(33);
+                        vdiskLoc.SetPDiskGuid(33001);
+                    }
+                }
+            }
+        }
+
+        TString err;
+        auto res = ValidateStaticGroup(cur, proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err, "VDiskLocation changed");
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Warn);
+    }
+
+    Y_UNIT_TEST(TooManyVDiskChanged) {
+        auto [cur, proposed] = PrepareStaticStorageTest();
+
+        WITH(auto& group = *cur.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(1)) {
+            WITH(auto& ring = *group.MutableRings(2)) {
+                WITH(auto& failDomain = *ring.MutableFailDomains(1)) {
+                    WITH(auto& vdiskLoc = *failDomain.MutableVDiskLocations(0)) {
+                        vdiskLoc.SetNodeID(36); // replaced one disk
+                        vdiskLoc.SetPDiskID(3);
+                        vdiskLoc.SetVDiskSlotID(36);
+                        vdiskLoc.SetPDiskGuid(36001);
+                    }
+                    WITH(auto& vdiskLoc = *failDomain.MutableVDiskLocations(1)) {
+                        vdiskLoc.SetNodeID(33); // replaced one disk
+                        vdiskLoc.SetPDiskID(2);
+                        vdiskLoc.SetVDiskSlotID(33);
+                        vdiskLoc.SetPDiskGuid(33001);
+                    }
+                }
+            }
+        }
+
+        TString err;
+        auto res = ValidateStaticGroup(cur, proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err, "Too many VDiskLocation changes");
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
     }
 }

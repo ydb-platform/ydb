@@ -897,6 +897,9 @@ namespace NTypeAnnImpl {
                 }
 
             }
+            else if (optionName == "join_algo") {
+                // do nothing
+            }
             else {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() <<
                     "Unknown option name: " << optionName));

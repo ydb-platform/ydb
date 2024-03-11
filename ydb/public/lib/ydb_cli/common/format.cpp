@@ -383,8 +383,8 @@ void TQueryPlanPrinter::PrintSimplifyJson(const NJson::TJsonValue& plan) {
 }
 
 void TQueryPlanPrinter::PrintPrettyTable(const NJson::TJsonValue& plan) {
-    static const TVector<TString> explainColumnNames = {"Operation", "E-Cost", "E-Rows"};
-    static const TVector<TString> explainAnalyzeColumnNames = {"Operation", "A-Cpu", "A-Rows", "E-Cost", "E-Rows"};
+    static const TVector<TString> explainColumnNames = {"Operation", "E-Cost", "E-Rows", "E-Size"};
+    static const TVector<TString> explainAnalyzeColumnNames = {"Operation", "A-Cpu", "A-Rows", "E-Cost", "E-Rows", "E-Size"};
 
     if (plan.GetMapSafe().contains("SimplifiedPlan")) {
         auto queryPlan = plan.GetMapSafe().at("SimplifiedPlan");
@@ -480,6 +480,7 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
             TString aCpu;
             TString eCost;
             TString eRows;
+            TString eSize;
 
             for (const auto& [key, value] : op.GetMapSafe()) {
                 if (key == "A-Cpu") {
@@ -488,6 +489,8 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
                     eCost = formatPrettyTableDouble(value.GetDouble());
                 } else if (key == "E-Rows") {
                     eRows = formatPrettyTableDouble(value.GetDouble());
+                } else if (key == "E-Size") {
+                    eSize = formatPrettyTableDouble(value.GetDouble());
                 } else if (key != "Name") {
                     if (key == "Predicate" || key == "Condition" || key == "SortBy") {
                         info.emplace_back(TStringBuilder() << replaceAll(replaceAll(JsonToString(value), "item.", ""), "state.", ""));
@@ -512,10 +515,12 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
                 newRow.Column(1, std::move(aCpu));
                 newRow.Column(3, std::move(eCost));
                 newRow.Column(4, std::move(eRows));
+                newRow.Column(5, std::move(eSize));
             }
             else {
                 newRow.Column(1, std::move(eCost));
                 newRow.Column(2, std::move(eRows));
+                newRow.Column(3, std::move(eSize));
             }
         }
     } else {

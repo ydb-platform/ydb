@@ -29,7 +29,7 @@ struct TKqpProviderContext : public NYql::IProviderContext {
         const TVector<TString>& leftJoinKeys, const TVector<TString>& rightJoinKeys,
         NYql::EJoinAlgoType joinAlgo) override;
 
-    virtual double ComputeJoinCost(const NYql::TOptimizerStatistics& leftStats, const NYql::TOptimizerStatistics& rightStats, NYql::EJoinAlgoType joinAlgo) const override;
+    virtual double ComputeJoinCost(const NYql::TOptimizerStatistics& leftStats, const NYql::TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, NYql::EJoinAlgoType joinAlgo) const override;
 
     const TKqpOptimizeContext& KqpCtx;
     int OptLevel;

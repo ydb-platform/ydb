@@ -1421,6 +1421,8 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, bool useCBO, 
                                         return parent;
                                     })
                                 .Seal()
+                                .List(7).Add(join.LeftJoinKeyNames().Ref().ChildrenList()).Seal()
+                                .List(8).Add(join.RightJoinKeyNames().Ref().ChildrenList()).Seal()
                             .Seal()
                         .Seal()
                     .Seal().Build();
@@ -1469,6 +1471,8 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, bool useCBO, 
                                         return parent;
                                     })
                                 .Seal()
+                                .List(7).Add(join.LeftJoinKeyNames().Ref().ChildrenList()).Seal()
+                                .List(8).Add(join.RightJoinKeyNames().Ref().ChildrenList()).Seal()
                             .Seal()
                         .Seal()
                     .Seal().Build();

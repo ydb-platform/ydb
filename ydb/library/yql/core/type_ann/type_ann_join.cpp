@@ -476,7 +476,7 @@ namespace NTypeAnnImpl {
     IGraphTransformer::TStatus MapJoinCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         
-        if (!EnsureArgsCount(*input, 7, ctx.Expr)) {
+        if (!EnsureArgsCount(*input, 9, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 

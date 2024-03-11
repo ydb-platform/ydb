@@ -885,12 +885,13 @@ protected:
             if (cmd == EntitySymbol) {
                 return NUdf::TUnboxedValue();
             }
-
-            auto val = ReadYsonValue(uwrappedType, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
+            auto& decoder = *SpecsCache_.GetSpecs().Inputs[TableIndex_];
+            auto val = ReadYsonValue(uwrappedType, decoder.NativeYtTypeFlags, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
             return val.Release().MakeOptional();
         } else {
             if (Y_LIKELY(cmd != EntitySymbol)) {
-                return ReadYsonValue(type, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
+                auto& decoder = *SpecsCache_.GetSpecs().Inputs[TableIndex_];
+                return ReadYsonValue(type, decoder.NativeYtTypeFlags, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
             }
 
             if (type->GetKind() == TType::EKind::Data && static_cast<TDataType*>(type)->GetSchemeType() == NUdf::TDataType<NUdf::TYson>::Id) {
@@ -1359,7 +1360,7 @@ protected:
             // parse binary yson...
             YQL_ENSURE(size > 0);
             char cmd = Buf_.Read();
-            auto value = ReadYsonValue(uwrappedType, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
+            auto value = ReadYsonValue(uwrappedType, SpecsCache_.GetSpecs().Inputs[TableIndex_]->NativeYtTypeFlags, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
             return isOptional ? value.Release().MakeOptional() : value;
         }
     }
@@ -1734,6 +1735,7 @@ public:
         : TMkqlWriterImpl::TEncoder(buf, specs)
     {
         Fields_ = GetFields(Specs_.Outputs[tableIndex].RowType);
+        NativeYtTypeFlags_ = Specs_.Outputs[tableIndex].NativeYtTypeFlags;
     }
 
     void EncodeNext(const NUdf::TUnboxedValuePod row) final {
@@ -1754,7 +1756,7 @@ public:
             Buf_.WriteMany(field.Name.data(), field.Name.size());
             Buf_.Write(KeyValueSeparatorSymbol);
 
-            WriteYsonValueInTableFormat(Buf_, field.Type, std::move(value), true);
+            WriteYsonValueInTableFormat(Buf_, field.Type, NativeYtTypeFlags_, std::move(value), true);
 
             Buf_.Write(KeyedItemSeparatorSymbol);
         }
@@ -1781,7 +1783,7 @@ public:
             Buf_.WriteMany(field.Name.data(), field.Name.size());
             Buf_.Write(KeyValueSeparatorSymbol);
 
-            WriteYsonValueInTableFormat(Buf_, field.Type, std::move(value), true);
+            WriteYsonValueInTableFormat(Buf_, field.Type, NativeYtTypeFlags_, std::move(value), true);
 
             Buf_.Write(KeyedItemSeparatorSymbol);
         }
@@ -1791,6 +1793,7 @@ public:
     }
 private:
     TVector<TField> Fields_;
+    ui64 NativeYtTypeFlags_;
 };
 
 class TSkiffEncoderBase: public TMkqlWriterImpl::TEncoder {
@@ -1869,7 +1872,7 @@ protected:
         } else if (!wasOptional && type->IsPg()) {
             NCommon::WriteSkiffPg(static_cast<TPgType*>(type), value, Buf_);
         } else {
-            WriteYsonContainerValue(type, value, Buf_);
+            WriteYsonContainerValue(type, NativeYtTypeFlags_, value, Buf_);
         }
     }
 

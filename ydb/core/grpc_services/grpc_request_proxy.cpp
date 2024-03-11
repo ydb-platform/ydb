@@ -242,7 +242,7 @@ private:
                 database = &it->second;
             } else {
                 // No given database found, start update if possible
-                LOG_INFO_S(ctx, NKikimrServices::GRPC_SERVER, "MY_MARKER database" << databaseName << " does not exist, bad " << event->Get()->GetRequestName());
+                LOG_INFO_S(ctx, NKikimrServices::GRPC_SERVER, "MY_MARKER database '" << databaseName << "' does not exist, bad " << event->Get()->GetRequestName());
                 if (!DeferAndStartUpdate(databaseName, event, requestBaseCtx)) {
                     Counters->IncDatabaseUnavailableCounter();
                     const TString error = "Grpc proxy is not ready to accept request, database unknown";

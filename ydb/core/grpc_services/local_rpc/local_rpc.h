@@ -60,6 +60,10 @@ public:
         return InternalToken;
     }
 
+    void SetInternalToken(const TIntrusiveConstPtr<NACLib::TUserToken>& newToken) {
+        InternalToken = newToken;
+    }
+
     const TString& GetSerializedToken() const override {
         if (InternalToken) {
             return InternalToken->GetSerializedToken();
@@ -171,7 +175,8 @@ public:
     void SetRuHeader(ui64) override {}
 
     // Unimplemented methods
-    void ReplyWithRpcStatus(grpc::StatusCode, const TString&, const TString&) override {
+    void ReplyWithRpcStatus(grpc::StatusCode code, const TString& msg = "", const TString& details = "") override {
+        RaiseIssue(NYql::TIssue(TStringBuilder() << "grpc code: " << code << ", msg: " << msg << " (" << details << ")"));
         ReplyWithYdbStatus(Ydb::StatusIds::GENERIC_ERROR);
     }
 

@@ -14,16 +14,19 @@ class IFacilityProvider;
 namespace NYdbOverFq {
 
 template <typename TMsg, ui32 EMsgType>
-class TEvent : public TEventLocal<TEvent<TMsg, EMsgType>, EMsgType> {
+class TEventBase : public TEventLocal<TEventBase<TMsg, EMsgType>, EMsgType> {
 public:
-    TEvent() = default;
+    TEventBase() = default;
 
-    TEvent(TMsg message)
+    TEventBase(TMsg message)
         : Message{std::move(message)}
     {}
 
     TMsg Message;
 };
+
+template <typename TMsg>
+class TEvent;
 
 enum EEventTypes {
     EvCreateQueryRequest = NFq::YqEventSubspaceBegin(NFq::TYqEventSubspace::TableOverFq),
@@ -37,7 +40,12 @@ enum EEventTypes {
 };
 
 #define DEFINE_EVENT(Event) \
-using TEv##Event = TEvent<FederatedQuery::Event, Ev##Event>;
+template <> \
+class TEvent<FederatedQuery::Event> : public TEventBase<FederatedQuery::Event, Ev##Event> { \
+    using TBase = TEventBase<FederatedQuery::Event, Ev##Event>; \
+    using TBase::TBase; \
+}; \
+using TEv##Event = TEvent<FederatedQuery::Event>;
 
 #define DEFINE_REQ_RESP(Name) \
 DEFINE_EVENT(Name##Request)  \
@@ -51,49 +59,13 @@ DEFINE_REQ_RESP(GetResultData)
 #undef DEFINE_REQ_RESP
 #undef DEFINE_EVENT
 
-template <typename TReq, typename TResp>
-class TGrpcYdbOverFqOpCall
-    : public TGrpcRequestOperationCall<TReq, TResp>
-    , public TFqPermissionsBase<TReq> {
-public:
-    using TBase = TGrpcRequestOperationCall<TReq, TResp>;
-    using TPermissionsBase = TFqPermissionsBase<TReq>;
-    using TPermissionsFunc = typename TPermissionsBase::TPermissionsFunc;
-    using TCallback = void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&);
-
-    TGrpcYdbOverFqOpCall(NYdbGrpc::IRequestContextBase* ctx, TCallback* cb, NFederatedQuery::TPermissionsVec&& permissions)
-        : TBase{ctx, cb, {}}, TPermissionsBase{AsConst(std::move(permissions))}
-    {}
-
-    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult& , ICheckerIface* iface) override {
-        TString scope = "yandexcloud:/" + TBase::GetDatabaseName().GetOrElse("/");
-        TVector entries = TPermissionsBase::FillSids(scope, *TBase::GetProtoRequest());
-        if (entries.empty()) {
-            return false;
-        }
-
-        iface->SetEntries(entries);
-        return true;
-    }
-
-private:
-    static TPermissionsFunc AsConst(NFederatedQuery::TPermissionsVec&& permissions) {
-        return [permissions = std::move(permissions)](const TReq&) {
-            return permissions;
-        };
-    }
-};
-
-NFederatedQuery::TPermissionsVec GetCreateSessionPermissions();
-NFederatedQuery::TPermissionsVec GetExecuteDataQueryPermissions();
-
 // table
-void DoCreateSessionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
-void DoKeepAliveRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
-void DoDescribeTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
-void DoExplainDataQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
-void DoExecuteDataQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
-void DoListDirectoryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> GetCreateSessionExecutor(NActors::TActorId grpcProxyId);
+std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> GetKeepAliveExecutor(NActors::TActorId grpcProxyId);
+std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> GetDescribeTableExecutor(NActors::TActorId grpcProxyId);
+std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> GetExplainDataQueryExecutor(NActors::TActorId grpcProxyId);
+std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> GetExecuteDataQueryExecutor(NActors::TActorId grpcProxyId);
+std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> GetListDirectoryExecutor(NActors::TActorId grpcProxyId);
 
 } // namespace NYdbOverFq
 

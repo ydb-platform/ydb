@@ -42,8 +42,8 @@ MakeIntrusive<TGRpcRequest<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response
     this, &Service_, CQ_,                                                                                      \
     [this](NYdbGrpc::IRequestContextBase *ctx) {                                                                  \
         NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                       \
-        auto op_call = new NYdbOverFq::TGrpcYdbOverFqOpCall<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response>( \
-            ctx, &NYdbOverFq::Do##NAME##Request, NYdbOverFq::Get##NAME##Permissions()); \
+        auto op_call = new TGrpcRequestOperationCall<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response>( \
+            ctx, NYdbOverFq::Get##NAME##Executor(GRpcRequestProxyId_)); \
         ActorSystem_->Send(GRpcRequestProxyId_, op_call);            \
     },                                                                                                         \
     &Ydb::Table::V1::TableService::AsyncService::Request##NAME,                                  \
@@ -54,19 +54,6 @@ MakeIntrusive<TGRpcRequest<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response
     ADD_REQUEST(CreateSession)
 
 #undef ADD_REQUEST
-
-    // using ExecuteDataQuery = NYdbGrpc::TGRpcRequest<
-    //     Ydb::Table::ExecuteDataQueryRequest, Ydb::Table::ExecuteDataQueryResponse,
-    //     TGRpcYdbOverFqService,
-    //     TSecurityTextFormatPrinter<Ydb::Table::ExecuteDataQueryRequest>,
-    //     TSecurityTextFormatPrinter<Ydb::Table::ExecuteDataQueryResponse>>;
-
-    // MakeIntrusive<ExecuteDataQuery>(this, &Service_, CQ_, [this](NYdbGrpc::IRequestContextBase* ctx) {
-    //     NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());
-    //     auto op_call = new TGrpcRequestOperationCall<Ydb::Table::ExecuteDataQueryRequest, Ydb::Table::ExecuteDataQueryResponse>(ctx, &NYdbOverFq::DoExecuteDataQueryRequest);
-    //     ActorSystem_->Send(GRpcRequestProxyId_, op_call);
-    // }, &Ydb::Table::V1::TableService::AsyncService::RequestExecuteDataQuery,
-    // "ExecuteDataQuery", logger, getCounterBlock("ydb_over_fq", "ExecuteDataQuery"))->Run();
 }
 
 } // namespace NKikimr::NGRpcService

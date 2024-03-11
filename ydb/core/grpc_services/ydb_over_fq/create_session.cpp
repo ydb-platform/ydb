@@ -33,8 +33,10 @@ private:
     }
 };
 
-void DoCreateSessionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    f.RegisterActor(new TCreateSessionRPC(p.release()));
+std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> GetCreateSessionExecutor(NActors::TActorId) {
+    return [](std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+        f.RegisterActor(new TCreateSessionRPC(p.release()));
+    };
 }
 
 } // namespace NKikimr::NGRpcService::NYdbOverFq

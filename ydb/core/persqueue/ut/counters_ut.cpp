@@ -117,7 +117,7 @@ Y_UNIT_TEST(PartitionWriteQuota) {
 
     PQTabletPrepare({.partitions = 1, .writeSpeed = 30_KB}, {}, tc);
     TVector<std::pair<ui64, TString>> data;
-    TString s{50_KB, 'c'};
+    TString s{32_KB, 'c'};
     data.push_back({1, s});
     TVector<std::function<void()>> validators;
     tc.Runtime->SetObserverFunc(
@@ -152,8 +152,8 @@ Y_UNIT_TEST(PartitionWriteQuota) {
         TStringStream histogramStr;
         histogram->OutputHtml(histogramStr);
         Cerr << "**** Total histogram: **** \n " << histogramStr.Str() << "**** **** **** ****" << Endl;
-        UNIT_ASSERT_VALUES_EQUAL(histogram->FindNamedCounter("Interval", "1000ms")->Val(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(histogram->FindNamedCounter("Interval", "2500ms")->Val(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(histogram->FindNamedCounter("Interval", "1000ms")->Val(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(histogram->FindNamedCounter("Interval", "2500ms")->Val(), 2);
     }
 }
 

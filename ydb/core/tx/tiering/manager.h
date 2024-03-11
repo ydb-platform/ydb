@@ -85,18 +85,12 @@ public:
     TTiersManager& Start(std::shared_ptr<TTiersManager> ownerPtr);
     TTiersManager& Stop(const bool needStopActor);
     virtual const std::map<TString, NTiers::TManager>& GetManagers() const override {
+        AFL_VERIFY(IsReady());
         return Managers;
     }
     virtual const NTiers::TManager* GetManagerOptional(const TString& tierId) const override;
     NMetadata::NFetcher::ISnapshotsFetcher::TPtr GetExternalDataManipulation() const;
 
-    TManagers::const_iterator begin() const {
-        return Managers.begin();
-    }
-
-    TManagers::const_iterator end() const {
-        return Managers.end();
-    }
 };
 
 }

@@ -208,7 +208,7 @@ namespace NFwd {
                     return false;
                 }
                 ContinueNext = false;
-                Y_ABORT_UNLESS(Index->GetRowId() < EndRowId, "Requested page is outside of slices");
+                Y_DEBUG_ABORT_UNLESS(Index->GetRowId() < EndRowId, "Requested page is outside of slices");
             }
 
             Y_ABORT_UNLESS(Index->IsValid(), "Requested page doesn't belong to the part");

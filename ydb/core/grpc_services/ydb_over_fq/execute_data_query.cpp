@@ -15,203 +15,199 @@ using DescribeQueryRpc = TGrpcFqRequestOperationCall<FederatedQuery::DescribeQue
 using GetResultDataRpc = TGrpcFqRequestOperationCall<FederatedQuery::GetResultDataRequest, FederatedQuery::GetResultDataResponse>;
 
 template<typename TReq, typename TResp>
-class TLocalGrpcRequest
-    : public NRpcService::TLocalRpcCtx<TGrpcFqRequestOperationCall<TReq, TResp>, std::function<void(TResp)>>
-    , public TEvProxyRuntimeEvent
-    , public TFqPermissionsBase<TReq> {
+class TLocalGrpcContext
+    : public NYdbGrpc::IRequestContextBase {
 public:
     using TRequest = TReq;
     using TResponse = TResp;
-    using TPermissions = TFqPermissionsBase<TReq>;
-    using TRpc = TGrpcFqRequestOperationCall<TReq, TResp>;
-    using TBase = NRpcService::TLocalRpcCtx<TRpc, std::function<void(TResp)>>;
 
-    TLocalGrpcRequest(
+    TLocalGrpcContext(
         TReq&& request, std::shared_ptr<IRequestCtx> baseRequest,
-        std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> passCallback,
-        NFederatedQuery::TPermissionsFunc<TReq> permissions,
-        std::function<void(const TResp&)> replyCallback)
-        : TBase{
-            std::move(request), std::move(replyCallback), baseRequest->GetDatabaseName().GetOrElse(""),
-            /*serialized token*/baseRequest->GetSerializedToken().Empty() ? Nothing() : TMaybe<TString>(baseRequest->GetSerializedToken()),
-            /*requestType*/ Nothing(), /*internalCall*/ true}
-        , TEvProxyRuntimeEvent{}
-        , TPermissions{std::move(permissions)}
+        std::function<void(const TResponse&)> replyCallback)
+        : Request_{std::move(request)}
         , Scope_{"yandexcloud:/" + baseRequest->GetDatabaseName().GetOrElse("/")}
-        , PassCallback_{std::move(passCallback)}
+        , ReplyCallback_{std::move(replyCallback)}
         , BaseRequest_{std::move(baseRequest)}
         , AuthState_{/*needAuth*/true}
     {}
 private:
-    void ReplyUnavaliable() override {
-        TBase::ReplyWithRpcStatus(grpc::StatusCode::UNAVAILABLE);
-    }
-
-    void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
-        TBase::ReplyWithYdbStatus(status);
+    void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) {
+        TResp resp;
+        NGRpcService::TCommonResponseFiller<TResp, true>::Fill(resp, IssueManager_.GetIssues(), nullptr, status);
+        ReplyCallback_(resp);
     }
 
 public:
-    const TMaybe<TString> GetPeerMetaValues(const TString& key) const override {
-        if (key == "x-ydb-fq-project") {
-            return Scope_;
-        }
-        return BaseRequest_->GetPeerMetaValues(key);
+    //! Get pointer to the request's message.
+    const NProtoBuf::Message* GetRequest() const override {
+        return &Request_;
     }
 
-    // auth
-    const TMaybe<TString> GetYdbToken() const override {
-        return GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER);
+    //! Get mutable pointer to the request's message.
+    NProtoBuf::Message* GetRequestMut() override {
+        return &Request_;
     }
 
-    void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) override {
-        AuthState_.State = state;
-    }
-
-    void SetInternalToken(const TIntrusiveConstPtr<NACLib::TUserToken>& token) override {
-        TBase::SetInternalToken(token);
-    }
-
-    const NYdbGrpc::TAuthState& GetAuthState() const override {
+    //! Get current auth state
+    NYdbGrpc::TAuthState& GetAuthState() override {
         return AuthState_;
     }
 
-    void ReplyUnauthenticated(const TString& msg = "") override {
-        TBase::ReplyWithRpcStatus(grpc::StatusCode::UNAUTHENTICATED, msg);
+    //! Send common response (The request shoult be created for protobuf response type)
+    //! Implementation can swap protobuf message
+    void Reply(NProtoBuf::Message* proto, ui32 status = 0) override {
+        Y_UNUSED(status);
+        TResp* resp = dynamic_cast<TResp*>(proto);
+        Y_ABORT_UNLESS(resp);
+        ReplyCallback_(*resp);
     }
 
-    void RaiseIssue(const NYql::TIssue& issue) override {
-        TBase::RaiseIssue(issue);
-    }
-    void RaiseIssues(const NYql::TIssues& issues) override {
-        TBase::RaiseIssues(issues);
+    //! Send serialised response (The request shoult be created for bytes response type)
+    //! Implementation can swap ByteBuffer
+
+    //! ctrl - controll stream behaviour. Ignored in case of unary call
+    void Reply(grpc::ByteBuffer* resp, ui32 status = 0, EStreamCtrl ctrl = EStreamCtrl::CONT) override {
+        Y_UNUSED(resp, status, ctrl);
+        Y_ABORT("TLocalGrpcContext::Reply for stream is unimplemented");
     }
 
-    //tracing
-    void StartTracing(NWilson::TSpan&& span) override {
-        Span_ = std::move(span);
-    }
-    void LegacyFinishSpan() override {
-        Span_.End();
+    //! Send grpc UNAUTHENTICATED status
+    void ReplyUnauthenticated(const TString& in) override {
+        ReplyError(grpc::UNAUTHENTICATED, in);
     }
 
-    // validation
-    bool Validate(TString&) override {
-        return true;
+    //! Send grpc error
+    void ReplyError(grpc::StatusCode code, const TString& msg, const TString& details = "") override {
+        NYql::TIssue issue{TStringBuilder() << "grpc code: " << code << ", msg: " << msg << " (" << details << ")"};
+        issue.SetCode(code, NYql::ESeverity::TSeverityIds_ESeverityId_S_ERROR);
+        RaiseIssue(issue);
+        ReplyWithYdbStatus(Ydb::StatusIds::GENERIC_ERROR);
     }
 
-    // counters
-    void SetCounters(IGRpcProxyCounters::TPtr counters) override {
-        Counters_ = counters;
+    //! Returns deadline (server epoch related) if peer set it on its side, or Instanse::Max() otherwise
+    TInstant Deadline() const override {
+        return BaseRequest_->GetDeadline();
     }
-    IGRpcProxyCounters::TPtr GetCounters() const override {
-        return Counters_;
+
+    //! Returns available peer metadata keys
+    TSet<TStringBuf> GetPeerMetaKeys() const override {
+        Y_ABORT("TLocalGrpcContext::GetPeerMetaKeys unimplemented");
+        return {};
     }
+
+    //! Returns peer optional metavalue
+    TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const override {
+        if (key == "x-ydb-fq-project") {
+            return {Scope_};
+        }
+        auto value = BaseRequest_->GetPeerMetaValues(TString{key});
+        if (value) {
+            return {std::move(*value)};
+        }
+        return {};
+    }
+
+    TVector<TStringBuf> FindClientCert() const override {
+        return BaseRequest_->FindClientCert();
+    }
+
+    //! Returns request compression level
+    grpc_compression_level GetCompressionLevel() const override {
+        return GRPC_COMPRESS_LEVEL_NONE;
+    }
+
+    //! Returns protobuf arena allocator associated with current request
+    //! Lifetime of the arena is lifetime of the context
+    google::protobuf::Arena* GetArena() override {
+        return &Arena_;
+    }
+
+    //! Add trailing metadata in to grpc context
+    //! The metadata will be send at the time of rpc finish
+    void AddTrailingMetadata(const TString& key, const TString& value) override {
+        Y_UNUSED(key, value);
+    }
+
+    //! Use validated database name for counters
     void UseDatabase(const TString& database) override {
-        Counters_->UseDatabase(database);
+        Y_UNUSED(database);
     }
 
-    // rate limiting
+    // Streaming part
 
-    // This method allows to set hook for unary call.
-    // The hook will be called at the reply time
-    // TRespHookCtx::Ptr will be passed in to the hook, it is allow
-    // to store the ctx somwhere to delay reply and then call Pass() to send response.
-    void SetRespHook(TRespHook&& hook) override {
-        RespHook_ = std::move(hook);
+    void SetNextReplyCallback(TOnNextReply&& cb) override {
+        Y_UNUSED(cb);
     }
-    void SetRlPath(TMaybe<NRpcService::TRlPath>&& path) override {
-        RlPath_ = std::move(path);
-    }
-    TRateLimiterMode GetRlMode() const override {
-        // TODO: is ok?
-        return TRateLimiterMode::Off;
-    }
+    void FinishStreamingOk() override {}
+    TAsyncFinishResult GetFinishFuture() override { return {}; }
+    TString GetPeer() const override { return {}; }
+    bool SslServer() const override { return false; }
+    bool IsClientLost() const override { return false; }
 
-    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface* iface) override {
-        auto entries = TPermissions::FillSids(Scope_, GetRequestProto());
-        if (entries.empty()) {
-            return false;
-        }
-        iface->SetEntries(entries);
-        return true;
-    }
-
-    // Pass request for next processing
-    void Pass(const IFacilityProvider& facility) override {
-        Span_.End();
-
-        try {
-            PassCallback_(std::unique_ptr<IRequestOpCtx>(this), facility);
-        } catch (const std::exception& ex) {
-            this->RaiseIssue(NYql::TIssue{TStringBuilder() << "exception in local grpc: " << ex.what()});
-            this->ReplyWithYdbStatus(Ydb::StatusIds::INTERNAL_ERROR);
-        }
-    }
-
-    // audit
-    void SetAuditLogHook(TAuditLogHook&&) override {
-        Y_ABORT("unimplemented for TLocalGrpcRequest");
-    }
-    void SetDiskQuotaExceeded(bool) override {
-        // unimplemented
-    }
-
+public:
     const TReq& GetRequestProto() const {
-        auto typedReq = dynamic_cast<const TReq*>(TBase::GetRequest());
+        auto typedReq = dynamic_cast<const TReq*>(GetRequest());
         Y_ABORT_UNLESS(typedReq);
         return *typedReq;
     }
+private:
+    void RaiseIssue(const NYql::TIssue& issue) {
+        IssueManager_.RaiseIssue(issue);
+    }
 
 private:
+    TReq Request_;
     TString Scope_;
-    std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> PassCallback_;
+    std::function<void(const TResponse&)> ReplyCallback_;
 
     std::shared_ptr<IRequestCtx> BaseRequest_;
     NYdbGrpc::TAuthState AuthState_;
-    NWilson::TSpan Span_;
-    IGRpcProxyCounters::TPtr Counters_;
-    // rate limiting
-    TRespHook RespHook_;
-    TMaybe<NRpcService::TRlPath> RlPath_;
+
+    NYql::TIssueManager IssueManager_;
+    google::protobuf::Arena Arena_;
 };
+
 
 namespace {
 
-TLocalGrpcRequest<FederatedQuery::CreateQueryRequest, FederatedQuery::CreateQueryResponse>* MakeRequest(
+std::unique_ptr<TEvProxyRuntimeEvent> MakeRequest(
     FederatedQuery::CreateQueryRequest&& request,
     std::shared_ptr<IRequestCtx> baseRequest,
     std::function<void(const FederatedQuery::CreateQueryResponse&)> replyCallback) {
-    return new TLocalGrpcRequest<FederatedQuery::CreateQueryRequest, FederatedQuery::CreateQueryResponse>{
-        std::move(request), std::move(baseRequest), &DoFederatedQueryCreateQueryRequest, GetFederatedQueryCreateQueryPermissions(), std::move(replyCallback)
+    auto context = new TLocalGrpcContext<FederatedQuery::CreateQueryRequest, FederatedQuery::CreateQueryResponse>{
+        std::move(request), std::move(baseRequest), std::move(replyCallback)
     };
+    return CreateFederatedQueryCreateQueryRequestOperationCall(context);
 };
 
-TLocalGrpcRequest<FederatedQuery::GetQueryStatusRequest, FederatedQuery::GetQueryStatusResponse>* MakeRequest(
+std::unique_ptr<TEvProxyRuntimeEvent> MakeRequest(
     FederatedQuery::GetQueryStatusRequest&& request,
     std::shared_ptr<IRequestCtx> baseRequest,
     std::function<void(const FederatedQuery::GetQueryStatusResponse&)> replyCallback) {
-    return new TLocalGrpcRequest<FederatedQuery::GetQueryStatusRequest, FederatedQuery::GetQueryStatusResponse>{
-        std::move(request), std::move(baseRequest), &DoFederatedQueryGetQueryStatusRequest, GetFederatedQueryGetQueryStatusPermissions(), std::move(replyCallback)
+    auto context = new TLocalGrpcContext<FederatedQuery::GetQueryStatusRequest, FederatedQuery::GetQueryStatusResponse>{
+        std::move(request), std::move(baseRequest), std::move(replyCallback)
     };
+    return CreateFederatedQueryGetQueryStatusRequestOperationCall(context);
 };
 
-TLocalGrpcRequest<FederatedQuery::DescribeQueryRequest, FederatedQuery::DescribeQueryResponse>* MakeRequest(
+std::unique_ptr<TEvProxyRuntimeEvent> MakeRequest(
     FederatedQuery::DescribeQueryRequest&& request,
     std::shared_ptr<IRequestCtx> baseRequest,
     std::function<void(const FederatedQuery::DescribeQueryResponse&)> replyCallback) {
-    return new TLocalGrpcRequest<FederatedQuery::DescribeQueryRequest, FederatedQuery::DescribeQueryResponse>{
-        std::move(request), std::move(baseRequest), &DoFederatedQueryDescribeQueryRequest, GetFederatedQueryDescribeQueryPermissions(), std::move(replyCallback)
+    auto context = new TLocalGrpcContext<FederatedQuery::DescribeQueryRequest, FederatedQuery::DescribeQueryResponse>{
+        std::move(request), std::move(baseRequest), std::move(replyCallback)
     };
+    return CreateFederatedQueryDescribeQueryRequestOperationCall(context);
 };
 
-TLocalGrpcRequest<FederatedQuery::GetResultDataRequest, FederatedQuery::GetResultDataResponse>* MakeRequest(
+std::unique_ptr<TEvProxyRuntimeEvent> MakeRequest(
     FederatedQuery::GetResultDataRequest&& request,
     std::shared_ptr<IRequestCtx> baseRequest,
     std::function<void(const FederatedQuery::GetResultDataResponse&)> replyCallback) {
-    return new TLocalGrpcRequest<FederatedQuery::GetResultDataRequest, FederatedQuery::GetResultDataResponse>{
-        std::move(request), std::move(baseRequest), &DoFederatedQueryGetResultDataRequest, GetFederatedQueryGetResultDataPermissions(), std::move(replyCallback)
+    auto context = new TLocalGrpcContext<FederatedQuery::GetResultDataRequest, FederatedQuery::GetResultDataResponse>{
+        std::move(request), std::move(baseRequest), std::move(replyCallback)
     };
+    return CreateFederatedQueryGetResultDataRequestOperationCall(context);
 };
 
 }
@@ -430,7 +426,7 @@ private:
         FederatedQuery::GetResultDataResult result;
         resp.operation().result().UnpackTo(&result);
 
-        Y_ABORT_UNLESS(CurrentResultSet_ >= static_cast<i64>(ResultSets_.size()));
+        Y_ABORT_UNLESS(CurrentResultSet_ <= static_cast<i64>(ResultSets_.size()));
 
         Ydb::ResultSet* resultSet = nullptr;
         if (CurrentResultSet_ == static_cast<i64>(ResultSets_.size())) {
@@ -466,7 +462,7 @@ private:
         auto localRequest = MakeRequest(std::move(req), baseRequest, [as = ctx.ActorSystem(), selfId = SelfId()](const TResp& response) {
                 as->Send(selfId, new TEvent<TResp>(response));
             });
-        ctx.Send(GrpcProxyId_, localRequest);
+        ctx.Send(GrpcProxyId_, localRequest.release());
     }
 
     // if status is not success, replies error, returns true

@@ -3,112 +3,64 @@
 #include <algorithm>
 #include <memory>
 
-#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/fq/libs/control_plane_proxy/utils/utils.h>
 
 namespace NKikimr {
 namespace NGRpcService {
 
-namespace NFederatedQuery {
-
-inline TMaybe<TString> GetYdbToken(const IRequestCtx& req) {
-    return req.GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER);
-}
-
-using TPermissionsVec = TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TPermission>;
-
-template <typename TReq>
-using TPermissionsFunc = std::function<TPermissionsVec(const TReq&)>;
-}
-
 class IRequestOpCtx;
 class IFacilityProvider;
 
-
-template <typename TReq>
-class TFqPermissionsBase {
-public:
-    using NPerms = NKikimr::TEvTicketParser::TEvAuthorizeTicket;
-    using TPermissionsFunc = NFederatedQuery::TPermissionsFunc<TReq>;
-
-    TFqPermissionsBase(TPermissionsFunc&& permissions) noexcept
-        : Permissions{std::move(permissions)}
-    {}
-
-    const TVector<TString>& GetSids() const noexcept {
-        return Sids;
-    }
-
-    NFederatedQuery::TPermissionsVec GetPermissions(const TReq& proto) const {
-        return Permissions(proto);
-    }
-
-    TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> FillSids(const TString& scope, const TReq& req) {
-        if (!scope.StartsWith("yandexcloud://")) {
-            return {};
-        }
-
-        const TVector<TString> path = StringSplitter(scope).Split('/').SkipEmpty();
-        if (path.size() != 2 && path.size() != 3) {
-            return {};
-        }
-
-        const TString& folderId = path.back();
-        auto permissions = GetPermissions(req);
-        TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries {{
-            permissions,
-            {
-                {"folder_id", folderId}
-            }
-        }};
-        std::transform(permissions.begin(), permissions.end(), std::back_inserter(Sids),
-            [](const auto& s) -> TString { return s.Permission + "@as"; });
-
-        auto serviceAccountId = NFq::ExtractServiceAccountId(req);
-        if (serviceAccountId) {
-            entries.push_back({
-                {{NPerms::Required("iam.serviceAccounts.use")}},
-                {
-                    {"service_account_id", serviceAccountId}
-                }});
-            Sids.push_back("iam.serviceAccounts.use@as");
-        }
-
-        return entries;
-    }
-protected:
-    TVector<TString> Sids;
-    TPermissionsFunc Permissions;
-};
-
 template <typename TReq, typename TResp>
-class TGrpcFqRequestOperationCall : public TGrpcRequestOperationCall<TReq, TResp>, public TFqPermissionsBase<TReq> {
+class TGrpcFqRequestOperationCall : public TGrpcRequestOperationCall<TReq, TResp> {
 public:
     using TBase = TGrpcRequestOperationCall<TReq, TResp>;
     using TBase::GetProtoRequest;
     using TBase::GetPeerMetaValues;
     using NPerms = NKikimr::TEvTicketParser::TEvAuthorizeTicket;
-    using TPermissions = TFqPermissionsBase<TReq>;
 
-    // const std::function<TVector<NPerms::TPermission>(const TReq&)>& Permissions;
-    // TVector<TString> Sids;
+    const std::function<TVector<NPerms::TPermission>(const TReq&)>& Permissions;
+    TVector<TString> Sids;
 
     TGrpcFqRequestOperationCall(NYdbGrpc::IRequestContextBase* ctx,
         void (*cb)(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider& f),
-        std::function<TVector<NPerms::TPermission>(const TReq&)>&& permissions)
-        : TGrpcRequestOperationCall<TReq, TResp>(ctx, cb, {}), TFqPermissionsBase<TReq>(std::move(permissions)) {
+        const std::function<TVector<NPerms::TPermission>(const TReq&)>& permissions)
+        : TGrpcRequestOperationCall<TReq, TResp>(ctx, cb, {}), Permissions(permissions) {
     }
 
     bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult& , ICheckerIface* iface) override {
         TString scope = GetPeerMetaValues("x-ydb-fq-project").GetOrElse("");
-        TVector entries = TPermissions::FillSids(scope, *GetProtoRequest());
-        if (entries.empty()) {
-            return false;
+        if (scope.StartsWith("yandexcloud://")) {
+            const TVector<TString> path = StringSplitter(scope).Split('/').SkipEmpty();
+            if (path.size() == 2 || path.size() == 3) {
+                const TString& folderId = path.back();
+                const auto& permissions = Permissions(*GetProtoRequest());
+                TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries {{
+                    permissions,
+                    {
+                        {"folder_id", folderId}
+                    }
+                }};
+                std::transform(permissions.begin(), permissions.end(), std::back_inserter(Sids),
+                   [](const auto& s) -> TString { return s.Permission + "@as"; });
+
+                auto serviceAccountId = NFq::ExtractServiceAccountId(*GetProtoRequest());
+                if (serviceAccountId) {
+                    entries.push_back({
+                        {{NPerms::Required("iam.serviceAccounts.use")}},
+                        {
+                            {"service_account_id", serviceAccountId}
+                        }});
+                    Sids.push_back("iam.serviceAccounts.use@as");
+                }
+
+                iface->SetEntries(entries);
+                return true;
+            }
         }
 
-        iface->SetEntries(entries);
-        return true;
+        return false;
     }
 };
 
@@ -133,31 +85,6 @@ void DoFederatedQueryListBindingsRequest(std::unique_ptr<IRequestOpCtx> p, const
 void DoFederatedQueryDescribeBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& facility);
 void DoFederatedQueryModifyBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& facility);
 void DoFederatedQueryDeleteBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& facility);
-
-NFederatedQuery::TPermissionsFunc<FederatedQuery::CreateQueryRequest>        GetFederatedQueryCreateQueryPermissions();
-NFederatedQuery::TPermissionsFunc<FederatedQuery::ListQueriesRequest>        GetFederatedQueryListQueriesPermissions();
-NFederatedQuery::TPermissionsFunc<FederatedQuery::DescribeQueryRequest>      GetFederatedQueryDescribeQueryPermissions();
-NFederatedQuery::TPermissionsFunc<FederatedQuery::GetQueryStatusRequest>     GetFederatedQueryGetQueryStatusPermissions();
-NFederatedQuery::TPermissionsFunc<FederatedQuery::ModifyQueryRequest>        GetFederatedQueryModifyQueryPermissions();
-NFederatedQuery::TPermissionsFunc<FederatedQuery::DeleteQueryRequest>        GetFederatedQueryDeleteQueryPermissions();
-NFederatedQuery::TPermissionsFunc<FederatedQuery::ControlQueryRequest>       GetFederatedQueryControlQueryPermissions();
-NFederatedQuery::TPermissionsFunc<FederatedQuery::GetResultDataRequest>      GetFederatedQueryGetResultDataPermissions();
-
-NFederatedQuery::TPermissionsFunc<FederatedQuery::ListJobsRequest>           GetFederatedQueryListJobsPermissions();
-NFederatedQuery::TPermissionsFunc<FederatedQuery::DescribeJobRequest>        GetFederatedQueryDescribeJobPermissions();
-
-NFederatedQuery::TPermissionsFunc<FederatedQuery::CreateConnectionRequest>   GetFederatedQueryCreateConnectionPermissions();
-NFederatedQuery::TPermissionsFunc<FederatedQuery::ListConnectionsRequest>    GetFederatedQueryListConnectionsPermissions();
-NFederatedQuery::TPermissionsFunc<FederatedQuery::DescribeConnectionRequest> GetFederatedQueryDescribeConnectionPermissions();
-NFederatedQuery::TPermissionsFunc<FederatedQuery::ModifyConnectionRequest>   GetFederatedQueryModifyConnectionPermissions();
-NFederatedQuery::TPermissionsFunc<FederatedQuery::DeleteConnectionRequest>   GetFederatedQueryDeleteConnectionPermissions();
-NFederatedQuery::TPermissionsFunc<FederatedQuery::TestConnectionRequest>     GetFederatedQueryTestConnectionPermissions();
-
-NFederatedQuery::TPermissionsFunc<FederatedQuery::CreateBindingRequest>      GetFederatedQueryCreateBindingPermissions();
-NFederatedQuery::TPermissionsFunc<FederatedQuery::ListBindingsRequest>       GetFederatedQueryListBindingsPermissions();
-NFederatedQuery::TPermissionsFunc<FederatedQuery::DescribeBindingRequest>    GetFederatedQueryDescribeBindingPermissions();
-NFederatedQuery::TPermissionsFunc<FederatedQuery::ModifyBindingRequest>      GetFederatedQueryModifyBindingPermissions();
-NFederatedQuery::TPermissionsFunc<FederatedQuery::DeleteBindingRequest>      GetFederatedQueryDeleteBindingPermissions();
 
 std::unique_ptr<TEvProxyRuntimeEvent> CreateFederatedQueryCreateQueryRequestOperationCall(TIntrusivePtr<NYdbGrpc::IRequestContextBase> ctx);
 std::unique_ptr<TEvProxyRuntimeEvent> CreateFederatedQueryListQueriesRequestOperationCall(TIntrusivePtr<NYdbGrpc::IRequestContextBase> ctx);

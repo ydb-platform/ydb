@@ -101,3 +101,4 @@ ydb/tests/functional/tenants test_tenants.py.*
 ydb/tests/functional/ydb_cli test_ydb_scripting.py.TestScriptingServiceHelp.test_help
 ydb/tests/functional/ydb_cli test_ydb_scripting.py.TestScriptingServiceHelp.test_help_ex
 ydb/tests/tools/pq_read/test test_timeout.py.TestTimeout.test_timeout
+ydb/tests/functional/rename [test_rename.py */10] chunk chunk

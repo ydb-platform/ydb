@@ -409,11 +409,6 @@ private:
                 //jumping into unsafe world, refusing ownership
                 static_cast<NUdf::TUnboxedValue&>(processingState.Throat[i - KeyWidth]) = std::move(keyAndState[i]);
             }
-
-            for (size_t i = 0; i != KeyAndStateType->GetElementsCount(); ++i) {
-                //releasing values stored in unsafe TUnboxedValue buffer
-                keyAndState[i].UnRef();
-            }
         }
 
         InMemoryProcessingState.ReadMore<false>();
@@ -706,6 +701,8 @@ private:
     }
 
     bool HasMemoryForProcessing() const {
+        auto this_id = std::this_thread::get_id();
+        std::cerr << "[" << this_id << "] - " << TlsAllocState->GetUsed() << std::endl;
         return false;
         // return !TlsAllocState->IsMemoryYellowZoneReached();
     }

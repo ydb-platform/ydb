@@ -196,33 +196,16 @@ jobs:
       fail-fast: false
       matrix:
         build_preset: ["relwithdebinfo", "release-asan"]
+    runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', inputs.build_preset) }}" ]
     name: Build and test ${{ matrix.build_preset }}
-    uses: ./.github/workflows/build_and_test_ya_provisioned.yml
-    with:
-      build_preset: ${{ matrix.build_preset }}
-      build_target: "ydb/"
-      test_size: "small,medium"
-      test_type: "unittest,py3test,py2test,pytest"
-      test_threads: 52
-      runner_label: auto-provisioned
-      put_build_results_to_cache: true
-      commit_sha: ${{ needs.check-running-allowed.outputs.commit_sha }}
-    secrets: inherit
-  build:
-    needs:
-      - check-running-allowed
-    if: needs.check-running-allowed.outputs.result == 'true' && needs.check-running-allowed.outputs.commit_sha != ''
-    strategy:
-      fail-fast: false
-      matrix:
-        build_preset: ["release-cmake14"]
-    name: Build and test ${{ matrix.build_preset }}
-    uses: ./.github/workflows/build_and_test_ya_provisioned.yml
-    with:
-      build_preset: ${{ matrix.build_preset }}
-      build_target: "ydb/"
-      run_tests: false
-      runner_label: auto-provisioned
-      put_build_results_to_cache: true
-      commit_sha: ${{ needs.check-running-allowed.outputs.commit_sha }}
-    secrets: inherit
+    steps:
+    - name: Build and test
+      uses: ./.github/actions/build_and_test_ya
+      with:
+        build_preset: ${{ matrix.build_preset }}
+        build_target: "ydb/"
+        test_size: "small,medium"
+        test_type: "unittest,py3test,py2test,pytest"
+        test_threads: 52
+        put_build_results_to_cache: true
+        commit_sha: ${{ needs.check-running-allowed.outputs.commit_sha }}

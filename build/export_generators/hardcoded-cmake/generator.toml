@@ -22,7 +22,12 @@ platform_vars="list"
 includes="sorted_set"
 use_conan="bool"
 
+[attrs.dir]
+prologue="str"
+epilogue="str"
+
 [attrs.target]
+is_interface="bool"
 
 [[rules]]
 attrs=["run_antlr"]

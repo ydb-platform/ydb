@@ -45,7 +45,7 @@ bool IsLookupJoinApplicableDetailed(const std::shared_ptr<NYql::TRelOptimizerNod
         return false;
     }
 
-    if (find_if(joinColumns.begin(), joinColumns.end(), [&] (const TString& s) { return node->Stats->KeyColumns[0] == s;})) {
+    if (find_if(joinColumns.begin(), joinColumns.end(), [&] (const TString& s) { return node->Stats->KeyColumns[0] == s;}) != joinColumns.end()) {
         return true;
     }
 
@@ -97,9 +97,9 @@ bool IsLookupJoinApplicableDetailed(const std::shared_ptr<NYql::TRelOptimizerNod
         return false;
     }
 
-    if (prefixSize < node->Stats->KeyColumns.size() && !(find_if(joinColumns.begin(), joinColumns.end(), [&] (const TString& s) {
+    if (prefixSize < node->Stats->KeyColumns.size() && (find_if(joinColumns.begin(), joinColumns.end(), [&] (const TString& s) {
             return node->Stats->KeyColumns[prefixSize] == s;
-        }))){
+        }) == joinColumns.end())){
             return false;
         }
 
@@ -128,10 +128,10 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
     for (auto [leftCol, rightCol] : joinConditions) {
         // Fix for clang14, somehow structured binding does not create a variable in clang14
         auto r = rightCol;
-        if (! find_if(rightStats->KeyColumns.begin(), rightStats->KeyColumns.end(), 
-            [r] (const TString& s) {
+        if (find_if(rightStats->KeyColumns.begin(), rightStats->KeyColumns.end(), 
+            [&r] (const TString& s) {
             return r.AttributeName == s;
-        } )) {
+        } ) == rightStats->KeyColumns.end()) {
             return false;
         }
     }

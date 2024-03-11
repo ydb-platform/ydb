@@ -147,8 +147,8 @@ public:
         return Ttl;
     }
 
-    void AddTtls(THashMap<ui64, NOlap::TTiering>& eviction) {
-        Ttl.AddTtls(eviction);
+    bool AddTtls(THashMap<ui64, NOlap::TTiering>& eviction) {
+        return Ttl.AddTtls(eviction);
     }
 
     const THashSet<ui64>& GetPathsToDrop() const {

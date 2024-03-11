@@ -6,14 +6,6 @@ inputs:
     description: "limit build and test to specific target"
   build_preset:
     type: string
-  runner_label:
-    type: string
-    default: "linux"
-    description: "runner label"
-  runner_additional_label:
-    type: string
-    default: "linux"
-    description: "additional runner label, can be empty"
   run_build:
     type: boolean
     default: true

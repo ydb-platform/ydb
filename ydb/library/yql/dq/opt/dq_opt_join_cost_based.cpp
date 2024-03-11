@@ -217,7 +217,7 @@ void TJoinOptimizerNodeInternal::Print(std::stringstream& stream, int ntabs) {
         stream << "\t";
     }
 
-    stream << "Join: (" << JoinType << ") ";
+    stream << "Join: (" << JoinType << "," << int(JoinAlgo) << ") ";
     for (auto c : JoinConditions){
         stream << c.first.RelName << "." << c.first.AttributeName
             << "=" << c.second.RelName << "."
@@ -1151,7 +1151,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertToJoinTree(const TCoEquiJoinTuple& jo
             TJoinColumn(rightScope, rightColumn)));
     }
 
-    return std::make_shared<TJoinOptimizerNode>(left, right, joinConds, ConvertToJoinKind(joinTuple.Type().StringValue()), EJoinAlgoType::DictJoin);
+    return std::make_shared<TJoinOptimizerNode>(left, right, joinConds, ConvertToJoinKind(joinTuple.Type().StringValue()), EJoinAlgoType::Undefined);
 }
 
 /**
@@ -1217,7 +1217,7 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
         ComputeStatistics(static_pointer_cast<TJoinOptimizerNode>(join->RightArg), ctx);
     }
     join->Stats = std::make_shared<TOptimizerStatistics>(ComputeJoinStats(*join->LeftArg->Stats, *join->RightArg->Stats,
-        join->LeftJoinKeys, join->RightJoinKeys, EJoinAlgoType::DictJoin, ctx));
+        join->LeftJoinKeys, join->RightJoinKeys, EJoinAlgoType::GraceJoin, ctx));
 }
 
 /**
@@ -1314,7 +1314,7 @@ public:
                 join->RightArg = OptimizeSubtree(static_pointer_cast<TJoinOptimizerNode>(join->RightArg), MaxDPccpDPTableSize, Pctx);
             }
             join->Stats = std::make_shared<TOptimizerStatistics>(ComputeJoinStats(*join->LeftArg->Stats, *join->RightArg->Stats,
-                join->LeftJoinKeys, join->RightJoinKeys, EJoinAlgoType::DictJoin, Pctx));
+                join->LeftJoinKeys, join->RightJoinKeys, EJoinAlgoType::GraceJoin, Pctx));
         }
 
         // Optimize the root

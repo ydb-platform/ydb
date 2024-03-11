@@ -150,17 +150,17 @@ bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
 
     switch( joinAlgo ) {
         case EJoinAlgoType::LookupJoin:
-            if (OptLevel==2 && left->Stats->Nrows > 1e4) {
+            if ((OptLevel >= 2) && (left->Stats->Nrows > 1000)) {
                 return false;
             }
             return IsLookupJoinApplicable(left, right, joinConditions, leftJoinKeys, rightJoinKeys, *this);
 
-        case EJoinAlgoType::DictJoin:
-            return false;
         case EJoinAlgoType::MapJoin:
-            return right->Stats->ByteSize < 50e9;
+            return right->Stats->ByteSize < 5e8;
         case EJoinAlgoType::GraceJoin:
             return true;
+        default:
+            return false;
     }
 }
 
@@ -173,12 +173,13 @@ double TKqpProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftStat
                 return -1;
             }
             return leftStats.Nrows;
-        case EJoinAlgoType::DictJoin:
-            return leftStats.Nrows + 1.7 * rightStats.Nrows + outputRows;
         case EJoinAlgoType::MapJoin:
             return leftStats.Nrows + 1.8 * rightStats.Nrows + outputRows;
         case EJoinAlgoType::GraceJoin:
             return leftStats.Nrows + 2.0 * rightStats.Nrows + outputRows;
+        default:
+            Y_ENSURE(false, "Illegal join type encountered");
+            return 0;
     }
 }
 

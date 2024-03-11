@@ -1,9 +1,7 @@
 items:
 - name: Обзор
   href: index.md
-- name: Доклады с конференций
-  href: conferences.md
-- name: Вебинары и открытые лекции 
-  href: webinars.md
-- name: Публикации в СМИ
+- name: Видеоматериалы
+  href: video.md
+- name: Публикации
   href: mass-media.md

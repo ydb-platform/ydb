@@ -34,102 +34,87 @@ public:
     TFixture()
         : Alloc(__LOCATION__)
     {}
-private:
-    NKikimr::NMiniKQL::TScopedAlloc Alloc;
-    NKikimr::TActorSystemStub ActorSystemStub;
-};
 
-TYqSharedResources::TPtr YqSharedResources;
+    TStateStoragePtr GetStateStorage(const char* tablePrefix) {
 
-TStateStoragePtr GetStateStorage(const char* tablePrefix) {
+        NConfig::TCheckpointCoordinatorConfig config;
+        auto& stateStorageConfig = *config.MutableStorage();
+        stateStorageConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));
+        stateStorageConfig.SetDatabase(GetEnv("YDB_DATABASE"));
+        stateStorageConfig.SetToken("");
+        stateStorageConfig.SetTablePrefix(tablePrefix);
+        auto& stateStorageLimits = *config.MutableStateStorageLimits();
+        stateStorageLimits.SetMaxRowSizeBytes(YdbRowSizeLimit);
 
-    NConfig::TCheckpointCoordinatorConfig config;
-    auto& stateStorageConfig = *config.MutableStorage();
-    stateStorageConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));
-    stateStorageConfig.SetDatabase(GetEnv("YDB_DATABASE"));
-    stateStorageConfig.SetToken("");
-    stateStorageConfig.SetTablePrefix(tablePrefix);
-    auto& stateStorageLimits = *config.MutableStateStorageLimits();
-    stateStorageLimits.SetMaxRowSizeBytes(YdbRowSizeLimit);
-
-    YqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, NKikimr::CreateYdbCredentialsProviderFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
-    auto storage = NewYdbStateStorage(config, NKikimr::CreateYdbCredentialsProviderFactory, YqSharedResources);
-    storage->Init().GetValueSync();
-    return storage;
-}
-
-
-NYql::NDqProto::TComputeActorState MakeState(NYql::NUdf::TUnboxedValuePod&& value) {
-    const TStringBuf savedBuf = value.AsStringRef();
-    TString result;
-    NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, savedBuf);
-    NYql::NDqProto::TComputeActorState state;
-    state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(result);
-    return state;
-}
-
-NYql::NDqProto::TComputeActorState MakeStateFromBlob(size_t blobSize) {
-    TString blob;
-    blob.reserve(blobSize);
-    for (size_t i = 0; i < blobSize; ++i) {
-        blob += static_cast<TString::value_type>(std::rand() % 100);
+        YqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, NKikimr::CreateYdbCredentialsProviderFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
+        auto storage = NewYdbStateStorage(config, NKikimr::CreateYdbCredentialsProviderFactory, YqSharedResources);
+        storage->Init().GetValueSync();
+        return storage;
     }
-    return MakeState(NKikimr::NMiniKQL::TNodeStateHelper::MakeSimpleBlobState(blob));
-}
 
-NYql::NDqProto::TComputeActorState MakeIncrementState(size_t miniKqlPStateSize) {
-    std::map<TString, TString> map;
-    size_t itemCount = 4;
-    for (size_t i = 0; i < itemCount; ++i) {
-        map[ToString(777 + i)] = TString(miniKqlPStateSize / itemCount, 'a');
-    }
-    return MakeState(NKikimr::NMiniKQL::TNodeStateHelper::MakeSnapshotState(map));
-}
 
-NYql::NDqProto::TComputeActorState MakeIncrementState(
-    const std::map<TString, TString>& snapshot,
-    const std::map<TString, TString>& increment,
-    const std::set<TString>& deleted)
-{
-    if (!snapshot.empty()) {
-        return MakeState(NKikimr::NMiniKQL::TNodeStateHelper::MakeSnapshotState(snapshot));
+    NYql::NDqProto::TComputeActorState MakeState(NYql::NUdf::TUnboxedValuePod&& value) {
+        const TStringBuf savedBuf = value.AsStringRef();
+        TString result;
+        NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, savedBuf);
+        NYql::NDqProto::TComputeActorState state;
+        state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(result);
+        return state;
     }
-    else {
+
+    NYql::NDqProto::TComputeActorState MakeStateFromBlob(size_t blobSize) {
+        TString blob;
+        blob.reserve(blobSize);
+        for (size_t i = 0; i < blobSize; ++i) {
+            blob += static_cast<TString::value_type>(std::rand() % 100);
+        }
+        return MakeState(NKikimr::NMiniKQL::TNodeStateHelper::MakeSimpleBlobState(blob));
+    }
+
+    NYql::NDqProto::TComputeActorState MakeIncrementState(size_t miniKqlPStateSize) {
+        std::map<TString, TString> map;
+        size_t itemCount = 4;
+        for (size_t i = 0; i < itemCount; ++i) {
+            map[ToString(777 + i)] = TString(miniKqlPStateSize / itemCount, 'a');
+        }
+        return MakeState(NKikimr::NMiniKQL::TNodeStateHelper::MakeSnapshotState(map));
+    }
+
+    NYql::NDqProto::TComputeActorState MakeIncrementState(
+        const std::map<TString, TString>& snapshot,
+        const std::map<TString, TString>& increment,
+        const std::set<TString>& deleted)
+    {
+        if (!snapshot.empty()) {
+            return MakeState(NKikimr::NMiniKQL::TNodeStateHelper::MakeSnapshotState(snapshot));
+        }
         return MakeState(NKikimr::NMiniKQL::TNodeStateHelper::MakeIncrementState(increment, deleted));
     }
-}
 
-void SaveState(
-    TStateStoragePtr storage,
-    ui64 taskId,
-    const TString& graphId,
-    const TCheckpointId& checkpointId,
-    const NYql::NDqProto::TComputeActorState& state)
-{
-    auto issues = storage->SaveState(taskId, graphId, checkpointId, state).GetValueSync();
-    UNIT_ASSERT_C(issues.Empty(), issues.ToString());
-}
-
-NYql::NDqProto::TComputeActorState GetState(
-    TStateStoragePtr storage,
-    const ui64 taskId,
-    const TString& graphId,
-    const TCheckpointId& checkpointId)
-{
-    auto [states, issues] = storage->GetState({taskId}, graphId, checkpointId).GetValueSync();
-    UNIT_ASSERT_C(issues.Empty(), issues.ToString());
-    UNIT_ASSERT(!states.empty());
-    return states[0];
-}
-
-} // namespace
-
-////////////////////////////////////////////////////////////////////////////////
-
-Y_UNIT_TEST_SUITE(TStateStorageTest) {
-
-    void ShouldSaveGetStateImpl(const char* tablePrefix, const NYql::NDqProto::TComputeActorState& state)
+    void SaveState(
+        TStateStoragePtr storage,
+        ui64 taskId,
+        const TString& graphId,
+        const TCheckpointId& checkpointId,
+        const NYql::NDqProto::TComputeActorState& state)
     {
+        auto issues = storage->SaveState(taskId, graphId, checkpointId, state).GetValueSync();
+        UNIT_ASSERT_C(issues.Empty(), issues.ToString());
+    }
+
+    NYql::NDqProto::TComputeActorState GetState(
+        TStateStoragePtr storage,
+        const ui64 taskId,
+        const TString& graphId,
+        const TCheckpointId& checkpointId)
+    {
+        auto [states, issues] = storage->GetState({taskId}, graphId, checkpointId).GetValueSync();
+        UNIT_ASSERT_C(issues.Empty(), issues.ToString());
+        UNIT_ASSERT(!states.empty());
+        return states[0];
+    }
+
+    void ShouldSaveGetStateImpl(const char* tablePrefix, const NYql::NDqProto::TComputeActorState& state) {
         auto storage = GetStateStorage(tablePrefix);
         auto issues = storage->SaveState(1, "graph1", CheckpointId1, state).GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
@@ -139,6 +124,18 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         UNIT_ASSERT(!states.empty());
         UNIT_ASSERT(google::protobuf::util::MessageDifferencer::Equals(state, states[0]));
     }
+private:
+    NKikimr::NMiniKQL::TScopedAlloc Alloc;
+    NKikimr::TActorSystemStub ActorSystemStub;
+    TYqSharedResources::TPtr YqSharedResources;
+};
+
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+Y_UNIT_TEST_SUITE(TStateStorageTest) {
 
     Y_UNIT_TEST_F(ShouldSaveGetOldSmallState, TFixture)
     {

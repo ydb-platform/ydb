@@ -361,7 +361,8 @@ public:
     virtual ~IColumnEngine() = default;
 
     virtual const TVersionedIndex& GetVersionedIndex() const = 0;
-    virtual const std::shared_ptr<arrow::Schema>& GetReplaceKey() const { return GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetReplaceKey(); }
+    virtual std::shared_ptr<TVersionedIndex> CopyVersionedIndexPtr() const = 0;
+    virtual const std::shared_ptr<arrow::Schema>& GetReplaceKey() const;
 
     virtual bool HasDataInPathId(const ui64 pathId) const = 0;
     virtual bool Load(IDbWrapper& db) = 0;
@@ -383,7 +384,7 @@ public:
     virtual const TColumnEngineStats& GetTotalStats() = 0;
     virtual ui64 MemoryUsage() const { return 0; }
     virtual TSnapshot LastUpdate() const { return TSnapshot::Zero(); }
-    virtual void OnTieringModified(std::shared_ptr<NColumnShard::TTiersManager> manager, const NColumnShard::TTtl& ttl) = 0;
+    virtual void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) = 0;
 };
 
 }

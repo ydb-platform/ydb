@@ -381,7 +381,7 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
 }
 
 void TTxInitSchema::Complete(const TActorContext& ctx) {
-    LOG_S_DEBUG("TxInitSchema.Complete at tablet " << Self->TabletID();)
+    LOG_S_DEBUG("TxInitSchema.Complete at tablet " << Self->TabletID(););
     Self->Execute(new TTxUpdateSchema(Self), ctx);
 }
 

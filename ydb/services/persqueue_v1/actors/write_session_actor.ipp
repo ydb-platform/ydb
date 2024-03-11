@@ -393,10 +393,11 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
         bool isScenarioSupported =
             !InitRequest.producer_id().empty() && (
                 InitRequest.has_message_group_id() && InitRequest.message_group_id() == InitRequest.producer_id() ||
+                InitRequest.message_group_id().empty() ||
                 InitRequest.has_partition_id() ||
                 InitRequest.has_partition_with_generation())
             ||
-            InitRequest.producer_id().empty();
+            InitRequest.producer_id().empty() ;
 
         if (!isScenarioSupported) {
             CloseSession("unsupported producer_id / message_group_id / partition_id settings in init request",
@@ -420,10 +421,10 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
         if constexpr (UseMigrationProtocol) {
             return InitRequest.message_group_id();
         } else {
-            if (InitRequest.producer_id().empty()) {
+            if (InitRequest.producer_id().empty() && InitRequest.message_group_id().empty()) {
                 UseDeduplication = false;
             }
-            return InitRequest.has_message_group_id() ? InitRequest.message_group_id() : InitRequest.producer_id();
+            return !InitRequest.message_group_id().empty() ? InitRequest.message_group_id() : InitRequest.producer_id();
         }
     }();
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session request cookie: " << Cookie << " " << InitRequest.ShortDebugString() << " from " << PeerName);
@@ -469,7 +470,7 @@ void TWriteSessionActor<UseMigrationProtocol>::InitAfterDiscovery(const TActorCo
     Y_UNUSED(ctx);
 
     if (SourceId.empty() && UseDeduplication) {
-        CloseSession("Internal server error: got empty SourceId with enabled deduplication", PersQueue::ErrorCode::ERROR, ctx);
+        CloseSession("Internal server error: got empty SourceId with enabled deduplication", PersQueue::ErrorCode::VALIDATION_ERROR, ctx);
         return;
     }
 

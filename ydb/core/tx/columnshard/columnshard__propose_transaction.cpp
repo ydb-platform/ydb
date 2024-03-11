@@ -109,7 +109,7 @@ TTxController::TProposeResult TTxProposeTransaction::ProposeTtlDeprecated(const 
     if (!Self->SetupTtl(pathTtls)) {
         return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL not started");
     }
-    Self->TablesManager.MutablePrimaryIndex().OnTieringModified(Self->Tiers, Self->TablesManager.GetTtl());
+    Self->TablesManager.MutablePrimaryIndex().OnTieringModified(Self->Tiers, Self->TablesManager.GetTtl(), {});
 
     return TTxController::TProposeResult();
 }

@@ -85,6 +85,7 @@ class TColumnEngineForLogs : public IColumnEngine {
     friend class TCleanupColumnEngineChanges;
     friend class NDataSharing::TDestinationSession;
 private:
+    bool TiersInitialized = false;
     const NColumnShard::TEngineLogsCounters SignalCounters;
     std::shared_ptr<TGranulesStorage> GranulesStorage;
     std::shared_ptr<IStoragesManager> StoragesManager;
@@ -148,7 +149,11 @@ public:
 
     TColumnEngineForLogs(ui64 tabletId, const TCompactionLimits& limits, const std::shared_ptr<IStoragesManager>& storagesManager);
 
-    virtual void OnTieringModified(std::shared_ptr<NColumnShard::TTiersManager> manager, const NColumnShard::TTtl& ttl) override;
+    virtual void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) override;
+
+    virtual std::shared_ptr<TVersionedIndex> CopyVersionedIndexPtr() const override {
+        return std::make_shared<TVersionedIndex>(VersionedIndex);
+    }
 
     const TVersionedIndex& GetVersionedIndex() const override {
         return VersionedIndex;

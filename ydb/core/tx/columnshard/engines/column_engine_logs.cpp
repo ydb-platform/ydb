@@ -260,11 +260,12 @@ std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(
     auto changes = std::make_shared<TCleanupColumnEngineChanges>(StoragesManager);
 
     // Add all portions from dropped paths
-    THashSet<ui64> dropPortions;
     THashSet<ui64> emptyPaths;
     ui64 txSize = 0;
     const ui64 txSizeLimit = TGlobalLimits::TxWriteLimitBytes / 4;
     changes->NeedRepeat = false;
+    ui32 skipLocked = 0;
+    ui32 portionsFromDrop = 0;
     for (ui64 pathId : pathsToDrop) {
         auto itTable = Tables.find(pathId);
         if (itTable == Tables.end()) {
@@ -274,6 +275,7 @@ std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(
 
         for (auto& [portion, info] : itTable->second->GetPortions()) {
             if (dataLocksManager->IsLocked(*info)) {
+                ++skipLocked;
                 continue;
             }
             if (txSize + info->GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
@@ -283,35 +285,48 @@ std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(
                 break;
             }
             changes->PortionsToDrop.push_back(*info);
-            dropPortions.insert(portion);
+            ++portionsFromDrop;
         }
     }
     for (ui64 pathId : emptyPaths) {
         pathsToDrop.erase(pathId);
     }
 
-    while (CleanupPortions.size() && !changes->NeedRepeat) {
-        auto it = CleanupPortions.begin();
+    for (auto it = CleanupPortions.begin(); it != CleanupPortions.end();) {
         if (it->first >= snapshot) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanupStop")("snapshot", snapshot.DebugString())("current_snapshot", it->first.DebugString());
             break;
         }
-        for (auto&& i : it->second) {
-            if (dataLocksManager->IsLocked(i)) {
+        for (ui32 i = 0; i < it->second.size();) {
+            if (dataLocksManager->IsLocked(it->second[i])) {
+                ++skipLocked;
+                ++i;
                 continue;
             }
-            Y_ABORT_UNLESS(i.CheckForCleanup(snapshot));
-            if (txSize + i.GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
-                txSize += i.GetTxVolume();
+            Y_ABORT_UNLESS(it->second[i].CheckForCleanup(snapshot));
+            if (txSize + it->second[i].GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
+                txSize += it->second[i].GetTxVolume();
             } else {
                 changes->NeedRepeat = true;
                 break;
             }
-            changes->PortionsToDrop.push_back(i);
+            changes->PortionsToDrop.push_back(std::move(it->second[i]));
+            if (i + 1 < it->second.size()) {
+                it->second[i] = std::move(it->second.back());
+            }
+            it->second.pop_back();
         }
-        CleanupPortions.erase(it);
+        if (changes->NeedRepeat) {
+            break;
+        }
+        if (it->second.empty()) {
+            it = CleanupPortions.erase(it);
+        } else {
+            ++it;
+        }
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size())("portions_prepared", changes->PortionsToDrop.size());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")
+        ("portions_count", CleanupPortions.size())("portions_prepared", changes->PortionsToDrop.size())("repeat", changes->NeedRepeat)("drop", portionsFromDrop)("skip", skipLocked);
 
     if (changes->PortionsToDrop.empty()) {
         return nullptr;

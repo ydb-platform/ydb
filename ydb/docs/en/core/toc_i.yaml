@@ -8,7 +8,7 @@ items:
     href: getting_started/quickstart.md
   - name: Kubernetes
     href: getting_started/kubernetes.md
-  - name: Deploying {{ ydb-short-name }} cluster with Ansible
+  - name: Ansible
     href: getting_started/ansible.md
 
 # Main

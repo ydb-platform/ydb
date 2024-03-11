@@ -255,7 +255,7 @@ class TColumnShard
         TabletCounters->Cumulative()[counter].Increment(num);
     }
 
-    void ActivateTiering(const ui64 pathId, const TString& useTiering, const bool onTabletInit = false);
+    void ActivateTiering(const ui64 pathId, const TString& useTiering);
     void OnTieringModified(const std::optional<ui64> pathId = {});
 public:
     enum class EOverloadStatus {

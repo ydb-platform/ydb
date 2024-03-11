@@ -1033,7 +1033,7 @@ void TColumnShard::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& 
     Tiers->TakeConfigs(ev->Get()->GetSnapshot(), nullptr);
 }
 
-void TColumnShard::ActivateTiering(const ui64 pathId, const TString& useTiering, const bool onTabletInit) {
+void TColumnShard::ActivateTiering(const ui64 pathId, const TString& useTiering) {
     AFL_VERIFY(Tiers);
     if (useTiering) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "activate_tiering")("path_id", pathId)("tiering", useTiering);
@@ -1043,9 +1043,7 @@ void TColumnShard::ActivateTiering(const ui64 pathId, const TString& useTiering,
     } else {
         Tiers->DisablePathId(pathId);
     }
-    if (!onTabletInit) {
-        OnTieringModified(pathId);
-    }
+    OnTieringModified(pathId);
 }
 
 void TColumnShard::Enqueue(STFUNC_SIG) {

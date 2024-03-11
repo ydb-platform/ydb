@@ -31,7 +31,7 @@ std::shared_ptr<NKikimr::NOlap::IPortionDataChunk> TIndexByColumns::DoBuildIndex
     TChunkedBatchReader reader(std::move(columnReaders));
     std::shared_ptr<arrow::RecordBatch> indexBatch = DoBuildIndexImpl(reader);
     const TString indexData = Serializer->SerializeFull(indexBatch);
-    return std::make_shared<TPortionIndexChunk>(indexId, recordsCount, NArrow::GetBatchDataSize(indexBatch), indexData);
+    return std::make_shared<TPortionIndexChunk>(TChunkAddress(indexId, 0), recordsCount, NArrow::GetBatchDataSize(indexBatch), indexData);
 }
 
 bool TIndexByColumns::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& /*proto*/) {

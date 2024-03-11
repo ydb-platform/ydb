@@ -126,8 +126,8 @@ protected:
     }
     virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfo& portionInfo) const override;
 public:
-    TPortionIndexChunk(const ui32 entityId, const ui32 recordsCount, const ui64 rawBytes, const TString& data)
-        : TBase(entityId, 0)
+    TPortionIndexChunk(const TChunkAddress& address, const ui32 recordsCount, const ui64 rawBytes, const TString& data)
+        : TBase(address.GetColumnId(), address.GetChunkIdx())
         , RecordsCount(recordsCount)
         , RawBytes(rawBytes)
         , Data(data)

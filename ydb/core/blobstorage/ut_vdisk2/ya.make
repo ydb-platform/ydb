@@ -16,6 +16,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/apps/version
     library/cpp/testing/unittest
     ydb/core/blobstorage/backpressure
     ydb/core/blobstorage/groupinfo

@@ -6,21 +6,14 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
 
-add_library(core-testlib-actors)
-target_link_libraries(core-testlib-actors PUBLIC
+add_library(version_definition)
+target_link_libraries(version_definition PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  version_definition
-  library-actors-testlib
-  cpp-testing-unittest
-  ydb-core-base
-  ydb-core-mon
-  ydb-core-mon_alloc
-  ydb-core-scheme
-  ydb-core-tablet
+  version
 )
-target_sources(core-testlib-actors PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/actors/test_runtime.cpp
+target_sources(version_definition PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/apps/version/version_definition.cpp
 )

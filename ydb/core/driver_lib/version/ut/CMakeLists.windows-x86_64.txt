@@ -17,6 +17,7 @@ target_link_libraries(ydb-core-driver_lib-version-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   version
+  version_definition
 )
 target_sources(ydb-core-driver_lib-version-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/version/ut/version_ut.cpp

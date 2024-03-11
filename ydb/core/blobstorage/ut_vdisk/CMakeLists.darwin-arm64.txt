@@ -20,6 +20,7 @@ target_link_libraries(ydb-core-blobstorage-ut_vdisk PUBLIC
   yutil
   cpp-testing-unittest_main
   ydb-core-blobstorage
+  version_definition
   library-actors-protos
   library-cpp-codecs
   ydb-core-base

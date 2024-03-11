@@ -476,6 +476,8 @@ private:
         bucket.AsyncWriteOperation = bucket.SpilledState->FinishWriting();
         if (bucket.AsyncWriteOperation) return;
 
+        bucket.InMemoryProcessingState->ReadMore<false>();
+
         bucket.BucketState = TSpilledBucket::EBucketState::SpillingData;
     }
 
@@ -626,13 +628,13 @@ private:
                 }
                 for (size_t i = 0; i != KeyWidth; ++i) {
                     //jumping into unsafe world, refusing ownership
-                    static_cast<NUdf::TUnboxedValue&>(InMemoryProcessingState.Tongue[i]) = std::move(BufferForKeyAnsState[i]);
+                    static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Tongue[i]) = std::move(BufferForKeyAnsState[i]);
                 }
-                auto isNew = InMemoryProcessingState.TasteIt();
+                auto isNew = bucket.InMemoryProcessingState->TasteIt();
                 MKQL_ENSURE(isNew, "Internal logic error");
                 for (size_t i = KeyWidth; i != KeyAndStateType->GetElementsCount(); ++i) {
                     //jumping into unsafe world, refusing ownership
-                    static_cast<NUdf::TUnboxedValue&>(InMemoryProcessingState.Throat[i - KeyWidth]) = std::move(BufferForKeyAnsState[i]);
+                    static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Throat[i - KeyWidth]) = std::move(BufferForKeyAnsState[i]);
                 }
                 BufferForKeyAnsState.resize(0);
             }
@@ -652,22 +654,22 @@ private:
                         fields[i] = nullptr;
                     }
                 }
-                Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Tongue));
-                const bool isNew = InMemoryProcessingState.TasteIt();
+                Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue *>(bucket.InMemoryProcessingState->Tongue));
+                const bool isNew = bucket.InMemoryProcessingState->TasteIt();
                 Nodes.ProcessItem(
                     ctx,
-                    isNew ? nullptr : static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Tongue),
-                    static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Throat)
+                    isNew ? nullptr : static_cast<NUdf::TUnboxedValue *>(bucket.InMemoryProcessingState->Tongue),
+                    static_cast<NUdf::TUnboxedValue *>(bucket.InMemoryProcessingState->Throat)
                 );
                 // BufferForUsedInputItems.resize(0);
             }
             
-            if (const auto values = static_cast<NUdf::TUnboxedValue*>(InMemoryProcessingState.Extract())) {
+            if (const auto values = static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Extract())) {
                 Nodes.FinishItem(ctx, values, output);
 
                 return EFetchResult::One;
             }
-            InMemoryProcessingState.ReadMore<false>();
+            bucket.InMemoryProcessingState->ReadMore<false>();
             SpilledBuckets.pop_front();
         }
         return EFetchResult::Finish;

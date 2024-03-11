@@ -126,7 +126,7 @@ protected:
     static TString GetSpecImpl(const TVector<TTableType>& tables, size_t beginIdx, size_t endIdx, NYT::TNode initialOutSpec, bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags, bool intermediateInput);
 
     NThreading::TFuture<void> MakeOperationWaiter(const NYT::IOperationPtr& op, const TMaybe<ui32>& publicId) const {
-        return Session_->OpTracker_->MakeOperationWaiter(op, publicId, YtServer_, Session_->ProgressWriter_, Session_->StatWriter_);
+        return Session_->OpTracker_->MakeOperationWaiter(op, publicId, YtServer_, Cluster_, Session_->ProgressWriter_, Session_->StatWriter_);
     }
 
     TString GetAuth(const TYtSettings::TConstPtr& config) const;

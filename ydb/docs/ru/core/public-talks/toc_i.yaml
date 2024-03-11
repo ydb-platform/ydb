@@ -1,6 +1,4 @@
 items:
-- name: Обзор
-  href: index.md
 - name: Видеоматериалы
   href: video.md
 - name: Публикации

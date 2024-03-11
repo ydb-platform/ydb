@@ -538,7 +538,7 @@ private:
     void StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dataToIndex, const i64 bytesToIndex);
     void SetupIndexation();
     void SetupCompaction();
-    bool SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {}, const bool force = false);
+    bool SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {});
     void SetupCleanup();
     void SetupCleanupInsertTable();
     void SetupGC();

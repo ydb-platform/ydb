@@ -11,18 +11,24 @@ private:
     THashSet<TPortionAddress> Portions;
     THashSet<TTabletId> Granules;
 protected:
-    virtual bool DoIsLocked(const TPortionInfo& portion) const override {
-        return Portions.contains(portion.GetAddress());
+    virtual std::optional<TString> DoIsLocked(const TPortionInfo& portion) const override {
+        if (Portions.contains(portion.GetAddress())) {
+            return GetLockName();
+        }
+        return {};
     }
-    virtual bool DoIsLocked(const TGranuleMeta& granule) const override {
-        return Granules.contains((TTabletId)granule.GetPathId());
+    virtual std::optional<TString> DoIsLocked(const TGranuleMeta& granule) const override {
+        if (Granules.contains((TTabletId)granule.GetPathId())) {
+            return GetLockName();
+        }
+        return {};
     }
     bool DoIsEmpty() const override {
         return Portions.empty();
     }
 public:
-    TListPortionsLock(const std::vector<std::shared_ptr<TPortionInfo>>& portions, const bool readOnly = false)
-        : TBase(readOnly)
+    TListPortionsLock(const TString& lockName, const std::vector<std::shared_ptr<TPortionInfo>>& portions, const bool readOnly = false)
+        : TBase(lockName, readOnly)
     {
         for (auto&& p : portions) {
             Portions.emplace(p->GetAddress());
@@ -30,8 +36,8 @@ public:
         }
     }
 
-    TListPortionsLock(const std::vector<TPortionInfo>& portions, const bool readOnly = false)
-        : TBase(readOnly) {
+    TListPortionsLock(const TString& lockName, const std::vector<TPortionInfo>& portions, const bool readOnly = false)
+        : TBase(lockName, readOnly) {
         for (auto&& p : portions) {
             Portions.emplace(p.GetAddress());
             Granules.emplace((TTabletId)p.GetPathId());
@@ -39,8 +45,8 @@ public:
     }
 
     template <class T, class TGetter>
-    TListPortionsLock(const std::vector<T>& portions, const TGetter& g, const bool readOnly = false)
-        : TBase(readOnly) {
+    TListPortionsLock(const TString& lockName, const std::vector<T>& portions, const TGetter& g, const bool readOnly = false)
+        : TBase(lockName, readOnly) {
         for (auto&& p : portions) {
             const auto address = g(p);
             Portions.emplace(address);
@@ -49,8 +55,8 @@ public:
     }
 
     template <class T>
-    TListPortionsLock(const THashMap<TPortionAddress, T>& portions, const bool readOnly = false)
-        : TBase(readOnly) {
+    TListPortionsLock(const TString& lockName, const THashMap<TPortionAddress, T>& portions, const bool readOnly = false)
+        : TBase(lockName, readOnly) {
         for (auto&& p : portions) {
             const auto address = p.first;
             Portions.emplace(address);

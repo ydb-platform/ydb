@@ -91,6 +91,93 @@ pqconfig:
   check_acl: false
 ```
 
+### Пример использования всех типов ресурсов {{ ydb-short-name }} Terraform провайдера
+
+Данный пример объединяет все типы ресурсов, которые доступны в {{ ydb-short-name }} Terraform провайдере:
+
+```tf
+variable "db-connect" {
+  type = string
+  default = "grpc(s)://HOST:PORT/?database=/database/path" # нужно указать путь к базе данных
+}
+
+resource "ydb_table" "table" {
+  path        = "1/2/3/tftest"
+  connection_string = var.db-connect
+  column {
+    name = "a"
+    type = "Utf8"
+  }
+  column {
+    name = "b"
+    type = "String"
+  }
+  column {
+    name = "ttlBase"
+    type = "Uint32"
+  }
+  ttl {
+    column_name = "ttlBase"
+    expire_interval = "P7D"
+    unit = "milliseconds"
+  }
+
+  primary_key = ["b", "a"]
+
+  partitioning_settings {
+    auto_partitioning_min_partitions_count = 5
+    auto_partitioning_max_partitions_count = 8
+    auto_partitioning_partition_size_mb    = 256
+    auto_partitioning_by_load              = true
+  }
+}
+
+resource "ydb_table_index" "table_index" {
+  table_path        = ydb_table.table.path
+  connection_string = ydb_table.table.connection_string
+  name              = "my_index"
+  type              = "global_sync" # "global_async"
+  columns           = ["a", "b"]
+}
+
+resource "ydb_table_changefeed" "table_changefeed" {
+  table_id = ydb_table.table.id
+  name     = "changefeed"
+  mode     = "NEW_IMAGE"
+  format   = "JSON"
+  consumer {
+    name = "test"
+    supported_codecs = ["raw", "gzip"]
+  }
+}
+
+resource "ydb_topic" "test" {
+  database_endpoint = ydb_table.table.connection_string
+  name              = "1/2/test"
+  supported_codecs  = ["zstd"]
+
+  consumer {
+    name             = "test-consumer3"
+    starting_message_timestamp_ms = 0
+    supported_codecs = ["zstd","raw"]
+  }
+
+  consumer {
+    name             = "test-consumer1"
+    starting_message_timestamp_ms = 2000
+    supported_codecs = ["zstd"]
+  }
+
+  consumer {
+    name             = "test-consumer2"
+    starting_message_timestamp_ms = 0
+    supported_codecs = ["zstd"]
+  }
+}
+```
+
+Ниже будут подробно расписаны все ресурсы {{ ydb-short-name }} Terraform провайдера
+
 ### Строковая таблица {#ydb-table}
 
 {% note info %}
@@ -202,7 +289,7 @@ family {
 Пример:
 
 ```tf
-partitioning_settings = {
+partitioning_settings {
   auto_partitioning_min_partitions_count = 5
   auto_partitioning_max_partitions_count = 8
   auto_partitioning_partition_size_mb    = 256

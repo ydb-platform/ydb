@@ -969,6 +969,11 @@ protected:
     }
 
     void Handle(TEvPrivate::TEvUpdateClockSkew::TPtr &, const TActorContext &ctx) {
+        auto group = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils")
+            ->GetSubgroup("subsystem", "whiteboard");
+        group->GetCounter("MaxClockSkewWithPeerUs")->Set(MaxClockSkewWithPeerUs);
+        group->GetCounter("MaxClockSkewPeerId")->Set(MaxClockSkewPeerId);
+
         SystemStateInfo.SetMaxClockSkewWithPeerUs(MaxClockSkewWithPeerUs);
         SystemStateInfo.SetMaxClockSkewPeerId(MaxClockSkewPeerId);
         MaxClockSkewWithPeerUs = 0;

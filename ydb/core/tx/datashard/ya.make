@@ -191,6 +191,7 @@ SRCS(
     read_iterator.h
     restore_unit.cpp
     setup_sys_locks.h
+    statistics_scan.cpp
     store_and_send_out_rs_unit.cpp
     store_and_send_write_out_rs_unit.cpp    
     store_commit_writes_tx_unit.cpp
@@ -306,6 +307,7 @@ RECURSE_FOR_TESTS(
     ut_rs
     ut_sequence
     ut_snapshot
+    ut_statistics
     ut_stats
     ut_upload_rows
     ut_volatile

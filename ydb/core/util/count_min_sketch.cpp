@@ -16,7 +16,7 @@ ui64 TCountMinSketch::Hash(const char* data, size_t size, size_t hashIndex) {
 }
 
 void TCountMinSketch::Count(const char* data, size_t size) {
-    ui32* start = Buckets.data();
+    ui32* start = Buckets();
     for (size_t d = 0; d < Depth; ++d, start += Width) {
         ui64 hash = Hash(data, size, d);
         ui32* bucket = start + hash % Width;
@@ -29,7 +29,7 @@ void TCountMinSketch::Count(const char* data, size_t size) {
 
 ui32 TCountMinSketch::Probe(const char* data, size_t size) const {
     ui32 minValue = std::numeric_limits<ui32>::max();
-    const ui32* start = Buckets.data();
+    const ui32* start = Buckets();
     for (size_t d = 0; d < Depth; ++d, start += Width) {
         ui64 hash = Hash(data, size, d);
         const ui32* bucket = start + hash % Width;
@@ -42,8 +42,8 @@ TCountMinSketch& TCountMinSketch::operator+=(TCountMinSketch& rhs) {
     if (Width != rhs.Width || Depth != rhs.Depth) {
         return *this;
     }
-    ui32* dst = Buckets.data();
-    ui32* src = rhs.Buckets.data();
+    ui32* dst = Buckets();
+    ui32* src = rhs.Buckets();
     ui32* end = dst + Width * Depth;
     for (; dst != end; ++dst, ++src) {
         ui32 sum = *dst + *src;

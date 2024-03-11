@@ -17,11 +17,11 @@ struct TStatHyperLogLog {
     // TODO:
 };
 
-// TODO: other stats
 enum EStatType {
     SIMPLE = 0,
     HYPER_LOG_LOG = 1,
-    // TODO...
+    COUNT_MIN_SKETCH = 2,
+    // ...
 };
 
 struct TRequest {

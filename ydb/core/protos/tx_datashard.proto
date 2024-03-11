@@ -1452,6 +1452,30 @@ message TEvCdcStreamScanResponse {
     optional TStats Stats = 6;
 }
 
+message TEvStatisticsScanRequest {
+    optional NKikimrProto.TPathID TablePathId = 1;
+}
+
+message TEvStatisticsScanResponse {
+    message TStatistic {
+        optional uint32 Type = 1;
+        optional bytes Bytes = 2;
+    }
+    message TColumn {
+        optional uint32 Tag = 1;
+        repeated TStatistic Statistics = 2;
+    }
+    repeated TColumn Columns = 1;
+
+    enum EStatus {
+        SUCCESS = 1;
+        ABORTED = 2;
+        ERROR = 3;
+    }
+
+    optional EStatus Status = 5;
+}
+
 message TComputeShardingPolicy {
     repeated string ColumnNames = 1;
     optional uint32 ShardsCount = 2 [default = 0];

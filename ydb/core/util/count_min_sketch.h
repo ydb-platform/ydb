@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/system/types.h>
+#include <util/generic/strbuf.h>
 
 #include <vector>
 
@@ -8,21 +9,39 @@ namespace NKikimr {
 
 class TCountMinSketch {
 private:
-    const size_t Width;
-    const size_t Depth;
-
-    size_t ElementCount{0};
-    std::vector<ui32> Buckets;
+    ui64 Width;
+    ui64 Depth;
+    ui64 ElementCount;
 
 private:
     static ui64 Hash(const char* data, size_t size, size_t hashIndex);
 
+    static size_t StaticSize(ui64 width, ui64 depth) {
+        return sizeof(TCountMinSketch) + width * depth * sizeof(ui32);
+    }
+
+    const ui32* Buckets() const {
+        return reinterpret_cast<const ui32*>(this + 1);
+    }
+
+    ui32* Buckets() {
+        return reinterpret_cast<ui32*>(this + 1);
+    }
+
 public:
-    explicit TCountMinSketch(size_t width = 256, size_t depth = 8)
-        : Width(width)
-        , Depth(depth)
-    {
-        Buckets.resize(Width * Depth, 0);
+    static TCountMinSketch* Create(ui64 width = 256, ui64 depth = 8) {
+        auto* bytes = new char[StaticSize(width, depth)];
+        auto* sketch = reinterpret_cast<TCountMinSketch*>(bytes);
+        sketch->Width = width;
+        sketch->Depth = depth;
+        sketch->ElementCount = 0;
+        return sketch;
+    }
+
+    TCountMinSketch() = delete;
+
+    size_t GetSize() const {
+        return StaticSize(Width, Depth);
     }
 
     size_t GetWidth() const {
@@ -37,11 +56,15 @@ public:
         return ElementCount;
     }
 
+    TStringBuf AsStringBuf() const { return TStringBuf((char*)this, GetSize()); }
+
     void Count(const char* data, size_t size);
 
     ui32 Probe(const char* data, size_t size) const;
 
     TCountMinSketch& operator+=(TCountMinSketch& rhs);
 };
+
+static_assert(sizeof(TCountMinSketch) == 24);
 
 } // NKikimr

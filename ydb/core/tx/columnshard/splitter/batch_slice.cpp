@@ -99,7 +99,7 @@ bool TGeneralSerializedSlice::GroupBlobsImpl(const TString& currentGroupName, co
     return true;
 }
 
-TGeneralSerializedSlice::TGeneralSerializedSlice(const std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters,
+TGeneralSerializedSlice::TGeneralSerializedSlice(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters,
                                                  const TSplitSettings& settings)
     : Schema(schema)
     , Counters(counters)

@@ -48,7 +48,7 @@ public:
             void AddChunk(const std::shared_ptr<IPortionDataChunk>& chunk) {
                 return OwnerBlob->AddChunk(*OwnerPortion, chunk);
             }
-            void RestoreChunk(const std::shared_ptr<IPortionColumnChunk>& chunk) {
+            void RestoreChunk(const std::shared_ptr<IPortionDataChunk>& chunk) {
                 OwnerBlob->RestoreChunk(*OwnerPortion, chunk);
             }
         };
@@ -95,7 +95,7 @@ private:
 public:
     static std::vector<TPortionInfoWithBlobs> RestorePortions(const std::vector<TPortionInfo>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
         const TVersionedIndex& tables, const std::shared_ptr<IStoragesManager>& operators);
-    static TPortionInfoWithBlobs RestorePortion(const TPortionInfo& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
+    static TPortionInfoWithBlobs RestorePortion(const TPortionInfo& portion, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
         const TIndexInfo& indexInfo, const std::shared_ptr<IStoragesManager>& operators);
 
     std::shared_ptr<arrow::RecordBatch> GetBatch(const ISnapshotSchema::TPtr& data, const ISnapshotSchema& result, const std::set<std::string>& columnNames = {}) const;

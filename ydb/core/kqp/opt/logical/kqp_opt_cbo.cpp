@@ -172,7 +172,7 @@ double TKqpProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftStat
             if (OptLevel==1) {
                 return -1;
             }
-            return leftStats.Nrows;
+            return leftStats.Nrows + outputRows;
         case EJoinAlgoType::MapJoin:
             return leftStats.Nrows + 1.8 * rightStats.Nrows + outputRows;
         case EJoinAlgoType::GraceJoin:

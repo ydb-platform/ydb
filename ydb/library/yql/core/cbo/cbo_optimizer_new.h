@@ -123,9 +123,8 @@ struct TDummyProviderContext : public IProviderContext {
         Y_UNUSED(joinConditions);
         Y_UNUSED(leftJoinKeys);
         Y_UNUSED(rightJoinKeys);
-        Y_UNUSED(joinAlgo);
 
-        return true;
+        return joinAlgo == EJoinAlgoType::MapJoin;
     }
 
     static const TDummyProviderContext& instance() {

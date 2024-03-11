@@ -108,7 +108,7 @@ public:
         , Driver(std::move(driver))
         , CredentialsProviderFactory(credentialsProviderFactory)
         , Callbacks(callbacks)
-        , LogPrefix(TStringBuilder() << "TxId: " << TxId << ", PQ sink. ")
+        , LogPrefix(TStringBuilder() << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", PQ sink. ")
         , FreeSpace(freeSpace)
         , TopicClient(Driver, GetTopicClientSettings())
     { 

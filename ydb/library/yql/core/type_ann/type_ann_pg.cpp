@@ -4908,21 +4908,8 @@ IGraphTransformer::TStatus PgLikeWrapper(const TExprNode::TPtr& input, TExprNode
             continue;
         }
 
-        auto canCast = [] (const ui32 sourceType, const ui32 targetType) {
-            if (sourceType == NPg::UnknownOid) {
-                return true;
-            }
-            if (NPg::HasCast(sourceType, targetType)) {
-                const auto& cast = NPg::LookupCast(sourceType, targetType);
-                if (cast.CoercionCode == NPg::ECoercionCode::Implicit) {
-                    return true;
-                }
-            }
-            return false;
-        };
-
         if (argTypes[i] != textTypeId) {
-            if (canCast(argTypes[i], textTypeId)) {
+            if (NPg::IsCoercible(argTypes[i], textTypeId, NPg::ECoercionCode::Implicit)) {
                 auto& argNode = input->ChildRef(i);
                 argNode = WrapWithPgCast(std::move(argNode), textTypeId, ctx.Expr);
                 return IGraphTransformer::TStatus::Repeat;

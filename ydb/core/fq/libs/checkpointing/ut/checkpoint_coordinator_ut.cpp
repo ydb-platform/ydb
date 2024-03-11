@@ -68,6 +68,7 @@ struct TTestBootstrap : public TTestActorRuntime {
     TCheckpointId CheckpointId2;
     TCheckpointId CheckpointId3;
     TCheckpointId CheckpointId4;
+    TString GraphDescId;
 
     THashMap<TActorId, ui64> ActorToTask;
 
@@ -81,6 +82,7 @@ struct TTestBootstrap : public TTestActorRuntime {
         , CheckpointId2(CoordinatorId.Generation, 2)
         , CheckpointId3(CoordinatorId.Generation, 3)
         , CheckpointId4(CoordinatorId.Generation, 4)
+        , GraphDescId("42")
     {
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Initialize(app->Unwrap());
@@ -141,7 +143,11 @@ struct TTestBootstrap : public TTestActorRuntime {
         const TEvCheckpointStorage::TEvCreateCheckpointRequest& lhs,
         const TEvCheckpointStorage::TEvCreateCheckpointRequest& rhs) {
         return IsEqual(lhs.CoordinatorId, rhs.CoordinatorId)
-            && std::tie(lhs.CheckpointId, lhs.NodeCount) == std::tie(rhs.CheckpointId, rhs.NodeCount);
+            && std::tie(lhs.CheckpointId, lhs.NodeCount) == std::tie(rhs.CheckpointId, rhs.NodeCount)
+             && lhs.GraphDescription.index() == rhs.GraphDescription.index()
+                 && (lhs.GraphDescription.index() == 0 
+                    ? std::get<0>(lhs.GraphDescription) == std::get<0>(rhs.GraphDescription)
+                    : google::protobuf::util::MessageDifferencer::Equals(std::get<1>(lhs.GraphDescription), std::get<1>(rhs.GraphDescription)));
     }
 
     bool IsEqual(
@@ -228,7 +234,7 @@ struct TTestBootstrap : public TTestActorRuntime {
         Send(new IEventHandle(
             CheckpointCoordinator,
             StorageProxy,
-            new TEvCheckpointStorage::TEvCreateCheckpointResponse(checkpointId, std::move(issues), "42")));
+            new TEvCheckpointStorage::TEvCreateCheckpointResponse(checkpointId, std::move(issues), GraphDescId)));
     }
 
     void MockNodeStateSavedEvent(TCheckpointId& checkpointId, TActorId& sender) {
@@ -333,18 +339,31 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
             MockCheckpointsMetadataResponse();
         }
 
-        void InjectCheckpoint(TCheckpointId checkpointId, NYql::NDqProto::TCheckpoint::EType type = NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT) {
+        void InjectCheckpoint(
+            TCheckpointId checkpointId,
+            TMaybe<TString> graphDescId = {},
+            NYql::NDqProto::TCheckpoint::EType type = NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT) {
 
             Cerr << "Waiting for TEvCreateCheckpointRequest (storage)" << Endl;
-            NProto::TCheckpointGraphDescription graphDesc;
-            graphDesc.MutableGraph()->CopyFrom(NProto::TGraphParams());
-            ExpectEvent(StorageProxy, 
-                TEvCheckpointStorage::TEvCreateCheckpointRequest(
-                    CoordinatorId,
-                    checkpointId,
-                    3,
-                    graphDesc
-                ));
+            if (graphDescId) {
+                ExpectEvent(StorageProxy, 
+                    TEvCheckpointStorage::TEvCreateCheckpointRequest(
+                        CoordinatorId,
+                        checkpointId,
+                        3,
+                        *graphDescId
+                    ));
+            } else {
+                NProto::TCheckpointGraphDescription graphDesc;
+                graphDesc.MutableGraph()->CopyFrom(NProto::TGraphParams());
+                ExpectEvent(StorageProxy, 
+                    TEvCheckpointStorage::TEvCreateCheckpointRequest(
+                        CoordinatorId,
+                        checkpointId,
+                        3,
+                        graphDesc
+                    ));
+            }
 
             MockCreateCheckpointResponse(checkpointId);
 
@@ -432,7 +451,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
         test.AllSavedAndCommited(test.CheckpointId1);
 
         test.ScheduleCheckpointing();
-        test.InjectCheckpoint(test.CheckpointId2, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT);
+        test.InjectCheckpoint(test.CheckpointId2, test.GraphDescId, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT);
         test.AllSavedAndCommited(test.CheckpointId2, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT);
     }
 
@@ -443,15 +462,15 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
         test.AllSavedAndCommited(test.CheckpointId1);
 
         test.ScheduleCheckpointing();
-        test.InjectCheckpoint(test.CheckpointId2, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_INCREMENT_OR_SNAPSHOT);
+        test.InjectCheckpoint(test.CheckpointId2, test.GraphDescId, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_INCREMENT_OR_SNAPSHOT);
         test.AllSavedAndCommited(test.CheckpointId2, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_INCREMENT_OR_SNAPSHOT);
 
         test.ScheduleCheckpointing();
-        test.InjectCheckpoint(test.CheckpointId3, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_INCREMENT_OR_SNAPSHOT);
+        test.InjectCheckpoint(test.CheckpointId3, test.GraphDescId, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_INCREMENT_OR_SNAPSHOT);
         test.AllSavedAndCommited(test.CheckpointId3, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_INCREMENT_OR_SNAPSHOT);
 
         test.ScheduleCheckpointing();
-        test.InjectCheckpoint(test.CheckpointId4, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT);
+        test.InjectCheckpoint(test.CheckpointId4, test.GraphDescId, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT);
         test.AllSavedAndCommited(test.CheckpointId4, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT);
     }
 
@@ -462,7 +481,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
         test.SaveFailed(test.CheckpointId1);
 
         test.ScheduleCheckpointing();
-        test.InjectCheckpoint(test.CheckpointId2, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT);
+        test.InjectCheckpoint(test.CheckpointId2, test.GraphDescId, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT);
     }
 }
 

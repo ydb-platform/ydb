@@ -701,16 +701,12 @@ private:
     }
 
     bool HasMemoryForProcessing() const {
-        auto this_id = std::this_thread::get_id();
-        std::cerr << "[" << this_id << "] - " << TlsAllocState->GetUsed() << std::endl;
-        return false;
-        // return !TlsAllocState->IsMemoryYellowZoneReached();
+        return !TlsAllocState->IsMemoryYellowZoneReached();
     }
 
     bool IsSwitchToSpillingModeCondition() const {
         //TODO implement me
-        // return !HasMemoryForProcessing();
-        return true;
+        return !HasMemoryForProcessing();
     }
 
 private:

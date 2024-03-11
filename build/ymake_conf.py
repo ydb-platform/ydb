@@ -2386,13 +2386,10 @@ class Cuda(object):
             if not self.cuda_version.from_user:
                 return False
 
-        if self.cuda_version.value in ('8.0', '9.0', '9.1', '9.2', '10.0', '10.1'):
-            raise ConfigureError('CUDA versions 8.x, 9.x and 10.x are no longer supported.\nSee DEVTOOLS-7108 and DTCC-2118.')
-
-        if self.cuda_version.value in ('11.0', '11.1', '11.3', '11.4', '11.8', '12.1'):
+        if self.cuda_version.value in ('11.4', '11.8', '12.1'):
             return True
-
-        return False
+        else:
+            raise ConfigureError('CUDA version {} is not supported in Arcadia'.format(self.cuda_version.value))
 
     def auto_have_cuda(self):
         if is_positive('MUSL'):
@@ -2419,10 +2416,8 @@ class Cuda(object):
         return match.group(1)
 
     def convert_major_version(self, value):
-        if value == '10':
-            return '10.1'
-        elif value == '11':
-            return '11.3'
+        if value == '11':
+            return '11.4'
         else:
             return value
 

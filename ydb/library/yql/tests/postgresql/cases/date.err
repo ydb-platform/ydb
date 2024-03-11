@@ -28,6 +28,15 @@ INSERT INTO DATE_TBL VALUES ('1997-02-28');
 <sql-statement>
 INSERT INTO DATE_TBL VALUES ('1997-02-29');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO DATE_TBL VALUES ('1997-02-29');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "1997-02-29"
+
+        	INSERT INTO DATE_TBL VALUES ('1997-02-29');
+	^
 <sql-statement>
 INSERT INTO DATE_TBL VALUES ('1997-03-01');
 </sql-statement>
@@ -71,19 +80,9 @@ SELECT f1 FROM DATE_TBL
 --
 SET datestyle TO iso;  -- display results in ISO
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: datestyle
-    	--
-	^
 <sql-statement>
 SET datestyle TO ymd;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: datestyle
-    	SET datestyle TO ymd;
-	^
 <sql-statement>
 SELECT date 'January 8, 1999';
 </sql-statement>
@@ -315,11 +314,6 @@ SELECT date '1999 08 01';
 <sql-statement>
 SET datestyle TO dmy;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: datestyle
-    	SET datestyle TO dmy;
-	^
 <sql-statement>
 SELECT date 'January 8, 1999';
 </sql-statement>
@@ -551,11 +545,6 @@ SELECT date '1999 08 01';
 <sql-statement>
 SET datestyle TO mdy;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: datestyle
-    	SET datestyle TO mdy;
-	^
 <sql-statement>
 SELECT date 'January 8, 1999';
 </sql-statement>
@@ -818,11 +807,6 @@ SELECT date '5874898-01-01';  -- out of range
 <sql-statement>
 RESET datestyle;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
-    	RESET datestyle;
-	^
 <sql-statement>
 --
 -- Simple math
@@ -1165,6 +1149,14 @@ select '-infinity'::date < 'today'::date as t;
 <sql-statement>
 select isfinite('infinity'::date), isfinite('-infinity'::date), isfinite('today'::date);
 </sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select isfinite('infinity'::date), isfinite('-infinity'::date), isfinite('today'::date);
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: isfinite
+        	select isfinite('infinity'::date), isfinite('-infinity'::date), isfinite('today'::date);
+	^
 <sql-statement>
 --
 -- oscillating fields from non-finite date:

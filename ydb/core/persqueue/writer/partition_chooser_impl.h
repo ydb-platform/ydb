@@ -1,28 +1,14 @@
 #pragma once
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <util/random/random.h>
-#include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/base/tablet_pipe.h>
-#include <ydb/core/kqp/common/events/events.h>
-#include <ydb/core/kqp/common/simple/services.h>
-#include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/pq_database.h>
 #include <ydb/core/persqueue/utils.h>
-#include <ydb/core/persqueue/writer/metadata_initializers.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
-#include "partition_chooser.h"
+#include "partition_chooser_impl__old_chooser_actor.h"
+#include "partition_chooser_impl__sm_chooser_actor.h"
+
 
 namespace NKikimr::NPQ {
 namespace NPartitionChooser {
-
-#define DEBUG(message) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, message);    
-
-using namespace NActors;
-using namespace NSourceIdEncoding;
-using namespace Ydb::PersQueue::ErrorCode;
 
 // For testing purposes
 struct TAsIsSharder {
@@ -60,6 +46,7 @@ public:
 
     const TPartitionInfo* GetPartition(const TString& sourceId) const override;
     const TPartitionInfo* GetPartition(ui32 partitionId) const override;
+    const TPartitionInfo* GetRandomPartition() const override;
 
 private:
     const TString TopicName;
@@ -68,150 +55,18 @@ private:
 };
 
 // It is old alghoritm of choosing partition by SourceId
-template<class THasher = TMd5Sharder>
+template<typename THasher = TMd5Sharder>
 class THashChooser: public IPartitionChooser {
 public:
     THashChooser(const NKikimrSchemeOp::TPersQueueGroupDescription& config);
 
     const TPartitionInfo* GetPartition(const TString& sourceId) const override;
     const TPartitionInfo* GetPartition(ui32 partitionId) const override;
+    const TPartitionInfo* GetRandomPartition() const override;
 
 private:
     std::vector<TPartitionInfo> Partitions;
     THasher Hasher;
-};
-
-
-class TPartitionChooserActor: public TActorBootstrapped<TPartitionChooserActor> {
-    using TThis = TPartitionChooserActor;
-    using TThisActor = TActor<TThis>;
-
-    friend class TActorBootstrapped<TThis>;
-public:
-    using TPartitionInfo = typename IPartitionChooser::TPartitionInfo;
-
-    TPartitionChooserActor(TActorId parentId,
-                           const NKikimrSchemeOp::TPersQueueGroupDescription& config,
-                           std::shared_ptr<IPartitionChooser>& chooser,
-                           NPersQueue::TTopicConverterPtr& fullConverter,
-                           const TString& sourceId,
-                           std::optional<ui32> preferedPartition);
-
-    void Bootstrap(const TActorContext& ctx);
-
-private:
-    void HandleInit(NMetadata::NProvider::TEvManagerPrepared::TPtr&, const TActorContext& ctx);
-    void HandleInit(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const NActors::TActorContext& ctx);
-
-    STATEFN(StateInit) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(NMetadata::NProvider::TEvManagerPrepared, HandleInit);
-            HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, HandleInit);
-            sFunc(TEvents::TEvPoison, ScheduleStop);
-        }
-    }
-
-private:
-    void HandleSelect(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
-    void HandleSelect(TEvPersQueue::TEvGetPartitionIdForWriteResponse::TPtr& ev, const TActorContext& ctx);
-    void HandleSelect(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const NActors::TActorContext& ctx);
-
-    STATEFN(StateSelect) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(NKqp::TEvKqp::TEvQueryResponse, HandleSelect);
-            HFunc(TEvPersQueue::TEvGetPartitionIdForWriteResponse, HandleSelect);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, HandleSelect);
-            sFunc(TEvents::TEvPoison, ScheduleStop);
-        }
-    }
-
-private:
-    void HandleIdle(TEvPartitionChooser::TEvRefreshRequest::TPtr& ev, const TActorContext& ctx);
-
-    STATEFN(StateIdle)  {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPartitionChooser::TEvRefreshRequest, HandleIdle);
-            SFunc(TEvents::TEvPoison, Stop);
-        }
-    }
-
-private:
-    void HandleUpdate(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
-
-    STATEFN(StateUpdate) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(NKqp::TEvKqp::TEvQueryResponse, HandleUpdate);
-            sFunc(TEvents::TEvPoison, ScheduleStop);
-        }
-    }
-
-private:
-    void HandleDestroy(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const NActors::TActorContext& ctx);
-    void HandleDestroy(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
-
-    STATEFN(StateDestroy) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, HandleDestroy);
-            HFunc(NKqp::TEvKqp::TEvQueryResponse, HandleDestroy);
-        }
-    }
-
-private:
-    void ScheduleStop();
-    void Stop(const TActorContext& ctx);
-
-    void ChoosePartition(const TActorContext& ctx);
-    void OnPartitionChosen(const TActorContext& ctx);
-    std::pair<bool, const TPartitionInfo*> ChoosePartitionSync(const TActorContext& ctx) const;
-
-    TString GetDatabaseName(const NActors::TActorContext& ctx);
-
-    void InitTable(const NActors::TActorContext& ctx);
-
-    void StartKqpSession(const NActors::TActorContext& ctx);
-    void CloseKqpSession(const TActorContext& ctx);
-    void SendUpdateRequests(const TActorContext& ctx);
-    void SendSelectRequest(const NActors::TActorContext& ctx);
-
-    void RequestPQRB(const NActors::TActorContext& ctx);
-
-    THolder<NKqp::TEvKqp::TEvCreateSessionRequest> MakeCreateSessionRequest(const NActors::TActorContext& ctx);
-    THolder<NKqp::TEvKqp::TEvCloseSessionRequest> MakeCloseSessionRequest();
-    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSelectQueryRequest(const NActors::TActorContext& ctx);
-    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeUpdateQueryRequest(const NActors::TActorContext& ctx);
-
-    void ReplyResult(const NActors::TActorContext& ctx);
-    void ReplyError(ErrorCode code, TString&& errorMessage, const NActors::TActorContext& ctx);
-
-private:
-    const TActorId Parent;
-    const NPersQueue::TTopicConverterPtr FullConverter;
-    const TString SourceId;
-    const std::optional<ui32> PreferedPartition;
-    const std::shared_ptr<IPartitionChooser> Chooser;
-    const bool SplitMergeEnabled_;
-
-    std::optional<ui32> PartitionId;
-    const TPartitionInfo* Partition;
-    bool PartitionPersisted = false;
-    ui64 CreateTime = 0;
-    ui64 AccessTime = 0;
-
-    bool NeedUpdateTable = false;
-
-    NPQ::NSourceIdEncoding::TEncodedSourceId EncodedSourceId;
-    TString KqpSessionId;
-    TString TxId;
-
-    NPQ::ESourceIdTableGeneration TableGeneration;
-    TString SelectQuery;
-    TString UpdateQuery;
-
-    size_t UpdatesInflight = 0;
-    size_t SelectInflight = 0;
-
-    ui64 BalancerTabletId;
-    TActorId PipeToBalancer;
 };
 
 
@@ -233,7 +88,7 @@ TBoundaryChooser<THasher>::TBoundaryChooser(const NKikimrSchemeOp::TPersQueueGro
     }
 
     std::sort(Partitions.begin(), Partitions.end(),
-        [](const TPartitionInfo& a, const TPartitionInfo& b) { return a.ToBound && a.ToBound < b.ToBound; });
+        [](const TPartitionInfo& a, const TPartitionInfo& b) { return !b.ToBound || (a.ToBound && a.ToBound < b.ToBound); });
 }
 
 template<class THasher>
@@ -250,6 +105,15 @@ const typename TBoundaryChooser<THasher>::TPartitionInfo* TBoundaryChooser<THash
     auto it = std::find_if(Partitions.begin(), Partitions.end(),
         [=](const TPartitionInfo& v) { return v.PartitionId == partitionId; });
     return it == Partitions.end() ? nullptr : it;
+}
+
+template<class THasher>
+const typename TBoundaryChooser<THasher>::TPartitionInfo* TBoundaryChooser<THasher>::GetRandomPartition() const {
+    if (Partitions.empty()) {
+        return nullptr;
+    }
+    size_t p = RandomNumber<size_t>(Partitions.size());
+    return &Partitions[p];
 }
 
 
@@ -272,6 +136,9 @@ THashChooser<THasher>::THashChooser(const NKikimrSchemeOp::TPersQueueGroupDescri
 
 template<class THasher>
 const typename THashChooser<THasher>::TPartitionInfo* THashChooser<THasher>::GetPartition(const TString& sourceId) const {
+    if (Partitions.empty()) {
+        return nullptr;
+    }
     return &Partitions[Hasher(sourceId, Partitions.size())];
 }
 
@@ -285,5 +152,32 @@ const typename THashChooser<THasher>::TPartitionInfo* THashChooser<THasher>::Get
     return it->PartitionId == partitionId ? it : nullptr;
 }
 
+template<class THasher>
+const typename THashChooser<THasher>::TPartitionInfo* THashChooser<THasher>::GetRandomPartition() const {
+    if (Partitions.empty()) {
+        return nullptr;
+    }
+    size_t p = RandomNumber<size_t>(Partitions.size());
+    return &Partitions[p];
+}
+
+
 } // namespace NPartitionChooser
+
+
+inline IActor* CreatePartitionChooserActorM(TActorId parentId,
+                                    const NKikimrSchemeOp::TPersQueueGroupDescription& config,
+                                    NPersQueue::TTopicConverterPtr& fullConverter,
+                                    const TString& sourceId,
+                                    std::optional<ui32> preferedPartition,
+                                    bool withoutHash) {
+    auto chooser = CreatePartitionChooser(config, withoutHash);
+    if (SplitMergeEnabled(config.GetPQTabletConfig())) {
+        return new NPartitionChooser::TSMPartitionChooserActor<NTabletPipe::NTest::TPipeMock>(parentId, config, chooser, fullConverter, sourceId, preferedPartition);
+    } else {
+        return new NPartitionChooser::TPartitionChooserActor<NTabletPipe::NTest::TPipeMock>(parentId, config, chooser, fullConverter, sourceId, preferedPartition);
+    }
+}
+
+
 } // namespace NKikimr::NPQ

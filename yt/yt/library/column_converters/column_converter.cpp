@@ -107,7 +107,7 @@ TConvertedColumnRange TColumnConverters::ConvertRowsToColumns(
         YT_VERIFY(iterSchema != columnSchema.end());
         auto converter = CreateColumnConvert(iterSchema->second, ColumnIds_[offset], offset);
         auto columns = converter->Convert(rowsValues);
-        convertedColumnsRange.emplace_back(std::move(columns));
+        convertedColumnsRange.push_back(std::move(columns));
     }
     return convertedColumnsRange;
 }

@@ -3,6 +3,7 @@
 #include "public.h"
 
 #include <yt/yt/core/yson/consumer.h>
+#include <yt/yt/core/yson/producer.h>
 
 #include <yt/yt/core/ypath/public.h>
 

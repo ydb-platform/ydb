@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
 namespace NKikimr::NPQ {
@@ -13,6 +14,14 @@ ui64 PutUnitsSize(const ui64 size);
 
 TString SourceIdHash(const TString& sourceId);
 
+void Migrate(NKikimrPQ::TPQTabletConfig& config);
+
+// This function required for marking the code which required remove after 25-1
+constexpr bool ReadRuleCompatible() { return true; }
+
+bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName);
+size_t ConsumerCount(const NKikimrPQ::TPQTabletConfig& config);
+
 const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config, const ui32 partitionId);
 
 // The graph of split-merge operations. 
@@ -22,7 +31,7 @@ public:
 
         Node() = default;
         Node(Node&&) = default;
-        Node(const NKikimrPQ::TPQTabletConfig::TPartition& config);
+        Node(ui32 id, ui64 tabletId);
 
         ui32 Id;
         ui64 TabletId;
@@ -35,11 +44,18 @@ public:
         std::set<Node*> HierarhicalParents;
     };
 
-    void Rebuild(const NKikimrPQ::TPQTabletConfig& config);
+    TPartitionGraph();
+    TPartitionGraph(std::unordered_map<ui32, Node>&& partitions);
 
-    std::optional<const Node*> GetPartition(ui32 id) const;
+    const Node* GetPartition(ui32 id) const;
+    std::set<ui32> GetActiveChildren(ui32 id) const;
+
 private:
     std::unordered_map<ui32, Node> Partitions;
 };
+
+TPartitionGraph MakePartitionGraph(const NKikimrPQ::TPQTabletConfig& config);
+TPartitionGraph MakePartitionGraph(const NKikimrPQ::TUpdateBalancerConfig& config);
+TPartitionGraph MakePartitionGraph(const NKikimrSchemeOp::TPersQueueGroupDescription& config);
 
 } // NKikimr::NPQ

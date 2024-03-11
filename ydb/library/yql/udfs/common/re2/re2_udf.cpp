@@ -382,13 +382,14 @@ namespace {
                 default:
                     if (hasEscape && c == escape) {
                         if (escapeOn) {
-                            result << c;
+                            result << RE2::QuoteMeta(StringPiece(&c, 1));
                         }
                         escapeOn = !escapeOn;
                     } else {
                         if (slash)
                             result << '\\';
                         result << c;
+                        escapeOn = false;
                     }
                     slash = false;
                     break;

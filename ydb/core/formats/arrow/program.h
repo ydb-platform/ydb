@@ -108,6 +108,8 @@ protected:
 };
 
 class TAssign {
+private:
+    YDB_ACCESSOR_DEF(std::optional<ui32>, YqlOperationId);
 public:
     using TOperationType = EOperation;
 
@@ -227,6 +229,8 @@ public:
         , KernelFunction(std::move(kernelFunction))
     {}
 
+    static TAssign MakeTimestamp(const TColumnInfo& column, ui64 value);
+
     bool IsConstant() const { return Operation == EOperation::Constant; }
     bool IsOk() const { return Operation != EOperation::Unspecified || !!KernelFunction; }
     EOperation GetOperation() const { return Operation; }
@@ -237,12 +241,7 @@ public:
     const arrow::compute::FunctionOptions* GetOptions() const { return FuncOpts.get(); }
 
     IStepFunction<TAssign>::TPtr GetFunction(arrow::compute::ExecContext* ctx) const;
-    TString DebugString() const {
-        return TStringBuilder() <<
-            "{op=" << Operation << ";column=" << Column.DebugString() << ";" << (Constant ? "const=" + Constant->ToString() + ";" : "NO;")
-            << (KernelFunction ? ("kernel=" + KernelFunction->name() + ";") : "NO;")
-            << "}";
-    }
+    TString DebugString() const;
 private:
     const TColumnInfo Column;
     EOperation Operation{EOperation::Unspecified};
@@ -325,13 +324,26 @@ public:
     TString DebugString() const {
         TStringBuilder sb;
         sb << "{";
-        sb << "assignes=[";
-        for (auto&& i : Assignes) {
-            sb << i.DebugString() << ";";
+        if (Assignes.size()) {
+            sb << "assignes=[";
+            for (auto&& i : Assignes) {
+                sb << i.DebugString() << ";";
+            }
+            sb << "];";
         }
-        sb << "];";
-        sb << "group_by_count = " << GroupBy.size() << "; ";
-        sb << "group_by_keys_count=" << GroupByKeys.size() << ";";
+        if (Filters.size()) {
+            sb << "filters=[";
+            for (auto&& i : Filters) {
+                sb << i.DebugString() << ";";
+            }
+            sb << "];";
+        }
+        if (GroupBy.size()) {
+            sb << "group_by_count=" << GroupBy.size() << "; ";
+        }
+        if (GroupByKeys.size()) {
+            sb << "group_by_keys_count=" << GroupByKeys.size() << ";";
+        }
 
         sb << "projections=[";
         for (auto&& i : Projection) {
@@ -396,6 +408,7 @@ public:
 };
 
 struct TProgram {
+public:
     std::vector<std::shared_ptr<TProgramStep>> Steps;
     THashMap<ui32, TColumnInfo> SourceColumns;
 

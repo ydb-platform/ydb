@@ -6,7 +6,7 @@ namespace NKikimr {
 namespace NPQ {
 
     void TOwnerInfo::GenerateCookie(const TString& owner, const TActorId& pipeClient, const TActorId& sender,
-                                            const TString& topicName, const ui32 partition, const TActorContext& ctx) {
+                                            const TString& topicName, const TPartitionId& partition, const TActorContext& ctx) {
         TStringBuilder s;
         s << owner << "|" << CreateGuidAsString() << "_" << OwnerGeneration;
         ++OwnerGeneration;

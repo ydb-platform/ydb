@@ -8,10 +8,10 @@ YDB supports [Apache Kafka protocol](https://kafka.apache.org/protocol.html) ver
 
 3. Message compression is not supported.
 
-4. Only Manual Partition Assignment is supported in read mode, using the [assign method](https://kafka.apache.org/35/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html#assign(java.util.Collection)). Consumer group partitions can't be used.
+4. Transactions are not supported.
 
-5. Transactions are not supported.
+5. DDL operations are not supported. Use the [YDB SDK](../ydb-sdk/index.md) or [YDB CLI](../ydb-cli/index.md) to perform them.
 
-6. DDL operations are not supported. Use the [YDB SDK](../ydb-sdk/index.md) or [YDB CLI](../ydb-cli/index.md) to perform them.
+6. Data schema validation not supported.
 
-7. Data schema validation not supported.
+7. Kafka Connect is only supported in standalone mode.

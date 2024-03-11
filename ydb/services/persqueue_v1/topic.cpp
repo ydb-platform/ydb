@@ -2,9 +2,10 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/core/grpc_services/rpc_calls_topic.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/service_table.h>
+#include <ydb/core/grpc_services/service_topic.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 
 #include "actors/update_offsets_in_transaction_actor.h"
@@ -29,7 +30,7 @@ TGRpcTopicService::TGRpcTopicService(NActors::TActorSystem *system,
 void TGRpcTopicService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrpc::TLoggerPtr logger) {
     CQ_ = cq;
 
-    ServicesInitializer(ActorSystem_, SchemeCache, Counters_).Execute();
+    ServicesInitializer(ActorSystem_, SchemeCache, Counters_, &ClustersCfgProvider).Execute();
 
     if (ActorSystem_->AppData<TAppData>()->PQConfig.GetEnabled()) {
         SetupIncomingRequests(std::move(logger));
@@ -43,6 +44,7 @@ void TGRpcTopicService::DoUpdateOffsetsInTransaction(std::unique_ptr<IRequestOpC
 
 void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
+    using namespace std::placeholders;
     auto getCounterBlock = NKikimr::NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
 
     {
@@ -118,27 +120,33 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         "TopicService/"#NAME, logger, getCounterBlock("topic", #NAME))->Run();
 
     ADD_REQUEST(CommitOffset, TopicService, CommitOffsetRequest, CommitOffsetResponse, {
-            ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvCommitOffsetRequest(ctx));
-        })
+        ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvCommitOffsetRequest(ctx));
+    })
 
     ADD_REQUEST(DropTopic, TopicService, DropTopicRequest, DropTopicResponse, {
-            ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvDropTopicRequest(ctx, IsRlAllowed()));
-        })
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDropTopicRequest(ctx, &DoDropTopicRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Off}));
+    })
+
     ADD_REQUEST(CreateTopic, TopicService, CreateTopicRequest, CreateTopicResponse, {
-            ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvCreateTopicRequest(ctx, IsRlAllowed()));
-        })
+        auto clusterCfg = ClustersCfgProvider->GetCfg();
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvCreateTopicRequest(ctx, std::bind(DoCreateTopicRequest, _1, _2, clusterCfg), TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Off}));
+    })
+
     ADD_REQUEST(AlterTopic, TopicService, AlterTopicRequest, AlterTopicResponse, {
-            ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvAlterTopicRequest(ctx, IsRlAllowed()));
-        })
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvAlterTopicRequest(ctx, &DoAlterTopicRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Off}));
+    })
+
     ADD_REQUEST(DescribeTopic, TopicService, DescribeTopicRequest, DescribeTopicResponse, {
-            ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvDescribeTopicRequest(ctx, IsRlAllowed()));
-        })
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDescribeTopicRequest(ctx, &DoDescribeTopicRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Off}));
+    })
+
     ADD_REQUEST(DescribeConsumer, TopicService, DescribeConsumerRequest, DescribeConsumerResponse, {
-            ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvDescribeConsumerRequest(ctx, IsRlAllowed()));
-        })
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDescribeConsumerRequest(ctx, &DoDescribeConsumerRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Off}));
+    })
+
     ADD_REQUEST(DescribePartition, TopicService, DescribePartitionRequest, DescribePartitionResponse, {
-            ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvDescribePartitionRequest(ctx, IsRlAllowed()));
-        })
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDescribePartitionRequest(ctx, &DoDescribePartitionRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Off}));
+    })
 #undef ADD_REQUEST
 
 #ifdef ADD_REQUEST_LIMIT

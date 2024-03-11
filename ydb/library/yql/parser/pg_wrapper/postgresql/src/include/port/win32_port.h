@@ -415,9 +415,7 @@ extern int	_pgstat64(const char *name, struct stat *buf);
 #define iswalpha_l _iswalpha_l
 #define isalnum_l _isalnum_l
 #define iswalnum_l _iswalnum_l
-#define isupper_l _isupper_l
 #define iswupper_l _iswupper_l
-#define islower_l _islower_l
 #define iswlower_l _iswlower_l
 #define isgraph_l _isgraph_l
 #define iswgraph_l _iswgraph_l

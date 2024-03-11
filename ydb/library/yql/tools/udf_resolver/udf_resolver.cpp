@@ -28,6 +28,7 @@
 #ifdef _linux_
 #include <sys/types.h>
 #include <sys/prctl.h>
+#include <sys/resource.h>
 #include <sys/syscall.h>
 #include <sys/socket.h>
 #ifndef GRND_RANDOM
@@ -272,6 +273,12 @@ int main(int argc, char **argv) {
         }
 
         NYql::SendSignalOnParentThreadExit(SIGTERM);
+
+#ifdef _linux_
+        if (rlimit limit = {0, 0}; setrlimit(RLIMIT_CORE, &limit) != 0) {
+            ythrow TSystemError() << "Failed to set RLIMIT_CORE";
+        }
+#endif
 
         if (res.Has("filter-syscalls")) {
 #ifdef _linux_

@@ -15,6 +15,7 @@
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
 #include <ydb/core/protos/external_sources.pb.h>
+#include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
@@ -744,8 +745,8 @@ public:
     TMaybe<TString> GetDomainName() override {
         TAppData* appData = AppData(ActorSystem);
         if (GetDomainLoginOnly()) {
-            if (appData->DomainsInfo && !appData->DomainsInfo->Domains.empty()) {
-                return appData->DomainsInfo->Domains.begin()->second->Name;
+            if (appData->DomainsInfo && appData->DomainsInfo->Domain) {
+                return appData->DomainsInfo->GetDomain()->Name;
             }
         }
         return {};
@@ -806,12 +807,7 @@ public:
                 return InvalidCluster<TTableMetadataResult>(cluster);
             }
 
-            settings.WithExternalDatasources_ = !CheckCluster(cluster);
-            // In the case of reading from an external data source,
-            // we have a construction of the form: `/Root/external_data_source`.`/path_in_external_system` WITH (...)
-            // In this syntax, information about path_in_external_system is already known and we only need information about external_data_source.
-            // To do this, we go to the DefaultCluster and get information about external_data_source from scheme shard
-            return MetadataLoader->LoadTableMetadata(settings.WithExternalDatasources_ ? GetDefaultCluster() : cluster, settings.WithExternalDatasources_ ? cluster : table, settings, Database, UserToken);
+            return MetadataLoader->LoadTableMetadata(cluster, table, settings, Database, UserToken);
         } catch (yexception& e) {
             return MakeFuture(ResultFromException<TTableMetadataResult>(e));
         }
@@ -855,10 +851,11 @@ public:
         return profilesPromise.GetFuture();
     }
 
-    TFuture<TGenericResult> CreateTable(NYql::TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk) override {
+    TFuture<TGenericResult> CreateTable(NYql::TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk, bool replaceIfExists) override {
         Y_UNUSED(metadata);
         Y_UNUSED(createDir);
         Y_UNUSED(existingOk);
+        Y_UNUSED(replaceIfExists);
         return NotImplemented<TGenericResult>();
     }
 
@@ -881,51 +878,12 @@ public:
         return tablePromise.GetFuture();
     }
 
-    TFuture<TGenericResult> CreateColumnTable(NYql::TKikimrTableMetadataPtr metadata, bool createDir) override {
-        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
-
-        try {
-            if (!CheckCluster(metadata->Cluster)) {
-                return InvalidCluster<TGenericResult>(metadata->Cluster);
-            }
-
-            std::pair<TString, TString> pathPair;
-            {
-                TString error;
-                if (!GetPathPair(metadata->Name, pathPair, error, createDir)) {
-                    return MakeFuture(ResultFromError<TGenericResult>(error));
-                }
-            }
-
-            auto ev = MakeHolder<TRequest>();
-            ev->Record.SetDatabaseName(Database);
-            if (UserToken) {
-                ev->Record.SetUserToken(UserToken->GetSerializedToken());
-            }
-            auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
-            schemeTx.SetWorkingDir(pathPair.first);
-
-            Ydb::StatusIds::StatusCode code;
-            TString error;
-
-            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateColumnTable);
-            NKikimrSchemeOp::TColumnTableDescription* tableDesc = schemeTx.MutableCreateColumnTable();
-
-            tableDesc->SetName(pathPair.second);
-            FillColumnTableSchema(*tableDesc->MutableSchema(), *metadata);
-
-            if (!FillCreateColumnTableDesc(metadata, *tableDesc, code, error)) {
-                IKqpGateway::TGenericResult errResult;
-                errResult.AddIssue(NYql::TIssue(error));
-                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
-                return MakeFuture(std::move(errResult));
-            }
-
-            return SendSchemeRequest(ev.Release());
-        }
-        catch (yexception& e) {
-            return MakeFuture(ResultFromException<TGenericResult>(e));
-        }
+    TFuture<TGenericResult> CreateColumnTable(NYql::TKikimrTableMetadataPtr metadata,
+            bool createDir, bool existingOk) override {
+        Y_UNUSED(metadata);
+        Y_UNUSED(createDir);
+        Y_UNUSED(existingOk);
+        return NotImplemented<TGenericResult>();
     }
 
     TFuture<TGenericResult> AlterTable(const TString&, Ydb::Table::AlterTableRequest&&, const TMaybe<TString>&, ui64, NKikimrIndexBuilder::TIndexBuildSettings&&) override
@@ -1039,155 +997,38 @@ public:
 
     TFuture<TGenericResult> AlterColumnTable(const TString& cluster,
                                              const NYql::TAlterColumnTableSettings& settings) override {
-        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
-
-        try {
-            if (!CheckCluster(cluster)) {
-                return InvalidCluster<TGenericResult>(cluster);
-            }
-
-            std::pair<TString, TString> pathPair;
-            {
-                TString error;
-                if (!GetPathPair(settings.Table, pathPair, error, false)) {
-                    return MakeFuture(ResultFromError<TGenericResult>(error));
-                }
-            }
-
-            auto ev = MakeHolder<TRequest>();
-            ev->Record.SetDatabaseName(Database);
-            if (UserToken) {
-                ev->Record.SetUserToken(UserToken->GetSerializedToken());
-            }
-            auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
-            schemeTx.SetWorkingDir(pathPair.first);
-
-            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnTable);
-            NKikimrSchemeOp::TAlterColumnTable* alter = schemeTx.MutableAlterColumnTable();
-            alter->SetName(settings.Table);
-
-            return SendSchemeRequest(ev.Release());
-        }
-        catch (yexception& e) {
-            return MakeFuture(ResultFromException<TGenericResult>(e));
-        }
+        Y_UNUSED(cluster);
+        Y_UNUSED(settings);
+        return NotImplemented<TGenericResult>();
     }
 
     TFuture<TGenericResult> CreateTableStore(const TString& cluster,
-                                             const NYql::TCreateTableStoreSettings& settings) override {
-        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
-
-        try {
-            if (!CheckCluster(cluster)) {
-                return InvalidCluster<TGenericResult>(cluster);
-            }
-
-            std::pair<TString, TString> pathPair;
-            {
-                TString error;
-                if (!GetPathPair(settings.TableStore, pathPair, error, false)) {
-                    return MakeFuture(ResultFromError<TGenericResult>(error));
-                }
-            }
-
-            auto ev = MakeHolder<TRequest>();
-            ev->Record.SetDatabaseName(Database);
-            if (UserToken) {
-                ev->Record.SetUserToken(UserToken->GetSerializedToken());
-            }
-            auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
-            schemeTx.SetWorkingDir(pathPair.first);
-
-            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateColumnStore);
-            NKikimrSchemeOp::TColumnStoreDescription* storeDesc = schemeTx.MutableCreateColumnStore();
-            storeDesc->SetName(pathPair.second);
-            storeDesc->SetColumnShardCount(settings.ShardsCount);
-
-            NKikimrSchemeOp::TColumnTableSchemaPreset* schemaPreset = storeDesc->AddSchemaPresets();
-            schemaPreset->SetName("default");
-            FillColumnTableSchema(*schemaPreset->MutableSchema(), settings);
-
-            return SendSchemeRequest(ev.Release());
-        }
-        catch (yexception& e) {
-            return MakeFuture(ResultFromException<TGenericResult>(e));
-        }
+                                             const NYql::TCreateTableStoreSettings& settings,
+                                             bool existingOk) override {
+        Y_UNUSED(cluster);
+        Y_UNUSED(settings);
+        Y_UNUSED(existingOk);
+        return NotImplemented<TGenericResult>();
     }
 
     TFuture<TGenericResult> AlterTableStore(const TString& cluster,
                                             const NYql::TAlterTableStoreSettings& settings) override {
-        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
-
-        try {
-            if (!CheckCluster(cluster)) {
-                return InvalidCluster<TGenericResult>(cluster);
-            }
-
-            std::pair<TString, TString> pathPair;
-            {
-                TString error;
-                if (!GetPathPair(settings.TableStore, pathPair, error, false)) {
-                    return MakeFuture(ResultFromError<TGenericResult>(error));
-                }
-            }
-
-            auto ev = MakeHolder<TRequest>();
-            ev->Record.SetDatabaseName(Database);
-            if (UserToken) {
-                ev->Record.SetUserToken(UserToken->GetSerializedToken());
-            }
-            auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
-            schemeTx.SetWorkingDir(pathPair.first);
-
-            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnStore);
-            NKikimrSchemeOp::TAlterColumnStore* alter = schemeTx.MutableAlterColumnStore();
-            alter->SetName(pathPair.second);
-
-            return SendSchemeRequest(ev.Release());
-        }
-        catch (yexception& e) {
-            return MakeFuture(ResultFromException<TGenericResult>(e));
-        }
+        Y_UNUSED(cluster);
+        Y_UNUSED(settings);
+        return NotImplemented<TGenericResult>();
     }
 
     TFuture<TGenericResult> DropTableStore(const TString& cluster,
-                                           const NYql::TDropTableStoreSettings& settings) override {
-        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
-
-        try {
-            if (!CheckCluster(cluster)) {
-                return InvalidCluster<TGenericResult>(cluster);
-            }
-
-            std::pair<TString, TString> pathPair;
-            {
-                TString error;
-                if (!GetPathPair(settings.TableStore, pathPair, error, false)) {
-                    return MakeFuture(ResultFromError<TGenericResult>(error));
-                }
-            }
-
-            auto ev = MakeHolder<TRequest>();
-            ev->Record.SetDatabaseName(Database);
-            if (UserToken) {
-                ev->Record.SetUserToken(UserToken->GetSerializedToken());
-            }
-            auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
-            schemeTx.SetWorkingDir(pathPair.first);
-
-            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropColumnStore);
-            NKikimrSchemeOp::TDrop* drop = schemeTx.MutableDrop();
-            drop->SetName(pathPair.second);
-            return SendSchemeRequest(ev.Release());
-        }
-        catch (yexception& e) {
-            return MakeFuture(ResultFromException<TGenericResult>(e));
-        }
+                                           const NYql::TDropTableStoreSettings& settings, bool missingOk) override {
+        Y_UNUSED(cluster);
+        Y_UNUSED(settings);
+        Y_UNUSED(missingOk);
+        return NotImplemented<TGenericResult>();
     }
 
     TFuture<TGenericResult> CreateExternalTable(const TString& cluster,
                                                 const NYql::TCreateExternalTableSettings& settings,
-                                                bool createDir, bool existingOk) override {
+                                                bool createDir, bool existingOk, bool replaceIfExists) override {
         using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
         try {
@@ -1214,7 +1055,7 @@ public:
             schemeTx.SetFailedOnAlreadyExists(!existingOk);
 
             NKikimrSchemeOp::TExternalTableDescription& externalTableDesc = *schemeTx.MutableCreateExternalTable();
-            NSchemeHelpers::FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, settings);
+            NSchemeHelpers::FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, replaceIfExists, settings);
             return SendSchemeRequest(ev.Release(), true);
         }
         catch (yexception& e) {
@@ -2332,27 +2173,6 @@ private:
         return result;
     }
 
-    template <typename T>
-    static void FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T& metadata)
-    {
-        Y_ENSURE(metadata.ColumnOrder.size() == metadata.Columns.size());
-        for (const auto& name : metadata.ColumnOrder) {
-            auto columnIt = metadata.Columns.find(name);
-            Y_ENSURE(columnIt != metadata.Columns.end());
-
-            TOlapColumnDescription& columnDesc = *schema.AddColumns();
-            columnDesc.SetName(columnIt->second.Name);
-            columnDesc.SetType(columnIt->second.Type);
-            columnDesc.SetNotNull(columnIt->second.NotNull);
-        }
-
-        for (const auto& keyColumn : metadata.KeyColumnNames) {
-            schema.AddKeyColumnNames(keyColumn);
-        }
-
-        schema.SetEngine(NKikimrSchemeOp::EColumnTableEngine::COLUMN_ENGINE_REPLACING_TIMESERIES);
-    }
-
     static void FillParameters(TQueryData::TPtr params, ::google::protobuf::Map<TBasicString<char>, Ydb::TypedValue>* output) {
         if (!params) {
             return;
@@ -2360,59 +2180,6 @@ private:
 
         auto& paramsMap = params->GetParamsProtobuf();
         output->insert(paramsMap.begin(), paramsMap.end());
-    }
-
-    static bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
-        NKikimrSchemeOp::TColumnTableDescription& tableDesc, Ydb::StatusIds::StatusCode& code, TString& error)
-    {
-        if (metadata->Columns.empty()) {
-            tableDesc.SetSchemaPresetName("default");
-        }
-
-        auto& hashSharding = *tableDesc.MutableSharding()->MutableHashSharding();
-
-        for (const TString& column : metadata->TableSettings.PartitionBy) {
-            if (!metadata->Columns.count(column)) {
-                code = Ydb::StatusIds::BAD_REQUEST;
-                error = TStringBuilder() << "Unknown column '" << column << "' in partition by key";
-                return false;
-            }
-
-            hashSharding.AddColumns(column);
-        }
-
-        if (metadata->TableSettings.PartitionByHashFunction) {
-            if (to_lower(metadata->TableSettings.PartitionByHashFunction.GetRef()) == "cloud_logs") {
-                hashSharding.SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CLOUD_LOGS);
-            } else if (to_lower(metadata->TableSettings.PartitionByHashFunction.GetRef()) == "consistency_hash_64") {
-                hashSharding.SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
-            } else if (to_lower(metadata->TableSettings.PartitionByHashFunction.GetRef()) == "modulo_n") {
-                hashSharding.SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N);
-            } else {
-                code = Ydb::StatusIds::BAD_REQUEST;
-                error = TStringBuilder() << "Unknown hash function '"
-                    << metadata->TableSettings.PartitionByHashFunction.GetRef() << "' to partition by";
-                return false;
-            }
-        } else {
-            hashSharding.SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
-        }
-
-        if (metadata->TableSettings.MinPartitions) {
-            tableDesc.SetColumnShardCount(*metadata->TableSettings.MinPartitions);
-        }
-
-        if (metadata->TableSettings.TtlSettings.Defined() && metadata->TableSettings.TtlSettings.IsSet()) {
-            const auto& inputSettings = metadata->TableSettings.TtlSettings.GetValueSet();
-            auto& resultSettings = *tableDesc.MutableTtlSettings();
-            resultSettings.MutableEnabled()->SetColumnName(inputSettings.ColumnName);
-            resultSettings.MutableEnabled()->SetExpireAfterSeconds(inputSettings.ExpireAfter.Seconds());
-            if (inputSettings.ColumnUnit) {
-                resultSettings.MutableEnabled()->SetColumnUnit(static_cast<NKikimrSchemeOp::TTTLSettings::EUnit>(*inputSettings.ColumnUnit));
-            }
-        }
-
-        return true;
     }
 
 private:

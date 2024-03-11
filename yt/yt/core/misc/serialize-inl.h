@@ -5,10 +5,15 @@
 #endif
 
 #include "collection_helpers.h"
+#include "maybe_inf.h"
+
+#include <yt/yt/core/yson/string.h>
 
 #include <library/cpp/yt/small_containers/compact_vector.h>
 #include <library/cpp/yt/small_containers/compact_flat_map.h>
 #include <library/cpp/yt/small_containers/compact_set.h>
+
+#include <library/cpp/yt/containers/enum_indexed_array.h>
 
 #include <optional>
 #include <variant>
@@ -299,41 +304,6 @@ Y_FORCE_INLINE TLoadContextStream* TStreamLoadContext::GetInput()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline constexpr TEntitySerializationKey::TEntitySerializationKey()
-    : Index(-1)
-{ }
-
-inline constexpr TEntitySerializationKey::TEntitySerializationKey(int index)
-    : Index(index)
-{ }
-
-inline constexpr bool TEntitySerializationKey::operator == (TEntitySerializationKey rhs) const
-{
-    return Index == rhs.Index;
-}
-
-inline constexpr bool TEntitySerializationKey::operator != (TEntitySerializationKey rhs) const
-{
-    return !(*this == rhs);
-}
-
-inline constexpr TEntitySerializationKey::operator bool() const
-{
-    return Index != -1;
-}
-
-inline void TEntitySerializationKey::Save(TEntityStreamSaveContext& context) const
-{
-    NYT::Save(context, Index);
-}
-
-inline void TEntitySerializationKey::Load(TEntityStreamLoadContext& context)
-{
-    NYT::Load(context, Index);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 inline TEntitySerializationKey TEntityStreamSaveContext::GenerateSerializationKey()
 {
     YT_VERIFY(!ParentContext_);
@@ -398,9 +368,10 @@ T* TEntityStreamLoadContext::GetRawEntity(TEntitySerializationKey key) const
         return ParentContext_->GetRawEntity<T>(key);
     }
 
-    YT_ASSERT(key.Index >= 0);
-    YT_ASSERT(key.Index < std::ssize(RawPtrs_));
-    return static_cast<T*>(RawPtrs_[key.Index]);
+    auto index = key.Underlying();
+    YT_ASSERT(index >= 0);
+    YT_ASSERT(index < std::ssize(RawPtrs_));
+    return static_cast<T*>(RawPtrs_[index]);
 }
 
 template <class T>
@@ -1025,15 +996,9 @@ public:
             return Index_ == other.Index_;
         }
 
-        bool operator != (const TIteratorWrapper& other) const
-        {
-            return Index_ != other.Index_;
-        }
-
     private:
         const TIterators* const Iterators_;
         size_t Index_;
-
     };
 
     explicit TCollectionSorter(const T& set)
@@ -1356,17 +1321,17 @@ struct TOptionalListSerializer
 };
 
 template <class TItemSerializer = TDefaultSerializer>
-struct TEnumIndexedVectorSerializer
+struct TEnumIndexedArraySerializer
 {
     template <class E, class T, class C, E Min, E Max>
-    static void Save(C& context, const TEnumIndexedVector<E, T, Min, Max>& vector)
+    static void Save(C& context, const TEnumIndexedArray<E, T, Min, Max>& vector)
     {
         using NYT::Save;
 
         auto keys = TEnumTraits<E>::GetDomainValues();
         size_t count = 0;
         for (auto key : keys) {
-            if (!vector.IsDomainValue(key)) {
+            if (!vector.IsValidIndex(key)) {
                 continue;
             }
             ++count;
@@ -1375,7 +1340,7 @@ struct TEnumIndexedVectorSerializer
         TSizeSerializer::Save(context, count);
 
         for (auto key : keys) {
-            if (!vector.IsDomainValue(key)) {
+            if (!vector.IsValidIndex(key)) {
                 continue;
             }
             Save(context, key);
@@ -1384,7 +1349,7 @@ struct TEnumIndexedVectorSerializer
     }
 
     template <class E, class T, class C, E Min, E Max>
-    static void Load(C& context, TEnumIndexedVector<E, T, Min, Max>& vector)
+    static void Load(C& context, TEnumIndexedArray<E, T, Min, Max>& vector)
     {
         if constexpr (std::is_copy_assignable_v<T>) {
             std::fill(vector.begin(), vector.end(), T());
@@ -1403,7 +1368,7 @@ struct TEnumIndexedVectorSerializer
                 auto key = LoadSuspended<E>(context);
                 SERIALIZATION_DUMP_WRITE(context, "%v =>", key);
                 SERIALIZATION_DUMP_INDENT(context) {
-                    if (!vector.IsDomainValue(key)) {
+                    if (!vector.IsValidIndex(key)) {
                         T dummy;
                         TItemSerializer::Load(context, dummy);
                     } else {
@@ -1967,9 +1932,9 @@ struct TSerializerTraits<THashMultiMap<K, V>, C, void>
 };
 
 template <class E, class T, class C, E Min, E Max>
-struct TSerializerTraits<TEnumIndexedVector<E, T, Min, Max>, C, void>
+struct TSerializerTraits<TEnumIndexedArray<E, T, Min, Max>, C, void>
 {
-    using TSerializer = TEnumIndexedVectorSerializer<>;
+    using TSerializer = TEnumIndexedArraySerializer<>;
 };
 
 template <class F, class S, class C>
@@ -2018,4 +1983,3 @@ struct TSerializerTraits<TMaybeInf<T>, C, void>
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
-

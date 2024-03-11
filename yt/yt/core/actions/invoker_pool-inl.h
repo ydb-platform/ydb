@@ -19,7 +19,7 @@ struct TDummyInvokerHolder
 // TInvokerPoolWrapper with TDummyInvokerHolder is used in tests.
 template <class TInvoker, class TInvokerHolder = TDummyInvokerHolder>
 class TInvokerPoolWrapper
-    : public IGenericInvokerPool<TInvoker>
+    : public TGenericInvokerPool<TInvoker>
 {
 private:
     using TInvokerPtr = TIntrusivePtr<TInvoker>;
@@ -51,9 +51,34 @@ private:
 
 } // namespace NDetail
 
+template <class TInvoker>
+const TIntrusivePtr<TInvoker>& TGenericInvokerPool<TInvoker>::GetInvoker(int index) const
+{
+    return DoGetInvoker(index);
+}
+
+template <class TInvoker>
+template <class E>
+    requires TEnumTraits<E>::IsEnum
+const TIntrusivePtr<TInvoker>& TGenericInvokerPool<TInvoker>::GetInvoker(E index) const
+{
+    return DoGetInvoker(ToUnderlying(index));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class E>
+    requires TEnumTraits<E>::IsEnum
+TDiagnosableInvokerPool::TInvokerStatistics TDiagnosableInvokerPool::GetInvokerStatistics(E index) const
+{
+    return DoGetInvokerStatistics(ToUnderlying(index));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <class TInvokerFunctor, class TInputInvoker, class TOutputInvoker>
-TIntrusivePtr<IGenericInvokerPool<TOutputInvoker>> TransformInvokerPool(
-    TIntrusivePtr<IGenericInvokerPool<TInputInvoker>> inputInvokerPool,
+TIntrusivePtr<TGenericInvokerPool<TOutputInvoker>> TransformInvokerPool(
+    TIntrusivePtr<TGenericInvokerPool<TInputInvoker>> inputInvokerPool,
     TInvokerFunctor&& functor)
 {
     const auto invokerCount = inputInvokerPool->GetSize();
@@ -64,7 +89,7 @@ TIntrusivePtr<IGenericInvokerPool<TOutputInvoker>> TransformInvokerPool(
         invokers.push_back(functor(inputInvokerPool->GetInvoker(invokerIndex)));
     }
 
-    return New<NYT::NDetail::TInvokerPoolWrapper<TOutputInvoker, TIntrusivePtr<IGenericInvokerPool<TInputInvoker>>>>(
+    return New<NYT::NDetail::TInvokerPoolWrapper<TOutputInvoker, TIntrusivePtr<TGenericInvokerPool<TInputInvoker>>>>(
         std::move(invokers),
         std::move(inputInvokerPool));
 }

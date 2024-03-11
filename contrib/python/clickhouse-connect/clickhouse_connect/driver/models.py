@@ -16,8 +16,12 @@ class ColumnDef(NamedTuple):
     ttl_expression: str
 
     @property
+    def type_name(self):
+        return self.type.replace('\n', '').strip()
+
+    @property
     def ch_type(self):
-        return get_from_name(self.type)
+        return get_from_name(self.type_name)
 
 
 class SettingDef(NamedTuple):

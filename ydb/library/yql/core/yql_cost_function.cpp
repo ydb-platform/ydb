@@ -1,5 +1,7 @@
 #include "yql_cost_function.h"
 
+#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
+
 using namespace NYql;
 
 namespace {
@@ -16,6 +18,7 @@ bool IsPKJoin(const TOptimizerStatistics& stats, const TVector<TString>& joinKey
     }
     return true;
 }
+
 }
 
 bool NDq::operator < (const NDq::TJoinColumn& c1, const NDq::TJoinColumn& c2) {
@@ -36,16 +39,19 @@ bool NDq::operator < (const NDq::TJoinColumn& c1, const NDq::TJoinColumn& c2) {
 */
 
 TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, 
-    const TVector<TString>& leftJoinKeys, const TVector<TString>& rightJoinKeys, EJoinImplType joinImpl) {
-    Y_UNUSED(joinImpl);
+    const TVector<TString>& leftJoinKeys, const TVector<TString>& rightJoinKeys, EJoinAlgoType joinAlgo, const IProviderContext& ctx) {
 
     double newCard;
     EStatisticsType outputType;
-    TVector<TString> joinedTableKeys;
+    bool leftKeyColumns = false;
+    bool rightKeyColumns = false;
+    double selectivity = 1.0;
+
 
     if (IsPKJoin(rightStats,rightJoinKeys)) {
-        newCard = leftStats.Nrows;
-        joinedTableKeys = leftStats.KeyColumns;
+        newCard = leftStats.Nrows * rightStats.Selectivity;
+        selectivity = leftStats.Selectivity * rightStats.Selectivity;
+        leftKeyColumns = true;
         if (leftStats.Type == EStatisticsType::BaseTable){
             outputType = EStatisticsType::FilteredFactTable;
         } else {
@@ -54,7 +60,10 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
     }
     else if (IsPKJoin(leftStats,leftJoinKeys)) {
         newCard = rightStats.Nrows;
-        joinedTableKeys = rightStats.KeyColumns;
+        newCard = rightStats.Nrows * leftStats.Selectivity;
+        selectivity = leftStats.Selectivity * rightStats.Selectivity;
+
+        rightKeyColumns = true;
         if (rightStats.Type == EStatisticsType::BaseTable){
             outputType = EStatisticsType::FilteredFactTable;
         } else {
@@ -68,15 +77,19 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
 
     int newNCols = leftStats.Ncols + rightStats.Ncols;
 
-    double cost = leftStats.Nrows + 2.0 * rightStats.Nrows 
+    double cost = ctx.ComputeJoinCost(leftStats, rightStats, joinAlgo)
         + newCard 
         + leftStats.Cost + rightStats.Cost;
 
-    return TOptimizerStatistics(outputType, newCard, newNCols, cost, joinedTableKeys);
+    auto result =  TOptimizerStatistics(outputType, newCard, newNCols, cost, 
+        leftKeyColumns ? leftStats.KeyColumns : ( rightKeyColumns ? rightStats.KeyColumns : TOptimizerStatistics::EmptyColumns));
+    result.Selectivity = selectivity;
+    return result;
 }
 
+
 TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, 
-    const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, EJoinImplType joinImpl) {
+    const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, EJoinAlgoType joinAlgo, const IProviderContext& ctx) {
 
     TVector<TString> leftJoinKeys;
     TVector<TString> rightJoinKeys;
@@ -86,5 +99,6 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
         rightJoinKeys.emplace_back(c.second.AttributeName);
     }
 
-    return ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinImpl);
+    return ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, ctx);
 }
+

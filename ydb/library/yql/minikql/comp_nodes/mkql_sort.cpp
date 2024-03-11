@@ -100,7 +100,7 @@ public:
 
     TGatherIterator(const TGatherIterator&) = default;
     TGatherIterator& operator=(const TGatherIterator&) = default;
-    TGatherIteratorRef operator*() {
+    TGatherIteratorRef operator*() const& {
         return TGatherIteratorRef(*First, *Second);
     }
 
@@ -142,18 +142,18 @@ public:
         return *this;
     }
 
-    ptrdiff_t operator - (TGatherIterator& rhs) {
+    ptrdiff_t operator - (TGatherIterator& rhs) const& {
         return First - rhs.First;
     }
 
-    TGatherIterator operator + (ptrdiff_t n) {
+    TGatherIterator operator + (ptrdiff_t n) const& {
         TGatherIterator tmp(*this);
         tmp.First += n;
         tmp.Second += n;
         return tmp;
     }
 
-    TGatherIterator operator - (ptrdiff_t n) {
+    TGatherIterator operator - (ptrdiff_t n) const& {
         TGatherIterator tmp(*this);
         tmp.First -= n;
         tmp.Second -= n;
@@ -168,19 +168,19 @@ public:
         return First != rhs.First;
     }
 
-    bool operator<(TGatherIterator& rhs) {
+    bool operator<(TGatherIterator& rhs) const& {
         return First < rhs.First;
     }
 
-    bool operator<=(TGatherIterator& rhs) {
+    bool operator<=(TGatherIterator& rhs) const& {
         return First <= rhs.First;
     }
 
-    bool operator>(TGatherIterator& rhs) {
+    bool operator>(TGatherIterator& rhs) const& {
         return First > rhs.First;
     }
 
-    bool operator>=(TGatherIterator& rhs) {
+    bool operator>=(TGatherIterator& rhs) const& {
         return First >= rhs.First;
     }
 

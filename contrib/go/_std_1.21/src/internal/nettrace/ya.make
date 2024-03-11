@@ -1,7 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    nettrace.go
-)
-
+IF (TRUE)
+    SRCS(
+		nettrace.go
+    )
+ENDIF()
 END()

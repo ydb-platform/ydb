@@ -61,7 +61,7 @@ namespace NKikimr {
                 reqID = Register(
                     CreateBlobStorageGroupGetRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
                         ev->Get(), ev->Cookie, std::move(ev->TraceId), TNodeLayoutInfoPtr(NodeLayoutInfo),
-                        kind, TActivationContext::Now(), StoragePoolCounters, false));
+                        kind, TActivationContext::Now(), StoragePoolCounters));
                 ActiveRequests.insert(reqID);
             } else {
                 Mon->EventMultiGet->Inc();

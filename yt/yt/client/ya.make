@@ -21,7 +21,7 @@ SRCS(
     api/query_tracker_client.cpp
     api/helpers.cpp
     api/internal_client.cpp
-    api/operation_archive_schema.cpp
+    api/operations_archive_schema.cpp
     api/public.cpp
     api/rowset.cpp
     api/skynet.cpp

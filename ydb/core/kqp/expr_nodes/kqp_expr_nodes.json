@@ -104,7 +104,9 @@
             "Base": "TKqlReadTableRangesBase",
             "Match": {"Type": "Callable", "Name": "KqlReadTableRanges"},
             "Children": [
-                {"Index": 5, "Name": "PrefixPointsExpr", "Type": "TExprBase", "Optional": true}
+                {"Index": 5, "Name": "PrefixPointsExpr", "Type": "TExprBase", "Optional": true},
+                {"Index": 6, "Name": "PredicateExpr", "Type": "TCoLambda", "Optional": true},
+                {"Index": 7, "Name": "PredicateUsedColumns", "Type": "TCoAtomList", "Optional": true}
             ]
         },
         {
@@ -131,7 +133,9 @@
             "Match": {"Type": "Callable", "Name": "TKqlReadTableIndexRanges"},
             "Children": [
                 {"Index": 5, "Name": "Index", "Type": "TCoAtom"},
-                {"Index": 6, "Name": "PrefixPointsExpr", "Type": "TExprBase", "Optional": true}
+                {"Index": 6, "Name": "PrefixPointsExpr", "Type": "TExprBase", "Optional": true},
+                {"Index": 7, "Name": "PredicateExpr", "Type": "TCoLambda", "Optional": true},
+                {"Index": 8, "Name": "PredicateUsedColumns", "Type": "TCoAtomList", "Optional": true}
             ]
         },
         {
@@ -509,12 +513,18 @@
         {
             "Name": "TKqlDeleteRows",
             "Base": "TKqlDeleteRowsBase",
-            "Match": {"Type": "Callable", "Name": "KqlDeleteRows"}
+            "Match": {"Type": "Callable", "Name": "KqlDeleteRows"},
+            "Children": [
+                {"Index": 2, "Name": "ReturningColumns", "Type": "TCoAtomList"}
+            ]
         },
         {
             "Name": "TKqlDeleteRowsIndex",
             "Base": "TKqlDeleteRowsBase",
-            "Match": {"Type": "Callable", "Name": "KqlDeleteRowsIndex"}
+            "Match": {"Type": "Callable", "Name": "KqlDeleteRowsIndex"},
+            "Children": [
+                {"Index": 2, "Name": "ReturningColumns", "Type": "TCoAtomList"}
+            ]
         },
         {
             "Name": "TKqpDeleteRows",

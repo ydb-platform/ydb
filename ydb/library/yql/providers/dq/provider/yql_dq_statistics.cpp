@@ -14,8 +14,8 @@ using namespace NNodes;
 
 class TDqsStatisticsTransformer : public NDq::TDqStatisticsTransformerBase {
 public:
-    TDqsStatisticsTransformer(const TDqStatePtr& state)
-        : NDq::TDqStatisticsTransformerBase(state->TypeCtx)
+    TDqsStatisticsTransformer(const TDqStatePtr& state, const IProviderContext& ctx)
+        : NDq::TDqStatisticsTransformerBase(state->TypeCtx, ctx)
         , State(state)
     { }
 
@@ -55,8 +55,8 @@ private:
     TDqStatePtr State;
 };
 
-THolder<IGraphTransformer> CreateDqsStatisticsTransformer(TDqStatePtr state) {
-    return MakeHolder<TDqsStatisticsTransformer>(state);
+THolder<IGraphTransformer> CreateDqsStatisticsTransformer(TDqStatePtr state, const IProviderContext& ctx) {
+    return MakeHolder<TDqsStatisticsTransformer>(state, ctx);
 }
 
 } // namespace NYql

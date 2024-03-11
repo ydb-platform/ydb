@@ -484,8 +484,8 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
                 << "(" << *leftKeyType << ") and " << rightKeys[i]->Content() << "(" << *rightKeyType << ")";
             break;
         }
-        castKeyLeft = (!IsSameAnnotation(*leftDryType, *commonType) || optKeyLeft);
-        castKeyRight = (!IsSameAnnotation(*rightDryType, *commonType) || optKeyRight);
+        castKeyLeft = castKeyLeft || (!IsSameAnnotation(*leftDryType, *commonType) || optKeyLeft);
+        castKeyRight = castKeyRight || (!IsSameAnnotation(*rightDryType, *commonType) || optKeyRight);
         keyTypeItems.emplace_back(commonType);
     }
 
@@ -511,18 +511,18 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
         rightKeySelector = BuildDictKeySelector(ctx, joinDict.Pos(), rightKeys, keyTypeItems, castKeyRight);
     }
 
-    auto streamToDict = [&ctx](const TExprBase& input, const TExprNode::TPtr& keySelector) {
+    const auto streamToDict = [&ctx](const TExprBase& input, const TExprNode::TPtr& keySelector) {
         return Build<TCoSqueezeToDict>(ctx, input.Pos())
-            .Stream(input)
+            .Stream(TCoIterator::Match(input.Raw()) ? TExprBase(ctx.RenameNode(input.Ref(), TCoToFlow::CallableName())) : input)
             .KeySelector(keySelector)
             .PayloadSelector()
                 .Args({"item"})
                 .Body("item")
                 .Build()
             .Settings()
-                .Add<TCoAtom>().Build("Hashed")
-                .Add<TCoAtom>().Build("Many")
-                .Add<TCoAtom>().Build("Compact")
+                .Add<TCoAtom>().Build("Hashed", TNodeFlags::Default)
+                .Add<TCoAtom>().Build("Many", TNodeFlags::Default)
+                .Add<TCoAtom>().Build("Compact", TNodeFlags::Default)
                 .Build()
             .Done();
     };
@@ -554,7 +554,9 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
     auto unpackData = UnpackJoinedData(leftRowType, rightRowType, leftTableLabel, rightTableLabel, join.Pos(), ctx);
 
     return Build<TCoMap>(ctx, joinDict.Pos())
-        .Input(join)
+        .Input<TCoToFlow>()
+            .Input(join)
+            .Build()
         .Lambda(unpackData)
         .Done();
 }
@@ -579,6 +581,8 @@ NNodes::TExprBase DqPeepholeRewritePureJoin(const NNodes::TExprBase& node, TExpr
                 .RightLabel(join.RightLabel())
                 .JoinType(join.JoinType())
                 .JoinKeys(join.JoinKeys())
+                .LeftJoinKeyNames(join.LeftJoinKeyNames())
+                .RightJoinKeyNames(join.RightJoinKeyNames())
                 .Build()
             .Done();
     } else {
@@ -594,6 +598,8 @@ NNodes::TExprBase DqPeepholeRewritePureJoin(const NNodes::TExprBase& node, TExpr
                 .RightLabel(join.RightLabel())
                 .JoinType(join.JoinType())
                 .JoinKeys(join.JoinKeys())
+                .LeftJoinKeyNames(join.LeftJoinKeyNames())
+                .RightJoinKeyNames(join.RightJoinKeyNames())
                 .Build()
             .Done();
     }

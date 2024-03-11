@@ -102,6 +102,7 @@ struct TYtState : public TThrRefBase {
     THolder<IDqIntegration> DqIntegration_;
     ui32 NextEpochId = 1;
     bool OnlyNativeExecution = false;
+    bool PassiveExecution = false;
     TDuration TimeSpentInHybrid;
     NMonotonic::TMonotonic HybridStartTime;
     std::unordered_set<ui32> HybridInFlightOprations;
@@ -111,6 +112,8 @@ private:
 };
 
 
+class TYtGatewayConfig;
+std::pair<TIntrusivePtr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway::TPtr gateway, const TString& userName, const TString& sessionId, const TYtGatewayConfig* ytGatewayConfig, TIntrusivePtr<TTypeAnnotationContext> typeCtx);
 TIntrusivePtr<IDataProvider> CreateYtDataSource(TYtState::TPtr state);
 TIntrusivePtr<IDataProvider> CreateYtDataSink(TYtState::TPtr state);
 

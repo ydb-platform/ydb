@@ -22,9 +22,9 @@ public:
         const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
         const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
         : ReplyActor_(request->Sender)
-        , ExecutionId_(request->Get()->ExecutionId)
-        , Database_(request->Get()->Database)
-        , FinalizationStatus_(request->Get()->FinalizationStatus)
+        , ExecutionId_(request->Get()->Description.ExecutionId)
+        , Database_(request->Get()->Description.Database)
+        , FinalizationStatus_(request->Get()->Description.FinalizationStatus)
         , Request_(std::move(request))
         , FinalizationTimeout_(TDuration::Seconds(finalizeScriptServiceConfig.GetScriptFinalizationTimeoutSeconds()))
         , MaximalSecretsSnapshotWaitTime_(2 * TDuration::Seconds(metadataProviderConfig.GetRefreshPeriodSeconds()))
@@ -32,16 +32,20 @@ public:
     {}
 
     void Bootstrap() {
-        Register(CreateSaveScriptFinalStatusActor(std::move(Request_)));
+        Register(CreateSaveScriptFinalStatusActor(SelfId(), std::move(Request_)));
         Become(&TScriptFinalizerActor::FetchState);
     }
 
     STRICT_STFUNC(FetchState,
         hFunc(TEvSaveScriptFinalStatusResponse, Handle);
-        hFunc(TEvScriptExecutionFinished, Handle);
     )
 
     void Handle(TEvSaveScriptFinalStatusResponse::TPtr& ev) {
+        if (!ev->Get()->ApplicateScriptExternalEffectRequired || ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            Reply(ev->Get()->OperationAlreadyFinalized, ev->Get()->Status, std::move(ev->Get()->Issues));
+            return;
+        }
+
         Schedule(FinalizationTimeout_, new TEvents::TEvWakeup());
         Become(&TScriptFinalizerActor::PrepareState);
 
@@ -168,7 +172,7 @@ private:
     )
 
     void FinishScriptFinalization(std::optional<Ydb::StatusIds::StatusCode> status, NYql::TIssues issues) {
-        Register(CreateScriptFinalizationFinisherActor(ExecutionId_, Database_, status, std::move(issues)));
+        Register(CreateScriptFinalizationFinisherActor(SelfId(), ExecutionId_, Database_, status, std::move(issues)));
         Become(&TScriptFinalizerActor::FinishState);
     }
 
@@ -181,7 +185,11 @@ private:
     }
 
     void Handle(TEvScriptExecutionFinished::TPtr& ev) {
-        Send(ReplyActor_, ev->Release());
+        Reply(ev->Get()->OperationAlreadyFinalized, ev->Get()->Status, std::move(ev->Get()->Issues));
+    }
+
+    void Reply(bool operationAlreadyFinalized, Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) {
+        Send(ReplyActor_, new TEvScriptExecutionFinished(operationAlreadyFinalized, status, std::move(issues)));
         Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), new TEvScriptFinalizeResponse(ExecutionId_));
 
         PassAway();

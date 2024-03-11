@@ -155,7 +155,7 @@ struct TLessOp;
 
 template<typename TLeft, typename TRight>
 struct TLessOp<TLeft, TRight, bool> : public TLess<TLeft, TRight, false> {
-    static constexpr bool DefaultNulls = true;
+    static constexpr auto NullMode = TKernel::ENullMode::Default;
 };
 
 template<typename TLeft, typename TRight, bool Aggr>
@@ -183,7 +183,7 @@ struct TDiffDateLessOp;
 
 template<typename TLeft, typename TRight>
 struct TDiffDateLessOp<TLeft, TRight, NUdf::TDataType<bool>> : public TDiffDateLess<TLeft, TRight, false> {
-    static constexpr bool DefaultNulls = true;
+    static constexpr auto NullMode = TKernel::ENullMode::Default;
 };
 
 template<typename TLeft, typename TRight, bool Aggr>

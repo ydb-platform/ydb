@@ -27,6 +27,14 @@
 #include <ydb/library/login/protos/login.pb.h>
 
 #include <ydb/public/api/protos/ydb_import.pb.h>
+#include <ydb/core/protos/blockstore_config.pb.h>
+#include <ydb/core/protos/filestore_config.pb.h>
+#include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/public/api/protos/ydb_coordination.pb.h>
+
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <google/protobuf/util/message_differencer.h>
@@ -321,6 +329,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         ui64 DeleteVersion;
         ETableColumnDefaultKind DefaultKind = ETableColumnDefaultKind::None;
         TString DefaultValue;
+        bool IsBuildInProgress = false;
 
         TColumn(const TString& name, ui32 id, NScheme::TTypeInfo type, const TString& typeMod, bool notNull)
             : NTable::TScheme::TColumn(name, id, type, typeMod, notNull)
@@ -403,6 +412,8 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     THashMap<ui32, TColumn> Columns;
     TVector<ui32> KeyColumnIds;
     bool IsBackup = false;
+    bool IsTemporary = false;
+    TActorId OwnerActorId;
 
     TAlterTableInfo::TPtr AlterData;
 
@@ -2194,7 +2205,7 @@ private:
     TPathId ResourcesDomainId;
     TTabletId SharedHive = InvalidTabletId;
     TMaybeServerlessComputeResourcesMode ServerlessComputeResourcesMode;
-    
+
     NLoginProto::TSecurityState SecurityState;
     ui64 SecurityStateVersion = 0;
 

@@ -1,3 +1,5 @@
+#include "yql_dq_exectransformer.h"
+
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasource.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_state.h>
 
@@ -122,6 +124,11 @@ public:
             ? CreateDeterministicRandomProvider(1)
             : State->RandomProvider;
 
+        TScopedAlloc alloc(
+            __LOCATION__, 
+            NKikimr::TAlignedPagePoolCounters(), 
+            State->FunctionRegistry->SupportsSizedAllocators(),
+            false);
         NDq::TDqTaskRunnerContext executionContext;
         executionContext.FuncRegistry = State->FunctionRegistry;
 
@@ -138,7 +145,7 @@ public:
         settings.OptLLVM = "OFF"; // Don't use LLVM for local execution
         settings.SecureParams = secureParams;
         settings.StatsMode = NDqProto::DQ_STATS_MODE_BASIC;
-        auto runner = NDq::MakeDqTaskRunner(executionContext, settings, {});
+        auto runner = NDq::MakeDqTaskRunner(alloc, executionContext, settings, {});
         auto runnerSettings = NDq::TDqTaskSettings(&task);
 
         {
@@ -222,6 +229,30 @@ struct TPublicIds {
     using TPtr = std::shared_ptr<TPublicIds>;
 };
 
+NDq::EChannelMode GetConfiguredChannelMode(const TDqStatePtr& state, const TTypeAnnotationContext& typesCtx) {
+    const bool useWideChannels = state->Settings->UseWideChannels.Get().GetOrElse(typesCtx.BlockEngineMode != EBlockEngineMode::Disable);
+    const TMaybe<bool> useChannelBlocks = state->Settings->UseWideBlockChannels.Get();
+    NDq::EChannelMode mode;
+    if (!useWideChannels) {
+        mode = NDq::EChannelMode::CHANNEL_SCALAR;
+    } else if (useChannelBlocks.Defined()) {
+        mode = *useChannelBlocks ? NDq::EChannelMode::CHANNEL_WIDE_FORCE_BLOCK : NDq::EChannelMode::CHANNEL_WIDE_SCALAR;
+    } else {
+        switch (typesCtx.BlockEngineMode) {
+            case NYql::EBlockEngineMode::Auto:
+                mode = NDq::EChannelMode::CHANNEL_WIDE_AUTO_BLOCK;
+                break;
+            case NYql::EBlockEngineMode::Force:
+                mode = NDq::EChannelMode::CHANNEL_WIDE_FORCE_BLOCK;
+                break;
+            case NYql::EBlockEngineMode::Disable:
+                mode = NDq::EChannelMode::CHANNEL_WIDE_SCALAR;
+                break;
+        }
+    }
+    return mode;
+}
+
 struct TDqsPipelineConfigurator : public IPipelineConfigurator {
 public:
     TDqsPipelineConfigurator(const TDqStatePtr& state, const THashMap<TString, TString>& providerParams)
@@ -244,31 +275,20 @@ private:
 
     void AfterTypeAnnotation(TTransformationPipeline* pipeline) const final {
         // First truncate graph by calculated precomputes
-        pipeline->Add(NDqs::CreateDqsReplacePrecomputesTransformer(*pipeline->GetTypeAnnotationContext(), State_->FunctionRegistry), "ReplacePrecomputes");
+        pipeline->Add(NDqs::CreateDqsReplacePrecomputesTransformer(*pipeline->GetTypeAnnotationContext()), "ReplacePrecomputes");
 
         // Then apply provider specific transformers on truncated graph
         std::for_each(UniqIntegrations_.cbegin(), UniqIntegrations_.cend(), [&](const auto dqInt) {
             dqInt->ConfigurePeepholePipeline(true, ProviderParams_, pipeline);
         });
 
-        if (State_->Settings->UseBlockReader.Get().GetOrElse(false)) {
-            pipeline->Add(NDqs::CreateDqsRewritePhyBlockReadOnDqIntegrationTransformer(*pipeline->GetTypeAnnotationContext()), "ReplaceWideReadsWithBlock");
+        TTypeAnnotationContext& typesCtx = *pipeline->GetTypeAnnotationContext();
+        if (State_->Settings->UseBlockReader.Get().GetOrElse(typesCtx.BlockEngineMode != EBlockEngineMode::Disable)) {
+            pipeline->Add(NDqs::CreateDqsRewritePhyBlockReadOnDqIntegrationTransformer(typesCtx), "ReplaceWideReadsWithBlock");
         }
-        bool useWideChannels = State_->Settings->UseWideChannels.Get().GetOrElse(false);
-        bool useChannelBlocks = State_->Settings->UseWideBlockChannels.Get().GetOrElse(false);
-        NDq::EChannelMode mode;
-        if (!useWideChannels) {
-            mode = NDq::EChannelMode::CHANNEL_SCALAR;
-        } else if (!useChannelBlocks) {
-            mode = NDq::EChannelMode::CHANNEL_WIDE;
-        } else {
-            mode = NDq::EChannelMode::CHANNEL_WIDE_BLOCK;
-        }
+        NDq::EChannelMode mode = GetConfiguredChannelMode(State_, typesCtx);
         pipeline->Add(
-            NDq::CreateDqBuildPhyStagesTransformer(
-                !State_->Settings->SplitStageOnDqReplicate.Get().GetOrElse(true),
-                *pipeline->GetTypeAnnotationContext(), mode
-            ),
+            NDq::CreateDqBuildPhyStagesTransformer(!State_->Settings->SplitStageOnDqReplicate.Get().GetOrElse(true), typesCtx, mode),
             "BuildPhy");
         pipeline->Add(NDqs::CreateDqsRewritePhyCallablesTransformer(*pipeline->GetTypeAnnotationContext()), "RewritePhyCallables");
     }
@@ -285,7 +305,7 @@ private:
     std::unordered_set<IDqIntegration*> UniqIntegrations_;
 };
 
-TExprNode::TPtr DqMarkBlockStage(const TDqPhyStage& stage, TExprContext& ctx) {
+TExprNode::TPtr DqMarkBlockStage(const TDqStatePtr& state, const TPublicIds::TPtr& publicIds, const TDqPhyStage& stage, TExprContext& ctx) {
     using NDq::TDqStageSettings;
     TDqStageSettings settings = NDq::TDqStageSettings::Parse(stage);
     if (settings.BlockStatus.Defined()) {
@@ -339,7 +359,20 @@ TExprNode::TPtr DqMarkBlockStage(const TDqPhyStage& stage, TExprContext& ctx) {
         return true;
     });
 
-    YQL_CLOG(INFO, CoreDq) << "Setting block status for stage #" << settings.LogicalId << " = " << ToString(blockStatus);
+    auto publicId = publicIds->Stage2publicId.find(settings.LogicalId);
+    TString publicIdMsg;
+    if (publicId != publicIds->Stage2publicId.end()) {
+        publicIdMsg = TStringBuilder() << " (public id #" << publicId->second << ")";
+        auto p = TOperationProgress(TString(DqProviderName), publicId->second, TOperationProgress::EState::InProgress);
+        switch (blockStatus) {
+        case TDqStageSettings::EBlockStatus::None: p.BlockStatus = TOperationProgress::EOpBlockStatus::None; break;
+        case TDqStageSettings::EBlockStatus::Partial: p.BlockStatus = TOperationProgress::EOpBlockStatus::Partial; break;
+        case TDqStageSettings::EBlockStatus::Full: p.BlockStatus = TOperationProgress::EOpBlockStatus::Full; break;
+        }
+        state->ProgressWriter(p);
+    }
+
+    YQL_CLOG(INFO, CoreDq) << "Setting block status for stage #" << settings.LogicalId << publicIdMsg << " to " << ToString(blockStatus);
     return Build<TDqPhyStage>(ctx, stage.Pos())
         .InitFrom(stage)
         .Settings(settings.SetBlockStatus(blockStatus).BuildNode(ctx, stage.Settings().Pos()))
@@ -348,7 +381,11 @@ TExprNode::TPtr DqMarkBlockStage(const TDqPhyStage& stage, TExprContext& ctx) {
 
 struct TDqsFinalPipelineConfigurator : public IPipelineConfigurator {
 public:
-    TDqsFinalPipelineConfigurator() = default;
+    explicit TDqsFinalPipelineConfigurator(const TDqStatePtr& state, const TPublicIds::TPtr& publicIds)
+        : State_(state)
+        , PublicIds_(publicIds)
+    {
+    }
 private:
     void AfterCreate(TTransformationPipeline*) const final {}
 
@@ -356,30 +393,48 @@ private:
 
     void AfterOptimize(TTransformationPipeline* pipeline) const final {
         auto typeCtx = pipeline->GetTypeAnnotationContext();
+        NDq::EChannelMode mode = GetConfiguredChannelMode(State_, *typeCtx);
+        pipeline->Add(NDq::CreateDqBuildWideBlockChannelsTransformer(*typeCtx, mode),
+            "DqBuildWideBlockChannels",
+            TIssuesIds::DEFAULT_ERROR);
         pipeline->Add(CreateFunctorTransformer(
-            [typeCtx](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+            [typeCtx, state = State_, publicIds = PublicIds_](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 TOptimizeExprSettings optSettings{typeCtx.Get()};
                 optSettings.VisitLambdas = false;
-                return OptimizeExpr(input, output, [](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+                return OptimizeExpr(input, output, [state, publicIds](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
                     TExprBase expr{node};
                     if (auto stage = expr.Maybe<TDqPhyStage>()) {
-                        return DqMarkBlockStage(stage.Cast(), ctx);
+                        return DqMarkBlockStage(state, publicIds, stage.Cast(), ctx);
                     }
                     return node;
                 }, ctx, optSettings);
             }
         ),
-        "DqAfterPeephole",
+        "DqMarkBlockStages",
         TIssuesIds::DEFAULT_ERROR);
+    }
+    const TDqStatePtr State_;
+    const TPublicIds::TPtr PublicIds_;
+};
+
+class TSimpleSkiffConverter : public ISkiffConverter {
+public:
+    TString ConvertNodeToSkiff(const TDqStatePtr /*state*/, const IDataProvider::TFillSettings& /*fillSettings*/, const NYT::TNode& /*rowSpec*/, const NYT::TNode& /*item*/) override {
+        Y_ABORT("not implemented");
+    }
+
+    TYtType ParseYTType(const TExprNode& /*node*/, TExprContext& /*ctx*/, const TMaybe<NYql::TColumnOrder>& /*columns*/) override {
+        Y_ABORT("not implemented");
     }
 };
 
 class TDqExecTransformer: public TExecTransformerBase, TCounters
 {
 public:
-    TDqExecTransformer(const TDqStatePtr& state)
+    TDqExecTransformer(const TDqStatePtr& state, const ISkiffConverterPtr& skiffConverter)
         : State(state)
         , ExecState(MakeIntrusive<TExecState>())
+        , SkiffConverter(skiffConverter)
     {
         AddHandler({TStringBuf("Result")}, RequireNone(), Hndl(&TDqExecTransformer::HandleResult));
         AddHandler({TStringBuf("Pull")}, RequireNone(), Hndl(&TDqExecTransformer::HandlePull));
@@ -844,11 +899,12 @@ private:
                 settings->_AllResultsBytesLimit = 64_MB;
             }
 
+            TPublicIds::TPtr publicIds = std::make_shared<TPublicIds>();
             int level;
             TExprNode::TPtr resInput = WrapLambdaBody(level, result.Input().Ptr(), ctx);
             {
                 auto block = MeasureBlock("PeepHole");
-                if (const auto status = PeepHole(resInput, resInput, ctx, resSettings); status.Level != TStatus::Ok) {
+                if (const auto status = PeepHole(resInput, resInput, ctx, resSettings, publicIds); status.Level != TStatus::Ok) {
                     return SyncStatus(status);
                 }
             }
@@ -863,7 +919,6 @@ private:
             TVector<TString> columns;
             GetResultType(&type, &columns, result.Ref(), result.Input().Ref());
 
-            TPublicIds::TPtr publicIds = std::make_shared<TPublicIds>();
             VisitExpr(result.Ptr(), [&](const TExprNode::TPtr& node) {
                 const TExprBase expr(node);
                 if (expr.Maybe<TResFill>()) {
@@ -968,7 +1023,17 @@ private:
 
             FlushStatisticsToState();
 
-            return WrapFutureCallback<false>(future, [localRun, startTime, type, fillSettings, level, settings, enableFullResultWrite, columns, graphParams, state = State](const IDqGateway::TResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+            TString skiffType;
+            NYT::TNode rowSpec;
+            if (fillSettings.Format == IDataProvider::EResultFormat::Skiff) {
+                auto parsedYtType =  SkiffConverter->ParseYTType(result.Input().Ref(), ctx, columns);
+
+                type = parsedYtType.Type;
+                rowSpec = parsedYtType.RowSpec;
+                skiffType = parsedYtType.SkiffType;
+            }
+
+            return WrapFutureCallback<false>(future, [localRun, startTime, type, rowSpec, skiffType, fillSettings, level, settings, enableFullResultWrite, columns, graphParams, state = State, skiffConverter = SkiffConverter](const IDqGateway::TResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 YQL_CLOG(DEBUG, ProviderDq) << state->SessionId <<  " WrapFutureCallback";
 
                 auto duration = TInstant::Now() - startTime;
@@ -1010,6 +1075,20 @@ private:
                 TStringStream out;
                 NYson::TYsonWriter writer((IOutputStream*)&out);
                 writer.OnBeginMap();
+
+                if (skiffType) {
+                    writer.OnKeyedItem("SkiffType");
+                    writer.OnRaw(skiffType, ::NYson::EYsonType::Node);
+
+                    writer.OnKeyedItem("Columns");
+                    writer.OnBeginList();
+                    for (auto& column: columns) {
+                        writer.OnListItem();
+                        writer.OnStringScalar(column);
+                    }
+                    writer.OnEndList();
+                }
+
                 if (type) {
                     writer.OnKeyedItem("Type");
                     writer.OnRaw(type);
@@ -1028,21 +1107,34 @@ private:
                 if (truncated && item.IsList()) {
                     ui64 bytes = 0;
                     ui64 rows = 0;
-                    writer.OnBeginList();
-                    for (auto& node : item.AsList()) {
-                        raw = NYT::NodeToYsonString(node);
-                        bytes += raw.size();
-                        rows += 1;
-                        writer.OnListItem();
-                        writer.OnRaw(raw);
-                        if (fillSettings.AllResultsBytesLimit && bytes >= *fillSettings.AllResultsBytesLimit) {
+                    switch (fillSettings.Format) {
+                        case IDataProvider::EResultFormat::Yson: {
+                            writer.OnBeginList();
+                            for (auto& node : item.AsList()) {
+                                raw = NYT::NodeToYsonString(node);
+                                bytes += raw.size();
+                                rows += 1;
+                                writer.OnListItem();
+                                writer.OnRaw(raw);
+                                if (fillSettings.AllResultsBytesLimit && bytes >= *fillSettings.AllResultsBytesLimit) {
+                                    break;
+                                }
+                                if (fillSettings.RowsLimitPerWrite && rows >= *fillSettings.RowsLimitPerWrite) {
+                                    break;
+                                }
+                            }
+                            writer.OnEndList();
                             break;
                         }
-                        if (fillSettings.RowsLimitPerWrite && rows >= *fillSettings.RowsLimitPerWrite) {
+                        case IDataProvider::EResultFormat::Skiff: {
+                            writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item));
                             break;
+                        }
+                        default: {
+                            YQL_LOG_CTX_THROW yexception() << "Invalid result type: " << fillSettings.Format;
                         }
                     }
-                    writer.OnEndList();
+
                     if (enableFullResultWrite) {
                         writer.OnKeyedItem("Ref");
                         writer.OnBeginList();
@@ -1055,11 +1147,35 @@ private:
                     writer.OnKeyedItem("Truncated");
                     writer.OnBooleanScalar(true);
                 } else if (truncated) {
-                    writer.OnRaw("[]");
+                    switch (fillSettings.Format) {
+                        case IDataProvider::EResultFormat::Yson: {
+                            writer.OnRaw("[]");
+                            break;
+                        }
+                        case IDataProvider::EResultFormat::Skiff: {
+                            writer.OnStringScalar("");
+                            break;
+                        }
+                        default: {
+                            YQL_LOG_CTX_THROW yexception() << "Invalid result type: " << fillSettings.Format;
+                        }
+                    }
                     writer.OnKeyedItem("Truncated");
                     writer.OnBooleanScalar(true);
                 } else {
-                    writer.OnRaw(raw);
+                    switch (fillSettings.Format) {
+                        case IDataProvider::EResultFormat::Yson: {
+                            writer.OnRaw(raw);
+                            break;
+                        }
+                        case IDataProvider::EResultFormat::Skiff: {
+                            writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item));
+                            break;
+                        }
+                        default: {
+                            YQL_LOG_CTX_THROW yexception() << "Invalid result type: " << fillSettings.Format;
+                        }
+                    }
                 }
 
                 if (rowsCount) {
@@ -1180,7 +1296,7 @@ private:
         optimizedInput->SetTypeAnn(pull.Input().Ref().GetTypeAnn());
         optimizedInput->CopyConstraints(pull.Input().Ref());
 
-        auto status = PeepHole(optimizedInput, optimizedInput, ctx, pullSettings);
+        auto status = PeepHole(optimizedInput, optimizedInput, ctx, pullSettings, publicIds);
         if (status.Level != TStatus::Ok) {
             return SyncStatus(status);
         }
@@ -1347,9 +1463,19 @@ private:
         });
         executionPlanner.Destroy();
 
+        TString skiffType;
+        NYT::TNode rowSpec;
+        if (fillSettings.Format == IDataProvider::EResultFormat::Skiff) {
+            auto parsedYtType = SkiffConverter->ParseYTType(pull.Input().Ref(), ctx, columns);
+
+            type = parsedYtType.Type;
+            rowSpec = parsedYtType.RowSpec;
+            skiffType = parsedYtType.SkiffType;
+        }
+
         int level = 0;
         // TODO: remove copy-paste
-        return WrapFutureCallback<false>(future, [settings, startTime, localRun, type, fillSettings, level, graphParams, columns, enableFullResultWrite, state = State](const IDqGateway::TResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        return WrapFutureCallback<false>(future, [settings, startTime, localRun, type, rowSpec, skiffType, fillSettings, level, graphParams, columns, enableFullResultWrite, state = State, skiffConverter = SkiffConverter](const IDqGateway::TResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             auto duration = TInstant::Now() - startTime;
             YQL_CLOG(INFO, ProviderDq) << "Execution Pull complete, duration: " << duration;
             if (state->Metrics) {
@@ -1380,8 +1506,26 @@ private:
             input->SetState(TExprNode::EState::ExecutionComplete);
 
             TStringStream out;
-            NYson::TYsonWriter writer((IOutputStream*)&out, NCommon::GetYsonFormat(fillSettings), ::NYson::EYsonType::Node, false);
+
+            IDataProvider::TFillSettings ysonFormatSettings;
+            ysonFormatSettings.FormatDetails = fillSettings.FormatDetails;
+            ysonFormatSettings.Format = IDataProvider::EResultFormat::Yson;
+            NYson::TYsonWriter writer((IOutputStream*)&out, NCommon::GetYsonFormat(ysonFormatSettings), ::NYson::EYsonType::Node, false);
             writer.OnBeginMap();
+
+            if (skiffType) {
+                writer.OnKeyedItem("SkiffType");
+                writer.OnRaw(skiffType, ::NYson::EYsonType::Node);
+
+                writer.OnKeyedItem("Columns");
+                writer.OnBeginList();
+                for (auto& column: columns) {
+                    writer.OnListItem();
+                    writer.OnStringScalar(column);
+                }
+                writer.OnEndList();
+            }
+
             if (type) {
                 writer.OnKeyedItem("Type");
                 writer.OnRaw(type);
@@ -1421,21 +1565,35 @@ private:
                 // TODO:
                 ui64 bytes = 0;
                 ui64 rows = 0;
-                writer.OnBeginList();
-                for (auto& node : item.AsList()) {
-                    raw = NYT::NodeToYsonString(node);
-                    bytes += raw.size();
-                    rows += 1;
-                    writer.OnListItem();
-                    writer.OnRaw(raw);
-                    if (fillSettings.AllResultsBytesLimit && bytes >= *fillSettings.AllResultsBytesLimit) {
+                switch (fillSettings.Format) {
+                    case IDataProvider::EResultFormat::Yson: {
+                        writer.OnBeginList();
+
+                        for (auto& node : item.AsList()) {
+                            raw = NYT::NodeToYsonString(node);
+                            bytes += raw.size();
+                            rows += 1;
+                            writer.OnListItem();
+                            writer.OnRaw(raw);
+
+                            if (fillSettings.AllResultsBytesLimit && bytes >= *fillSettings.AllResultsBytesLimit) {
+                                break;
+                            }
+                            if (fillSettings.RowsLimitPerWrite && rows >= *fillSettings.RowsLimitPerWrite) {
+                                break;
+                            }
+                        }
+                        writer.OnEndList();
                         break;
                     }
-                    if (fillSettings.RowsLimitPerWrite && rows >= *fillSettings.RowsLimitPerWrite) {
+                    case IDataProvider::EResultFormat::Skiff: {
+                        writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item));
                         break;
+                    }
+                    default: {
+                        YQL_LOG_CTX_THROW yexception() << "Invalid result type: " << fillSettings.Format;
                     }
                 }
-                writer.OnEndList();
 
                 if (enableFullResultWrite) {
                     writer.OnKeyedItem("Ref");
@@ -1450,7 +1608,19 @@ private:
                 writer.OnKeyedItem("Truncated");
                 writer.OnBooleanScalar(true);
             } else {
-                writer.OnRaw(raw);
+                switch (fillSettings.Format) {
+                    case IDataProvider::EResultFormat::Yson: {
+                        writer.OnRaw(raw);
+                        break;
+                    }
+                    case IDataProvider::EResultFormat::Skiff: {
+                        writer.OnStringScalar(skiffConverter->ConvertNodeToSkiff(state, fillSettings, rowSpec, item));
+                        break;
+                    }
+                    default: {
+                        YQL_LOG_CTX_THROW yexception() << "Invalid result type: " << fillSettings.Format;
+                    }
+                }
             }
 
             if (rowsCount) {
@@ -1658,7 +1828,7 @@ private:
 
             auto optimizedInput = input;
             optimizedInput->SetState(TExprNode::EState::ConstrComplete);
-            auto status = PeepHole(optimizedInput, optimizedInput, ctx, providerParams);
+            auto status = PeepHole(optimizedInput, optimizedInput, ctx, providerParams, publicIds);
             if (status.Level != TStatus::Ok) {
                 return combinedStatus.Combine(status);
             }
@@ -1878,9 +2048,11 @@ private:
         return combinedStatus;
     }
 
-    IGraphTransformer::TStatus PeepHole(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx, const THashMap<TString, TString>& providerParams) const {
+    IGraphTransformer::TStatus PeepHole(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx,
+        const THashMap<TString, TString>& providerParams, const TPublicIds::TPtr& publicIds) const
+    {
         TDqsPipelineConfigurator peepholeConfig(State, providerParams);
-        TDqsFinalPipelineConfigurator finalPeepholeConfg;
+        TDqsFinalPipelineConfigurator finalPeepholeConfg(State, publicIds);
         TPeepholeSettings peepholeSettings;
         peepholeSettings.CommonConfig = &peepholeConfig;
         peepholeSettings.FinalConfig = &finalPeepholeConfg;
@@ -1897,6 +2069,7 @@ private:
 private:
     TDqStatePtr State;
     TExecStatePtr ExecState;
+    ISkiffConverterPtr SkiffConverter;
     mutable THashMap<TString, TFileLinkPtr> FileLinks;
     mutable THashMap<TString, TString> ModulesMapping;
 
@@ -1906,7 +2079,11 @@ private:
 }
 
 IGraphTransformer* CreateDqExecTransformer(const TDqStatePtr& state) {
-    return new TDqExecTransformer(state);
+    return new TDqExecTransformer(state, MakeIntrusive<TSimpleSkiffConverter>());
+}
+
+TExecTransformerFactory CreateDqExecTransformerFactory(const ISkiffConverterPtr& skiffConverter) {
+    return [skiffConverter] (const TDqStatePtr& state) { return new TDqExecTransformer(state, skiffConverter); };
 }
 
 } // namespace NYql

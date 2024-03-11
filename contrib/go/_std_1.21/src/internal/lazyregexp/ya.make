@@ -1,7 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    lazyre.go
-)
-
+IF (TRUE)
+    SRCS(
+		lazyre.go
+    )
+ENDIF()
 END()

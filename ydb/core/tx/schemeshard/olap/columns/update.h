@@ -1,30 +1,35 @@
 #pragma once
-#include <ydb/core/formats/arrow/compression/diff.h>
 #include <ydb/core/formats/arrow/dictionary/diff.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/schemeshard/olap/common/common.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
-#include <ydb/core/formats/arrow/compression/object.h>
 #include <ydb/core/formats/arrow/dictionary/object.h>
+#include <ydb/core/formats/arrow/serializer/abstract.h>
 
 namespace NKikimr::NSchemeShard {
 
 class TOlapColumnDiff {
 private:
     YDB_READONLY_DEF(TString, Name);
-    YDB_READONLY_DEF(NArrow::TCompressionDiff, Compression);
+    YDB_READONLY_DEF(NArrow::NSerialization::TSerializerContainer, Serializer);
     YDB_READONLY_DEF(NArrow::NDictionary::TEncodingDiff, DictionaryEncoding);
+    YDB_READONLY_DEF(std::optional<TString>, StorageId);
 public:
     bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors) {
         Name = columnSchema.GetName();
+        if (!!columnSchema.GetStorageId()) {
+            StorageId = columnSchema.GetStorageId();
+        }
         if (!Name) {
             errors.AddError("empty field name");
             return false;
         }
-        if (!Compression.DeserializeFromProto(columnSchema.GetCompression())) {
-            errors.AddError("cannot parse compression diff from proto");
-            return false;
+        if (columnSchema.HasSerializer()) {
+            if (!Serializer.DeserializeFromProto(columnSchema.GetSerializer())) {
+                errors.AddError("cannot parse serializer diff from proto");
+                return false;
+            }
         }
         if (!DictionaryEncoding.DeserializeFromProto(columnSchema.GetDictionaryEncoding())) {
             errors.AddError("cannot parse dictionary encoding diff from proto");
@@ -40,8 +45,9 @@ private:
     YDB_READONLY_DEF(TString, Name);
     YDB_READONLY_DEF(TString, TypeName);
     YDB_READONLY_DEF(NScheme::TTypeInfo, Type);
+    YDB_READONLY_DEF(TString, StorageId);
     YDB_FLAG_ACCESSOR(NotNull, false);
-    YDB_READONLY_DEF(std::optional<NArrow::TCompression>, Compression);
+    YDB_READONLY_DEF(std::optional<NArrow::NSerialization::TSerializerContainer>, Serializer);
     YDB_READONLY_DEF(std::optional<NArrow::NDictionary::TEncodingSettings>, DictionaryEncoding);
 public:
     TOlapColumnAdd(const std::optional<ui32>& keyOrder)

@@ -27,6 +27,9 @@ TEST(TQueryBuilderTest, Simple)
     b.AddGroupByExpression("x + y * z", "group_expr");
     b.AddGroupByExpression("x - 1");
 
+    b.AddHavingConjunct("group_expr > 42");
+    b.AddHavingConjunct("group_expr < 420");
+
     b.SetLimit(43);
 
     EXPECT_EQ(xIndex, 0);
@@ -37,8 +40,9 @@ TEST(TQueryBuilderTest, Simple)
         "(x), (y) AS y_alias, (z) "
         "FROM [//t] "
         "WHERE (x > y_alias) AND (y = 177 OR y % 2 = 0) "
-        "ORDER BY (z) ASC, (x) DESC, (x + y) DESC, (z - y_alias) "
         "GROUP BY (x + y * z) AS group_expr, (x - 1) "
+        "HAVING (group_expr > 42) AND (group_expr < 420) "
+        "ORDER BY (z) ASC, (x) DESC, (x + y) DESC, (z - y_alias) "
         "LIMIT 43");
 }
 

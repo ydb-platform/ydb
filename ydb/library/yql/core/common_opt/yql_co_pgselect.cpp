@@ -8,6 +8,25 @@
 
 namespace NYql {
 
+TExprNode::TPtr BuildArrayAggTraits(TExprContext& ctx, TPositionHandle pos, const TExprNode::TPtr& typeNode) {
+    return ctx.Builder(pos)
+        .Callable("AggApply")
+            .Atom(0, "pg_array_agg")
+            .Callable(1, "ListItemType")
+                .Add(0, typeNode)
+            .Seal()
+            .Lambda(2)
+                .Param("row")
+                .Callable("SingleMember")
+                    .Callable(0, "RemoveSystemMembers")
+                        .Arg(0, "row")
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 TNodeMap<ui32> GatherSubLinks(const TExprNode::TPtr& root) {
     TNodeMap<ui32> subLinks;
 
@@ -248,6 +267,32 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(TPositionHand
                             .Seal()
                         .Seal()
                         .Build();
+                } else if (linkType == "array") {
+                    auto typeNode = ctx.NewCallable(node->Pos(), "TypeOf", { select });
+                    auto aggTraits = BuildArrayAggTraits(ctx, node->Pos(), typeNode);
+                    auto aggregate = ctx.Builder(node->Pos())
+                        .Callable("Aggregate")
+                            .Add(0, select)
+                            .List(1)
+                            .Seal()
+                            .List(2)
+                                .List(0)
+                                    .Atom(0, "a")
+                                    .Add(1, aggTraits)
+                                .Seal()
+                            .Seal()
+                            .List(3)
+                            .Seal()
+                        .Seal()
+                        .Build();
+
+                    return ctx.Builder(node->Pos())
+                        .Callable("SingleMember")
+                            .Callable(0, "ToOptional")
+                                .Add(0, aggregate)
+                            .Seal()
+                        .Seal()
+                        .Build();
                 } else if (linkType == "any" || linkType == "all") {
                     const bool useIn = testLambda->Tail().IsCallable("PgResolvedOp")
                         && testLambda->Tail().Head().Content() == "="
@@ -347,6 +392,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(TPositionHand
                 TExprNode::TPtr someTraits;
                 TExprNode::TPtr orTraits;
                 TExprNode::TPtr andTraits;
+                TExprNode::TPtr aggArrayTraits = BuildArrayAggTraits(ctx, node->Pos(), selectTypeNode);
                 for (ui32 factoryIndex = 0; factoryIndex < 4; ++factoryIndex)
                 {
                     TStringBuf name;
@@ -474,6 +520,17 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(TPositionHand
                             .Add(1, someTraits)
                         .Seal()
                         .Build());
+                } else if (linkType == "array") {
+                    if (sublinkColumns) {
+                        sublinkColumns->push_back(columnName + "_value");
+                    }
+
+                    aggregateItems.push_back(ctx.Builder(node->Pos())
+                        .List()
+                            .Atom(0, columnName + "_value")
+                            .Add(1, aggArrayTraits)
+                        .Seal()
+                        .Build());
                 } else if (linkType == "any") {
                     if (sublinkColumns) {
                         sublinkColumns->push_back(columnName + "_count");
@@ -576,6 +633,13 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(TPositionHand
                             .Callable(2, "String")
                                 .Atom(0, "More than one row returned by a subquery used as an expression")
                             .Seal()
+                        .Seal()
+                        .Build();
+                } else if (linkType == "array") {
+                    return ctx.Builder(node->Pos())
+                        .Callable("Member")
+                            .Add(0, originalArg)
+                            .Atom(1, columnName + "_value")
                         .Seal()
                         .Build();
                 } else if (linkType == "any") {
@@ -1858,7 +1922,8 @@ TExprNode::TPtr BuildAggregationTraits(TPositionHandle pos, bool onWindow, const
         extractor = ctx.NewLambda(pos, std::move(arguments), std::move(aggFuncArgs));
     }
 
-    if (optCtx.Types->PgEmitAggApply && !onWindow) {
+    const bool blockEngineEnabled = optCtx.Types->BlockEngineMode != EBlockEngineMode::Disable;
+    if (optCtx.Types->PgEmitAggApply.GetOrElse(blockEngineEnabled) && !onWindow) {
         return ctx.Builder(pos)
             .Callable("AggApply")
                 .Atom(0, TString("pg_") + func)
@@ -2197,66 +2262,57 @@ std::tuple<TExprNode::TPtr, TExprNode::TPtr> BuildFrame(TPositionHandle pos, con
 
 TExprNode::TPtr BuildSortTraits(TPositionHandle pos, const TExprNode& sortColumns, const TExprNode::TPtr& list,
     const TAggregationMap* aggId, TExprContext& ctx, TOptimizeContext& optCtx) {
-    if (sortColumns.ChildrenSize() == 1) {
-        auto lambda = sortColumns.Head().ChildPtr(1);
-        if (aggId) {
-            RewriteAggs(lambda, *aggId, ctx, optCtx, false);
-        }
-
-        return ctx.Builder(pos)
-            .Callable("SortTraits")
-                .Callable(0, "TypeOf")
-                    .Add(0, list)
-                .Seal()
-                .Callable(1, "Bool")
-                    .Atom(0, sortColumns.Head().Tail().Content() == "asc" ? "true" : "false")
-                .Seal()
-                .Lambda(2)
-                    .Param("row")
-                    .Apply(lambda)
-                        .With(0, "row")
-                    .Seal()
-                .Seal()
+    return ctx.Builder(pos)
+        .Callable("SortTraits")
+            .Callable(0, "TypeOf")
+                .Add(0, list)
             .Seal()
-            .Build();
-    } else {
-        return ctx.Builder(pos)
-            .Callable("SortTraits")
-                .Callable(0, "TypeOf")
-                    .Add(0, list)
-                .Seal()
-                .List(1)
+            .List(1)
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    for (ui32 i = 0; i < sortColumns.ChildrenSize(); ++i) {
+                        parent.Callable(i, "Bool")
+                            .Atom(0, sortColumns.Child(i)->Child(2)->Content() == "asc" ? "true" : "false")
+                            .Seal();
+                    }
+                    return parent;
+                })
+            .Seal()
+            .Lambda(2)
+                .Param("row")
+                .List()
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                         for (ui32 i = 0; i < sortColumns.ChildrenSize(); ++i) {
-                            parent.Callable(i, "Bool")
-                                .Atom(0, sortColumns.Child(i)->Tail().Content() == "asc" ? "true" : "false")
-                                .Seal();
-                        }
-                        return parent;
-                    })
-                .Seal()
-                .Lambda(2)
-                    .Param("row")
-                    .List()
-                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                            for (ui32 i = 0; i < sortColumns.ChildrenSize(); ++i) {
-                                auto lambda = sortColumns.Child(i)->ChildPtr(1);
-                                if (aggId) {
-                                    RewriteAggs(lambda, *aggId, ctx, optCtx, false);
-                                }
+                            auto lambda = sortColumns.Child(i)->ChildPtr(1);
+                            if (aggId) {
+                                RewriteAggs(lambda, *aggId, ctx, optCtx, false);
+                            }
 
+                            if (sortColumns.Child(i)->ChildPtr(3)->Content() == "last") {
+                                parent.List(i)
+                                    .Callable(0, "Not")
+                                        .Callable(0, "Exists")
+                                            .Apply(0, lambda)
+                                                .With(0, "row")
+                                            .Seal()
+                                        .Seal()
+                                    .Seal()
+                                    .Apply(1, lambda)
+                                        .With(0, "row")
+                                    .Seal()
+                                .Seal();
+                            } else {
                                 parent.Apply(i, lambda)
                                     .With(0, "row")
                                     .Seal();
                             }
+                        }
 
-                            return parent;
-                        })
-                    .Seal()
+                        return parent;
+                    })
                 .Seal()
             .Seal()
-            .Build();
-    }
+        .Seal()
+        .Build();
 }
 
 TExprNode::TPtr BuildWindows(TPositionHandle pos, const TExprNode::TPtr& list, const TExprNode::TPtr& window, const TWindowsCtx& winCtx,
@@ -2538,7 +2594,21 @@ TExprNode::TPtr BuildSortLambda(TPositionHandle pos, const TExprNode::TPtr& sort
     const auto& keys = sort->Tail();
     for (const auto& key : keys.Children()) {
         auto keyLambda = key->ChildPtr(1);
-        rootItems.push_back(ctx.ReplaceNode(keyLambda->TailPtr(), keyLambda->Head().Head(), argNode));
+        auto value = ctx.ReplaceNode(keyLambda->TailPtr(), keyLambda->Head().Head(), argNode);
+        if (key->Child(3)->Content() == "last") {
+            rootItems.push_back(ctx.Builder(pos)
+                .List()
+                    .Callable(0, "Not")
+                        .Callable(0, "Exists")
+                            .Add(0, value)
+                        .Seal()
+                    .Seal()
+                    .Add(1, value)
+                .Seal()
+                .Build());
+        } else {
+            rootItems.push_back(value);
+        }
     }
 
     auto root = ctx.NewList(pos, std::move(rootItems));
@@ -2554,7 +2624,7 @@ TExprNode::TPtr BuildSort(TPositionHandle pos, const TExprNode::TPtr& sort, cons
     for (const auto& key : keys.Children()) {
         dirItems.push_back(ctx.Builder(pos)
             .Callable("Bool")
-                .Atom(0, key->Tail().Content() == "asc" ? "true" : "false")
+                .Atom(0, key->Child(2)->Content() == "asc" ? "true" : "false")
             .Seal()
             .Build());
     }

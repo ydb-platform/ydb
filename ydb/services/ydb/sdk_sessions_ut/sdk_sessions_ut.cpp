@@ -353,19 +353,12 @@ Y_UNIT_TEST_SUITE(YdbSdkSessions) {
         }
         for (auto& r : results) {
             if (!r.empty()) {
-                int ok = 0;
-                int bad = 0;
                 for (auto& asyncStatus : r) {
                     auto res = asyncStatus.GetValue();
-                    if (res.IsSuccess()) {
-                        ok++;
-                    } else {
+                    if (!res.IsSuccess()) {
                         UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SESSION_BUSY);
-                        bad++;
                     }
                 }
-                //UNIT_ASSERT_VALUES_EQUAL(ok, 1);
-                //UNIT_ASSERT_VALUES_EQUAL(bad, nRequests - 1);
             }
         }
         UNIT_ASSERT_VALUES_EQUAL(client.GetActiveSessionCount(), maxActiveSessions);

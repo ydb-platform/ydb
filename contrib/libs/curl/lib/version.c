@@ -54,7 +54,7 @@
 #endif
 
 #ifdef USE_LIBRTMP
-#include <librtmp/rtmp.h>
+#error #include <librtmp/rtmp.h>
 #endif
 
 #ifdef HAVE_LIBZ

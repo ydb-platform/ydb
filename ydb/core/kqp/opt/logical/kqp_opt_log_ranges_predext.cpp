@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
@@ -179,13 +180,13 @@ TMaybeNode<TExprBase> TryBuildTrivialReadTable(TCoFlatMap& flatmap, TKqlReadTabl
 } // namespace
 
 TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
-    TTypeAnnotationContext& typesCtx)
+    TTypeAnnotationContext& typesCtx, const NYql::TParentsMap& parentsMap)
 {
-    if (!node.Maybe<TCoFlatMap>()) {
+    if (!node.Maybe<TCoFlatMapBase>()) {
         return node;
     }
 
-    auto flatmap = node.Cast<TCoFlatMap>();
+    auto flatmap = node.Cast<TCoFlatMapBase>();
 
     if (!IsPredicateFlatMap(flatmap.Lambda().Body().Ref())) {
         return node;
@@ -252,6 +253,8 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
                 kqpCtx.Cluster,
                 mainTableDesc.Metadata->GetIndexMetadata(TString(indexName.Cast())).first->Name)
             : mainTableDesc;
+        YQL_ENSURE(node.Maybe<TCoFlatMap>(), "got OrderedFlatMap with disabled PredicateExtract20");
+        auto flatmap = node.Cast<TCoFlatMap>();
         if (auto expr = TryBuildTrivialReadTable(flatmap, read, *readMatch, tableDesc, ctx, kqpCtx, indexName)) {
             return expr.Cast();
         }
@@ -364,7 +367,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     if (buildResult.ExpectedMaxRanges.Defined()) {
         prompt.SetExpectedMaxRanges(buildResult.ExpectedMaxRanges.GetRef());
     }
-    prompt.SetPointPrefixLen(buildResult.UsedPrefixLen);
+    prompt.SetPointPrefixLen(buildResult.PointPrefixLen);
 
     YQL_CLOG(DEBUG, ProviderKqp) << "Ranges extracted: " << KqpExprToPrettyString(*ranges, ctx);
     YQL_CLOG(DEBUG, ProviderKqp) << "Residual lambda: " << KqpExprToPrettyString(*residualLambda, ctx);
@@ -464,18 +467,37 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
                         .Done();
                 }
             }
-        } else if (buildResult.PointPrefixLen == tableDesc.Metadata->KeyColumnNames.size()) {
-            YQL_ENSURE(prefixPointsExpr);
-            residualLambda = pointsExtractionResult.PrunedLambda;
-            buildLookup(prefixPointsExpr, input);
         }
     }
 
     if (!input) {
         TMaybeNode<TExprBase> prefix;
+        TMaybeNode<TCoLambda> predicateExpr;
+        TMaybeNode<TCoAtomList> usedColumnsList;
         if (kqpCtx.Config->PredicateExtract20) {
             prefix = prefixPointsExpr;
+            if (prefix) {
+                predicateExpr = ctx.DeepCopyLambda(flatmap.Lambda().Ref());
+                TSet<TString> usedColumns;
+                if (!ExtractUsedFields(
+                    flatmap.Lambda().Body().Ptr(),
+                    flatmap.Lambda().Args().Arg(0).Ref(),
+                    usedColumns,
+                    parentsMap,
+                    true))
+                {
+                    prefix = {};
+                    predicateExpr = {};
+                } else {
+                    TVector<TCoAtom> columnAtoms;
+                    for (auto&& column : usedColumns) {
+                        columnAtoms.push_back(Build<TCoAtom>(ctx, read.Pos()).Value(column).Done());
+                    }
+                    usedColumnsList = Build<TCoAtomList>(ctx, read.Pos()).Add(columnAtoms).Done();
+                }
+            }
         }
+
 
         if (indexName) {
             input = Build<TKqlReadTableIndexRanges>(ctx, read.Pos())
@@ -486,6 +508,8 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
                 .ExplainPrompt(prompt.BuildNode(ctx, read.Pos()))
                 .Index(indexName.Cast())
                 .PrefixPointsExpr(prefix)
+                .PredicateExpr(predicateExpr)
+                .PredicateUsedColumns(usedColumnsList)
                 .Done();
         } else {
             input = Build<TKqlReadTableRanges>(ctx, read.Pos())
@@ -495,16 +519,24 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
                 .Settings(read.Settings())
                 .ExplainPrompt(prompt.BuildNode(ctx, read.Pos()))
                 .PrefixPointsExpr(prefix)
+                .PredicateExpr(predicateExpr)
+                .PredicateUsedColumns(usedColumnsList)
                 .Done();
         }
     }
 
     *input = readMatch->BuildProcessNodes(*input, ctx);
-
-    return Build<TCoFlatMap>(ctx, node.Pos())
-        .Input(*input)
-        .Lambda(residualLambda)
-        .Done();
+    if (node.Maybe<TCoFlatMap>()) {
+        return Build<TCoFlatMap>(ctx, node.Pos())
+            .Input(*input)
+            .Lambda(residualLambda)
+            .Done();
+    } else {
+        return Build<TCoOrderedFlatMap>(ctx, node.Pos())
+            .Input(*input)
+            .Lambda(residualLambda)
+            .Done();    
+    }
 }
 
 } // namespace NKikimr::NKqp::NOpt

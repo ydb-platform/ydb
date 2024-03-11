@@ -37,6 +37,7 @@ message TIssuesIds {
         CORE_LEGACY_RANK_FOR_NULLABLE_KEYS = 1109;
         CORE_LEGACY_REGEX_ENGINE = 1110;
         CORE_ALIAS_SHADOWS_COLUMN = 1111;
+        CORE_LINEAGE_INTERNAL_ERROR = 1112;
 
 // core errors
         CORE_GC_NODES_LIMIT_EXCEEDED = 1500;
@@ -141,6 +142,7 @@ message TIssuesIds {
         YQL_OFFSET_WITHOUT_SORT = 4537;
         YQL_DEPRECATED_BINDINGS = 4538;
         YQL_HINT_INVALID_PARAMETERS = 4539;
+        YQL_UNTYPED_STRING_LITERALS = 4540;
 
 // yql parser errors
         YQL_NOT_ALLOWED_IN_DISCOVERY = 4600;
@@ -183,6 +185,7 @@ message TIssuesIds {
 
 // pg
         PG_NO_LOCKING_SUPPORT = 7000;
+        PG_COMPAT = 7001;
 
 // range [200000, 399999) reserved for KiKiMR issue codes, do not use!
 

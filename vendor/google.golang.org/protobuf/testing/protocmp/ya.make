@@ -8,12 +8,4 @@ SRCS(
     xform.go
 )
 
-GO_TEST_SRCS(
-    reflect_test.go
-    util_test.go
-    xform_test.go
-)
-
 END()
-
-RECURSE(gotest)

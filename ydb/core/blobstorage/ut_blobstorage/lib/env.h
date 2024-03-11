@@ -13,7 +13,7 @@ struct TEnvironmentSetup {
     static constexpr ui32 DrivesPerNode = 5;
     const TString DomainName = "Root";
     const ui32 DomainId = 1;
-    const ui64 TabletId = MakeBSControllerID(DomainId);
+    const ui64 TabletId = MakeBSControllerID();
     const ui32 GroupId = 0;
     const TString StoragePoolName = "test";
     const ui32 NumGroups = 1;
@@ -38,6 +38,9 @@ struct TEnvironmentSetup {
         const bool SetupHive = false;
         const bool SuppressCompatibilityCheck = false;
         const TFeatureFlags FeatureFlags;
+        const NPDisk::EDeviceType DiskType = NPDisk::EDeviceType::DEVICE_TYPE_NVME;
+        const ui32 BurstThresholdNs = 0;
+        const float DiskTimeAvailableScale = 1;
     };
 
     const TSettings Settings;
@@ -55,7 +58,8 @@ struct TEnvironmentSetup {
             const auto key = std::make_pair(nodeId, pdiskId);
             TIntrusivePtr<TPDiskMockState>& state = Env.PDiskMockStates[key];
             if (!state) {
-                state.Reset(new TPDiskMockState(nodeId, pdiskId, cfg->PDiskGuid, ui64(10) << 40, cfg->ChunkSize));
+                state.Reset(new TPDiskMockState(nodeId, pdiskId, cfg->PDiskGuid, ui64(10) << 40, cfg->ChunkSize,
+                        Env.Settings.DiskType));
             }
             const TActorId& actorId = ctx.Register(CreatePDiskMockActor(state), TMailboxType::HTSwap, poolId);
             const TActorId& serviceId = MakeBlobStoragePDiskID(nodeId, pdiskId);
@@ -126,22 +130,27 @@ struct TEnvironmentSetup {
             Settings.Erasure.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc ? 3 : 1;
     }
 
+    std::unique_ptr<TTestActorSystem> MakeRuntime() {
+        TFeatureFlags featureFlags;
+        featureFlags.SetSuppressCompatibilityCheck(Settings.SuppressCompatibilityCheck);
+
+        auto domainsInfo = MakeIntrusive<TDomainsInfo>();
+        auto domain = TDomainsInfo::TDomain::ConstructEmptyDomain(DomainName, DomainId);
+        domainsInfo->AddDomain(domain.Get());
+        if (Settings.SetupHive) {
+            domainsInfo->AddHive(MakeDefaultHiveID());
+        }
+
+        return std::make_unique<TTestActorSystem>(Settings.NodeCount, NLog::PRI_ERROR, domainsInfo, featureFlags);
+    }
+
     void Initialize() {
-        Runtime = std::make_unique<TTestActorSystem>(Settings.NodeCount, NLog::PRI_ERROR);
+        Runtime = MakeRuntime();
         if (Settings.PrepareRuntime) {
             Settings.PrepareRuntime(*Runtime);
         }
         SetupLogging();
         Runtime->Start();
-        auto *appData = Runtime->GetAppData();
-
-        appData->FeatureFlags.SetSuppressCompatibilityCheck(Settings.SuppressCompatibilityCheck);
-
-        auto domain = TDomainsInfo::TDomain::ConstructEmptyDomain(DomainName, DomainId);
-        appData->DomainsInfo->AddDomain(domain.Get());
-        if (Settings.SetupHive) {
-            appData->DomainsInfo->AddHive(domain->DefaultHiveUid, MakeDefaultHiveID(domain->DefaultStateStorageGroup));
-        }
 
         if (Settings.LocationGenerator) {
             Runtime->SetupTabletRuntime(Settings.LocationGenerator, Settings.ControllerNodeId);
@@ -316,6 +325,16 @@ struct TEnvironmentSetup {
                     config->CacheAccessor = std::make_unique<TAccessor>(Cache[nodeId]);
                 }
                 config->FeatureFlags = Settings.FeatureFlags;
+
+                {
+                    auto* type = config->BlobStorageConfig.MutableCostMetricsSettings()->AddVDiskTypes();
+                    type->SetPDiskType(NKikimrBlobStorage::EPDiskType::ROT);
+                    if (Settings.BurstThresholdNs) {
+                        type->SetBurstThresholdNs(Settings.BurstThresholdNs);
+                    }
+                    type->SetDiskTimeAvailableScale(Settings.DiskTimeAvailableScale);
+                }
+
                 warden.reset(CreateBSNodeWarden(config));
             }
 
@@ -332,12 +351,10 @@ struct TEnvironmentSetup {
             ui32 NumChannels = 3;
         };
         std::vector<TTabletInfo> tablets{
-            {MakeBSControllerID(DomainId), TTabletTypes::BSController, &CreateFlatBsController},
+            {MakeBSControllerID(), TTabletTypes::BSController, &CreateFlatBsController},
         };
 
-        auto *appData = Runtime->GetAppData();
-
-        for (const auto& [uid, tabletId] : appData->DomainsInfo->HivesByHiveUid) {
+        if (const ui64 tabletId = Runtime->GetDomainsInfo()->GetHive(); tabletId != TDomainsInfo::BadTabletId) {
             tablets.push_back(TTabletInfo{tabletId, TTabletTypes::Hive, &CreateDefaultHive});
         }
 
@@ -353,8 +370,8 @@ struct TEnvironmentSetup {
         auto localConfig = MakeIntrusive<TLocalConfig>();
 
         localConfig->TabletClassInfo[TTabletTypes::BlobDepot] = TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
-            &NBlobDepot::CreateBlobDepot, TMailboxType::ReadAsFilled, appData->SystemPoolId, TMailboxType::ReadAsFilled,
-            appData->SystemPoolId));
+            &NBlobDepot::CreateBlobDepot, TMailboxType::ReadAsFilled, Runtime->SYSTEM_POOL_ID, TMailboxType::ReadAsFilled,
+            Runtime->SYSTEM_POOL_ID));
 
         auto tenantPoolConfig = MakeIntrusive<TTenantPoolConfig>(localConfig);
         tenantPoolConfig->AddStaticSlot(DomainName);

@@ -33,6 +33,7 @@ namespace NYql {
         const TString OPERATION_SIZE("OPERATION_SIZE");
         const TString YT_COORDINATOR("YT_COORDINATOR");
         const TString YT_BACKEND("YT_BACKEND");
+        const TString YT_FORCE_IPV4("YT_FORCE_IPV4");
     }
 
     using namespace NActors;
@@ -600,6 +601,7 @@ namespace NYql {
                         .BeginMap()
                             .Item(NCommonJobVars::YT_COORDINATOR).Value(coordinatorStr)
                             .Item(NCommonJobVars::YT_BACKEND).Value(backendStr)
+                            .Item(NCommonJobVars::YT_FORCE_IPV4).Value(Options.ForceIPv4)
                             .DoFor(Options.YtBackend.GetVaultEnv(), [&] (NYT::TFluentMap fluent, const NYql::NProto::TDqConfig::TAttr& envVar) { // Добавляем env variables
                                 TString tokenValue;
                                 try {

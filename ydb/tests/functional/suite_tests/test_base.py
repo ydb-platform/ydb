@@ -354,6 +354,8 @@ class BaseSuiteRunner(object):
         query_name = "query_%d" % query_id
         if self.plan:
             query_plan = json.loads(self.explain(statement.text))
+            if 'SimplifiedPlan' in query_plan:
+                del query_plan['SimplifiedPlan']
             self.files[query_name + '.plan'] = write_canonical_response(
                 query_plan,
                 query_name + '.plan',

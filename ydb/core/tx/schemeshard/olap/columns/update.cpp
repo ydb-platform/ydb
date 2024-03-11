@@ -2,6 +2,7 @@
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
+#include <ydb/core/formats/arrow/serializer/abstract.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -13,13 +14,14 @@ namespace NKikimr::NSchemeShard {
         Name = columnSchema.GetName();
         NotNullFlag = columnSchema.GetNotNull();
         TypeName = columnSchema.GetType();
-        if (columnSchema.HasCompression()) {
-            auto compression = NArrow::TCompression::BuildFromProto(columnSchema.GetCompression());
-            if (!compression) {
-                errors.AddError("Cannot parse compression info: " + compression.GetErrorMessage());
+        StorageId = columnSchema.GetStorageId();
+        if (columnSchema.HasSerializer()) {
+            NArrow::NSerialization::TSerializerContainer serializer;
+            if (!serializer.DeserializeFromProto(columnSchema.GetSerializer())) {
+                errors.AddError("Cannot parse serializer info");
                 return false;
             }
-            Compression = *compression;
+            Serializer = serializer;
         }
         if (columnSchema.HasDictionaryEncoding()) {
             auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnSchema.GetDictionaryEncoding());
@@ -62,6 +64,7 @@ namespace NKikimr::NSchemeShard {
     void TOlapColumnAdd::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema) {
         Name = columnSchema.GetName();
         TypeName = columnSchema.GetType();
+        StorageId = columnSchema.GetStorageId();
 
         if (columnSchema.HasTypeInfo()) {
             Type = NScheme::TypeInfoModFromProtoColumnType(
@@ -72,10 +75,14 @@ namespace NKikimr::NSchemeShard {
                 columnSchema.GetTypeId(), nullptr)
                 .TypeInfo;
         }
-        if (columnSchema.HasCompression()) {
-            auto compression = NArrow::TCompression::BuildFromProto(columnSchema.GetCompression());
-            Y_ABORT_UNLESS(compression.IsSuccess(), "%s", compression.GetErrorMessage().data());
-            Compression = *compression;
+        if (columnSchema.HasSerializer()) {
+            NArrow::NSerialization::TSerializerContainer serializer;
+            AFL_VERIFY(serializer.DeserializeFromProto(columnSchema.GetSerializer()));
+            Serializer = serializer;
+        } else if (columnSchema.HasCompression()) {
+            NArrow::NSerialization::TSerializerContainer serializer;
+            AFL_VERIFY(serializer.DeserializeFromProto(columnSchema.GetCompression()));
+            Serializer = serializer;
         }
         if (columnSchema.HasDictionaryEncoding()) {
             auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnSchema.GetDictionaryEncoding());
@@ -89,8 +96,9 @@ namespace NKikimr::NSchemeShard {
         columnSchema.SetName(Name);
         columnSchema.SetType(TypeName);
         columnSchema.SetNotNull(NotNullFlag);
-        if (Compression) {
-            *columnSchema.MutableCompression() = Compression->SerializeToProto();
+        columnSchema.SetStorageId(StorageId);
+        if (Serializer) {
+            Serializer->SerializeToProto(*columnSchema.MutableSerializer());
         }
         if (DictionaryEncoding) {
             *columnSchema.MutableDictionaryEncoding() = DictionaryEncoding->SerializeToProto();
@@ -105,12 +113,11 @@ namespace NKikimr::NSchemeShard {
 
     bool TOlapColumnAdd::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollector& errors) {
         Y_ABORT_UNLESS(GetName() == diffColumn.GetName());
-        {
-            auto result = diffColumn.GetCompression().Apply(Compression);
-            if (!result) {
-                errors.AddError("Cannot merge compression info: " + result.GetErrorMessage());
-                return false;
-            }
+        if (diffColumn.GetStorageId()) {
+            StorageId = *diffColumn.GetStorageId();
+        }
+        if (diffColumn.GetSerializer()) {
+            Serializer = diffColumn.GetSerializer();
         }
         {
             auto result = diffColumn.GetDictionaryEncoding().Apply(DictionaryEncoding);

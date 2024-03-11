@@ -68,6 +68,7 @@ class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor<TBlob
     TStackVec<bool, TypicalDisksInSubring> ReceivedResponseFlags;
     TStackVec<bool, TypicalDisksInSubring> EmptyResponseFlags;
     TStackVec<bool, TypicalDisksInSubring> ErrorResponseFlags;
+    TStackVec<bool, TypicalDisksInSubring> ForceStopFlags;
     TBlobStorageGroupInfo::TVDiskIds VDisks;
 
     bool UseVPatch = false;
@@ -332,8 +333,15 @@ public:
     }
 
     void Handle(TEvBlobStorage::TEvVPatchResult::TPtr &ev) {
-        ReceivedResults++;
         NKikimrBlobStorage::TEvVPatchResult &record = ev->Get()->Record;
+
+        Y_ABORT_UNLESS(record.HasCookie());
+        ui8 subgroupIdx = record.GetCookie();
+        if (ForceStopFlags[subgroupIdx]) {
+            return; // ignore force stop response
+        }
+        ReceivedResults++;
+
         PullOutStatusFlagsAndFressSpace(record);
         Y_ABORT_UNLESS(record.HasStatus());
         NKikimrProto::EReplyStatus status = record.GetStatus();
@@ -341,9 +349,6 @@ public:
         if (record.HasErrorReason()) {
             errorReason = record.GetErrorReason();
         }
-
-        Y_ABORT_UNLESS(record.HasCookie());
-        ui8 subgroupIdx = record.GetCookie();
 
         PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA23, "Received VPatchResult",
                 (Status, status),
@@ -413,15 +418,16 @@ public:
     void SendStopDiffs() {
             PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA18, "Send stop diffs");
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPatchDiff>> events;
-        for (ui32 vdiskIdx = 0; vdiskIdx < VDisks.size(); ++vdiskIdx) {
-            if (!ErrorResponseFlags[vdiskIdx] && !EmptyResponseFlags[vdiskIdx] && ReceivedResponseFlags[vdiskIdx]) {
+        for (ui32 subgroupIdx = 0; subgroupIdx < VDisks.size(); ++subgroupIdx) {
+            if (!ErrorResponseFlags[subgroupIdx] && !EmptyResponseFlags[subgroupIdx] && ReceivedResponseFlags[subgroupIdx]) {
                 std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> ev = std::make_unique<TEvBlobStorage::TEvVPatchDiff>(
-                        OriginalId, PatchedId, VDisks[vdiskIdx], 0, Deadline, vdiskIdx);
+                        OriginalId, PatchedId, VDisks[subgroupIdx], 0, Deadline, subgroupIdx);
                 ev->SetForceEnd();
+                ForceStopFlags[subgroupIdx] = true;
                 events.emplace_back(std::move(ev));
                 PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA19, "Send stop message",
-                        (VDiskIdxInSubgroup, vdiskIdx),
-                        (VDiskId, VDisks[vdiskIdx]));
+                        (VDiskIdxInSubgroup, subgroupIdx),
+                        (VDiskId, VDisks[subgroupIdx]));
             }
         }
         SendToQueues(events, false);
@@ -495,6 +501,7 @@ public:
             PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA20, "Send TEvVPatchDiff",
                     (VDiskIdxInSubgroup, idxInSubgroup),
                     (PatchedVDiskIdxInSubgroup, patchedIdxInSubgroup),
+                    (PartId, (ui64)partPlacement.PartId),
                     (DiffsForPart, diffsForPart.size()),
                     (ParityPlacements, parityPlacements.size()),
                     (WaitedXorDiffs, waitedXorDiffs));
@@ -586,6 +593,7 @@ public:
         ReceivedResponseFlags.assign(VDisks.size(), false);
         ErrorResponseFlags.assign(VDisks.size(), false);
         EmptyResponseFlags.assign(VDisks.size(), false);
+        ForceStopFlags.assign(VDisks.size(), false);
 
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPatchStart>> events;
 

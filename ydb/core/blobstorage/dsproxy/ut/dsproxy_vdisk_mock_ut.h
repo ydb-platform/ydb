@@ -99,7 +99,6 @@ public:
 
     void OnVGet(const TEvBlobStorage::TEvVGet &vGet, TEvBlobStorage::TEvVGetResult &outVGetResult) {
         auto &request = vGet.Record;
-        Y_ABORT_UNLESS(request.HasCookie());
         if (IsError) {
             outVGetResult.MakeError(Status, TString(), request);
             return;

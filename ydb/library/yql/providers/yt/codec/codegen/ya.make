@@ -17,6 +17,7 @@ IF (NOT MKQL_DISABLE_CODEGEN)
     PEERDIR(
         ydb/library/yql/minikql/codegen/llvm14
     )
+    USE_LLVM_BC14()
     LLVM_BC(
         yt_codec_bc.cpp
         NAME

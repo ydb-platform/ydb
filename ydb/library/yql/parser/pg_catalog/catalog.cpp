@@ -28,6 +28,10 @@ using TCasts = THashMap<ui32, TCastDesc>;
 
 using TAggregations = THashMap<ui32, TAggregateDesc>;
 
+using TAms = THashMap<ui32, TAmDesc>;
+
+using TNamespaces = THashMap<decltype(TNamespaceDesc::Oid), TNamespaceDesc>;
+
 // We parse OpFamilies' IDs for now. If we ever needed oid_symbol,
 // create TOpFamilyDesc class alike other catalogs
 using TOpFamilies = THashMap<TString, ui32>;
@@ -39,6 +43,8 @@ using TAmOps = THashMap<std::tuple<ui32, ui32, ui32, ui32>, TAmOpDesc>;
 using TAmProcs = THashMap<std::tuple<ui32, ui32, ui32, ui32>, TAmProcDesc>;
 
 using TConversions = THashMap<std::pair<TString, TString>, TConversionDesc>;
+
+using TLanguages = THashMap<ui32, TLanguageDesc>;
 
 bool IsCompatibleTo(ui32 actualTypeId, ui32 expectedTypeId, const TTypes& types) {
     if (actualTypeId == expectedTypeId) {
@@ -67,6 +73,12 @@ bool IsCompatibleTo(ui32 actualTypeId, ui32 expectedTypeId, const TTypes& types)
         const auto& actualDescPtr = types.FindPtr(actualTypeId);
         Y_ENSURE(actualDescPtr);
         return actualDescPtr->ArrayTypeId == actualDescPtr->TypeId;
+    }
+
+    if (expectedTypeId == AnyNonArrayOid) {
+        const auto& actualDescPtr = types.FindPtr(actualTypeId);
+        Y_ENSURE(actualDescPtr);
+        return actualDescPtr->ArrayTypeId != actualDescPtr->TypeId;
     }
 
     return false;
@@ -274,6 +286,8 @@ public:
             LastOperator.OperId = FromString<ui32>(value);
         } else if (key == "oprname") {
             LastOperator.Name = value;
+        } else if (key == "descr") {
+            LastOperator.Descr = value;
         } else if (key == "oprkind") {
             if (value == "r") {
                 LastOperator.Kind = EOperKind::RightUnary;
@@ -355,6 +369,8 @@ public:
             LastProc.ProcId = FromString<ui32>(value);
         } else if (key == "provariadic") {
             IsSupported = false;
+        } else if (key == "descr") {
+            LastProc.Descr = value;
         } else if (key == "prokind") {
             if (value == "f") {
                 LastProc.Kind = EProcKind::Function;
@@ -376,6 +392,8 @@ public:
         } else if (key == "prolang") {
             if (value != "c") {
                 IsSupported = false;
+            } else {
+                LastProc.Lang = LangC;
             }
         } else if (key == "proargtypes") {
             TVector<TString> strArgs;
@@ -430,6 +448,7 @@ public:
                 Split(ArgNamesStr.substr(1, ArgNamesStr.size() - 2), ",", names);
                 Y_ENSURE(names.size() >= LastProc.ArgTypes.size());
                 LastProc.OutputArgNames.insert(LastProc.OutputArgNames.begin(), names.begin() + LastProc.ArgTypes.size(), names.end());
+                LastProc.InputArgNames.insert(LastProc.InputArgNames.begin(), names.begin(), names.begin() + LastProc.ArgTypes.size());
             }
 
             if (!AllArgTypesStr.empty()) {
@@ -493,6 +512,8 @@ public:
             LastType.TypeId = FromString<ui32>(value);
         } else if (key == "array_type_oid") {
             LastType.ArrayTypeId = FromString<ui32>(value);
+        } else if (key == "descr") {
+            LastType.Descr = value;
         } else if (key == "typname") {
             LastType.Name = value;
         } else if (key == "typcategory") {
@@ -743,15 +764,15 @@ public:
             }
         } else if (key == "agginitval") {
             LastAggregation.InitValue = value;
+        } else if (key == "aggfinalextra") {
+            LastAggregation.FinalExtra = (value == "t");;
         }
     }
 
     void OnFinish() override {
         if (IsSupported) {
             if (FillSupported()) {
-                auto id = Aggregations.size() + 1;
-                LastAggregation.InternalId = id;
-                Aggregations[id] = LastAggregation;
+                Aggregations[LastAggregation.AggId] = LastAggregation;
             }
         }
 
@@ -822,6 +843,22 @@ public:
         }
 
         Y_ENSURE(!LastAggregation.Name.empty());
+        auto funcIdsPtr = ProcByName.FindPtr(LastAggregation.Name);
+        Y_ENSURE(funcIdsPtr);
+        if (funcIdsPtr->size() == 1) {
+            LastAggregation.AggId = funcIdsPtr->front();
+        } else {
+            for (const auto id : *funcIdsPtr) {
+                auto procPtr = Procs.FindPtr(id);
+                Y_ENSURE(procPtr);
+                if (procPtr->ArgTypes == LastAggregation.ArgTypes) {
+                    LastAggregation.AggId = id;
+                    break;
+                }
+            }
+        }
+
+        Y_ENSURE(LastAggregation.AggId);
         if (!ResolveFunc(LastFinalFunc, LastAggregation.FinalFuncId, 1)) {
             return false;
         }
@@ -1084,6 +1121,40 @@ private:
     bool IsSupported = true;
 };
 
+
+class TAmsParser : public TParser {
+public:
+    TAmsParser(TAms& ams) : Ams_(ams) {}
+
+    void OnKey(const TString& key, const TString& value) override {
+        if (key == "oid") {
+            CurrDesc_.Oid = FromString<ui32>(value);
+        } else if (key == "descr") {
+            CurrDesc_.Descr = value;
+        } else if (key == "amname") {
+            CurrDesc_.AmName = value;
+        } else if (key == "amtype") {
+            Y_ENSURE(value.Size() == 1);
+            if ((char)EAmType::Index == value[0]) {
+                CurrDesc_.AmType = EAmType::Index;
+            } else if ((char)EAmType::Table == value[0]) {
+                CurrDesc_.AmType = EAmType::Table;
+            } else {
+                Y_ENSURE(false, "Expected correct AmType");
+            }
+        }
+    }
+
+    void OnFinish() override {
+        Ams_[CurrDesc_.Oid] = std::move(CurrDesc_);
+        CurrDesc_ = TAmDesc();
+    }
+
+private:
+    TAmDesc CurrDesc_;
+    TAms& Ams_;
+};
+
 class TAmProcsParser : public TParser {
 public:
     TAmProcsParser(TAmProcs& amProcs, const THashMap<TString, ui32>& typeByName,
@@ -1169,6 +1240,8 @@ public:
         } else if (key == "conforencoding") {
             Y_ENSURE(value.StartsWith("PG_"));
             LastConversion.From = value.substr(3);
+        } else if (key == "descr") {
+            LastConversion.Descr = value;
         } else if (key == "contoencoding") {
             Y_ENSURE(value.StartsWith("PG_"));
             LastConversion.To = value.substr(3);
@@ -1194,6 +1267,33 @@ private:
     const THashMap<TString, TVector<ui32>>& ProcByName;
 
     TConversionDesc LastConversion;
+};
+
+class TLanguagesParser : public TParser {
+public:
+    TLanguagesParser(TLanguages& languages)
+        : Languages(languages)
+    {}
+
+    void OnKey(const TString& key, const TString& value) override {
+        if (key == "oid") {
+            LastLanguage.LangId = FromString<ui32>(value);
+        } else if (key == "lanname") {
+            LastLanguage.Name = value;
+        } else if (key == "descr") {
+            LastLanguage.Descr = value;
+        }
+    }
+
+    void OnFinish() override {
+        Languages[LastLanguage.LangId] = LastLanguage;
+        LastLanguage = TLanguageDesc();
+    }
+
+private:
+    TLanguages& Languages;
+
+    TLanguageDesc LastLanguage;
 };
 
 TOperators ParseOperators(const TString& dat, const THashMap<TString, ui32>& typeByName,
@@ -1274,6 +1374,31 @@ TConversions ParseConversions(const TString& dat, const THashMap<TString, TVecto
     return ret;
 }
 
+TAms ParseAms(const TString& dat) {
+    TAms ret;
+    TAmsParser parser(ret);
+    parser.Do(dat);
+    return ret;
+}
+
+TLanguages ParseLanguages(const TString& dat) {
+    TLanguages ret;
+    TLanguagesParser parser(ret);
+    parser.Do(dat);
+    return ret;
+}
+
+TNamespaces FillNamespaces() {
+    const ui32 PgInformationSchemaNamepace = 1;
+    const ui32 PgCatalogNamepace = 11;
+    const ui32 PgPublicNamepace = 2200;
+    return TNamespaces{
+        {PgInformationSchemaNamepace, TNamespaceDesc{PgInformationSchemaNamepace, "information_schema", "information_schema namespace"}},
+        {PgPublicNamepace, TNamespaceDesc{PgPublicNamepace, "public", "public namespace"}},
+        {PgCatalogNamepace, TNamespaceDesc{PgCatalogNamepace, "pg_catalog", "pg_catalog namespace"}},
+    };
+}
+
 struct TCatalog {
     TCatalog()
         : ProhibitedProcs({
@@ -1336,8 +1461,30 @@ struct TCatalog {
             "lo_truncate64",
             "lo_close",
             "lo_unlink"
+        }),
+        StaticTables({
+#include "pg_class.generated.h"
+        }),
+        AllStaticColumns({
+#include "columns.generated.h"
         })
     {
+        THashSet<ui32> usedTableOids;
+        for (const auto& t : StaticTables) {
+            StaticColumns.insert(std::make_pair(t, TVector<TColumnInfo>()));
+            Y_ENSURE(usedTableOids.insert(t.Oid).first);
+        }
+
+        for (const auto& c: AllStaticColumns) {
+            auto tablePtr = StaticColumns.FindPtr(TTableInfoKey{c.Schema, c.TableName});
+            Y_ENSURE(tablePtr);
+            tablePtr->push_back(c);
+        }
+
+        for (const auto& t : StaticColumns) {
+            Y_ENSURE(!t.second.empty());
+        }
+
         TString typeData;
         Y_ENSURE(NResource::FindExact("pg_type.dat", &typeData));
         TString opData;
@@ -1358,6 +1505,10 @@ struct TCatalog {
         Y_ENSURE(NResource::FindExact("pg_amop.dat", &amOpData));
         TString conversionData;
         Y_ENSURE(NResource::FindExact("pg_conversion.dat", &conversionData));
+        TString amData;
+        Y_ENSURE(NResource::FindExact("pg_am.dat", &amData));
+        TString languagesData;
+        Y_ENSURE(NResource::FindExact("pg_language.dat", &languagesData));
         THashMap<ui32, TLazyTypeInfo> lazyTypeInfos;
         Types = ParseTypes(typeData, lazyTypeInfos);
         for (const auto& [k, v] : Types) {
@@ -1480,6 +1631,8 @@ struct TCatalog {
         OpClasses = ParseOpClasses(opClassData, TypeByName, opFamilies);
         AmOps = ParseAmOps(amOpData, TypeByName, Types, OperatorsByName, Operators, opFamilies);
         AmProcs = ParseAmProcs(amProcData, TypeByName, ProcByName, Procs, opFamilies);
+        Ams = ParseAms(amData);
+        Namespaces = FillNamespaces();
         for (auto& [k, v] : Types) {
             if (v.TypeId != v.ArrayTypeId) {
                 auto lookupId = (v.TypeId == VarcharOid ? TextOid : v.TypeId);
@@ -1511,6 +1664,7 @@ struct TCatalog {
         }
 
         Conversions = ParseConversions(conversionData, ProcByName);
+        Languages = ParseLanguages(languagesData);
     }
 
     static const TCatalog& Instance() {
@@ -1522,16 +1676,23 @@ struct TCatalog {
     TTypes Types;
     TCasts Casts;
     TAggregations Aggregations;
+    TAms Ams;
+    TNamespaces Namespaces;
     TOpClasses OpClasses;
     TAmOps AmOps;
     TAmProcs AmProcs;
     TConversions Conversions;
+    TLanguages Languages;
     THashMap<TString, TVector<ui32>> ProcByName;
     THashMap<TString, ui32> TypeByName;
     THashMap<std::pair<ui32, ui32>, ui32> CastsByDir;
     THashMap<TString, TVector<ui32>> OperatorsByName;
     THashMap<TString, TVector<ui32>> AggregationsByName;
     THashSet<TString> ProhibitedProcs;
+
+    TVector<TTableInfo> StaticTables;
+    TVector<TColumnInfo> AllStaticColumns;
+    THashMap<TTableInfoKey, TVector<TColumnInfo>> StaticColumns;
 };
 
 bool ValidateArgs(const TVector<ui32>& descArgTypeIds, const TVector<ui32>& argTypeIds) {
@@ -1662,6 +1823,55 @@ void EnumTypes(std::function<void(ui32, const TTypeDesc&)> f) {
     }
 }
 
+const TAmDesc& LookupAm(ui32 oid) {
+    const auto& catalog = TCatalog::Instance();
+    const auto typePtr = catalog.Ams.FindPtr(oid);
+    if (!typePtr) {
+        throw yexception() << "No such am: " << oid;
+    }
+
+    return *typePtr;
+}
+
+void EnumAm(std::function<void(ui32, const TAmDesc&)> f) {
+    const auto& catalog = TCatalog::Instance();
+    for (const auto& [oid, desc] : catalog.Ams) {
+        f(oid, desc);
+    }
+}
+
+void EnumConversions(std::function<void(const TConversionDesc&)> f) {
+    const auto& catalog = TCatalog::Instance();
+    for (const auto& [_, desc] : catalog.Conversions) {
+        f(desc);
+    }
+}
+
+const TNamespaceDesc& LookupNamespace(ui32 oid) {
+    const auto& catalog = TCatalog::Instance();
+    const auto typePtr = catalog.Namespaces.FindPtr(oid);
+    if (!typePtr) {
+        throw yexception() << "No such namespace: " << oid;
+    }
+
+    return *typePtr;
+}
+
+void EnumNamespace(std::function<void(ui32, const TNamespaceDesc&)> f) {
+    const auto& catalog = TCatalog::Instance();
+    for (const auto& [oid, desc] : catalog.Namespaces) {
+        f(oid, desc);
+    }
+}
+
+void EnumOperators(std::function<void(const TOperDesc&)> f) {
+    const auto& catalog = TCatalog::Instance();
+    for (const auto& [_, desc] : catalog.Operators) {
+        f(desc);
+    }
+}
+
+
 bool HasCast(ui32 sourceId, ui32 targetId) {
     const auto& catalog = TCatalog::Instance();
     return catalog.CastsByDir.contains(std::make_pair(sourceId, targetId));
@@ -1775,7 +1985,6 @@ bool IsCoercible(ui32 fromTypeId, ui32 toTypeId, ECoercionCode coercionType, con
     if (toTypeId == AnyOid) {
         return true;
     }
-
     //TODO: support polymorphic types
 
     if (fromTypeId == UnknownOid) {
@@ -1796,6 +2005,12 @@ bool IsCoercible(ui32 fromTypeId, ui32 toTypeId, ECoercionCode coercionType, con
         const auto& actualDescPtr = catalog.Types.FindPtr(fromTypeId);
         Y_ENSURE(actualDescPtr);
         return actualDescPtr->ArrayTypeId == actualDescPtr->TypeId;
+    }
+
+    if (toTypeId == AnyNonArrayOid) {
+        const auto& actualDescPtr = catalog.Types.FindPtr(fromTypeId);
+        Y_ENSURE(actualDescPtr);
+        return actualDescPtr->ArrayTypeId != actualDescPtr->TypeId;
     }
 
     return false;
@@ -2639,6 +2854,33 @@ const TConversionDesc& LookupConversion(const TString& from, const TString& to) 
 bool IsCompatibleTo(ui32 actualType, ui32 expectedType) {
     const auto& catalog = TCatalog::Instance();
     return IsCompatibleTo(actualType, expectedType, catalog.Types);
+}
+
+const TLanguageDesc& LookupLanguage(ui32 langId) {
+    const auto& catalog = TCatalog::Instance();
+    auto langPtr = catalog.Languages.FindPtr(langId);
+    if (!langPtr) {
+        throw yexception() << "No such lang: " << langId;
+    }
+
+    return *langPtr;
+}
+
+void EnumLanguages(std::function<void(ui32, const TLanguageDesc&)> f) {
+    const auto& catalog = TCatalog::Instance();
+    for (const auto& x : catalog.Languages) {
+        f(x.first, x.second);
+    }
+}
+
+const TVector<TTableInfo>& GetStaticTables() {
+    const auto& catalog = TCatalog::Instance();
+    return catalog.StaticTables;
+}
+
+const THashMap<TTableInfoKey, TVector<TColumnInfo>>& GetStaticColumns() {
+    const auto& catalog = TCatalog::Instance();
+    return catalog.StaticColumns;
 }
 
 }

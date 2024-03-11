@@ -6,11 +6,18 @@ namespace NKikimr::NOlap {
 TUnifiedBlobId IBlobsWritingAction::AddDataForWrite(const TString& data) {
     Y_ABORT_UNLESS(!WritingStarted);
     auto blobId = AllocateNextBlobId(data);
-    AFL_VERIFY(BlobsForWrite.emplace(blobId, data).second);
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("generated_blob_id", blobId.ToStringNew());
+    AddDataForWrite(blobId, data);
+    return blobId;
+}
+
+void IBlobsWritingAction::AddDataForWrite(const TUnifiedBlobId& blobId, const TString& data) {
+    AFL_VERIFY(blobId.IsValid())("blob_id", blobId.ToStringNew());
+    AFL_VERIFY(blobId.BlobSize() == data.size());
+    AFL_VERIFY(BlobsForWrite.emplace(blobId, data).second)("blob_id", blobId.ToStringNew());
     BlobsWaiting.emplace(blobId);
     BlobsWriteCount += 1;
     SumSize += data.size();
-    return blobId;
 }
 
 void IBlobsWritingAction::OnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status) {

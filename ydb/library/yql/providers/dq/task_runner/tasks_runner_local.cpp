@@ -220,11 +220,11 @@ public:
         ExecutionContext.PatternCache = patternCache;
     }
 
-    ITaskRunner::TPtr GetOld(const TDqTaskSettings& task, const TString& traceId) override {
-        return new TLocalTaskRunner(task, Get(task, NDqProto::DQ_STATS_MODE_BASIC, traceId));
+    ITaskRunner::TPtr GetOld(NKikimr::NMiniKQL::TScopedAlloc& alloc, const TDqTaskSettings& task, const TString& traceId) override {
+        return new TLocalTaskRunner(task, Get(alloc, task, NDqProto::DQ_STATS_MODE_BASIC, traceId));
     }
 
-    TIntrusivePtr<NDq::IDqTaskRunner> Get(const TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const TString& traceId) override {
+    TIntrusivePtr<NDq::IDqTaskRunner> Get(NKikimr::NMiniKQL::TScopedAlloc& alloc, const TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const TString& traceId) override {
         Y_UNUSED(traceId);
         NDq::TDqTaskRunnerSettings settings;
         settings.TerminateOnError = TerminateOnError;
@@ -262,7 +262,7 @@ public:
         }
         auto ctx = ExecutionContext;
         ctx.FuncProvider = TaskTransformFactory(settings.TaskParams, ctx.FuncRegistry);
-        return MakeDqTaskRunner(ctx, settings, { });
+        return MakeDqTaskRunner(alloc, ctx, settings, { });
     }
 
 private:

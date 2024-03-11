@@ -7,51 +7,186 @@ CREATE TABLE TIMETZ_TBL (f1 time(2) with time zone);
 <sql-statement>
 INSERT INTO TIMETZ_TBL VALUES ('00:01 PDT');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMETZ_TBL VALUES ('00:01 PDT');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "00:01 PDT"
+
+        	INSERT INTO TIMETZ_TBL VALUES ('00:01 PDT');
+	^
 <sql-statement>
 INSERT INTO TIMETZ_TBL VALUES ('01:00 PDT');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMETZ_TBL VALUES ('01:00 PDT');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "01:00 PDT"
+
+        	INSERT INTO TIMETZ_TBL VALUES ('01:00 PDT');
+	^
 <sql-statement>
 INSERT INTO TIMETZ_TBL VALUES ('02:03 PDT');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMETZ_TBL VALUES ('02:03 PDT');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "02:03 PDT"
+
+        	INSERT INTO TIMETZ_TBL VALUES ('02:03 PDT');
+	^
 <sql-statement>
 INSERT INTO TIMETZ_TBL VALUES ('07:07 PST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMETZ_TBL VALUES ('07:07 PST');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "07:07 PST"
+
+        	INSERT INTO TIMETZ_TBL VALUES ('07:07 PST');
+	^
 <sql-statement>
 INSERT INTO TIMETZ_TBL VALUES ('08:08 EDT');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMETZ_TBL VALUES ('08:08 EDT');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "08:08 EDT"
+
+        	INSERT INTO TIMETZ_TBL VALUES ('08:08 EDT');
+	^
 <sql-statement>
 INSERT INTO TIMETZ_TBL VALUES ('11:59 PDT');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMETZ_TBL VALUES ('11:59 PDT');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "11:59 PDT"
+
+        	INSERT INTO TIMETZ_TBL VALUES ('11:59 PDT');
+	^
 <sql-statement>
 INSERT INTO TIMETZ_TBL VALUES ('12:00 PDT');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMETZ_TBL VALUES ('12:00 PDT');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "12:00 PDT"
+
+        	INSERT INTO TIMETZ_TBL VALUES ('12:00 PDT');
+	^
 <sql-statement>
 INSERT INTO TIMETZ_TBL VALUES ('12:01 PDT');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMETZ_TBL VALUES ('12:01 PDT');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "12:01 PDT"
+
+        	INSERT INTO TIMETZ_TBL VALUES ('12:01 PDT');
+	^
 <sql-statement>
 INSERT INTO TIMETZ_TBL VALUES ('23:59 PDT');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMETZ_TBL VALUES ('23:59 PDT');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "23:59 PDT"
+
+        	INSERT INTO TIMETZ_TBL VALUES ('23:59 PDT');
+	^
 <sql-statement>
 INSERT INTO TIMETZ_TBL VALUES ('11:59:59.99 PM PDT');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMETZ_TBL VALUES ('11:59:59.99 PM PDT');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "11:59:59.99 PM PDT"
+
+        	INSERT INTO TIMETZ_TBL VALUES ('11:59:59.99 PM PDT');
+	^
 <sql-statement>
 INSERT INTO TIMETZ_TBL VALUES ('2003-03-07 15:36:39 America/New_York');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMETZ_TBL VALUES ('2003-03-07 15:36:39 America/New_York');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "america/new_york" not recognized
+
+        	INSERT INTO TIMETZ_TBL VALUES ('2003-03-07 15:36:39 America/New_York');
+	^
 <sql-statement>
 INSERT INTO TIMETZ_TBL VALUES ('2003-07-07 15:36:39 America/New_York');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMETZ_TBL VALUES ('2003-07-07 15:36:39 America/New_York');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "america/new_york" not recognized
+
+        	INSERT INTO TIMETZ_TBL VALUES ('2003-07-07 15:36:39 America/New_York');
+	^
 <sql-statement>
 -- this should fail (the timezone offset is not known)
 INSERT INTO TIMETZ_TBL VALUES ('15:36:39 America/New_York');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- this should fail (the timezone offset is not known)
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "america/new_york" not recognized
+
+        	-- this should fail (the timezone offset is not known)
+	^
 <sql-statement>
 -- this should fail (timezone not specified without a date)
 INSERT INTO TIMETZ_TBL VALUES ('15:36:39 m2');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- this should fail (timezone not specified without a date)
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "15:36:39 m2"
+
+        	-- this should fail (timezone not specified without a date)
+	^
 <sql-statement>
 -- this should fail (dynamic timezone abbreviation without a date)
 INSERT INTO TIMETZ_TBL VALUES ('15:36:39 MSK m2');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- this should fail (dynamic timezone abbreviation without a date)
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "15:36:39 MSK m2"
+
+        	-- this should fail (dynamic timezone abbreviation without a date)
+	^
 <sql-statement>
 SELECT f1 AS "Time TZ" FROM TIMETZ_TBL;
 </sql-statement>

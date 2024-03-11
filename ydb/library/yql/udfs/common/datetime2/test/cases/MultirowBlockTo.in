@@ -1,0 +1,24 @@
+{
+    "finterval1"="P0Y2M";
+    "finterval2"=null;
+    "finterval3"="P4DT5H";
+    "finterval4"="P6Y7M"
+};
+{
+    "finterval1"="P20000Y4M";
+    "finterval2"="PT6H12M";
+    "finterval3"=null;
+    "finterval4"="P9Y10M"
+};
+{
+    "finterval1"=null;
+    "finterval2"="PT9H18M";
+    "finterval3"="P100000D";
+    "finterval4"="P12Y14M"
+};
+{
+    "finterval1"="P4Y8M";
+    "finterval2"=null;
+    "finterval3"="P13DT14H";
+    "finterval4"=null
+};

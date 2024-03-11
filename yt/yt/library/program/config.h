@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <yt/yt/core/tracing/config.h>
+
 #include <yt/yt/core/ytree/yson_struct.h>
 
 #include <yt/yt/core/ytalloc/config.h>
@@ -27,23 +29,7 @@
 
 #include <library/cpp/yt/stockpile/stockpile.h>
 
-
 namespace NYT {
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TRpcConfig
-    : public NYTree::TYsonStruct
-{
-public:
-    NTracing::TTracingConfigPtr Tracing;
-
-    REGISTER_YSON_STRUCT(TRpcConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(TRpcConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -116,6 +102,10 @@ class THeapProfilerConfig
     : public NYTree::TYsonStruct
 {
 public:
+    // Sampling rate for tcmalloc in bytes.
+    // See https://github.com/google/tcmalloc/blob/master/docs/sampling.md
+    std::optional<i64> SamplingRate;
+
     // Period of update snapshot in heap profiler.
     std::optional<TDuration> SnapshotUpdatePeriod;
 
@@ -143,13 +133,14 @@ public:
     NProfiling::TSolomonExporterConfigPtr SolomonExporter;
     NLogging::TLogManagerConfigPtr Logging;
     NTracing::TJaegerTracerConfigPtr Jaeger;
-    TRpcConfigPtr Rpc;
+    NTracing::TTracingTransportConfigPtr TracingTransport;
     TTCMallocConfigPtr TCMalloc;
     TStockpileConfigPtr Stockpile;
     bool EnableRefCountedTrackerProfiling;
     bool EnableResourceTracker;
     std::optional<double> ResourceTrackerVCpuFactor;
     THeapProfilerConfigPtr HeapProfiler;
+    NYson::TProtobufInteropConfigPtr ProtobufInterop;
 
     REGISTER_YSON_STRUCT(TSingletonsConfig);
 
@@ -170,7 +161,7 @@ public:
     NRpc::TDispatcherDynamicConfigPtr RpcDispatcher;
     NLogging::TLogManagerDynamicConfigPtr Logging;
     NTracing::TJaegerTracerDynamicConfigPtr Jaeger;
-    TRpcConfigPtr Rpc;
+    NTracing::TTracingTransportConfigPtr TracingTransport;
     TTCMallocConfigPtr TCMalloc;
     NYson::TProtobufInteropDynamicConfigPtr ProtobufInterop;
 
@@ -205,17 +196,9 @@ void WarnForUnrecognizedOptions(
     const NLogging::TLogger& logger,
     const NYTree::TYsonStructPtr& config);
 
-void WarnForUnrecognizedOptions(
-    const NLogging::TLogger& logger,
-    const NYTree::TYsonSerializablePtr& config);
-
 void AbortOnUnrecognizedOptions(
     const NLogging::TLogger& logger,
     const NYTree::TYsonStructPtr& config);
-
-void AbortOnUnrecognizedOptions(
-    const NLogging::TLogger& logger,
-    const NYTree::TYsonSerializablePtr& config);
 
 ////////////////////////////////////////////////////////////////////////////////
 

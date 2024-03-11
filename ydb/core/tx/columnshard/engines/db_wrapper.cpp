@@ -52,7 +52,7 @@ void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRe
         portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Update(
             NIceDb::TUpdate<IndexColumns::XPlanStep>(portion.GetRemoveSnapshot().GetPlanStep()),
             NIceDb::TUpdate<IndexColumns::XTxId>(portion.GetRemoveSnapshot().GetTxId()),
-            NIceDb::TUpdate<IndexColumns::Blob>(row.SerializedBlobId()),
+            NIceDb::TUpdate<IndexColumns::Blob>(portion.GetBlobId(row.GetBlobRange().GetBlobIdxVerified()).SerializeBinary()),
             NIceDb::TUpdate<IndexColumns::Metadata>(rowProto.SerializeAsString()),
             NIceDb::TUpdate<IndexColumns::Offset>(row.BlobRange.Offset),
             NIceDb::TUpdate<IndexColumns::Size>(row.BlobRange.Size),
@@ -88,8 +88,47 @@ bool TDbWrapper::LoadColumns(const std::function<void(const NOlap::TPortionInfo&
 
         callback(portion, chunkLoadContext);
 
-        if (!rowset.Next())
+        if (!rowset.Next()) {
             return false;
+        }
+    }
+    return true;
+}
+
+void TDbWrapper::WriteIndex(const TPortionInfo& portion, const TIndexChunk& row) {
+    AFL_VERIFY(row.GetBlobRange().IsValid());
+    using IndexIndexes = NColumnShard::Schema::IndexIndexes;
+    NIceDb::TNiceDb db(Database);
+    db.Table<IndexIndexes>().Key(portion.GetPathId(), portion.GetPortionId(), row.GetIndexId(), row.GetChunkIdx()).Update(
+            NIceDb::TUpdate<IndexIndexes::Blob>(portion.GetBlobId(row.GetBlobRange().GetBlobIdxVerified()).SerializeBinary()),
+            NIceDb::TUpdate<IndexIndexes::Offset>(row.GetBlobRange().Offset),
+            NIceDb::TUpdate<IndexIndexes::Size>(row.GetBlobRange().Size),
+            NIceDb::TUpdate<IndexIndexes::RecordsCount>(row.GetRecordsCount()),
+            NIceDb::TUpdate<IndexIndexes::RawBytes>(row.GetRawBytes())
+        );
+}
+
+void TDbWrapper::EraseIndex(const TPortionInfo& portion, const TIndexChunk& row) {
+    NIceDb::TNiceDb db(Database);
+    using IndexIndexes = NColumnShard::Schema::IndexIndexes;
+    db.Table<IndexIndexes>().Key(portion.GetPathId(), portion.GetPortionId(), row.GetIndexId(), 0).Delete();
+}
+
+bool TDbWrapper::LoadIndexes(const std::function<void(const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext&)>& callback) {
+    NIceDb::TNiceDb db(Database);
+    using IndexIndexes = NColumnShard::Schema::IndexIndexes;
+    auto rowset = db.Table<IndexIndexes>().Select();
+    if (!rowset.IsReady()) {
+        return false;
+    }
+
+    while (!rowset.EndOfSet()) {
+        NOlap::TIndexChunkLoadContext chunkLoadContext(rowset, DsGroupSelector);
+        callback(rowset.GetValue<IndexIndexes::PathId>(), rowset.GetValue<IndexIndexes::PortionId>(), chunkLoadContext);
+
+        if (!rowset.Next()) {
+            return false;
+        }
     }
     return true;
 }

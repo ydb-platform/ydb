@@ -1,7 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    transform.go
-)
-
+IF (TRUE)
+    SRCS(
+		transform.go
+    )
+ENDIF()
 END()

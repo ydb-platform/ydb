@@ -11,16 +11,17 @@
 #include <util/datetime/base.h>
 #include <memory>
 
-namespace NKikimr::NOlap::NIndexedReader {
-class IOrderPolicy;
-}
-
 namespace NKikimr::NColumnShard {
 class TTiersManager;
+class TColumnShard;
 }
 
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;
+class IBlobsGCAction;
+namespace NStatistics {
+class TOperatorContainer;
+}
 }
 namespace arrow {
 class RecordBatch;
@@ -44,11 +45,12 @@ public:
 };
 
 class ICSController {
-private:
-    YDB_READONLY(TAtomicCounter, OnSortingPolicyCounter, 0);
 protected:
-    virtual bool DoOnSortingPolicy(std::shared_ptr<NOlap::NIndexedReader::IOrderPolicy> /*policy*/) {
-        return true;
+    virtual void DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
+        return;
+    }
+    virtual void DoOnTabletStopped(const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
+        return;
     }
     virtual bool DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& /*batch*/) {
         return true;
@@ -56,31 +58,69 @@ protected:
     virtual bool DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& /*changes*/) {
         return true;
     }
-    virtual bool DoOnWriteIndexComplete(const ui64 /*tabletId*/, const TString& /*changeClassName*/) {
+    virtual bool DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& /*changes*/, const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
         return true;
     }
     virtual bool DoOnWriteIndexStart(const ui64 /*tabletId*/, const TString& /*changeClassName*/) {
         return true;
     }
+    virtual void DoOnAfterSharingSessionsManagerStart(const NColumnShard::TColumnShard& /*shard*/) {
+    }
+    virtual void DoOnAfterGCAction(const NColumnShard::TColumnShard& /*shard*/, const NOlap::IBlobsGCAction& /*action*/) {
+    }
+    virtual void DoOnDataSharingFinished(const ui64 /*tabletId*/, const TString& /*sessionId*/) {
+    }
+    virtual void DoOnDataSharingStarted(const ui64 /*tabletId*/, const TString & /*sessionId*/) {
+    }
 
 public:
     using TPtr = std::shared_ptr<ICSController>;
     virtual ~ICSController() = default;
-    bool OnSortingPolicy(std::shared_ptr<NOlap::NIndexedReader::IOrderPolicy> policy) {
-        OnSortingPolicyCounter.Inc();
-        return DoOnSortingPolicy(policy);
+    virtual bool IsTTLEnabled() const {
+        return true;
     }
+    void OnDataSharingFinished(const ui64 tabletId, const TString& sessionId) {
+        return DoOnDataSharingFinished(tabletId, sessionId);
+    }
+    void OnDataSharingStarted(const ui64 tabletId, const TString& sessionId) {
+        return DoOnDataSharingStarted(tabletId, sessionId);
+    }
+    virtual void OnStatisticsUsage(const NOlap::NStatistics::TOperatorContainer& /*statOperator*/) {
+        
+    }
+    virtual void OnMaxValueUsage() {
+    }
+    void OnTabletInitCompleted(const NColumnShard::TColumnShard& shard) {
+        DoOnTabletInitCompleted(shard);
+    }
+
+    void OnTabletStopped(const NColumnShard::TColumnShard& shard) {
+        DoOnTabletStopped(shard);
+    }
+
+    void OnAfterGCAction(const NColumnShard::TColumnShard& shard, const NOlap::IBlobsGCAction& action) {
+        DoOnAfterGCAction(shard, action);
+    }
+
     bool OnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& batch) {
         return DoOnAfterFilterAssembling(batch);
     }
-    bool OnWriteIndexComplete(const ui64 tabletId, const TString& changeClassName) {
-        return DoOnWriteIndexComplete(tabletId, changeClassName);
+    bool OnWriteIndexComplete(const NOlap::TColumnEngineChanges& changes, const NColumnShard::TColumnShard& shard) {
+        return DoOnWriteIndexComplete(changes, shard);
+    }
+    void OnAfterSharingSessionsManagerStart(const NColumnShard::TColumnShard& shard) {
+        return DoOnAfterSharingSessionsManagerStart(shard);
     }
     bool OnWriteIndexStart(const ui64 tabletId, const TString& changeClassName) {
         return DoOnWriteIndexStart(tabletId, changeClassName);
     }
     bool OnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) {
         return DoOnStartCompaction(changes);
+    }
+    virtual void OnIndexSelectProcessed(const std::optional<bool> /*result*/) {
+    }
+    virtual TDuration GetReadTimeoutClean(const TDuration def) {
+        return def;
     }
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const {
         return EOptimizerCompactionWeightControl::Force;

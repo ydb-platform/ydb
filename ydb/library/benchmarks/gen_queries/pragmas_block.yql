@@ -1,0 +1,5 @@
+PRAGMA dq.EnableDqReplicate = "1";
+PRAGMA DisableSimpleColumns;
+PRAGMA UseBlocks;
+PRAGMA EmitAggApply;
+pragma OrderedColumns="true";

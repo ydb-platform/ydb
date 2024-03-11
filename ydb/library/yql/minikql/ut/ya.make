@@ -24,8 +24,13 @@ SRCS(
     mkql_string_util_ut.cpp
     mkql_type_builder_ut.cpp
     mkql_type_ops_ut.cpp
+    mkql_unboxed_value_stream_ut.cpp
     pack_num_ut.cpp
     watermark_tracker_ut.cpp
+)
+
+ADDINCL(
+    ydb/library/yql/parser/pg_wrapper/postgresql/src/include
 )
 
 PEERDIR(

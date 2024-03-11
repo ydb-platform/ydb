@@ -5,6 +5,8 @@
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/tx.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <ydb/library/login/protos/login.pb.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 namespace NKikimr::NSchemeShard {
@@ -118,6 +120,8 @@ struct Schema : NIceDb::Schema {
         struct TTLSettings : Column<8, NScheme::NTypeIds::String> {};
         struct IsBackup : Column<9, NScheme::NTypeIds::Bool> {};
         struct ReplicationConfig : Column<10, NScheme::NTypeIds::String> {};
+        struct IsTemporary : Column<11, NScheme::NTypeIds::Bool> {};
+        struct OwnerActorId : Column<12, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<TabId>;
         using TColumns = TableColumns<
@@ -130,7 +134,9 @@ struct Schema : NIceDb::Schema {
             PartitioningVersion,
             TTLSettings,
             IsBackup,
-            ReplicationConfig
+            ReplicationConfig,
+            IsTemporary,
+            OwnerActorId
         >;
     };
 
@@ -147,6 +153,8 @@ struct Schema : NIceDb::Schema {
         struct TTLSettings :         Column<9, NScheme::NTypeIds::String> {};
         struct IsBackup :            Column<10, NScheme::NTypeIds::Bool> {};
         struct ReplicationConfig :   Column<11, NScheme::NTypeIds::String> {};
+        struct IsTemporary :         Column<12, NScheme::NTypeIds::Bool> {};
+        struct OwnerActorId :        Column<13, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -160,7 +168,9 @@ struct Schema : NIceDb::Schema {
             PartitioningVersion,
             TTLSettings,
             IsBackup,
-            ReplicationConfig
+            ReplicationConfig,
+            IsTemporary,
+            OwnerActorId
         >;
     };
 
@@ -177,10 +187,11 @@ struct Schema : NIceDb::Schema {
         struct DefaultKind :    Column<9, NScheme::NTypeIds::Uint32> { using Type = ETableColumnDefaultKind; static constexpr Type Default = Type::None; };
         struct DefaultValue :   Column<10, NScheme::NTypeIds::String> {};
         struct NotNull :        Column<11, NScheme::NTypeIds::Bool> {};
+        struct IsBuildInProgress :  Column<13, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<TabId, ColId>;
         using TColumns = TableColumns<TabId, ColId, ColName, ColType, ColKeyOrder,
-            CreateVersion, DeleteVersion, Family, DefaultKind, DefaultValue, NotNull, ColTypeData>;
+            CreateVersion, DeleteVersion, Family, DefaultKind, DefaultValue, NotNull, ColTypeData, IsBuildInProgress>;
     };
 
     struct MigratedColumns : Table<55> {
@@ -198,10 +209,11 @@ struct Schema : NIceDb::Schema {
         struct DefaultKind :    Column<10, NScheme::NTypeIds::Uint32> { using Type = ETableColumnDefaultKind; static constexpr Type Default = Type::None; };
         struct DefaultValue :   Column<11, NScheme::NTypeIds::String> {};
         struct NotNull :        Column<12, NScheme::NTypeIds::Bool> {};
+        struct IsBuildInProgress :  Column<14, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId, ColId>;
         using TColumns = TableColumns<OwnerPathId, LocalPathId, ColId, ColName, ColType, ColKeyOrder,
-            CreateVersion, DeleteVersion, Family, DefaultKind, DefaultValue, NotNull, ColTypeData>;
+            CreateVersion, DeleteVersion, Family, DefaultKind, DefaultValue, NotNull, ColTypeData, IsBuildInProgress>;
     };
 
     struct ColumnAlters : Table<13> {
@@ -217,10 +229,11 @@ struct Schema : NIceDb::Schema {
         struct DefaultKind :    Column<9, NScheme::NTypeIds::Uint32> { using Type = ETableColumnDefaultKind; static constexpr Type Default = Type::None; };
         struct DefaultValue :   Column<10, NScheme::NTypeIds::String> {};
         struct NotNull :        Column<11, NScheme::NTypeIds::Bool> {};
+        struct IsBuildInProgress :  Column<13, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<TabId, ColId>;
         using TColumns = TableColumns<TabId, ColId, ColName, ColType, ColKeyOrder,
-            CreateVersion, DeleteVersion, Family, DefaultKind, DefaultValue, NotNull, ColTypeData>;
+            CreateVersion, DeleteVersion, Family, DefaultKind, DefaultValue, NotNull, ColTypeData, IsBuildInProgress>;
     };
 
     struct MigratedColumnAlters : Table<63> {
@@ -238,10 +251,11 @@ struct Schema : NIceDb::Schema {
         struct DefaultKind :    Column<10, NScheme::NTypeIds::Uint32> { using Type = ETableColumnDefaultKind; static constexpr Type Default = Type::None; };
         struct DefaultValue :   Column<11, NScheme::NTypeIds::String> {};
         struct NotNull :        Column<12, NScheme::NTypeIds::Bool> {};
+        struct IsBuildInProgress :  Column<14, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId, ColId>;
         using TColumns = TableColumns<OwnerPathId, LocalPathId, ColId, ColName, ColType, ColKeyOrder,
-            CreateVersion, DeleteVersion, Family, DefaultKind, DefaultValue, NotNull, ColTypeData>;
+            CreateVersion, DeleteVersion, Family, DefaultKind, DefaultValue, NotNull, ColTypeData, IsBuildInProgress>;
     };
 
     struct Shards : Table<7> {

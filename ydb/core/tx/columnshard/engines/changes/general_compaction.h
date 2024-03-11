@@ -7,10 +7,10 @@ namespace NKikimr::NOlap::NCompaction {
 class TGeneralCompactColumnEngineChanges: public TCompactColumnEngineChanges {
 private:
     using TBase = TCompactColumnEngineChanges;
-    virtual void DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) override;
+    virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
     std::map<NIndexedReader::TSortableBatchPosition, bool> CheckPoints;
-    void BuildAppendedPortionsByFullBatches(TConstructionContext& context) noexcept;
-    void BuildAppendedPortionsByChunks(TConstructionContext& context) noexcept;
+    void BuildAppendedPortionsByFullBatches(TConstructionContext& context, std::vector<TPortionInfoWithBlobs>&& portions) noexcept;
+    void BuildAppendedPortionsByChunks(TConstructionContext& context, std::vector<TPortionInfoWithBlobs>&& portions) noexcept;
 protected:
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept override;
     virtual TPortionMeta::EProduced GetResultProducedClass() const override {
@@ -29,12 +29,6 @@ protected:
 public:
     using TBase::TBase;
 
-    class IMemoryPredictor {
-    public:
-        virtual ui64 AddPortion(const TPortionInfo& portionInfo) = 0;
-        virtual ~IMemoryPredictor() = default;
-    };
-
     class TMemoryPredictorSimplePolicy: public IMemoryPredictor {
     private:
         ui64 SumMemory = 0;
@@ -50,27 +44,12 @@ public:
 
     class TMemoryPredictorChunkedPolicy: public IMemoryPredictor {
     private:
-        ui64 SumMemory = 0;
+        ui64 SumMemoryDelta = 0;
+        ui64 SumMemoryFix = 0;
         ui32 PortionsCount = 0;
         THashMap<ui32, ui64> MaxMemoryByColumnChunk;
     public:
-        virtual ui64 AddPortion(const TPortionInfo& portionInfo) override {
-            SumMemory += portionInfo.GetRecordsCount() * (2 * sizeof(ui64) + sizeof(ui32) + sizeof(ui16));
-            for (auto&& i : portionInfo.GetRecords()) {
-                SumMemory += i.BlobRange.Size;
-                auto it = MaxMemoryByColumnChunk.find(i.GetColumnId());
-                ++PortionsCount;
-                if (it == MaxMemoryByColumnChunk.end()) {
-                    it = MaxMemoryByColumnChunk.emplace(i.GetColumnId(), i.GetMeta().GetRawBytesVerified()).first;
-                    SumMemory += it->second * PortionsCount;
-                } else if (it->second < i.GetMeta().GetRawBytesVerified()) {
-                    SumMemory -= it->second * (PortionsCount - 1);
-                    it->second = i.GetMeta().GetRawBytesVerified();
-                    SumMemory += it->second * PortionsCount;
-                }
-            }
-            return SumMemory;
-        }
+        virtual ui64 AddPortion(const TPortionInfo& portionInfo) override;
     };
 
     static std::shared_ptr<IMemoryPredictor> BuildMemoryPredictor();

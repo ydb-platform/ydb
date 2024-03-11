@@ -172,6 +172,11 @@ namespace NYql {
                        NYql::TGenericClusterConfig& clusterConfig) {
         using namespace NConnector::NApi;
 
+        if (clusterConfig.GetKind() == EDataSourceKind::YDB) {
+            clusterConfig.SetProtocol(EProtocol::NATIVE);
+            return;
+        }
+
         auto it = properties.find("protocol");
         if (it == properties.cend()) {
             ythrow yexception() << "missing 'PROTOCOL' value";
@@ -312,7 +317,7 @@ namespace NYql {
         auto hasEndpoint = clusterConfig.HasEndpoint();
         auto databaseId = clusterConfig.GetDatabaseId();
 
-        if ((hasEndpoint && databaseId)) {
+        if (hasEndpoint && databaseId) {
             return ValidationError(
                 clusterConfig,
                 context,
@@ -352,6 +357,22 @@ namespace NYql {
                 "you must set either ('ServiceAccountId', 'ServiceAccountIdSignature') fields or 'Token' field or none of them");
         }
 
+        if (clusterConfig.GetKind() == NConnector::NApi::YDB) {
+            if (clusterConfig.HasDatabaseName() && clusterConfig.HasDatabaseId()) {
+                return ValidationError(
+                    clusterConfig,
+                    context,
+                    "For YDB clusters you must set either database name or database id, but you have set both of them");
+            }
+
+            if (!clusterConfig.HasDatabaseName() && !clusterConfig.HasDatabaseId()) {
+                return ValidationError(
+                    clusterConfig,
+                    context,
+                    "For YDB clusters you must set either database name or database id, but you have set none of them");
+            }
+        }
+
         // check required fields
         if (!clusterConfig.GetName()) {
             return ValidationError(clusterConfig, context, "empty field 'Name'");
@@ -359,10 +380,6 @@ namespace NYql {
 
         if (clusterConfig.GetKind() == EDataSourceKind::DATA_SOURCE_KIND_UNSPECIFIED) {
             return ValidationError(clusterConfig, context, "empty field 'Kind'");
-        }
-
-        if (!clusterConfig.GetCredentials().Getbasic().Getusername()) {
-            return ValidationError(clusterConfig, context, "empty field 'Credentials.basic.username'");
         }
 
         // TODO: validate Credentials.basic.password after ClickHouse recipe fix

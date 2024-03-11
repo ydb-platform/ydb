@@ -2,6 +2,8 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
+#include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/library/aclib/aclib.h>
 
 #include <util/string/builder.h>
@@ -636,7 +638,7 @@ TAuditLogFragment MakeAuditLogFragment(const NKikimrSchemeOp::TModifyScheme& tx)
     auto [aclAdd, aclRemove] = ExtractACLChange(tx);
     auto [userAttrsAdd, userAttrsRemove] = ExtractUserAttrChange(tx);
     auto [loginUser, loginGroup, loginMember] = ExtractLoginChange(tx);
-    
+
     return {
         .Operation = DefineUserOperationName(tx),
         .Paths = ExtractChangingPaths(tx),

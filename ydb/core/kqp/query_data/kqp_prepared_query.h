@@ -1,8 +1,10 @@
 #pragma once
 
+#include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
 
 #include <util/generic/vector.h>
 
@@ -115,6 +117,9 @@ public:
         const std::shared_ptr<TPreparedQueryAllocHolder>& alloc, TIntrusivePtr<TTableConstInfoMap> tableConstInfoById);
 
     bool IsLiteralTx() const;
+
+    std::optional<std::pair<bool, std::pair<TString, TString>>>
+    GetSchemeOpTempTablePath() const;
 };
 
 class TLlvmSettings {
@@ -187,6 +192,8 @@ public:
     void FillTable(const NKqpProto::TKqpPhyTable& phyTable);
 
     void FillTables(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpPhyStage>& stages);
+
+    bool HasTempTables(TKqpTempTablesState::TConstPtr tempTablesState, bool withSessionId) const;
 };
 
 

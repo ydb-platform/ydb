@@ -9,12 +9,19 @@ namespace {
 
 class TRunScriptActorMock : public NActors::TActorBootstrapped<TRunScriptActorMock> {
 public:
-    TRunScriptActorMock(THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> request, NThreading::TPromise<NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr> promise, ui64 resultSizeLimit)
+    TRunScriptActorMock(THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> request,
+        NThreading::TPromise<NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr> promise,
+        ui64 resultRowsLimit, ui64 resultSizeLimit, std::vector<Ydb::ResultSet>& resultSets)
         : Request_(std::move(request))
         , Promise_(promise)
+        , ResultRowsLimit_(std::numeric_limits<ui64>::max())
         , ResultSizeLimit_(std::numeric_limits<i64>::max())
+        , ResultSets_(resultSets)
     {
-        if (resultSizeLimit && resultSizeLimit < std::numeric_limits<i64>::max()) {
+        if (resultRowsLimit) {
+            ResultRowsLimit_ = resultRowsLimit;
+        }
+        if (resultSizeLimit) {
             ResultSizeLimit_ = resultSizeLimit;
         }
     }
@@ -36,6 +43,28 @@ public:
         response->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
         response->Record.SetFreeSpace(ResultSizeLimit_);
 
+        auto resultSetIndex = ev->Get()->Record.GetQueryResultIndex();
+        if (resultSetIndex >= ResultSets_.size()) {
+            ResultSets_.resize(resultSetIndex + 1);
+        }
+
+        if (!ResultSets_[resultSetIndex].truncated()) {
+            for (auto& row : *ev->Get()->Record.MutableResultSet()->mutable_rows()) {
+                if (static_cast<ui64>(ResultSets_[resultSetIndex].rows_size()) >= ResultRowsLimit_) {
+                    ResultSets_[resultSetIndex].set_truncated(true);
+                    break;
+                }
+
+                if (ResultSets_[resultSetIndex].ByteSizeLong() + row.ByteSizeLong() > ResultSizeLimit_) {
+                    ResultSets_[resultSetIndex].set_truncated(true);
+                    break;
+                }
+
+                *ResultSets_[resultSetIndex].add_rows() = std::move(row);
+            }
+            *ResultSets_[resultSetIndex].mutable_columns() = ev->Get()->Record.GetResultSet().columns();
+        }
+
         Send(ev->Sender, response.Release());
     }
     
@@ -47,13 +76,17 @@ public:
 private:
     THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> Request_;
     NThreading::TPromise<NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr> Promise_;
-    i64 ResultSizeLimit_;
+    ui64 ResultRowsLimit_;
+    ui64 ResultSizeLimit_;
+    std::vector<Ydb::ResultSet>& ResultSets_;
 };
 
 }  // anonymous namespace
 
-NActors::IActor* CreateRunScriptActorMock(THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> request, NThreading::TPromise<NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr> promise, ui64 resultSizeLimit) {
-    return new TRunScriptActorMock(std::move(request), promise, resultSizeLimit);
+NActors::IActor* CreateRunScriptActorMock(THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> request,
+    NThreading::TPromise<NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr> promise,
+    ui64 resultRowsLimit, ui64 resultSizeLimit, std::vector<Ydb::ResultSet>& resultSets) {
+    return new TRunScriptActorMock(std::move(request), promise, resultRowsLimit, resultSizeLimit, resultSets);
 }
 
 }  // namespace NKqpRun

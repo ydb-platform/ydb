@@ -24,9 +24,27 @@ INSERT INTO TIMESTAMPTZ_TBL VALUES ('tomorrow');
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('tomorrow EST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMPTZ_TBL VALUES ('tomorrow EST');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "tomorrow EST"
+
+        	INSERT INTO TIMESTAMPTZ_TBL VALUES ('tomorrow EST');
+	^
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('tomorrow zulu');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMPTZ_TBL VALUES ('tomorrow zulu');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "tomorrow zulu"
+
+        	INSERT INTO TIMESTAMPTZ_TBL VALUES ('tomorrow zulu');
+	^
 <sql-statement>
 SELECT count(*) AS One FROM TIMESTAMPTZ_TBL WHERE d1 = timestamp with time zone 'today';
 </sql-statement>
@@ -39,9 +57,27 @@ SELECT count(*) AS One FROM TIMESTAMPTZ_TBL WHERE d1 = timestamp with time zone 
 <sql-statement>
 SELECT count(*) AS One FROM TIMESTAMPTZ_TBL WHERE d1 = timestamp with time zone 'tomorrow EST';
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtMap!
+    	SELECT count(*) AS One FROM TIMESTAMPTZ_TBL WHERE d1 = timestamp with time zone 'tomorrow EST';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "tomorrow EST"
+
+        	SELECT count(*) AS One FROM TIMESTAMPTZ_TBL WHERE d1 = timestamp with time zone 'tomorrow EST';
+	^
 <sql-statement>
 SELECT count(*) AS One FROM TIMESTAMPTZ_TBL WHERE d1 = timestamp with time zone 'tomorrow zulu';
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtMap!
+    	SELECT count(*) AS One FROM TIMESTAMPTZ_TBL WHERE d1 = timestamp with time zone 'tomorrow zulu';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "tomorrow zulu"
+
+        	SELECT count(*) AS One FROM TIMESTAMPTZ_TBL WHERE d1 = timestamp with time zone 'tomorrow zulu';
+	^
 <sql-statement>
 COMMIT;
 </sql-statement>
@@ -50,7 +86,7 @@ DELETE FROM TIMESTAMPTZ_TBL;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 -- Verify that 'now' *does* change over a reasonable interval such as 100 msec,
@@ -81,14 +117,6 @@ SELECT count(*) AS two FROM TIMESTAMPTZ_TBL WHERE d1 = timestamp(2) with time zo
 <sql-statement>
 SELECT count(d1) AS three, count(DISTINCT d1) AS two FROM TIMESTAMPTZ_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Execution
-
-    -stdin-:<main>:1:1: Fatal: Execution of node: YtMapReduce!
-    	SELECT count(d1) AS three, count(DISTINCT d1) AS two FROM TIMESTAMPTZ_TBL;
-	^
-        -stdin-:<main>:1:1: Fatal: Failed to unwrap empty optional
-        	SELECT count(d1) AS three, count(DISTINCT d1) AS two FROM TIMESTAMPTZ_TBL;
-	^
 <sql-statement>
 COMMIT;
 </sql-statement>
@@ -114,22 +142,76 @@ INSERT INTO TIMESTAMPTZ_TBL VALUES ('epoch');
 -- Postgres v6.0 standard output format
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('Mon Feb 10 17:32:01 1997 PST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- Postgres v6.0 standard output format
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "Mon Feb 10 17:32:01 1997 PST"
+
+        	-- Postgres v6.0 standard output format
+	^
 <sql-statement>
 -- Variations on Postgres v6.1 standard output format
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('Mon Feb 10 17:32:01.000001 1997 PST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- Variations on Postgres v6.1 standard output format
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "Mon Feb 10 17:32:01.000001 1997 PST"
+
+        	-- Variations on Postgres v6.1 standard output format
+	^
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('Mon Feb 10 17:32:01.999999 1997 PST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMPTZ_TBL VALUES ('Mon Feb 10 17:32:01.999999 1997 PST');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "Mon Feb 10 17:32:01.999999 1997 PST"
+
+        	INSERT INTO TIMESTAMPTZ_TBL VALUES ('Mon Feb 10 17:32:01.999999 1997 PST');
+	^
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('Mon Feb 10 17:32:01.4 1997 PST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMPTZ_TBL VALUES ('Mon Feb 10 17:32:01.4 1997 PST');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "Mon Feb 10 17:32:01.4 1997 PST"
+
+        	INSERT INTO TIMESTAMPTZ_TBL VALUES ('Mon Feb 10 17:32:01.4 1997 PST');
+	^
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('Mon Feb 10 17:32:01.5 1997 PST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMPTZ_TBL VALUES ('Mon Feb 10 17:32:01.5 1997 PST');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "Mon Feb 10 17:32:01.5 1997 PST"
+
+        	INSERT INTO TIMESTAMPTZ_TBL VALUES ('Mon Feb 10 17:32:01.5 1997 PST');
+	^
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('Mon Feb 10 17:32:01.6 1997 PST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMPTZ_TBL VALUES ('Mon Feb 10 17:32:01.6 1997 PST');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "Mon Feb 10 17:32:01.6 1997 PST"
+
+        	INSERT INTO TIMESTAMPTZ_TBL VALUES ('Mon Feb 10 17:32:01.6 1997 PST');
+	^
 <sql-statement>
 -- ISO 8601 format
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('1997-01-02');
@@ -187,44 +269,106 @@ INSERT INTO TIMESTAMPTZ_TBL VALUES ('1997/02/10 17:32:01-0800');
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('1997-02-10 17:32:01 PST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMPTZ_TBL VALUES ('1997-02-10 17:32:01 PST');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "1997-02-10 17:32:01 PST"
+
+        	INSERT INTO TIMESTAMPTZ_TBL VALUES ('1997-02-10 17:32:01 PST');
+	^
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('Feb-10-1997 17:32:01 PST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMPTZ_TBL VALUES ('Feb-10-1997 17:32:01 PST');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "Feb-10-1997 17:32:01 PST"
+
+        	INSERT INTO TIMESTAMPTZ_TBL VALUES ('Feb-10-1997 17:32:01 PST');
+	^
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('02-10-1997 17:32:01 PST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMPTZ_TBL VALUES ('02-10-1997 17:32:01 PST');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "02-10-1997 17:32:01 PST"
+
+        	INSERT INTO TIMESTAMPTZ_TBL VALUES ('02-10-1997 17:32:01 PST');
+	^
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('19970210 173201 PST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMPTZ_TBL VALUES ('19970210 173201 PST');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "19970210 173201 PST"
+
+        	INSERT INTO TIMESTAMPTZ_TBL VALUES ('19970210 173201 PST');
+	^
 <sql-statement>
 set datestyle to ymd;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: datestyle
-    	set datestyle to ymd;
-	^
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('97FEB10 5:32:01PM UTC');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMPTZ_TBL VALUES ('97FEB10 5:32:01PM UTC');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "97FEB10 5:32:01PM UTC"
+
+        	INSERT INTO TIMESTAMPTZ_TBL VALUES ('97FEB10 5:32:01PM UTC');
+	^
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('97/02/10 17:32:01 UTC');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMPTZ_TBL VALUES ('97/02/10 17:32:01 UTC');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "97/02/10 17:32:01 UTC"
+
+        	INSERT INTO TIMESTAMPTZ_TBL VALUES ('97/02/10 17:32:01 UTC');
+	^
 <sql-statement>
 reset datestyle;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
-    	reset datestyle;
-	^
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('1997.041 17:32:01 UTC');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMPTZ_TBL VALUES ('1997.041 17:32:01 UTC');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "1997.041 17:32:01 UTC"
+
+        	INSERT INTO TIMESTAMPTZ_TBL VALUES ('1997.041 17:32:01 UTC');
+	^
 <sql-statement>
 -- timestamps at different timezones
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('19970210 173201 America/New_York');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- timestamps at different timezones
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "america/new_york" not recognized
+
+        	-- timestamps at different timezones
+	^
 <sql-statement>
 SELECT '19970210 173201' AT TIME ZONE 'America/New_York';
 </sql-statement>
@@ -240,6 +384,15 @@ SELECT '19970210 173201' AT TIME ZONE 'America/New_York';
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('19970710 173201 America/New_York');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMPTZ_TBL VALUES ('19970710 173201 America/New_York');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "america/new_york" not recognized
+
+        	INSERT INTO TIMESTAMPTZ_TBL VALUES ('19970710 173201 America/New_York');
+	^
 <sql-statement>
 SELECT '19970710 173201' AT TIME ZONE 'America/New_York';
 </sql-statement>
@@ -255,6 +408,15 @@ SELECT '19970710 173201' AT TIME ZONE 'America/New_York';
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('19970710 173201 America/Does_not_exist');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMPTZ_TBL VALUES ('19970710 173201 America/Does_not_exist');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "america/does_not_exist" not recognized
+
+        	INSERT INTO TIMESTAMPTZ_TBL VALUES ('19970710 173201 America/Does_not_exist');
+	^
 <sql-statement>
 SELECT '19970710 173201' AT TIME ZONE 'America/Does_not_exist';
 </sql-statement>
@@ -320,6 +482,15 @@ SELECT '205000-01-10 17:32:01 Europe/Helsinki'::timestamptz; -- non-DST
 -- Check date conversion and date arithmetic
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('1997-06-10 18:32:01 PDT');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- Check date conversion and date arithmetic
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "1997-06-10 18:32:01 PDT"
+
+        	-- Check date conversion and date arithmetic
+	^
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('Feb 10 17:32:01 1997');
 </sql-statement>
@@ -392,6 +563,15 @@ INSERT INTO TIMESTAMPTZ_TBL VALUES ('Feb 28 17:32:01 1997');
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('Feb 29 17:32:01 1997');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMPTZ_TBL VALUES ('Feb 29 17:32:01 1997');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "Feb 29 17:32:01 1997"
+
+        	INSERT INTO TIMESTAMPTZ_TBL VALUES ('Feb 29 17:32:01 1997');
+	^
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('Mar 01 17:32:01 1997');
 </sql-statement>
@@ -417,9 +597,27 @@ INSERT INTO TIMESTAMPTZ_TBL VALUES ('Jan 01 17:32:01 2001');
 -- Currently unsupported syntax and ranges
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('Feb 16 17:32:01 -0097');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- Currently unsupported syntax and ranges
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone displacement out of range: "Feb 16 17:32:01 -0097"
+
+        	-- Currently unsupported syntax and ranges
+	^
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('Feb 16 17:32:01 5097 BC');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMPTZ_TBL VALUES ('Feb 16 17:32:01 5097 BC');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  timestamp out of range: "Feb 16 17:32:01 5097 BC"
+
+        	INSERT INTO TIMESTAMPTZ_TBL VALUES ('Feb 16 17:32:01 5097 BC');
+	^
 <sql-statement>
 -- Alternative field order that we've historically supported (sort of)
 -- with regular and POSIXy timezone specs
@@ -904,21 +1102,75 @@ CREATE TABLE TIMESTAMPTZ_TST (a int , b timestamptz);
 -- Test year field value with len > 4
 INSERT INTO TIMESTAMPTZ_TST VALUES(1, 'Sat Mar 12 23:58:48 1000 IST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- Test year field value with len > 4
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "Sat Mar 12 23:58:48 1000 IST"
+
+        	-- Test year field value with len > 4
+	^
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TST VALUES(2, 'Sat Mar 12 23:58:48 10000 IST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMPTZ_TST VALUES(2, 'Sat Mar 12 23:58:48 10000 IST');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "Sat Mar 12 23:58:48 10000 IST"
+
+        	INSERT INTO TIMESTAMPTZ_TST VALUES(2, 'Sat Mar 12 23:58:48 10000 IST');
+	^
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TST VALUES(3, 'Sat Mar 12 23:58:48 100000 IST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMPTZ_TST VALUES(3, 'Sat Mar 12 23:58:48 100000 IST');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "Sat Mar 12 23:58:48 100000 IST"
+
+        	INSERT INTO TIMESTAMPTZ_TST VALUES(3, 'Sat Mar 12 23:58:48 100000 IST');
+	^
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TST VALUES(3, '10000 Mar 12 23:58:48 IST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMPTZ_TST VALUES(3, '10000 Mar 12 23:58:48 IST');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "10000 Mar 12 23:58:48 IST"
+
+        	INSERT INTO TIMESTAMPTZ_TST VALUES(3, '10000 Mar 12 23:58:48 IST');
+	^
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TST VALUES(4, '100000312 23:58:48 IST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMPTZ_TST VALUES(4, '100000312 23:58:48 IST');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "100000312 23:58:48 IST"
+
+        	INSERT INTO TIMESTAMPTZ_TST VALUES(4, '100000312 23:58:48 IST');
+	^
 <sql-statement>
 INSERT INTO TIMESTAMPTZ_TST VALUES(4, '1000000312 23:58:48 IST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMPTZ_TST VALUES(4, '1000000312 23:58:48 IST');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "1000000312 23:58:48 IST"
+
+        	INSERT INTO TIMESTAMPTZ_TST VALUES(4, '1000000312 23:58:48 IST');
+	^
 <sql-statement>
 --Verify data
 SELECT * FROM TIMESTAMPTZ_TST ORDER BY a;
@@ -1142,6 +1394,1207 @@ SET TimeZone to 'UTC';
 <sql-statement>
 SELECT '2011-03-27 00:00:00 Europe/Moscow'::timestamptz;
 </sql-statement>
-pgrun: /-S/ydbwork/ydb/contrib/libs/llvm12/lib/IR/LegacyPassManager.cpp:588: void llvm::PMTopLevelManager::setLastUser(ArrayRef<Pass *>, Pass *): Assertion `AnalysisPass && "Expected analysis pass to exist."' failed.
-pthread_kill at ./nptl/./nptl/pthread_kill.c:43:17
-?? at ??:0:0
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 00:00:00 Europe/Moscow'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "europe/moscow" not recognized
+
+        	SELECT '2011-03-27 00:00:00 Europe/Moscow'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-27 01:00:00 Europe/Moscow'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 01:00:00 Europe/Moscow'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "europe/moscow" not recognized
+
+        	SELECT '2011-03-27 01:00:00 Europe/Moscow'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-27 01:59:59 Europe/Moscow'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 01:59:59 Europe/Moscow'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "europe/moscow" not recognized
+
+        	SELECT '2011-03-27 01:59:59 Europe/Moscow'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-27 02:00:00 Europe/Moscow'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 02:00:00 Europe/Moscow'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "europe/moscow" not recognized
+
+        	SELECT '2011-03-27 02:00:00 Europe/Moscow'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-27 02:00:01 Europe/Moscow'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 02:00:01 Europe/Moscow'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "europe/moscow" not recognized
+
+        	SELECT '2011-03-27 02:00:01 Europe/Moscow'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-27 02:59:59 Europe/Moscow'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 02:59:59 Europe/Moscow'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "europe/moscow" not recognized
+
+        	SELECT '2011-03-27 02:59:59 Europe/Moscow'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-27 03:00:00 Europe/Moscow'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 03:00:00 Europe/Moscow'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "europe/moscow" not recognized
+
+        	SELECT '2011-03-27 03:00:00 Europe/Moscow'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-27 03:00:01 Europe/Moscow'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 03:00:01 Europe/Moscow'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "europe/moscow" not recognized
+
+        	SELECT '2011-03-27 03:00:01 Europe/Moscow'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-27 04:00:00 Europe/Moscow'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 04:00:00 Europe/Moscow'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "europe/moscow" not recognized
+
+        	SELECT '2011-03-27 04:00:00 Europe/Moscow'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-27 00:00:00 MSK'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 00:00:00 MSK'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-27 00:00:00 MSK"
+
+        	SELECT '2011-03-27 00:00:00 MSK'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-27 01:00:00 MSK'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 01:00:00 MSK'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-27 01:00:00 MSK"
+
+        	SELECT '2011-03-27 01:00:00 MSK'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-27 01:59:59 MSK'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 01:59:59 MSK'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-27 01:59:59 MSK"
+
+        	SELECT '2011-03-27 01:59:59 MSK'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-27 02:00:00 MSK'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 02:00:00 MSK'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-27 02:00:00 MSK"
+
+        	SELECT '2011-03-27 02:00:00 MSK'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-27 02:00:01 MSK'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 02:00:01 MSK'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-27 02:00:01 MSK"
+
+        	SELECT '2011-03-27 02:00:01 MSK'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-27 02:59:59 MSK'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 02:59:59 MSK'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-27 02:59:59 MSK"
+
+        	SELECT '2011-03-27 02:59:59 MSK'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-27 03:00:00 MSK'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 03:00:00 MSK'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-27 03:00:00 MSK"
+
+        	SELECT '2011-03-27 03:00:00 MSK'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-27 03:00:01 MSK'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 03:00:01 MSK'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-27 03:00:01 MSK"
+
+        	SELECT '2011-03-27 03:00:01 MSK'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-27 04:00:00 MSK'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 04:00:00 MSK'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-27 04:00:00 MSK"
+
+        	SELECT '2011-03-27 04:00:00 MSK'::timestamptz;
+	^
+<sql-statement>
+SELECT '2014-10-26 00:00:00 Europe/Moscow'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-26 00:00:00 Europe/Moscow'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "europe/moscow" not recognized
+
+        	SELECT '2014-10-26 00:00:00 Europe/Moscow'::timestamptz;
+	^
+<sql-statement>
+SELECT '2014-10-26 00:59:59 Europe/Moscow'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-26 00:59:59 Europe/Moscow'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "europe/moscow" not recognized
+
+        	SELECT '2014-10-26 00:59:59 Europe/Moscow'::timestamptz;
+	^
+<sql-statement>
+SELECT '2014-10-26 01:00:00 Europe/Moscow'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-26 01:00:00 Europe/Moscow'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "europe/moscow" not recognized
+
+        	SELECT '2014-10-26 01:00:00 Europe/Moscow'::timestamptz;
+	^
+<sql-statement>
+SELECT '2014-10-26 01:00:01 Europe/Moscow'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-26 01:00:01 Europe/Moscow'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "europe/moscow" not recognized
+
+        	SELECT '2014-10-26 01:00:01 Europe/Moscow'::timestamptz;
+	^
+<sql-statement>
+SELECT '2014-10-26 02:00:00 Europe/Moscow'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-26 02:00:00 Europe/Moscow'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "europe/moscow" not recognized
+
+        	SELECT '2014-10-26 02:00:00 Europe/Moscow'::timestamptz;
+	^
+<sql-statement>
+SELECT '2014-10-26 00:00:00 MSK'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-26 00:00:00 MSK'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2014-10-26 00:00:00 MSK"
+
+        	SELECT '2014-10-26 00:00:00 MSK'::timestamptz;
+	^
+<sql-statement>
+SELECT '2014-10-26 00:59:59 MSK'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-26 00:59:59 MSK'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2014-10-26 00:59:59 MSK"
+
+        	SELECT '2014-10-26 00:59:59 MSK'::timestamptz;
+	^
+<sql-statement>
+SELECT '2014-10-26 01:00:00 MSK'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-26 01:00:00 MSK'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2014-10-26 01:00:00 MSK"
+
+        	SELECT '2014-10-26 01:00:00 MSK'::timestamptz;
+	^
+<sql-statement>
+SELECT '2014-10-26 01:00:01 MSK'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-26 01:00:01 MSK'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2014-10-26 01:00:01 MSK"
+
+        	SELECT '2014-10-26 01:00:01 MSK'::timestamptz;
+	^
+<sql-statement>
+SELECT '2014-10-26 02:00:00 MSK'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-26 02:00:00 MSK'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2014-10-26 02:00:00 MSK"
+
+        	SELECT '2014-10-26 02:00:00 MSK'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-27 00:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 00:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "Europe/Moscow" not recognized
+
+        	SELECT '2011-03-27 00:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2011-03-27 01:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 01:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "Europe/Moscow" not recognized
+
+        	SELECT '2011-03-27 01:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2011-03-27 01:59:59'::timestamp AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 01:59:59'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "Europe/Moscow" not recognized
+
+        	SELECT '2011-03-27 01:59:59'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2011-03-27 02:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 02:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "Europe/Moscow" not recognized
+
+        	SELECT '2011-03-27 02:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2011-03-27 02:00:01'::timestamp AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 02:00:01'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "Europe/Moscow" not recognized
+
+        	SELECT '2011-03-27 02:00:01'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2011-03-27 02:59:59'::timestamp AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 02:59:59'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "Europe/Moscow" not recognized
+
+        	SELECT '2011-03-27 02:59:59'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2011-03-27 03:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 03:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "Europe/Moscow" not recognized
+
+        	SELECT '2011-03-27 03:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2011-03-27 03:00:01'::timestamp AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 03:00:01'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "Europe/Moscow" not recognized
+
+        	SELECT '2011-03-27 03:00:01'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2011-03-27 04:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 04:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "Europe/Moscow" not recognized
+
+        	SELECT '2011-03-27 04:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2011-03-27 00:00:00'::timestamp AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 00:00:00'::timestamp AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "MSK" not recognized
+
+        	SELECT '2011-03-27 00:00:00'::timestamp AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2011-03-27 01:00:00'::timestamp AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 01:00:00'::timestamp AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "MSK" not recognized
+
+        	SELECT '2011-03-27 01:00:00'::timestamp AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2011-03-27 01:59:59'::timestamp AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 01:59:59'::timestamp AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "MSK" not recognized
+
+        	SELECT '2011-03-27 01:59:59'::timestamp AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2011-03-27 02:00:00'::timestamp AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 02:00:00'::timestamp AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "MSK" not recognized
+
+        	SELECT '2011-03-27 02:00:00'::timestamp AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2011-03-27 02:00:01'::timestamp AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 02:00:01'::timestamp AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "MSK" not recognized
+
+        	SELECT '2011-03-27 02:00:01'::timestamp AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2011-03-27 02:59:59'::timestamp AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 02:59:59'::timestamp AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "MSK" not recognized
+
+        	SELECT '2011-03-27 02:59:59'::timestamp AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2011-03-27 03:00:00'::timestamp AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 03:00:00'::timestamp AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "MSK" not recognized
+
+        	SELECT '2011-03-27 03:00:00'::timestamp AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2011-03-27 03:00:01'::timestamp AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 03:00:01'::timestamp AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "MSK" not recognized
+
+        	SELECT '2011-03-27 03:00:01'::timestamp AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2011-03-27 04:00:00'::timestamp AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 04:00:00'::timestamp AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "MSK" not recognized
+
+        	SELECT '2011-03-27 04:00:00'::timestamp AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2014-10-26 00:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-26 00:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "Europe/Moscow" not recognized
+
+        	SELECT '2014-10-26 00:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2014-10-26 00:59:59'::timestamp AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-26 00:59:59'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "Europe/Moscow" not recognized
+
+        	SELECT '2014-10-26 00:59:59'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2014-10-26 01:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-26 01:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "Europe/Moscow" not recognized
+
+        	SELECT '2014-10-26 01:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2014-10-26 01:00:01'::timestamp AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-26 01:00:01'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "Europe/Moscow" not recognized
+
+        	SELECT '2014-10-26 01:00:01'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2014-10-26 02:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-26 02:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "Europe/Moscow" not recognized
+
+        	SELECT '2014-10-26 02:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2014-10-26 00:00:00'::timestamp AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-26 00:00:00'::timestamp AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "MSK" not recognized
+
+        	SELECT '2014-10-26 00:00:00'::timestamp AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2014-10-26 00:59:59'::timestamp AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-26 00:59:59'::timestamp AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "MSK" not recognized
+
+        	SELECT '2014-10-26 00:59:59'::timestamp AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2014-10-26 01:00:00'::timestamp AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-26 01:00:00'::timestamp AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "MSK" not recognized
+
+        	SELECT '2014-10-26 01:00:00'::timestamp AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2014-10-26 01:00:01'::timestamp AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-26 01:00:01'::timestamp AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "MSK" not recognized
+
+        	SELECT '2014-10-26 01:00:01'::timestamp AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2014-10-26 02:00:00'::timestamp AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-26 02:00:00'::timestamp AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "MSK" not recognized
+
+        	SELECT '2014-10-26 02:00:00'::timestamp AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT make_timestamptz(2014, 10, 26, 0, 0, 0, 'MSK');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT make_timestamptz(2014, 10, 26, 0, 0, 0, 'MSK');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "MSK" not recognized
+
+        	SELECT make_timestamptz(2014, 10, 26, 0, 0, 0, 'MSK');
+	^
+<sql-statement>
+SELECT make_timestamptz(2014, 10, 26, 1, 0, 0, 'MSK');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT make_timestamptz(2014, 10, 26, 1, 0, 0, 'MSK');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "MSK" not recognized
+
+        	SELECT make_timestamptz(2014, 10, 26, 1, 0, 0, 'MSK');
+	^
+<sql-statement>
+SELECT to_timestamp(         0);          -- 1970-01-01 00:00:00+00
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp( 946684800);          -- 2000-01-01 00:00:00+00
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp(1262349296.7890123);  -- 2010-01-01 12:34:56.789012+00
+</sql-statement>
+<sql-statement>
+-- edge cases
+SELECT to_timestamp(-210866803200);       --   4714-11-24 00:00:00+00 BC
+</sql-statement>
+<sql-statement>
+-- upper limit varies between integer and float timestamps, so hard to test
+-- nonfinite values
+SELECT to_timestamp(' Infinity'::float);
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('-Infinity'::float);
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('NaN'::float);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT to_timestamp('NaN'::float);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  timestamp cannot be NaN
+
+        	SELECT to_timestamp('NaN'::float);
+	^
+<sql-statement>
+SET TimeZone to 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: TimeZone
+    	SET TimeZone to 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2011-03-26 21:00:00 UTC'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-26 21:00:00 UTC'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-26 21:00:00 UTC"
+
+        	SELECT '2011-03-26 21:00:00 UTC'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-26 22:00:00 UTC'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-26 22:00:00 UTC'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-26 22:00:00 UTC"
+
+        	SELECT '2011-03-26 22:00:00 UTC'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-26 22:59:59 UTC'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-26 22:59:59 UTC'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-26 22:59:59 UTC"
+
+        	SELECT '2011-03-26 22:59:59 UTC'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-26 23:00:00 UTC'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-26 23:00:00 UTC'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-26 23:00:00 UTC"
+
+        	SELECT '2011-03-26 23:00:00 UTC'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-26 23:00:01 UTC'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-26 23:00:01 UTC'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-26 23:00:01 UTC"
+
+        	SELECT '2011-03-26 23:00:01 UTC'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-26 23:59:59 UTC'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-26 23:59:59 UTC'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-26 23:59:59 UTC"
+
+        	SELECT '2011-03-26 23:59:59 UTC'::timestamptz;
+	^
+<sql-statement>
+SELECT '2011-03-27 00:00:00 UTC'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 00:00:00 UTC'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-27 00:00:00 UTC"
+
+        	SELECT '2011-03-27 00:00:00 UTC'::timestamptz;
+	^
+<sql-statement>
+SELECT '2014-10-25 21:00:00 UTC'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-25 21:00:00 UTC'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2014-10-25 21:00:00 UTC"
+
+        	SELECT '2014-10-25 21:00:00 UTC'::timestamptz;
+	^
+<sql-statement>
+SELECT '2014-10-25 21:59:59 UTC'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-25 21:59:59 UTC'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2014-10-25 21:59:59 UTC"
+
+        	SELECT '2014-10-25 21:59:59 UTC'::timestamptz;
+	^
+<sql-statement>
+SELECT '2014-10-25 22:00:00 UTC'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-25 22:00:00 UTC'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2014-10-25 22:00:00 UTC"
+
+        	SELECT '2014-10-25 22:00:00 UTC'::timestamptz;
+	^
+<sql-statement>
+SELECT '2014-10-25 22:00:01 UTC'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-25 22:00:01 UTC'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2014-10-25 22:00:01 UTC"
+
+        	SELECT '2014-10-25 22:00:01 UTC'::timestamptz;
+	^
+<sql-statement>
+SELECT '2014-10-25 23:00:00 UTC'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-25 23:00:00 UTC'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2014-10-25 23:00:00 UTC"
+
+        	SELECT '2014-10-25 23:00:00 UTC'::timestamptz;
+	^
+<sql-statement>
+RESET TimeZone;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	RESET TimeZone;
+	^
+<sql-statement>
+SELECT '2011-03-26 21:00:00 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-26 21:00:00 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-26 21:00:00 UTC"
+
+        	SELECT '2011-03-26 21:00:00 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2011-03-26 22:00:00 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-26 22:00:00 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-26 22:00:00 UTC"
+
+        	SELECT '2011-03-26 22:00:00 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2011-03-26 22:59:59 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-26 22:59:59 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-26 22:59:59 UTC"
+
+        	SELECT '2011-03-26 22:59:59 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2011-03-26 23:00:00 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-26 23:00:00 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-26 23:00:00 UTC"
+
+        	SELECT '2011-03-26 23:00:00 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2011-03-26 23:00:01 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-26 23:00:01 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-26 23:00:01 UTC"
+
+        	SELECT '2011-03-26 23:00:01 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2011-03-26 23:59:59 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-26 23:59:59 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-26 23:59:59 UTC"
+
+        	SELECT '2011-03-26 23:59:59 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2011-03-27 00:00:00 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 00:00:00 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-27 00:00:00 UTC"
+
+        	SELECT '2011-03-27 00:00:00 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2014-10-25 21:00:00 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-25 21:00:00 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2014-10-25 21:00:00 UTC"
+
+        	SELECT '2014-10-25 21:00:00 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2014-10-25 21:59:59 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-25 21:59:59 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2014-10-25 21:59:59 UTC"
+
+        	SELECT '2014-10-25 21:59:59 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2014-10-25 22:00:00 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-25 22:00:00 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2014-10-25 22:00:00 UTC"
+
+        	SELECT '2014-10-25 22:00:00 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2014-10-25 22:00:01 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-25 22:00:01 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2014-10-25 22:00:01 UTC"
+
+        	SELECT '2014-10-25 22:00:01 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2014-10-25 23:00:00 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-25 23:00:00 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2014-10-25 23:00:00 UTC"
+
+        	SELECT '2014-10-25 23:00:00 UTC'::timestamptz AT TIME ZONE 'Europe/Moscow';
+	^
+<sql-statement>
+SELECT '2011-03-26 21:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-26 21:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-26 21:00:00 UTC"
+
+        	SELECT '2011-03-26 21:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2011-03-26 22:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-26 22:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-26 22:00:00 UTC"
+
+        	SELECT '2011-03-26 22:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2011-03-26 22:59:59 UTC'::timestamptz AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-26 22:59:59 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-26 22:59:59 UTC"
+
+        	SELECT '2011-03-26 22:59:59 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2011-03-26 23:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-26 23:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-26 23:00:00 UTC"
+
+        	SELECT '2011-03-26 23:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2011-03-26 23:00:01 UTC'::timestamptz AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-26 23:00:01 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-26 23:00:01 UTC"
+
+        	SELECT '2011-03-26 23:00:01 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2011-03-26 23:59:59 UTC'::timestamptz AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-26 23:59:59 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-26 23:59:59 UTC"
+
+        	SELECT '2011-03-26 23:59:59 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2011-03-27 00:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2011-03-27 00:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2011-03-27 00:00:00 UTC"
+
+        	SELECT '2011-03-27 00:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2014-10-25 21:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-25 21:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2014-10-25 21:00:00 UTC"
+
+        	SELECT '2014-10-25 21:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2014-10-25 21:59:59 UTC'::timestamptz AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-25 21:59:59 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2014-10-25 21:59:59 UTC"
+
+        	SELECT '2014-10-25 21:59:59 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2014-10-25 22:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-25 22:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2014-10-25 22:00:00 UTC"
+
+        	SELECT '2014-10-25 22:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2014-10-25 22:00:01 UTC'::timestamptz AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-25 22:00:01 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2014-10-25 22:00:01 UTC"
+
+        	SELECT '2014-10-25 22:00:01 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+SELECT '2014-10-25 23:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2014-10-25 23:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp with time zone: "2014-10-25 23:00:00 UTC"
+
+        	SELECT '2014-10-25 23:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
+	^
+<sql-statement>
+--
+-- Test that AT TIME ZONE isn't misoptimized when using an index (bug #14504)
+--
+create temp table tmptz (f1 timestamptz primary key);
+</sql-statement>
+<sql-statement>
+insert into tmptz values ('2017-01-18 00:00+00');
+</sql-statement>
+<sql-statement>
+explain (costs off)
+select * from tmptz where f1 at time zone 'utc' = '2017-01-18 00:00';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select * from tmptz where f1 at time zone 'utc' = '2017-01-18 00:00';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtMap!
+    	select * from tmptz where f1 at time zone 'utc' = '2017-01-18 00:00';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "utc" not recognized
+
+        	select * from tmptz where f1 at time zone 'utc' = '2017-01-18 00:00';
+	^

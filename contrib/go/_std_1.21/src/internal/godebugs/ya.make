@@ -1,12 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    table.go
-)
-
-GO_XTEST_SRCS(godebugs_test.go)
-
+IF (TRUE)
+    SRCS(
+		table.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

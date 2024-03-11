@@ -446,7 +446,7 @@ def get_tables(suite, cfg, DATA_PATH, def_attr=None):
 
 
 def get_supported_providers(cfg):
-    providers = 'yt', 'kikimr', 'dq'
+    providers = 'yt', 'kikimr', 'dq', 'hybrid'
     for item in cfg:
         if item[0] == 'providers':
             providers = [i.strip() for i in ''.join(item[1:]).split(',')]
@@ -693,7 +693,7 @@ def get_udfs_path(extra_paths=None):
         udfs_project_path = None
 
     try:
-        ydb_udfs_project_path = yql_binary_path('ydb/library/yql/test/common/test_framework/udfs_deps')
+        ydb_udfs_project_path = yql_binary_path('ydb/library/yql/tests/common/test_framework/udfs_deps')
     except Exception:
         ydb_udfs_project_path = None
 
@@ -899,6 +899,21 @@ def pytest_get_current_part(path):
     maxpart = max([int(part[len('part'):]) if part.startswith('part') else -1 for part in os.listdir(parent)])
     assert maxpart > 0, "Cannot find parts in {}".format(parent)
     return (current, 1 + maxpart)
+
+
+def normalize_result(res, sort):
+    res = cyson.loads(res) if res else cyson.loads("[]")
+    res = replace_vals(res)
+    for r in res:
+        for data in r['Write']:
+            if sort and 'Data' in data:
+                data['Data'] = sorted(data['Data'])
+            if 'Ref' in data:
+                data['Ref'] = []
+                data['Truncated'] = True
+            if 'Data' in data and len(data['Data']) == 0:
+                del data['Data']
+    return res
 
 
 class LoggingDowngrade(object):

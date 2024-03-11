@@ -79,7 +79,7 @@ struct TGeneratedColumnsConfig {
 
 class TS3IODiscoveryTransformer : public TGraphTransformerBase {
 public:
-    TS3IODiscoveryTransformer(TS3State::TPtr state, IHTTPGateway::TPtr gateway)
+    TS3IODiscoveryTransformer(TS3State::TPtr state)
         : State_(std::move(state))
         , ListerFactory_(NS3Lister::MakeS3ListerFactory(
               State_->Configuration->MaxInflightListsPerQuery,
@@ -87,7 +87,7 @@ public:
               State_->Configuration->ListingCallbackPerThreadQueueSize,
               State_->Configuration->RegexpCacheSize))
         , ListingStrategy_(MakeS3ListingStrategy(
-              gateway,
+              State_->Gateway,
               ListerFactory_,
               State_->Configuration->MinDesiredDirectoriesOfFilesPerQuery,
               State_->Configuration->MaxInflightListsPerQuery,
@@ -870,8 +870,8 @@ private:
 
 }
 
-THolder<IGraphTransformer> CreateS3IODiscoveryTransformer(TS3State::TPtr state, IHTTPGateway::TPtr gateway) {
-    return THolder(new TS3IODiscoveryTransformer(std::move(state), std::move(gateway)));
+THolder<IGraphTransformer> CreateS3IODiscoveryTransformer(TS3State::TPtr state) {
+    return THolder(new TS3IODiscoveryTransformer(std::move(state)));
 }
 
 }

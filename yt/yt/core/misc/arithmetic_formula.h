@@ -86,7 +86,6 @@ public:
     void Load(TStreamLoadContext& context);
 
     bool operator==(const TBooleanFormulaTags& other) const;
-    bool operator!=(const TBooleanFormulaTags& other) const;
 
 private:
     THashSet<TString> Tags_;
@@ -99,7 +98,7 @@ void Serialize(const TBooleanFormulaTags& tags, NYson::IYsonConsumer* consumer);
 void Deserialize(TBooleanFormulaTags& tags, NYTree::INodePtr node);
 
 TString ToString(const TBooleanFormulaTags& tags);
-void FormatValue(TStringBuilderBase* builder, const TBooleanFormulaTags& tags, TStringBuf /* format */);
+void FormatValue(TStringBuilderBase* builder, const TBooleanFormulaTags& tags, TStringBuf /*format*/);
 
 ////////////////////////////////////////////////////////////////////////////////
 

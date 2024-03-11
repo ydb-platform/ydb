@@ -9,9 +9,11 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
+#include <ydb/core/jaeger_tracing/sampling_throttling_control.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/scheme_board/scheme_board.h>
 #include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 
 #include <shared_mutex>
 
@@ -26,13 +28,10 @@ TString DatabaseFromDomain(const TAppData* appdata = AppData()) {
     auto dinfo = appdata->DomainsInfo;
     if (!dinfo)
         ythrow yexception() << "Invalid DomainsInfo ptr";
-    if (dinfo->Domains.empty() || dinfo->Domains.size() != 1)
-        ythrow yexception() << "Unexpected domains container size: "
-                            << dinfo->Domains.size();
-    if (!dinfo->Domains.begin()->second)
-        ythrow yexception() << "Empty domain params";
+    if (!dinfo->Domain)
+        ythrow yexception() << "No Domain defined";
 
-    return TString("/") + dinfo->Domains.begin()->second->Name;
+    return TString("/") + dinfo->GetDomain()->Name;
 }
 
 struct TDatabaseInfo {
@@ -60,8 +59,9 @@ class TGRpcRequestProxyImpl
 {
     using TBase = TActorBootstrapped<TGRpcRequestProxyImpl>;
 public:
-    explicit TGRpcRequestProxyImpl(const NKikimrConfig::TAppConfig& appConfig)
+    explicit TGRpcRequestProxyImpl(const NKikimrConfig::TAppConfig& appConfig, TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> tracingControl)
         : ChannelBufferSize(appConfig.GetTableServiceConfig().GetResourceManager().GetChannelBufferSize())
+        , TracingControl(std::move(tracingControl))
     { }
 
     void Bootstrap(const TActorContext& ctx);
@@ -80,7 +80,7 @@ private:
     void HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev);
     void ReplayEvents(const TString& databaseName, const TActorContext& ctx);
 
-    void StartTracing(IRequestProxyCtx& ctx);
+    void MaybeStartTracing(IRequestProxyCtx& ctx);
 
     static bool IsAuthStateOK(const IRequestProxyCtx& ctx);
 
@@ -151,7 +151,7 @@ private:
         }
 
 
-        StartTracing(*requestBaseCtx);
+        MaybeStartTracing(*requestBaseCtx);
 
         if (IsAuthStateOK(*requestBaseCtx)) {
             Handle(event, ctx);
@@ -311,6 +311,7 @@ private:
     bool DynamicNode = false;
     TString RootDatabase;
     IGRpcProxyCounters::TPtr Counters;
+    TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> TracingControl;
 };
 
 void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
@@ -409,12 +410,18 @@ bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
            state.NeedAuth == false && !ctx.GetYdbToken();
 }
 
-void TGRpcRequestProxyImpl::StartTracing(IRequestProxyCtx& ctx) {
+void TGRpcRequestProxyImpl::MaybeStartTracing(IRequestProxyCtx& ctx) {
+    NWilson::TTraceId traceId;
     if (const auto otelHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER)) {
-        if (auto traceId = NWilson::TTraceId::FromTraceparentHeader(otelHeader.GetRef())) {
-            NWilson::TSpan grpcRequestProxySpan(TWilsonGrpc::RequestProxy, std::move(traceId), "GrpcRequestProxy");
-            ctx.StartTracing(std::move(grpcRequestProxySpan));
+        traceId = NWilson::TTraceId::FromTraceparentHeader(otelHeader.GetRef());
+    }
+    TracingControl->HandleTracing(traceId, ctx.GetRequestDiscriminator());
+    if (traceId) {
+        NWilson::TSpan grpcRequestProxySpan(TWilsonGrpc::RequestProxy, std::move(traceId), "GrpcRequestProxy");
+        if (auto database = ctx.GetDatabaseName()) {
+            grpcRequestProxySpan.Attribute("database", std::move(*database));
         }
+        ctx.StartTracing(std::move(grpcRequestProxySpan));
     }
 }
 
@@ -560,20 +567,8 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
         HFunc(TEvStreamTopicDirectReadRequest, PreHandle);
         HFunc(TEvCommitOffsetRequest, PreHandle);
         HFunc(TEvPQReadInfoRequest, PreHandle);
-        HFunc(TEvPQDropTopicRequest, PreHandle);
-        HFunc(TEvPQCreateTopicRequest, PreHandle);
-        HFunc(TEvPQAlterTopicRequest, PreHandle);
-        HFunc(TEvPQAddReadRuleRequest, PreHandle);
-        HFunc(TEvPQRemoveReadRuleRequest, PreHandle);
-        HFunc(TEvPQDescribeTopicRequest, PreHandle);
         HFunc(TEvDiscoverPQClustersRequest, PreHandle);
         HFunc(TEvCoordinationSessionRequest, PreHandle);
-        HFunc(TEvDropTopicRequest, PreHandle);
-        HFunc(TEvCreateTopicRequest, PreHandle);
-        HFunc(TEvAlterTopicRequest, PreHandle);
-        HFunc(TEvDescribeTopicRequest, PreHandle);
-        HFunc(TEvDescribeConsumerRequest, PreHandle);
-        HFunc(TEvDescribePartitionRequest, PreHandle);
         HFunc(TEvNodeCheckRequest, PreHandle);
         HFunc(TEvProxyRuntimeEvent, PreHandle);
 
@@ -583,8 +578,8 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
     }
 }
 
-IActor* CreateGRpcRequestProxy(const NKikimrConfig::TAppConfig& appConfig) {
-    return new TGRpcRequestProxyImpl(appConfig);
+IActor* CreateGRpcRequestProxy(const NKikimrConfig::TAppConfig& appConfig, TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> tracingControl) {
+    return new TGRpcRequestProxyImpl(appConfig, std::move(tracingControl));
 }
 
 } // namespace NGRpcService

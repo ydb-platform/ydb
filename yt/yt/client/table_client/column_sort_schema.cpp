@@ -56,16 +56,6 @@ void Deserialize(TColumnSortSchema& schema, TYsonPullParserCursor* cursor)
     Deserialize(schema, ExtractTo<INodePtr>(cursor));
 }
 
-bool operator == (const TColumnSortSchema& lhs, const TColumnSortSchema& rhs)
-{
-    return lhs.Name == rhs.Name && lhs.SortOrder == rhs.SortOrder;
-}
-
-bool operator != (const TColumnSortSchema& lhs, const TColumnSortSchema& rhs)
-{
-    return !(lhs == rhs);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 void ValidateSortColumns(const std::vector<TColumnSortSchema>& columns)

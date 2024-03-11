@@ -96,6 +96,14 @@ public:
         c2->set_location("dc2");
         c2->set_status(::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_AVAILABLE);
         c2->set_weight(500);
+        auto c3 = mockResult.add_federation_databases();
+        c3->set_name("dc3");
+        c3->set_path("/Root");
+        c3->set_id("account-dc3");
+        c3->set_endpoint("localhost:" + ToString(Port));
+        c3->set_location("dc3");
+        c3->set_status(::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_AVAILABLE);
+        c3->set_weight(500);
 
         op->mutable_result()->PackFrom(mockResult);
 

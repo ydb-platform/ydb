@@ -14,17 +14,19 @@ namespace NKikimr::NKqp {
 class TKqpTableMetadataLoader : public NYql::IKikimrGateway::IKqpTableMetadataLoader {
 public:
 
-    explicit TKqpTableMetadataLoader(TActorSystem* actorSystem, 
-        NYql::TKikimrConfiguration::TPtr config, 
-        bool needCollectSchemeData = false, 
+    explicit TKqpTableMetadataLoader(const TString& cluster,
+        TActorSystem* actorSystem,
+        NYql::TKikimrConfiguration::TPtr config,
+        bool needCollectSchemeData = false,
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
         TDuration maximalSecretsSnapshotWaitTime = TDuration::Seconds(20))
-        : NeedCollectSchemeData(needCollectSchemeData)
+        : Cluster(cluster)
+        , NeedCollectSchemeData(needCollectSchemeData)
         , ActorSystem(actorSystem)
         , Config(config)
         , TempTablesState(std::move(tempTablesState))
         , MaximalSecretsSnapshotWaitTime(maximalSecretsSnapshotWaitTime)
-    {};
+    {}
 
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadTableMetadata(
         const TString& cluster, const TString& table, const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings, const TString& database,
@@ -56,6 +58,7 @@ private:
 
     void OnLoadedTableMetadata(NYql::IKikimrGateway::TTableMetadataResult& loadTableMetadataResult);
 
+    const TString Cluster;
     TVector<NKikimrKqp::TKqpTableMetadataProto> CollectedSchemeData;
     TMutex Lock;
     bool NeedCollectSchemeData;

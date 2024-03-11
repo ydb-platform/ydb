@@ -20,7 +20,7 @@ Y_UNIT_TEST(TestPartitionedBlobSimpleTest) {
     THead head;
     THead newHead;
 
-    TPartitionedBlob blob(0, 0, "sourceId", 1, 1, 10, head, newHead, false, false, 8_MB);
+    TPartitionedBlob blob(TPartitionId(0), 0, "sourceId", 1, 1, 10, head, newHead, false, false, 8_MB);
     TClientBlob clientBlob("sourceId", 1, "valuevalue", TMaybe<TPartData>(), TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 0, "123", "123");
     UNIT_ASSERT(blob.IsInited());
     TString error;
@@ -73,7 +73,7 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     newHead.PackedSize = newHead.Batches.back().GetUnpackedSize();
     TString value2(partSize, 'b');
     ui32 maxBlobSize = 8 << 20;
-    TPartitionedBlob blob(0, newHead.GetNextOffset(), "sourceId3", 1, parts, parts * value2.size(), head, newHead, headCompacted, false, maxBlobSize);
+    TPartitionedBlob blob(TPartitionId(0), newHead.GetNextOffset(), "sourceId3", 1, parts, parts * value2.size(), head, newHead, headCompacted, false, maxBlobSize);
 
     TVector<std::pair<TKey, TString>> formed;
 
@@ -228,6 +228,29 @@ Y_UNIT_TEST(TestKeyRange) {
     UNIT_ASSERT_STRINGS_EQUAL(ToHex(result), ToHex(expected));
 } // Y_UNIT_TEST(TestKeyRange)
 
+Y_UNIT_TEST(StoreKeys) {
+    TKey keyOld(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5, false);
+    UNIT_ASSERT_VALUES_EQUAL(keyOld.ToString(), "d0000000009_00000000000000000008_00007_0000000006_00005");
+
+    TKey keyNew(TKeyPrefix::TypeData, TPartitionId{5, 1, 9}, 8, 7, 6, 5, false);
+    UNIT_ASSERT_VALUES_EQUAL(keyNew.ToString(), "D0000000009_00000000000000000008_00007_0000000006_00005");
+
+    keyNew.SetType(TKeyPrefix::TypeInfo);
+    UNIT_ASSERT_VALUES_EQUAL(keyNew.ToString(), "M0000000009_00000000000000000008_00007_0000000006_00005");
+}
+
+Y_UNIT_TEST(RestoreKeys) {
+    {
+        TKey key("X0000000001_00000000000000000002_00003_0000000004_00005");
+        UNIT_ASSERT(key.GetType() == TKeyPrefix::TypeTmpData);
+        UNIT_ASSERT_VALUES_EQUAL(key.GetPartition().InternalPartitionId, 1);
+    }
+    {
+        TKey key("i0000000001_00000000000000000002_00003_0000000004_00005");
+        UNIT_ASSERT(key.GetType() == TKeyPrefix::TypeMeta);
+        UNIT_ASSERT_VALUES_EQUAL(key.GetPartition().InternalPartitionId, 1);
+    }
+}
 
 } //Y_UNIT_TEST_SUITE
 

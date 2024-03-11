@@ -54,6 +54,12 @@ struct TEvStatistics {
         EvConnectNode,
         EvRequestStats,
         EvPropagateStatistics,
+        EvStatisticsIsDisabled,
+        EvPropagateStatisticsResponse,
+
+        EvStatTableCreationResponse,
+        EvSaveStatisticsQueryResponse,
+        EvLoadStatisticsQueryResponse,
 
         EvEnd
     };
@@ -108,6 +114,41 @@ struct TEvStatistics {
         NKikimrStat::TEvPropagateStatistics,
         EvPropagateStatistics>
     {};
+
+    struct TEvStatisticsIsDisabled : public TEventPB<
+        TEvStatisticsIsDisabled,
+        NKikimrStat::TEvStatisticsIsDisabled,
+        EvStatisticsIsDisabled>
+    {};
+
+    struct TEvPropagateStatisticsResponse : public TEventPB<
+        TEvPropagateStatisticsResponse,
+        NKikimrStat::TEvPropagateStatisticsResponse,
+        EvPropagateStatisticsResponse>
+    {};
+
+    struct TEvStatTableCreationResponse : public TEventLocal<
+        TEvStatTableCreationResponse,
+        EvStatTableCreationResponse>
+    {
+        bool Success = true;
+    };
+
+    struct TEvSaveStatisticsQueryResponse : public TEventLocal<
+        TEvSaveStatisticsQueryResponse,
+        EvSaveStatisticsQueryResponse>
+    {
+        bool Success = true;
+    };
+
+    struct TEvLoadStatisticsQueryResponse : public TEventLocal<
+        TEvLoadStatisticsQueryResponse,
+        EvLoadStatisticsQueryResponse>
+    {
+        bool Success = true;
+        TMaybe<TString> Data;
+    };
+
 };
 
 } // NStat

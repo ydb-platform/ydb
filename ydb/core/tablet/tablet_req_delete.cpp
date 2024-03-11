@@ -84,8 +84,7 @@ class TTabletReqDelete : public TActorBootstrapped<TTabletReqDelete> {
             ++FinishedRequests;
             if (FinishedRequests >= Requests.size()) {
                 if (Generation == std::numeric_limits<ui32>::max()) {
-                    ui64 StateStorageId = StateStorageGroupFromTabletID(TabletId);
-                    const TActorId proxyActorID = MakeStateStorageProxyID(StateStorageId);
+                    const TActorId proxyActorID = MakeStateStorageProxyID();
                     ctx.Send(proxyActorID, new TEvStateStorage::TEvDelete(TabletId));
                 }
 

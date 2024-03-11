@@ -583,6 +583,16 @@ void TCheckpointCoordinator::Handle(NActors::TEvInterconnect::TEvNodeConnected::
     }
 }
 
+void TCheckpointCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+    CC_LOG_D("Handle undelivered");
+
+    if (const auto actorIt = AllActors.find(ev->Sender); actorIt != AllActors.end()) {
+        actorIt->second->EventsQueue.HandleUndelivered(ev);
+    }
+
+    NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnUndelivered(ev);
+}
+
 void TCheckpointCoordinator::Handle(NActors::TEvents::TEvPoison::TPtr& ev) {
     CC_LOG_D("Got TEvPoison");
     Send(ev->Sender, new NActors::TEvents::TEvPoisonTaken(), 0, ev->Cookie);

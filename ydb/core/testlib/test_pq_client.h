@@ -5,6 +5,7 @@
 #include <ydb/core/persqueue/cluster_tracker.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
+#include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
@@ -28,6 +29,7 @@ const static ui32 PQ_DEFAULT_NODE_COUNT = 2;
 inline Tests::TServerSettings PQSettings(ui16 port = 0, ui32 nodesCount = PQ_DEFAULT_NODE_COUNT, const TString& yql_timeout = "10", const THolder<TTempFileHandle>& netDataFile = nullptr) {
     NKikimrPQ::TPQConfig pqConfig;
     NKikimrProto::TAuthConfig authConfig;
+    authConfig.SetUseBuiltinDomain(true);
     authConfig.SetUseBlackBox(false);
     authConfig.SetUseAccessService(false);
     authConfig.SetUseAccessServiceTLS(false);
@@ -542,7 +544,7 @@ public:
         auto driverConfig = NYdb::TDriverConfig()
             .SetEndpoint(endpoint)
             .SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
-        if (databaseName) 
+        if (databaseName)
             driverConfig.SetDatabase(*databaseName);
         Driver.Reset(MakeHolder<NYdb::TDriver>(driverConfig));
 
@@ -599,6 +601,7 @@ public:
            "Columns { Name: \"Partition\"        Type: \"Uint32\"}"
            "Columns { Name: \"CreateTime\"       Type: \"Uint64\"}"
            "Columns { Name: \"AccessTime\"       Type: \"Uint64\"}"
+           "Columns { Name: \"SeqNo\"            Type: \"Uint64\"}"
            "KeyColumnNames: [\"Hash\", \"SourceId\", \"Topic\"]"
         );
     }
@@ -790,7 +793,7 @@ public:
     {
         auto response = RequestTopicMetadata(name);
 
-        if (response.GetErrorCode() != (ui32)NPersQueue::NErrorCode::OK) 
+        if (response.GetErrorCode() != (ui32)NPersQueue::NErrorCode::OK)
             return 0;
 
         UNIT_ASSERT(response.HasMetaResponse());
@@ -877,8 +880,8 @@ public:
 
     void GrantConsumerAccess(const TString& oldName, const TString& subj) {
         NACLib::TDiffACL acl;
-        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::ReadAttributes, subj);
-        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::WriteAttributes, subj);
+        // in future use right UseConsumer
+        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, subj);
         auto name = NPersQueue::ConvertOldConsumerName(oldName);
         auto pos = name.rfind("/");
         Y_ABORT_UNLESS(pos != TString::npos);
@@ -1080,7 +1083,7 @@ public:
         Cerr << "ChooseProxy response:\n" << PrintToString(response) << Endl;
 
         UNIT_ASSERT_C(status.ok(), status.error_message());
- 
+
         UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response.GetStatus(), NMsgBusProxy::MSTATUS_OK, "proxy failure");
     }
 
@@ -1095,7 +1098,7 @@ public:
         TString cookie = GetOwnership({writeRequest.Topic, writeRequest.Partition}, expectedOwnerStatus);
 
         THolder<NMsgBusProxy::TBusPersQueue> request = writeRequest.GetRequest(data, cookie);
-        if (!ticket.empty()) 
+        if (!ticket.empty())
             request.Get()->Record.SetTicket(ticket);
 
         auto response = CallPersQueueGRPC(request->Record);

@@ -203,6 +203,7 @@ private:
         RegisterSystemView<Schema::QueryStats>(TopQueriesByCpuTime1HourName);
         RegisterSystemView<Schema::QueryStats>(TopQueriesByRequestUnits1MinuteName);
         RegisterSystemView<Schema::QueryStats>(TopQueriesByRequestUnits1HourName);
+        RegisterSystemView<Schema::QuerySessions>(QuerySessions);
 
         RegisterDomainSystemView<Schema::PDisks>(PDisksName);
         RegisterDomainSystemView<Schema::VSlots>(VSlotsName);

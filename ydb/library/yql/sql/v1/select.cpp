@@ -605,6 +605,7 @@ public:
     bool SetSamplingOptions(
             TContext& ctx,
             TPosition pos,
+            ESampleClause sampleClause,
             ESampleMode mode,
             TNodePtr samplingRate,
             TNodePtr samplingSeed) override {
@@ -616,7 +617,7 @@ public:
             ctx.Error(pos) << "'Repeatable' keyword is not supported for subqueries";
             return false;
         }
-        return SetSamplingRate(ctx, samplingRate);
+        return SetSamplingRate(ctx, sampleClause, samplingRate);
     }
 
     bool IsStream() const override {
@@ -708,40 +709,33 @@ public:
     bool SetSamplingOptions(
             TContext& ctx,
             TPosition pos,
+            ESampleClause sampleClause,
             ESampleMode mode,
             TNodePtr samplingRate,
             TNodePtr samplingSeed) override
     {
+        Y_UNUSED(pos);
         TString modeName;
         if (!samplingSeed) {
             samplingSeed = Y("Int32", Q("0"));
         }
-
+        if (ESampleClause::Sample == sampleClause) {
+            YQL_ENSURE(ESampleMode::Bernoulli == mode, "Internal logic error");
+        }
         switch (mode) {
-        case ESampleMode::Auto:
-            modeName = "bernoulli";
-            samplingRate = Y("*", samplingRate, Y("Double", Q("100")));
-            break;
-        case ESampleMode::Bernoulli:
-            modeName = "bernoulli";
-            break;
-        case ESampleMode::System:
-            modeName = "system";
-            break;
+            case ESampleMode::Bernoulli:
+                modeName = "bernoulli";
+                break;
+            case ESampleMode::System:
+                modeName = "system";
+                break;
         }
 
         if (!samplingRate->Init(ctx, FakeSource.Get())) {
             return false;
         }
 
-        auto ensureLow  = Y("Ensure", "samplingRate", Y(">=", "samplingRate", Y("Double", Q("0"))), Y("String", BuildQuotedAtom(pos, "Expected sampling rate to be nonnegative")));
-        auto ensureHigh = Y("Ensure", "samplingRate", Y("<=", "samplingRate", Y("Double", Q("100"))), Y("String", BuildQuotedAtom(pos, "Sampling rate is over 100%")));
-
-        auto block(Y(Y("let", "samplingRate", samplingRate)));
-        block = L(block, Y("let", "samplingRate", ensureLow));
-        block = L(block, Y("let", "samplingRate", ensureHigh));
-
-        samplingRate = Y("block", Q(L(block, Y("return", "samplingRate"))));
+        samplingRate = PrepareSamplingRate(pos, sampleClause, samplingRate);
 
         auto sampleSettings = Q(Y(Q(modeName), Y("EvaluateAtom", Y("ToString", samplingRate)), Y("EvaluateAtom", Y("ToString", samplingSeed))));
         auto sampleOption = Q(Y(Q("sample"), sampleSettings));
@@ -807,9 +801,10 @@ public:
         SetLabel(label);
     }
 
-    bool SetSamplingOptions(TContext& ctx, TPosition pos, ESampleMode mode, TNodePtr samplingRate, TNodePtr samplingSeed) override {
+    bool SetSamplingOptions(TContext& ctx, TPosition pos, ESampleClause sampleClause, ESampleMode mode, TNodePtr samplingRate, TNodePtr samplingSeed) override {
         Y_UNUSED(ctx);
         SamplingPos = pos;
+        SamplingClause = sampleClause;
         SamplingMode = mode;
         SamplingRate = samplingRate;
         SamplingSeed = samplingSeed;
@@ -858,7 +853,7 @@ public:
         }
 
         if (SamplingPos) {
-            if (!source->SetSamplingOptions(ctx, *SamplingPos, SamplingMode, SamplingRate, SamplingSeed)) {
+            if (!source->SetSamplingOptions(ctx, *SamplingPos, SamplingClause, SamplingMode, SamplingRate, SamplingSeed)) {
                 return false;
             }
         }
@@ -918,7 +913,8 @@ protected:
 
 private:
     TMaybe<TPosition> SamplingPos;
-    ESampleMode SamplingMode = ESampleMode::Auto;
+    ESampleClause SamplingClause;
+    ESampleMode SamplingMode;
     TNodePtr SamplingRate;
     TNodePtr SamplingSeed;
 
@@ -1736,7 +1732,16 @@ public:
             return nullptr;
         }
 
-        return Y("let", label, BuildSortSpec(OrderBy, label, false, AssumeSorted));
+        auto sorted = BuildSortSpec(OrderBy, label, false, AssumeSorted);
+        if (ExtraSortColumns.empty()) {
+            return Y("let", label, sorted);
+        }
+        auto body = Y();
+        for (const auto& [column, _] : ExtraSortColumns) {
+            body = L(body, Y("let", "row", Y("RemoveMember", "row", Q(column))));
+        }
+        body = L(body, Y("let", "res", "row"));
+        return Y("let", label, Y("OrderedMap", sorted, BuildLambda(Pos, Y("row"), body, "res")));
     }
 
     TNodePtr BuildCleanupColumns(TContext& ctx, const TString& label) override {
@@ -1801,6 +1806,31 @@ public:
             }
             return Source->AddColumn(ctx, column);
         }
+
+        if (OrderByInit && !Distinct && !GroupBy) {
+            bool reliable = column.IsReliable();
+            column.SetAsNotReliable();
+            auto maybeExist = IRealSource::AddColumn(ctx, column);
+            if (reliable) {
+                column.ResetAsReliable();
+            }
+            if (maybeExist && maybeExist.GetRef()) {
+                return true;
+            }
+
+            auto maybeSourceExist = Source->AddColumn(ctx, column);
+            if (!maybeSourceExist.Defined()) {
+                return maybeSourceExist;
+            }
+
+            // order by references column which is missing in projection, but may exists in source
+            const auto columnName = column.GetColumnName();
+            if (columnName) {
+                ExtraSortColumns.emplace(*columnName, TNodePtr(&column));
+            }
+            return true;
+        }
+
         return IRealSource::AddColumn(ctx, column);
     }
 
@@ -2139,6 +2169,17 @@ private:
                 ++column;
                 ++isNamedColumn;
             }
+
+            for (const auto& [columnName, column]: ExtraSortColumns) {
+                auto body = Y();
+                if (haveCompositeTerms) {
+                    body = L(body, Y("let", "row", Y("Apply", "addCompositTerms", "row")));
+                }
+                body = L(body, Y("let", "res", column));
+                TPosition pos = column->GetPos();
+                auto projectItem = Y("SqlProjectItem", "projectCoreType", BuildQuotedAtom(pos, columnName), BuildLambda(pos, Y("row"), body, "res"));
+                sqlProjectArgs = L(sqlProjectArgs, projectItem);
+            }
         }
 
         auto block(Y(Y("let", "projectCoreType", Y("TypeOf", "core"))));
@@ -2199,6 +2240,7 @@ private:
     const bool SelectStream;
     const TWriteSettings Settings;
     const TColumnsSets UniqueSets, DistinctSets;
+    TMap<TString, TNodePtr> ExtraSortColumns;
 };
 
 class TProcessSource: public IRealSource {
@@ -2917,6 +2959,7 @@ public:
     bool SetSamplingOptions(
             TContext& ctx,
             TPosition pos,
+            ESampleClause sampleClause,
             ESampleMode mode,
             TNodePtr samplingRate,
             TNodePtr samplingSeed) override {
@@ -2928,7 +2971,7 @@ public:
             ctx.Error(pos) << "'Repeatable' keyword is not supported for subqueries";
             return false;
         }
-        return SetSamplingRate(ctx, samplingRate);
+        return SetSamplingRate(ctx, sampleClause, samplingRate);
     }
 
     bool IsSelect() const override {

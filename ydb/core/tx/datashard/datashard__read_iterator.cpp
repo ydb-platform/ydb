@@ -364,6 +364,16 @@ public:
         iterRange.MaxInclusive = toInclusive;
         const bool reverse = State.Reverse;
 
+        if (TArrayRef<const TCell> cells = keyFromCells.GetCells()) {
+            if (!fromInclusive || cells.size() >= TableInfo.KeyColumnTypes.size()) {
+                Self->GetKeyAccessSampler()->AddSample(TableId, cells);
+            } else {
+                TVector<TCell> extended(cells.begin(), cells.end());
+                extended.resize(TableInfo.KeyColumnTypes.size());
+                Self->GetKeyAccessSampler()->AddSample(TableId, extended);
+            }
+        }
+
         EReadStatus result;
         if (!reverse) {
             auto iter = txc.DB.IterateRange(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
@@ -2535,7 +2545,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
     auto* request = ev->Get();
     
     if (!request->ReadSpan) {
-        request->ReadSpan = NWilson::TSpan(TWilsonTablet::Tablet, std::move(ev->TraceId), "Datashard.Read", NWilson::EFlags::AUTO_END);
+        request->ReadSpan = NWilson::TSpan(TWilsonTablet::TabletTopLevel, std::move(ev->TraceId), "Datashard.Read", NWilson::EFlags::AUTO_END);
         request->ReadSpan.Attribute("Shard", std::to_string(TabletID()));
     }
 

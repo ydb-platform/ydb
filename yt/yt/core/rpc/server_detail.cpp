@@ -88,11 +88,6 @@ void TServiceContextBase::Reply(const TSharedRefArray& responseMessage)
     TResponseHeader header;
     YT_VERIFY(TryParseResponseHeader(responseMessage, &header));
 
-    // COMPAT(danilalexeev): legacy RPC codecs
-    if (header.has_codec()) {
-        SetResponseBodySerializedWithCompression();
-    }
-
     if (header.has_error()) {
         Error_ = FromProto<TError>(header.error());
     }
@@ -102,6 +97,14 @@ void TServiceContextBase::Reply(const TSharedRefArray& responseMessage)
         ResponseAttachments_ = std::vector<TSharedRef>(
             responseMessage.Begin() + 2,
             responseMessage.End());
+
+        if (header.has_codec()) {
+            YT_VERIFY(TryEnumCast(header.codec(), &ResponseCodec_));
+            SetResponseBodySerializedWithCompression();
+        }
+        if (header.has_format()) {
+            RequestHeader_->set_response_format(header.format());
+        }
     } else {
         ResponseBody_.Reset();
         ResponseAttachments_.clear();
@@ -186,9 +189,14 @@ TSharedRefArray TServiceContextBase::BuildResponseMessage()
         header.set_format(RequestHeader_->response_format());
     }
 
-    // COMPAT(danilalexeev)
+    // COMPAT(danilalexeev): legacy RPC codecs.
     if (IsResponseBodySerializedWithCompression()) {
-        header.set_codec(static_cast<int>(ResponseCodec_));
+        if (RequestHeader_->has_response_codec()) {
+            header.set_codec(static_cast<int>(ResponseCodec_));
+        } else {
+            ResponseBody_ = PushEnvelope(ResponseBody_, ResponseCodec_);
+            ResponseAttachments_ = DecompressAttachments(ResponseAttachments_, ResponseCodec_);
+        }
     }
 
     auto message = Error_.IsOK()
@@ -874,6 +882,7 @@ void TServerBase::ApplyConfig()
     newAppliedConfig->EnableErrorCodeCounting = DynamicConfig_->EnableErrorCodeCounting.value_or(StaticConfig_->EnableErrorCodeCounting);
     newAppliedConfig->EnablePerUserProfiling = DynamicConfig_->EnablePerUserProfiling.value_or(StaticConfig_->EnablePerUserProfiling);
     newAppliedConfig->HistogramTimerProfiling = DynamicConfig_->HistogramTimerProfiling.value_or(StaticConfig_->HistogramTimerProfiling);
+    newAppliedConfig->TracingMode = DynamicConfig_->TracingMode.value_or(StaticConfig_->TracingMode);
     newAppliedConfig->Services = StaticConfig_->Services;
 
     for (const auto& [name, node] : DynamicConfig_->Services) {

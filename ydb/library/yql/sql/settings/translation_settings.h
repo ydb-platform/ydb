@@ -5,6 +5,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/map.h>
+#include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 
 namespace google::protobuf {
@@ -27,7 +28,7 @@ namespace NSQLTranslation {
     };
 
     enum class EBindingsMode {
-        // raise error 
+        // raise error
         DISABLED,
         // classic support for bindings
         ENABLED,
@@ -81,6 +82,7 @@ namespace NSQLTranslation {
 
         EBindingsMode BindingsMode;
         THashMap<TString, TTableBindingSettings> Bindings;
+        bool SaveWorldDependencies = false;
 
         // each (name, type) entry in this map is equivalent to
         // DECLARE $name AS type;
@@ -111,9 +113,12 @@ namespace NSQLTranslation {
         TVector<ui32> PgParameterTypeOids;
         bool AutoParametrizeEnabled = false;
         bool AutoParametrizeValuesStmt = false;
-        THashSet<TString> AutoParametrizeExprDisabledScopes = {};
 
         TGUCSettings::TPtr GUCSettings = std::make_shared<TGUCSettings>();
+        bool UnicodeLiterals = false;
+
+        TMaybe<TString> ApplicationName;
+        bool PgSortNulls = false;
     };
 
     bool ParseTranslationSettings(const TString& query, NSQLTranslation::TTranslationSettings& settings, NYql::TIssues& issues);

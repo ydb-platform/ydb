@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/library/mkql_proto/protos/minikql.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 

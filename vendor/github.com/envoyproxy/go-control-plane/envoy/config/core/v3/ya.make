@@ -21,6 +21,8 @@ SRCS(
     grpc_service.pb.validate.go
     health_check.pb.go
     health_check.pb.validate.go
+    http_service.pb.go
+    http_service.pb.validate.go
     http_uri.pb.go
     http_uri.pb.validate.go
     protocol.pb.go

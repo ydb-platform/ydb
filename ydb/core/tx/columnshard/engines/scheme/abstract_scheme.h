@@ -1,15 +1,15 @@
 #pragma once
+#include "abstract/saver.h"
+#include "abstract/loader.h"
 
-#include <ydb/core/tx/columnshard/engines/defs.h>
-#include <ydb/core/tx/columnshard/engines/column_features.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
 
 #include <string>
-
-#include <ydb/core/formats/arrow/arrow_helpers.h>
 
 namespace NKikimr::NOlap {
 
 struct TIndexInfo;
+class TSaverContext;
 
 class ISnapshotSchema {
 protected:
@@ -19,24 +19,9 @@ public:
 
     virtual ~ISnapshotSchema() {}
     virtual std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const ui32 columnId) const = 0;
-    std::shared_ptr<TColumnLoader> GetColumnLoaderVerified(const ui32 columnId) const {
-        auto result = GetColumnLoaderOptional(columnId);
-        AFL_VERIFY(result);
-        return result;
-    }
-    std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const std::string& columnName) const {
-        const std::optional<ui32> id = GetColumnIdOptional(columnName);
-        if (id) {
-            return GetColumnLoaderOptional(*id);
-        } else {
-            return nullptr;
-        }
-    }
-    std::shared_ptr<TColumnLoader> GetColumnLoaderVerified(const std::string& columnName) const {
-        auto result = GetColumnLoaderOptional(columnName);
-        AFL_VERIFY(result);
-        return result;
-    }
+    std::shared_ptr<TColumnLoader> GetColumnLoaderVerified(const ui32 columnId) const;
+    std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const std::string& columnName) const;
+    std::shared_ptr<TColumnLoader> GetColumnLoaderVerified(const std::string& columnName) const;
 
     virtual TColumnSaver GetColumnSaver(const ui32 columnId, const TSaverContext& context) const = 0;
     TColumnSaver GetColumnSaver(const TString& columnName, const TSaverContext& context) const {

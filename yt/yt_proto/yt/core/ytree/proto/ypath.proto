@@ -60,6 +60,7 @@ message TReqGet
 {
     // TODO(max42): rename attributes -> attribute_filter
     optional TAttributeFilter attributes = 1;
+    // TODO(h0pless): rename limit -> max_size
     optional int64 limit = 2;
     optional bool ignore_opaque = 3;
     optional NYT.NYTree.NProto.TAttributeDictionary options = 4;

@@ -500,8 +500,12 @@ namespace NSQLTranslationV1 {
         TAstNode* Translate(TContext& ctx) const override;
     };
 
+    enum class ESampleClause {
+        TableSample, //from SQL standard, percantage rate (0..100)
+        Sample //simplified (implied Bernulli mode), fraction (0..1)
+    };
+
     enum class ESampleMode {
-        Auto,
         Bernoulli,
         System
     };
@@ -796,6 +800,8 @@ namespace NSQLTranslationV1 {
 
         void DoUpdateState() const override;
 
+        virtual const TString* GetGenericKey() const;
+
         virtual bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) = 0;
 
         virtual std::pair<TNodePtr, bool> AggregationTraits(const TNodePtr& type, bool overState, bool many, bool allowAggApply, TContext& ctx) const;
@@ -812,6 +818,9 @@ namespace NSQLTranslationV1 {
 
         EAggregateMode GetAggregationMode() const;
         void MarkKeyColumnAsGenerated();
+
+        virtual void Join(IAggregation* aggr);
+
     private:
         virtual TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const = 0;
 
@@ -1046,6 +1055,7 @@ namespace NSQLTranslationV1 {
         TVector<TChangefeedDescription> Changefeeds;
         TTableSettings TableSettings;
         ETableType TableType = ETableType::Table;
+        bool Temporary = false;
     };
 
     struct TAlterTableParameters {
@@ -1231,7 +1241,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildUpsertObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
         std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context);
     TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
-        bool existingOk, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context);
+        bool existingOk, bool replaceIfExists, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context);
     TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
         std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context);
     TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
@@ -1248,7 +1258,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildPragma(TPosition pos, const TString& prefix, const TString& name, const TVector<TDeferredAtom>& values, bool valueDefault);
     TNodePtr BuildSqlLambda(TPosition pos, TVector<TString>&& args, TVector<TNodePtr>&& exprSeq);
     TNodePtr BuildWorldIfNode(TPosition pos, TNodePtr predicate, TNodePtr thenNode, TNodePtr elseNode, bool isEvaluate);
-    TNodePtr BuildWorldForNode(TPosition pos, TNodePtr list, TNodePtr bodyNode, TNodePtr elseNode, bool isEvaluate);
+    TNodePtr BuildWorldForNode(TPosition pos, TNodePtr list, TNodePtr bodyNode, TNodePtr elseNode, bool isEvaluate, bool isParallel);
 
     TNodePtr BuildCreateTopic(TPosition pos, const TTopicRef& tr, const TCreateTopicParameters& params,
                               TScopedStatePtr scoped);

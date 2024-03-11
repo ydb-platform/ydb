@@ -3,12 +3,15 @@
 
 namespace NKikimr::NSchemeShard {
 
+class TOlapSchema;
+
 class TOlapIndexSchema {
 private:
     using TBase = TOlapIndexUpsert;
     YDB_READONLY(ui32, Id, Max<ui32>());
     YDB_READONLY_DEF(TString, Name);
-    NBackgroundTasks::TInterfaceProtoContainer<NOlap::NIndexes::IIndexMeta> IndexMeta;
+    YDB_READONLY_DEF(TString, StorageId);
+    YDB_READONLY_DEF(NBackgroundTasks::TInterfaceProtoContainer<NOlap::NIndexes::IIndexMeta>, IndexMeta);
 public:
     TOlapIndexSchema() = default;
 
@@ -20,20 +23,7 @@ public:
 
     }
 
-    bool ApplyUpdate(const TOlapSchema& currentSchema, const TOlapIndexUpsert& upsert, IErrorCollector& errors) {
-        AFL_VERIFY(upsert.GetName() == GetName());
-        AFL_VERIFY(!!upsert.GetIndexConstructor());
-        if (upsert.GetIndexConstructor().GetClassName() != IndexMeta.GetClassName()) {
-            errors.AddError("different index classes: " + upsert.GetIndexConstructor().GetClassName() + " vs " + IndexMeta.GetClassName());
-            return false;
-        }
-        auto object = upsert.GetIndexConstructor()->CreateIndexMeta(currentSchema, errors);
-        if (!object) {
-            return false;
-        }
-        IndexMeta = NBackgroundTasks::TInterfaceProtoContainer<NOlap::NIndexes::IIndexMeta>(object);
-        return true;
-    }
+    bool ApplyUpdate(const TOlapSchema& currentSchema, const TOlapIndexUpsert& upsert, IErrorCollector& errors);
 
     void SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& indexSchema) const;
     void DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& indexSchema);

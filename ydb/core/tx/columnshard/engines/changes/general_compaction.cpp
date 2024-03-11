@@ -16,8 +16,7 @@
 
 namespace NKikimr::NOlap::NCompaction {
 
-void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByFullBatches(TConstructionContext& context) noexcept {
-    std::vector<TPortionInfoWithBlobs> portions = TPortionInfoWithBlobs::RestorePortions(SwitchedPortions, Blobs);
+void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByFullBatches(TConstructionContext& context, std::vector<TPortionInfoWithBlobs>&& portions) noexcept {
     std::vector<std::shared_ptr<arrow::RecordBatch>> batchResults;
     auto resultSchema = context.SchemaVersions.GetLastSchema();
     {
@@ -42,14 +41,18 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByFullBatches(TCon
     }
 }
 
-void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstructionContext& context) noexcept {
-    std::vector<TPortionInfoWithBlobs> portions = TPortionInfoWithBlobs::RestorePortions(SwitchedPortions, Blobs);
+void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstructionContext& context, std::vector<TPortionInfoWithBlobs>&& portions) noexcept {
     static const TString portionIdFieldName = "$$__portion_id";
     static const TString portionRecordIndexFieldName = "$$__portion_record_idx";
     static const std::shared_ptr<arrow::Field> portionIdField = std::make_shared<arrow::Field>(portionIdFieldName, std::make_shared<arrow::UInt16Type>());
     static const std::shared_ptr<arrow::Field> portionRecordIndexField = std::make_shared<arrow::Field>(portionRecordIndexFieldName, std::make_shared<arrow::UInt32Type>());
 
     auto resultSchema = context.SchemaVersions.GetLastSchema();
+    TEntityGroups groups(IStoragesManager::DefaultStorageId);
+    for (auto&& i : resultSchema->GetIndexInfo().GetEntityIds()) {
+        groups.Add(i, resultSchema->GetIndexInfo().GetEntityStorageId(i, ""));
+    }
+
     std::vector<std::string> pkFieldNames = resultSchema->GetIndexInfo().GetReplaceKey()->field_names();
     std::set<std::string> pkFieldNamesSet(pkFieldNames.begin(), pkFieldNames.end());
     for (auto&& i : TIndexInfo::GetSpecialColumnNames()) {
@@ -159,6 +162,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
 
     }
     ui32 batchIdx = 0;
+
     for (auto&& columnChunks : chunkGroups) {
         auto batchResult = batchResults[batchIdx];
         ++batchIdx;
@@ -181,6 +185,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
             for (auto&& p : columnChunks) {
                 portionColumns.emplace(p.first, p.second[i].GetChunks());
             }
+            resultSchema->GetIndexInfo().AppendIndexes(portionColumns);
             batchSlices.emplace_back(portionColumns, schemaDetails, context.Counters.SplitterCounters, GetSplitSettings());
         }
         TSimilarSlicer slicer(GetSplitSettings().GetExpectedPortionSize());
@@ -188,13 +193,13 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
 
         ui32 recordIdx = 0;
         for (auto&& i : packs) {
-            TGeneralSerializedSlice slice(std::move(i));
+            TGeneralSerializedSlice slice(std::move(i), GetSplitSettings());
             auto b = batchResult->Slice(recordIdx, slice.GetRecordsCount());
-            std::vector<std::vector<std::shared_ptr<IPortionDataChunk>>> chunksByBlobs = slice.GroupChunksByBlobs();
-            AppendedPortions.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(chunksByBlobs, nullptr, GranuleMeta->GetPathId(), resultSchema->GetSnapshot(), SaverContext.GetStorageOperator()));
+            AppendedPortions.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), nullptr, GranuleMeta->GetPathId(), 
+                resultSchema->GetSnapshot(), SaverContext.GetStoragesManager(), resultSchema));
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultSchema->GetIndexInfo().GetReplaceKey()));
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
-            AppendedPortions.back().GetPortionInfo().AddMetadata(*resultSchema, primaryKeys, snapshotKeys, SaverContext.GetTierName());
+            AppendedPortions.back().GetPortionInfo().AddMetadata(*resultSchema, primaryKeys, snapshotKeys, IStoragesManager::DefaultStorageId);
             recordIdx += slice.GetRecordsCount();
         }
     }
@@ -220,10 +225,13 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
     NChanges::TGeneralCompactionCounters::OnPortionsKind(insertedPortionsSize, compactedPortionsSize, otherPortionsSize);
     NChanges::TGeneralCompactionCounters::OnRepackPortions(portionsCount, portionsSize);
 
-    if (!HasAppData() || AppDataVerified().ColumnShardConfig.GetUseChunkedMergeOnCompaction()) {
-        BuildAppendedPortionsByChunks(context);
-    } else {
-        BuildAppendedPortionsByFullBatches(context);
+    {
+        std::vector<TPortionInfoWithBlobs> portions = TPortionInfoWithBlobs::RestorePortions(SwitchedPortions, Blobs, context.SchemaVersions, SaverContext.GetStoragesManager());
+        if (!HasAppData() || AppDataVerified().ColumnShardConfig.GetUseChunkedMergeOnCompaction()) {
+            BuildAppendedPortionsByChunks(context, std::move(portions));
+        } else {
+            BuildAppendedPortionsByFullBatches(context, std::move(portions));
+        }
     }
 
     if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
@@ -245,11 +253,13 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
     return TConclusionStatus::Success();
 }
 
-void TGeneralCompactColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) {
-    TBase::DoWriteIndexComplete(self, context);
-    self.IncCounter(context.FinishedSuccessfully ? NColumnShard::COUNTER_SPLIT_COMPACTION_SUCCESS : NColumnShard::COUNTER_SPLIT_COMPACTION_FAIL);
-    self.IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_BLOBS_WRITTEN, context.BlobsWritten);
-    self.IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_BYTES_WRITTEN, context.BytesWritten);
+void TGeneralCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
+    TBase::DoWriteIndexOnComplete(self, context);
+    if (self) {
+        self->IncCounter(context.FinishedSuccessfully ? NColumnShard::COUNTER_SPLIT_COMPACTION_SUCCESS : NColumnShard::COUNTER_SPLIT_COMPACTION_FAIL);
+        self->IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_BLOBS_WRITTEN, context.BlobsWritten);
+        self->IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_BYTES_WRITTEN, context.BytesWritten);
+    }
 }
 
 void TGeneralCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
@@ -272,6 +282,32 @@ std::shared_ptr<TGeneralCompactColumnEngineChanges::IMemoryPredictor> TGeneralCo
     } else {
         return std::make_shared<TMemoryPredictorSimplePolicy>();
     }
+}
+
+ui64 TGeneralCompactColumnEngineChanges::TMemoryPredictorChunkedPolicy::AddPortion(const TPortionInfo& portionInfo) {
+    SumMemoryFix += portionInfo.GetRecordsCount() * (2 * sizeof(ui64) + sizeof(ui32) + sizeof(ui16));
+    ++PortionsCount;
+    THashMap<ui32, ui64> maxChunkSizeByColumn;
+    for (auto&& i : portionInfo.GetRecords()) {
+        SumMemoryFix += i.BlobRange.Size;
+        auto it = maxChunkSizeByColumn.find(i.GetColumnId());
+        if (it == maxChunkSizeByColumn.end()) {
+            maxChunkSizeByColumn.emplace(i.GetColumnId(), i.GetMeta().GetRawBytesVerified());
+        } else {
+            if (it->second < i.GetMeta().GetRawBytesVerified()) {
+                it->second = i.GetMeta().GetRawBytesVerified();
+            }
+        }
+    }
+
+    SumMemoryDelta = 0;
+    for (auto&& i : maxChunkSizeByColumn) {
+        MaxMemoryByColumnChunk[i.first] += i.second;
+        SumMemoryDelta = std::max(SumMemoryDelta, MaxMemoryByColumnChunk[i.first]);
+    }
+
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("memory_prediction_after", SumMemoryFix + SumMemoryDelta)("portion_info", portionInfo.DebugString());
+    return SumMemoryFix + SumMemoryDelta;
 }
 
 }

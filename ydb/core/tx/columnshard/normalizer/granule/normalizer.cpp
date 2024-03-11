@@ -147,6 +147,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TGranulesNormalizer::Init(const 
     for (auto&& c : *changes) {
         tasks.emplace_back(std::make_shared<TGranulesNormalizerTask>(c));
     }
+    AtomicSet(ActiveTasksCount, tasks.size());
     return tasks;
 }
 

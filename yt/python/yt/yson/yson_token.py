@@ -144,7 +144,7 @@ class YsonToken(object):
 
         if token_type not in expected_types:
             if token_type == TOKEN_END_OF_STREAM:
-                raise YsonError("Unexpected end of stream; expected types are {0}".format(expected_types))
+                raise YsonError("Unexpected end of stream; expected types are {0}".format(list(imap(token_type_to_string, expected_types))))
             else:
                 raise YsonError('Unexpected token "{0}" of type {1}; '
                                 'expected types are {2}'.format(decode_token_value(self.get_value()),

@@ -100,6 +100,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore2: {
+            if (Ctx.ParallelModeCount > 0) {
+                Error() << humanStatementName << " statement is not supported in parallel mode";
+                return false;
+            }
+
             Ctx.BodyPart();
             TSqlSelect select(Ctx, Mode);
             TPosition pos;
@@ -154,75 +159,114 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         case TRule_sql_stmt_core::kAltSqlStmtCore4: {
             Ctx.BodyPart();
             const auto& rule = core.GetAlt_sql_stmt_core4().GetRule_create_table_stmt1();
-            const auto& block = rule.GetBlock2();
-            ETableType tableType = ETableType::Table;
-            if (block.HasAlt2() && block.GetAlt2().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_TABLESTORE) {
-                tableType = ETableType::TableStore;
-            } else if (block.HasAlt3() && block.GetAlt3().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_EXTERNAL) {
-                tableType = ETableType::ExternalTable;
-            }
 
-            bool existingOk = false;
-            if (rule.HasBlock3()) { // IF NOT EXISTS
-                existingOk = true;
+            bool replaceIfExists = false;
+            if (rule.HasBlock2()) { // OR REPLACE
+                replaceIfExists = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    rule.GetBlock3().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_IF &&
-                    rule.GetBlock3().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_NOT &&
-                    rule.GetBlock3().GetToken3().GetId() == SQLv1LexerTokens::TOKEN_EXISTS
+                    rule.GetBlock2().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_OR &&
+                    rule.GetBlock2().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_REPLACE
                 );
             }
 
-            TTableRef tr;
-            if (!SimpleTableRefImpl(rule.GetRule_simple_table_ref4(), tr)) {
+            const bool isCreateTableAs = rule.HasBlock15();
+            const auto& block = rule.GetBlock3();
+            ETableType tableType = ETableType::Table;
+            bool temporary = false;
+            if (block.HasAlt2() && block.GetAlt2().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_TABLESTORE) {
+                tableType = ETableType::TableStore;
+                if (isCreateTableAs) {
+                    Context().Error(GetPos(block.GetAlt2().GetToken1()))
+                        << "CREATE TABLE AS is not supported for TABLESTORE";
+                    return false;
+                }
+            } else if (block.HasAlt3() && block.GetAlt3().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_EXTERNAL) {
+                tableType = ETableType::ExternalTable;
+                if (isCreateTableAs) {
+                    Context().Error(GetPos(block.GetAlt3().GetToken1()))
+                        << "CREATE TABLE AS is not supported for EXTERNAL TABLE";
+                    return false;
+                }
+            } else if (block.HasAlt4() && block.GetAlt4().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_TEMP ||
+                    block.HasAlt5() && block.GetAlt5().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_TEMPORARY) {
+                temporary = true;
+            }
+
+            bool existingOk = false;
+            if (rule.HasBlock4()) { // IF NOT EXISTS
+                existingOk = true;
+                Y_DEBUG_ABORT_UNLESS(
+                    rule.GetBlock4().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_IF &&
+                    rule.GetBlock4().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_NOT &&
+                    rule.GetBlock4().GetToken3().GetId() == SQLv1LexerTokens::TOKEN_EXISTS
+                );
+            }
+
+            if (replaceIfExists && tableType != ETableType::ExternalTable) {
+                Context().Error(GetPos(rule.GetBlock2().GetToken1()))
+                    << "OR REPLACE feature is supported only for EXTERNAL DATA SOURCE and EXTERNAL TABLE";
                 return false;
             }
 
-            TCreateTableParameters params{.TableType=tableType};
-            if (!CreateTableEntry(rule.GetRule_create_table_entry6(), params)) {
+            TTableRef tr;
+            if (!SimpleTableRefImpl(rule.GetRule_simple_table_ref5(), tr)) {
                 return false;
             }
-            for (auto& block: rule.GetBlock7()) {
-                if (!CreateTableEntry(block.GetRule_create_table_entry2(), params)) {
+
+            TCreateTableParameters params{.TableType=tableType, .Temporary=temporary};
+            if (!CreateTableEntry(rule.GetRule_create_table_entry7(), params, isCreateTableAs)) {
+                return false;
+            }
+            for (auto& block: rule.GetBlock8()) {
+                if (!CreateTableEntry(block.GetRule_create_table_entry2(), params, isCreateTableAs)) {
                     return false;
                 }
             }
 
-            if (rule.HasBlock10()) {
-                Context().Error(GetPos(rule.GetBlock10().GetRule_table_inherits1().GetToken1()))
+            if (rule.HasBlock11()) {
+                Context().Error(GetPos(rule.GetBlock11().GetRule_table_inherits1().GetToken1()))
                     << "INHERITS clause is not supported yet";
                 return false;
             }
 
-            if (rule.HasBlock11()) {
+            if (rule.HasBlock12()) {
                 if (tableType == ETableType::TableStore) {
-                    Context().Error(GetPos(rule.GetBlock11().GetRule_table_partition_by1().GetToken1()))
+                    Context().Error(GetPos(rule.GetBlock12().GetRule_table_partition_by1().GetToken1()))
                         << "PARTITION BY is not supported for TABLESTORE";
                     return false;
                 }
-                const auto list = rule.GetBlock11().GetRule_table_partition_by1().GetRule_pure_column_list4();
+                const auto list = rule.GetBlock12().GetRule_table_partition_by1().GetRule_pure_column_list4();
                 params.PartitionByColumns.push_back(IdEx(list.GetRule_an_id2(), *this));
                 for (auto& node : list.GetBlock3()) {
                     params.PartitionByColumns.push_back(IdEx(node.GetRule_an_id2(), *this));
                 }
             }
 
-            if (rule.HasBlock12()) {
-                if (!CreateTableSettings(rule.GetBlock12().GetRule_with_table_settings1(), params)) {
+            if (rule.HasBlock13()) {
+                if (!CreateTableSettings(rule.GetBlock13().GetRule_with_table_settings1(), params)) {
                     return false;
                 }
             }
 
-            if (rule.HasBlock13()) {
-                Context().Error(GetPos(rule.GetBlock13().GetRule_table_tablestore1().GetToken1()))
+            if (rule.HasBlock14()) {
+                Context().Error(GetPos(rule.GetBlock14().GetRule_table_tablestore1().GetToken1()))
                     << "TABLESTORE clause is not supported yet";
                 return false;
+            }
+
+            TSourcePtr tableSource = nullptr;
+            if (isCreateTableAs) {
+                tableSource = TSqlAsValues(Ctx, Mode).Build(rule.GetBlock15().GetRule_table_as_source1().GetRule_values_source2(), "CreateTableAs");
+                if (!tableSource) {
+                    return false;
+                }
             }
 
             if (!ValidateExternalTable(params)) {
                 return false;
             }
 
-            AddStatementToBlocks(blocks, BuildCreateTable(Ctx.Pos(), tr, existingOk, params, Ctx.Scoped));
+            AddStatementToBlocks(blocks, BuildCreateTable(Ctx.Pos(), tr, existingOk, replaceIfExists, params, std::move(tableSource), Ctx.Scoped));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore5: {
@@ -274,6 +318,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore8: {
+            if (Ctx.ParallelModeCount > 0) {
+                Error() << humanStatementName << " statement is not supported in parallel mode";
+                return false;
+            }
+
             Ctx.BodyPart();
             const auto& rule = core.GetAlt_sql_stmt_core8().GetRule_commit_stmt1();
             Token(rule.GetToken1());
@@ -299,6 +348,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore11: {
+            if (Ctx.ParallelModeCount > 0) {
+                Error() << humanStatementName << " statement is not supported in parallel mode";
+                return false;
+            }
+
             Ctx.BodyPart();
             const auto& rule = core.GetAlt_sql_stmt_core11().GetRule_rollback_stmt1();
             Token(rule.GetToken1());
@@ -409,6 +463,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore21: {
+            if (Ctx.ParallelModeCount > 0) {
+                Error() << humanStatementName << " statement is not supported in parallel mode";
+                return false;
+            }
+
             Ctx.BodyPart();
             TSqlValues values(Ctx, Mode);
             TPosition pos;
@@ -677,7 +736,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx.Pos(), objectId, typeId, existingOk, std::move(kv), context));
+            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx.Pos(), objectId, typeId, existingOk, false, std::move(kv), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore28: {
@@ -734,33 +793,42 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore30: {
-            // create_external_data_source_stmt: CREATE EXTERNAL DATA SOURCE (IF NOT EXISTS)? name WITH (k=v,...);
+            // create_external_data_source_stmt: CREATE (OR REPLACE)? EXTERNAL DATA SOURCE (IF NOT EXISTS)? name WITH (k=v,...);
             auto& node = core.GetAlt_sql_stmt_core30().GetRule_create_external_data_source_stmt1();
             TObjectOperatorContext context(Ctx.Scoped);
-            if (node.GetRule_object_ref6().HasBlock1()) {
-                if (!ClusterExpr(node.GetRule_object_ref6().GetBlock1().GetRule_cluster_expr1(),
+            if (node.GetRule_object_ref7().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref7().GetBlock1().GetRule_cluster_expr1(),
                     false, context.ServiceId, context.Cluster)) {
                     return false;
                 }
             }
 
-            bool existingOk = false;
-            if (node.HasBlock5()) { // IF NOT EXISTS
-                existingOk = true;
+            bool replaceIfExists = false;
+            if (node.HasBlock2()) { // OR REPLACE
+                replaceIfExists = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    node.GetBlock5().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_IF &&
-                    node.GetBlock5().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_NOT &&
-                    node.GetBlock5().GetToken3().GetId() == SQLv1LexerTokens::TOKEN_EXISTS
+                    node.GetBlock2().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_OR &&
+                    node.GetBlock2().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_REPLACE
                 );
             }
 
-            const TString& objectId = Id(node.GetRule_object_ref6().GetRule_id_or_at2(), *this).second;
+            bool existingOk = false;
+            if (node.HasBlock6()) { // IF NOT EXISTS
+                existingOk = true;
+                Y_DEBUG_ABORT_UNLESS(
+                    node.GetBlock6().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_IF &&
+                    node.GetBlock6().GetToken2().GetId() == SQLv1LexerTokens::TOKEN_NOT &&
+                    node.GetBlock6().GetToken3().GetId() == SQLv1LexerTokens::TOKEN_EXISTS
+                );
+            }
+
+            const TString& objectId = Id(node.GetRule_object_ref7().GetRule_id_or_at2(), *this).second;
             std::map<TString, TDeferredAtom> kv;
-            if (!ParseExternalDataSourceSettings(kv, node.GetRule_with_table_settings7())) {
+            if (!ParseExternalDataSourceSettings(kv, node.GetRule_with_table_settings8())) {
                 return false;
             }
 
-            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx.Pos(), BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId), "EXTERNAL_DATA_SOURCE", existingOk, std::move(kv), context));
+            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx.Pos(), BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId), "EXTERNAL_DATA_SOURCE", existingOk, replaceIfExists, std::move(kv), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore31: {
@@ -1084,6 +1152,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                                  BuildCreateObjectOperation(Ctx.Pos(),
                                                             BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
                                                             TypeId,
+                                                            false,
                                                             false,
                                                             std::move(features),
                                                             context));
@@ -1594,7 +1663,16 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
     }
 
     const bool withConfigure = prefix || normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "udf";
-    static const THashSet<TStringBuf> lexicalScopePragmas = {"classicdivision", "strictjoinkeytypes", "disablestrictjoinkeytypes", "checkedops"};
+    static const THashSet<TStringBuf> lexicalScopePragmas = {
+        "classicdivision",
+        "strictjoinkeytypes",
+        "disablestrictjoinkeytypes",
+        "checkedops",
+        "unicodeliterals",
+        "disableunicodeliterals",
+        "warnuntypedstringliterals",
+        "disablewarnuntypedstringliterals",
+    };
     const bool hasLexicalScope = withConfigure || lexicalScopePragmas.contains(normalizedPragma);
     const bool withFileAlias = normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "library" || normalizedPragma == "udf";
     for (auto pragmaValue : pragmaValues) {
@@ -2164,6 +2242,18 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disablestrictjoinkeytypes") {
             Ctx.Scoped->StrictJoinKeyTypes = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableStrictJoinKeyTypes");
+        } else if (normalizedPragma == "unicodeliterals") {
+            Ctx.Scoped->UnicodeLiterals = true;
+            Ctx.IncrementMonCounter("sql_pragma", "UnicodeLiterals");
+        } else if (normalizedPragma == "disableunicodeliterals") {
+            Ctx.Scoped->UnicodeLiterals = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableUnicodeLiterals");
+        } else if (normalizedPragma == "warnuntypedstringliterals") {
+            Ctx.Scoped->WarnUntypedStringLiterals = true;
+            Ctx.IncrementMonCounter("sql_pragma", "WarnUntypedStringLiterals");
+        } else if (normalizedPragma == "disablewarnuntypedstringliterals") {
+            Ctx.Scoped->WarnUntypedStringLiterals = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableWarnUntypedStringLiterals");
         } else if (normalizedPragma == "unorderedsubqueries") {
             Ctx.UnorderedSubqueries = true;
             Ctx.IncrementMonCounter("sql_pragma", "UnorderedSubqueries");
@@ -2587,6 +2677,75 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
 
     auto result = BuildQuery(Ctx.Pos(), blocks, true, Ctx.Scoped);
     WarnUnusedNodes();
+    return result;
+}
+
+TNodePtr TSqlQuery::Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_core>& statements) {
+    if (Mode == NSQLTranslation::ESqlMode::QUERY) {
+        // inject externally declared named expressions
+        for (auto [name, type] : Ctx.Settings.DeclaredNamedExprs) {
+            if (name.empty()) {
+                Error() << "Empty names for externally declared expressions are not allowed";
+                return nullptr;
+            }
+            TString varName = "$" + name;
+            if (IsAnonymousName(varName)) {
+                Error() << "Externally declared name '" << name << "' is anonymous";
+                return nullptr;
+            }
+
+            auto parsed = ParseType(type, *Ctx.Pool, Ctx.Issues, Ctx.Pos());
+            if (!parsed) {
+                Error() << "Failed to parse type for externally declared name '" << name << "'";
+                return nullptr;
+            }
+
+            TNodePtr typeNode = BuildBuiltinFunc(Ctx, Ctx.Pos(), "ParseType", { BuildLiteralRawString(Ctx.Pos(), type) });
+            PushNamedAtom(Ctx.Pos(), varName);
+            // no duplicates are possible at this stage
+            bool isWeak = true;
+            Ctx.DeclareVariable(varName, typeNode, isWeak);
+            // avoid 'Symbol is not used' warning for externally declared expression
+            YQL_ENSURE(GetNamedNode(varName));
+        }
+    }
+
+    TVector<TNodePtr> blocks;
+    Ctx.PushCurrentBlocks(&blocks);
+    Y_DEFER {
+        Ctx.PopCurrentBlocks();
+    };
+    for (const auto& statement : statements) {
+        if (!Statement(blocks, statement)) {
+            return nullptr;
+        }
+    }
+
+    ui32 topLevelSelects = 0;
+    bool hasTailOps = false;
+    for (auto& block : blocks) {
+        if (block->SubqueryAlias()) {
+            continue;
+        }
+
+        if (block->HasSelectResult()) {
+            ++topLevelSelects;
+        } else if (topLevelSelects) {
+            hasTailOps = true;
+        }
+    }
+
+    if ((Mode == NSQLTranslation::ESqlMode::SUBQUERY || Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW) && (topLevelSelects != 1 || hasTailOps)) {
+        Error() << "Strictly one select/process/reduce statement is expected at the end of "
+            << (Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW ? "view" : "subquery");
+        return nullptr;
+    }
+
+     if (!Ctx.PragmaAutoCommit && Ctx.Settings.EndOfQueryCommit && IsQueryMode(Mode)) {
+        AddStatementToBlocks(blocks, BuildCommitClusters(Ctx.Pos()));
+    }
+
+    auto result = BuildQuery(Ctx.Pos(), blocks, true, Ctx.Scoped);
     return result;
 }
 namespace {

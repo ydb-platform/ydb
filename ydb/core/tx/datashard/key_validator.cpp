@@ -1,7 +1,7 @@
 #include "key_validator.h"
 #include "datashard_impl.h"
 #include "range_ops.h"
-
+#include "datashard_user_db.h"
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log.h>
@@ -12,9 +12,8 @@
 using namespace NKikimr;
 using namespace NKikimr::NDataShard;
 
-TKeyValidator::TKeyValidator(const TDataShard& self, const NTable::TDatabase& db) 
+TKeyValidator::TKeyValidator(const TDataShard& self) 
     : Self(self)
-    , Db(db)
 {
 
 }
@@ -65,9 +64,43 @@ void TKeyValidator::AddWriteRange(const TTableId& tableId, const TTableRange& ra
     Info.SetLoaded();
 }
 
-bool TKeyValidator::IsValidKey(TKeyDesc& key) const {
+TKeyValidator::TValidateOptions::TValidateOptions(
+        ui64 LockTxId,
+        ui32 LockNodeId,
+        bool isRepeatableSnapshot,
+        bool isImmediateTx,
+        bool isWriteTx,
+        const NTable::TScheme& scheme)
+    : IsLockTxId(static_cast<bool>(LockTxId))
+    , IsLockNodeId(static_cast<bool>(LockNodeId))
+    , IsRepeatableSnapshot(isRepeatableSnapshot)
+    , IsImmediateTx(isImmediateTx)
+    , IsWriteTx(isWriteTx)
+    , Scheme(scheme)
+{
+}
+
+bool TKeyValidator::IsValidKey(TKeyDesc& key, const TValidateOptions& opt) const {
+    if (TSysTables::IsSystemTable(key.TableId))
+        return true;
+
+    if (key.RowOperation != TKeyDesc::ERowOperation::Read && !opt.IsWriteTx) {
+        // Prevent updates/erases with LockTxId set, unless it's allowed for immediate mvcc txs
+        if (opt.IsLockTxId) {
+            if (!(Self.GetEnableLockedWrites() && opt.IsImmediateTx && opt.IsRepeatableSnapshot && opt.IsLockNodeId)) {
+                key.Status = TKeyDesc::EStatus::OperationNotSupported;
+                return false;
+            }
+        }
+        // Prevent updates/erases in repeatable mvcc txs
+        else if (opt.IsRepeatableSnapshot) {
+            key.Status = TKeyDesc::EStatus::OperationNotSupported;
+            return false;
+        }
+    }
+
     ui64 localTableId = Self.GetLocalTableId(key.TableId);
-    return NMiniKQL::IsValidKey(Db.GetScheme(), localTableId, key);
+    return NMiniKQL::IsValidKey(opt.Scheme, localTableId, key);
 }
 
 ui64 TKeyValidator::GetTableSchemaVersion(const TTableId& tableId) const {
@@ -84,13 +117,13 @@ ui64 TKeyValidator::GetTableSchemaVersion(const TTableId& tableId) const {
     }
 }
 
-std::tuple<NMiniKQL::IEngineFlat::EResult, TString> TKeyValidator::ValidateKeys() const {
+std::tuple<NMiniKQL::IEngineFlat::EResult, TString> TKeyValidator::ValidateKeys(const TValidateOptions& options) const {
     using EResult = NMiniKQL::IEngineFlat::EResult;
 
     for (const auto& validKey : Info.Keys) {
         TKeyDesc* key = validKey.Key.get();
 
-        bool valid = IsValidKey(*key);
+        bool valid = IsValidKey(*key, options);
 
         if (valid) {
             auto curSchemaVersion = GetTableSchemaVersion(key->TableId);

@@ -1,6 +1,8 @@
 #include "defs.h"
 #include "mkql_terminator.h"
 
+#include <util/string/builder.h>
+
 namespace NKikimr {
 
 namespace NMiniKQL {
@@ -16,6 +18,18 @@ TBindTerminator::TBindTerminator(ITerminator* terminator)
 TBindTerminator::~TBindTerminator()
 {
     Terminator = PreviousTerminator;
+}
+
+TThrowingBindTerminator::TThrowingBindTerminator()
+    : TBindTerminator(this)
+{
+}
+
+void TThrowingBindTerminator::Terminate(const char* message) const {
+    TStringBuf reason = (message ? TStringBuf(message) : TStringBuf("(unknown)"));
+    TString fullMessage = TStringBuilder() <<
+        "Terminate was called, reason(" << reason.size() << "): " << reason << Endl;
+    ythrow yexception() << fullMessage;
 }
 
 [[noreturn]] void MKQLTerminate(const char* message) {

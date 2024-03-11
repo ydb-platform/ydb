@@ -12,10 +12,7 @@
 namespace NActors {
 
 TSharedExecutorPool::TSharedExecutorPool(const TSharedExecutorPoolConfig &config, i16 poolCount, std::vector<i16> poolsWithThreads)
-    : ThreadByPool(poolCount, -1)
-    , PoolByThread(poolsWithThreads.size())
-    , BorrowedThreadByPool(poolCount, -1)
-    , PoolByBorrowedThread(poolsWithThreads.size(), -1)
+    : State(poolCount, poolsWithThreads.size())
     , Pools(poolCount)
     , PoolCount(poolCount)
     , SharedThreadCount(poolsWithThreads.size())
@@ -27,8 +24,8 @@ TSharedExecutorPool::TSharedExecutorPool(const TSharedExecutorPoolConfig &config
 {
     for (ui32 poolIdx = 0, threadIdx = 0; poolIdx < poolsWithThreads.size(); ++poolIdx, ++threadIdx) {
         Y_ABORT_UNLESS(poolsWithThreads[poolIdx] < poolCount);
-        ThreadByPool[poolsWithThreads[poolIdx]] = threadIdx;
-        PoolByThread[threadIdx] = poolsWithThreads[poolIdx];
+        State.ThreadByPool[poolsWithThreads[poolIdx]] = threadIdx;
+        State.PoolByThread[threadIdx] = poolsWithThreads[poolIdx];
     }
 }
 
@@ -42,7 +39,7 @@ void TSharedExecutorPool::Prepare(TActorSystem* actorSystem, NSchedulerQueue::TR
         std::vector<IExecutorPool*> poolByThread(SharedThreadCount);
         for (IExecutorPool* pool : poolsBasic) {
             Pools[pool->PoolId] = dynamic_cast<TBasicExecutorPool*>(pool);
-            i16 threadIdx = ThreadByPool[pool->PoolId];
+            i16 threadIdx = State.ThreadByPool[pool->PoolId];
             if (threadIdx >= 0) {
                 poolByThread[threadIdx] = pool;
             }
@@ -95,31 +92,41 @@ bool TSharedExecutorPool::Cleanup() {
 }
 
 TSharedExecutorThreadCtx* TSharedExecutorPool::GetSharedThread(i16 pool) {
-    i16 threadIdx = ThreadByPool[pool];
+    i16 threadIdx = State.ThreadByPool[pool];
     if (threadIdx < 0 || threadIdx >= PoolCount) {
         return nullptr;
     }
     return &Threads[threadIdx];
 }
 
-void TSharedExecutorPool::ReturnHalfThread(i16 pool) {
-    i16 threadIdx = ThreadByPool[pool];
+void TSharedExecutorPool::ReturnOwnHalfThread(i16 pool) {
+    i16 threadIdx = State.ThreadByPool[pool];
     TBasicExecutorPool* borrowingPool = Threads[threadIdx].ExecutorPools[1].exchange(nullptr, std::memory_order_acq_rel);
     Y_ABORT_UNLESS(borrowingPool);
-    BorrowedThreadByPool[PoolByBorrowedThread[threadIdx]] = -1;
-    PoolByBorrowedThread[threadIdx] = -1;
+    State.BorrowedThreadByPool[State.PoolByBorrowedThread[threadIdx]] = -1;
+    State.PoolByBorrowedThread[threadIdx] = -1;
+    // TODO(kruall): Check on race
+    borrowingPool->ReleaseSharedThread();
+}
 
-    // TODO(kruall): add change in executor pool basic
+void TSharedExecutorPool::ReturnBorrowedHalfThread(i16 pool) {
+    i16 threadIdx = State.BorrowedThreadByPool[pool];
+    TBasicExecutorPool* borrowingPool = Threads[threadIdx].ExecutorPools[1].exchange(nullptr, std::memory_order_acq_rel);
+    Y_ABORT_UNLESS(borrowingPool);
+    State.BorrowedThreadByPool[State.PoolByBorrowedThread[threadIdx]] = -1;
+    State.PoolByBorrowedThread[threadIdx] = -1;
+    // TODO(kruall): Check on race
+    borrowingPool->ReleaseSharedThread();
 }
 
 void TSharedExecutorPool::GiveHalfThread(i16 from, i16 to) {
-    i16 threadIdx = ThreadByPool[from];
+    i16 threadIdx = State.ThreadByPool[from];
     TBasicExecutorPool* borrowingPool = Pools[to];
     Threads[threadIdx].ExecutorPools[1].store(borrowingPool, std::memory_order_release);
-    BorrowedThreadByPool[to] = threadIdx;
-    PoolByBorrowedThread[threadIdx] = to;
-
-    // TODO(kruall): add change in executor pool basic
+    State.BorrowedThreadByPool[to] = threadIdx;
+    State.PoolByBorrowedThread[threadIdx] = to;
+    // TODO(kruall): Check on race
+    borrowingPool->AddSharedThread(&Threads[threadIdx]);
 }
 
 void TSharedExecutorPool::GetSharedStats(i16 poolId, std::vector<TExecutorThreadStats>& statsCopy) {
@@ -148,6 +155,10 @@ std::vector<TCpuConsumption> TSharedExecutorPool::GetThreadsCpuConsumption(i16 p
 
 i16 TSharedExecutorPool::GetSharedThreadCount() const {
     return SharedThreadCount;
+}
+
+TSharedPoolState TSharedExecutorPool::GetState() const {
+    return State;
 }
 
 }

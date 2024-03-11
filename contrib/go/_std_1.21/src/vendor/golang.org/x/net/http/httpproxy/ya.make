@@ -1,7 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    proxy.go
-)
-
+IF (TRUE)
+    SRCS(
+		proxy.go
+    )
+ENDIF()
 END()

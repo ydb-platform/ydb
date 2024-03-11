@@ -337,11 +337,11 @@ typename std::enable_if_t<std::is_trivial_v<TValue>> SetPairValueImpl(TProtoPair
 template <class TSerializedArray, class T, class E, E Min, E Max>
 void ToProtoArrayImpl(
     TSerializedArray* serializedArray,
-    const TEnumIndexedVector<E, T, Min, Max>& originalArray)
+    const TEnumIndexedArray<E, T, Min, Max>& originalArray)
 {
     serializedArray->Clear();
     for (auto key : TEnumTraits<E>::GetDomainValues()) {
-        if (originalArray.IsDomainValue(key)) {
+        if (originalArray.IsValidIndex(key)) {
             const auto& value = originalArray[key];
             auto* pair = serializedArray->Add();
             pair->set_key(static_cast<i32>(key));
@@ -352,17 +352,17 @@ void ToProtoArrayImpl(
 
 template <class T, class E, E Min, E Max, class TSerializedArray>
 void FromProtoArrayImpl(
-    TEnumIndexedVector<E, T, Min, Max>* originalArray,
+    TEnumIndexedArray<E, T, Min, Max>* originalArray,
     const TSerializedArray& serializedArray)
 {
     for (auto key : TEnumTraits<E>::GetDomainValues()) {
-        if (originalArray->IsDomainValue(key)) {
+        if (originalArray->IsValidIndex(key)) {
             (*originalArray)[key] = T{};
         }
     }
     for (const auto& pair : serializedArray) {
         const auto& key = static_cast<E>(pair.key());
-        if (originalArray->IsDomainValue(key)) {
+        if (originalArray->IsValidIndex(key)) {
             FromProto(&(*originalArray)[key], pair.value());
         }
     }

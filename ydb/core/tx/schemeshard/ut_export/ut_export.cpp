@@ -5,6 +5,7 @@
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/metering/metering.h>
+#include <ydb/public/api/protos/ydb_export.pb.h>
 
 #include <util/string/builder.h>
 #include <util/string/cast.h>
@@ -281,8 +282,42 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
 
         const TVector<TString> tables = {R"(
             Name: "Table"
-            Columns { Name: "key" Type: "Utf8" }
-            Columns { Name: "value" Type: "Utf8" }
+            Columns {
+                Name: "key"
+                Type: "Utf8"
+                DefaultFromLiteral {
+                    type {
+                        optional_type {
+                            item {
+                                type_id: UTF8
+                            }
+                        }
+                    }
+                    value {
+                        items {
+                            text_value: "b"
+                        }
+                    }
+                }
+            }
+            Columns {
+                Name: "value"
+                Type: "Utf8"
+                DefaultFromLiteral {
+                    type {
+                        optional_type {
+                            item {
+                                type_id: UTF8
+                            }
+                        }
+                    }
+                    value {
+                        items {
+                            text_value: "a"
+                        }
+                    }
+                }
+            }
             KeyColumnNames: ["key"]
             PartitionConfig {
               ColumnFamilies {
@@ -331,6 +366,20 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
     }
   }
   not_null: false
+  from_literal {
+    type {
+      optional_type {
+        item {
+          type_id: UTF8
+        }
+      }
+    }
+    value {
+      items {
+        text_value: "b"
+      }
+    }
+  }
 }
 columns {
   name: "value"
@@ -342,6 +391,20 @@ columns {
     }
   }
   not_null: false
+  from_literal {
+    type {
+      optional_type {
+        item {
+          type_id: UTF8
+        }
+      }
+    }
+    value {
+      items {
+        text_value: "a"
+      }
+    }
+  }
 }
 primary_key: "key"
 storage_settings {
@@ -1393,5 +1456,53 @@ partitioning_settings {
         env.TestWaitNotification(runtime, txId);
 
         TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+    }
+
+    Y_UNIT_TEST(UidAsIdempotencyKey) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        const auto request = Sprintf(R"(
+            OperationParams {
+              labels {
+                key: "uid"
+                value: "foo"
+              }
+            }
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port);
+
+        // create operation
+        TestExport(runtime, ++txId, "/MyRoot", request);
+        const ui64 exportId = txId;
+        // create operation again with same uid
+        TestExport(runtime, ++txId, "/MyRoot", request);
+        // new operation was not created
+        TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        // check previous operation
+        TestGetExport(runtime, exportId, "/MyRoot");
+        env.TestWaitNotification(runtime, exportId);
     }
 }

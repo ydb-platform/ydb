@@ -1,7 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    alias.go
-)
-
+IF (TRUE)
+    SRCS(
+		alias.go
+    )
+ENDIF()
 END()

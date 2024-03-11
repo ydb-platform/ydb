@@ -61,12 +61,14 @@ bool SetDatabaseForLoginOperation(TString& result, bool getDomainLoginOnly, TMay
 
 void FillCreateExternalTableColumnDesc(NKikimrSchemeOp::TExternalTableDescription& externalTableDesc,
                                        const TString& name,
+                                       bool replaceIfExists,
                                        const NYql::TCreateExternalTableSettings& settings)
 {
     externalTableDesc.SetName(name);
     externalTableDesc.SetDataSourcePath(settings.DataSourcePath);
     externalTableDesc.SetLocation(settings.Location);
     externalTableDesc.SetSourceType("General");
+    externalTableDesc.SetReplaceIfExists(replaceIfExists);
 
     Y_ENSURE(settings.ColumnOrder.size() == settings.Columns.size());
     for (const auto& name : settings.ColumnOrder) {

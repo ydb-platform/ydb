@@ -8,7 +8,7 @@
 
 #include <ydb/core/grpc_services/base/base_service.h>
 #include <ydb/core/grpc_services/base/base.h>
-
+#include <ydb/core/grpc_services/service_topic.h>
 
 namespace NKikimr::NGRpcService::V1 {
 
@@ -32,6 +32,7 @@ private:
     NActors::TActorId SchemeCache;
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
+    NKikimr::NGRpcProxy::V1::IClustersCfgProvider* ClustersCfgProvider = nullptr;
 };
 
 } // namespace NKikimr::NGRpcService::V1

@@ -28,6 +28,7 @@ SRCS(
     ut_dictionary.cpp
     ut_size_calcer.cpp
     ut_column_filter.cpp
+    ut_hash.cpp
 )
 
 END()

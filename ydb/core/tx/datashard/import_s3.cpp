@@ -14,7 +14,7 @@
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/s3_storage.h>
-#include <ydb/core/io_formats/csv.h>
+#include <ydb/core/io_formats/ydb_dump/csv_ydb_dump.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <contrib/libs/zstd/include/zstd.h>
@@ -309,10 +309,6 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
 
     }; // TUploadRowsRequestBuilder
 
-    enum class EWakeupTag: ui64 {
-        Restart,
-    };
-
     void AllocateResource() {
         IMPORT_LOG_D("AllocateResource");
 
@@ -386,7 +382,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             default:
                 IMPORT_LOG_E("Error at 'HeadObject'"
                     << ": error# " << result);
-                return RestartOrFinish(result.GetError().GetMessage().c_str());
+                return RetryOrFinish(result.GetError());
             }
 
             CompressionCodec = NBackupRestoreTraits::NextCompressionCodec(CompressionCodec);
@@ -578,7 +574,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             return Finish(false, record.GetErrorDescription());
 
         default:
-            return RestartOrFinish(record.GetErrorDescription());
+            return RetryOrFinish(record.GetErrorDescription());
         }
     }
 
@@ -590,7 +586,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
 
         IMPORT_LOG_E("Error at '" << marker << "'"
             << ": error# " << result);
-        RestartOrFinish(result.GetError().GetMessage().c_str());
+        RetryOrFinish(result.GetError());
 
         return false;
     }
@@ -656,21 +652,35 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         return true;
     }
 
-    void RestartOrFinish(const TString& error) {
-        if (Attempt++ < Retries) {
-            Delay = Min(Delay * Attempt, MaxDelay);
-            const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
-
-            Schedule(Delay + random, new TEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::Restart)));
-        } else {
-            Finish(false, error);
-        }
+    static bool ShouldRetry(const Aws::S3::S3Error& error) {
+        return error.ShouldRetry();
     }
 
-    void Handle(TEvents::TEvWakeup::TPtr& ev) {
-        switch (static_cast<EWakeupTag>(ev->Get()->Tag)) {
-        case EWakeupTag::Restart:
-            return Restart();
+    static bool ShouldRetry(const TString&) {
+        return true;
+    }
+
+    template <typename T>
+    bool CanRetry(const T& error) const {
+        return Attempt < Retries && ShouldRetry(error);
+    }
+
+    void Retry() {
+        Delay = Min(Delay * ++Attempt, MaxDelay);
+        const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
+        Schedule(Delay + random, new TEvents::TEvWakeup());
+    }
+
+    template <typename T>
+    void RetryOrFinish(const T& error) {
+        if (CanRetry(error)) {
+            Retry();
+        } else {
+            if constexpr (std::is_same_v<T, Aws::S3::S3Error>) {
+                Finish(false, TStringBuilder() << "S3 error: " << error.GetMessage().c_str());
+            } else {
+                Finish(false, error);
+            }
         }
     }
 
@@ -754,7 +764,7 @@ public:
             hFunc(TEvDataShard::TEvS3DownloadInfo, Handle);
             hFunc(TEvDataShard::TEvS3UploadRowsResponse, Handle);
 
-            hFunc(TEvents::TEvWakeup, Handle);
+            sFunc(TEvents::TEvWakeup, Restart);
             sFunc(TEvents::TEvPoisonPill, NotifyDied);
         }
     }

@@ -1,7 +1,5 @@
 #pragma once
 
-#include "transaction.h"
-
 #include <yt/cpp/mapreduce/http/helpers.h>
 #include <yt/cpp/mapreduce/http/http.h>
 #include <yt/cpp/mapreduce/http/http_client.h>
@@ -36,6 +34,7 @@ public:
         size_t bufferSize,
         const TWriterOptions& options)
         : BufferSize_(bufferSize)
+        , AutoFinish_(options.AutoFinish_)
     {
         THttpHeader header("PUT", command);
         header.SetInputFormat(format);
@@ -72,6 +71,7 @@ protected:
 
 private:
     const size_t BufferSize_ = 0;
+    const bool AutoFinish_;
 
     bool Running_ = true;
     NHttpClient::IHttpRequestPtr Request_;

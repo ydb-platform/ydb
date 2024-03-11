@@ -121,7 +121,6 @@ struct TDqTaskRunnerContext {
     NKikimr::NMiniKQL::TComputationNodeFactory ComputationFactory;
     NUdf::IApplyContext* ApplyCtx = nullptr;
     NKikimr::NMiniKQL::TCallableVisitFuncProvider FuncProvider;
-    NKikimr::NMiniKQL::TScopedAlloc* Alloc = nullptr;
     NKikimr::NMiniKQL::TTypeEnvironment* TypeEnv = nullptr;
     std::shared_ptr<NKikimr::NMiniKQL::TComputationPatternLRUCache> PatternCache;
 };
@@ -136,8 +135,8 @@ public:
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         TVector<IDqOutput::TPtr>&& outputs) const = 0;
 
-    virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId) const = 0;
-    virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, NActors::TActorSystem* actorSystem, bool isConcurrent) const = 0;
+    virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling) const = 0;
+    virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem, bool isConcurrent) const = 0;
 };
 
 class TDqTaskRunnerExecutionContextBase : public IDqTaskRunnerExecutionContext {
@@ -151,11 +150,11 @@ public:
 
 class TDqTaskRunnerExecutionContextDefault : public TDqTaskRunnerExecutionContextBase {
 public:
-    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/) const override {
+    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/, bool /*withSpilling*/) const override {
         return {};
     };
 
-    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/, NActors::TActorSystem* /*actorSystem*/, bool /*isConcurrent*/) const override {
+    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/, bool /*withSpilling*/, NActors::TActorSystem* /*actorSystem*/, bool /*isConcurrent*/) const override {
         return {};
     };
 
@@ -380,7 +379,7 @@ public:
     virtual bool IsAllocatorAttached() = 0;
     virtual const NKikimr::NMiniKQL::TTypeEnvironment& GetTypeEnv() const = 0;
     virtual const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const = 0;
-    virtual std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> GetAllocatorPtr() const = 0;
+    virtual NKikimr::NMiniKQL::TScopedAlloc& GetAllocator() const = 0;
 
     virtual const THashMap<TString, TString>& GetSecureParams() const = 0;
     virtual const THashMap<TString, TString>& GetTaskParams() const = 0;
@@ -397,8 +396,12 @@ public:
     virtual const NKikimr::NMiniKQL::TWatermark& GetWatermark() const = 0;
 };
 
-TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(const TDqTaskRunnerContext& ctx, const TDqTaskRunnerSettings& settings,
-    const TLogFunc& logFunc);
+TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(
+    NKikimr::NMiniKQL::TScopedAlloc& alloc, 
+    const TDqTaskRunnerContext& ctx, 
+    const TDqTaskRunnerSettings& settings,
+    const TLogFunc& logFunc
+);
 
 } // namespace NYql::NDq
 

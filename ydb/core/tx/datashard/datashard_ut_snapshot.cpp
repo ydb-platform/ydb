@@ -8,6 +8,7 @@
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h> // Y_UNIT_TEST_(TWIN|QUAD)
+#include <ydb/core/mind/local.h>
 
 #include <ydb/library/yql/minikql/mkql_node_printer.h>
 
@@ -1843,7 +1844,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         TDisableDataShardLogBatching disableDataShardLogBatching;
         CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
-            .Shards(1)
             .Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}, {"value2", "Uint32", false, false}}));
 
         auto shards = GetTableShards(server, sender, "/Root/table-1");
@@ -2002,7 +2002,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         TDisableDataShardLogBatching disableDataShardLogBatching;
         CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
-            .Shards(1)
             .Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}, {"value2", "Uint32", false, false}}));
 
         auto shards = GetTableShards(server, sender, "/Root/table-1");
@@ -3521,7 +3520,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         TDisableDataShardLogBatching disableDataShardLogBatching;
         auto opts = TShardedTableOptions()
-                        .Shards(1)
                         .Columns({
                             {"key", "Uint32", true, false},
                             {"value", "Uint32", false, false},
@@ -3634,11 +3632,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         InitRoot(server, sender);
 
         TDisableDataShardLogBatching disableDataShardLogBatching;
-        auto opts = TShardedTableOptions()
-                        .Shards(1)
-                        .Columns({
-                            {"key", "Uint32", true, false},
-                            {"value", "Uint32", false, false}});
+        TShardedTableOptions opts;
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         CreateShardedTable(server, sender, "/Root", "table-2", opts);
 
@@ -3755,11 +3749,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         InitRoot(server, sender);
 
         TDisableDataShardLogBatching disableDataShardLogBatching;
-        auto opts = TShardedTableOptions()
-                        .Shards(1)
-                        .Columns({
-                            {"key", "Uint32", true, false},
-                            {"value", "Uint32", false, false}});
+        TShardedTableOptions opts;
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         CreateShardedTable(server, sender, "/Root", "table-2", opts);
 
@@ -3821,6 +3811,733 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33)"));
         auto duration = runtime.GetCurrentTime() - start;
         UNIT_ASSERT_C(duration <= TDuration::MilliSeconds(200), "UPSERT takes too much time: " << duration);
+    }
+
+    Y_UNIT_TEST(UncommittedWriteRestartDuringCommit) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
+
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(100)
+            .SetAppConfig(app)
+            // Bug was with non-volatile transactions
+            .SetEnableDataShardVolatileTransactions(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        // Insert some initial data
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);"));
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 20);"));
+
+        const auto shards1 = GetTableShards(server, sender, "/Root/table-1");
+
+        TString sessionId, txId;
+
+        // Start inserting a row into table-1
+        Cerr << "... sending initial upsert" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 30);
+                )")),
+            "<empty>");
+
+        // We want to block readsets
+        std::vector<std::unique_ptr<IEventHandle>> readSets;
+        auto blockReadSets = runtime.AddObserver<TEvTxProcessing::TEvReadSet>([&](TEvTxProcessing::TEvReadSet::TPtr& ev) {
+            readSets.emplace_back(ev.Release());
+        });
+
+        // Start committing an additional read/write
+        // Note: select on table-1 flushes accumulated changes
+        // Note: select on table-2 ensures we have an outgoing readset
+        Cerr << "... sending commit request" << Endl;
+        auto commitFuture = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
+            SELECT key, value FROM `/Root/table-1`
+            UNION ALL
+            SELECT key, value FROM `/Root/table-2`
+            ORDER BY key;
+
+            UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 40);
+            )"), sessionId, txId, true /* commitTx */));
+
+        WaitFor(runtime, [&]{ return readSets.size() >= 2; }, "readset exchange");
+        UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
+
+        // We want to block local boot to make sure it stays down during rollback
+        std::vector<std::unique_ptr<IEventHandle>> blockedLocalBoot;
+        auto blockLocalBoot = runtime.AddObserver<TEvLocal::TEvBootTablet>([&](TEvLocal::TEvBootTablet::TPtr& ev) {
+            Cerr << "... blocking TEvLocal::TEvBootTablet" << Endl;
+            blockedLocalBoot.emplace_back(std::move(ev.Release()));
+        });
+
+        // Kill current datashard actor with TEvPoison (so it doesn't have a chance to reply)
+        Cerr << "... sending TEvPoison to " << shards1.at(0) << Endl;
+        ForwardToTablet(runtime, shards1.at(0), sender, new TEvents::TEvPoison);
+
+        // Wait until hive tries to boot a new instance (old instance is dead by that point)
+        WaitFor(runtime, [&]{ return blockedLocalBoot.size() > 0; }, "blocked local boot", 3);
+
+        // Stop blocking and resend readsets
+        blockReadSets.Remove();
+        Cerr << "... resending readsets" << Endl;
+        for (auto& ev : readSets) {
+            runtime.Send(ev.release(), 0, true);
+        }
+        readSets.clear();
+
+        // Wait until commit fails with UNDETERMINED
+        Cerr << "... waiting for commit result" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(AwaitResponse(runtime, std::move(commitFuture))),
+            "ERROR: UNDETERMINED");
+
+        // Sleep a little to make sure everything settles
+        Cerr << "... sleeping for 1 second" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // We want to detect a restarting datashard and block its progress queue
+        TActorId shard1actor;
+        std::vector<std::unique_ptr<IEventHandle>> blockedProgress;
+        auto blockProgressQueue = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvTablet::TEvBoot::EventType: {
+                    auto* msg = ev->Get<TEvTablet::TEvBoot>();
+                    Cerr << "... observed TEvBoot for " << msg->TabletID << " at " << ev->GetRecipientRewrite() << Endl;
+                    if (msg->TabletID == shards1.at(0)) {
+                        shard1actor = ev->GetRecipientRewrite();
+                    }
+                    break;
+                }
+                case EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 0 /* EvProgressTransaction */: {
+                    if (shard1actor && ev->GetRecipientRewrite() == shard1actor) {
+                        Cerr << "... blocking TEvProgressTranasction at " << ev->GetRecipientRewrite() << Endl;
+                        blockedProgress.emplace_back(ev.Release());
+                        return;
+                    }
+                    break;
+                }
+            }
+        });
+
+        // Unblock local boot
+        blockLocalBoot.Remove();
+        Cerr << "... unblocking local boot" << Endl;
+        for (auto& ev : blockedLocalBoot) {
+            runtime.Send(ev.release(), 0, true);
+        }
+        blockedLocalBoot.clear();
+
+        // Wait until a new instance starts and is blocked at progress queue handling
+        WaitFor(runtime, [&]{ return blockedProgress.size() > 0; }, "blocked progress", 10);
+
+        // Sleep a little to make sure datashard subscribes to lock and handles the response
+        Cerr << "... sleeping for 1 second" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Unblock progress queue and resend blocked messages
+        Cerr << "... resending progress queue" << Endl;
+        blockProgressQueue.Remove();
+        for (auto& ev : blockedProgress) {
+            runtime.Send(ev.release(), 0, true);
+        }
+        blockedProgress.clear();
+
+        // Sleep a little to make sure everything settles
+        Cerr << "... sleeping for 1 second" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Now make a read query, we must not observe partial commit
+        Cerr << "... checking final table state" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                UNION ALL
+                SELECT key, value FROM `/Root/table-2`
+                ORDER BY key;
+                )")),
+            "{ items { uint32_value: 1 } items { uint32_value: 10 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 20 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 30 } }, "
+            "{ items { uint32_value: 4 } items { uint32_value: 40 } }");
+    }
+
+    /**
+     * This observer forces newly created nodes to start on particular nodes
+     */
+    class TCreateTabletNodePinning {
+    public:
+        TCreateTabletNodePinning(TTestActorRuntime& runtime)
+            : Runtime(runtime)
+            , Node1(Runtime.GetNodeId(0))
+            , Observer(Runtime.AddObserver<TEvHive::TEvCreateTablet>([this](auto& ev) { this->Process(ev); }))
+        {}
+
+        void SetNodeIndexes(std::initializer_list<ui32> nodeIndexes) {
+            AllowedNodes.clear();
+            for (ui32 nodeIndex : nodeIndexes) {
+                AllowedNodes.push_back(Node1 + nodeIndex);
+            }
+        }
+
+        void Remove() {
+            Observer.Remove();
+        }
+
+    private:
+        void Process(TEvHive::TEvCreateTablet::TPtr& ev) {
+            auto* msg = ev->Get();
+            msg->Record.ClearAllowedNodeIDs();
+            for (ui32 nodeId : AllowedNodes) {
+                msg->Record.AddAllowedNodeIDs(nodeId);
+            }
+        }
+
+    private:
+        TTestActorRuntime& Runtime;
+        const ui32 Node1;
+        std::vector<ui32> AllowedNodes;
+        TTestActorRuntime::TEventObserverHolder Observer;
+    };
+
+    /**
+     * This observer allows blocking timecast updates at different nodes
+     */
+    class TMediatorTimeCastBlocking {
+    public:
+        TMediatorTimeCastBlocking(TTestActorRuntime& runtime)
+            : Runtime(runtime)
+            , Node1(Runtime.GetNodeId(0))
+            , Observer(Runtime.AddObserver<TEvMediatorTimecast::TEvUpdate>([this](auto& ev) { this->Process(ev); }))
+        {}
+
+        void SetMaxAllowedStep(ui32 nodeIndex, ui64 step) {
+            while (Nodes.size() <= nodeIndex) {
+                Nodes.emplace_back();
+            }
+            Nodes[nodeIndex].MaxAllowedStep = step;
+        }
+
+        void Unblock(ui32 nodeIndex) {
+            while (Nodes.size() <= nodeIndex) {
+                Nodes.emplace_back();
+            }
+            auto& state = Nodes[nodeIndex];
+            state.MaxAllowedStep = Max<ui64>();
+            for (auto& kv : state.Buckets) {
+                if (kv.second.LastBlocked) {
+                    Runtime.Send(kv.second.LastBlocked.release(), nodeIndex, true);
+                }
+            }
+        }
+
+        ui64 WaitNextStep() {
+            ui64 step = LastStep;
+            WaitFor(Runtime, [&]{ return LastStep > step; }, "next timecast step", 10);
+            return LastStep;
+        }
+
+        void Remove() {
+            Observer.Remove();
+        }
+
+    private:
+        void Process(TEvMediatorTimecast::TEvUpdate::TPtr& ev) {
+            auto* msg = ev->Get();
+            ui32 nodeId = ev->GetRecipientRewrite().NodeId();
+            ui32 nodeIndex = nodeId - Node1;
+            auto bucket = msg->Record.GetBucket();
+            auto step = msg->Record.GetTimeBarrier();
+            Cerr << "... observed step " << step << " at node " << nodeId << " bucket " << bucket << Endl;
+            LastStep = Max(LastStep, step);
+            while (Nodes.size() <= nodeIndex) {
+                Nodes.emplace_back();
+            }
+            auto& state = Nodes[nodeIndex];
+            auto& bucketState = state.Buckets[bucket];
+            ui64 prevObserved = bucketState.LastObservedStep;
+            bucketState.LastObservedStep = step;
+            bucketState.LastBlocked.reset();
+            if (step > state.MaxAllowedStep) {
+                Cerr << "... blocked step " << step << " at node " << nodeId << " bucket " << bucket << Endl;
+                // Generate an blocked event we would resend when on unblock
+                auto* newMsg = new TEvMediatorTimecast::TEvUpdate;
+                newMsg->Record = msg->Record;
+                bucketState.LastBlocked.reset(new IEventHandle(
+                    ev->Recipient,
+                    ev->Sender,
+                    newMsg,
+                    ev->Flags,
+                    ev->Cookie));
+                bucketState.LastBlocked->Rewrite(ev->GetTypeRewrite(), ev->GetRecipientRewrite());
+                // Modify the original event to send the max allowed step when necessary
+                if (prevObserved < state.MaxAllowedStep) {
+                    Cerr << "... synthetic step " << state.MaxAllowedStep << " at node " << nodeId << " bucket " << bucket << Endl;
+                    msg->Record.SetTimeBarrier(state.MaxAllowedStep);
+                } else {
+                    ev.Reset();
+                }
+                return;
+            }
+        }
+
+    private:
+        struct TBucketState {
+            ui64 LastObservedStep = 0;
+            std::unique_ptr<IEventHandle> LastBlocked;
+        };
+
+        struct TNodeState {
+            ui64 MaxAllowedStep = Max<ui64>();
+            std::map<ui32, TBucketState> Buckets;
+        };
+
+    public:
+        ui64 LastStep = 0;
+
+    private:
+        TTestActorRuntime& Runtime;
+        const ui32 Node1;
+        std::vector<TNodeState> Nodes;
+        TTestActorRuntime::TEventObserverHolder Observer;
+    };
+
+    /**
+     * Observer for blocking split at src tablets
+     */
+    class TSplitSrcBlocking {
+    public:
+        TSplitSrcBlocking(TTestActorRuntime& runtime)
+            : Runtime(runtime)
+            , Node1(Runtime.GetNodeId(0))
+            , Observer(Runtime.AddObserver<TEvDataShard::TEvSplit>([this](auto& ev) { this->Process(ev); }))
+        {}
+
+        void Unblock() {
+            Observer.Remove();
+            for (auto& ev : Blocked) {
+                ui32 nodeIndex = ev->GetRecipientRewrite().NodeId() - Node1;
+                Runtime.Send(ev.release(), nodeIndex, true);
+            }
+            Blocked.clear();
+        }
+
+    private:
+        void Process(TEvDataShard::TEvSplit::TPtr& ev) {
+            Cerr << "... blocking TEvSplit" << Endl;
+            Blocked.emplace_back(ev.Release());
+        }
+
+    private:
+        TTestActorRuntime& Runtime;
+        const ui32 Node1;
+        std::vector<std::unique_ptr<IEventHandle>> Blocked;
+        TTestActorRuntime::TEventObserverHolder Observer;
+    };
+
+    Y_UNIT_TEST(RepeatableReadAfterSplitRace) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetNodeCount(2)
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(100);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TCreateTabletNodePinning createTabletNodePinning(runtime);
+
+        // Create table-1 at node 1
+        createTabletNodePinning.SetNodeIndexes({ 0 });
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        auto shards1 = GetTableShards(server, sender, "/Root/table-1");
+
+        // Create table-2 at node 2
+        createTabletNodePinning.SetNodeIndexes({ 1 });
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        // Insert initial values
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);"));
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 20);"));
+
+        TSplitSrcBlocking splitSrcBlocking(runtime);
+        TMediatorTimeCastBlocking mediatorTimeCastBlocking(runtime);
+
+        // We need to make a snapshot read to force unprotected reads
+        // This will also ensure both nodes have an updated mediator time cast
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                UNION ALL
+                SELECT key, value FROM `/Root/table-2`
+                ORDER BY key;
+                )")),
+            "{ items { uint32_value: 1 } items { uint32_value: 10 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 20 } }");
+
+        // One more upsert to table-2, this will bump mediator time at node 2 past the snapshot
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (3, 30);"));
+
+        // We won't allow node 2 to go past that write version
+        mediatorTimeCastBlocking.SetMaxAllowedStep(1, mediatorTimeCastBlocking.LastStep);
+
+        // Start split of table-1 at key 10
+        auto splitSender = runtime.AllocateEdgeActor();
+        SetSplitMergePartCountLimit(server->GetRuntime(), -1);
+        Cerr << "... starting split of table-1" << Endl;
+        ui64 splitTxId = AsyncSplitTable(server, splitSender, "/Root/table-1", shards1.at(0), 10);
+
+        // We want to mediator time to advance, so the next snapshot is greater than the last write version
+        mediatorTimeCastBlocking.WaitNextStep();
+
+        // Start a snapshot read from table-1
+        // This will run at node 1 shard where mediator time is recent
+        Cerr << "... reading from table-1" << Endl;
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                ORDER BY key;
+                )")),
+            "{ items { uint32_value: 1 } items { uint32_value: 10 } }");
+
+        // Now unblock TEvSplit and wait until it finishes
+        splitSrcBlocking.Unblock();
+
+        // Wait until split finishes, so we can continue working with the new shards
+        Cerr << "... waiting for split to finish" << Endl;
+        WaitTxNotification(server, splitSender, splitTxId);
+
+        // Start an upsert into newly split table-1
+        TString upsertSessionId = CreateSessionRPC(runtime);
+        auto upsertFuture = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
+            UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 40);
+            )"), upsertSessionId, "", /* commit */ true));
+
+        // We cannot wait for it to finish (bug may be fixed)
+        // So we sleep for several seconds instead
+        Cerr << "... sleeping for 2 seconds" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(2));
+
+        // Unblock mediator timecast at node 2
+        mediatorTimeCastBlocking.Unblock(1);
+
+        // Wait until upsert finishes
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(AwaitResponse(runtime, std::move(upsertFuture))),
+            "<empty>");
+
+        // Repeat read in a previous tx, this read must be repeatable
+        // In other words we must not observe the new 4/40 row
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleContinue(runtime, sessionId, txId, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                UNION ALL
+                SELECT key, value FROM `/Root/table-2`
+                ORDER BY key;
+                )")),
+            "{ items { uint32_value: 1 } items { uint32_value: 10 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 20 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 30 } }");
+    }
+
+    Y_UNIT_TEST(DelayedWriteReadableAfterSplit) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetNodeCount(2)
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(100);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TCreateTabletNodePinning createTabletNodePinning(runtime);
+
+        // Create table-1 at node 1
+        createTabletNodePinning.SetNodeIndexes({ 0 });
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        auto shards1 = GetTableShards(server, sender, "/Root/table-1");
+
+        // Create table-2 at node 2
+        createTabletNodePinning.SetNodeIndexes({ 1 });
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        // Insert initial values
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);"));
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 20);"));
+
+        TSplitSrcBlocking splitSrcBlocking(runtime);
+        TMediatorTimeCastBlocking mediatorTimeCastBlocking(runtime);
+
+        // We need to make a snapshot read to force unprotected reads
+        // This will also ensure both nodes have an updated mediator time cast
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                UNION ALL
+                SELECT key, value FROM `/Root/table-2`
+                ORDER BY key;
+                )")),
+            "{ items { uint32_value: 1 } items { uint32_value: 10 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 20 } }");
+
+        // One more upsert to table-2, this will bump mediator time past the snapshot
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (3, 30);"));
+
+        // Wait for the next step, we will expect to read at that step
+        ui64 step = mediatorTimeCastBlocking.WaitNextStep();
+        Cerr << "... expecting next read at step " << step << Endl;
+
+        // We won't allow node 2 to go past that snapshot
+        mediatorTimeCastBlocking.SetMaxAllowedStep(1, step);
+
+        // Start a snapshot read from table-1
+        // This will run at node 1 shard where mediator time is recent
+        Cerr << "... reading from table-1" << Endl;
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                ORDER BY key;
+                )")),
+            "{ items { uint32_value: 1 } items { uint32_value: 10 } }");
+
+        // Start split of table-1 at key 10
+        auto splitSender = runtime.AllocateEdgeActor();
+        SetSplitMergePartCountLimit(server->GetRuntime(), -1);
+        Cerr << "... starting split of table-1" << Endl;
+        ui64 splitTxId = AsyncSplitTable(server, splitSender, "/Root/table-1", shards1.at(0), 10);
+
+        // Perform an immediate write, which will happen after the above snapshot
+        // We also wait for the result to make sure mediator time advances at node 1
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 40);
+            )")),
+            "<empty>");
+
+        // Unblock split at src
+        splitSrcBlocking.Unblock();
+
+        // Wait until split finishes, so we can continue working with the new shards
+        Cerr << "... waiting for split to finish" << Endl;
+        WaitTxNotification(server, splitSender, splitTxId);
+
+        // Start an immediate read from the new left shard of table-1
+        TString readSessionId = CreateSessionRPC(runtime);
+        Cerr << "... starting immediate read from table-1" << Endl;
+        auto readFuture = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
+            SELECT key, value FROM `/Root/table-1`
+            WHERE key <= 5
+            ORDER BY key;
+            )"), readSessionId, "", /* commit */ true));
+
+        // We cannot wait for it to finish (bug may be fixed)
+        // So we sleep for several seconds instead
+        Cerr << "... sleeping for 2 seconds" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(2));
+
+        // Unblock mediator timecast at node 2
+        mediatorTimeCastBlocking.Unblock(1);
+
+        // Wait until read finishes, we must observe previously inserted row
+        Cerr << "... waiting for table-1 read to finish" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(AwaitResponse(runtime, std::move(readFuture))),
+            "{ items { uint32_value: 1 } items { uint32_value: 10 } }, "
+            "{ items { uint32_value: 4 } items { uint32_value: 40 } }");
+
+        // Repeat read in a previous tx, this read must be repeatable
+        // In other words we must not observe the new 4/40 row
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleContinue(runtime, sessionId, txId, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                UNION ALL
+                SELECT key, value FROM `/Root/table-2`
+                ORDER BY key;
+                )")),
+            "{ items { uint32_value: 1 } items { uint32_value: 10 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 20 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 30 } }");
+    }
+
+    Y_UNIT_TEST(DelayedWriteReplyAfterSplit) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetNodeCount(2)
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(100);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        TCreateTabletNodePinning createTabletNodePinning(runtime);
+
+        // Create table-1 at node 1
+        createTabletNodePinning.SetNodeIndexes({ 0 });
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        auto shards1 = GetTableShards(server, sender, "/Root/table-1");
+
+        // Create table-2 at node 2
+        createTabletNodePinning.SetNodeIndexes({ 1 });
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        // Insert initial values
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);"));
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 20);"));
+
+        TSplitSrcBlocking splitSrcBlocking(runtime);
+        TMediatorTimeCastBlocking mediatorTimeCastBlocking(runtime);
+
+        // We need to make a snapshot read to force unprotected reads
+        // This will also ensure both nodes have an updated mediator time cast
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                UNION ALL
+                SELECT key, value FROM `/Root/table-2`
+                ORDER BY key;
+                )")),
+            "{ items { uint32_value: 1 } items { uint32_value: 10 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 20 } }");
+
+        // One more upsert to table-2, this will bump mediator time past the snapshot
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (3, 30);"));
+
+        // Wait for the next step, we will expect to read at that step
+        ui64 step = mediatorTimeCastBlocking.WaitNextStep();
+        Cerr << "... expecting next read at step " << step << Endl;
+
+        // We won't allow neither node 1 nor node 2 to go past that snapshot
+        mediatorTimeCastBlocking.SetMaxAllowedStep(0, step);
+        mediatorTimeCastBlocking.SetMaxAllowedStep(1, step);
+
+        // Start a snapshot read from table-1
+        // This will run at node 1 shard
+        Cerr << "... reading from table-1" << Endl;
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                ORDER BY key;
+                )")),
+            "{ items { uint32_value: 1 } items { uint32_value: 10 } }");
+
+        // Start split of table-1 at key 10
+        auto splitSender = runtime.AllocateEdgeActor();
+        SetSplitMergePartCountLimit(server->GetRuntime(), -1);
+        Cerr << "... starting split of table-1" << Endl;
+        ui64 splitTxId = AsyncSplitTable(server, splitSender, "/Root/table-1", shards1.at(0), 10);
+
+        // Start upserting a row into table-1, since mediator time is blocked
+        // this will not be able to reply until mediator time advances.
+        TString upsertSessionId = CreateSessionRPC(runtime);
+        Cerr << "... starting upsert into table-1" << Endl;
+        auto upsertFuture = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
+            UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 40);
+            )"), upsertSessionId, "", /* commit */ true));
+
+        // Sleep a little, so the above upsert is fully executed at future step and reply is enqueued
+        runtime.SimulateSleep(TDuration::MicroSeconds(100));
+
+        // We expect mediator time to be at the last step
+        UNIT_ASSERT_VALUES_EQUAL(mediatorTimeCastBlocking.LastStep, step);
+
+        // Now unblock the split and wait until it finishes
+        splitSrcBlocking.Unblock();
+        Cerr << "... waiting for split to finish" << Endl;
+        WaitTxNotification(server, splitSender, splitTxId);
+
+        // We expect mediator time to still be at the last step
+        UNIT_ASSERT_VALUES_EQUAL(mediatorTimeCastBlocking.LastStep, step);
+
+        // The new shard should be ready to take requests, validate by an immediate read
+        // The new row must not be visible, since mediator time is still in the past,
+        // and the write could not have sent a successful reply yet.
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                WHERE key <= 5
+                ORDER BY key;
+                )")),
+            "{ items { uint32_value: 1 } items { uint32_value: 10 } }");
+
+        // Now that we confirmed the new shard is readable, allow mediator time to advance at node 1
+        mediatorTimeCastBlocking.Unblock(0);
+
+        // Sleep for a couple of seconds and check whether upsert has replied
+        runtime.SimulateSleep(TDuration::Seconds(2));
+
+        // When upsert replies, only errors are allowed, otherwise new reads
+        // at node 2 would keep reading stale values.
+        if (upsertFuture.HasValue() || upsertFuture.HasException()) {
+            Cerr << "... upsert finished before unblocking node 2" << Endl;
+            auto upsertResult = FormatResult(upsertFuture.ExtractValueSync());
+            if (upsertResult == "<empty>") {
+                // It was successful, double check that node 2 can see the result
+                // For obvious reasons it cannot (due to blocked mediator time)
+                UNIT_ASSERT_VALUES_EQUAL(
+                    KqpSimpleExec(runtime, Q_(R"(
+                        SELECT key, value FROM `/Root/table-1`
+                        WHERE key <= 5
+                        ORDER BY key;
+                        )")),
+                    "{ items { uint32_value: 1 } items { uint32_value: 10 } }, "
+                    "{ items { uint32_value: 4 } items { uint32_value: 40 } }, ");
+            } else {
+                // Otherwise we must get an UNDETERMINED error
+                // The upsert hasn't happened yet, but will happen later
+                UNIT_ASSERT_VALUES_EQUAL(
+                    upsertResult,
+                    "ERROR: UNDETERMINED");
+            }
+        } else {
+            // Try to be future proof, in case we implement waiting with dst shards
+            Cerr << "... upsert did not finish before unblocking node 2" << Endl;
+        }
     }
 
 }

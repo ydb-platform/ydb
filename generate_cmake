@@ -141,15 +141,14 @@ if __name__ == "__main__":
     yexport_binary_path = args.yexport_bin
     debug = args.debug
     keep_going = args.keep_going
+    root_folder = os.getcwd()
 
     ydb_tmp_folder_path = tmp_folder_path + "/ydb"
     ydb_metadata_folder_path = tmp_folder_path + "/metadata"
-    plugins_folder_path = ydb_tmp_folder_path + "/build/plugins"
+    plugins_folder_path = root_folder + "/build/plugins"
 
     mkdir(tmp_folder_path)
     mkdir(ydb_metadata_folder_path)
-
-    root_folder = os.getcwd()
 
     if ymake_binary_path is None:
         ymake_binary_path = root_folder + "/ya tool ymake"

@@ -14,6 +14,9 @@ public:
     TTokenizer(const TTokenizer&) = delete;
     TTokenizer& operator=(const TTokenizer&) = delete;
 
+    TTokenizer(TTokenizer&&) = default;
+    TTokenizer& operator=(TTokenizer&&) = default;
+
     void Reset(TYPathBuf path);
 
     ETokenType Advance();
@@ -27,10 +30,10 @@ public:
     TStringBuf GetPath() const;
     const TString& GetLiteralValue() const;
 
-    void Expect(ETokenType expectedType);
-    void ExpectListIndex();
+    void Expect(ETokenType expectedType) const;
+    void ExpectListIndex() const;
     bool Skip(ETokenType expectedType);
-    [[noreturn]] void ThrowUnexpected();
+    [[noreturn]] void ThrowUnexpected() const;
 
 private:
     TYPathBuf Path_;

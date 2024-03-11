@@ -1,8 +1,8 @@
 GO_LIBRARY()
-
-SRCS(
-    exit.go
-    log.go
-)
-
+IF (TRUE)
+    SRCS(
+		exit.go
+		log.go
+    )
+ENDIF()
 END()

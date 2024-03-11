@@ -15,17 +15,16 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, SpecColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, MergeColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, EFColumns);
+    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, PredicateColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, PKColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, FFColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, ProgramInputColumns);
 
+    NIndexes::TIndexCheckerContainer IndexChecker;
     TReadMetadata::TConstPtr ReadMetadata;
     std::shared_ptr<TColumnsSet> EmptyColumns = std::make_shared<TColumnsSet>();
-    std::shared_ptr<TColumnsSet> PKFFColumns;
-    std::shared_ptr<TColumnsSet> EFPKColumns;
-    std::shared_ptr<TColumnsSet> FFMinusEFColumns;
-    std::shared_ptr<IFetchingStep> BuildColumnsFetchingPlan(const bool needSnapshotsFilter, const bool exclusiveSource) const;
-    std::array<std::array<std::shared_ptr<IFetchingStep>, 2>, 2> CacheFetchingScripts;
+    std::shared_ptr<IFetchingStep> BuildColumnsFetchingPlan(const bool needSnapshotsFilter, const bool exclusiveSource, const bool partialUsageByPredicate) const;
+    std::array<std::array<std::array<std::shared_ptr<IFetchingStep>, 2>, 2>, 2> CacheFetchingScripts;
 public:
     ui64 GetMemoryForSources(const std::map<ui32, std::shared_ptr<IDataSource>>& sources, const bool isExclusive);
 

@@ -111,8 +111,14 @@ public:
         : Object(object) {
     }
 
-    bool Initialize(const TString& className) {
-        AFL_VERIFY(!Object)("problem", "initialize for not-empty-object");
+    template <class TDerived>
+    TCommonInterfaceContainer(std::shared_ptr<TDerived> object)
+        : Object(object) {
+        static_assert(std::is_base_of<IInterface, TDerived>::value);
+    }
+
+    bool Initialize(const TString& className, const bool maybeExists = false) {
+        AFL_VERIFY(maybeExists || !Object)("problem", "initialize for not-empty-object");
         Object.reset(TFactory::Construct(className));
         if (!Object) {
             ALS_ERROR(NKikimrServices::BG_TASKS) << "incorrect class name: " << className << " for " << typeid(IInterface).name();
@@ -158,15 +164,21 @@ public:
     }
 
     const IInterface* operator->() const {
+        AFL_VERIFY(Object);
         return Object.get();
     }
 
     IInterface* operator->() {
+        AFL_VERIFY(Object);
         return Object.get();
     }
 
     bool operator!() const {
         return !Object;
+    }
+
+    operator bool() const {
+        return !!Object;
     }
 
 };
@@ -320,7 +332,7 @@ public:
         if (!Object) {
             return result;
         }
-        result = Object->SerializeToProto();
+        Object->SerializeToProto(result);
         TOperatorPolicy::SetClassName(result, Object->GetClassName());
         return result;
     }

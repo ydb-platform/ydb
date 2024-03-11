@@ -85,7 +85,9 @@ public:
         , Poller_(std::move(poller))
     { }
 
-    TFuture<IConnectionPtr> Dial(const TNetworkAddress& remote) override
+    TFuture<IConnectionPtr> Dial(
+        const TNetworkAddress& remote,
+        TRemoteContextPtr /*context*/) override
     {
         auto session = New<TDialSession>(
             remote,

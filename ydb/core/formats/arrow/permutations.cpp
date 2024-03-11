@@ -15,34 +15,24 @@
 namespace NKikimr::NArrow {
 
 std::shared_ptr<arrow::UInt64Array> MakePermutation(const int size, const bool reverse) {
-    if (size < 1) {
-        return {};
-    }
-
     arrow::UInt64Builder builder;
-    if (!builder.Reserve(size).ok()) {
-        return {};
-    }
+    TStatusValidator::Validate(builder.Reserve(size));
 
-    if (reverse) {
-        ui64 value = size - 1;
-        for (i64 i = 0; i < size; ++i, --value) {
-            if (!builder.Append(value).ok()) {
-                return {};
+    if (size) {
+        if (reverse) {
+            ui64 value = size - 1;
+            for (i64 i = 0; i < size; ++i, --value) {
+                TStatusValidator::Validate(builder.Append(value));
             }
-        }
-    } else {
-        for (i64 i = 0; i < size; ++i) {
-            if (!builder.Append(i).ok()) {
-                return {};
+        } else {
+            for (i64 i = 0; i < size; ++i) {
+                TStatusValidator::Validate(builder.Append(i));
             }
         }
     }
 
     std::shared_ptr<arrow::UInt64Array> out;
-    if (!builder.Finish(&out).ok()) {
-        return {};
-    }
+    TStatusValidator::Validate(builder.Finish(&out));
     return out;
 }
 
@@ -287,6 +277,7 @@ std::shared_ptr<arrow::UInt64Array> TShardingSplitIndex::BuildPermutation() cons
 }
 
 std::shared_ptr<arrow::RecordBatch> ReverseRecords(const std::shared_ptr<arrow::RecordBatch>& batch) {
+    AFL_VERIFY(batch);
     auto permutation = NArrow::MakePermutation(batch->num_rows(), true);
     return NArrow::TStatusValidator::GetValid(arrow::compute::Take(batch, permutation)).record_batch();
 }

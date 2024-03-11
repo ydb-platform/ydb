@@ -162,7 +162,7 @@ private:
         bool Terminated = false;
     };
 
-    TEnumIndexedVector<EMultiplexingBand, TBandBucket> Buckets_;
+    TEnumIndexedArray<EMultiplexingBand, TBandBucket> Buckets_;
 
     std::atomic<bool> TerminationFlag_ = false;
     TAtomicObject<TError> TerminationError_;

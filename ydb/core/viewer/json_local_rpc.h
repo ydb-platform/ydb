@@ -10,7 +10,7 @@
 #include "json_pipe_req.h"
 
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
-#include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/core/grpc_services/rpc_calls_topic.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 
@@ -131,7 +131,7 @@ public:
                 NProtobufJson::Json2Proto(postData, request, json2ProtoConfig);
             }
             catch (const yexception& e) {
-                Send(Event->Sender, new NMon::TEvHttpInfoRes(HTTPBADREQUEST, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPBADREQUEST(Event->Get(), {}, "Bad Request"), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
                 PassAway();
             }
         } else {
@@ -195,9 +195,9 @@ public:
         TString headers = Viewer->GetHTTPOKJSON(Event->Get());
         if (DescribeResult) {
             if (!DescribeResult->Status->IsSuccess()) {
-                headers = HTTPBADREQUEST;
+                headers = Viewer->GetHTTPBADREQUEST(Event->Get(), {}, "Bad Request");
                 if (DescribeResult->Status->GetStatus() == NYdb::EStatus::UNAUTHORIZED) {
-                    headers = HTTPFORBIDDENJSON;
+                    headers = Viewer->GetHTTPFORBIDDEN(Event->Get());
                 }
             } else {
                 TProtoToJson::ProtoToJson(json, *(DescribeResult->Message), JsonSettings);

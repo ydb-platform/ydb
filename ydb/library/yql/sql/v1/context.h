@@ -50,6 +50,8 @@ namespace NSQLTranslationV1 {
         bool PragmaClassicDivision = true;
         bool PragmaCheckedOps = false;
         bool StrictJoinKeyTypes = false;
+        bool UnicodeLiterals = false;
+        bool WarnUntypedStringLiterals = false;
         TNamedNodesMap NamedNodes;
 
         struct TLocal {
@@ -279,7 +281,7 @@ namespace NSQLTranslationV1 {
         bool WarnOnAnsiAliasShadowing = true;
         ui32 ResultRowsLimit = 0;
         ui64 ResultSizeLimit = 0;
-        ui32 PragmaGroupByLimit = 1 << 5;
+        ui32 PragmaGroupByLimit = 1 << 6;
         ui32 PragmaGroupByCubeLimit = 5;
         // if FlexibleTypes=true, emit TypeOrMember callable and resolve Type/Column uncertainty on type annotation stage, otherwise always emit Type
         bool FlexibleTypes = false;
@@ -303,13 +305,14 @@ namespace NSQLTranslationV1 {
         NYql::TWarningPolicy WarningPolicy;
         TString PqReadByRtmrCluster;
         bool EmitStartsWith = true;
-        bool EmitAggApply = false;
+        TMaybe<bool> EmitAggApply;
         bool UseBlocks = false;
         bool AnsiLike = false;
         bool FeatureR010 = false; //Row pattern recognition: FROM clause
         TMaybe<bool> CompactGroupBy;
         bool BlockEngineEnable = false;
         bool BlockEngineForce = false;
+        ui64 ParallelModeCount = 0;
     };
 
     class TColumnRefScope {

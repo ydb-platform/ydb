@@ -55,6 +55,11 @@ namespace NKikimr {
                     "not implemented")), 0, ev->Cookie);
             }
 
+            void Handle(TEvBlobStorage::TEvPatch::TPtr& ev) {
+                STLOG(PRI_DEBUG, BS_PROXY, BSPM10, "TEvPatch", (Msg, ev->Get()->ToString()));
+                Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
+            }
+
             template<typename TOut, typename TIn>
             TOut *CopyExecutionRelay(TIn *in, TOut *out) {
                 out->ExecutionRelay = std::move(in->ExecutionRelay);
@@ -80,6 +85,7 @@ namespace NKikimr {
                     hFunc(TEvBlobStorage::TEvRange, Handle);
                     hFunc(TEvBlobStorage::TEvCollectGarbage, Handle);
                     hFunc(TEvBlobStorage::TEvStatus, Handle);
+                    hFunc(TEvBlobStorage::TEvPatch, Handle);
 
                     hFunc(TEvents::TEvPoisonPill, HandlePoison);
                     hFunc(TEvBlobStorage::TEvConfigureProxy, Handle);

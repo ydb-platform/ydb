@@ -1,6 +1,5 @@
 #pragma once
 
-#include "test_pretty.h"
 #include "test_part.h"
 
 #include <ydb/core/tablet_flat/test/libs/rows/cook.h>
@@ -74,8 +73,14 @@ namespace NTest {
             TEpoch epoch = TEpoch(root.GetEpoch());
 
             size_t indexesRawSize = 0;
-            for (auto indexPage : eggs.GroupIndexes) {
-                indexesRawSize += Store->GetPageSize(0, indexPage);
+            if (eggs.BTreeGroupIndexes) {
+                for (const auto &meta : eggs.BTreeGroupIndexes) {
+                    indexesRawSize += meta.IndexSize;
+                }
+            } else {
+                for (auto indexPage : eggs.GroupIndexes) {
+                    indexesRawSize += Store->GetPageSize(0, indexPage);
+                }
             }
 
             return

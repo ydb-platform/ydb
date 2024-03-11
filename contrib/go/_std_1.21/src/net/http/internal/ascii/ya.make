@@ -1,12 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    print.go
-)
-
-GO_TEST_SRCS(print_test.go)
-
+IF (TRUE)
+    SRCS(
+		print.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

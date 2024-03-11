@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/engines/filter.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_scalar.h>
+#include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 #include <google/protobuf/text_format.h>
 
 namespace NKikimr::NOlap {
@@ -115,7 +116,11 @@ TAssign TProgramBuilder::MakeFunction(const NSsa::TColumnInfo& name,
             Error = TStringBuilder() << "Unknown kernel for " << name.GetColumnName() << ";kernel_idx=" << func.GetKernelIdx();
             return TAssign(name, EOperation::Unspecified, std::move(arguments));
         }
-        return TAssign(name, kernelFunction, std::move(arguments), nullptr);
+        TAssign result(name, kernelFunction, std::move(arguments), nullptr);
+        if (func.HasYqlOperationId()) {
+            result.SetYqlOperationId(func.GetYqlOperationId());
+        }
+        return result;
     }
 
     switch (func.GetId()) {
@@ -241,6 +246,7 @@ TAssign TProgramBuilder::MakeFunction(const NSsa::TColumnInfo& name,
         case TId::FUNC_UNSPECIFIED:
             break;
     }
+
     return TAssign(name, EOperation::Unspecified, std::move(arguments));
 }
 
@@ -270,6 +276,8 @@ NSsa::TAssign TProgramBuilder::MakeConstant(const NSsa::TColumnInfo& name, const
             return TAssign(name, constant.GetFloat());
         case TId::kDouble:
             return TAssign(name, constant.GetDouble());
+        case TId::kTimestamp:
+            return TAssign::MakeTimestamp(name, constant.GetTimestamp());
         case TId::kBytes:
         {
             TString str = constant.GetBytes();
@@ -430,6 +438,26 @@ bool TProgramBuilder::ExtractGroupBy(NSsa::TProgramStep& step, const NKikimrSSA:
 
     return true;
 }
+
+}
+
+TString TSchemaResolverColumnsOnly::GetColumnName(ui32 id, bool required /*= true*/) const {
+    auto* column = Schema->GetColumns().GetById(id);
+    AFL_VERIFY(!required || !!column);
+    if (column) {
+        return column->GetName();
+    } else {
+        return "";
+    }
+}
+
+std::optional<ui32> TSchemaResolverColumnsOnly::GetColumnIdOptional(const TString& name) const {
+    auto* column = Schema->GetColumns().GetByName(name);
+    if (!column) {
+        return {};
+    } else {
+        return column->GetId();
+    }
 }
 
 const THashMap<ui32, NSsa::TColumnInfo>& TProgramContainer::GetSourceColumns() const {
@@ -450,43 +478,12 @@ std::set<std::string> TProgramContainer::GetEarlyFilterColumns() const {
     return Default<std::set<std::string>>();
 }
 
-bool TProgramContainer::Init(const IColumnResolver& columnResolver, NKikimrSchemeOp::EOlapProgramType programType, TString serializedProgram, TString& error) {
-    Y_ABORT_UNLESS(serializedProgram);
-    Y_ABORT_UNLESS(!OverrideProcessingColumnsVector);
-
-    NKikimrSSA::TProgram programProto;
-    NKikimrSSA::TOlapProgram olapProgramProto;
-
-    switch (programType) {
-        case NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS:
-            if (!olapProgramProto.ParseFromString(serializedProgram)) {
-                error = TStringBuilder() << "Can't parse TOlapProgram";
-                return false;
-            }
-
-            if (!programProto.ParseFromString(olapProgramProto.GetProgram())) {
-                error = TStringBuilder() << "Can't parse TProgram";
-                return false;
-            }
-
-            break;
-        default:
-            error = TStringBuilder() << "Unsupported olap program version: " << (ui32)programType;
-            return false;
-    }
-
+bool TProgramContainer::Init(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& programProto, TString& error) {
     ProgramProto = programProto;
     if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
         TString out;
         ::google::protobuf::TextFormat::PrintToString(programProto, &out);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("program", out);
-    }
-
-    if (olapProgramProto.HasParameters()) {
-        Y_ABORT_UNLESS(olapProgramProto.HasParametersSchema(), "Parameters are present, but there is no schema.");
-
-        auto schema = NArrow::DeserializeSchema(olapProgramProto.GetParametersSchema());
-        ProgramParameters = NArrow::DeserializeBatch(olapProgramProto.GetParameters(), schema);
     }
 
     if (programProto.HasKernels()) {
@@ -499,7 +496,58 @@ bool TProgramContainer::Init(const IColumnResolver& columnResolver, NKikimrSchem
         }
         return false;
     }
+
     return true;
+}
+
+bool TProgramContainer::Init(const IColumnResolver& columnResolver, const NKikimrSSA::TOlapProgram& olapProgramProto, TString& error) {
+    NKikimrSSA::TProgram programProto;
+    if (!programProto.ParseFromString(olapProgramProto.GetProgram())) {
+        error = TStringBuilder() << "Can't parse TProgram";
+        return false;
+    }
+
+    if (olapProgramProto.HasParameters()) {
+        Y_ABORT_UNLESS(olapProgramProto.HasParametersSchema(), "Parameters are present, but there is no schema.");
+
+        auto schema = NArrow::DeserializeSchema(olapProgramProto.GetParametersSchema());
+        ProgramParameters = NArrow::DeserializeBatch(olapProgramProto.GetParameters(), schema);
+    }
+
+    ProgramProto = programProto;
+
+    if (!Init(columnResolver, ProgramProto, error)) {
+        return false;
+    }
+    if (olapProgramProto.HasIndexChecker()) {
+        if (!IndexChecker.DeserializeFromProto(olapProgramProto.GetIndexChecker())) {
+            AFL_VERIFY_DEBUG(false);
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "cannot_parse_index_checker")("data", olapProgramProto.GetIndexChecker().DebugString());
+        }
+    }
+    return true;
+}
+
+bool TProgramContainer::Init(const IColumnResolver& columnResolver, NKikimrSchemeOp::EOlapProgramType programType, TString serializedProgram, TString& error) {
+    Y_ABORT_UNLESS(serializedProgram);
+    Y_ABORT_UNLESS(!OverrideProcessingColumnsVector);
+
+    NKikimrSSA::TOlapProgram olapProgramProto;
+
+    switch (programType) {
+        case NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS:
+            if (!olapProgramProto.ParseFromString(serializedProgram)) {
+                error = TStringBuilder() << "Can't parse TOlapProgram";
+                return false;
+            }
+
+            break;
+        default:
+            error = TStringBuilder() << "Unsupported olap program version: " << (ui32)programType;
+            return false;
+    }
+
+    return Init(columnResolver, olapProgramProto, error);
 }
 
 bool TProgramContainer::ParseProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program, TString& error) {

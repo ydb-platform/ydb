@@ -1,5 +1,3 @@
-<!-- This file is not tracked by the automatic translation system. Edits to the RU-version must be made yourself. -->
-
 # {{ ydb-short-name }} CLI changelog
 
 ## Version 2.8.0 {#2-8-0}

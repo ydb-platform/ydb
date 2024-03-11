@@ -13,8 +13,14 @@ message TCredentials {
         string password = 2;
     }
 
+    message TToken {
+        string type = 1;
+        string value = 2;
+    }
+
     oneof payload {
         TBasic basic = 1;
+        TToken token = 2;
     }
 }
 
@@ -26,6 +32,8 @@ enum EDataSourceKind {
     POSTGRESQL = 2;
     S3 = 3;
     YDB = 4;
+    MYSQL = 5;
+    MS_SQL_SERVER = 6;
 }
 
 // EProtocol generalizes various kinds of network protocols supported by different databases.

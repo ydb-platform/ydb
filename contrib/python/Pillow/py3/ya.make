@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(10.1.0)
+VERSION(10.2.0)
 
-ORIGINAL_SOURCE(mirror://pypi/P/Pillow/Pillow-10.1.0.tar.gz)
+ORIGINAL_SOURCE(mirror://pypi/p/pillow/pillow-10.2.0.tar.gz)
 
 PEERDIR(
     contrib/libs/freetype
@@ -49,7 +49,7 @@ CFLAGS(
     -DHAVE_LIBZ
     -DHAVE_OPENJPEG
     -DHAVE_WEBPMUX
-    -DPILLOW_VERSION=\"10.1.0\"
+    -DPILLOW_VERSION=\"10.2.0\"
 )
 
 IF (NOT OPENSOURCE)
@@ -161,6 +161,7 @@ PY_SRCS(
     PIL/__main__.py
     PIL/_binary.py
     PIL/_deprecate.py
+    PIL/_typing.py
     PIL/_util.py
     PIL/_version.py
     PIL/BdfFontFile.py

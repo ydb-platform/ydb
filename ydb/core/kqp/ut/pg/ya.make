@@ -6,6 +6,7 @@ SIZE(MEDIUM)
 
 SRCS(
     kqp_pg_ut.cpp
+    pg_catalog_ut.cpp
 )
 
 PEERDIR(

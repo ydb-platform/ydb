@@ -8,6 +8,7 @@ SRCS(
     kqp_transform.cpp
     kqp_translate.cpp
     kqp_type_ann.cpp
+    kqp_statement_rewrite.cpp
 )
 
 PEERDIR(
@@ -29,6 +30,7 @@ PEERDIR(
     ydb/library/yql/providers/generic/provider
     ydb/library/yql/providers/result/provider
     ydb/library/yql/providers/s3/provider
+    ydb/library/yql/providers/pg/provider
 )
 
 YQL_LAST_ABI_VERSION()

@@ -4,6 +4,7 @@
 #include "tablet_info.h"
 #include "follower_tablet_info.h"
 #include <ydb/core/base/channel_profiles.h>
+#include <ydb/core/protos/blobstorage.pb.h>
 
 namespace NKikimr {
 namespace NHive {
@@ -338,6 +339,8 @@ public:
     TString GetChannelStoragePoolName(const TChannelProfiles::TProfile::TChannel& channel);
     TString GetChannelStoragePoolName(ui32 channelId);
     TStoragePoolInfo& GetStoragePool(ui32 channelId);
+
+    void SetType(TTabletTypes::EType type);
 };
 
 } // NHive

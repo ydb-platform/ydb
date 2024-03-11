@@ -4,6 +4,7 @@
 #include "persqueue_utils.h"
 
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/persqueue/utils.h>
 
 
 namespace NKikimr::NGRpcProxy::V1 {
@@ -197,15 +198,8 @@ bool TReadInitAndAuthActor::CheckTopicACL(
         return false;
     }
     if (!SkipReadRuleCheck && (Token || AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen())) {
-        bool found = false;
-        for (auto& cons : pqDescr.GetPQTabletConfig().GetReadRules() ) {
-            if (cons == ClientId) {
-                found = true;
-                break;
-            }
-        }
         //TODO : add here checking of client-service-type password. Provide it via API-call.
-        if (!found) {
+        if (!NPQ::HasConsumer(pqDescr.GetPQTabletConfig(), ClientId)) {
             CloseSession(
                     TStringBuilder() << "no read rule provided for consumer '" << ClientPath << "' in topic '" << topic << "' in current cluster '" << LocalCluster,
                     PersQueue::ErrorCode::BAD_REQUEST, ctx
@@ -238,10 +232,13 @@ void TReadInitAndAuthActor::HandleClientSchemeCacheResponse(
         return;
     }
 
-    NACLib::EAccessRights rights = (NACLib::EAccessRights)(NACLib::EAccessRights::ReadAttributes + NACLib::EAccessRights::WriteAttributes);
-    if (
-            !CheckACLPermissionsForNavigate(entry.SecurityObject, path, rights, "No ReadAsConsumer permissions", ctx)
-    ) {
+    // in future use right UseConsumer
+    auto selectRowRights = NACLib::EAccessRights::SelectRow;
+    auto accessAttributesRights = NACLib::EAccessRights::ReadAttributes | NACLib::EAccessRights::WriteAttributes;
+    if (DoCheckACL && !(entry.SecurityObject->CheckAccess(selectRowRights, *Token) || entry.SecurityObject->CheckAccess(accessAttributesRights, *Token))) {
+        CloseSession(TStringBuilder() << "No ReadAsConsumer permissions" << " for '" << path
+                    << "' for subject '" << Token->GetUserSID() << "'",
+                    PersQueue::ErrorCode::ACCESS_DENIED, ctx);
         return;
     }
     FinishInitialization(ctx);

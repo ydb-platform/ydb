@@ -28,11 +28,15 @@ TEST_SRCS(
     test_cpu_quota.py
     test_delete_read_rules_after_abort_by_system.py
     test_eval.py
+    test_kill_pq_bill.py
     test_mem_alloc.py
     test_metrics_cleanup.py
     test_pq_read_write.py
     test_public_metrics.py
     test_read_rules_deletion.py
+    test_recovery.py
+    test_recovery_match_recognize.py
+    test_recovery_mz.py
     test_restart_query.py
     test_select_1.py
     test_select_limit_db_id.py

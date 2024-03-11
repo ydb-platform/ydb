@@ -82,7 +82,7 @@ Y_UNIT_TEST(MakeRelOptInfoList) {
     TArenaMemoryContext ctx;
     IOptimizer::TRel rel1 = {10, 100, {{}}};
     IOptimizer::TRel rel2 = {100, 99, {{}}};
-    IOptimizer::TInput input = {{rel1, rel2}};
+    IOptimizer::TInput input = {.Rels={rel1, rel2}};
     auto* l = MakeRelOptInfoList(input);
     UNIT_ASSERT(l);
     UNIT_ASSERT_EQUAL(l->length, 2);

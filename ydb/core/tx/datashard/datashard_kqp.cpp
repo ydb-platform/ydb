@@ -1,13 +1,16 @@
 #include "datashard_kqp.h"
 #include "datashard_impl.h"
+#include "datashard_user_db.h"
 
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
-#include <ydb/core/tx/datashard/datashard_locks.h>
+#include <ydb/core/tx/locks/locks.h>
 #include <ydb/core/tx/datashard/datashard_user_table.h>
 #include <ydb/core/tx/datashard/range_ops.h>
+#include <ydb/core/protos/query_stats.pb.h>
+#include <ydb/core/protos/kqp_stats.pb.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
@@ -19,30 +22,25 @@ namespace NDataShard {
 
 namespace {
 
-const ui32 MaxDatashardReplySize = 48 * 1024 * 1024; // 48 MB
+const ui32 MaxDatashardReplySize = 48 * 1024 * 1024;  // 48 MB
 
 using namespace NYql;
 
-bool KqpValidateTask(const NYql::NDqProto::TDqTask& task, bool isImmediate, ui64 txId, const TActorContext& ctx,
-    bool& hasPersistentChannels)
+bool KqpValidateTask(const NYql::NDqProto::TDqTask& task, bool isImmediate, ui64 txId, const TActorContext& ctx, bool& hasPersistentChannels)
 {
     for (auto& input : task.GetInputs()) {
         for (auto& channel : input.GetChannels()) {
             if (channel.GetIsPersistent()) {
                 hasPersistentChannels = true;
                 if (isImmediate) {
-                    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "KQP validate, txId: " << txId
-                        << ", immediate KQP transaction cannot have persistent input channels"
-                        << ", task: " << task.GetId()
-                        << ", channelId: " << channel.GetId());
+                    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "KQP validate, txId: " << txId << ", immediate KQP transaction cannot have persistent input channels"
+                                                                                           << ", task: " << task.GetId() << ", channelId: " << channel.GetId());
                     return false;
                 }
 
                 if (!channel.GetSrcEndpoint().HasTabletId()) {
-                    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "KQP validate, txId: " << txId
-                        << ", persistent input channel without src tablet id"
-                        << ", task: " << task.GetId()
-                        << ", channelId: " << channel.GetId());
+                    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "KQP validate, txId: " << txId << ", persistent input channel without src tablet id"
+                                                                                           << ", task: " << task.GetId() << ", channelId: " << channel.GetId());
                     return false;
                 }
             }
@@ -54,18 +52,14 @@ bool KqpValidateTask(const NYql::NDqProto::TDqTask& task, bool isImmediate, ui64
             if (channel.GetIsPersistent()) {
                 hasPersistentChannels = true;
                 if (isImmediate) {
-                    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "KQP validate, txId: " << txId
-                        << ", immediate KQP transaction cannot have persistent output channels"
-                        << ", task: " << task.GetId()
-                        << ", channelId: " << channel.GetId());
+                    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "KQP validate, txId: " << txId << ", immediate KQP transaction cannot have persistent output channels"
+                                                                                           << ", task: " << task.GetId() << ", channelId: " << channel.GetId());
                     return false;
                 }
 
                 if (!channel.GetDstEndpoint().HasTabletId()) {
-                    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "KQP validate, txId: " << txId
-                        << ", persistent output channel without dst tablet id"
-                        << ", task: " << task.GetId()
-                        << ", channelId: " << channel.GetId());
+                    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "KQP validate, txId: " << txId << ", persistent output channel without dst tablet id"
+                                                                                           << ", task: " << task.GetId() << ", channelId: " << channel.GetId());
                     return false;
                 }
             }
@@ -97,12 +91,9 @@ NUdf::EFetchStatus FetchOutput(NDq::IDqOutputChannel* channel, NDq::TDqSerialize
     return NUdf::EFetchStatus::Yield;
 }
 
-NDq::ERunStatus RunKqpTransactionInternal(const TActorContext& ctx, ui64 txId,
-    const TInputOpData::TInReadSets* inReadSets, const NKikimrDataEvents::TKqpLocks&,
-    bool useGenericReadSets,
-    NKqp::TKqpTasksRunner& tasksRunner, bool applyEffects)
+NDq::ERunStatus RunKqpTransactionInternal(const TActorContext& ctx, ui64 txId, const TInputOpData::TInReadSets* inReadSets, bool useGenericReadSets, NKqp::TKqpTasksRunner& tasksRunner, bool applyEffects)
 {
-    THashMap<ui64, std::pair<ui64, ui32>> inputChannelsMap; // channelId -> (taskId, input index)
+    THashMap<ui64, std::pair<ui64, ui32>> inputChannelsMap;  // channelId -> (taskId, input index)
     for (auto& [taskId, task] : tasksRunner.GetTasks()) {
         for (ui32 i = 0; i < task.InputsSize(); ++i) {
             auto& input = task.GetInputs(i);
@@ -129,13 +120,11 @@ NDq::ERunStatus RunKqpTransactionInternal(const TActorContext& ctx, ui64 txId,
                 if (useGenericReadSets) {
                     NKikimrTx::TReadSetData genericData;
                     bool ok = genericData.ParseFromString(data.Body);
-                    Y_ABORT_UNLESS(ok, "Failed to parse generic readset data from %" PRIu64 " to %" PRIu64 " origin %" PRIu64,
-                        source, target, data.Origin);
+                    Y_ABORT_UNLESS(ok, "Failed to parse generic readset data from %" PRIu64 " to %" PRIu64 " origin %" PRIu64, source, target, data.Origin);
 
                     if (genericData.HasData()) {
                         ok = genericData.GetData().UnpackTo(&kqpReadset);
-                        Y_ABORT_UNLESS(ok, "Failed to parse kqp readset data from %" PRIu64 " to %" PRIu64 " origin %" PRIu64,
-                            source, target, data.Origin);
+                        Y_ABORT_UNLESS(ok, "Failed to parse kqp readset data from %" PRIu64 " to %" PRIu64 " origin %" PRIu64, source, target, data.Origin);
                     }
                 } else {
                     Y_PROTOBUF_SUPPRESS_NODISCARD kqpReadset.ParseFromString(data.Body);
@@ -150,8 +139,7 @@ NDq::ERunStatus RunKqpTransactionInternal(const TActorContext& ctx, ui64 txId,
                     auto taskId = inputInfo->first;
 
                     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Added KQP readset"
-                        << ", source: " << source << ", target: " << target << ", origin: " << data.Origin
-                        << ", TxId: " << txId << ", task: " << taskId << ", channelId: " << channelId);
+                                                                        << ", source: " << source << ", target: " << target << ", origin: " << data.Origin << ", TxId: " << txId << ", task: " << taskId << ", channelId: " << channelId);
 
                     auto channel = tasksRunner.GetInputChannel(taskId, channelId);
                     NDq::TDqSerializedBatch batch;
@@ -184,23 +172,18 @@ NDq::ERunStatus RunKqpTransactionInternal(const TActorContext& ctx, ui64 txId,
             for (ui32 i = 0; i < task.OutputsSize(); ++i) {
                 for (auto& channel : task.GetOutputs(i).GetChannels()) {
                     if (auto* inputInfo = inputChannelsMap.FindPtr(channel.GetId())) {
-                        auto transferState = tasksRunner.TransferData(task.GetId(), channel.GetId(),
-                            inputInfo->first, channel.GetId());
+                        auto transferState = tasksRunner.TransferData(task.GetId(), channel.GetId(), inputInfo->first, channel.GetId());
 
                         if (transferState.first) {
                             hasInputChanges = true;
                             LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Forwarded KQP channel data"
-                                << ", TxId: " << txId
-                                << ", srcTask: " << task.GetId() << ", dstTask: " << inputInfo->first
-                                << ", channelId: " << channel.GetId());
+                                                                                << ", TxId: " << txId << ", srcTask: " << task.GetId() << ", dstTask: " << inputInfo->first << ", channelId: " << channel.GetId());
                         }
 
                         if (transferState.second) {
                             hasInputChanges = true;
                             LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Finished input channel"
-                                << ", TxId: " << txId
-                                << ", srcTask: " << task.GetId() << ", dstTask: " << inputInfo->first
-                                << ", channelId: " << channel.GetId());
+                                                                                << ", TxId: " << txId << ", srcTask: " << task.GetId() << ", dstTask: " << inputInfo->first << ", channelId: " << channel.GetId());
                         }
                     }
                 }
@@ -265,8 +248,7 @@ TVector<TCell> MakeLockKey(const NKikimrDataEvents::TLock& lockProto) {
 }
 
 // returns list of broken locks
-TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLocks& txLocks, TSysLocks& sysLocks,
-    ui64 tabletId)
+TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLocks& txLocks, TSysLocks& sysLocks, ui64 tabletId)
 {
     TVector<NKikimrDataEvents::TLock> brokenLocks;
 
@@ -283,10 +265,7 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLoc
 
         auto lock = sysLocks.GetLock(lockKey);
         if (lock.Generation != lockProto.GetGeneration() || lock.Counter != lockProto.GetCounter()) {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "ValidateLocks: broken lock "
-                    << lockProto.GetLockId()
-                    << " expected " << lockProto.GetGeneration() << ":" << lockProto.GetCounter()
-                    << " found " << lock.Generation << ":" << lock.Counter);
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "ValidateLocks: broken lock " << lockProto.GetLockId() << " expected " << lockProto.GetGeneration() << ":" << lockProto.GetCounter() << " found " << lock.Generation << ":" << lock.Counter);
             brokenLocks.push_back(lockProto);
         }
     }
@@ -306,10 +285,9 @@ bool ReceiveLocks(const NKikimrDataEvents::TKqpLocks& locks, ui64 shardId) {
     return it != receivingShards.end();
 }
 
-} // namespace
+}  // namespace
 
-bool KqpValidateTransaction(const ::google::protobuf::RepeatedPtrField< ::NYql::NDqProto::TDqTask>& tasks, bool isImmediate, ui64 txId,
-    const TActorContext& ctx, bool& hasPersistentChannels)
+bool KqpValidateTransaction(const ::google::protobuf::RepeatedPtrField<::NYql::NDqProto::TDqTask>& tasks, bool isImmediate, ui64 txId, const TActorContext& ctx, bool& hasPersistentChannels)
 {
     for (const auto& task : tasks) {
         if (!KqpValidateTask(task, isImmediate, txId, ctx, hasPersistentChannels)) {
@@ -327,10 +305,8 @@ using TWriteOpMeta = NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta::TWriteO
 using TColumnMeta = NKikimrTxDataShard::TKqpTransaction::TColumnMeta;
 
 NTable::TColumn GetColumn(const TColumnMeta& columnMeta) {
-    auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(columnMeta.GetType(),
-        columnMeta.HasTypeInfo() ? &columnMeta.GetTypeInfo() : nullptr);
-    return NTable::TColumn(columnMeta.GetName(), columnMeta.GetId(),
-        typeInfoMod.TypeInfo, typeInfoMod.TypeMod);
+    auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(columnMeta.GetType(), columnMeta.HasTypeInfo() ? &columnMeta.GetTypeInfo() : nullptr);
+    return NTable::TColumn(columnMeta.GetName(), columnMeta.GetId(), typeInfoMod.TypeInfo, typeInfoMod.TypeMod);
 }
 
 TVector<NTable::TColumn> GetColumns(const TReadOpMeta& readMeta) {
@@ -359,10 +335,7 @@ TVector<TKeyValidator::TColumnWriteMeta> GetColumnWrites(const TWriteOpMeta& wri
 }
 
 template <bool Read>
-void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const TUserTable* tableInfo,
-    const NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta_TKeyRange& rangeKind,
-    const TReadOpMeta* readMeta, const TWriteOpMeta* writeMeta, const NScheme::TTypeRegistry& typeRegistry,
-    const TActorContext& ctx, TEngineBay& engineBay)
+void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const TUserTable* tableInfo, const NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta_TKeyRange& rangeKind, const TReadOpMeta* readMeta, const TWriteOpMeta* writeMeta, const NScheme::TTypeRegistry& typeRegistry, const TActorContext& ctx, TKeyValidator& keyValidator)
 {
     if (Read) {
         Y_ABORT_UNLESS(readMeta);
@@ -379,19 +352,14 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
                 TSerializedTableRange tableRange;
                 tableRange.Load(range);
 
-                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Table " << tableInfo->Path
-                    << ", shard: " << tabletId
-                    << ", task: " << taskId << ", " << (Read ? "read range " : "write range ")
-                    << DebugPrintRange(tableInfo->KeyColumnTypes, tableRange.ToTableRange(), typeRegistry));
+                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Table " << tableInfo->Path << ", shard: " << tabletId << ", task: " << taskId << ", " << (Read ? "read range " : "write range ") << DebugPrintRange(tableInfo->KeyColumnTypes, tableRange.ToTableRange(), typeRegistry));
 
                 Y_DEBUG_ABORT_UNLESS(!(tableRange.To.GetCells().empty() && tableRange.ToInclusive));
 
                 if constexpr (Read) {
-                    engineBay.GetKeyValidator().AddReadRange(tableId, GetColumns(*readMeta), tableRange.ToTableRange(),
-                        tableInfo->KeyColumnTypes, readMeta->GetItemsLimit(), readMeta->GetReverse());
+                    keyValidator.AddReadRange(tableId, GetColumns(*readMeta), tableRange.ToTableRange(), tableInfo->KeyColumnTypes, readMeta->GetItemsLimit(), readMeta->GetReverse());
                 } else {
-                    engineBay.GetKeyValidator().AddWriteRange(tableId, tableRange.ToTableRange(), tableInfo->KeyColumnTypes,
-                        GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
+                    keyValidator.AddWriteRange(tableId, tableRange.ToTableRange(), tableInfo->KeyColumnTypes, GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
                 }
             }
 
@@ -399,15 +367,12 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
                 TSerializedTableRange tablePoint(point, point, true, true);
                 tablePoint.Point = true;
 
-                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Table " << tableInfo->Path
-                    << ", shard: " << tabletId <<
-                    ", task: " << taskId << ", " << (Read ? "read point " : "write point ")
-                    << DebugPrintPoint(tableInfo->KeyColumnTypes, tablePoint.From.GetCells(), typeRegistry));
+                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Table " << tableInfo->Path << ", shard: " << tabletId << ", task: " << taskId << ", " << (Read ? "read point " : "write point ") << DebugPrintPoint(tableInfo->KeyColumnTypes, tablePoint.From.GetCells(), typeRegistry));
 
                 if constexpr (Read) {
-                    engineBay.GetKeyValidator().AddReadRange(tableId, GetColumns(*readMeta), tablePoint.ToTableRange(), tableInfo->KeyColumnTypes, readMeta->GetItemsLimit(), readMeta->GetReverse());
+                    keyValidator.AddReadRange(tableId, GetColumns(*readMeta), tablePoint.ToTableRange(), tableInfo->KeyColumnTypes, readMeta->GetItemsLimit(), readMeta->GetReverse());
                 } else {
-                    engineBay.GetKeyValidator().AddWriteRange(tableId, tablePoint.ToTableRange(), tableInfo->KeyColumnTypes, GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
+                    keyValidator.AddWriteRange(tableId, tablePoint.ToTableRange(), tableInfo->KeyColumnTypes, GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
                 }
             }
 
@@ -418,33 +383,24 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
             TSerializedTableRange tableRange;
             tableRange.Load(rangeKind.GetFullRange());
 
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Table " << tableInfo->Path
-                << ", shard: " << tabletId
-                << ", task: " << taskId << ", " << (Read ? "read range: FULL " : "write range: FULL ")
-                << DebugPrintRange(tableInfo->KeyColumnTypes, tableRange.ToTableRange(), typeRegistry));
+            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Table " << tableInfo->Path << ", shard: " << tabletId << ", task: " << taskId << ", " << (Read ? "read range: FULL " : "write range: FULL ") << DebugPrintRange(tableInfo->KeyColumnTypes, tableRange.ToTableRange(), typeRegistry));
 
             if constexpr (Read) {
-                engineBay.GetKeyValidator().AddReadRange(tableId,  GetColumns(*readMeta), tableRange.ToTableRange(),
-                    tableInfo->KeyColumnTypes, readMeta->GetItemsLimit(), readMeta->GetReverse());
+                keyValidator.AddReadRange(tableId, GetColumns(*readMeta), tableRange.ToTableRange(), tableInfo->KeyColumnTypes, readMeta->GetItemsLimit(), readMeta->GetReverse());
             } else {
-                engineBay.GetKeyValidator().AddWriteRange(tableId, tableRange.ToTableRange(), tableInfo->KeyColumnTypes,
-                    GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
+                keyValidator.AddWriteRange(tableId, tableRange.ToTableRange(), tableInfo->KeyColumnTypes, GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
             }
 
             break;
         }
 
         case NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta_TKeyRange::KIND_NOT_SET: {
-            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Table " << tableInfo->Path
-                << ", shard: " << tabletId
-                << ", task: " << taskId << ", " << (Read ? "read range: UNSPECIFIED" : "write range: UNSPECIFIED"));
+            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Table " << tableInfo->Path << ", shard: " << tabletId << ", task: " << taskId << ", " << (Read ? "read range: UNSPECIFIED" : "write range: UNSPECIFIED"));
 
             if constexpr (Read) {
-                engineBay.GetKeyValidator().AddReadRange(tableId,  GetColumns(*readMeta), tableInfo->Range.ToTableRange(),
-                    tableInfo->KeyColumnTypes, readMeta->GetItemsLimit(), readMeta->GetReverse());
+                keyValidator.AddReadRange(tableId, GetColumns(*readMeta), tableInfo->Range.ToTableRange(), tableInfo->KeyColumnTypes, readMeta->GetItemsLimit(), readMeta->GetReverse());
             } else {
-                engineBay.GetKeyValidator().AddWriteRange(tableId, tableInfo->Range.ToTableRange(), tableInfo->KeyColumnTypes,
-                    GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
+                keyValidator.AddWriteRange(tableId, tableInfo->Range.ToTableRange(), tableInfo->KeyColumnTypes, GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
             }
 
             break;
@@ -452,28 +408,23 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
     }
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
-void KqpSetTxKeys(ui64 tabletId, ui64 taskId, const TUserTable* tableInfo,
-    const NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta& meta, const NScheme::TTypeRegistry& typeRegistry,
-    const TActorContext& ctx, TEngineBay& engineBay)
+void KqpSetTxKeys(ui64 tabletId, ui64 taskId, const TUserTable* tableInfo, const NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta& meta, const NScheme::TTypeRegistry& typeRegistry, const TActorContext& ctx, TKeyValidator& keyValidator)
 {
     auto& tableMeta = meta.GetTable();
-    auto tableId = TTableId(tableMeta.GetTableId().GetOwnerId(), tableMeta.GetTableId().GetTableId(),
-        tableMeta.GetSchemaVersion());
+    auto tableId = TTableId(tableMeta.GetTableId().GetOwnerId(), tableMeta.GetTableId().GetTableId(), tableMeta.GetSchemaVersion());
 
     for (auto& read : meta.GetReads()) {
-        KqpSetTxKeysImpl<true>(tabletId, taskId, tableId, tableInfo, read.GetRange(), &read, nullptr,
-            typeRegistry, ctx, engineBay);
+        KqpSetTxKeysImpl<true>(tabletId, taskId, tableId, tableInfo, read.GetRange(), &read, nullptr, typeRegistry, ctx, keyValidator);
     }
 
     if (meta.HasWrites()) {
-        KqpSetTxKeysImpl<false>(tabletId, taskId, tableId, tableInfo, meta.GetWrites().GetRange(), nullptr,
-            &meta.GetWrites(), typeRegistry, ctx, engineBay);
+        KqpSetTxKeysImpl<false>(tabletId, taskId, tableId, tableInfo, meta.GetWrites().GetRange(), nullptr, &meta.GetWrites(), typeRegistry, ctx, keyValidator);
     }
 }
 
-void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLocks& sysLocks, TEngineBay& engineBay) {
+void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLocks& sysLocks, TKeyValidator& keyValidator) {
     if (locks.LocksSize() == 0) {
         return;
     }
@@ -491,27 +442,23 @@ void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLock
         if (sysLocks.IsMyKey(lockKey)) {
             auto point = TTableRange(lockKey, true, {}, true, /* point */ true);
             if (NeedValidateLocks(locks.GetOp())) {
-                engineBay.GetKeyValidator().AddReadRange(sysLocksTableId, {}, point, lockRowType);
+                keyValidator.AddReadRange(sysLocksTableId, {}, point, lockRowType);
             }
             if (NeedEraseLocks(locks.GetOp())) {
-                engineBay.GetKeyValidator().AddWriteRange(sysLocksTableId, point, lockRowType, {}, /* isPureEraseOp */ true);
+                keyValidator.AddWriteRange(sysLocksTableId, point, lockRowType, {}, /* isPureEraseOp */ true);
             }
         }
     }
 }
 
-NYql::NDq::ERunStatus KqpRunTransaction(const TActorContext& ctx, ui64 txId,
-    const NKikimrDataEvents::TKqpLocks& kqpLocks, bool useGenericReadSets, NKqp::TKqpTasksRunner& tasksRunner)
+NYql::NDq::ERunStatus KqpRunTransaction(const TActorContext& ctx, ui64 txId, bool useGenericReadSets, NKqp::TKqpTasksRunner& tasksRunner)
 {
-    return RunKqpTransactionInternal(ctx, txId, /* inReadSets */ nullptr, kqpLocks, useGenericReadSets, tasksRunner, /* applyEffects */ false);
+    return RunKqpTransactionInternal(ctx, txId, /* inReadSets */ nullptr, useGenericReadSets, tasksRunner, /* applyEffects */ false);
 }
 
-THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const TActorContext& ctx,
-    ui64 origin, ui64 txId, const TInputOpData::TInReadSets* inReadSets,
-    const NKikimrDataEvents::TKqpLocks& kqpLocks, bool useGenericReadSets, NKqp::TKqpTasksRunner& tasksRunner,
-    const NMiniKQL::TKqpDatashardComputeContext& computeCtx)
+THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const TActorContext& ctx, ui64 origin, ui64 txId, const TInputOpData::TInReadSets* inReadSets, bool useGenericReadSets, NKqp::TKqpTasksRunner& tasksRunner, const NMiniKQL::TKqpDatashardComputeContext& computeCtx)
 {
-    auto runStatus = RunKqpTransactionInternal(ctx, txId, inReadSets, kqpLocks, useGenericReadSets, tasksRunner, /* applyEffects */ true);
+    auto runStatus = RunKqpTransactionInternal(ctx, txId, inReadSets, useGenericReadSets, tasksRunner, /* applyEffects */ true);
 
     if (computeCtx.HadInconsistentReads()) {
         return nullptr;
@@ -527,8 +474,7 @@ THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const 
         return nullptr;
     }
 
-    auto result = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(NKikimrTxDataShard::TX_KIND_DATA,
-        origin, txId, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
+    auto result = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(NKikimrTxDataShard::TX_KIND_DATA, origin, txId, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
 
     for (auto& [taskId, task] : tasksRunner.GetTasks()) {
         auto& taskRunner = tasksRunner.GetTaskRunner(task.GetId());
@@ -563,8 +509,8 @@ THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const 
                         dataEv->Record.MutableChannelData()->SetFinished(fetchStatus == NUdf::EFetchStatus::Finish);
                         if (outputDataSize > MaxDatashardReplySize) {
                             auto message = TStringBuilder() << "Datashard " << origin
-                                << ": reply size limit exceeded (" << outputDataSize << " > "
-                                << MaxDatashardReplySize << ")";
+                                                            << ": reply size limit exceeded (" << outputDataSize << " > "
+                                                            << MaxDatashardReplySize << ")";
                             LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, message);
                             result->SetExecutionError(NKikimrTxDataShard::TError::REPLY_SIZE_EXCEEDED, message);
                             break;
@@ -590,33 +536,32 @@ THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const 
     return result;
 }
 
-void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks& kqpLocks,
-    bool hasKqpLocks, bool useGenericReadSets,
-    NKqp::TKqpTasksRunner& tasksRunner, TSysLocks& sysLocks, ui64 tabletId)
+void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks& kqpLocks, bool useGenericReadSets, NKqp::TKqpTasksRunner* tasksRunner, TSysLocks& sysLocks, ui64 tabletId)
 {
     TMap<std::pair<ui64, ui64>, NKikimrTxDataShard::TKqpReadset> readsetData;
 
-    for (auto& [taskId, task] : tasksRunner.GetTasks()) {
-        auto& taskRunner = tasksRunner.GetTaskRunner(task.GetId());
+    if (tasksRunner) {
+        for (auto& [taskId, task] : tasksRunner->GetTasks()) {
+            auto& taskRunner = tasksRunner->GetTaskRunner(task.GetId());
 
-        for (ui32 i = 0; i < task.OutputsSize(); ++i) {
-            for (auto& channel : task.GetOutputs(i).GetChannels()) {
-                if (channel.GetIsPersistent()) {
-                    MKQL_ENSURE_S(channel.GetSrcEndpoint().HasTabletId());
-                    MKQL_ENSURE_S(channel.GetDstEndpoint().HasTabletId());
+            for (ui32 i = 0; i < task.OutputsSize(); ++i) {
+                for (auto& channel : task.GetOutputs(i).GetChannels()) {
+                    if (channel.GetIsPersistent()) {
+                        MKQL_ENSURE_S(channel.GetSrcEndpoint().HasTabletId());
+                        MKQL_ENSURE_S(channel.GetDstEndpoint().HasTabletId());
 
-                    NDq::TDqSerializedBatch outputData;
-                    auto fetchStatus = FetchAllOutput(taskRunner.GetOutputChannel(channel.GetId()).Get(), outputData);
-                    MKQL_ENSURE_S(fetchStatus == NUdf::EFetchStatus::Finish);
-                    MKQL_ENSURE(!outputData.IsOOB(), "Out-of-band data transport is not yet supported");
+                        NDq::TDqSerializedBatch outputData;
+                        auto fetchStatus = FetchAllOutput(taskRunner.GetOutputChannel(channel.GetId()).Get(), outputData);
+                        MKQL_ENSURE_S(fetchStatus == NUdf::EFetchStatus::Finish);
+                        MKQL_ENSURE(!outputData.IsOOB(), "Out-of-band data transport is not yet supported");
 
-                    auto key = std::make_pair(channel.GetSrcEndpoint().GetTabletId(),
-                        channel.GetDstEndpoint().GetTabletId());
-                    auto& channelData = *readsetData[key].AddOutputs();
+                        auto key = std::make_pair(channel.GetSrcEndpoint().GetTabletId(), channel.GetDstEndpoint().GetTabletId());
+                        auto& channelData = *readsetData[key].AddOutputs();
 
-                    channelData.SetChannelId(channel.GetId());
-                    channelData.SetFinished(true);
-                    channelData.MutableData()->Swap(&outputData.Proto);
+                        channelData.SetChannelId(channel.GetId());
+                        channelData.SetFinished(true);
+                        channelData.MutableData()->Swap(&outputData.Proto);
+                    }
                 }
             }
         }
@@ -625,7 +570,7 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrD
     NKikimrTx::TReadSetData::EDecision decision = NKikimrTx::TReadSetData::DECISION_COMMIT;
     TMap<std::pair<ui64, ui64>, NKikimrTx::TReadSetData> genericData;
 
-    if (hasKqpLocks && NeedValidateLocks(kqpLocks.GetOp())) {
+    if (kqpLocks.HasOp() && NeedValidateLocks(kqpLocks.GetOp())) {
         bool sendLocks = SendLocks(kqpLocks, tabletId);
         YQL_ENSURE(sendLocks == !kqpLocks.GetLocks().empty());
 
@@ -636,8 +581,7 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrD
             validateLocksResult.SetSuccess(brokenLocks.empty());
 
             for (auto& lock : brokenLocks) {
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                    "Found broken lock: " << lock.ShortDebugString());
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Found broken lock: " << lock.ShortDebugString());
                 if (useGenericReadSets) {
                     decision = NKikimrTx::TReadSetData::DECISION_ABORT;
                 } else {
@@ -650,8 +594,7 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrD
                     continue;
                 }
 
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Send locks from "
-                    << tabletId << " to " << dstTabletId << ", locks: " << validateLocksResult.ShortDebugString());
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Send locks from " << tabletId << " to " << dstTabletId << ", locks: " << validateLocksResult.ShortDebugString());
 
                 auto key = std::make_pair(tabletId, dstTabletId);
                 if (useGenericReadSets) {
@@ -690,54 +633,32 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrD
     }
 }
 
-bool KqpValidateLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) {
-    auto& kqpLocks = tx->GetDataTx()->GetKqpLocks();
-    bool hasKqpLocks = tx->GetDataTx()->HasKqpLocks();
-
-    if (!hasKqpLocks || !NeedValidateLocks(kqpLocks.GetOp())) {
-        return true;
+std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateLocks(ui64 origin, TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, const TInputOpData::TInReadSets& inReadSets) {
+    if (kqpLocks == nullptr || !NeedValidateLocks(kqpLocks->GetOp())) {
+        return {true, {}};
     }
 
-    bool sendLocks = SendLocks(kqpLocks, origin);
-    YQL_ENSURE(sendLocks == !kqpLocks.GetLocks().empty());
+    bool sendLocks = SendLocks(*kqpLocks, origin);
+    YQL_ENSURE(sendLocks == !kqpLocks->GetLocks().empty());
 
     if (sendLocks) {
-        auto brokenLocks = ValidateLocks(kqpLocks, sysLocks, origin);
+        auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, origin);
 
         if (!brokenLocks.empty()) {
-            tx->Result() = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
-                NKikimrTxDataShard::TX_KIND_DATA,
-                origin,
-                tx->GetTxId(),
-                NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
-
-            auto* protoLocks = tx->Result()->Record.MutableTxLocks();
-            for (auto& brokenLock : brokenLocks) {
-                protoLocks->Add()->Swap(&brokenLock);
-            }
-
-            return false;
+            return {false, std::move(brokenLocks)};
         }
     }
 
-    for (auto& readSet : tx->InReadSets()) {
-        for (auto& data : readSet.second) {
-            if (tx->GetDataTx()->GetUseGenericReadSets()) {
+    for (const auto& readSet : inReadSets) {
+        for (const auto& data : readSet.second) {
+            if (useGenericReadSets) {
                 NKikimrTx::TReadSetData genericData;
                 bool ok = genericData.ParseFromString(data.Body);
-                Y_ABORT_UNLESS(ok, "Failed to parse generic readset from %" PRIu64 " to %" PRIu64 " origin %" PRIu64,
-                    readSet.first.first, readSet.first.second, data.Origin);
+                Y_ABORT_UNLESS(ok, "Failed to parse generic readset from %" PRIu64 " to %" PRIu64 " tabletId %" PRIu64, readSet.first.first, readSet.first.second, data.Origin);
 
                 if (genericData.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT) {
-                    tx->Result() = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
-                        NKikimrTxDataShard::TX_KIND_DATA,
-                        origin,
-                        tx->GetTxId(),
-                        NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
-
                     // Note: we don't know details on what failed at that shard
-
-                    return false;
+                    return {false, {}};
                 }
             } else {
                 NKikimrTxDataShard::TKqpReadset kqpReadset;
@@ -746,70 +667,51 @@ bool KqpValidateLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) 
                 if (kqpReadset.HasValidateLocksResult()) {
                     auto& validateResult = kqpReadset.GetValidateLocksResult();
                     if (!validateResult.GetSuccess()) {
-                        tx->Result() = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
-                            NKikimrTxDataShard::TX_KIND_DATA,
-                            origin,
-                            tx->GetTxId(),
-                            NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
-
-                        tx->Result()->Record.MutableTxLocks()->CopyFrom(validateResult.GetBrokenLocks());
-
-                        return false;
+                        TVector<NKikimrDataEvents::TLock> brokenLocks;
+                        brokenLocks.reserve(validateResult.GetBrokenLocks().size());
+                        std::copy(validateResult.GetBrokenLocks().begin(), validateResult.GetBrokenLocks().end(), std::back_inserter(brokenLocks));
+                        return {false, std::move(brokenLocks)};
                     }
                 }
             }
         }
     }
 
-    return true;
+    return {true, {}};
 }
 
-bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) {
-    auto& kqpLocks = tx->GetDataTx()->GetKqpLocks();
-
-    if (!tx->GetDataTx()->HasKqpLocks() || !NeedValidateLocks(kqpLocks.GetOp())) {
-        return true;
+std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 origin, TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, ui64 txId, const TVector<NKikimrTx::TEvReadSet>& delayedInReadSets, TInputOpData::TAwaitingDecisions& awaitingDecisions, TOutputOpData::TOutReadSets& outReadSets) {
+    if (kqpLocks == nullptr || !NeedValidateLocks(kqpLocks->GetOp())) {
+        return {true, {}};
     }
 
     // Volatile transactions cannot work with non-generic readsets
-    YQL_ENSURE(tx->GetDataTx()->GetUseGenericReadSets());
+    YQL_ENSURE(useGenericReadSets);
 
     // We may have some stale data since before the restart
     // We expect all stale data to be cleared on restarts
-    Y_ABORT_UNLESS(tx->OutReadSets().empty());
-    Y_ABORT_UNLESS(tx->AwaitingDecisions().empty());
+    Y_ABORT_UNLESS(outReadSets.empty());
+    Y_ABORT_UNLESS(awaitingDecisions.empty());
 
     // Note: usually all shards send locks, since they either have side effects or need to validate locks
     // However it is technically possible to have pure-read shards, that don't contribute to the final decision
-    bool sendLocks = SendLocks(kqpLocks, origin);
+    bool sendLocks = SendLocks(*kqpLocks, origin);
     if (sendLocks) {
         // Note: it is possible to have no locks
-        auto brokenLocks = ValidateLocks(kqpLocks, sysLocks, origin);
+        auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, origin);
 
         if (!brokenLocks.empty()) {
-            tx->Result() = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
-                NKikimrTxDataShard::TX_KIND_DATA,
-                origin,
-                tx->GetTxId(),
-                NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
-
-            auto* protoLocks = tx->Result()->Record.MutableTxLocks();
-            for (auto& brokenLock : brokenLocks) {
-                protoLocks->Add()->Swap(&brokenLock);
-            }
-
-            return false;
+            return {false, std::move(brokenLocks)};
         }
 
         // We need to form decision readsets for all other participants
-        for (ui64 dstTabletId : kqpLocks.GetReceivingShards()) {
+        for (ui64 dstTabletId : kqpLocks->GetReceivingShards()) {
             if (dstTabletId == origin) {
                 // Don't send readsets to ourselves
                 continue;
             }
 
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Send commit decision from "
-                << origin << " to " << dstTabletId);
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Send commit decision from " << origin << " to " << dstTabletId);
 
             auto key = std::make_pair(origin, dstTabletId);
             NKikimrTx::TReadSetData data;
@@ -819,47 +721,43 @@ bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLo
             bool ok = data.SerializeToString(&bodyStr);
             Y_ABORT_UNLESS(ok, "Failed to serialize readset from %" PRIu64 " to %" PRIu64, key.first, key.second);
 
-            tx->OutReadSets()[key] = std::move(bodyStr);
+            outReadSets[key] = std::move(bodyStr);
         }
     }
 
-    bool receiveLocks = ReceiveLocks(kqpLocks, origin);
+    bool receiveLocks = ReceiveLocks(*kqpLocks, origin);
     if (receiveLocks) {
         // Note: usually only shards with side-effects receive locks, since they
         //       need the final outcome to decide whether to commit or abort.
-        for (ui64 srcTabletId : kqpLocks.GetSendingShards()) {
+        for (ui64 srcTabletId : kqpLocks->GetSendingShards()) {
             if (srcTabletId == origin) {
                 // Don't await decision from ourselves
                 continue;
             }
 
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Will wait for volatile decision from "
-                << srcTabletId << " to " << origin);
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Will wait for volatile decision from " << srcTabletId << " to " << origin);
 
-            tx->AwaitingDecisions().insert(srcTabletId);
+            awaitingDecisions.insert(srcTabletId);
         }
 
         bool aborted = false;
 
-        for (auto& record : tx->DelayedInReadSets()) {
+        for (const auto& record : delayedInReadSets) {
             ui64 srcTabletId = record.GetTabletSource();
             ui64 dstTabletId = record.GetTabletDest();
             if (dstTabletId != origin) {
-                LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Ignoring unexpected readset from "
-                    << srcTabletId << " to " << dstTabletId << " for txId# " << tx->GetTxId() << " at tablet " << origin);
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Ignoring unexpected readset from " << srcTabletId << " to " << dstTabletId << " for txId# " << txId << " at tablet " << origin);
                 continue;
             }
-            if (!tx->AwaitingDecisions().contains(srcTabletId)) {
+            if (!awaitingDecisions.contains(srcTabletId)) {
                 continue;
             }
 
             if (record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_NO_DATA) {
-                Y_ABORT_UNLESS(!(record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET),
-                    "Unexpected FLAG_EXPECT_READSET + FLAG_NO_DATA in delayed readsets");
+                Y_ABORT_UNLESS(!(record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET), "Unexpected FLAG_EXPECT_READSET + FLAG_NO_DATA in delayed readsets");
 
                 // No readset data: participant aborted the transaction
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Processed readset without data from"
-                    << srcTabletId << " to " << dstTabletId << " will abort txId# " << tx->GetTxId());
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Processed readset without data from" << srcTabletId << " to " << dstTabletId << " will abort txId# " << txId);
                 aborted = true;
                 break;
             }
@@ -870,40 +768,29 @@ bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLo
 
             if (data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT) {
                 // Explicit decision that is not a commit, need to abort
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Processed decision "
-                    << ui32(data.GetDecision()) << " from " << srcTabletId << " to " << dstTabletId
-                    << " for txId# " << tx->GetTxId());
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Processed decision " << ui32(data.GetDecision()) << " from " << srcTabletId << " to " << dstTabletId << " for txId# " << txId);
                 aborted = true;
                 break;
             }
 
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Processed commit decision from "
-                << srcTabletId << " to " << dstTabletId << " for txId# " << tx->GetTxId());
-            tx->AwaitingDecisions().erase(srcTabletId);
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Processed commit decision from " << srcTabletId << " to " << dstTabletId << " for txId# " << txId);
+            awaitingDecisions.erase(srcTabletId);
         }
 
         if (aborted) {
-            tx->Result() = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
-                NKikimrTxDataShard::TX_KIND_DATA,
-                origin,
-                tx->GetTxId(),
-                NKikimrTxDataShard::TEvProposeTransactionResult::ABORTED);
-
-            return false;
+            return {false, {}};
         }
     }
 
-    return true;
+    return {true, {}};
 }
 
-void KqpEraseLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) {
-    auto& kqpLocks = tx->GetDataTx()->GetKqpLocks();
-
-    if (!tx->GetDataTx()->HasKqpLocks() || !NeedEraseLocks(kqpLocks.GetOp())) {
+void KqpEraseLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks) {
+    if (kqpLocks == nullptr || !NeedEraseLocks(kqpLocks->GetOp())) {
         return;
     }
 
-    for (auto& lockProto : kqpLocks.GetLocks()) {
+    for (const auto& lockProto : kqpLocks->GetLocks()) {
         if (lockProto.GetDataShard() != origin) {
             continue;
         }
@@ -915,18 +802,14 @@ void KqpEraseLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) {
     }
 }
 
-void KqpCommitLocks(ui64 origin, TActiveTransaction* tx, const TRowVersion& writeVersion, TDataShard& dataShard) {
-
-    if (!tx->GetDataTx()->HasKqpLocks()) {
+void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks, const TRowVersion& writeVersion, IDataShardUserDb& userDb) {
+    if (kqpLocks == nullptr) {
         return;
     }
 
-    auto& kqpLocks = tx->GetDataTx()->GetKqpLocks();
-    TSysLocks& sysLocks = dataShard.SysLocksTable();
-
-    if (NeedCommitLocks(kqpLocks.GetOp())) {
+    if (NeedCommitLocks(kqpLocks->GetOp())) {
         // We assume locks have been validated earlier
-        for (auto& lockProto : kqpLocks.GetLocks()) {
+        for (const auto& lockProto : kqpLocks->GetLocks()) {
             if (lockProto.GetDataShard() != origin) {
                 continue;
             }
@@ -939,27 +822,27 @@ void KqpCommitLocks(ui64 origin, TActiveTransaction* tx, const TRowVersion& writ
             TTableId tableId(lockProto.GetSchemeShard(), lockProto.GetPathId());
             auto txId = lockProto.GetLockId();
 
-            tx->GetDataTx()->CommitChanges(tableId, txId, writeVersion);
+            userDb.CommitChanges(tableId, txId, writeVersion);
         }
     } else {
-        KqpEraseLocks(origin, tx, sysLocks);
+        KqpEraseLocks(origin, kqpLocks, sysLocks);
     }
 }
 
-void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets,
-    const NKikimrDataEvents::TKqpLocks& kqpLocks, const NKqp::TKqpTasksRunner& tasksRunner, ui64 tabletId)
+void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets, const NKikimrDataEvents::TKqpLocks& kqpLocks, const NKqp::TKqpTasksRunner* tasksRunner, ui64 tabletId)
 {
-    for (auto& [taskId, task] : tasksRunner.GetTasks()) {
-        for (ui32 i = 0; i < task.InputsSize(); ++i) {
-            for (auto& channel : task.GetInputs(i).GetChannels()) {
-                if (channel.GetIsPersistent()) {
-                    MKQL_ENSURE_S(channel.GetSrcEndpoint().HasTabletId());
-                    MKQL_ENSURE_S(channel.GetDstEndpoint().HasTabletId());
+    if (tasksRunner) {
+        for (auto& [taskId, task] : tasksRunner->GetTasks()) {
+            for (ui32 i = 0; i < task.InputsSize(); ++i) {
+                for (auto& channel : task.GetInputs(i).GetChannels()) {
+                    if (channel.GetIsPersistent()) {
+                        MKQL_ENSURE_S(channel.GetSrcEndpoint().HasTabletId());
+                        MKQL_ENSURE_S(channel.GetDstEndpoint().HasTabletId());
 
-                    auto key = std::make_pair(channel.GetSrcEndpoint().GetTabletId(),
-                        channel.GetDstEndpoint().GetTabletId());
+                        auto key = std::make_pair(channel.GetSrcEndpoint().GetTabletId(), channel.GetDstEndpoint().GetTabletId());
 
-                    inReadSets.emplace(key, TVector<TRSData>());
+                        inReadSets.emplace(key, TVector<TRSData>());
+                    }
                 }
             }
         }
@@ -971,8 +854,7 @@ void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets,
                 continue;
             }
 
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Prepare InReadsets from " << shardId
-                << " to " << tabletId);
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Prepare InReadsets from " << shardId << " to " << tabletId);
 
             auto key = std::make_pair(shardId, tabletId);
             inReadSets.emplace(key, TVector<TRSData>());
@@ -999,10 +881,8 @@ void KqpUpdateDataShardStatCounters(TDataShard& dataShard, const NMiniKQL::TEngi
     }
 }
 
-void KqpFillTxStats(TDataShard& dataShard, const NMiniKQL::TEngineHostCounters& counters,
-    TEvDataShard::TEvProposeTransactionResult& result)
+void KqpFillTxStats(TDataShard& dataShard, const NMiniKQL::TEngineHostCounters& counters, NKikimrQueryStats::TTxStats& stats)
 {
-    auto& stats = *result.Record.MutableTxStats();
     auto& perTable = *stats.AddTableAccessStats();
     perTable.MutableTableInfo()->SetSchemeshardId(dataShard.GetPathOwnerId());
     Y_ABORT_UNLESS(dataShard.GetUserTables().size() == 1, "TODO: Fix handling of collocated tables");
@@ -1031,9 +911,7 @@ void KqpFillTxStats(TDataShard& dataShard, const NMiniKQL::TEngineHostCounters& 
     }
 }
 
-void KqpFillStats(TDataShard& dataShard, const NKqp::TKqpTasksRunner& tasksRunner,
-    NMiniKQL::TKqpDatashardComputeContext& computeCtx, const NYql::NDqProto::EDqStatsMode& statsMode,
-    TEvDataShard::TEvProposeTransactionResult& result)
+void KqpFillStats(TDataShard& dataShard, const NKqp::TKqpTasksRunner& tasksRunner, NMiniKQL::TKqpDatashardComputeContext& computeCtx, const NYql::NDqProto::EDqStatsMode& statsMode, TEvDataShard::TEvProposeTransactionResult& result)
 {
     Y_ABORT_UNLESS(dataShard.GetUserTables().size() == 1, "TODO: Fix handling of collocated tables");
     auto tableInfo = dataShard.GetUserTables().begin();
@@ -1057,7 +935,7 @@ void KqpFillStats(TDataShard& dataShard, const NKqp::TKqpTasksRunner& tasksRunne
         protoTable->SetWriteBytes(taskTableStats.UpdateRowBytes);
         protoTable->SetEraseRows(taskTableStats.NEraseRow);
 
-        if (statsMode <= NYql::NDqProto::DQ_STATS_MODE_NONE) { // UNSPECIFIED === NONE
+        if (statsMode <= NYql::NDqProto::DQ_STATS_MODE_NONE) {  // UNSPECIFIED === NONE
             continue;
         }
 
@@ -1095,30 +973,26 @@ NYql::NDq::TDqTaskRunnerMemoryLimits DefaultKqpDataReqMemoryLimits() {
 
 namespace {
 
-class TKqpTaskRunnerExecutionContext : public NDq::IDqTaskRunnerExecutionContext {
+class TKqpTaskRunnerExecutionContext: public NDq::IDqTaskRunnerExecutionContext {
 public:
-    NDq::IDqOutputConsumer::TPtr CreateOutputConsumer(const NDqProto::TTaskOutput& outputDesc,
-        const NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx, const NMiniKQL::TTypeEnvironment& typeEnv,
-        const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        TVector<NDq::IDqOutput::TPtr>&& outputs) const override
-    {
+    NDq::IDqOutputConsumer::TPtr CreateOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx, const NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory, TVector<NDq::IDqOutput::TPtr>&& outputs) const override {
         return NKqp::KqpBuildOutputConsumer(outputDesc, type, applyCtx, typeEnv, holderFactory, std::move(outputs));
     }
 
-    NDq::IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */) const override {
+    NDq::IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */, bool /* withSpilling */) const override {
         return {};
     }
 
-    NDq::IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */, TActorSystem* /* actorSystem */, bool /*isConcurrent*/) const override {
+    NDq::IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */, bool /* withSpilling */, TActorSystem* /* actorSystem */, bool /*isConcurrent*/) const override {
         return {};
     }
 };
 
-} // anonymous namespace
+}  // anonymous namespace
 
 THolder<NYql::NDq::IDqTaskRunnerExecutionContext> DefaultKqpExecutionContext() {
     return THolder(new TKqpTaskRunnerExecutionContext);
 }
 
-} // namespace NDataShard
-} // namespace NKikimr
+}  // namespace NDataShard
+}  // namespace NKikimr

@@ -20,6 +20,10 @@ class TChangeRecord: public NChangeExchange::TChangeRecordBase {
     friend class TChangeRecordBuilder;
 
 public:
+    ui64 GetGroup() const override { return Group; }
+    ui64 GetStep() const override { return Step; }
+    ui64 GetTxId() const override { return TxId; }
+    EKind GetKind() const override { return Kind; }
     ui64 GetLockId() const { return LockId; }
     ui64 GetLockOffset() const { return LockOffset; }
     const TPathId& GetPathId() const { return PathId; }
@@ -39,6 +43,10 @@ public:
     void Out(IOutputStream& out) const override;
 
 private:
+    ui64 Group = 0;
+    ui64 Step = 0;
+    ui64 TxId = 0;
+    EKind Kind;
     ui64 LockId = 0;
     ui64 LockOffset = 0;
     TPathId PathId;
@@ -54,7 +62,28 @@ private:
 
 class TChangeRecordBuilder: public NChangeExchange::TChangeRecordBuilder<TChangeRecord, TChangeRecordBuilder> {
 public:
-    using NChangeExchange::TChangeRecordBuilder<TChangeRecord, TChangeRecordBuilder>::TChangeRecordBuilder;
+    using TBase::TBase;
+
+    explicit TChangeRecordBuilder(EKind kind)
+        : TBase()
+    {
+        GetRecord()->Kind = kind;
+    }
+
+    TSelf& WithGroup(ui64 group) {
+        GetRecord()->Group = group;
+        return static_cast<TSelf&>(*this);
+    }
+
+    TSelf& WithStep(ui64 step) {
+        GetRecord()->Step = step;
+        return static_cast<TSelf&>(*this);
+    }
+
+    TSelf& WithTxId(ui64 txId) {
+        GetRecord()->TxId = txId;
+        return static_cast<TSelf&>(*this);
+    }
 
     TSelf& WithLockId(ui64 lockId) {
         GetRecord()->LockId = lockId;

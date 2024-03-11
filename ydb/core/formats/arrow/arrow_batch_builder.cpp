@@ -241,6 +241,16 @@ void TArrowBatchBuilder::AddRow(const TConstArrayRef<TCell>& key, const TConstAr
     }
 }
 
+void TArrowBatchBuilder::AddRow(const TConstArrayRef<TCell>& row) {
+    ++NumRows;
+
+    size_t offset = 0;
+    for (size_t i = 0; i < row.size(); ++i, ++offset) {
+        auto& cell = row[i];
+        AppendCell(cell, offset);
+    }
+}
+
 void TArrowBatchBuilder::ReserveData(ui32 columnNo, size_t size) {
     if (!BatchBuilder || columnNo >= (ui32)BatchBuilder->num_fields()) {
         return;

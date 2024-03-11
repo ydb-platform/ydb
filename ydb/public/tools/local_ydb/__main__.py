@@ -9,7 +9,7 @@ if __name__ == '__main__':
 \033[94m
 To deploy the local YDB cluster:
 
-   {prog} deploy --ydb-working-dir /absolute/path/to/working/directory --ydb-binary-path /path/to/kikimr/driver
+  {prog} deploy --ydb-working-dir /absolute/path/to/working/directory --ydb-binary-path /path/to/kikimr/driver
 
 To cleanup the deployed YDB cluster (this includes removal of working directory, all configuration files, disks and so on):
 
@@ -131,7 +131,12 @@ To update cluster (stop + start):
             default=False,
             action='store_true',
         )
-
+        sub_parser.add_argument(
+            '--base-port-offset',
+            type=int,
+            default=0,
+            action='store',
+        )
         sub_parser.add_argument(
             '--ydb-binary-path', required=True,
             help='Path to binary file'

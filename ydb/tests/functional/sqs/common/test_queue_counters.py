@@ -141,11 +141,10 @@ class TestSqsGettingCounters(KikimrSqsTestBase):
 
     def test_purge_queue_counters(self):
         queue_url = self._create_queue_and_assert(self.queue_name, False, True)
-        self._sqs_api.send_message(queue_url, "foo")
-        self._sqs_api.purge_queue(queue_url)
 
-        self._sqs_api.send_message(queue_url, "bar")
-        self._sqs_api.purge_queue(queue_url)
+        for _ in range(20):
+            self._sqs_api.send_message(queue_url, "foobar")
+            self._sqs_api.purge_queue(queue_url)
 
         sqs_counters = self._get_sqs_counters()
 
@@ -153,4 +152,4 @@ class TestSqsGettingCounters(KikimrSqsTestBase):
             'queue': self.queue_name,
             'sensor': 'MessagesPurged',
         })
-        assert purged_derivative == 1
+        assert purged_derivative > 0

@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/datashard/datashard_impl.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
@@ -397,7 +398,6 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
                 NKikimrConfig::TAppConfig appConfig;
                 appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
                 appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(false);
-                appConfig.MutableTableServiceConfig()->SetEnablePredicateExtractForScanQueries(true);
                 settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
                 settings.SetAppConfig(appConfig);
 
@@ -671,7 +671,6 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
         appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(false);
-        appConfig.MutableTableServiceConfig()->SetEnablePredicateExtractForScanQueries(true);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetAppConfig(appConfig);

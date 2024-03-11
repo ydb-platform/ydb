@@ -3,14 +3,15 @@
 #include "columnshard.h"
 #include "columnshard_impl.h"
 #include "blob_cache.h"
+#include "engines/scheme/statistics/max/operator.h"
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/tx/columnshard/test_helper/helper.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/test_client.h>
 #include <library/cpp/testing/unittest/registar.h>
-
 
 namespace NKikimr::NTxUT {
 
@@ -49,6 +50,10 @@ struct TTestSchema {
         TStorageTier(const TString& name = {})
             : Name(name)
         {}
+
+        TString DebugString() const {
+            return TStringBuilder() << "{Column=" << TtlColumn << ";EvictAfter=" << EvictAfter.value_or(TDuration::Zero()) << ";Name=" << Name << ";Codec=" << Codec << "};";
+        }
 
         NKikimrSchemeOp::EColumnCodec GetCodecId() const {
             if (Codec == "none") {
@@ -95,6 +100,7 @@ struct TTestSchema {
             s3Config.SetProxyScheme(NKikimrSchemeOp::TS3Settings::HTTP);
 #else
             s3Config.SetEndpoint("fake");
+            s3Config.SetSecretKey("fakeSecret");
 #endif
             s3Config.SetRequestTimeoutMs(10000);
             s3Config.SetHttpRequestTimeoutMs(10000);
@@ -104,10 +110,21 @@ struct TTestSchema {
     };
 
     struct TTableSpecials : public TStorageTier {
+    private:
+        bool NeedTestStatisticsFlag = true;
+    public:
         std::vector<TStorageTier> Tiers;
         bool WaitEmptyAfter = false;
 
         TTableSpecials() noexcept = default;
+
+        bool NeedTestStatistics() const {
+            return NeedTestStatisticsFlag;
+        }
+
+        void SetNeedTestStatistics(const bool value) {
+            NeedTestStatisticsFlag = value;
+        }
 
         bool HasTiers() const {
             return !Tiers.empty();
@@ -127,107 +144,110 @@ struct TTestSchema {
             EvictAfter = ttl;
             return *this;
         }
-    };
 
-    static auto YdbSchema(const std::pair<TString, TTypeInfo>& firstKeyItem = {"timestamp", TTypeInfo(NTypeIds::Timestamp) }) {
-        std::vector<std::pair<TString, TTypeInfo>> schema = {
+        TString DebugString() const {
+            auto result =  TStringBuilder() << "WaitEmptyAfter=" << WaitEmptyAfter << ";Tiers=";
+            for (auto&& tier : Tiers) {
+                result << "{" << tier.DebugString() << "}";
+            }
+            result << ";TTL=" << TStorageTier::DebugString();
+            return result;
+        }
+    };
+    using TTestColumn = NArrow::NTest::TTestColumn;
+    static auto YdbSchema(const TTestColumn& firstKeyItem = TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp))) {
+        std::vector<TTestColumn> schema = {
             // PK
             firstKeyItem,
-            {"resource_type", TTypeInfo(NTypeIds::Utf8) },
-            {"resource_id", TTypeInfo(NTypeIds::Utf8) },
-            {"uid", TTypeInfo(NTypeIds::Utf8) },
-            {"level", TTypeInfo(NTypeIds::Int32) },
-            {"message", TTypeInfo(NTypeIds::Utf8) },
-            {"json_payload", TTypeInfo(NTypeIds::Json) },
-            {"ingested_at", TTypeInfo(NTypeIds::Timestamp) },
-            {"saved_at", TTypeInfo(NTypeIds::Timestamp) },
-            {"request_id", TTypeInfo(NTypeIds::Utf8) }
+            TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8) ),
+            TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8) ),
+            TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) ).SetStorageId("__MEMORY"),
+            TTestColumn("level", TTypeInfo(NTypeIds::Int32) ),
+            TTestColumn("message", TTypeInfo(NTypeIds::Utf8) ).SetStorageId("__MEMORY"),
+            TTestColumn("json_payload", TTypeInfo(NTypeIds::Json) ),
+            TTestColumn("ingested_at", TTypeInfo(NTypeIds::Timestamp) ),
+            TTestColumn("saved_at", TTypeInfo(NTypeIds::Timestamp) ),
+            TTestColumn("request_id", TTypeInfo(NTypeIds::Utf8) )
         };
         return schema;
     };
 
     static auto YdbExoticSchema() {
-        std::vector<std::pair<TString, TTypeInfo>> schema = {
+        std::vector<TTestColumn> schema = {
             // PK
-            {"timestamp", TTypeInfo(NTypeIds::Timestamp) },
-            {"resource_type", TTypeInfo(NTypeIds::Utf8) },
-            {"resource_id", TTypeInfo(NTypeIds::Utf8) },
-            {"uid", TTypeInfo(NTypeIds::Utf8) },
+            TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) ),
+            TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8) ),
+            TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8) ),
+            TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) ).SetStorageId("__MEMORY"),
             //
-            {"level", TTypeInfo(NTypeIds::Int32) },
-            {"message", TTypeInfo(NTypeIds::String4k) },
-            {"json_payload", TTypeInfo(NTypeIds::JsonDocument) },
-            {"ingested_at", TTypeInfo(NTypeIds::Timestamp) },
-            {"saved_at", TTypeInfo(NTypeIds::Timestamp) },
-            {"request_id", TTypeInfo(NTypeIds::Yson) }
+            TTestColumn("level", TTypeInfo(NTypeIds::Int32) ),
+            TTestColumn("message", TTypeInfo(NTypeIds::String4k) ).SetStorageId("__MEMORY"),
+            TTestColumn("json_payload", TTypeInfo(NTypeIds::JsonDocument) ),
+            TTestColumn("ingested_at", TTypeInfo(NTypeIds::Timestamp) ),
+            TTestColumn("saved_at", TTypeInfo(NTypeIds::Timestamp) ),
+            TTestColumn("request_id", TTypeInfo(NTypeIds::Yson) )
         };
         return schema;
     };
 
     static auto YdbPkSchema() {
-        std::vector<std::pair<TString, TTypeInfo>> schema = {
-            {"timestamp", TTypeInfo(NTypeIds::Timestamp) },
-            {"resource_type", TTypeInfo(NTypeIds::Utf8) },
-            {"resource_id", TTypeInfo(NTypeIds::Utf8) },
-            {"uid", TTypeInfo(NTypeIds::Utf8) }
+        std::vector<TTestColumn> schema = {
+            TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) ),
+            TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8) ).SetStorageId("__MEMORY"),
+            TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8) ),
+            TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) ).SetStorageId("__MEMORY")
         };
         return schema;
     }
 
     static auto YdbAllTypesSchema() {
-        std::vector<std::pair<TString, TTypeInfo>> schema = {
-            { "ts", TTypeInfo(NTypeIds::Timestamp) },
+        std::vector<TTestColumn> schema = {
+            TTestColumn("ts", TTypeInfo(NTypeIds::Timestamp) ),
 
-            { "i8", TTypeInfo(NTypeIds::Int8) },
-            { "i16", TTypeInfo(NTypeIds::Int16) },
-            { "i32", TTypeInfo(NTypeIds::Int32) },
-            { "i64", TTypeInfo(NTypeIds::Int64) },
-            { "u8", TTypeInfo(NTypeIds::Uint8) },
-            { "u16", TTypeInfo(NTypeIds::Uint16) },
-            { "u32", TTypeInfo(NTypeIds::Uint32) },
-            { "u64", TTypeInfo(NTypeIds::Uint64) },
-            { "float", TTypeInfo(NTypeIds::Float) },
-            { "double", TTypeInfo(NTypeIds::Double) },
+            TTestColumn( "i8", TTypeInfo(NTypeIds::Int8) ),
+            TTestColumn( "i16", TTypeInfo(NTypeIds::Int16) ),
+            TTestColumn( "i32", TTypeInfo(NTypeIds::Int32) ),
+            TTestColumn( "i64", TTypeInfo(NTypeIds::Int64) ),
+            TTestColumn( "u8", TTypeInfo(NTypeIds::Uint8) ),
+            TTestColumn( "u16", TTypeInfo(NTypeIds::Uint16) ),
+            TTestColumn( "u32", TTypeInfo(NTypeIds::Uint32) ),
+            TTestColumn( "u64", TTypeInfo(NTypeIds::Uint64) ),
+            TTestColumn( "float", TTypeInfo(NTypeIds::Float) ),
+            TTestColumn( "double", TTypeInfo(NTypeIds::Double) ),
 
-            { "byte", TTypeInfo(NTypeIds::Byte) },
+            TTestColumn("byte", TTypeInfo(NTypeIds::Byte) ),
             //{ "bool", TTypeInfo(NTypeIds::Bool) },
             //{ "decimal", TTypeInfo(NTypeIds::Decimal) },
             //{ "dynum", TTypeInfo(NTypeIds::DyNumber) },
 
-            { "date", TTypeInfo(NTypeIds::Date) },
-            { "datetime", TTypeInfo(NTypeIds::Datetime) },
+            TTestColumn( "date", TTypeInfo(NTypeIds::Date) ),
+            TTestColumn( "datetime", TTypeInfo(NTypeIds::Datetime) ),
             //{ "interval", TTypeInfo(NTypeIds::Interval) },
 
-            {"text", TTypeInfo(NTypeIds::Text) },
-            {"bytes", TTypeInfo(NTypeIds::Bytes) },
-            {"yson", TTypeInfo(NTypeIds::Yson) },
-            {"json", TTypeInfo(NTypeIds::Json) },
-            {"jsondoc", TTypeInfo(NTypeIds::JsonDocument) }
+            TTestColumn("text", TTypeInfo(NTypeIds::Text) ),
+            TTestColumn("bytes", TTypeInfo(NTypeIds::Bytes) ),
+            TTestColumn("yson", TTypeInfo(NTypeIds::Yson) ),
+            TTestColumn("json", TTypeInfo(NTypeIds::Json) ),
+            TTestColumn("jsondoc", TTypeInfo(NTypeIds::JsonDocument) )
         };
         return schema;
     };
 
-    static NKikimrSchemeOp::TOlapColumnDescription CreateColumn(ui32 id, const TString& name, TTypeInfo type) {
-        NKikimrSchemeOp::TOlapColumnDescription col;
-        col.SetId(id);
-        col.SetName(name);
-        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(type, "");
-        col.SetTypeId(columnType.TypeId);
-        if (columnType.TypeInfo) {
-            *col.MutableTypeInfo() = *columnType.TypeInfo;
-        }
-        return col;
-    }
-
-    static void InitSchema(const std::vector<std::pair<TString, TTypeInfo>>& columns,
-                           const std::vector<std::pair<TString, TTypeInfo>>& pk,
+    static void InitSchema(const std::vector<NArrow::NTest::TTestColumn>& columns,
+                           const std::vector<NArrow::NTest::TTestColumn>& pk,
                            const TTableSpecials& specials,
                            NKikimrSchemeOp::TColumnTableSchema* schema)
     {
         schema->SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
 
         for (ui32 i = 0; i < columns.size(); ++i) {
-            *schema->MutableColumns()->Add() = CreateColumn(i + 1, columns[i].first, columns[i].second);
+            *schema->MutableColumns()->Add() = columns[i].CreateColumn(i + 1);
+            if (!specials.NeedTestStatistics()) {
+                continue;
+            }
+            if (NOlap::NStatistics::NMax::TOperator::IsAvailableType(columns[i].GetType())) {
+                *schema->AddStatistics() = NOlap::NStatistics::TOperatorContainer(std::make_shared<NOlap::NStatistics::NMax::TOperator>(i + 1)).SerializeToProto();
+            }
         }
 
         Y_ABORT_UNLESS(pk.size() > 0);
@@ -236,10 +256,10 @@ struct TTestSchema {
         }
 
         if (specials.HasCodec()) {
-            schema->MutableDefaultCompression()->SetCompressionCodec(specials.GetCodecId());
+            schema->MutableDefaultCompression()->SetCodec(specials.GetCodecId());
         }
         if (specials.CompressionLevel) {
-            schema->MutableDefaultCompression()->SetCompressionLevel(*specials.CompressionLevel);
+            schema->MutableDefaultCompression()->SetLevel(*specials.CompressionLevel);
         }
     }
 
@@ -261,8 +281,8 @@ struct TTestSchema {
         return specials.HasTiers() || specials.HasTtl();
     }
 
-    static TString CreateTableTxBody(ui64 pathId, const std::vector<std::pair<TString, TTypeInfo>>& columns,
-        const std::vector<std::pair<TString, TTypeInfo>>& pk,
+    static TString CreateTableTxBody(ui64 pathId, const std::vector<NArrow::NTest::TTestColumn>& columns,
+        const std::vector<NArrow::NTest::TTestColumn>& pk,
         const TTableSpecials& specialsExt = {})
     {
         auto specials = specialsExt;
@@ -288,8 +308,8 @@ struct TTestSchema {
         return out;
     }
 
-    static TString CreateInitShardTxBody(ui64 pathId, const std::vector<std::pair<TString, TTypeInfo>>& columns,
-        const std::vector<std::pair<TString, TTypeInfo>>& pk,
+    static TString CreateInitShardTxBody(ui64 pathId, const std::vector<NArrow::NTest::TTestColumn>& columns,
+        const std::vector<NArrow::NTest::TTestColumn>& pk,
         const TTableSpecials& specials = {}, const TString& ownerPath = "/Root/olap") {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableInitShard()->AddTables();
@@ -306,8 +326,8 @@ struct TTestSchema {
         return out;
     }
 
-    static TString CreateStandaloneTableTxBody(ui64 pathId, const std::vector<std::pair<TString, TTypeInfo>>& columns,
-                                               const std::vector<std::pair<TString, TTypeInfo>>& pk,
+    static TString CreateStandaloneTableTxBody(ui64 pathId, const std::vector<NArrow::NTest::TTestColumn>& columns,
+                                               const std::vector<NArrow::NTest::TTestColumn>& pk,
                                                const TTableSpecials& specials = {}) {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableEnsureTables()->AddTables();
@@ -377,20 +397,20 @@ struct TTestSchema {
         return txBody;
     }
 
-    static std::vector<TString> ExtractNames(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
+    static std::vector<TString> ExtractNames(const std::vector<NArrow::NTest::TTestColumn>& columns) {
         std::vector<TString> out;
         out.reserve(columns.size());
         for (auto& col : columns) {
-            out.push_back(col.first);
+            out.push_back(col.GetName());
         }
         return out;
     }
 
-    static std::vector<NScheme::TTypeInfo> ExtractTypes(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
+    static std::vector<NScheme::TTypeInfo> ExtractTypes(const std::vector<NArrow::NTest::TTestColumn>& columns) {
         std::vector<NScheme::TTypeInfo> types;
         types.reserve(columns.size());
-        for (auto& [name, type] : columns) {
-            types.push_back(type);
+        for (auto& i : columns) {
+            types.push_back(i.GetType());
         }
         return types;
     }
@@ -403,14 +423,14 @@ void PlanSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot
 void PlanWriteTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap, bool waitResult = true);
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId, const ui64 writeId, const ui64 tableId, const TString& data,
-                              const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema, std::vector<ui64>* writeIds);
+                              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>* writeIds);
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 writeId, const ui64 tableId, const TString& data,
-                              const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema, bool waitResult = true, std::vector<ui64>* writeIds = nullptr);
+                              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, bool waitResult = true, std::vector<ui64>* writeIds = nullptr);
 
 std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, const NLongTxService::TLongTxId& longTxId,
                               ui64 tableId, const ui64 writePartId, const TString& data,
-                              const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema);
+                              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema);
 
 ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 shardId, std::vector<ui64>* writeIds = nullptr);
 
@@ -436,10 +456,10 @@ struct TTestBlobOptions {
 };
 
 TCell MakeTestCell(const TTypeInfo& typeInfo, ui32 value, std::vector<TString>& mem);
-TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns,
+TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<NArrow::NTest::TTestColumn>& columns,
                      const TTestBlobOptions& options = {}, const std::set<std::string>& notNullColumns = {});
 TSerializedTableRange MakeTestRange(std::pair<ui64, ui64> range, bool inclusiveFrom, bool inclusiveTo,
-                                    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
+                                    const std::vector<NArrow::NTest::TTestColumn>& columns);
 
 
 }
@@ -525,20 +545,20 @@ namespace NKikimr::NColumnShard {
         }
     };
 
-    NOlap::TIndexInfo BuildTableInfo(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema,
-                         const std::vector<std::pair<TString, NScheme::TTypeInfo>>& key);
+    NOlap::TIndexInfo BuildTableInfo(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
+                         const std::vector<NArrow::NTest::TTestColumn>& key);
 
 
     struct TestTableDescription {
-        std::vector<std::pair<TString, NScheme::TTypeInfo>> Schema = NTxUT::TTestSchema::YdbSchema();
-        std::vector<std::pair<TString, NScheme::TTypeInfo>> Pk = NTxUT::TTestSchema::YdbPkSchema();
+        std::vector<NArrow::NTest::TTestColumn> Schema = NTxUT::TTestSchema::YdbSchema();
+        std::vector<NArrow::NTest::TTestColumn> Pk = NTxUT::TTestSchema::YdbPkSchema();
         bool InStore = true;
     };
 
     void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
                  const TestTableDescription& table = {}, TString codec = "none");
 
-    void PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema, const ui32 keySize = 1);
+    void PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize = 1);
 
-    std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema);
+    std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<NArrow::NTest::TTestColumn>& schema);
 }

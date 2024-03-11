@@ -59,8 +59,8 @@ constexpr ui32 MAX_NON_PARALLEL_TASKS_EXECUTION_LIMIT = 4;
 
 TKqpPlanner::TKqpPlanner(TKqpTasksGraph& graph, ui64 txId, const TActorId& executer, const IKqpGateway::TKqpSnapshot& snapshot,
     const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TInstant deadline,
-    const Ydb::Table::QueryStatsCollection::Mode& statsMode,
-    bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
+    const Ydb::Table::QueryStatsCollection::Mode& statsMode, bool withSpilling,
+    const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
     TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
     bool useDataQueryPool, bool localComputeTasks, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
@@ -87,8 +87,8 @@ TKqpPlanner::TKqpPlanner(TKqpTasksGraph& graph, ui64 txId, const TActorId& execu
 {
     if (!Database) {
         // a piece of magic for tests
-        for (auto& x : AppData()->DomainsInfo->DomainByName) {
-            Database = TStringBuilder() << '/' << x.first;
+        if (const auto& domain = AppData()->DomainsInfo->Domain) {
+            Database = TStringBuilder() << '/' << domain->Name;
             LOG_E("Database not set, use " << Database);
         }
     }
@@ -289,7 +289,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
     auto plan = planner->Plan(ResourcesSnapshot, ResourceEstimations);
 
     THashMap<ui64, ui64> alreadyAssigned;
-    for(auto& [nodeId, tasks] : TasksPerNode) { 
+    for(auto& [nodeId, tasks] : TasksPerNode) {
         for(ui64 taskId: tasks) {
             alreadyAssigned.emplace(taskId, nodeId);
         }
@@ -366,7 +366,7 @@ void TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, bool shareMailbox, bool op
     task.ComputeActorId = computeActorId;
 
     LOG_D("Executing task: " << taskId << " on compute actor: " << task.ComputeActorId);
-    
+
     auto result = PendingComputeActors.emplace(task.ComputeActorId, TProgressStat());
     YQL_ENSURE(result.second);
 }
@@ -409,7 +409,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
         }
         ComputeTasks.clear();
     }
-    
+
     if (nComputeTasks == 0 && TasksPerNode.size() == 1 && (AsyncIoFactory != nullptr) && AllowSinglePartitionOpt) {
         // query affects a single key or shard, so it might be more effective
         // to execute this task locally so we can avoid useless overhead for remote task launching.
@@ -518,8 +518,8 @@ ui32 TKqpPlanner::CalcSendMessageFlagsForNode(ui32 nodeId) {
 std::unique_ptr<TKqpPlanner> CreateKqpPlanner(TKqpTasksGraph& tasksGraph, ui64 txId, const TActorId& executer,
     const IKqpGateway::TKqpSnapshot& snapshot,
     const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TInstant deadline,
-    const Ydb::Table::QueryStatsCollection::Mode& statsMode,
-    bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
+    const Ydb::Table::QueryStatsCollection::Mode& statsMode, bool withSpilling,
+    const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
     TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
     bool useDataQueryPool, bool localComputeTasks, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, bool doOptimization,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext)

@@ -16,7 +16,7 @@ from yqlrun import YQLRun
 from utils import get_config, get_parameters_json, DATA_PATH
 
 
-def get_gateways_config(http_files, yql_http_file_server, force_blocks=False):
+def get_gateways_config(http_files, yql_http_file_server, force_blocks=False, is_hybrid=False):
     config = None
 
     if http_files or force_blocks:
@@ -29,6 +29,13 @@ def get_gateways_config(http_files, yql_http_file_server, force_blocks=False):
             config_message.SqlCore.TranslationFlags.extend(['EmitAggApply'])
             flags = config_message.YqlCore.Flags.add()
             flags.Name = 'UseBlocks'
+        if is_hybrid:
+            activate_hybrid = config_message.Yt.DefaultSettings.add()
+            activate_hybrid.Name = "HybridDqExecution"
+            activate_hybrid.Value = "1"
+            deactivate_dq = config_message.Dq.DefaultSettings.add()
+            deactivate_dq.Name = "AnalyzeQuery"
+            deactivate_dq.Value = "0"
         config = text_format.MessageToString(config_message)
 
     return config
@@ -54,13 +61,14 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server, 
     http_files_urls = yql_http_file_server.register_files({}, http_files)
 
     program_sql = os.path.join(DATA_PATH, suite, '%s.sql' % case)
+    is_hybrid = provider == 'hybrid'
 
     with codecs.open(program_sql, encoding='utf-8') as program_file_descr:
         sql_query = program_file_descr.read()
         if get_param('TARGET_PLATFORM'):
             if "Yson::" in sql_query:
                 pytest.skip('yson udf is not supported on non-default target platform')
-        if provider + 'file can not' in sql_query:
+        if (provider + 'file can not' in sql_query) or (is_hybrid and ('ytfile can not' in sql_query)):
             pytest.skip(provider + ' can not execute this')
 
     pragmas.append(sql_query)
@@ -81,7 +89,7 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server, 
         prov=provider,
         keep_temp=not re.search(r"yt\.ReleaseTempData", sql_query),
         binary=yqlrun_binary,
-        gateway_config=get_gateways_config(http_files, yql_http_file_server, force_blocks=force_blocks),
+        gateway_config=get_gateways_config(http_files, yql_http_file_server, force_blocks=force_blocks, is_hybrid=is_hybrid),
         extra_args=extra_args,
         udfs_dir=yql_binary_path('ydb/library/yql/tests/common/test_framework/udfs_deps')
     )

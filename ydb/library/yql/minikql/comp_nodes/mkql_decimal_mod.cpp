@@ -52,7 +52,6 @@ public:
                 BinaryOperator::CreateAnd(left, right, "test", block):
                 IsLeftOptional ? left : right;
 
-            const auto check = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, test, zero, "check", block);
             result->addIncoming(zero, block);
             BranchInst::Create(done, good, IsEmpty(test, block), block);
 

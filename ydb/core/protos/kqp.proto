@@ -144,6 +144,9 @@ message TKqpColumnMetadataProto {
     optional string DefaultFromSequence = 8;
     optional EDefaultKind DefaultKind = 9;
     optional Ydb.TypedValue DefaultFromLiteral = 10;
+    // flag that indicates that column is currently under the build
+    // operation.
+    optional bool IsBuildInProgress = 11 [default = false];
 };
 
 message TKqpTableMetadataProto {
@@ -304,6 +307,29 @@ message TEvProcessResponse {
     optional bool WorkerIsClosing = 4 [default = false];
 }
 
+message TSessionInfo {
+    optional string SessionId = 1;
+    optional string Status = 2;
+    optional string QueryText = 3;
+}
+
+message TEvListSessionsRequest {
+    optional string SessionIdStart = 1;
+    optional bool SessionIdStartInclusive = 2;
+    optional string SessionIdEnd = 3;
+    optional bool SessionIdEndInclusive = 4;
+    repeated uint32 Columns = 5;
+    optional int64 FreeSpace = 6;
+    optional int64 Limit = 7;
+}
+
+message TEvListSessionsResponse {
+    optional int64 NodeId = 1;
+    repeated TSessionInfo Sessions = 2;
+    optional bool Finished = 3;
+    optional string ContinuationToken = 4;
+}
+
 message TKqpSetting {
     required string Name = 1;
     required string Value = 2;
@@ -315,6 +341,7 @@ message TKqpDefaultSettings {
 
 message TCreateSessionRequest {
     optional string Database = 1;
+    optional string ApplicationName = 2;
 }
 
 message TEvCreateSessionRequest {
@@ -420,12 +447,16 @@ message TEvExecuterStreamData {
     optional Ydb.ResultSet ResultSet = 1;
     optional uint64 SeqNo = 2;
     optional uint32 QueryResultIndex = 3;
+    optional uint32 ChannelId = 4;
+    optional NActorsProto.TActorId ChannelActorId = 5;
 };
 
 message TEvExecuterStreamDataAck {
     optional uint64 SeqNo = 1;
     optional int64 FreeSpace = 2;
     optional bool Enough = 3 [default = false];
+    optional uint32 ChannelId = 4;
+    optional NActorsProto.TActorId ChannelActorId = 5;
 };
 
 message TEvExecuterStreamProfile {
@@ -434,7 +465,7 @@ message TEvExecuterStreamProfile {
 };
 
 // 1. Executer fills progress stats from it's own execution
-// 2. Session adds stats from early finished executions and builds complete plan 
+// 2. Session adds stats from early finished executions and builds complete plan
 message TEvExecuterProgress {
     optional NActorsProto.TActorId ExecuterActorId = 1;
     optional string QueryPlan = 2;
@@ -661,6 +692,7 @@ message TKqpStreamLookupSettings {
      optional bool ImmediateTx = 6;
      repeated string LookupKeyColumns = 7;
      optional NKqpProto.EStreamLookupStrategy LookupStrategy = 8;
+     optional bool AllowInconsistentReads = 9 [default = false];
 }
 
 message TKqpSequencerSettings {

@@ -13,6 +13,13 @@ PEERDIR(
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/minikql/computation/llvm14
     ydb/library/yql/minikql/comp_nodes/llvm14
+
+    ydb/library/yql/dq/integration/transform
+    ydb/library/yql/dq/comp_nodes
+    ydb/library/yql/providers/common/comp_nodes
+    ydb/library/yql/minikql/comp_nodes
+    ydb/library/yql/dq/transform
+    ydb/library/yql/providers/dq/task_runner    
 )
 
 SRCS(

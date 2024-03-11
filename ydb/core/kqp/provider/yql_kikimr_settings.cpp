@@ -1,6 +1,7 @@
 #include "yql_kikimr_settings.h"
 
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <util/generic/size_literals.h>
 
 namespace NYql {
@@ -65,7 +66,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
-    REGISTER_SETTING(*this, OptEnableCostBasedOptimization);
+    REGISTER_SETTING(*this, CostBasedOptimizationLevel);
     REGISTER_SETTING(*this, OptEnableConstantFolding);
 
     REGISTER_SETTING(*this, MaxDPccpDPTableSize);
@@ -120,10 +121,6 @@ bool TKikimrSettings::HasOptEnableOlapProvideComputeSharding() const {
 
 bool TKikimrSettings::HasOptUseFinalizeByKey() const {
     return GetOptionalFlagValue(OptUseFinalizeByKey.Get()) != EOptionalFlag::Disabled;
-}
-
-bool TKikimrSettings::HasOptEnableCostBasedOptimization() const {
-    return GetOptionalFlagValue(OptEnableCostBasedOptimization.Get()) == EOptionalFlag::Enabled;
 }
 
 bool TKikimrSettings::HasOptEnableConstantFolding() const {

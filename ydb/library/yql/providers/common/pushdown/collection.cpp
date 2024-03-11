@@ -77,6 +77,10 @@ bool IsSupportedDataType(const TCoDataCtor& node, const TSettings& settings) {
         return true;
     }
 
+    if (settings.IsEnabled(TSettings::EFeatureFlag::TimestampCtor) && node.Maybe<TCoTimestamp>()) {
+        return true;
+    }
+
     if (settings.IsEnabled(TSettings::EFeatureFlag::StringTypes)) {
         if (node.Maybe<TCoUtf8>() || node.Maybe<TCoString>()) {
             return true;
@@ -99,11 +103,9 @@ bool IsSupportedCast(const TCoSafeCast& cast, const TSettings& settings) {
     }
     YQL_ENSURE(maybeDataType.IsValid());
 
-    auto dataType = maybeDataType.Cast();
-    if (dataType.Type().Value() == "Int32") {
-        return cast.Value().Maybe<TCoString>().IsValid();
-    } else if (dataType.Type().Value() == "Timestamp") {
-        return cast.Value().Maybe<TCoUint32>().IsValid();
+    const auto dataType = maybeDataType.Cast();
+    if (dataType.Type().Value() == "Int32") { // TODO: Support any numeric casts.
+        return cast.Value().Maybe<TCoString>() || cast.Value().Maybe<TCoUtf8>();
     }
     return false;
 }

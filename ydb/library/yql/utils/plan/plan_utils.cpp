@@ -27,6 +27,13 @@ TString ToStr(const TCoDataCtor& data) {
     return out.Str();
 }
 
+TString ToStr(const TCoPgConst& data) {
+    TStringStream out;
+    EscapeArbitraryAtom(data.Value().Value(), '"', &out);
+    return out.Str();
+}
+
+
 TString ToStr(const TCoLambda& lambda) {
     return PrettyExprStr(lambda.Body());
 }
@@ -143,6 +150,8 @@ TString PrettyExprStr(const TExprBase& expr) {
         return TString(expr.Ref().Child(0)->Content());
     } else if (auto data = expr.Maybe<TCoDataCtor>()) {
         return ToStr(data.Cast());
+    } else if (auto pgConst = expr.Maybe<TCoPgConst>()) {
+        return ToStr(pgConst.Cast());
     } else if (auto lambda = expr.Maybe<TCoLambda>()) {
         return ToStr(lambda.Cast());
     } else if (auto asStruct = expr.Maybe<TCoAsStruct>()) {

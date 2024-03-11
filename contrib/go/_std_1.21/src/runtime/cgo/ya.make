@@ -1,12 +1,12 @@
 IF (CGO_ENABLED)
     GO_LIBRARY()
-    
+
     PEERDIR(
         library/cpp/sanitizer/include
     )
 
     NO_COMPILER_WARNINGS()
-    
+
     SRCS(
         abi_loong64.h
         abi_ppc64x.h
@@ -18,6 +18,7 @@ IF (CGO_ENABLED)
         libcgo.h
         libcgo_unix.h
     )
+
     CGO_SRCS(
         cgo.go
     )
@@ -71,9 +72,7 @@ IF (CGO_ENABLED)
     ENDIF()
 
     IF (OS_LINUX)
-        CGO_LDFLAGS(
-            -lpthread
-        )
+        CGO_LDFLAGS(-lpthread -ldl -lresolv)
 
         SRCS(
             callbacks_traceback.go

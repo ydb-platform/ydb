@@ -70,7 +70,9 @@ struct TCheckPermissionByAclResult
 
 struct TSetUserPasswordOptions
     : public TTimeoutOptions
-{ };
+{
+    bool PasswordIsTemporary = false;
+};
 
 struct TIssueTokenOptions
     : public TTimeoutOptions

@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         writer.RegisterSourceId(sourceId, sourceIdInfo);
         UNIT_ASSERT_VALUES_EQUAL(writer.GetSourceIdsToWrite().size(), 1);
         {
-            TKeyPrefix key(TKeyPrefix::TypeInfo, TestPartition, TKeyPrefix::MarkSourceId);
+            TKeyPrefix key(TKeyPrefix::TypeInfo, TPartitionId(TestPartition), TKeyPrefix::MarkSourceId);
             TBuffer data;
 
             TSourceIdWriter::FillKeyAndData(ESourceIdFormat::Raw, sourceId, sourceIdInfo, key, data);
@@ -73,7 +73,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
             write->SetValue(data.Data(), data.Size());
             write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
 
-            writer.FillRequest(actualRequest.Get(), TestPartition);
+            writer.FillRequest(actualRequest.Get(), TPartitionId(TestPartition));
             UNIT_ASSERT_VALUES_EQUAL(actualRequest.Get()->ToString(), expectedRequest.Get()->ToString());
         }
 
@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         writer.RegisterSourceId(anotherSourceId, anotherSourceIdInfo);
         UNIT_ASSERT_VALUES_EQUAL(writer.GetSourceIdsToWrite().size(), 2);
         {
-            TKeyPrefix key(TKeyPrefix::TypeInfo, TestPartition + 1, TKeyPrefix::MarkSourceId);
+            TKeyPrefix key(TKeyPrefix::TypeInfo, TPartitionId(TestPartition + 1), TKeyPrefix::MarkSourceId);
             TBuffer data;
 
             for (const auto& [sourceId, sourceIdInfo] : writer.GetSourceIdsToWrite()) {
@@ -93,7 +93,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
                 write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
             }
 
-            writer.FillRequest(actualRequest.Get(), TestPartition + 1);
+            writer.FillRequest(actualRequest.Get(), TPartitionId(TestPartition + 1));
             UNIT_ASSERT_VALUES_EQUAL(actualRequest.Get()->ToString(), expectedRequest.Get()->ToString());
         }
     }
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         const auto sourceId = TestSourceId();
         const auto sourceIdInfo = TSourceIdInfo(1, 10, TInstant::Seconds(100));
 
-        TKeyPrefix ikey(TKeyPrefix::TypeInfo, TestPartition, mark);
+        TKeyPrefix ikey(TKeyPrefix::TypeInfo, TPartitionId(TestPartition), mark);
         TBuffer idata;
         TSourceIdWriter::FillKeyAndData(format, sourceId, sourceIdInfo, ikey, idata);
 
@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         // sources are dropped before startOffset = 20
         {
             auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 20, TestPartition, config);
+            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 20, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, true);
             UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 2 * 19); // first 19 sources are dropped
         }
@@ -202,7 +202,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         // expired sources are dropped
         {
             auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 10000, TestPartition, config);
+            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, true);
             UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 2 * 341); // another 341 (360 - 19) sources are dropped
         }
@@ -210,14 +210,14 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         // move to the past
         {
             auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(1), 10000, TestPartition, config);
+            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(1), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, false); // nothing to drop (everything is dropped)
         }
 
         // move to the future
         {
             auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(3), 10000, TestPartition, config);
+            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(3), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, true);
             UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 2 * 360); // more 360 sources are dropped
         }
@@ -234,14 +234,14 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         config.SetSourceIdMaxCounts(10000);
         {
             auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(1), 10000, TestPartition, config);
+            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(1), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, false);
         }
 
         config.SetSourceIdMaxCounts(9900); // decrease by 100
         {
             auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(1), 10000, TestPartition, config);
+            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(1), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, true);
             UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 2 * 100); // 100 sources are dropped
         }
@@ -258,7 +258,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
     Y_UNIT_TEST(SourceIdStorageComplexDelete) {
         TSourceIdStorage storage;
         for (ui64 i = 1; i <= 10000 + 1; ++i) { // add 10000 + one extra sources
-            storage.RegisterSourceId(TestSourceId(i), i, i, TInstant::Seconds(10 * i));
+            storage.RegisterSourceId(TestSourceId(i), i, i , TInstant::Seconds(10 * i));
         }
 
         NKikimrPQ::TPartitionConfig config;
@@ -267,7 +267,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         config.SetSourceIdMaxCounts(10000); // limit to 10000
         {
             auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 10000, TestPartition, config);
+            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, true);
             UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 2 * 360); // first 360 sources are dropped
         }
@@ -276,7 +276,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         config.SetSourceIdMaxCounts(10000 - 360);
         {
             auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 10000, TestPartition, config);
+            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, true);
             UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 2 * 6); // another 6 sources are dropped by retention
         }
@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         config.SetSourceIdMaxCounts(10000 - 370);
         {
             auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 10000, TestPartition, config);
+            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, true);
             UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 2 * 5); // more 5 sources are dropped
         }
@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         NKikimrPQ::TPartitionConfig config;
         config.SetSourceIdMaxCounts(1); // limit to one
 
-        const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(1), 10000, TestPartition, config);
+        const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(1), 10000, TPartitionId(TestPartition), config);
         UNIT_ASSERT_EQUAL(dropped, true);
         UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 2); // first source is dropped by retention
 
@@ -457,6 +457,38 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
 
             emitter.Process(TestSourceId(2), MakeHeartbeat(4));
             UNIT_ASSERT(!emitter.CanEmit().Defined());
+        }
+    }
+
+    Y_UNIT_TEST(SourceIdMinSeqNo) {
+        TSourceIdStorage storage;
+
+        const auto sourceId = TestSourceId(1);
+        const auto sourceIdInfo = TSourceIdInfo(2, 10, TInstant::Seconds(100));
+        const auto anotherSourceId = TestSourceId(2);
+        const auto anotherSourceIdInfo = TSourceIdInfo(0, 20, TInstant::Seconds(200));
+
+        storage.RegisterSourceId(sourceId, sourceIdInfo);
+        storage.RegisterSourceId(anotherSourceId, anotherSourceIdInfo);
+        {
+            auto it = storage.GetInMemorySourceIds().find(anotherSourceId);
+            UNIT_ASSERT_VALUES_EQUAL(it->second.MinSeqNo, 0);
+        }
+
+        storage.RegisterSourceId(sourceId, sourceIdInfo.Updated(3, 11, TInstant::Seconds(100)));
+        {
+            auto it = storage.GetInMemorySourceIds().find(sourceId);
+            UNIT_ASSERT_VALUES_EQUAL(it->second.MinSeqNo, 2);
+        }
+        storage.RegisterSourceId(sourceId, sourceIdInfo.Updated(1, 12, TInstant::Seconds(100)));
+        {
+            auto it = storage.GetInMemorySourceIds().find(sourceId);
+            UNIT_ASSERT_VALUES_EQUAL(it->second.MinSeqNo, 2);
+        }
+        storage.RegisterSourceId(anotherSourceId, anotherSourceIdInfo.Updated(3, 12, TInstant::Seconds(100)));
+        {
+            auto it = storage.GetInMemorySourceIds().find(anotherSourceId);
+            UNIT_ASSERT_VALUES_EQUAL(it->second.MinSeqNo, 3);
         }
     }
 

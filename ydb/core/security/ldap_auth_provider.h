@@ -2,6 +2,7 @@
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/protos/auth.pb.h>
 
 namespace NKikimr {
 

@@ -48,7 +48,7 @@ namespace NPQ {
         void SaveInProgress(const TKvRequest& kvRequest)
         {
             for (const TRequestedBlob& reqBlob : kvRequest.Blobs) {
-                TBlobId blob(kvRequest.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
+                TBlobId blob(kvRequest.Partition.InternalPartitionId, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
                 ReadsInProgress.insert(blob);
             }
         }
@@ -56,7 +56,7 @@ namespace NPQ {
         bool CheckInProgress(const TActorContext& ctx, TKvRequest& kvRequest)
         {
             for (const TRequestedBlob& reqBlob : kvRequest.Blobs) {
-                TBlobId blob(kvRequest.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
+                TBlobId blob(kvRequest.Partition.InternalPartitionId, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
                 auto it = ReadsInProgress.find(blob);
                 if (it != ReadsInProgress.end()) {
                     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Read request is blocked. Partition "
@@ -73,7 +73,7 @@ namespace NPQ {
         {
             TVector<TKvRequest> unblocked;
             for (const TRequestedBlob& reqBlob : blocker.Blobs) {
-                TBlobId blob(blocker.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
+                TBlobId blob(blocker.Partition.InternalPartitionId, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
                 ReadsInProgress.erase(blob);
 
                 auto it = BlockedReads.find(blob);
@@ -104,8 +104,8 @@ namespace NPQ {
 
         void Handle(TEvPQ::TEvBlobRequest::TPtr& ev, const TActorContext& ctx)
         {
-            ui32 partition = ev->Get()->Partition;
-            Cache.SetUserOffset(ctx, ev->Get()->User, partition, ev->Get()->ReadOffset);
+            const TPartitionId& partition = ev->Get()->Partition;
+            Cache.SetUserOffset(ctx, ev->Get()->User, partition.InternalPartitionId, ev->Get()->ReadOffset);
 
             TKvRequest kvReq(TKvRequest::TypeRead, ev->Sender, ev->Get()->Cookie, partition);
             kvReq.Blobs = std::move(ev->Get()->Blobs);
@@ -263,7 +263,7 @@ namespace NPQ {
 
             auto srcRequest = ev->Get()->Record;
 
-            TKvRequest kvReq(TKvRequest::TypeWrite, ev->Sender, Max<ui64>(), Max<ui32>());
+            TKvRequest kvReq(TKvRequest::TypeWrite, ev->Sender, Max<ui64>(), TPartitionId(Max<ui32>()));
             kvReq.Blobs.reserve(srcRequest.CmdWriteSize());
 
             for (ui32 i = 0; i < srcRequest.CmdWriteSize(); ++i) {
@@ -333,7 +333,7 @@ namespace NPQ {
                                 if (!data)
                                     continue;
                                 TABLER() {
-                                    TABLED() {out << int(c.first.Partition);}
+                                    TABLED() {out << c.first.Partition;}
                                     TABLED() {out << c.first.Offset;}
                                     TABLED() {out << c.first.Count;}
                                     TABLED() {out << data->GetValue().size();}
@@ -345,7 +345,7 @@ namespace NPQ {
                     }
                 }
             }
-            ctx.Send(ev->Sender, new TEvPQ::TEvMonResponse(Max<ui32>(), TVector<TString>(), out.Str()));
+            ctx.Send(ev->Sender, new TEvPQ::TEvMonResponse(TVector<TString>(), out.Str()));
         }
 
         void UpdateCounters(const TActorContext& ctx)

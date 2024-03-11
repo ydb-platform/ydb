@@ -11,7 +11,11 @@ void TGarbageCollectionActor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TP
         return;
     }
     GCTask->OnGCResult(ev);
-    if (GCTask->IsFinished()) {
+    CheckFinished();
+}
+
+void TGarbageCollectionActor::CheckFinished() {
+    if (SharedRemovingFinished && GCTask->IsFinished()) {
         auto g = PassAwayGuard();
         ACFL_DEBUG("actor", "TGarbageCollectionActor")("event", "finished");
         TActorContext::AsActorContext().Send(TabletActorId, std::make_unique<NColumnShard::TEvPrivate::TEvGarbageCollectionFinished>(GCTask));

@@ -1707,6 +1707,8 @@ namespace {
         TExprContext& Expr;
         size_t Order = 0ULL;
         bool RefAtoms = false;
+        bool AllowFreeArgs = false;
+        TNodeMap<size_t> FreeArgs;
         std::unique_ptr<TMemoryPool> Pool;
         std::vector<TFrameContext> Frames;
         TFrameContext* CurrentFrame = nullptr;
@@ -1960,6 +1962,12 @@ namespace {
             case TExprNode::World:
                 res = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), TStringBuf("world"), pool);
                 break;
+            case TExprNode::Argument: {
+                YQL_ENSURE(ctx.AllowFreeArgs, "Free arguments are not allowed"); 
+                auto iter = ctx.FreeArgs.emplace(&node, ctx.FreeArgs.size());
+                res = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), ctx.Expr.AppendString("_FreeArg" + ToString(iter.first->second)), pool);
+                break;
+            }
             default:
                 YQL_ENSURE(false, "Unknown type: " << static_cast<ui32>(node.Type()));
             }
@@ -2703,6 +2711,7 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, c
 #endif
     TVisitNodeContext ctx(exprContext);
     ctx.RefAtoms = settings.RefAtoms;
+    ctx.AllowFreeArgs = settings.AllowFreeArgs;
     ctx.Pool = std::make_unique<TMemoryPool>(4096);
     ctx.Frames.push_back(TFrameContext());
     ctx.CurrentFrame = &ctx.Frames.front();
@@ -3206,7 +3215,7 @@ ui32 TPgExprType::GetFlags(ui32 typeId) {
 
     const auto& desc = *descPtr;
     ui32 ret = TypeHasManyValues | TypeHasOptional;
-    if (!desc.SendFuncId || !desc.ReceiveFuncId) {
+    if ((!desc.SendFuncId || !desc.ReceiveFuncId) && (!desc.OutFuncId || !desc.InFuncId)) {
         ret |= TypeNonPersistable;
     }
 

@@ -88,6 +88,8 @@ struct TKqpSessionInfo {
     TNodeId AttachedNodeId;
     TActorId AttachedRpcId;
     bool PgWire;
+    TString QueryText;
+    bool Ready = true;
 
     TKqpSessionInfo(const TString& sessionId, const TActorId& workerId,
         const TString& database, TKqpDbCountersPtr dbCounters, std::vector<i32>&& pos,
@@ -108,6 +110,7 @@ struct TKqpSessionInfo {
 
 class TLocalSessionsRegistry {
     THashMap<TString, TKqpSessionInfo> LocalSessions;
+    std::map<TString, TKqpSessionInfo*> OrderedSessions;
     THashMap<TActorId, TString> TargetIdIndex;
     THashSet<TString> ShutdownInFlightSessions;
     THashMap<TString, ui32> SessionsCountPerDatabase;
@@ -130,6 +133,10 @@ public:
         return actors.insert(sessionInfo).second;
     }
 
+    void AttachQueryText(const TKqpSessionInfo* sessionInfo, const TString& queryText) {
+        const_cast<TKqpSessionInfo*>(sessionInfo)->QueryText = queryText;
+    }
+
     TKqpSessionInfo* Create(const TString& sessionId, const TActorId& workerId,
         const TString& database, TKqpDbCountersPtr dbCounters, bool supportsBalancing,
         TDuration idleDuration, bool pgWire = false)
@@ -146,6 +153,7 @@ public:
         auto result = LocalSessions.emplace(sessionId,
             TKqpSessionInfo(sessionId, workerId, database, dbCounters, std::move(pos),
                 NActors::TActivationContext::Monotonic() + idleDuration, IdleSessions.end(), pgWire));
+        OrderedSessions.emplace(sessionId, &result.first->second);
         SessionsCountPerDatabase[database]++;
         Y_ABORT_UNLESS(result.second, "Duplicate session id!");
         TargetIdIndex.emplace(workerId, sessionId);
@@ -239,6 +247,14 @@ public:
         return ShutdownInFlightSessions.size();
     }
 
+    std::map<TString, TKqpSessionInfo*>::const_iterator GetOrderedLowerBound(const TString& continuation) const {
+        return OrderedSessions.lower_bound(continuation);
+    }
+
+    std::map<TString, TKqpSessionInfo*>::const_iterator GetOrderedEnd() const {
+        return OrderedSessions.end();
+    }
+
     std::pair<TNodeId, TActorId> Erase(const TString& sessionId) {
         auto it = LocalSessions.find(sessionId);
         auto result = std::make_pair<TNodeId, TActorId>(0, TActorId());
@@ -268,6 +284,7 @@ public:
                 }
             }
 
+            OrderedSessions.erase(sessionId);
             LocalSessions.erase(it);
         }
 

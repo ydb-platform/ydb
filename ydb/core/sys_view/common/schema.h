@@ -3,13 +3,14 @@
 #include "path.h"
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
-#include <ydb/core/tx/datashard/sys_tables.h>
+#include <ydb/core/tx/locks/sys_tables.h>
 
 namespace NKikimr {
 namespace NSysView {
 
 constexpr TStringBuf PartitionStatsName = "partition_stats";
 constexpr TStringBuf NodesName = "nodes";
+constexpr TStringBuf QuerySessions = "query_sessions";
 
 constexpr TStringBuf TopQueriesByDuration1MinuteName = "top_queries_by_duration_one_minute";
 constexpr TStringBuf TopQueriesByDuration1HourName = "top_queries_by_duration_one_hour";
@@ -393,15 +394,16 @@ struct Schema : NIceDb::Schema {
         struct RawBytes : Column<5, NScheme::NTypeIds::Uint64> {};
         struct PortionId: Column<6, NScheme::NTypeIds::Uint64> {};
         struct ChunkIdx : Column<7, NScheme::NTypeIds::Uint64> {};
-        struct ColumnName: Column<8, NScheme::NTypeIds::Utf8> {};
-        struct InternalColumnId : Column<9, NScheme::NTypeIds::Uint32> {};
+        struct EntityName: Column<8, NScheme::NTypeIds::Utf8> {};
+        struct InternalEntityId : Column<9, NScheme::NTypeIds::Uint32> {};
         struct BlobId : Column<10, NScheme::NTypeIds::Utf8> {};
         struct BlobRangeOffset : Column<11, NScheme::NTypeIds::Uint64> {};
         struct BlobRangeSize : Column<12, NScheme::NTypeIds::Uint64> {};
         struct Activity : Column<13, NScheme::NTypeIds::Bool> {};
-        struct TierName : Column<14, NScheme::NTypeIds::Utf8> {};
+        struct TierName: Column<14, NScheme::NTypeIds::Utf8> {};
+        struct EntityType: Column<15, NScheme::NTypeIds::Utf8> {};
 
-        using TKey = TableKey<PathId, TabletId, PortionId, InternalColumnId, ChunkIdx>;
+        using TKey = TableKey<PathId, TabletId, PortionId, InternalEntityId, ChunkIdx>;
         using TColumns = TableColumns<
             PathId,
             Kind,
@@ -409,14 +411,15 @@ struct Schema : NIceDb::Schema {
             Rows,
             RawBytes,
             PortionId,
-            ChunkIdx, 
-            ColumnName,
-            InternalColumnId,
+            ChunkIdx,
+            EntityName,
+            InternalEntityId,
             BlobId,
             BlobRangeOffset,
             BlobRangeSize,
             Activity,
-            TierName
+            TierName,
+            EntityType
             >;
     };
 
@@ -460,6 +463,20 @@ struct Schema : NIceDb::Schema {
             RowCount,
             IndexSize,
             InFlightTxCount>;
+    };
+
+    struct QuerySessions : Table<13> {
+        struct SessionId : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct NodeId : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct Status : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct QueryText : Column<4, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<SessionId>;
+        using TColumns = TableColumns<
+            SessionId,
+            NodeId,
+            Status,
+            QueryText>;
     };
 };
 

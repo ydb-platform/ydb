@@ -8,8 +8,7 @@ extern "C" {
 #include <string.h>
 #include <stddef.h>
 #include <stdint.h>
-
-typedef PyObject * (*calc_identity_func)(PyObject *key);
+#include <stdbool.h>
 
 typedef struct pair {
     PyObject  *identity;  // 8
@@ -38,12 +37,12 @@ HTTP headers into the buffer without allocating an extra memory block.
 #define EMBEDDED_CAPACITY 29
 #endif
 
-typedef struct pair_list {  // 40
-    Py_ssize_t  capacity;   // 8
-    Py_ssize_t  size;       // 8
-    uint64_t  version;      // 8
-    calc_identity_func calc_identity;  // 8
-    pair_t *pairs;          // 8
+typedef struct pair_list {
+    Py_ssize_t capacity;
+    Py_ssize_t size;
+    uint64_t version;
+    bool calc_ci_indentity;
+    pair_t *pairs;
     pair_t buffer[EMBEDDED_CAPACITY];
 } pair_list_t;
 
@@ -111,7 +110,11 @@ ci_key_to_str(PyObject *key)
         return ret;
     }
     if (PyUnicode_Check(key)) {
+#if PY_VERSION_HEX < 0x03090000
         return _PyObject_CallMethodId(key, &PyId_lower, NULL);
+#else
+        return PyObject_CallMethodNoArgs(key, multidict_str_lower);
+#endif
     }
     PyErr_SetString(PyExc_TypeError,
                     "CIMultiDict keys should be either str "
@@ -199,29 +202,37 @@ pair_list_shrink(pair_list_t *list)
 
 
 static inline int
-_pair_list_init(pair_list_t *list, calc_identity_func calc_identity)
+_pair_list_init(pair_list_t *list, bool calc_ci_identity)
 {
+    list->calc_ci_indentity = calc_ci_identity;
     list->pairs = list->buffer;
     list->capacity = EMBEDDED_CAPACITY;
     list->size = 0;
     list->version = NEXT_VERSION();
-    list->calc_identity = calc_identity;
     return 0;
 }
 
 static inline int
 pair_list_init(pair_list_t *list)
 {
-    return _pair_list_init(list, key_to_str);
+    return _pair_list_init(list, /* calc_ci_identity = */ false);
 }
 
 
 static inline int
 ci_pair_list_init(pair_list_t *list)
 {
-    return _pair_list_init(list, ci_key_to_str);
+    return _pair_list_init(list, /* calc_ci_identity = */ true);
 }
 
+
+static inline PyObject *
+pair_list_calc_identity(pair_list_t *list, PyObject *key)
+{
+    if (list->calc_ci_indentity)
+        return ci_key_to_str(key);
+    return key_to_str(key);
+}
 
 static inline void
 pair_list_dealloc(pair_list_t *list)
@@ -304,7 +315,7 @@ pair_list_add(pair_list_t *list,
     PyObject *identity = NULL;
     int ret;
 
-    identity = list->calc_identity(key);
+    identity = pair_list_calc_identity(list, key);
     if (identity == NULL) {
         goto fail;
     }
@@ -412,7 +423,7 @@ pair_list_del(pair_list_t *list, PyObject *key)
     Py_hash_t hash;
     int ret;
 
-    identity = list->calc_identity(key);
+    identity = pair_list_calc_identity(list, key);
     if (identity == NULL) {
         goto fail;
     }
@@ -486,7 +497,7 @@ pair_list_contains(pair_list_t *list, PyObject *key)
     PyObject *identity = NULL;
     int tmp;
 
-    ident = list->calc_identity(key);
+    ident = pair_list_calc_identity(list, key);
     if (ident == NULL) {
         goto fail;
     }
@@ -528,7 +539,7 @@ pair_list_get_one(pair_list_t *list, PyObject *key)
     PyObject *value = NULL;
     int tmp;
 
-    ident = list->calc_identity(key);
+    ident = pair_list_calc_identity(list, key);
     if (ident == NULL) {
         goto fail;
     }
@@ -573,7 +584,7 @@ pair_list_get_all(pair_list_t *list, PyObject *key)
     PyObject *res = NULL;
     int tmp;
 
-    ident = list->calc_identity(key);
+    ident = pair_list_calc_identity(list, key);
     if (ident == NULL) {
         goto fail;
     }
@@ -631,7 +642,7 @@ pair_list_set_default(pair_list_t *list, PyObject *key, PyObject *value)
     PyObject *value2 = NULL;
     int tmp;
 
-    ident = list->calc_identity(key);
+    ident = pair_list_calc_identity(list, key);
     if (ident == NULL) {
         goto fail;
     }
@@ -680,7 +691,7 @@ pair_list_pop_one(pair_list_t *list, PyObject *key)
     int tmp;
     PyObject *ident = NULL;
 
-    ident = list->calc_identity(key);
+    ident = pair_list_calc_identity(list, key);
     if (ident == NULL) {
         goto fail;
     }
@@ -730,7 +741,7 @@ pair_list_pop_all(pair_list_t *list, PyObject *key)
     PyObject *res = NULL;
     PyObject *ident = NULL;
 
-    ident = list->calc_identity(key);
+    ident = pair_list_calc_identity(list, key);
     if (ident == NULL) {
         goto fail;
     }
@@ -826,7 +837,7 @@ pair_list_replace(pair_list_t *list, PyObject * key, PyObject *value)
     PyObject *identity = NULL;
     Py_hash_t hash;
 
-    identity = list->calc_identity(key);
+    identity = pair_list_calc_identity(list, key);
     if (identity == NULL) {
         goto fail;
     }
@@ -1101,7 +1112,7 @@ pair_list_update_from_seq(pair_list_t *list, PyObject *seq)
         Py_INCREF(key);
         Py_INCREF(value);
 
-        identity = list->calc_identity(key);
+        identity = pair_list_calc_identity(list, key);
         if (identity == NULL) {
             goto fail_1;
         }

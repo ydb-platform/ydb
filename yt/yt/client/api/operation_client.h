@@ -292,8 +292,8 @@ struct TListOperationsResult
     std::optional<THashMap<TString, i64>> PoolTreeCounts;
     std::optional<THashMap<TString, i64>> PoolCounts;
     std::optional<THashMap<TString, i64>> UserCounts;
-    std::optional<TEnumIndexedVector<NScheduler::EOperationState, i64>> StateCounts;
-    std::optional<TEnumIndexedVector<NScheduler::EOperationType, i64>> TypeCounts;
+    std::optional<TEnumIndexedArray<NScheduler::EOperationState, i64>> StateCounts;
+    std::optional<TEnumIndexedArray<NScheduler::EOperationType, i64>> TypeCounts;
     std::optional<i64> FailedJobsCount;
     bool Incomplete = false;
 };
@@ -317,6 +317,7 @@ struct TJob
     NJobTrackerClient::TJobId JobCompetitionId;
     NJobTrackerClient::TJobId ProbingJobCompetitionId;
     NYson::TYsonString Error;
+    NYson::TYsonString InterruptionInfo;
     NYson::TYsonString BriefStatistics;
     NYson::TYsonString Statistics;
     NYson::TYsonString InputPaths;
@@ -338,8 +339,8 @@ void Serialize(const TJob& job, NYson::IYsonConsumer* consumer, TStringBuf idKey
 
 struct TListJobsStatistics
 {
-    TEnumIndexedVector<NJobTrackerClient::EJobState, i64> StateCounts;
-    TEnumIndexedVector<NJobTrackerClient::EJobType, i64> TypeCounts;
+    TEnumIndexedArray<NJobTrackerClient::EJobState, i64> StateCounts;
+    TEnumIndexedArray<NJobTrackerClient::EJobType, i64> TypeCounts;
 };
 
 struct TListJobsResult

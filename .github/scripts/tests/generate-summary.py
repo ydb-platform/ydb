@@ -347,7 +347,9 @@ def main():
         else:
             color = 'green'
 
-        update_pr_comment_text(pr, args.build_preset, color, text='\n'.join(text), rewrite=False)
+        run_number = int(os.environ.get("GITHUB_RUN_NUMBER"))
+
+        update_pr_comment_text(pr, args.build_preset, run_number, color, text='\n'.join(text), rewrite=False)
 
 
 if __name__ == "__main__":

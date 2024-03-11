@@ -45,7 +45,82 @@ bool TGraphShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TA
 }
 
 void TGraphShard::OnReadyToWork() {
+    ApplyConfig(AppData()->GraphConfig);
     SignalTabletActive(ActorContext());
+}
+
+void TGraphShard::ApplyConfig(const NKikimrConfig::TGraphConfig& config) {
+    BLOG_D("Updated Config to " << config.ShortDebugString());
+    if (config.HasBackendType()) {
+        BLOG_D("Updated BackendType");
+        if (config.GetBackendType() == "Memory") {
+            BackendType = EBackendType::Memory;
+        }
+        if (config.GetBackendType() == "Local") {
+            BackendType = EBackendType::Local;
+        }
+        if (config.GetBackendType() == "External") {
+            BackendType = EBackendType::External;
+        }
+    }
+    if (config.HasAggregateCheckPeriodSeconds()) {
+        BLOG_D("Updated AggregateCheckPeriod");
+        AggregateCheckPeriod = TDuration::Seconds(config.GetAggregateCheckPeriodSeconds());
+    }
+    if (config.AggregationSettingsSize() != 0) {
+        BLOG_D("Updated AggregationSettings");
+        AggregateSettings.clear();
+        for (const auto& protoSettings : config.GetAggregationSettings()) {
+            TAggregateSettings& settings = AggregateSettings.emplace_back();
+            if (protoSettings.HasPeriodToStartSeconds()) {
+                settings.PeriodToStart = TDuration::Seconds(protoSettings.GetPeriodToStartSeconds());
+            }
+            if (protoSettings.HasSampleSizeSeconds()) {
+                settings.SampleSize = TDuration::Seconds(protoSettings.GetSampleSizeSeconds());
+            }
+            if (protoSettings.HasMinimumStepSeconds()) {
+                settings.MinimumStep = TDuration::Seconds(protoSettings.GetMinimumStepSeconds());
+            }
+        }
+
+        if (AggregateSettings.empty()) {
+            BLOG_W("Settings are empty - fail-safe settings applied");
+            AggregateSettings.emplace_back().PeriodToStart = TDuration::Days(7);
+        }
+    }
+}
+
+void TGraphShard::MergeHistogram(std::map<ui64, ui64>& dest, const NKikimrGraph::THistogramMetric& src) {
+    size_t size(std::min(src.HistogramBoundsSize(), src.HistogramValuesSize()));
+    for (size_t n = 0; n < size; ++n) {
+        dest[src.GetHistogramBounds(n)] += src.GetHistogramValues(n);
+    }
+}
+
+void TGraphShard::AggregateHistograms(TMetricsData& data) {
+    for (const auto& [name, hist] : data.HistogramValues) {
+        AggregateHistogram(data.Values, name, hist);
+    }
+    data.HistogramValues.clear();
+}
+
+void TGraphShard::AggregateHistogram(std::unordered_map<TString, double>& values, const TString& name, const std::map<ui64, ui64>& histogram) {
+    TVector<ui64> histBoundaries;
+    TVector<ui64> histValues;
+    ui64 total = 0;
+
+    histBoundaries.reserve(histogram.size());
+    histValues.reserve(histogram.size());
+    for (auto [boundary, value] : histogram) {
+        histBoundaries.push_back(boundary);
+        histValues.push_back(value);
+        total += value;
+    }
+    // it's hardcoded for now, will be changed to aggregate function later
+    values[name + ".p50"] = TBaseBackend::GetTimingForPercentile(.50, histValues, histBoundaries, total);
+    values[name + ".p75"] = TBaseBackend::GetTimingForPercentile(.75, histValues, histBoundaries, total);
+    values[name + ".p90"] = TBaseBackend::GetTimingForPercentile(.90, histValues, histBoundaries, total);
+    values[name + ".p99"] = TBaseBackend::GetTimingForPercentile(.99, histValues, histBoundaries, total);
 }
 
 STFUNC(TGraphShard::StateWork) {
@@ -55,6 +130,7 @@ STFUNC(TGraphShard::StateWork) {
         hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
         hFunc(TEvGraph::TEvSendMetrics, Handle);
         hFunc(TEvGraph::TEvGetMetrics, Handle);
+        hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
             BLOG_W("StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
@@ -77,11 +153,22 @@ void TGraphShard::Handle(TEvSubDomain::TEvConfigure::TPtr& ev) {
 }
 
 void TGraphShard::Handle(TEvGraph::TEvSendMetrics::TPtr& ev) {
+    BLOG_TRACE(ev->Get()->Record.ShortDebugString());
+    if (ev->Get()->Record.HasTime()) { // direct insertion
+        TMetricsData data;
+        data.Timestamp = TInstant::Seconds(ev->Get()->Record.GetTime());
+        for (const auto& metric : ev->Get()->Record.GetMetrics()) {
+            data.Values[metric.GetName()] = metric.GetValue();
+        }
+        for (const auto& metric : ev->Get()->Record.GetHistogramMetrics()) {
+            MergeHistogram(data.HistogramValues[metric.GetName()], metric);
+        }
+        BLOG_TRACE("Executing direct TxStoreMetrics");
+        ExecuteTxStoreMetrics(std::move(data));
+        return;
+    }
     TInstant now = TInstant::Seconds(TActivationContext::Now().Seconds()); // 1 second resolution
     BLOG_TRACE("Handle TEvGraph::TEvSendMetrics from " << ev->Sender << " now is " << now << " md.timestamp is " << MetricsData.Timestamp);
-    if (StartTimestamp == TInstant()) {
-        StartTimestamp = now;
-    }
     if (now != MetricsData.Timestamp) {
         if (MetricsData.Timestamp != TInstant()) {
             BLOG_TRACE("Executing TxStoreMetrics");
@@ -91,19 +178,34 @@ void TGraphShard::Handle(TEvGraph::TEvSendMetrics::TPtr& ev) {
         MetricsData.Timestamp = now;
         MetricsData.Values.clear();
     }
-    if ((now - StartTimestamp) > DURATION_CLEAR_TRIGGER && (now - ClearTimestamp) > DURATION_CLEAR_PERIOD) {
-        ClearTimestamp = now;
-        BLOG_TRACE("Executing TxClearData");
-        ExecuteTxClearData();
+    if ((now - AggregateTimestamp) >= AggregateCheckPeriod) {
+        AggregateTimestamp = now;
+        for (const auto& settings : AggregateSettings) {
+            if (settings.IsItTimeToAggregate(now)) {
+                BLOG_TRACE("Executing TxAggregateData for " << settings.ToString());
+                ExecuteTxAggregateData(settings);
+            }
+        }
     }
+    // aggregation
     for (const auto& metric : ev->Get()->Record.GetMetrics()) {
         MetricsData.Values[metric.GetName()] += metric.GetValue(); // simple accumulation by name of metric
+    }
+    for (auto& histMetric : ev->Get()->Record.GetHistogramMetrics()) {
+        MergeHistogram(MetricsData.HistogramValues[histMetric.GetName()], histMetric);
     }
 }
 
 void TGraphShard::Handle(TEvGraph::TEvGetMetrics::TPtr& ev) {
     BLOG_TRACE("Handle TEvGraph::TEvGetMetrics from " << ev->Sender);
     ExecuteTxGetMetrics(ev);
+}
+
+void TGraphShard::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    const NKikimrConsole::TConfigNotificationRequest& record = ev->Get()->Record;
+    BLOG_D("Received TEvConsole::TEvConfigNotificationRequest with update of config: " << record.GetConfig().GetGraphConfig().ShortDebugString());
+    ApplyConfig(record.GetConfig().GetGraphConfig());
+    Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
 }
 
 IActor* CreateGraphShard(const TActorId& tablet, TTabletStorageInfo* info) {

@@ -24,7 +24,7 @@ public:
 
     }
     ~TActor() {
-        Owner->Stop();
+        Owner->Stop(false);
     }
 
     STATEFN(StateMain) {
@@ -106,10 +106,16 @@ TManager::TManager(const ui64 tabletId, const NActors::TActorId& tabletActorId, 
 {
 }
 
-NArrow::TCompression ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compression) {
-    auto out = NArrow::TCompression::BuildFromProto(compression);
-    Y_ABORT_UNLESS(out, "%s", out.GetErrorMessage().data());
-    return *out;
+NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compressionProto) {
+    NArrow::NSerialization::TSerializerContainer container;
+    AFL_VERIFY(container.DeserializeFromProto(compressionProto));
+    return container;
+}
+
+NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSchemeOp::TOlapColumn::TSerializer& serializerProto) {
+    NArrow::NSerialization::TSerializerContainer container;
+    AFL_VERIFY(container.DeserializeFromProto(serializerProto));
+    return container;
 }
 }
 
@@ -156,11 +162,11 @@ TTiersManager& TTiersManager::Start(std::shared_ptr<TTiersManager> ownerPtr) {
     return *this;
 }
 
-TTiersManager& TTiersManager::Stop() {
+TTiersManager& TTiersManager::Stop(const bool needStopActor) {
     if (!Actor) {
         return *this;
     }
-    if (TlsActivationContext) {
+    if (TlsActivationContext && needStopActor) {
         TActivationContext::AsActorContext().Send(Actor->SelfId(), new NActors::TEvents::TEvPoison);
     }
     Actor = nullptr;
@@ -168,12 +174,6 @@ TTiersManager& TTiersManager::Stop() {
         i.second.Stop();
     }
     return *this;
-}
-
-const NTiers::TManager& TTiersManager::GetManagerVerified(const TString& tierId) const {
-    auto it = Managers.find(tierId);
-    Y_ABORT_UNLESS(it != Managers.end());
-    return it->second;
 }
 
 const NTiers::TManager* TTiersManager::GetManagerOptional(const TString& tierId) const {
@@ -194,24 +194,26 @@ NMetadata::NFetcher::ISnapshotsFetcher::TPtr TTiersManager::GetExternalDataManip
 
 THashMap<ui64, NKikimr::NOlap::TTiering> TTiersManager::GetTiering() const {
     THashMap<ui64, NKikimr::NOlap::TTiering> result;
-    if (!IsReady()) {
-        return result;
-    }
+    AFL_VERIFY(IsReady());
     auto snapshotPtr = std::dynamic_pointer_cast<NTiers::TConfigsSnapshot>(Snapshot);
     Y_ABORT_UNLESS(snapshotPtr);
     auto& tierConfigs = snapshotPtr->GetTierConfigs();
     for (auto&& i : PathIdTiering) {
         auto* tiering = snapshotPtr->GetTieringById(i.second);
         if (tiering) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("path_id", i.first)("tiering_name", i.second)("event", "activation");
             result.emplace(i.first, tiering->BuildOlapTiers());
             for (auto& [pathId, pathTiering] : result) {
                 for (auto& [name, tier] : pathTiering.GetTierByName()) {
+                    AFL_VERIFY(name != NOlap::TTierInfo::GetTtlTierName());
                     auto it = tierConfigs.find(name);
                     if (it != tierConfigs.end()) {
-                        tier->SetCompression(NTiers::ConvertCompression(it->second.GetCompression()));
+                        tier->SetSerializer(NTiers::ConvertCompression(it->second.GetCompression()));
                     }
                 }
             }
+        } else {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("path_id", i.first)("tiering_name", i.second)("event", "not_found");
         }
     }
     return result;

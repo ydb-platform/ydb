@@ -52,7 +52,7 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
                 LOG_LOG_S_THROTTLE(Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 
                     "TTxWrite:: errors while proposing transaction txid " << TxId << " at tablet " << Self->TabletID() << " status: " << status << " error: " << errMessage);
 
-                auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), TxId, NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, errMessage);
+                auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), TxId, NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED, errMessage);
 
                 TActorId target = Op ? Op->GetTarget() : Ev->Sender;
                 ui64 cookie = Op ? Op->GetCookie() : Ev->Cookie;
@@ -72,7 +72,9 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
                 return true;
             }
 
-            TOperation::TPtr op = Self->Pipeline.BuildOperation(Ev, ReceivedAt, TieBreakerIndex, txc, ctx, std::move(DatashardTransactionSpan));
+            TOperation::TPtr op = Self->Pipeline.BuildOperation(std::move(Ev), ReceivedAt, TieBreakerIndex, txc, std::move(DatashardTransactionSpan));
+            Y_ABORT_UNLESS(!Ev);
+
             TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 
             // Unsuccessful operation parse.
@@ -90,7 +92,6 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
                 Self->Pipeline.GetExecutionUnit(op->GetCurrentUnit()).AddOperation(op);
 
             Op = op;
-            Ev = nullptr;
             Op->IncrementInProgress();
         }
 
@@ -231,7 +232,7 @@ void TDataShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorCo
     ProposeTransaction(std::move(ev), ctx);
 }
 
-ui64 EvWrite::Convertor::GetTxId(const TAutoPtr<IEventHandle>& ev) {
+ui64 NEvWrite::TConvertor::GetTxId(const TAutoPtr<IEventHandle>& ev) {
     switch (ev->GetTypeRewrite()) {
         case TEvDataShard::TEvProposeTransaction::EventType:
             return ev->Get<TEvDataShard::TEvProposeTransaction>()->GetTxId();
@@ -242,7 +243,7 @@ ui64 EvWrite::Convertor::GetTxId(const TAutoPtr<IEventHandle>& ev) {
     }
 }
 
-ui64 EvWrite::Convertor::GetProposeFlags(NKikimrDataEvents::TEvWrite::ETxMode txMode) {
+ui64 NEvWrite::TConvertor::GetProposeFlags(NKikimrDataEvents::TEvWrite::ETxMode txMode) {
     switch (txMode) {
         case NKikimrDataEvents::TEvWrite::MODE_PREPARE:
             return TTxFlags::Default;
@@ -255,7 +256,7 @@ ui64 EvWrite::Convertor::GetProposeFlags(NKikimrDataEvents::TEvWrite::ETxMode tx
     }
 }
 
-NKikimrDataEvents::TEvWrite::ETxMode EvWrite::Convertor::GetTxMode(ui64 flags) {
+NKikimrDataEvents::TEvWrite::ETxMode NEvWrite::TConvertor::GetTxMode(ui64 flags) {
     if ((flags & TTxFlags::Immediate) && !(flags & TTxFlags::ForceOnline)) {
         return NKikimrDataEvents::TEvWrite::ETxMode::TEvWrite_ETxMode_MODE_IMMEDIATE;
     }
@@ -267,7 +268,7 @@ NKikimrDataEvents::TEvWrite::ETxMode EvWrite::Convertor::GetTxMode(ui64 flags) {
     }
 }
 
-NKikimrTxDataShard::TEvProposeTransactionResult::EStatus EvWrite::Convertor::GetStatus(NKikimrDataEvents::TEvWriteResult::EStatus status) {
+NKikimrTxDataShard::TEvProposeTransactionResult::EStatus NEvWrite::TConvertor::GetStatus(NKikimrDataEvents::TEvWriteResult::EStatus status) {
     switch (status) {
         case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED:
             return NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE;
@@ -275,6 +276,42 @@ NKikimrTxDataShard::TEvProposeTransactionResult::EStatus EvWrite::Convertor::Get
             return NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED;
         default:
             return NKikimrTxDataShard::TEvProposeTransactionResult::ERROR;
+    }
+}
+
+NKikimrDataEvents::TEvWriteResult::EStatus NEvWrite::TConvertor::ConvertErrCode(NKikimrTxDataShard::TError::EKind code) {
+    switch (code) {
+        case NKikimrTxDataShard::TError_EKind_OK:
+            return NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED;
+        case NKikimrTxDataShard::TError_EKind_BAD_ARGUMENT:
+        case NKikimrTxDataShard::TError_EKind_SCHEME_ERROR:
+        case NKikimrTxDataShard::TError_EKind_WRONG_PAYLOAD_TYPE:
+            return NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST;
+        case NKikimrTxDataShard::TError_EKind_SCHEME_CHANGED:
+            return NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED;
+        case NKikimrTxDataShard::TError_EKind_OUT_OF_SPACE:
+        case NKikimrTxDataShard::TError_EKind_DISK_SPACE_EXHAUSTED:
+            return NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
+        default:
+            return NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR;
+    }
+}
+
+TOperation::TPtr NEvWrite::TConvertor::MakeOperation(EOperationKind kind, const TBasicOpInfo& info, ui64 tabletId) {
+    switch (kind) {
+        case EOperationKind::DataTx:
+        case EOperationKind::SchemeTx:
+        case EOperationKind::Snapshot:
+        case EOperationKind::DistributedErase:
+        case EOperationKind::CommitWrites:
+        case EOperationKind::ReadTable:
+            return MakeIntrusive<TActiveTransaction>(info);
+        case EOperationKind::WriteTx:
+            return MakeIntrusive<TWriteOperation>(info, tabletId);
+        case EOperationKind::DirectTx:
+        case EOperationKind::ReadTx:
+        case EOperationKind::Unknown:
+            Y_ABORT("Unsupported");
     }
 }
 }

@@ -291,6 +291,8 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
              "CREATE TABLE user (\n\tCHANGEFEED user WITH (user = 'foo')\n);\n"},
             {"create table user(changefeed user with (user='foo',user='bar'))",
              "CREATE TABLE user (\n\tCHANGEFEED user WITH (user = 'foo', user = 'bar')\n);\n"},
+            {"create table user(user) AS SELECT 1","CREATE TABLE user (\n\tuser\n)\nAS\nSELECT\n    1;\n"},
+            {"create table user(user) AS VALUES (1), (2)","CREATE TABLE user (\n\tuser\n)\nAS\nVALUES\n    (1),\n    (2);\n"},
             {"create table user(foo int32, bar bool ?) inherits (s3:$cluster.xxx) partition by hash(a,b,hash) with (inherits=interval('PT1D') ON logical_time) tablestore tablestore",
               "CREATE TABLE user (\n"
               "\tfoo int32,\n"
@@ -307,7 +309,9 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
               ")\n"
               "PARTITION BY HASH (a, b, hash)\n"
               "WITH (tiering = 'some');\n"},
-              {"create table if not  exists user(user int32)", "CREATE TABLE IF NOT EXISTS user (\n\tuser int32\n);\n"}
+            {"create table if not  exists user(user int32)", "CREATE TABLE IF NOT EXISTS user (\n\tuser int32\n);\n"},
+            {"create temp   table    user(user int32)", "CREATE TEMP TABLE user (\n\tuser int32\n);\n"},
+            {"create   temporary   table    user(user int32)", "CREATE TEMPORARY TABLE user (\n\tuser int32\n);\n"}
         };
 
         TSetup setup;
@@ -354,6 +358,8 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
              "CREATE EXTERNAL DATA SOURCE usEr WITH (a = \"b\");\n"},
              {"creAte exTernAl daTa SouRce if not exists usEr With (a = \"b\")",
              "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS usEr WITH (a = \"b\");\n"},
+             {"creAte oR rePlaCe exTernAl daTa SouRce usEr With (a = \"b\")",
+             "CREATE OR REPLACE EXTERNAL DATA SOURCE usEr WITH (a = \"b\");\n"},
              {"create external data source eds with (a=\"a\",b=\"b\",c = true)",
              "CREATE EXTERNAL DATA SOURCE eds WITH (\n\ta = \"a\",\n\tb = \"b\",\n\tc = TRUE\n);\n"},
              {"alter external data source eds set a true, reset (b, c), set (x=y, z=false)",
@@ -388,6 +394,8 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         TCases cases = {
             {"creAte exTernAl TabLe usEr (a int) With (a = \"b\")",
              "CREATE EXTERNAL TABLE usEr (\n\ta int\n)\nWITH (a = \"b\");\n"},
+             {"creAte oR rePlaCe exTernAl TabLe usEr (a int) With (a = \"b\")",
+             "CREATE OR REPLACE EXTERNAL TABLE usEr (\n\ta int\n)\nWITH (a = \"b\");\n"},
             {"creAte exTernAl TabLe iF NOt Exists usEr (a int) With (a = \"b\")",
              "CREATE EXTERNAL TABLE IF NOT EXISTS usEr (\n\ta int\n)\nWITH (a = \"b\");\n"},
             {"create external table user (a int) with (a=\"b\",c=\"d\")",
@@ -578,6 +586,8 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
              "EVALUATE FOR $x IN []\n\tDO BEGIN\n\t\tSELECT\n\t\t\t$x;\n\tEND DO;\n"},
             {"evaluate for $x in [] do begin select $x; end do else do begin select 2; end do",
              "EVALUATE FOR $x IN []\n\tDO BEGIN\n\t\tSELECT\n\t\t\t$x;\n\tEND DO\nELSE\n\tDO BEGIN\n\t\tSELECT\n\t\t\t2;\n\tEND DO;\n"},
+            {"evaluate parallel for $x in [] do $a($x)",
+             "EVALUATE PARALLEL FOR $x IN []\n\tDO $a($x);\n"},
         };
 
         TSetup setup;

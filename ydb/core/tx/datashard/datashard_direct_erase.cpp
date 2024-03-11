@@ -59,6 +59,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         }
     }
 
+    std::optional<NMiniKQL::TEngineHostCounters> engineHostCounters;
     std::optional<TDataShardUserDb> userDb;
     std::optional<TDataShardChangeGroupProvider> groupProvider;
 
@@ -69,7 +70,8 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
             condition->Prepare(params.Txc->DB.GetRowScheme(localTableId), 0);
         }
 
-        userDb.emplace(*self, params.Txc->DB, params.ReadVersion);
+        engineHostCounters.emplace();
+        userDb.emplace(*self, params.Txc->DB, params.GlobalTxId, params.ReadVersion, params.WriteVersion, *engineHostCounters, TAppData::TimeProvider->Now());
         groupProvider.emplace(*self, params.Txc->DB);
         params.Tx->ChangeCollector.Reset(CreateChangeCollector(*self, *userDb, *groupProvider, params.Txc->DB, tableInfo));
     }
@@ -178,7 +180,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
             self->GetConflictsCache().GetTableCache(localTableId).AddUncommittedWrite(keyCells.GetCells(), params.GlobalTxId, params.Txc->DB);
             if (!commitAdded && userDb) {
                 // Make sure we see our own changes on further iterations
-                userDb->AddCommitTxId(params.GlobalTxId, params.WriteVersion);
+                userDb->AddCommitTxId(fullTableId, params.GlobalTxId, params.WriteVersion);
                 commitAdded = true;
             }
         } else {

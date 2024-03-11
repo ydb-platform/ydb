@@ -4,6 +4,7 @@
 #include <iostream>
 #include <ydb/library/yql/parser/pg_wrapper/arena_ctx.h>
 #include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/library/yql/ast/yql_expr.h>
 
 #include <util/string/builder.h>
 #include <util/generic/scope.h>
@@ -17,12 +18,18 @@
 #undef SIZEOF_SIZE_T
 
 extern "C" {
+Y_PRAGMA_DIAGNOSTIC_PUSH
+#ifdef _win_
+Y_PRAGMA("GCC diagnostic ignored \"-Wshift-count-overflow\"")
+#endif
+Y_PRAGMA("GCC diagnostic ignored \"-Wunused-parameter\"")
 #include "postgres.h"
 #include "miscadmin.h"
 #include "optimizer/paths.h"
 #include "nodes/print.h"
 #include "utils/selfuncs.h"
 #include "utils/palloc.h"
+Y_PRAGMA_DIAGNOSTIC_POP
 }
 
 #undef Min
@@ -40,6 +47,9 @@ bool RelationStatsHook(
     AttrNumber attnum,
     VariableStatData *vardata)
 {
+    Y_UNUSED(root);
+    Y_UNUSED(rte);
+    Y_UNUSED(attnum);
     vardata->statsTuple = nullptr;
     return true;
 }
@@ -224,8 +234,8 @@ int TPgOptimizer::MakeOutputJoin(TOutput& output, Path* path) {
 
         for (int i = 0; i < list_length(jpath->joinrestrictinfo); i++) {
             RestrictInfo* rinfo = (RestrictInfo*)jpath->joinrestrictinfo->elements[i].ptr_value;
-            Var* left;
-            Var* right;
+            Var* left = nullptr;
+            Var* right = nullptr;
 
             if (jpath->jointype == JOIN_INNER) {
                 YQL_ENSURE(rinfo->left_em->em_expr->type == T_Var, "Unsupported left em type");
@@ -279,7 +289,7 @@ void TPgOptimizer::MakeLeftOrRightRestrictions(std::vector<RestrictInfo*>& dst, 
         ri->clause = (Expr*)oe;
 
         bool left = true;
-        for (const auto [relId, varId] : eq.Vars) {
+        for (const auto& [relId, varId] : eq.Vars) {
             ri->required_relids = bms_add_member(ri->required_relids, relId);
             ri->clause_relids = bms_add_member(ri->clause_relids, relId);
             if (left) {
@@ -402,9 +412,302 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
     return result;
 }
 
-IOptimizer* MakePgOptimizer(const IOptimizer::TInput& input, const std::function<void(const TString&)>& log)
+struct TPgOptimizerImpl
+{
+    TPgOptimizerImpl(
+        const std::shared_ptr<TJoinOptimizerNode>& root,
+        TExprContext& ctx,
+        const std::function<void(const TString&)>& log)
+        : Root(root)
+        , Ctx(ctx)
+        , Log(log)
+    { }
+
+    std::shared_ptr<TJoinOptimizerNode> Do() {
+        CollectRels(Root);
+        if (!CollectOps(Root)) {
+            return Root;
+        }
+
+        IOptimizer::TInput input;
+        input.EqClasses = std::move(EqClasses);
+        input.Left = std::move(Left);
+        input.Right = std::move(Right);
+        input.Rels = std::move(Rels);
+        input.Normalize();
+        Log("Input: " + input.ToString());
+
+        std::unique_ptr<IOptimizer> opt = std::unique_ptr<IOptimizer>(MakePgOptimizerInternal(input, Log));
+        Result = opt->JoinSearch();
+
+        Log("Result: " + Result.ToString());
+
+        std::shared_ptr<IBaseOptimizerNode> res = Convert(0);
+        YQL_ENSURE(res);
+
+        return std::static_pointer_cast<TJoinOptimizerNode>(res);
+    }
+
+    void OnLeaf(const std::shared_ptr<TRelOptimizerNode>& leaf) {
+        int relId = Rels.size() + 1;
+        Rels.emplace_back(IOptimizer::TRel{});
+        Var2TableCol.emplace_back();
+        // rel -> varIds
+        VarIds.emplace_back(THashMap<TStringBuf, int>{});
+        // rel -> tables
+        RelTables.emplace_back(std::vector<TStringBuf>{});
+        for (const auto& table : leaf->Labels()) {
+            RelTables.back().emplace_back(table);
+            Table2RelIds[table].emplace_back(relId);
+        }
+        auto& rel = Rels[relId - 1];
+
+        rel.Rows = leaf->Stats->Nrows;
+        rel.TotalCost = leaf->Stats->Cost;
+
+        int leafIndex = relId - 1;
+        if (leafIndex >= static_cast<int>(Leafs.size())) {
+            Leafs.resize(leafIndex + 1);
+        }
+        Leafs[leafIndex] = leaf;
+    }
+
+    int GetVarId(int relId, TStringBuf column) {
+        int varId = 0;
+        auto maybeVarId = VarIds[relId-1].find(column);
+        if (maybeVarId != VarIds[relId-1].end()) {
+            varId = maybeVarId->second;
+        } else {
+            varId = Rels[relId - 1].TargetVars.size() + 1;
+            VarIds[relId - 1][column] = varId;
+            Rels[relId - 1].TargetVars.emplace_back();
+            Var2TableCol[relId - 1].emplace_back();
+        }
+        return varId;
+    }
+
+    void ExtractVars(
+        std::vector<std::tuple<int,int,TStringBuf,TStringBuf>>& leftVars,
+        std::vector<std::tuple<int,int,TStringBuf,TStringBuf>>& rightVars,
+        const std::shared_ptr<TJoinOptimizerNode>& op)
+    {
+        for (auto& [l, r]: op->JoinConditions) {
+            auto& ltable = l.RelName;
+            auto& lcol = l.AttributeName;
+            auto& rtable = r.RelName;
+            auto& rcol = r.AttributeName;
+
+            const auto& lrelIds = Table2RelIds[ltable];
+            YQL_ENSURE(!lrelIds.empty());
+            const auto& rrelIds = Table2RelIds[rtable];
+            YQL_ENSURE(!rrelIds.empty());
+
+            for (int relId : lrelIds) {
+                int varId = GetVarId(relId, lcol);
+
+                leftVars.emplace_back(std::make_tuple(relId, varId, ltable, lcol));
+            }
+            for (int relId : rrelIds) {
+                int varId = GetVarId(relId, rcol);
+
+                rightVars.emplace_back(std::make_tuple(relId, varId, rtable, rcol));
+            }
+        }
+    }
+
+    IOptimizer::TEq MakeEqClass(const auto& vars) {
+        IOptimizer::TEq eqClass;
+
+        for (auto& [relId, varId, table, column] : vars) {
+            eqClass.Vars.emplace_back(std::make_tuple(relId, varId));
+            Var2TableCol[relId - 1][varId - 1] = std::make_tuple(table, column);
+        }
+
+        return eqClass;
+    }
+
+    void MakeEqClasses(std::vector<IOptimizer::TEq>& res, const auto& leftVars, const auto& rightVars) {
+        for (int i = 0; i < (int)leftVars.size(); i++) {
+            auto& [lrelId, lvarId, ltable, lcolumn] = leftVars[i];
+            auto& [rrelId, rvarId, rtable, rcolumn] = rightVars[i];
+
+            IOptimizer::TEq eqClass; eqClass.Vars.reserve(2);
+            eqClass.Vars.emplace_back(std::make_tuple(lrelId, lvarId));
+            eqClass.Vars.emplace_back(std::make_tuple(rrelId, rvarId));
+
+            Var2TableCol[lrelId - 1][lvarId - 1] = std::make_tuple(ltable, lcolumn);
+            Var2TableCol[rrelId - 1][rvarId - 1] = std::make_tuple(rtable, rcolumn);
+
+            res.emplace_back(std::move(eqClass));
+        }
+    }
+
+    bool OnOp(const std::shared_ptr<TJoinOptimizerNode>& op) {
+#define CHECK(A, B)                                                     \
+        if (Y_UNLIKELY(!(A))) {                                         \
+            TIssues issues;                                             \
+            issues.AddIssue(TIssue(B).SetCode(0, NYql::TSeverityIds::S_INFO)); \
+            Ctx.IssueManager.AddIssues(issues);                         \
+            return false;                                               \
+        }
+
+        if (op->JoinType == InnerJoin) {
+            // relId, varId, table, column
+            std::vector<std::tuple<int,int,TStringBuf,TStringBuf>> leftVars;
+            std::vector<std::tuple<int,int,TStringBuf,TStringBuf>> rightVars;
+
+            ExtractVars(leftVars, rightVars, op);
+
+            CHECK(leftVars.size() == rightVars.size(), "Left and right labels must have the same size");
+
+            MakeEqClasses(EqClasses, leftVars, rightVars);
+        } else if (op->JoinType == LeftJoin || op->JoinType == RightJoin) {
+            CHECK(op->JoinConditions.size() == 1, "Only 1 var per join supported");
+
+            std::vector<std::tuple<int,int,TStringBuf,TStringBuf>> leftVars, rightVars;
+            ExtractVars(leftVars, rightVars, op);
+
+            IOptimizer::TEq leftEqClass = MakeEqClass(leftVars);
+            IOptimizer::TEq rightEqClass = MakeEqClass(rightVars);
+            IOptimizer::TEq eqClass = leftEqClass;
+            eqClass.Vars.insert(eqClass.Vars.end(), rightEqClass.Vars.begin(), rightEqClass.Vars.end());
+
+            CHECK(eqClass.Vars.size() == 2, "Only a=b left|right join supported yet");
+
+            EqClasses.emplace_back(std::move(leftEqClass));
+            EqClasses.emplace_back(std::move(rightEqClass));
+            if (op->JoinType == LeftJoin) {
+                Left.emplace_back(eqClass);
+            } else {
+                Right.emplace_back(eqClass);
+            }
+        } else {
+            CHECK(false, "Unsupported join type");
+        }
+
+#undef CHECK
+        return true;
+    }
+
+    bool CollectOps(const std::shared_ptr<IBaseOptimizerNode>& node)
+    {
+        if (node->Kind == JoinNodeType) {
+            auto op = std::static_pointer_cast<TJoinOptimizerNode>(node);
+            return OnOp(op)
+                && CollectOps(op->LeftArg)
+                && CollectOps(op->RightArg);
+        }
+        return true;
+    }
+
+    void CollectRels(const std::shared_ptr<IBaseOptimizerNode>& node) {
+        if (node->Kind == JoinNodeType) {
+            auto op = std::static_pointer_cast<TJoinOptimizerNode>(node);
+            CollectRels(op->LeftArg);
+            CollectRels(op->RightArg);
+        } else if (node->Kind == RelNodeType) {
+            OnLeaf(std::static_pointer_cast<TRelOptimizerNode>(node));
+        } else {
+            YQL_ENSURE(false, "Unknown node kind");
+        }
+    }
+
+    std::shared_ptr<IBaseOptimizerNode> Convert(int nodeId) const {
+        const auto* node = &Result.Nodes[nodeId];
+        if (node->Outer == -1 && node->Inner == -1) {
+            YQL_ENSURE(node->Rels.size() == 1);
+            auto leaf = Leafs[node->Rels[0]-1];
+            return leaf;
+        } else if (node->Outer != -1 && node->Inner != -1) {
+            EJoinKind joinKind;
+            switch (node->Mode) {
+            case IOptimizer::EJoinType::Inner:
+                joinKind = InnerJoin; break;
+            case IOptimizer::EJoinType::Left:
+                joinKind = LeftJoin; break;
+            case IOptimizer::EJoinType::Right:
+                joinKind = RightJoin; break;
+            default:
+                YQL_ENSURE(false, "Unsupported join type");
+                break;
+            };
+
+            auto left = Convert(node->Outer);
+            auto right = Convert(node->Inner);
+
+            YQL_ENSURE(node->LeftVars.size() == node->RightVars.size());
+
+            std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>> joinConditions;
+            for (size_t i = 0; i < node->LeftVars.size(); i++) {
+                auto [lrelId, lvarId] = node->LeftVars[i];
+                auto [rrelId, rvarId] = node->RightVars[i];
+                auto [ltable, lcolumn] = Var2TableCol[lrelId - 1][lvarId - 1];
+                auto [rtable, rcolumn] = Var2TableCol[rrelId - 1][rvarId - 1];
+
+                joinConditions.insert({
+                    NDq::TJoinColumn{TString(ltable), TString(lcolumn)},
+                    NDq::TJoinColumn{TString(rtable), TString(rcolumn)}
+                });
+            }
+
+            return std::make_shared<TJoinOptimizerNode>(
+                left, right,
+                joinConditions,
+                joinKind,
+                GraceJoin
+                );
+        } else {
+            YQL_ENSURE(false, "Wrong CBO node");
+        }
+        return nullptr;
+    }
+
+    std::shared_ptr<TJoinOptimizerNode> Root;
+    TExprContext& Ctx;
+    std::function<void(const TString&)> Log;
+
+    THashMap<TStringBuf, std::vector<int>> Table2RelIds;
+    std::vector<IOptimizer::TRel> Rels;
+    std::vector<std::vector<TStringBuf>> RelTables;
+    std::vector<std::shared_ptr<TRelOptimizerNode>> Leafs;
+    std::vector<std::vector<std::tuple<TStringBuf, TStringBuf>>> Var2TableCol;
+
+    std::vector<THashMap<TStringBuf, int>> VarIds;
+
+    std::vector<IOptimizer::TEq> EqClasses;
+    std::vector<IOptimizer::TEq> Left;
+    std::vector<IOptimizer::TEq> Right;
+
+    IOptimizer::TOutput Result;
+};
+
+class TPgOptimizerNew: public IOptimizerNew
+{
+public:
+    TPgOptimizerNew(IProviderContext& pctx, TExprContext& ctx, const std::function<void(const TString&)>& log)
+        : IOptimizerNew(pctx)
+        , Ctx(ctx)
+        , Log(log)
+    { }
+
+    std::shared_ptr<TJoinOptimizerNode> JoinSearch(const std::shared_ptr<TJoinOptimizerNode>& joinTree) override
+    {
+        return TPgOptimizerImpl(joinTree, Ctx, Log).Do();
+    }
+
+private:
+    TExprContext& Ctx;
+    std::function<void(const TString&)> Log;
+};
+
+IOptimizer* MakePgOptimizerInternal(const IOptimizer::TInput& input, const std::function<void(const TString&)>& log)
 {
     return new TPgOptimizer(input, log);
+}
+
+IOptimizerNew* MakePgOptimizerNew(IProviderContext& pctx, TExprContext& ctx, const std::function<void(const TString&)>& log)
+{
+    return new TPgOptimizerNew(pctx, ctx, log);
 }
 
 } // namespace NYql {

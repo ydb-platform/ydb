@@ -26,12 +26,10 @@ void TTester::Setup(TTestActorRuntime& runtime) {
 
     auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
                       "dc-1", domainId, FAKE_SCHEMESHARD_TABLET_ID,
-                      domainId, domainId, std::vector<ui32>{domainId},
-                      domainId, std::vector<ui32>{domainId},
                       planResolution,
-                      std::vector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(domainId, 1)},
+                      std::vector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(1)},
                       std::vector<ui64>{},
-                      std::vector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(domainId, 1)});
+                      std::vector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(1)});
 
     TVector<ui64> ids = runtime.GetTxAllocatorTabletIds();
     ids.insert(ids.end(), domain->TxAllocators.begin(), domain->TxAllocators.end());
@@ -123,7 +121,7 @@ bool WriteDataImpl(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shar
 }
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId, const ui64 writeId, const ui64 tableId, const TString& data,
-                              const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema, std::vector<ui64>* writeIds) {
+                              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>* writeIds) {
     NLongTxService::TLongTxId longTxId;
     UNIT_ASSERT(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
     return WriteDataImpl(runtime, sender, shardId, tableId, longTxId, writeId, data, NArrow::MakeArrowSchema(ydbSchema), writeIds);
@@ -131,7 +129,7 @@ bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId,
 }
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 writeId, const ui64 tableId, const TString& data,
-                              const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema, bool waitResult, std::vector<ui64>* writeIds) {
+                              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, bool waitResult, std::vector<ui64>* writeIds) {
     NLongTxService::TLongTxId longTxId;
     UNIT_ASSERT(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
     if (writeIds) {
@@ -143,7 +141,7 @@ bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 writeId,
 
 std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, const NLongTxService::TLongTxId& longTxId,
                               ui64 tableId, const ui64 writePartId, const TString& data,
-                              const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema)
+                              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema)
 {
     auto write = std::make_unique<TEvColumnShard::TEvWrite>(sender, longTxId, tableId, "0", data, writePartId);
     write->SetArrowSchema(NArrow::SerializeSchema(*NArrow::MakeArrowSchema(ydbSchema)));
@@ -295,18 +293,17 @@ std::vector<TCell> MakeTestCells(const std::vector<TTypeInfo>& types, ui32 value
 }
 
 
-TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<std::pair<TString, TTypeInfo>>& columns,
+TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<NArrow::NTest::TTestColumn>& columns,
                      const TTestBlobOptions& options, const std::set<std::string>& notNullColumns) {
-    TString err;
     NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::LZ4_FRAME, notNullColumns);
-    batchBuilder.Start(columns, 0, 0, err);
+    batchBuilder.Start(NArrow::NTest::TTestColumn::ConvertToPairs(columns));
 
     std::vector<ui32> nullPositions;
     std::vector<ui32> samePositions;
     for (size_t i = 0; i < columns.size(); ++i) {
-        if (options.NullColumns.contains(columns[i].first)) {
+        if (options.NullColumns.contains(columns[i].GetName())) {
             nullPositions.push_back(i);
-        } else if (options.SameValueColumns.contains(columns[i].first)) {
+        } else if (options.SameValueColumns.contains(columns[i].GetName())) {
             samePositions.push_back(i);
         }
     }
@@ -348,7 +345,7 @@ TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<std::pair<TS
 }
 
 TSerializedTableRange MakeTestRange(std::pair<ui64, ui64> range, bool inclusiveFrom, bool inclusiveTo,
-                                    const std::vector<std::pair<TString, TTypeInfo>>& columns) {
+                                    const std::vector<NArrow::NTest::TTestColumn>& columns) {
     std::vector<TString> mem;
     std::vector<TTypeInfo> types = TTestSchema::ExtractTypes(columns);
     std::vector<TCell> cellsFrom = MakeTestCells(types, range.first, mem);
@@ -375,10 +372,10 @@ NMetadata::NFetcher::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpec
             cProto.SetName(tier.Name);
             *cProto.MutableObjectStorage() = tier.S3;
             if (tier.Codec) {
-                cProto.MutableCompression()->SetCompressionCodec(tier.GetCodecId());
+                cProto.MutableCompression()->SetCodec(tier.GetCodecId());
             }
             if (tier.CompressionLevel) {
-                cProto.MutableCompression()->SetCompressionLevel(*tier.CompressionLevel);
+                cProto.MutableCompression()->SetLevel(*tier.CompressionLevel);
             }
             NColumnShard::NTiers::TTierConfig tConfig(tier.Name, cProto);
             cs->MutableTierConfigs().emplace(tConfig.GetTierName(), tConfig);
@@ -392,24 +389,26 @@ NMetadata::NFetcher::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpec
 }
 
 namespace NKikimr::NColumnShard {
-    NOlap::TIndexInfo BuildTableInfo(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema,
-                         const std::vector<std::pair<TString, NScheme::TTypeInfo>>& key) {
+    NOlap::TIndexInfo BuildTableInfo(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
+                         const std::vector<NArrow::NTest::TTestColumn>& key) {
         NOlap::TIndexInfo indexInfo = NOlap::TIndexInfo::BuildDefault();
 
         for (ui32 i = 0; i < ydbSchema.size(); ++i) {
             ui32 id = i + 1;
-            auto& name = ydbSchema[i].first;
-            auto& type = ydbSchema[i].second;
+            auto& name = ydbSchema[i].GetName();
+            auto& type = ydbSchema[i].GetType();
 
             indexInfo.Columns[id] = NTable::TColumn(name, id, type, "");
             indexInfo.ColumnNames[name] = id;
         }
 
-        for (const auto& [keyName, keyType] : key) {
-            indexInfo.KeyColumns.push_back(indexInfo.ColumnNames[keyName]);
+        for (const auto& c : key) {
+            indexInfo.KeyColumns.push_back(indexInfo.ColumnNames[c.GetName()]);
         }
 
-        indexInfo.SetAllKeys();
+        auto storage = std::make_shared<NOlap::TTestStoragesManager>();
+        storage->Initialize();
+        indexInfo.SetAllKeys(std::make_shared<NOlap::TTestStoragesManager>());
         return indexInfo;
     }
 
@@ -430,7 +429,7 @@ namespace NKikimr::NColumnShard {
         PlanSchemaTx(runtime, sender, snap);
     }
 
-    void PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema, const ui32 keySize) {
+    void PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize) {
         using namespace NTxUT;
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
 
@@ -449,10 +448,10 @@ namespace NKikimr::NColumnShard {
         SetupSchema(runtime, sender, tableId, tableDescription);
     }
 
-    std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema) {
+    std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<NArrow::NTest::TTestColumn>& schema) {
         std::vector<TString> fields;
         for (auto&& f : schema) {
-            fields.emplace_back(f.first);
+            fields.emplace_back(f.GetName());
         }
 
         NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);

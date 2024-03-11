@@ -354,7 +354,7 @@ protected:
 
         auto usePhases = State_->Configuration->UseAggPhases.Get().GetOrElse(false);
         auto usePartitionsByKeys = State_->Configuration->UsePartitionsByKeysForFinalAgg.Get().GetOrElse(true);
-        TAggregateExpander aggExpander(true, usePartitionsByKeys, false, node.Ptr(), ctx, *State_->Types, false, false, usePhases);
+        TAggregateExpander aggExpander(usePartitionsByKeys, false, node.Ptr(), ctx, *State_->Types, false, false, usePhases);
         return aggExpander.ExpandAggregate();
     }
 

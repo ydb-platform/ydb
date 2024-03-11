@@ -1,57 +1,29 @@
 GO_LIBRARY()
-
-SRCS(
-    allocs.go
-    benchmark.go
-    cover.go
-    example.go
-    fuzz.go
-    match.go
-    newcover.go
-    run_example.go
-    testing.go
-)
-
-GO_TEST_SRCS(
-    export_test.go
-    helper_test.go
-    helperfuncs_test.go
-    match_test.go
-    sub_test.go
-)
-
-GO_XTEST_SRCS(
-    allocs_test.go
-    benchmark_test.go
-    flag_test.go
-    panic_test.go
-    testing_test.go
-)
-
-IF (OS_LINUX)
+IF (OS_DARWIN AND ARCH_ARM64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_ARM64 AND RACE AND NOT CGO_ENABLED OR OS_DARWIN AND ARCH_ARM64 AND NOT RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_ARM64 AND NOT RACE AND NOT CGO_ENABLED OR OS_DARWIN AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_X86_64 AND RACE AND NOT CGO_ENABLED OR OS_DARWIN AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_X86_64 AND NOT RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND NOT RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND NOT RACE AND NOT CGO_ENABLED)
     SRCS(
-        testing_other.go
+		allocs.go
+		benchmark.go
+		cover.go
+		example.go
+		fuzz.go
+		match.go
+		newcover.go
+		run_example.go
+		testing.go
+		testing_other.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND RACE AND NOT CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+		allocs.go
+		benchmark.go
+		cover.go
+		example.go
+		fuzz.go
+		match.go
+		newcover.go
+		run_example.go
+		testing.go
+		testing_windows.go
     )
 ENDIF()
-
-IF (OS_DARWIN)
-    SRCS(
-        testing_other.go
-    )
-ENDIF()
-
-IF (OS_WINDOWS)
-    SRCS(
-        testing_windows.go
-    )
-ENDIF()
-
 END()
-
-RECURSE(
-    fstest
-    internal
-    iotest
-    quick
-    slogtest
-)

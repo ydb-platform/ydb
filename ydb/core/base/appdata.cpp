@@ -18,6 +18,9 @@
 #include <ydb/core/protos/key.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/stream.pb.h>
+#include <ydb/core/protos/netclassifier.pb.h>
+#include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/shared_cache.pb.h>
 #include <ydb/library/pdisk_io/aio.h>
 
 #include <ydb/library/actors/interconnect/poller_tcp.h>
@@ -75,6 +78,8 @@ TAppData::TAppData(
     , BootstrapConfigPtr(new NKikimrConfig::TBootstrap())
     , AwsCompatibilityConfigPtr(new NKikimrConfig::TAwsCompatibilityConfig())
     , S3ProxyResolverConfigPtr(new NKikimrConfig::TS3ProxyResolverConfig())
+    , GraphConfigPtr(new NKikimrConfig::TGraphConfig())
+    , BackgroundCleaningConfigPtr(new NKikimrConfig::TBackgroundCleaningConfig())
     , StreamingConfig(*StreamingConfigPtr.get())
     , PQConfig(*PQConfigPtr.get())
     , PQClusterDiscoveryConfig(*PQClusterDiscoveryConfigPtr.get())
@@ -96,8 +101,10 @@ TAppData::TAppData(
     , BootstrapConfig(*BootstrapConfigPtr.get())
     , AwsCompatibilityConfig(*AwsCompatibilityConfigPtr.get())
     , S3ProxyResolverConfig(*S3ProxyResolverConfigPtr.get())
+    , BackgroundCleaningConfig(*BackgroundCleaningConfigPtr.get())
+    , GraphConfig(*GraphConfigPtr.get())
     , KikimrShouldContinue(kikimrShouldContinue)
-    
+
 {}
 
 TIntrusivePtr<IRandomProvider> TAppData::RandomProvider = CreateDefaultRandomProvider();

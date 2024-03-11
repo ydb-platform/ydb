@@ -1990,6 +1990,19 @@ public:
     virtual void Load(IInputStream& stream) override { Load(&stream); } \
     Y_PASS_VA_ARGS(Y_SAVELOAD_DEFINE(__VA_ARGS__))
 
+///
+/// @brief Same as the macro above, but also calls Base class's SaveLoad methods.
+#define Y_SAVELOAD_JOB_DERIVED(Base, ...) \
+    virtual void Save(IOutputStream& stream) const override { \
+        Base::Save(stream); \
+        Save(&stream); \
+    } \
+    virtual void Load(IInputStream& stream) override { \
+        Base::Load(stream); \
+        Load(&stream); \
+    } \
+    Y_PASS_VA_ARGS(Y_SAVELOAD_DEFINE(__VA_ARGS__))
+
 ////////////////////////////////////////////////////////////////////////////////
 
 ///

@@ -1,15 +1,125 @@
-#include "mkql_alloc.h"
+#include <ydb/library/yql/parser/pg_wrapper/pg_compat.h>
+
 #include "mkql_type_ops.h"
+#include "mkql_alloc.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/format.h>
 #include <util/stream/str.h>
+
+extern "C" {
+#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/datatype/timestamp.h>
+#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/utils/datetime.h>
+}
+
 using namespace NYql;
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
 Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
+    Y_UNIT_TEST(IsLeapYear) {
+        UNIT_ASSERT(IsLeapYear(-401));
+        UNIT_ASSERT(!IsLeapYear(-400));
+        UNIT_ASSERT(!IsLeapYear(-101));
+        UNIT_ASSERT(!IsLeapYear(-100));
+        UNIT_ASSERT(IsLeapYear(-5));
+        UNIT_ASSERT(!IsLeapYear(-4));
+        UNIT_ASSERT(IsLeapYear(-1));
+        UNIT_ASSERT(!IsLeapYear(1));
+        UNIT_ASSERT(IsLeapYear(4));
+        UNIT_ASSERT(!IsLeapYear(100));
+        UNIT_ASSERT(IsLeapYear(400));
+        UNIT_ASSERT(!IsLeapYear(1970));
+        UNIT_ASSERT(IsLeapYear(2000));
+        UNIT_ASSERT(IsLeapYear(2400));
+    }
+
+    Y_UNIT_TEST(Date16vs32) {
+        for (ui16 value16 = 0; value16 < NUdf::MAX_DATE; ++value16) {
+            const NUdf::TUnboxedValue& strDate16 = ValueToString(NUdf::EDataSlot::Date, NUdf::TUnboxedValuePod(value16));
+            UNIT_ASSERT(strDate16.HasValue());
+            auto value32 = ValueFromString(NUdf::EDataSlot::Date32, strDate16.AsStringRef());
+            UNIT_ASSERT(value32.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(value16, value32.Get<i32>());
+            const NUdf::TUnboxedValue& strDate32 = ValueToString(NUdf::EDataSlot::Date32, NUdf::TUnboxedValuePod(value32.Get<i32>()));
+            UNIT_ASSERT(strDate32.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(strDate16.AsStringRef(), strDate32.AsStringRef());
+        }
+    }
+
+    Y_UNIT_TEST(Date32vsPostgres) {
+        int value;
+        UNIT_ASSERT(MakeDate32(JULIAN_MINYEAR, JULIAN_MINMONTH, JULIAN_MINDAY, value));
+        for (; value < NUdf::MAX_DATE32; ++value) {
+            i32 year;
+            ui32 month, day;
+            UNIT_ASSERT(SplitDate32(value, year, month, day));
+            if (year < 0) {
+                year++;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(value, date2j(year, month, day) - UNIX_EPOCH_JDATE);
+        }
+    }
+
+    Y_UNIT_TEST(PostgresVsDate32) {
+        for (int value = DATETIME_MIN_JULIAN; value < DATE_END_JULIAN; ++value) {
+            int year, month, day;
+            j2date(value, &year, &month, &day);
+            i32 date32;
+            if (year <= 0) {
+                year--;
+            }
+            UNIT_ASSERT(MakeDate32(year, static_cast<ui32>(month), static_cast<ui32>(day), date32));
+            UNIT_ASSERT_VALUES_EQUAL(date32, value - UNIX_EPOCH_JDATE);
+            if (date32 == NUdf::MAX_DATE32) {
+                break;
+            }
+        }
+    }
+
+    Y_UNIT_TEST(Datetime32vs64) {
+        TScopedAlloc alloc(__LOCATION__);
+        for (ui32 v32 = 0; v32 <= 86400; ++v32) {
+            const NUdf::TUnboxedValue str32 = ValueToString(NUdf::EDataSlot::Datetime, NUdf::TUnboxedValuePod(v32));
+            UNIT_ASSERT(str32.HasValue());
+            auto v64 = ValueFromString(NUdf::EDataSlot::Datetime64, str32.AsStringRef());
+            UNIT_ASSERT(v64.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(v32, v64.Get<i64>());
+            const NUdf::TUnboxedValue str64 = ValueToString(NUdf::EDataSlot::Datetime64, NUdf::TUnboxedValuePod(v64.Get<i64>()));
+            UNIT_ASSERT(str64.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(str32.AsStringRef(), str64.AsStringRef());
+        }
+    }
+
+    Y_UNIT_TEST(TimestampOldVsNew) {
+        TScopedAlloc alloc(__LOCATION__);
+        for (ui64 val = 0; val <= 86400000000; val += 1000003) {
+            const NUdf::TUnboxedValue str32 = ValueToString(NUdf::EDataSlot::Timestamp, NUdf::TUnboxedValuePod(val));
+            UNIT_ASSERT(str32.HasValue());
+            auto v64 = ValueFromString(NUdf::EDataSlot::Timestamp64, str32.AsStringRef());
+            UNIT_ASSERT(v64.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(val, v64.Get<i64>());
+            const NUdf::TUnboxedValue str64 = ValueToString(NUdf::EDataSlot::Timestamp64, NUdf::TUnboxedValuePod(v64.Get<i64>()));
+            UNIT_ASSERT(str64.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(str32.AsStringRef(), str64.AsStringRef());
+        }
+    }
+
+    Y_UNIT_TEST(IntervalOldVsNew) {
+        TScopedAlloc alloc(__LOCATION__);
+        for (ui64 val = -86400000000; val <= 86400000000; val += 1000003) {
+            const NUdf::TUnboxedValue str32 = ValueToString(NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(val));
+            UNIT_ASSERT(str32.HasValue());
+            auto v64 = ValueFromString(NUdf::EDataSlot::Interval64, str32.AsStringRef());
+            UNIT_ASSERT(v64.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(val, v64.Get<i64>());
+            const NUdf::TUnboxedValue str64 = ValueToString(NUdf::EDataSlot::Interval64, NUdf::TUnboxedValuePod(v64.Get<i64>()));
+            UNIT_ASSERT(str64.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(str32.AsStringRef(), str64.AsStringRef());
+        }
+    }
+
     Y_UNIT_TEST(DateInOut) {
         ui32 year = 1970;
         ui32 month = 1;
@@ -107,7 +217,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
         return ValueFromString(NUdf::EDataSlot::Timestamp, buf);
     }
 
-    Y_UNIT_TEST(TimestampSeriailization) {
+    Y_UNIT_TEST(TimestampSerialization) {
         UNIT_ASSERT(!ParseTimestamp("2020-07-28T21:46:05.55045#"));
         UNIT_ASSERT(!ParseTimestamp("2020-07-28T21:46:05.55045"));
         UNIT_ASSERT(!ParseTimestamp("2020-07-28T21:46:05."));

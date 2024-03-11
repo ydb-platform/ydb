@@ -55,7 +55,7 @@ namespace NPageCollection {
                 refs.push_back({ largeGlobId.Lead, std::move(body) });
             } else {
                 ui32 off = 0;
-                for (auto blobId : largeGlobId.Blobs()) {
+                for (const auto& blobId : largeGlobId.Blobs()) {
                     const ui32 chunk = Min(Block, size - off);
                     Y_DEBUG_ABORT_UNLESS(chunk == blobId.BlobSize());
                     refs.push_back({ blobId, body.substr(off, chunk) });

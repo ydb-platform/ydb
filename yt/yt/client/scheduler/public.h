@@ -132,6 +132,7 @@ DEFINE_ENUM(EAbortReason,
     ((JobSettlementTimedOut)           ( 50))
     ((NonexistentPoolTree)             ( 51))
     ((WrongSchedulingSegmentModule)    ( 52))
+    ((UnresolvedNodeId)                ( 53))
     ((SchedulingFirst)                 (100))
     ((SchedulingTimeout)               (101))
     ((SchedulingResourceOvercommit)    (102))

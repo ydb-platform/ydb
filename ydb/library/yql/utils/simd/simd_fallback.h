@@ -63,6 +63,44 @@ struct TBase {
     };
 };
 
+template <typename T>
+struct FallbackTrait {
+
+    T Value;
+    
+    static const int SIZE = sizeof(T);
+
+    inline FallbackTrait() : Value() {}
+
+    inline FallbackTrait(const FallbackTrait& other) : Value(other.Value) {}
+
+    inline FallbackTrait(const T* ptr) : Value(*ptr) {}
+
+    inline FallbackTrait& operator=(const FallbackTrait& other) {
+        if (&other == this) return *this;
+
+        Value = other.Value;
+        return *this;
+    }
+
+    inline FallbackTrait& operator+=(const FallbackTrait& other) {
+        Value += other.Value;
+        return *this;
+    }
+
+    inline FallbackTrait operator+(const FallbackTrait& other) {
+        FallbackTrait ans;
+
+        ans += other;
+        
+        return ans;
+    }
+
+    inline void Store(T* ptr) {
+        *ptr = Value;
+    }
+};
+
 template<typename T, typename Mask=TSimd8<bool>>
 struct TBase8: TBase<TSimd8<T>> {
 

@@ -200,16 +200,12 @@ public:
     }
 
     void SetTempTables(NKikimr::NKqp::TKqpTempTablesState::TConstPtr tempTablesState) {
-        if (tempTablesState) {
-            for (const auto& [path, info] : tempTablesState->TempTables) {
-                TempTables[path.second + *tempTablesState->SessionId] = path.second;
-            }
-        }
+        TempTablesState = std::move(tempTablesState);
     }
 
 private:
     THashMap<std::pair<TString, TString>, TKikimrTableDescription> Tables;
-    THashMap<TString, TString> TempTables;
+    NKikimr::NKqp::TKqpTempTablesState::TConstPtr TempTablesState;
 };
 
 enum class TYdbOperation : ui32 {
@@ -288,11 +284,7 @@ public:
     }
 
     void SetTempTables(NKikimr::NKqp::TKqpTempTablesState::TConstPtr tempTablesState) {
-        if (tempTablesState) {
-            for (const auto& [path, info] : tempTablesState->TempTables) {
-                TempTables[path.second] = path.second + *tempTablesState->SessionId;
-            }
-        }
+        TempTablesState = std::move(tempTablesState);
     }
 
     template<class IterableKqpTableOps, class IterableKqpTableInfos>
@@ -330,16 +322,15 @@ public:
         }
 
         for (const auto& op : operations) {
-            const auto& table = [&]() -> const TString& {
-                const auto tempTable = TempTables.FindPtr(op.GetTable());
-                if (tempTable) {
-                    return *tempTable;
-                } else {
-                    return op.GetTable();
-                }
-            }();
-
             const auto newOp = TYdbOperation(op.GetOperation());
+
+            auto table = op.GetTable();
+            if (TempTablesState) {
+                auto tempTableInfoIt = TempTablesState->FindInfo(table, false);
+                if (tempTableInfoIt != TempTablesState->TempTables.end()) {
+                    table = tempTableInfoIt->first + TempTablesState->SessionId;
+                }
+            }
 
             const auto info = tableInfoMap.FindPtr(table);
             if (!info) {
@@ -450,7 +441,7 @@ public:
     THashMap<TString, TYdbOperations> TableOperations;
     THashMap<TKikimrPathId, TString> TableByIdMap;
     TMaybe<NKikimrKqp::EIsolationLevel> EffectiveIsolationLevel;
-    THashMap<TString, TString> TempTables;
+    NKikimr::NKqp::TKqpTempTablesState::TConstPtr TempTablesState;
     bool Readonly = false;
     bool Invalidated = false;
     bool Closed = false;
@@ -535,7 +526,7 @@ public:
         if (TxCtx) {
             TxCtx->SetTempTables(tempTablesState);
         }
-        TempTablesState = tempTablesState;
+        TempTablesState = std::move(tempTablesState);
     }
 
     const TIntrusiveConstPtr<NACLib::TUserToken>& GetUserToken() const {

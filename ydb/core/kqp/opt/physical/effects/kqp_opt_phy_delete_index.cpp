@@ -81,6 +81,7 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
     auto tableDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
         .Table(del.Table())
         .Input(lookupKeys)
+        .ReturningColumns(del.ReturningColumns())
         .Done();
 
     TVector<TExprBase> effects;
@@ -102,6 +103,7 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
         auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
             .Table(tableNode)
             .Input(deleteIndexKeys)
+            .ReturningColumns<TCoAtomList>().Build()
             .Done();
 
         effects.emplace_back(std::move(indexDelete));

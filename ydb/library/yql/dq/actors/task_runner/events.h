@@ -25,21 +25,21 @@ struct TTaskRunnerEvents {
     enum {
         EvCreate = EventSpaceBegin(NActors::TEvents::EEventSpace::ES_USERSPACE) + 20000,
         EvCreateFinished,
-        // channel->Pop -> TEvChannelPopFinished
-        EvPop,
-        EvPopFinished,
-        // channel->Push -> TEvPushFinished
-        EvPush,
-        EvPushFinished,
+
+        EvOutputChannelDataRequest,
+        EvOutputChannelData,
+
+	EvInputChannelData,
+        EvInputChannelDataAck,
+
+	// EvContinueRun -> TaskRunner->Run() -> TEvTaskRunFinished
         EvContinueRun,
-        // EvContinueRun -> TaskRunner->Run() -> TEvTaskRunFinished
         EvRunFinished,
 
-        EvAsyncInputPush,
-        EvAsyncInputPushFinished,
+        EvSourceDataAck,
 
-        EvSinkPop,
-        EvSinkPopFinished,
+        EvSinkDataRequest,
+        EvSinkData,
 
         EvLoadTaskRunnerFromState,
         EvLoadTaskRunnerFromStateDone,
@@ -90,16 +90,19 @@ struct TEvError
     TMaybe<TStatus> Status = Nothing();
 };
 
-struct TEvPop
-    : NActors::TEventLocal<TEvPop, TTaskRunnerEvents::EvPop>
+//Sent by ComputActor to TaskRunnerActor to request data from output channel.
+//Upon receiving this event, TaskRunnerActor reads data from corresponding TaskRunner's output channel,
+//collects data by chunks and then sends data chunks to the sender of this message with TEvOutputChaanelData.
+//See also notes to TEvOutpuChannelData.
+struct TEvOutputChannelDataRequest
+    : NActors::TEventLocal<TEvOutputChannelDataRequest, TTaskRunnerEvents::EvOutputChannelDataRequest>
 {
-    TEvPop() = default;
-    TEvPop(ui32 channelId, bool wasFinished, i64 toPop)
+    TEvOutputChannelDataRequest(ui32 channelId, bool wasFinished, i64 requestedSize)
         : ChannelId(channelId)
         , WasFinished(wasFinished)
-        , Size(toPop)
+        , Size(requestedSize)
     { }
-    TEvPop(ui32 channelId)
+    TEvOutputChannelDataRequest(ui32 channelId)
         : ChannelId(channelId)
         , WasFinished(false)
         , Size(0)
@@ -110,45 +113,37 @@ struct TEvPop
     const i64 Size;
 };
 
-struct TEvPush
-    : NActors::TEventLocal<TEvPush, TTaskRunnerEvents::EvPush>
+//Sent by ComputeActor to TaskRunnerActor and contains a portion on input channel data
+//Upon receiving this event, TaskRunnerActor moves data to its input channel buffer and send TEvInputChannelDataAck back to the sender
+//See also notes to TEvInputChannelDataAck
+struct TEvInputChannelData
+    : NActors::TEventLocal<TEvInputChannelData, TTaskRunnerEvents::EvInputChannelData>
 {
-    TEvPush() = default;
-    TEvPush(ui32 channelId, bool finish = true, bool pauseAfterPush = false, bool isOut = false)
+    TEvInputChannelData(ui32 channelId, std::optional<TDqSerializedBatch>&& data, bool finish, bool pauseAfterPush)
         : ChannelId(channelId)
-        , HasData(false)
-        , Finish(finish)
-        , PauseAfterPush(pauseAfterPush)
-        , IsOut(isOut)
-    { }
-    TEvPush(ui32 channelId, TDqSerializedBatch&& data, bool finish = false, bool pauseAfterPush = false)
-        : ChannelId(channelId)
-        , HasData(true)
-        , Finish(finish)
         , Data(std::move(data))
+        , Finish(finish)
         , PauseAfterPush(pauseAfterPush)
     { }
 
     const ui32 ChannelId;
-    const bool HasData = false;
-    const bool Finish = false;
-    TDqSerializedBatch Data;
-    bool PauseAfterPush = false;
-    const bool IsOut = false;
+    std::optional<TDqSerializedBatch> Data; //not const, because we want to efficiently move data out of this event on a reciever side
+    const bool Finish;
+    const bool PauseAfterPush;
 };
 
-struct TEvPushFinished
-    : NActors::TEventLocal<TEvPushFinished, TTaskRunnerEvents::EvPushFinished> {
+//Sent by TaskRunnerActor to ComputeActor to ackonowledge input data received in TEvInputChannelData
+//See also note to TEvInputChannelData
+struct TEvInputChannelDataAck
+    : NActors::TEventLocal<TEvInputChannelDataAck, TTaskRunnerEvents::EvInputChannelDataAck> {
 
-    TEvPushFinished() = default;
-
-    TEvPushFinished(ui32 channelId, ui64 freeSpace)
+    TEvInputChannelDataAck(ui32 channelId, ui64 freeSpace)
         : ChannelId(channelId)
         , FreeSpace(freeSpace)
     { }
 
-    ui32 ChannelId;
-    ui64 FreeSpace;
+    const ui32 ChannelId;
+    const ui64 FreeSpace;
 };
 
 struct TEvTaskRunnerCreate
@@ -205,7 +200,6 @@ struct TEvTaskRunnerCreateFinished
 struct TEvTaskRunFinished
     : NActors::TEventLocal<TEvTaskRunFinished, TTaskRunnerEvents::EvRunFinished>
 {
-    TEvTaskRunFinished() = default;
     TEvTaskRunFinished(
         NDq::ERunStatus runStatus,
         THashMap<ui32, i64>&& inputChannelsMap,
@@ -242,12 +236,13 @@ struct TEvTaskRunFinished
     TDuration ComputeTime;
 };
 
-struct TEvChannelPopFinished
-    : NActors::TEventLocal<TEvChannelPopFinished, TTaskRunnerEvents::EvPopFinished>
+//Sent by TaskRunnerActor to ComputeActor in response to TEvOutputChannelDataRequest.
+//Contains data read from output channel accompanied with auxiliary info.
+//See also notes to TEvOutputChannelDataRequest
+struct TEvOutputChannelData
+    : NActors::TEventLocal<TEvOutputChannelData, TTaskRunnerEvents::EvOutputChannelData>
 {
-    TEvChannelPopFinished() = default;
-
-    TEvChannelPopFinished(ui32 channelId)
+    TEvOutputChannelData(ui32 channelId)
         : Stats()
         , ChannelId(channelId)
         , Data()
@@ -255,7 +250,7 @@ struct TEvChannelPopFinished
         , Changed(false)
     { }
 
-    TEvChannelPopFinished(
+    TEvOutputChannelData(
             ui32 channelId,
             TVector<TDqSerializedBatch>&& data,
             TMaybe<NDqProto::TWatermark>&& watermark,
@@ -343,37 +338,43 @@ struct TEvContinueRun
     TVector<ui32> InputTransformIds;
 };
 
-struct TEvAsyncInputPushFinished
-    : NActors::TEventLocal<TEvAsyncInputPushFinished, TTaskRunnerEvents::EvAsyncInputPushFinished>
+//Sent by TaskRunnerActor to ComputeActor as an acknowledgement in AsyncInputPush method call
+//after data is pushed to corresponding TaskRunner's source
+struct TEvSourceDataAck
+    : NActors::TEventLocal<TEvSourceDataAck, TTaskRunnerEvents::EvSourceDataAck>
 {
-    TEvAsyncInputPushFinished() = default;
-    TEvAsyncInputPushFinished(ui64 index, i64 freeSpaceLeft)
+    TEvSourceDataAck(ui64 index, i64 freeSpaceLeft)
         : Index(index)
         , FreeSpaceLeft(freeSpaceLeft)
     { }
 
-    ui64 Index;
-    i64 FreeSpaceLeft;
+    const ui64 Index;
+    const i64 FreeSpaceLeft;
 };
 
-struct TEvSinkPop
-    : NActors::TEventLocal<TEvSinkPop, TTaskRunnerEvents::EvSinkPop>
+//Sent by ComputeActor to TaskRunnerActor to request output data from a sink.
+//Upon receiving this event, TaskRunnerActor reads data from corresponding TaskRunner's sink buffer,
+//and sends data to the sender of this message with TEvSinkData.
+//See also notes to TEvSinkData.
+struct TEvSinkDataRequest
+    : NActors::TEventLocal<TEvSinkDataRequest, TTaskRunnerEvents::EvSinkDataRequest>
 {
-    TEvSinkPop() = default;
-    TEvSinkPop(ui64 index, i64 size)
+    TEvSinkDataRequest(ui64 index, i64 size)
         : Index(index)
         , Size(size)
     { }
 
-    ui64 Index;
-    i64 Size;
+    const ui64 Index;
+    const i64 Size;
 };
 
-struct TEvSinkPopFinished
-    : NActors::TEventLocal<TEvSinkPopFinished, TTaskRunnerEvents::EvSinkPopFinished>
+//Sent by TaskRunnerActor to ComputeActor in response to TEvSinkDataRequest.
+//Contains data from TaskRunner's sink buffer
+//See also notes to TEvSinkDataRequest.
+struct TEvSinkData
+    : NActors::TEventLocal<TEvSinkData, TTaskRunnerEvents::EvSinkData>
 {
-    TEvSinkPopFinished() = default;
-    TEvSinkPopFinished(
+    TEvSinkData(
         ui64 index,
         TMaybe<NDqProto::TCheckpoint>&& checkpoint,
         i64 size,

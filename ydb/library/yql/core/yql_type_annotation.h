@@ -243,6 +243,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     THashSet<TString> DisableConstraintCheck;
     bool UdfSupportsYield = false;
     ui32 EvaluateForLimit = 500;
+    ui32 EvaluateParallelForLimit = 5000;
     ui32 EvaluateOrderByColumnLimit = 100;
     bool PullUpFlatMapOverJoin = true;
     bool DeprecatedSQL = false;
@@ -258,7 +259,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 FolderSubDirsLimit = 1000;
     bool UseBlocks = false;
     EBlockEngineMode BlockEngineMode = EBlockEngineMode::Disable;
-    bool PgEmitAggApply = false;
+    TMaybe<bool> PgEmitAggApply;
     IArrowResolver::TPtr ArrowResolver;
     ECostBasedOptimizerType CostBasedOptimizer = ECostBasedOptimizerType::Disable;
     bool MatchRecognize = false;

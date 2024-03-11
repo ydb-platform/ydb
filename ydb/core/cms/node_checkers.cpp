@@ -38,8 +38,7 @@ void TNodesCounterBase::UpdateNode(ui32 nodeId, NKikimrCms::EState state) {
         --DownNodesCount;
     }
 
-    if (NodeToState[nodeId] == NODE_STATE_LOCKED ||
-        NodeToState[nodeId] == NODE_STATE_RESTART) {
+    if (IsNodeLocked(nodeId)) {
         --LockedNodesCount;
     }
 
@@ -55,8 +54,13 @@ void TNodesCounterBase::UpdateNode(ui32 nodeId, NKikimrCms::EState state) {
     }
 }
 
-void TNodesCounterBase::LockNode(ui32 nodeId) {
+bool TNodesCounterBase::IsNodeLocked(ui32 nodeId) const {
     Y_ABORT_UNLESS(NodeToState.contains(nodeId));
+    return NodeToState.at(nodeId) == NODE_STATE_RESTART || NodeToState.at(nodeId) == NODE_STATE_LOCKED;
+}   
+
+void TNodesCounterBase::LockNode(ui32 nodeId) {
+    Y_ABORT_UNLESS(!IsNodeLocked(nodeId));
 
     ++LockedNodesCount;
     if (NodeToState[nodeId] == NODE_STATE_DOWN) {
@@ -68,8 +72,8 @@ void TNodesCounterBase::LockNode(ui32 nodeId) {
 }
 
 void TNodesCounterBase::UnlockNode(ui32 nodeId) {
-    Y_ABORT_UNLESS(NodeToState.contains(nodeId));
-
+    Y_ABORT_UNLESS(IsNodeLocked(nodeId));
+   
     --LockedNodesCount;
     if (NodeToState[nodeId] == NODE_STATE_RESTART) {
         NodeToState[nodeId] = NODE_STATE_DOWN;

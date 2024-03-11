@@ -13,7 +13,7 @@ public:
     TRlContext() {
     }
 
-    TRlContext(const NGRpcService::IRequestCtxBase* reqCtx) {
+    TRlContext(const NGRpcService::IRequestCtxBaseMtSafe* reqCtx) {
         Path.DatabaseName = reqCtx->GetDatabaseName().GetOrElse("");
         Path.Token = reqCtx->GetSerializedToken();
 

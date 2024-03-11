@@ -16,7 +16,9 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
 class TestS3(TestYdsBase):
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_partitioned_by(self, kikimr, s3, client):
+    @pytest.mark.parametrize("runtime_listing", ["false", "true"])
+    def test_partitioned_by(self, kikimr, s3, client, runtime_listing, yq_version):
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -59,7 +61,9 @@ Pear,15,33'''
                                                  "file_pattern": "*t?.csv"
                                              })
 
-        sql = R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{runtime_listing}";
+
             SELECT *
             FROM bindings.my_binding;
             '''
@@ -106,7 +110,9 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_projection(self, kikimr, s3, client):
+    @pytest.mark.parametrize("runtime_listing", ["false", "true"])
+    def test_projection(self, kikimr, s3, client, runtime_listing, yq_version):
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -156,7 +162,9 @@ Banana,3,100'''
                                              },
                                              partitioned_by=["year", "month", "day"])
 
-        sql = R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{runtime_listing}";
+
             SELECT *
             FROM bindings.my_binding;
             '''
@@ -189,7 +197,9 @@ Banana,3,100'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_pruning(self, kikimr, s3, client):
+    @pytest.mark.parametrize("runtime_listing", ["false", "true"])
+    def test_pruning(self, kikimr, s3, client, runtime_listing, yq_version):
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -237,7 +247,9 @@ Apple,2,22'''
                                                  "file_pattern": "*.csv"
                                              })
 
-        sql = R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{runtime_listing}";
+
             SELECT *
             FROM bindings.my_binding where year > 2020 order by Fruit;
             '''
@@ -334,7 +346,9 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_no_schema_columns_except_partitioning_ones(self, kikimr, s3, client):
+    @pytest.mark.parametrize("runtime_listing", ["false", "true"])
+    def test_no_schema_columns_except_partitioning_ones(self, kikimr, s3, client, runtime_listing, yq_version):
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -358,7 +372,9 @@ Pear,15,33'''
         kikimr.control_plane.wait_bootstrap(1)
         client.create_storage_connection("json_bucket", "json_bucket")
 
-        sql = R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{runtime_listing}";
+            ''' + R'''
             $projection =
             @@
             {
@@ -406,7 +422,9 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_projection_date(self, kikimr, s3, client):
+    @pytest.mark.parametrize("runtime_listing", ["false", "true"])
+    def test_projection_date(self, kikimr, s3, client, runtime_listing, yq_version):
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -450,7 +468,9 @@ Banana,3,100'''
                                              },
                                              partitioned_by=["dt"])
 
-        sql = R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{runtime_listing}";
+
             SELECT *
             FROM bindings.my_binding;
             '''
@@ -520,7 +540,9 @@ Banana,3,100'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_no_paritioning_columns(self, kikimr, s3, client):
+    @pytest.mark.parametrize("runtime_listing", ["false", "true"])
+    def test_no_paritioning_columns(self, kikimr, s3, client, runtime_listing, yq_version):
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -571,8 +593,11 @@ Banana,3,100'''
         kikimr.control_plane.wait_bootstrap(1)
         client.create_storage_connection("logs2", "logs2")
 
-        sql = R'''
-            $projection = @@ {
+        sql = f'''
+            pragma s3.UseRuntimeListing="{runtime_listing}";
+            ''' + R'''
+            $projection =
+            @@ {
                 "projection.enabled" : "true",
                 "storage.location.template" : "/${date}",
                 "projection.date.type" : "date",
@@ -639,7 +664,9 @@ Banana,3,100'''
         ({"folder_id": "my_folder13"}, "year Uint64", False),
         ({"folder_id": "my_folder14"}, "year Date", False)
     ], indirect=["client"])
-    def test_projection_integer_type_validation(self, kikimr, s3, client, column_type, is_correct):
+    @pytest.mark.parametrize("runtime_listing", ["false", "true"])
+    def test_projection_integer_type_validation(self, kikimr, s3, client, column_type, is_correct, runtime_listing, yq_version):
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -663,7 +690,9 @@ Banana,3,100'''
         kikimr.control_plane.wait_bootstrap(1)
         client.create_storage_connection("fruitbucket", "test_projection_integer_type_validation")
 
-        sql = R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{runtime_listing}";
+            ''' + R'''
             $projection =
             @@
             {
@@ -677,7 +706,7 @@ Banana,3,100'''
                 "storage.location.template" : "${year}-03-05"
             }
             @@;
-            ''' + R'''
+            ''' + f'''
             SELECT *
             FROM `fruitbucket`.`/` WITH
             (
@@ -690,7 +719,7 @@ Banana,3,100'''
                 partitioned_by=(year),
                 projection=$projection
             )
-            '''.format(column_type=column_type)
+            '''
 
         query_id = client.create_query("simple", sql).result.query_id
         if is_correct:
@@ -726,7 +755,9 @@ Banana,3,100'''
         ({"folder_id": "my_folder8"}, "year Utf8", False),
         ({"folder_id": "my_folder9"}, "year Date", False),
     ], indirect=["client"])
-    def test_projection_enum_type_invalid_validation(self, kikimr, s3, client, column_type, is_correct):
+    @pytest.mark.parametrize("runtime_listing", ["false", "true"])
+    def test_projection_enum_type_invalid_validation(self, kikimr, s3, client, column_type, is_correct, runtime_listing, yq_version):
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -750,7 +781,9 @@ Banana,3,100'''
         kikimr.control_plane.wait_bootstrap(1)
         client.create_storage_connection("fruitbucket", "test_projection_enum_type_invalid_validation")
 
-        sql = R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{runtime_listing}";
+            ''' + R'''
             $projection =
             @@
             {
@@ -762,7 +795,7 @@ Banana,3,100'''
                 "storage.location.template" : "${year}-03-05"
             }
             @@;
-            ''' + R'''
+            ''' + f'''
             SELECT *
             FROM `fruitbucket`.`/` WITH
             (
@@ -775,7 +808,7 @@ Banana,3,100'''
                 partitioned_by=(year),
                 projection=$projection
             )
-            '''.format(column_type=column_type)
+            '''
 
         query_id = client.create_query("simple", sql).result.query_id
         if is_correct:
@@ -813,7 +846,9 @@ Banana,3,100'''
         ({"folder_id": "my_folder15"}, "year Datetime", False),
         ({"folder_id": "my_folder16"}, "year Datetime NOT NULL", True),
     ], indirect=["client"])
-    def test_projection_date_type_validation(self, kikimr, s3, client, column_type, is_correct):
+    @pytest.mark.parametrize("runtime_listing", ["false", "true"])
+    def test_projection_date_type_validation(self, kikimr, s3, client, column_type, is_correct, runtime_listing, yq_version):
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -837,7 +872,9 @@ Banana,3,100'''
         kikimr.control_plane.wait_bootstrap(1)
         client.create_storage_connection("fruitbucket", "test_projection_date_type_invalid_validation")
 
-        sql = R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{runtime_listing}";
+            ''' + R'''
             $projection =
             @@
             {
@@ -853,7 +890,7 @@ Banana,3,100'''
                 "storage.location.template" : "${year}-03-05"
             }
             @@;
-            ''' + R'''
+            ''' + f'''
             SELECT *
             FROM `fruitbucket`.`/` WITH
             (
@@ -866,7 +903,7 @@ Banana,3,100'''
                 partitioned_by=(year),
                 projection=$projection
             )
-            '''.format(column_type=column_type)
+            '''
 
         query_id = client.create_query("simple", sql).result.query_id
         if is_correct:
@@ -1068,7 +1105,9 @@ Banana,3,100'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_raw_format(self, kikimr, s3, client):
+    @pytest.mark.parametrize("runtime_listing", ["false", "true"])
+    def test_raw_format(self, kikimr, s3, client, runtime_listing, yq_version):
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -1094,7 +1133,9 @@ Banana,3,100'''
         kikimr.control_plane.wait_bootstrap(1)
         client.create_storage_connection("rawbucket", "raw_bucket")
 
-        sql = R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{runtime_listing}";
+            ''' + R'''
             $projection = @@ {
                 "projection.enabled" : "true",
                 "storage.location.template" : "/${timestamp}",
@@ -1124,6 +1165,10 @@ Banana,3,100'''
             )
         '''
 
+        # temporary fix for dynamic listing
+        if yq_version == "v1":
+            sql = 'pragma dq.MaxTasksPerStage="10"; ' + sql
+
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
@@ -1145,8 +1190,9 @@ Banana,3,100'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    @pytest.mark.parametrize("blocks", [False, True])
-    def test_parquet(self, kikimr, s3, blocks, client):
+    @pytest.mark.parametrize("runtime_listing", ["false", "true"])
+    def test_parquet(self, kikimr, s3, client, runtime_listing, yq_version):
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -1174,8 +1220,9 @@ Banana,3,100'''
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
-        sql = 'pragma s3.UseBlocksSource="{}";'.format("true" if blocks else "false")
-        sql = sql + R'''
+        sql = f'''
+            pragma s3.UseRuntimeListing="{runtime_listing}";
+
             SELECT foo, bar, x FROM pb.`part/`
             WITH
             (

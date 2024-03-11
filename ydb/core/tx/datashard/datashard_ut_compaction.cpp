@@ -8,42 +8,6 @@ using namespace Tests;
 
 namespace {
 
-    NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runtime, ui64 tabletId) {
-        NKikimrTxDataShard::TEvPeriodicTableStats stats;
-        bool captured = false;
-
-        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
-            switch (ev->GetTypeRewrite()) {
-                case TEvDataShard::TEvPeriodicTableStats::EventType: {
-                    const auto& record = ev->Get<TEvDataShard::TEvPeriodicTableStats>()->Record;
-                    if (record.GetDatashardId() == tabletId) {
-                        stats = record;
-                        captured = true;
-                    }
-                    break;
-                }
-                default: {
-                    break;
-                }
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-        auto prevObserverFunc = runtime.SetObserverFunc(observerFunc);
-
-        for (int i = 0; i < 5 && !captured; ++i) {
-            TDispatchOptions options;
-            options.CustomFinalCondition = [&]() {
-                return captured;
-            };
-            runtime.DispatchEvents(options, TDuration::Seconds(5));
-        }
-
-        runtime.SetObserverFunc(prevObserverFunc);
-        UNIT_ASSERT(captured);
-
-        return stats;
-    }
-
     void CompactBorrowed(TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId) {
         auto evReq = MakeHolder<TEvDataShard::TEvCompactBorrowed>(tableId.PathId);
         auto sender = runtime.AllocateEdgeActor();

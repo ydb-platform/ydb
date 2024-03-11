@@ -241,7 +241,10 @@ struct TDefaultArgsPolicy {
     static constexpr std::array<bool, 0> IsFixedArg = {};
 };
 
+Y_PRAGMA_DIAGNOSTIC_PUSH
+Y_PRAGMA("GCC diagnostic ignored \"-Wreturn-type-c-linkage\"")
 extern "C" TPgKernelState& GetPGKernelState(arrow::compute::KernelContext* ctx);
+Y_PRAGMA_DIAGNOSTIC_POP
 
 template <typename TFunc, bool IsStrict, bool IsFixedResult, typename TArgsPolicy = TDefaultArgsPolicy>
 struct TGenericExec {
@@ -452,8 +455,7 @@ struct TGenericExec {
                         len = state.TypeLen;
                     }
 
-                    NUdf::ZeroMemoryContext(ptr);
-                    builder.Add(NUdf::TBlockItem(NUdf::TStringRef(ptr - sizeof(void*), len + sizeof(void*))));
+                    builder.AddPgItem(NUdf::TStringRef(ptr, len));
                 }
             }
     SkipCall:;
@@ -552,18 +554,15 @@ public:
             } else if (TypeLen_ == -1) {
                 auto ptr = (char*)ret.value;
                 ui32 len = GetFullVarSize((const text*)ptr);
-                NUdf::ZeroMemoryContext(ptr);
-                Builder_.Add(NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef(ptr - sizeof(void*), len + sizeof(void*))));
+                Builder_.AddPgItem(NYql::NUdf::TStringRef(ptr, len));
             } else if (TypeLen_ == -2) {
                 auto ptr = (char*)ret.value;
                 ui32 len = 1 + strlen(ptr);
-                NUdf::ZeroMemoryContext(ptr);
-                Builder_.Add(NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef(ptr - sizeof(void*), len + sizeof(void*))));
+                Builder_.AddPgItem(NYql::NUdf::TStringRef(ptr, len));
             } else {
                 auto ptr = (char*)ret.value;
                 ui32 len = TypeLen_;
-                NUdf::ZeroMemoryContext(ptr);
-                Builder_.Add(NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef(ptr - sizeof(void*), len + sizeof(void*))));
+                Builder_.AddPgItem(NYql::NUdf::TStringRef(ptr, len));
             }
         }
     }

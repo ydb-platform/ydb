@@ -1077,7 +1077,7 @@ void TSupportsAttributes::DoRemoveAttribute(const TYPath& path, bool force)
                     }
 
                     if (!descriptor->Writable) {
-                        ThrowCannotSetBuiltinAttribute(key);
+                        ThrowCannotRemoveAttribute(key);
                     }
 
                     permissionValidator.Validate(descriptor->ModifyPermission);

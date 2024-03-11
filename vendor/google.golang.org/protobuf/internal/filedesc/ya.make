@@ -12,11 +12,4 @@ SRCS(
     placeholder.go
 )
 
-GO_XTEST_SRCS(
-    build_test.go
-    desc_test.go
-)
-
 END()
-
-RECURSE(gotest)

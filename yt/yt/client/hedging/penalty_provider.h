@@ -1,9 +1,10 @@
 #pragma once
 
+#include "public.h"
+
 #include <yt/yt/client/api/client.h>
 
 #include <yt/yt/core/profiling/public.h>
-
 
 // @brief    IPenaltyProvider interface is used in HedgingClient to provide external penalties for different clusters.
 //           Current implementations are DummyPenaltyProvider and ReplicationLagPenaltyProvider.
@@ -11,12 +12,9 @@ namespace NYT::NClient::NHedging::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(IPenaltyProvider)
-
-class IPenaltyProvider
+struct IPenaltyProvider
     : public TRefCounted
 {
-public:
     virtual NProfiling::TCpuDuration Get(const TString& cluster) = 0;
 };
 

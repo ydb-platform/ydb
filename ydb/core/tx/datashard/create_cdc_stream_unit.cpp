@@ -77,7 +77,7 @@ public:
     void Complete(TOperation::TPtr, const TActorContext& ctx) override {
         if (AddSender) {
             ctx.Send(DataShard.GetChangeSender(), AddSender.Release());
-            DataShard.EmitHeartbeats(ctx);
+            DataShard.EmitHeartbeats();
         }
     }
 };

@@ -1,5 +1,7 @@
 #include "src/kqp_runner.h"
 
+#include <cstdio>
+
 #include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
 
 #include <library/cpp/colorizer/colors.h>
@@ -22,7 +24,7 @@ struct TExecutionOptions {
     TString ScriptTraceId = "kqprun";
 
     bool HasResults() const {
-        return ScriptQuery && ScriptQueryAction == NKikimrKqp::QUERY_ACTION_EXECUTE && !ClearExecution;
+        return ScriptQuery && ScriptQueryAction == NKikimrKqp::QUERY_ACTION_EXECUTE;
     }
 };
 
@@ -46,6 +48,9 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
             if (!runner.ExecuteScript(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.ScriptTraceId)) {
                 ythrow yexception() << "Script execution failed";
             }
+            if (!runner.FetchScriptResults()) {
+                ythrow yexception() << "Fetch script results failed";
+            }
         } else {
             if (!runner.ExecuteQuery(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.ScriptTraceId)) {
                 ythrow yexception() << "Query execution failed";
@@ -54,10 +59,7 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
     }
 
     if (executionOptions.HasResults()) {
-        Cout << colors.Yellow() << "Writing script results..." << colors.Default() << Endl;
-        if (!runner.WriteScriptResults()) {
-            ythrow yexception() << "Writing script results failed";
-        }
+        runner.PrintScriptResults();
     }
 }
 
@@ -74,6 +76,20 @@ THolder<TFileOutput> SetupDefaultFileOutput(const TString& filePath, IOutputStre
 }
 
 
+TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> CreateFunctionRegistry(const TString& udfsDirectory, TVector<TString> udfsPaths) {
+    if (!udfsDirectory.empty() || !udfsPaths.empty()) {
+        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        Cout << colors.Yellow() << "Fetching udfs..." << colors.Default() << Endl;
+    }
+
+    NKikimr::NMiniKQL::FindUdfsInDir(udfsDirectory, &udfsPaths);
+    auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, udfsPaths)->Clone();
+    NKikimr::NMiniKQL::FillStaticModules(*functionRegistry);
+
+    return functionRegistry;
+}
+
+
 void RunMain(int argc, const char* argv[]) {
     TExecutionOptions executionOptions;
     NKqpRun::TRunnerOptions runnerOptions;
@@ -87,9 +103,11 @@ void RunMain(int argc, const char* argv[]) {
     TString logFile = "-";
     TString appConfigFile = "./configuration/app_config.conf";
 
+    TString traceOptType = "disabled";
     TString scriptQueryAction = "execute";
     TString planOutputFormat = "pretty";
     TString resultOutputFormat = "rows";
+    i64 resultsRowsLimit = 1000;
 
     TVector<TString> udfsPaths;
     TString udfsDirectory;
@@ -103,7 +121,7 @@ void RunMain(int argc, const char* argv[]) {
         .Optional()
         .RequiredArgument("FILE")
         .StoreResult(&schemeQueryFile);
-    options.AddLongOption("app-config", "File with app config (TAppConfig)")
+    options.AddLongOption('c', "app-config", "File with app config (TAppConfig)")
         .Optional()
         .RequiredArgument("FILE")
         .DefaultValue(appConfigFile)
@@ -135,33 +153,33 @@ void RunMain(int argc, const char* argv[]) {
         .NoArgument()
         .DefaultValue(executionOptions.ClearExecution)
         .SetFlag(&executionOptions.ClearExecution);
-    options.AddLongOption("trace-opt", "print AST in the begin of each transformation")
+    options.AddLongOption('T', "trace-opt", "print AST in the begin of each transformation, one of { scheme | script | all }")
         .Optional()
-        .NoArgument()
-        .DefaultValue(runnerOptions.YdbSettings.TraceOpt)
-        .SetFlag(&runnerOptions.YdbSettings.TraceOpt);
-    options.AddLongOption("script-action", "Script query execute action, one of { execute | explain }")
+        .RequiredArgument("STR")
+        .DefaultValue(traceOptType)
+        .StoreResult(&traceOptType);
+    options.AddLongOption('A', "script-action", "Script query execute action, one of { execute | explain }")
         .Optional()
         .RequiredArgument("STR")
         .DefaultValue(scriptQueryAction)
         .StoreResult(&scriptQueryAction);
-    options.AddLongOption("plan-format", "Script query plan format, one of { pretty | table | json }")
+    options.AddLongOption('P', "plan-format", "Script query plan format, one of { pretty | table | json }")
         .Optional()
         .RequiredArgument("STR")
         .DefaultValue(planOutputFormat)
         .StoreResult(&planOutputFormat);
-    options.AddLongOption("result-format", "Script query result format, one of { rows | full }")
+    options.AddLongOption('R', "result-format", "Script query result format, one of { rows | full }")
         .Optional()
         .RequiredArgument("STR")
         .DefaultValue(resultOutputFormat)
         .StoreResult(&resultOutputFormat);
-    options.AddLongOption("result-rows-limit", "Rows limit for script execution results")
+    options.AddLongOption('L', "result-rows-limit", "Rows limit for script execution results")
         .Optional()
         .RequiredArgument("INT")
-        .DefaultValue(runnerOptions.ResultsRowsLimit)
-        .StoreResult(&runnerOptions.ResultsRowsLimit);
+        .DefaultValue(resultsRowsLimit)
+        .StoreResult(&resultsRowsLimit);
 
-    options.AddLongOption("udf", "Load shared library with UDF by given path")
+    options.AddLongOption('u', "udf", "Load shared library with UDF by given path")
         .Optional()
         .RequiredArgument("FILE")
         .AppendTo(&udfsPaths);
@@ -191,14 +209,18 @@ void RunMain(int argc, const char* argv[]) {
 
     // Runner options
 
-    if (runnerOptions.ResultsRowsLimit < 0) {
-        ythrow yexception() << "Results rows limit less than zero";
-    }
-
     THolder<TFileOutput> resultFileHolder = SetupDefaultFileOutput(resultOutputFile, runnerOptions.ResultOutput);
     THolder<TFileOutput> schemeQueryAstFileHolder = SetupDefaultFileOutput(schemeQueryAstFile, runnerOptions.SchemeQueryAstOutput);
     THolder<TFileOutput> scriptQueryAstFileHolder = SetupDefaultFileOutput(scriptQueryAstFile, runnerOptions.ScriptQueryAstOutput);
     THolder<TFileOutput> scriptQueryPlanFileHolder = SetupDefaultFileOutput(scriptQueryPlanFile, runnerOptions.ScriptQueryPlanOutput);
+
+    runnerOptions.TraceOptType =
+              (traceOptType == TStringBuf("all")) ? NKqpRun::TRunnerOptions::ETraceOptType::All
+            : (traceOptType == TStringBuf("scheme")) ? NKqpRun::TRunnerOptions::ETraceOptType::Scheme
+            : (traceOptType == TStringBuf("script")) ? NKqpRun::TRunnerOptions::ETraceOptType::Script
+            : (traceOptType == TStringBuf("disabled")) ? NKqpRun::TRunnerOptions::ETraceOptType::Disabled
+            : NKqpRun::TRunnerOptions::ETraceOptType::All;
+    runnerOptions.YdbSettings.TraceOptEnabled = runnerOptions.TraceOptType != NKqpRun::TRunnerOptions::ETraceOptType::Disabled;
 
     runnerOptions.ResultOutputFormat =
               (resultOutputFormat == TStringBuf("rows")) ? NKqpRun::TRunnerOptions::EResultOutputFormat::RowsJson
@@ -215,25 +237,38 @@ void RunMain(int argc, const char* argv[]) {
 
     if (logFile != "-") {
         runnerOptions.YdbSettings.LogOutputFile = logFile;
+        std::remove(logFile.c_str());
     }
 
     runnerOptions.YdbSettings.YqlToken = GetEnv("YQL_TOKEN");
-
-    NKikimr::NMiniKQL::FindUdfsInDir(udfsDirectory, &udfsPaths);
-    auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, udfsPaths)->Clone();
-    NKikimr::NMiniKQL::FillStaticModules(*functionRegistry);
-    runnerOptions.YdbSettings.FunctionRegistry = functionRegistry.Get();
+    runnerOptions.YdbSettings.FunctionRegistry = CreateFunctionRegistry(udfsDirectory, udfsPaths).Get();
 
     TString appConfigData = TFileInput(appConfigFile).ReadAll();
     if (!google::protobuf::TextFormat::ParseFromString(appConfigData, &runnerOptions.YdbSettings.AppConfig)) {
         ythrow yexception() << "Bad format of app configuration";
     }
 
+    if (resultsRowsLimit < 0) {
+        ythrow yexception() << "Results rows limit less than zero";
+    }
+    runnerOptions.YdbSettings.AppConfig.MutableQueryServiceConfig()->SetScriptResultRowsLimit(resultsRowsLimit);
+
     RunScript(executionOptions, runnerOptions);
 }
 
+void KqprunTerminateHandler() {
+    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
+
+    Cerr << colors.Red() << "======= terminate() call stack ========" << colors.Default() << Endl;
+    FormatBackTrace(&Cerr);
+    Cerr << colors.Red() << "=======================================" << colors.Default() << Endl;
+
+    abort();
+}
 
 int main(int argc, const char* argv[]) {
+    std::set_terminate(KqprunTerminateHandler);
+
     try {
         RunMain(argc, argv);
     } catch (...) {

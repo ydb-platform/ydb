@@ -7,76 +7,60 @@
 
 namespace NKikimr::NGRpcService {
 
+TGRpcYdbQueryService::TGRpcYdbQueryService(NActors::TActorSystem *system,
+                                           TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+                                           const NActors::TActorId& proxyId,
+                                           bool rlAllowed,
+                                           size_t handlersPerCompletionQueue)
+    : TGrpcServiceBase(system, counters, proxyId, rlAllowed)
+    , HandlersPerCompletionQueue(Max(size_t{1}, handlersPerCompletionQueue))
+{
+}
+
+TGRpcYdbQueryService::TGRpcYdbQueryService(NActors::TActorSystem *system,
+                                           TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+                                           const TVector<NActors::TActorId>& proxies,
+                                           bool rlAllowed,
+                                           size_t handlersPerCompletionQueue)
+    : TGrpcServiceBase(system, counters, proxies, rlAllowed)
+    , HandlersPerCompletionQueue(Max(size_t{1}, handlersPerCompletionQueue))
+{
+}
+
 void TGRpcYdbQueryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     using namespace Ydb::Query;
     using namespace NQuery;
 
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
+    size_t proxyCounter = 0;
 
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
-#define ADD_REQUEST(NAME, IN, OUT, ACTION) \
-    MakeIntrusive<TGRpcRequest<IN, OUT, TGRpcYdbQueryService>>(this, &Service_, CQ_, \
-        [this](NYdbGrpc::IRequestContextBase* ctx) { \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
-            ACTION; \
-        }, &Ydb::Query::V1::QueryService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("query", #NAME))->Run();
+#define ADD_REQUEST(NAME, IN, OUT, CB, ...) \
+    for (size_t i = 0; i < HandlersPerCompletionQueue; ++i) {  \
+        for (auto* cq: CQS) { \
+            MakeIntrusive<TGRpcRequest<IN, OUT, TGRpcYdbQueryService>>(this, &Service_, cq, \
+                [this, proxyCounter](NYdbGrpc::IRequestContextBase* ctx) { \
+                    NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
+                    ActorSystem_->Send(GRpcProxies_[proxyCounter % GRpcProxies_.size()], \
+                        new TGrpcRequestNoOperationCall<IN, OUT> \
+                            (ctx, &CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr __VA_OPT__(, TAuditMode::__VA_ARGS__)})); \
+                }, &Ydb::Query::V1::QueryService::AsyncService::Request ## NAME, \
+                #NAME, logger, getCounterBlock("query", #NAME))->Run(); \
+            ++proxyCounter; \
+        }  \
+    }
 
-    ADD_REQUEST(ExecuteQuery, ExecuteQueryRequest, ExecuteQueryResponsePart, {
-        ActorSystem_->Send(GRpcRequestProxyId_,
-            new TGrpcRequestNoOperationCall<ExecuteQueryRequest, ExecuteQueryResponsePart>
-                (ctx, &DoExecuteQuery, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Auditable}));
-    })
-
-    ADD_REQUEST(ExecuteScript, ExecuteScriptRequest, Ydb::Operations::Operation, {
-        ActorSystem_->Send(GRpcRequestProxyId_,
-            new TGrpcRequestNoOperationCall<ExecuteScriptRequest, Ydb::Operations::Operation>
-                (ctx, &DoExecuteScript, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Auditable}));
-    })
-
-    ADD_REQUEST(FetchScriptResults, FetchScriptResultsRequest, FetchScriptResultsResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_,
-            new TGrpcRequestNoOperationCall<FetchScriptResultsRequest, FetchScriptResultsResponse>
-                (ctx, &DoFetchScriptResults, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));
-    })
-
-    ADD_REQUEST(CreateSession, CreateSessionRequest, CreateSessionResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_,
-            new TGrpcRequestNoOperationCall<CreateSessionRequest, CreateSessionResponse>
-                (ctx, &DoCreateSession, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));
-    })
-
-    ADD_REQUEST(DeleteSession, DeleteSessionRequest, DeleteSessionResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_,
-            new TGrpcRequestNoOperationCall<DeleteSessionRequest, DeleteSessionResponse>
-                (ctx, &DoDeleteSession, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));
-    })
-
-    ADD_REQUEST(AttachSession, AttachSessionRequest, SessionState, {
-        ActorSystem_->Send(GRpcRequestProxyId_,
-            new TGrpcRequestNoOperationCall<AttachSessionRequest, SessionState>
-                (ctx, &DoAttachSession, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));
-    })
-
-    ADD_REQUEST(BeginTransaction, BeginTransactionRequest, BeginTransactionResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_,
-            new TGrpcRequestNoOperationCall<BeginTransactionRequest, BeginTransactionResponse>
-                (ctx, &DoBeginTransaction, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));
-    })
-
-    ADD_REQUEST(CommitTransaction, CommitTransactionRequest, CommitTransactionResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_,
-            new TGrpcRequestNoOperationCall<CommitTransactionRequest, CommitTransactionResponse>
-                (ctx, &DoCommitTransaction, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));
-    })
-
-    ADD_REQUEST(RollbackTransaction, RollbackTransactionRequest, RollbackTransactionResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_,
-            new TGrpcRequestNoOperationCall<RollbackTransactionRequest, RollbackTransactionResponse>
-                (ctx, &DoRollbackTransaction, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));
-    })
+    ADD_REQUEST(ExecuteQuery, ExecuteQueryRequest, ExecuteQueryResponsePart, DoExecuteQuery, Auditable);
+    ADD_REQUEST(ExecuteScript, ExecuteScriptRequest, Ydb::Operations::Operation, DoExecuteScript, Auditable);
+    ADD_REQUEST(FetchScriptResults, FetchScriptResultsRequest, FetchScriptResultsResponse, DoFetchScriptResults);
+    ADD_REQUEST(CreateSession, CreateSessionRequest, CreateSessionResponse, DoCreateSession);
+    ADD_REQUEST(DeleteSession, DeleteSessionRequest, DeleteSessionResponse, DoDeleteSession);
+    ADD_REQUEST(AttachSession, AttachSessionRequest, SessionState, DoAttachSession);
+    ADD_REQUEST(BeginTransaction, BeginTransactionRequest, BeginTransactionResponse, DoBeginTransaction);
+    ADD_REQUEST(CommitTransaction, CommitTransactionRequest, CommitTransactionResponse, DoCommitTransaction);
+    ADD_REQUEST(RollbackTransaction, RollbackTransactionRequest, RollbackTransactionResponse, DoRollbackTransaction);
 
 #undef ADD_REQUEST
 }

@@ -298,8 +298,8 @@ void AddCompareStringKernel(TKernelFamilyBase& kernelFamily) {
     NUdf::TDataTypeId returnType = NUdf::TDataType<bool>::Id;
 
     arrow::compute::ScalarKernel k({ GetPrimitiveInputArrowType<TInput1>(), GetPrimitiveInputArrowType<TInput2>() }, GetPrimitiveOutputArrowType<TOutput>(), &TExecs::Exec);
-    k.null_handling = kernelFamily.NullMode == TKernelFamily::ENullMode::Default ? arrow::compute::NullHandling::INTERSECTION : arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
-    kernelFamily.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(kernelFamily, argTypes, returnType, k));
+    k.null_handling = arrow::compute::NullHandling::INTERSECTION;
+    kernelFamily.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(kernelFamily, argTypes, returnType, k, TKernel::ENullMode::Default));
 }
 
 template<typename TOp>
@@ -332,8 +332,8 @@ void AddSizeStringKernel(TKernelFamilyBase& kernelFamily) {
     NUdf::TDataTypeId returnType = NUdf::TDataType<TOutput>::Id;
 
     arrow::compute::ScalarKernel k({ GetPrimitiveInputArrowType<TInput>() }, GetPrimitiveOutputArrowType<TOutput>(), &TExecs::Exec);
-    k.null_handling = kernelFamily.NullMode == TKernelFamily::ENullMode::Default ? arrow::compute::NullHandling::INTERSECTION : arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
-    kernelFamily.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(kernelFamily, argTypes, returnType, k));
+    k.null_handling = arrow::compute::NullHandling::INTERSECTION;
+    kernelFamily.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(kernelFamily, argTypes, returnType, k, TKernel::ENullMode::Default));
 }
 
 } // namespace

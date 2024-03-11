@@ -17,8 +17,8 @@ private:
 
     TString TablesPath;
     TString StoreType;
-    TString Scale;
-    TString Bucket;
+    TString S3Endpoint;
+    TString S3Prefix;
 };
 
 class TTpchCommandClean : public NYdb::NConsoleClient::TYdbCommand {
@@ -31,6 +31,7 @@ private:
     std::vector<TString> Tables = {"customer", "lineitem", "nation", "orders",
         "region", "part", "partsupp", "supplier"};
     bool IsExternal = false;
+    TString TablesPath;
 };
 
 class TTpchCommandRun : public NYdb::NConsoleClient::TYdbCommand {
@@ -38,11 +39,9 @@ protected:
     TSet<ui32> QueriesToRun;
     TSet<ui32> QueriesToSkip;
     TVector<TString> QuerySettings;
-    TString ExternalQueries;
-    TString ExternalQueriesFile;
     TString ExternalQueriesDir;
     TString ExternalVariablesString;
-    TString QueryExecutorType;
+    TString QueryExecuterType;
 
 public:
     TTpchCommandRun();

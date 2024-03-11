@@ -1,48 +1,35 @@
 GO_LIBRARY()
-
-SRCS(
-    counters_supported.go
-    coverage.go
-    encoding.go
-    fuzz.go
-    mem.go
-    minimize.go
-    mutator.go
-    mutators_byteslice.go
-    pcg.go
-    queue.go
-    trace.go
-    worker.go
-)
-
-GO_TEST_SRCS(
-    encoding_test.go
-    minimize_test.go
-    mutator_test.go
-    mutators_byteslice_test.go
-    queue_test.go
-    worker_test.go
-)
-
-IF (OS_LINUX)
+IF (OS_DARWIN AND ARCH_ARM64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_ARM64 AND RACE AND NOT CGO_ENABLED OR OS_DARWIN AND ARCH_ARM64 AND NOT RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_ARM64 AND NOT RACE AND NOT CGO_ENABLED OR OS_DARWIN AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_X86_64 AND RACE AND NOT CGO_ENABLED OR OS_DARWIN AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_X86_64 AND NOT RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND NOT RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND NOT RACE AND NOT CGO_ENABLED)
     SRCS(
-        sys_posix.go
+		counters_supported.go
+		coverage.go
+		encoding.go
+		fuzz.go
+		mem.go
+		minimize.go
+		mutator.go
+		mutators_byteslice.go
+		pcg.go
+		queue.go
+		sys_posix.go
+		trace.go
+		worker.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND RACE AND NOT CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+		counters_supported.go
+		coverage.go
+		encoding.go
+		fuzz.go
+		mem.go
+		minimize.go
+		mutator.go
+		mutators_byteslice.go
+		pcg.go
+		queue.go
+		sys_windows.go
+		trace.go
+		worker.go
     )
 ENDIF()
-
-IF (OS_DARWIN)
-    SRCS(
-        sys_posix.go
-    )
-ENDIF()
-
-IF (OS_WINDOWS)
-    SRCS(
-        sys_windows.go
-    )
-ENDIF()
-
 END()
-
-RECURSE(
-)

@@ -2,7 +2,6 @@
 
 #include "dsproxy.h"
 #include "dsproxy_blackboard.h"
-#include "dsproxy_cookies.h"
 #include "dsproxy_mon.h"
 #include "dsproxy_strategy_accelerate_put.h"
 #include "dsproxy_strategy_accelerate_put_m3dc.h"
@@ -236,13 +235,8 @@ public:
 
         // Group put requests together by VDiskID.
         std::unordered_multimap<ui32, TDiskPutRequest*> puts;
-        auto& perDiskRequests = Blackboard.GroupDiskRequests.DiskRequestsForOrderNumber;
-        for (ui32 orderNumber = 0, numDisks = perDiskRequests.size(); orderNumber < numDisks; ++orderNumber) {
-            TDiskRequests& requests = perDiskRequests[orderNumber];
-            while (requests.FirstUnsentPutIdx < requests.PutsToSend.size()) {
-                auto& putRequest = requests.PutsToSend[requests.FirstUnsentPutIdx++];
-                puts.emplace(orderNumber, &putRequest);
-            }
+        for (auto& put : Blackboard.GroupDiskRequests.PutsPending) {
+            puts.emplace(put.OrderNumber, &put);
         }
 
         // Generate queries to VDisks.
@@ -279,6 +273,7 @@ public:
             }
         }
 
+        Blackboard.GroupDiskRequests.PutsPending.clear();
         return events;
     }
 

@@ -12,6 +12,8 @@ template<typename TLeft, typename TRight, typename TOutput>
 struct TDiv : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TDiv<TLeft, TRight, TOutput>> {
     static_assert(std::is_floating_point<TOutput>::value, "expected floating point");
 
+    static constexpr auto NullMode = TKernel::ENullMode::Default;
+
     static TOutput Do(TOutput left, TOutput right)
     {
         return left / right;
@@ -29,7 +31,7 @@ template <typename TLeft, typename TRight, typename TOutput>
 struct TIntegralDiv {
     static_assert(std::is_integral<TOutput>::value, "integral type expected");
 
-    static constexpr bool DefaultNulls = false;
+    static constexpr auto NullMode = TKernel::ENullMode::AlwaysNull;
 
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
     {
@@ -60,7 +62,7 @@ struct TIntegralDiv {
         const auto result = PHINode::Create(type, 2, "result", done);
         result->addIncoming(zero, block);
 
-        if (std::is_signed<TOutput>() && sizeof(TOutput) <= sizeof(TLeft)) {
+        if constexpr (std::is_signed<TOutput>() && sizeof(TOutput) <= sizeof(TLeft)) {
             const auto min = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, lv, ConstantInt::get(lv->getType(), Min<TOutput>()), "min", block);
             const auto one = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, rv, ConstantInt::get(rv->getType(), -1), "one", block);
             const auto two = BinaryOperator::CreateAnd(min, one, "two", block);
@@ -167,7 +169,7 @@ void RegisterDiv(IBuiltinFunctionRegistry& registry) {
 }
 
 void RegisterDiv(TKernelFamilyMap& kernelFamilyMap) {
-    kernelFamilyMap["Div"] = std::make_unique<TBinaryNumericKernelFamily<TIntegralDiv>>(TKernelFamily::ENullMode::AlwaysNull);
+    kernelFamilyMap["Div"] = std::make_unique<TBinaryNumericKernelFamily<TIntegralDiv, TDiv>>();
 }
 
 } // namespace NMiniKQL

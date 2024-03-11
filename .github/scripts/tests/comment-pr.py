@@ -23,6 +23,7 @@ def main():
     elif args.fail:
         color = 'red'
 
+    run_number = int(os.environ.get("GITHUB_RUN_NUMBER"))
     build_preset = os.environ["BUILD_PRESET"]
 
     gh = Github(auth=GithubAuth.Token(os.environ["GITHUB_TOKEN"]))
@@ -30,11 +31,10 @@ def main():
     with open(os.environ["GITHUB_EVENT_PATH"]) as fp:
         event = json.load(fp)
 
-    prnum = event.get("pull_request")
-    if not prnum is None:
-        pr = gh.create_from_raw_data(PullRequest, prnum)
-        update_pr_comment_text(pr, build_preset, color, args.text.read().rstrip(), args.rewrite)
+    pr = gh.create_from_raw_data(PullRequest, event["pull_request"])
+    update_pr_comment_text(pr, build_preset, run_number, color, args.text.read().rstrip(), args.rewrite)
 
 
 if __name__ == "__main__":
-    main()
+    if os.environ.get('GITHUB_EVENT_NAME', '').startswith('pull_request'):
+        main()

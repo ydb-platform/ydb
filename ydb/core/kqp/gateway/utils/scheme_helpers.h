@@ -29,6 +29,7 @@ bool SetDatabaseForLoginOperation(TString& result, bool getDomainLoginOnly, TMay
 
 void FillCreateExternalTableColumnDesc(NKikimrSchemeOp::TExternalTableDescription& externalTableDesc,
                                        const TString& name,
+                                       bool replaceIfExists,
                                        const NYql::TCreateExternalTableSettings& settings);
 
 std::pair<TString, TString> SplitPathByDirAndBaseNames(const TString& path);

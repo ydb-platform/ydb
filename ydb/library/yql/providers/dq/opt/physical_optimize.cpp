@@ -35,7 +35,6 @@ public:
         AddHandler(0, &TCoPartitionsByKeys::Match, HNDL(BuildPartitionsStage<false>));
         AddHandler(0, &TCoShuffleByKeys::Match, HNDL(BuildShuffleStage<false>));
         AddHandler(0, &TCoFinalizeByKey::Match, HNDL(BuildFinalizeByKeyStage<false>));
-        AddHandler(0, &TDqCnHashShuffle::Match, HNDL(BuildHashShuffleByKeyStage));
         AddHandler(0, &TCoPartitionByKey::Match, HNDL(BuildPartitionStage<false>));
         AddHandler(0, &TCoAsList::Match, HNDL(BuildAggregationResultStage));
         AddHandler(0, &TCoTopSort::Match, HNDL(BuildTopSortStage<false>));
@@ -99,46 +98,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> BuildStageWithReadWrap(TExprBase node, TExprContext& ctx) {
-        const auto wrap = node.Cast<TDqReadWrap>();
-        const auto read = Build<TDqReadWideWrap>(ctx, node.Pos())
-                .Input(wrap.Input())
-                .Flags().Build()
-                .Token(wrap.Token())
-            .Done();
-
-        const auto structType = GetSeqItemType(*wrap.Ref().GetTypeAnn()).Cast<TStructExprType>();
-        auto narrow = ctx.Builder(node.Pos())
-            .Lambda()
-                .Callable("NarrowMap")
-                    .Add(0, read.Ptr())
-                    .Lambda(1)
-                        .Params("fields", structType->GetSize())
-                        .Callable("AsStruct")
-                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                                ui32 i = 0U;
-                                for (const auto& item : structType->GetItems()) {
-                                    parent.List(i)
-                                        .Atom(0, item->GetName())
-                                        .Arg(1, "fields", i)
-                                    .Seal();
-                                    ++i;
-                                }
-                                return parent;
-                            })
-                        .Seal()
-                    .Seal()
-                .Seal()
-            .Seal().Build();
-
-        return Build<TDqCnUnionAll>(ctx, node.Pos())
-            .Output()
-                .Stage<TDqStage>()
-                    .Inputs().Build()
-                    .Program(narrow)
-                    .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
-                .Build()
-                .Index().Build("0")
-            .Build() .Done();
+        return DqBuildStageWithReadWrap(node, ctx);
     }
 
     template <bool IsGlobal>
@@ -192,10 +152,6 @@ protected:
     template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildShuffleStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
         return DqBuildShuffleStage(node, ctx, optCtx, *getParents(), IsGlobal);
-    }
-
-    TMaybeNode<TExprBase> BuildHashShuffleByKeyStage(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        return DqBuildHashShuffleByKeyStage(node, ctx, *getParents());
     }
 
     template<bool IsGlobal>

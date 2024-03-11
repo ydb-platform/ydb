@@ -18,9 +18,19 @@ namespace NYql {
             YQL_OPERATION_PROGRESS_STATE_MAP(ENUM_VALUE_GEN)
         };
 
+#define YQL_OPERATION_BLOCK_STATUS_MAP(xx) \
+    xx(None, 0)                            \
+    xx(Partial, 1)                         \
+    xx(Full, 2)
+
+        enum class EOpBlockStatus {
+            YQL_OPERATION_BLOCK_STATUS_MAP(ENUM_VALUE_GEN)
+        };
+
         TString Category;
         ui32 Id;
         EState State;
+        TMaybe<EOpBlockStatus> BlockStatus;
 
         using TStage = std::pair<TString, TInstant>;
         TStage Stage;

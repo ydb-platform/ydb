@@ -340,7 +340,7 @@ TStatus AnnotateReadTableRanges(const TExprNode::TPtr& node, TExprContext& ctx, 
     size_t argCount = (olapTable || index) ? 6 : 5;
 
     // prefix
-    if (!EnsureMinArgsCount(*node, argCount, ctx) && EnsureMaxArgsCount(*node, argCount + 1, ctx)) {
+    if (!EnsureMinArgsCount(*node, argCount, ctx) && EnsureMaxArgsCount(*node, argCount + 3, ctx)) {
         return TStatus::Error;
     }
 
@@ -375,8 +375,34 @@ TStatus AnnotateReadTableRanges(const TExprNode::TPtr& node, TExprContext& ctx, 
     }
 
     if (TKqlReadTableRanges::Match(node.Get())) {
+        if (node->ChildrenSize() > TKqlReadTableRanges::idx_PredicateExpr) {
+            auto& lambda = node->ChildRef(TKqlReadTableRanges::idx_PredicateExpr);
+            auto rowType = GetReadTableRowType(ctx, tablesData, cluster, table.first, node->Pos(), withSystemColumns);
+            if (!rowType) {
+                return TStatus::Error;
+            }
+            if (!UpdateLambdaAllArgumentsTypes(lambda, {rowType}, ctx)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (!lambda->GetTypeAnn()) {
+                return IGraphTransformer::TStatus::Repeat;
+            }
+        }
         node->SetTypeAnn(ctx.MakeType<TListExprType>(rowType));
     } else if (TKqlReadTableIndexRanges::Match(node.Get())) {
+        if (node->ChildrenSize() > TKqlReadTableIndexRanges::idx_PredicateExpr) {
+            auto& lambda = node->ChildRef(TKqlReadTableIndexRanges::idx_PredicateExpr);
+            auto rowType = GetReadTableRowType(ctx, tablesData, cluster, table.first, node->Pos(), withSystemColumns);
+            if (!rowType) {
+                return TStatus::Error;
+            }
+            if (!UpdateLambdaAllArgumentsTypes(lambda, {rowType}, ctx)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (!lambda->GetTypeAnn()) {
+                return IGraphTransformer::TStatus::Repeat;
+            }
+        }
         node->SetTypeAnn(ctx.MakeType<TListExprType>(rowType));
     } else if (TKqpReadTableRanges::Match(node.Get())) {
         node->SetTypeAnn(ctx.MakeType<TFlowExprType>(rowType));
@@ -830,7 +856,7 @@ TStatus AnnotateUpdateRows(const TExprNode::TPtr& node, TExprContext& ctx, const
 TStatus AnnotateDeleteRows(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData)
 {
-    if (!EnsureArgsCount(*node, 2, ctx)) {
+    if (!EnsureMaxArgsCount(*node, 3, ctx) && !EnsureMinArgsCount(*node, 2, ctx)) {
         return TStatus::Error;
     }
 

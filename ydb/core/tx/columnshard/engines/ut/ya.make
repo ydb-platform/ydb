@@ -23,6 +23,7 @@ PEERDIR(
     ydb/library/yql/sql/pg_dummy
     ydb/library/yql/core/arrow_kernels/request
     ydb/core/testlib/default
+    ydb/core/tx/columnshard/test_helper
     ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/columnshard/hooks/testing
 
@@ -35,6 +36,7 @@ SRCS(
     ut_insert_table.cpp
     ut_logs_engine.cpp
     ut_program.cpp
+    helper.cpp
     ydb/core/tx/columnshard/columnshard_ut_common.cpp
 )
 

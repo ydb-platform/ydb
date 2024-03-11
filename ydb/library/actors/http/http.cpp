@@ -119,8 +119,9 @@ void THttpParser<THttpRequest, TSocketBuffer>::Advance(size_t len) {
                         } else {
                             Stage = EParseStage::Done;
                         }
-                    } else {
-                        ProcessHeader(Header);
+                    } else if (!ProcessHeader(Header)) {
+                        Stage = EParseStage::Error;
+                        break;
                     }
                     Headers = TStringBuf(Headers.data(), data.data() - Headers.data());
                 }
@@ -278,8 +279,9 @@ void THttpParser<THttpResponse, TSocketBuffer>::Advance(size_t len) {
                         } else {
                             Stage = EParseStage::Done;
                         }
-                    } else {
-                        ProcessHeader(Header);
+                    } else if (!ProcessHeader(Header)) {
+                        Stage = EParseStage::Error;
+                        break;
                     }
                     Headers = TStringBuf(Headers.data(), data.data() - Headers.data());
                 }

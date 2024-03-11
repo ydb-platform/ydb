@@ -31,6 +31,7 @@ namespace NKikimr::NKqp {
     enum class EProviderType {
         PostgreSQL,
         ClickHouse,
+        Ydb,
     };
 
     NApi::TDataSourceInstance MakeDataSourceInstance(EProviderType providerType) {
@@ -39,6 +40,8 @@ namespace NKikimr::NKqp {
                 return TConnectorClientMock::TPostgreSQLDataSourceInstanceBuilder<>().GetResult();
             case EProviderType::ClickHouse:
                 return TConnectorClientMock::TClickHouseDataSourceInstanceBuilder<>().GetResult();
+            case EProviderType::Ydb:
+                return TConnectorClientMock::TYdbDataSourceInstanceBuilder<>().GetResult();
         }
     }
 
@@ -48,6 +51,8 @@ namespace NKikimr::NKqp {
                 return CreatePostgreSQLExternalDataSource(kikimr);
             case EProviderType::ClickHouse:
                 return CreateClickHouseExternalDataSource(kikimr);
+            case EProviderType::Ydb:
+                return CreateYdbExternalDataSource(kikimr);
         }
     }
 
@@ -103,7 +108,6 @@ namespace NKikimr::NKqp {
             // step 3: ReadSplits
             std::vector<ui16> colData = {10, 20, 30, 40, 50};
             clientMock->ExpectReadSplits()
-                .DataSourceInstance(dataSourceInstance)
                 .Split()
                     .Description("some binary description")
                     .Select()
@@ -165,6 +169,10 @@ namespace NKikimr::NKqp {
             TestSelectAllFields(EProviderType::ClickHouse);
         }
 
+        Y_UNIT_TEST(YdbManaged) {
+            TestSelectAllFields(EProviderType::Ydb);
+        }
+
         void TestSelectConstant(EProviderType providerType) {
             // prepare mock
             auto clientMock = std::make_shared<TConnectorClientMock>();
@@ -199,7 +207,6 @@ namespace NKikimr::NKqp {
 
             // step 3: ReadSplits
             clientMock->ExpectReadSplits()
-                .DataSourceInstance(dataSourceInstance)
                 .Split()
                     .Description("some binary description")
                     .Select()
@@ -257,6 +264,10 @@ namespace NKikimr::NKqp {
             TestSelectConstant(EProviderType::ClickHouse);
         }
 
+        Y_UNIT_TEST(YdbManagedSelectConstant) {
+            TestSelectConstant(EProviderType::Ydb);
+        }
+
         void TestSelectCount(EProviderType providerType) {
             // prepare mock
             auto clientMock = std::make_shared<TConnectorClientMock>();
@@ -291,7 +302,6 @@ namespace NKikimr::NKqp {
 
             // step 3: ReadSplits
             clientMock->ExpectReadSplits()
-                .DataSourceInstance(dataSourceInstance)
                 .Split()
                     .Description("some binary description")
                     .Select()
@@ -345,6 +355,10 @@ namespace NKikimr::NKqp {
             TestSelectCount(EProviderType::ClickHouse);
         }
 
+        Y_UNIT_TEST(YdbSelectCount) {
+            TestSelectCount(EProviderType::Ydb);
+        }
+
         void TestFilterPushdown(EProviderType providerType) {
             // prepare mock
             auto clientMock = std::make_shared<TConnectorClientMock>();
@@ -396,7 +410,6 @@ namespace NKikimr::NKqp {
             std::vector<i32> filterColumnData = {42, 24};
             // clang-format off
             clientMock->ExpectReadSplits()
-                .DataSourceInstance(dataSourceInstance)
                 .Split()
                     .Description("some binary description")
                     .Select(select)
@@ -449,6 +462,10 @@ namespace NKikimr::NKqp {
 
         Y_UNIT_TEST(ClickHouseFilterPushdown) {
             TestFilterPushdown(EProviderType::ClickHouse);
+        }
+
+        Y_UNIT_TEST(YdbFilterPushdown) {
+            TestFilterPushdown(EProviderType::Ydb);
         }
     }
 }

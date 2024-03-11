@@ -3,6 +3,7 @@
 #include "defs.h"
 
 #include <ydb/core/protos/console_config.pb.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include <util/generic/bitmap.h>
 #include <util/generic/hash.h>

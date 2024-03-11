@@ -177,7 +177,9 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
         Ctx = CreateClientContext();
         Ssl = ConstructSsl(Ctx.Get(), Bio.Get());
         if (!Host.Empty()) {
-            SSL_set_tlsext_host_name(Ssl.Get(), Host.c_str());
+            TVector<TString> items;
+            Split(Host, ":", items);
+            SSL_set_tlsext_host_name(Ssl.Get(), items[0].c_str());
         }
         SSL_set_connect_state(Ssl.Get());
     }
@@ -204,6 +206,7 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
             write = true;
             return -EAGAIN;
         default:
+            std::cerr << "(SSL_ERROR): " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
             return -EIO;
         }
     }

@@ -59,11 +59,6 @@ public:
             return Ptr_ == other.Ptr_;
         }
 
-        bool operator != (TIterator other) const
-        {
-            return Ptr_ != other.Ptr_;
-        }
-
         TIterator& operator = (TIterator other)
         {
             Ptr_ = other.Ptr_;

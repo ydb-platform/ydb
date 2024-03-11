@@ -9,10 +9,11 @@
 namespace NKikimr::NDataShard {
 
 class TDataShard;
+class TDataShardUserDb;
 
 class TKeyValidator {
 public:
-    TKeyValidator(const TDataShard& self, const NTable::TDatabase& db);
+    TKeyValidator(const TDataShard& self);
 
     struct TColumnWriteMeta {
         NTable::TColumn Column;
@@ -22,8 +23,24 @@ public:
     void AddReadRange(const TTableId& tableId, const TVector<NTable::TColumn>& columns, const TTableRange& range, const TVector<NScheme::TTypeInfo>& keyTypes, ui64 itemsLimit = 0, bool reverse = false);
     void AddWriteRange(const TTableId& tableId, const TTableRange& range, const TVector<NScheme::TTypeInfo>& keyTypes, const TVector<TColumnWriteMeta>& columns, bool isPureEraseOp);
     
-    bool IsValidKey(TKeyDesc& key) const;
-    std::tuple<NMiniKQL::IEngineFlat::EResult, TString> ValidateKeys() const;
+    struct TValidateOptions {
+        bool IsLockTxId;
+        bool IsLockNodeId;
+        bool IsRepeatableSnapshot;
+        bool IsImmediateTx;
+        bool IsWriteTx;
+        const NTable::TScheme& Scheme;
+
+        TValidateOptions(ui64 LockTxId,
+                         ui32 LockNodeId,
+                         bool isRepeatableSnapshot,
+                         bool isImmediateTx,
+                         bool isWriteTx,
+                         const NTable::TScheme& scheme);
+    };
+
+    bool IsValidKey(TKeyDesc& key, const TValidateOptions& options) const;
+    std::tuple<NMiniKQL::IEngineFlat::EResult, TString> ValidateKeys(const TValidateOptions& options) const;
 
     ui64 GetTableSchemaVersion(const TTableId& tableId) const;
 
@@ -31,7 +48,6 @@ public:
     const NMiniKQL::IEngineFlat::TValidationInfo& GetInfo() const;
 private:
     const TDataShard& Self;
-    const NTable::TDatabase& Db;
 
     NMiniKQL::IEngineFlat::TValidationInfo Info;
 };

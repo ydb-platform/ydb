@@ -27,9 +27,10 @@ public:
     }
 
     void Handle(TEvSaveScriptExternalEffectRequest::TPtr& ev) {
-        ev->Get()->Sinks = FilterExternalSinks(ev->Get()->Sinks);
+        auto& description = ev->Get()->Description;
+        description.Sinks = FilterExternalSinks(description.Sinks);
 
-        if (!ev->Get()->Sinks.empty()) {
+        if (!description.Sinks.empty()) {
             Register(CreateSaveScriptExternalEffectActor(std::move(ev)));
         } else {
             Send(ev->Sender, new TEvSaveScriptExternalEffectResponse(Ydb::StatusIds::SUCCESS, {}));
@@ -37,7 +38,7 @@ public:
     }
 
     void Handle(TEvScriptFinalizeRequest::TPtr& ev) {
-        TString executionId = ev->Get()->ExecutionId;
+        TString executionId = ev->Get()->Description.ExecutionId;
 
         if (!FinalizationRequestsQueue_.contains(executionId)) {
             WaitingFinalizationExecutions_.push(executionId);

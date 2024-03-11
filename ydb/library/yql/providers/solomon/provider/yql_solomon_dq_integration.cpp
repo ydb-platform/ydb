@@ -94,7 +94,7 @@ public:
         YQL_ENSURE(false, "Unimplemented");
     }
 
-    void FillSourceSettings(const TExprNode&, ::google::protobuf::Any&, TString& ) override {
+    void FillSourceSettings(const TExprNode&, ::google::protobuf::Any&, TString&, size_t) override {
         YQL_ENSURE(false, "Unimplemented");
     }
 

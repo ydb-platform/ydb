@@ -1,4 +1,5 @@
 import collections
+import json
 import os
 import six
 from hashlib import md5
@@ -135,6 +136,15 @@ def get_srcdir(path, unit):
     return rootrel_arc_src(path, unit)[: -len(path)].rstrip('/')
 
 
+@lazy
+def get_ruff_configs(unit):
+    rel_config_path = rootrel_arc_src(unit.get('RUFF_CONFIG_PATHS_FILE'), unit)
+    arc_config_path = unit.resolve_arc_path(rel_config_path)
+    abs_config_path = unit.resolve(arc_config_path)
+    with open(abs_config_path, 'r') as fd:
+        return list(json.load(fd).values())
+
+
 def add_python_lint_checks(unit, py_ver, files):
     @lazy
     def get_resolved_files():
@@ -144,6 +154,8 @@ def add_python_lint_checks(unit, py_ver, files):
             if resolved.startswith('$S'):  # path was resolved as source file.
                 resolved_files.append(resolved)
         return resolved_files
+
+    upath = unit.path()[3:]
 
     no_lint_value = get_no_lint_value(unit)
     if no_lint_value == "none":
@@ -160,8 +172,6 @@ def add_python_lint_checks(unit, py_ver, files):
             "yt/yt/",  # YT-20053
             "yt/python/",  # YT-20053
         )
-
-        upath = unit.path()[3:]
 
         if not upath.startswith(no_lint_allowed_paths):
             ymake.report_configure_error("NO_LINT() is allowed only in " + ", ".join(no_lint_allowed_paths))
@@ -193,6 +203,27 @@ def add_python_lint_checks(unit, py_ver, files):
                 params += ["EXTRA_PARAMS"] + extra_params
             unit.on_add_linter_check(params)
 
+    # ruff related stuff
+    if unit.get('STYLE_RUFF_VALUE') == 'yes':
+        if no_lint_value in ("none", "none_internal"):
+            ymake.report_configure_error(
+                'NO_LINT() and STYLE_RUFF() can\'t be enabled both at the same time',
+            )
+        # temporary allow using ruff for taxi only
+        ruff_allowed_paths = ("taxi/",)
+        if not upath.startswith(ruff_allowed_paths):
+            ymake.report_configure_error("STYLE_RUFF() is allowed only in " + ", ".join(ruff_allowed_paths))
+
+        resolved_files = get_resolved_files()
+        if resolved_files:
+            resource = "build/external_resources/ruff"
+            params = ["ruff", "tools/ruff_linter/bin/ruff_linter"]
+            params += ["FILES"] + resolved_files
+            params += ["GLOBAL_RESOURCES", resource]
+            configs = [unit.get('RUFF_CONFIG_PATHS_FILE'), 'build/config/tests/ruff/ruff.toml'] + get_ruff_configs(unit)
+            params += ['CONFIGS'] + configs
+            unit.on_add_linter_check(params)
+
     if files and unit.get('STYLE_PYTHON_VALUE') == 'yes' and is_py3(unit):
         resolved_files = get_resolved_files()
         if resolved_files:
@@ -218,7 +249,7 @@ def py_program(unit, py3):
     if py3:
         peers = ['library/python/runtime_py3/main']
         if unit.get('PYTHON_SQLITE3') != 'no':
-            peers.append('contrib/tools/python3/src/Modules/_sqlite')
+            peers.append('contrib/tools/python3/Modules/_sqlite')
     else:
         peers = ['library/python/runtime/main']
         if unit.get('PYTHON_SQLITE3') != 'no':
@@ -301,6 +332,7 @@ def onpy_srcs(unit, *args):
     swigs_cpp = []
     swigs = swigs_cpp
     pys = []
+    pyis = []
     protos = []
     evs = []
     fbss = []
@@ -419,9 +451,8 @@ def onpy_srcs(unit, *args):
                 evs.append(pathmod)
             elif path.endswith('.swg'):
                 swigs.append(pathmod)
-            # Allow pyi files in PY_SRCS for autocomplete in IDE, but skip it during building
             elif path.endswith('.pyi'):
-                pass
+                pyis.append(pathmod)
             elif path.endswith('.fbs'):
                 fbss.append(pathmod)
             else:
@@ -449,7 +480,10 @@ def onpy_srcs(unit, *args):
                 # generated
                 if with_ext is None:
                     cpp_files2res.add(
-                        (os.path.splitext(filename)[0] + out_suffix, os.path.splitext(path)[0] + out_suffix)
+                        (
+                            os.path.splitext(filename)[0] + out_suffix,
+                            os.path.splitext(path)[0] + out_suffix,
+                        )
                     )
                 else:
                     cpp_files2res.add((filename + with_ext + out_suffix, path + with_ext + out_suffix))
@@ -594,6 +628,20 @@ def onpy_srcs(unit, *args):
             add_python_lint_checks(
                 unit, 2, [path for path, mod in pys] + unit.get(['_PY_EXTRA_LINT_FILES_VALUE']).split()
             )
+
+    if pyis:
+        pyis_seen = set()
+        pyis_dups = {m for _, m in pyis if (m in pyis_seen or pyis_seen.add(m))}
+        if pyis_dups:
+            pyis_dups = ', '.join(name for name in sorted(pyis_dups))
+            ymake.report_configure_error('Duplicate(s) is found in the PY_SRCS macro: {}'.format(pyis_dups))
+
+        res = []
+        for path, mod in pyis:
+            dest = 'py/' + mod.replace('.', '/') + '.pyi'
+            res += ['DEST', dest, path]
+
+        unit.onresource_files(res)
 
     use_vanilla_protoc = unit.get('USE_VANILLA_PROTOC') == 'yes'
     if use_vanilla_protoc:

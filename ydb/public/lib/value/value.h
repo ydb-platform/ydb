@@ -89,9 +89,12 @@ public:
     NScheme::TTypeId GetDataType() const;
     // gets text representation of simple 'Data' types
     TString GetDataText() const;
+
     // gets text representation of simple 'Pg' types
-    // You need to add ydb/core/kqp/opt/query_plan_value to PEERDIRs in order to use this function
     TString GetPgText() const;
+    // gets text representation of simple 'Data' and 'Pg' types
+    TString GetSimpleValueText() const;
+
     // returns text representation of value's type
     template <typename Format> TString GetTypeText(const Format& format = Format()) const;
     // returns text representation of value itself

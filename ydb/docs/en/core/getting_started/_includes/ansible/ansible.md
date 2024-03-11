@@ -123,10 +123,6 @@ The values of the `system_timezone` and `system_ntp_servers` variables depend on
 
 {% list tabs %}
 
-- Yandex Cloud
-  * `system_timezone`: Europe/Moscow
-  * `system_ntp_servers`: [0.ru.pool.ntp.org, 1.ru.pool.ntp.org, ntp0.NL.net, ntp2.vniiftri.ru, ntp.ix.ru, ntps1-1.cs.tu-berlin.de] [Learn more](https://cloud.yandex.ru/en/docs/tutorials/infrastructure-management/ntp) about Yandex Cloud NTP server settings.
-
 - AWS
   * `system_timezone`: USA/<region_name>
   * `system_ntp_servers`: [169.254.169.123, time.aws.com] [Learn more](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/set-time.html#configure-time-sync) about AWS NTP server settings.
@@ -136,6 +132,10 @@ The values of the `system_timezone` and `system_ntp_servers` variables depend on
 
 - Alibaba
   * The specifics of connecting to NTP servers in Alibaba are described in [this article](https://www.alibabacloud.com/help/en/ecs/user-guide/alibaba-cloud-ntp-server).
+
+- Yandex Cloud
+  * `system_timezone`: Europe/Moscow
+  * `system_ntp_servers`: [0.ru.pool.ntp.org, 1.ru.pool.ntp.org, ntp0.NL.net, ntp2.vniiftri.ru, ntp.ix.ru, ntps1-1.cs.tu-berlin.de] [Learn more](https://cloud.yandex.ru/en/docs/tutorials/infrastructure-management/ntp) about Yandex Cloud NTP server settings.
 
 {% endlist %}
 

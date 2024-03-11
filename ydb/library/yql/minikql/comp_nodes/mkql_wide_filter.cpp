@@ -244,7 +244,7 @@ public:
     }
 
     TMaybeFetchResult DoProcess(NUdf::TUnboxedValue& start, TComputationContext& ctx, TMaybeFetchResult fetchRes, NUdf::TUnboxedValue*const* output) const {
-        if (!start && fetchRes.Get() == EFetchResult::One) {
+        if (!start.Get<bool>() && fetchRes.Get() == EFetchResult::One) {
             const bool predicate = Predicate->GetValue(ctx).Get<bool>();
             if (!predicate) {
                 start = NUdf::TUnboxedValuePod(true);

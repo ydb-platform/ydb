@@ -8,9 +8,12 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // TOutOfSpaceState
     ////////////////////////////////////////////////////////////////////////////
-    TOutOfSpaceState::TOutOfSpaceState(ui32 totalVDisks, ui32 selfOrderNum)
+    TOutOfSpaceState::TOutOfSpaceState(ui32 totalVDisks, ui32 selfOrderNum,
+        const TString& vDiskLogPrefix, std::shared_ptr<NMonGroup::TOutOfSpaceGroup> monGroup)
         : TotalVDisks(totalVDisks)
         , SelfOrderNum(selfOrderNum)
+        , VDiskLogPrefix(vDiskLogPrefix)
+        , MonGroup(monGroup)
     {
         Y_ABORT_UNLESS(totalVDisks <= MaxVDisksInGroup);
         for (ui32 i = 0; i < TotalVDisks; ++i) {
@@ -38,6 +41,26 @@ namespace NKikimr {
         }
     }
 
+    void UpdateMonGroup(NPDisk::TStatusFlags flags, std::shared_ptr<NMonGroup::TOutOfSpaceGroup> monGroup) {
+        if (!monGroup) {
+            return;
+        }
+
+        if (flags & NKikimrBlobStorage::StatusDiskSpaceRed) {
+            monGroup->StatusDiskSpaceRed().Inc();
+        } else if (flags & NKikimrBlobStorage::StatusDiskSpaceOrange) {
+            monGroup->StatusDiskSpaceOrange().Inc();
+        } else if (flags & NKikimrBlobStorage::StatusDiskSpaceLightOrange) {
+            monGroup->StatusDiskSpaceLightOrange().Inc();
+        } else if (flags & NKikimrBlobStorage::StatusDiskSpacePreOrange) {
+            monGroup->StatusDiskSpacePreOrange().Inc();
+        } else if (flags & NKikimrBlobStorage::StatusDiskSpaceYellowStop) {
+            monGroup->StatusDiskSpaceYellowStop().Inc();
+        } else if (flags & NKikimrBlobStorage::StatusDiskSpaceLightYellowMove) {
+            monGroup->StatusDiskSpaceLightYellowMove().Inc();
+        }
+    }
+
     void TOutOfSpaceState::Update(ui32 vdiskOrderNum, NPDisk::TStatusFlags flags) {
         NPDisk::TStatusFlags curFlags = static_cast<NPDisk::TStatusFlags>(AtomicGet(AllVDiskFlags[vdiskOrderNum]));
         if (curFlags == flags) {
@@ -47,14 +70,20 @@ namespace NKikimr {
 
         // setup new value
         AtomicSet(AllVDiskFlags[vdiskOrderNum], static_cast<TAtomicBase>(flags));
-
         // recalculate merge
         TAtomicBase merged = 0;
         for (ui32 i = 0; i < TotalVDisks; ++i) {
             TAtomicBase value = AtomicGet(AllVDiskFlags[i]);
             merged |= value;
         }
-
         AtomicSet(GlobalFlags, merged);
+
+        UpdateMonGroup(flags, MonGroup);
+
+        if (TlsActivationContext) {
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_VDISK_CHUNKS,
+                VDiskLogPrefix << "Disk space status changed to " <<
+                TPDiskSpaceColor_Name(StatusFlagToSpaceColor(flags)));
+        }
     }
 } // NKikimr

@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.h"
+#include "vdisk_mongroups.h"
 
 #include <ydb/core/blobstorage/base/blobstorage_oos_defs.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
@@ -18,7 +19,7 @@ namespace NKikimr {
     class TOutOfSpaceState {
     public:
 
-        TOutOfSpaceState(ui32 totalVDisks, ui32 selfOrderNum);
+        TOutOfSpaceState(ui32 totalVDisks, ui32 selfOrderNum, const TString& vDiskLogPrefix, std::shared_ptr<NMonGroup::TOutOfSpaceGroup> monGroup);
         static NKikimrWhiteboard::EFlag ToWhiteboardFlag(const ESpaceColor color);
         // update flags for vdisk with vdiskOrderNum
         void Update(ui32 vdiskOrderNum, NPDisk::TStatusFlags flags);
@@ -96,6 +97,10 @@ namespace NKikimr {
         const ui32 SelfOrderNum;
         // Chunks used locally by VDisk
         TAtomic LocalUsedChunks = 0;
+        // VDiskLogPrefix for logging
+        TString VDiskLogPrefix;
+        // Monitoring counters
+        std::shared_ptr<NMonGroup::TOutOfSpaceGroup> MonGroup;
     };
 
     ////////////////////////////////////////////////////////////////////////////

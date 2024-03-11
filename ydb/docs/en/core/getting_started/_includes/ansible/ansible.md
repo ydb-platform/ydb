@@ -59,7 +59,7 @@ Navigate to the root directory of the downloaded repository and execute the comm
 [Download](../../../downloads/index.md#ydb-server) the archive of the current version of {{ ydb-short-name }} into the project's root directory. For example, using wget: `wget https://binaries.ydb.tech/release/23.3.17/ydbd-23.3.17-linux-amd64.tar.gz` and also copy the private part of the SSH key for accessing the {{ ydb-short-name }} cluster servers to the same location. The SSH key should have the following permissions:
 ```text
 -rw------- (600)  # Only the owner has read and write permission.
-
+```
 You can set the required permissions with the command `sudo chmod 600 <ssh-key name>`.
 
 Next, you can go to the TLS directory and specify in the file ydb-ca-nodes.txt a list of FQDNs for which TLS certificates will be generated. By default, the list looks as follows:

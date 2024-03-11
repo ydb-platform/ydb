@@ -899,22 +899,6 @@ CREATE VIEW xmlview9 AS SELECT xmlserialize(content 'good' as text);
 SELECT table_name, view_definition FROM information_schema.views
   WHERE table_name LIKE 'xmlview%' ORDER BY 1;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
-    	SELECT table_name, view_definition FROM information_schema.views
-	^
-        -stdin-:<main>: Error: At function: PgSetItem
-        
-            -stdin-:<main>:1:1: Error: At function: PgWhere
-            	SELECT table_name, view_definition FROM information_schema.views
-	^
-                -stdin-:<main>:2:20: Error: At function: PgLike
-                	  WHERE table_name LIKE 'xmlview%' ORDER BY 1;
-	                   ^
-                    -stdin-:<main>:2:20: Error: Expected pg text, but got name
-                    	  WHERE table_name LIKE 'xmlview%' ORDER BY 1;
-	                   ^
 <sql-statement>
 -- Text XPath expressions evaluation
 SELECT xpath('/value', data) FROM xmltest;

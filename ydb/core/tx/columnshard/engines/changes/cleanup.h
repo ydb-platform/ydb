@@ -28,7 +28,7 @@ protected:
         return 0;
     }
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const override {
-        return std::make_shared<NDataLocks::TListPortionsLock>(PortionsToDrop);
+        return std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier(), PortionsToDrop);
     }
 
 public:

@@ -25,6 +25,27 @@ struct TIndexInfo;
 class TVersionedIndex;
 class IDbWrapper;
 
+class TEntityChunk {
+private:
+    TChunkAddress Address;
+    YDB_READONLY(ui32, RecordsCount, 0);
+    YDB_READONLY(ui64, RawBytes, 0);
+    YDB_READONLY_DEF(TBlobRangeLink16, BlobRange);
+public:
+    const TChunkAddress& GetAddress() const {
+        return Address;
+    }
+
+    TEntityChunk(const TChunkAddress& address, const ui32 recordsCount, const ui64 rawBytesSize, const TBlobRangeLink16& blobRange)
+        : Address(address)
+        , RecordsCount(recordsCount)
+        , RawBytes(rawBytesSize)
+        , BlobRange(blobRange)
+    {
+
+    }
+};
+
 class TPortionInfo {
 private:
     TPortionInfo() = default;
@@ -39,6 +60,9 @@ private:
     std::vector<TUnifiedBlobId> BlobIds;
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
 public:
+
+    THashMap<TString, THashMap<TUnifiedBlobId, std::vector<TEntityChunk>>> GetEntityChunks(const TIndexInfo& info) const;
+
     const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
         return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
     }
@@ -76,6 +100,13 @@ public:
 
         }
     };
+
+    TString GetTierNameDef(const TString& defaultTierName) const {
+        if (GetMeta().GetTierName()) {
+            return GetMeta().GetTierName();
+        }
+        return defaultTierName;
+    }
 
     static TConclusion<TPortionInfo> BuildFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;

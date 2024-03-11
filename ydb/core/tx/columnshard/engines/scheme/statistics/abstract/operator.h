@@ -67,6 +67,12 @@ private:
     using TBase = NBackgroundTasks::TInterfaceProtoContainer<IOperator>;
 public:
     using TBase::TBase;
+
+    const TPortionStorageCursor& GetCursorVerified() const {
+        AFL_VERIFY(Cursor);
+        return *Cursor;
+    }
+
     void SetCursor(const TPortionStorageCursor& cursor) {
         AFL_VERIFY(!Cursor);
         Cursor = cursor;

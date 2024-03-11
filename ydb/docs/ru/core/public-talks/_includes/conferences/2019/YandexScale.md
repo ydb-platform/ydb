@@ -5,7 +5,7 @@
 
 Доклад будет интересен всем, кто интересуется распределенными базами данных.
 
-[Слайды доклада](https://storage.yandexcloud.net/ydb-public-talks/08-20190905_yscale_fomichev.pptx)
+[Слайды](https://presentations.ydb.tech/2019/ru/yandex_scale_nosql_alternative/presentation.pdf)
 
 ### {{ ydb-name }} at Scale: опыт применения в высоконагруженных сервисах Яндекса {#2019-conf-yascale-ydb-at-scale}
 Представители [Auto.ru](https://auto.ru), [Яндекс.Репетитора](https://yandex.ru/tutor/), [Алисы](https://yandex.ru/alice) и [Condé Nast](https://www.condenast.ru/) рассказали, почему они выбрали {{ ydb-name }} и как эта СУБД помогает развивать их продукты.
@@ -14,4 +14,4 @@
 
 Доклад будет интересен всем, кто интересуется распределенными базами данных.
 
-[Слайды доклада](https://storage.yandexcloud.net/ydb-public-talks/242-olegbondar.pptx)
+[Слайды](https://storage.yandexcloud.net/ydb-public-talks/242-olegbondar.pptx)

@@ -38,7 +38,7 @@
 
 <hr>
 
-## 2019: YaTalks, Yandex Scale, HighLoad ++ Москва, HighLoad ++ Сибирь, Backend Conf {#2019-conf}
+## 2019: YaTalks, Yandex Scale, HighLoad ++ Москва, HighLoad ++ Сибирь, Backend Conf, Hydra {#2019-conf}
 
 {% include [YaTalks](./_includes/conferences/2019/YaTalks.md) %}
 
@@ -47,6 +47,8 @@
 {% include [HighLoad](./_includes/conferences/2019/HighLoad.md) %}
 
 {% include [BackendConf](./_includes/conferences/2019/BackendConf.md) %}
+
+{% include [Hydra](./_includes/conferences/2019/Hydra.md) %}
 
 <hr>
 

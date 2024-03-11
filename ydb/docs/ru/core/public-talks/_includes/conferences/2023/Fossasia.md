@@ -5,4 +5,4 @@
 
 Доклад подойдёт всем, кто еще не знаком с {{ ydb-short-name }}.
 
-[Слайды доклада](https://github.com/ydb-platform/ydb-presentations/blob/main/2023/en/fossasia_summit/presentation.pdf)
+[Слайды доклада](https://presentations.ydb.tech/2023/en/fossasia_summit/presentation.pdf)

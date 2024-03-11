@@ -5,4 +5,4 @@
 
 Этот доклад будет интересен всем, кто хочет узнать простой способ увеличения стабильности и доступности системы в продакшене.
 
-[Слайды выступления](https://2017.heisenbug-moscow.ru/en/talks/2017/msk/79fuksrzakwwqu4cmikw62/)
+[Слайды](https://presentations.ydb.tech/2017/ru/heisenbug/presentation.pdf)

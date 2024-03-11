@@ -11,4 +11,4 @@
 
 Вебинар будет интересен тем, кто хочет познакомиться с {{ ydb-name }}.
 
-[Презентация](https://storage.yandexcloud.net/ydb-public-talks/2019-webinar.pptx)
+[Презентация](https://presentations.ydb.tech/2019/ru/webinar_ydb/presentation.pdf)

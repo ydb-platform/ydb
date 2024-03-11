@@ -14,3 +14,5 @@
 @[YouTube](https://www.youtube.com/watch?v=8bgtMxkduV8&t=3946s)
 
 Доклад будет полезен разработчикам, архитекторам, инженерам сопровождения.
+
+[Слайды](https://presentations.ydb.tech/2021/ru/about_cloud_postgresql_migration/presentation.pdf)

@@ -16,3 +16,5 @@
 * [Go SDK](github.com/yandex-cloud/ydb-go-sdk)
 * [Java SDK](github.com/yandex-cloud/ydb-java-sdk)
 * [Node.js SDK](github.com/yandex-cloud/ydb-nodejs-sdk)
+
+[Презентация](https://presentations.ydb.tech/2020/ru/webinar_ydb/presentation.pdf)

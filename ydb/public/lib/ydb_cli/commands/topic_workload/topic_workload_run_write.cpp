@@ -58,9 +58,9 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
     config.Opts->AddLongOption("direct", "Direct write to a partition node.")
         .Hidden()
         .StoreTrue(&Scenario.Direct);
-    config.Opts->AddLongOption("no-partition", "Let the server to choose the partition to write to.")
+    config.Opts->AddLongOption("empty-partition-id", "Do not send partition ID in requests.")
         .Hidden()
-        .StoreTrue(&Scenario.NoPartition);
+        .StoreTrue(&Scenario.EmptyPartitionId);
 
     config.Opts->MutuallyExclusive("message-rate", "byte-rate");
 

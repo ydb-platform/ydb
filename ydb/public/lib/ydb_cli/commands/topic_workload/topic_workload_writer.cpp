@@ -225,7 +225,7 @@ void TTopicWorkloadWriterWorker::CreateWorker() {
     settings.Path(Params.TopicName);
     settings.ProducerId(Params.ProducerId);
     settings.MessageGroupId(Params.ProducerId);
-    if (!Params.NoPartition) {
+    if (!Params.EmptyPartitionId) {
         settings.PartitionId(Params.PartitionId);
     }
     settings.DirectWriteToPartition(Params.Direct);

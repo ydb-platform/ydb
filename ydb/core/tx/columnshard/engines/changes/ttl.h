@@ -62,7 +62,7 @@ protected:
         const auto pred = [](const TPortionForEviction& p) {
             return p.GetPortionInfo().GetAddress();
         };
-        return std::make_shared<NDataLocks::TListPortionsLock>(PortionsToEvict, pred);
+        return std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier(), PortionsToEvict, pred);
     }
 public:
     class TMemoryPredictorSimplePolicy: public IMemoryPredictor {

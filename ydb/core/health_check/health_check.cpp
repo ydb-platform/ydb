@@ -809,7 +809,7 @@ public:
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
         TabletRequests.CompleteRequest(ev->Cookie);
         const NKikimrBlobStorage::TEvControllerConfigResponse& pbRecord(ev->Get()->Record);
-        if (pbRecord.HasResponse() && pbRecord.GetResponse().StatusSize() > 0) {
+        if (pbRecord.HasResponse() && pbRecord.GetResponse().StatusSize() > 1) {
             const NKikimrBlobStorage::TConfigResponse::TStatus& pbStatus(pbRecord.GetResponse().GetStatus(0));
             if (pbStatus.HasBaseConfig()) {
                 BaseConfig = ev->Release();
@@ -1920,7 +1920,8 @@ public:
 
     void FillStorage(TDatabaseState& databaseState, Ydb::Monitoring::StorageStatus& storageStatus, TSelfCheckContext context) {
         if (!BaseConfig) {
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "System tablet BSC didn't provide information", ETags::StorageState);
+            // it will be reported RED BSController System Tablet in this case, we don't need report RED Storage
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN, "System tablet BSC didn't provide information", ETags::StorageState);
         } else if (databaseState.StoragePools.empty()) {
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no storage pools", ETags::StorageState);
         } else {

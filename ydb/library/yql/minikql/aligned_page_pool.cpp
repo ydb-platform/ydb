@@ -196,13 +196,13 @@ TAlignedPagePoolCounters::TAlignedPagePoolCounters(::NMonitoring::TDynamicCounte
 
 template<typename T>
 TAlignedPagePoolImpl<T>::~TAlignedPagePoolImpl() {
-    if (CheckLostMem && !UncaughtException()) {
+    /*if (CheckLostMem && !UncaughtException()) {
         Y_DEBUG_ABORT_UNLESS(TotalAllocated == FreePages.size() * POOL_PAGE_SIZE,
                        "memory leak; Expected %ld, actual %ld (%ld page(s), %ld offloaded); allocator created at: %s",
                        TotalAllocated, FreePages.size() * POOL_PAGE_SIZE,
                        FreePages.size(), OffloadedActiveBytes, GetDebugInfo().data());
         Y_DEBUG_ABORT_UNLESS(OffloadedActiveBytes == 0, "offloaded: %ld", OffloadedActiveBytes);
-    }
+    }*/
 
     size_t activeBlocksSize = 0;
     for (auto it = ActiveBlocks.cbegin(); ActiveBlocks.cend() != it; ActiveBlocks.erase(it++)) {

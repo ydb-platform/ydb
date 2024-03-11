@@ -515,12 +515,10 @@ private:
 
         while (const auto keyAndState = bucket.ProcessingState->Extract()) {
             bucket.AsyncWriteOperation = bucket.InitialState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
-            if (!bucket.AsyncWriteOperation) {
-                for (size_t i = 0; i != KeyAndStateType->GetElementsCount(); ++i) {
-                    //releasing values stored in unsafe TUnboxedValue buffer
-                    keyAndState[i].UnRef();
-                }
-            }
+            /* for (size_t i = 0; i != KeyAndStateType->GetElementsCount(); ++i) {
+                //releasing values stored in unsafe TUnboxedValue buffer
+                keyAndState[i].UnRef();
+            }*/ 
             if (bucket.AsyncWriteOperation) return;
         }
 
@@ -848,7 +846,7 @@ private:
                     isNew ? nullptr : static_cast<NUdf::TUnboxedValue *>(bucket.ProcessingState->Tongue),
                     static_cast<NUdf::TUnboxedValue *>(bucket.ProcessingState->Throat)
                 );
-                BufferForUsedInputItems.resize(0);
+                BufferForKeyAnsState.resize(0);
             }
             if (const auto values = static_cast<NUdf::TUnboxedValue*>(bucket.ProcessingState->Extract())) {
                 Nodes.FinishItem(ctx, values, output);

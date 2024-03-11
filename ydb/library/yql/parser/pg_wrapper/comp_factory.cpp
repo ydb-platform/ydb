@@ -983,9 +983,9 @@ public:
         fmgr_info(Id, &FInfo);
         Y_ENSURE(FInfo.fn_retset == isList);
         Y_ENSURE(FInfo.fn_addr);
-        Y_ENSURE(FInfo.fn_nargs == ArgNodes.size());
-        ArgDesc.reserve(ProcDesc.ArgTypes.size());
-        for (ui32 i = 0; i < ProcDesc.ArgTypes.size(); ++i) {
+        Y_ENSURE(ArgNodes.size() <= FUNC_MAX_ARGS);
+        ArgDesc.reserve(ArgTypes.size());
+        for (ui32 i = 0; i < ArgTypes.size(); ++i) {
             ui32 type;
             // extract real type from input args
             auto argType = ArgTypes[i];

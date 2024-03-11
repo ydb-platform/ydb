@@ -66,6 +66,8 @@ struct TProcDesc {
     TVector<TString> OutputArgNames;
     TVector<ui32> OutputArgTypes;
     ui32 Lang = LangInternal;
+    ui32 VariadicType = 0;
+    TString VariadicArgName;
 };
 
 // Copied from pg_collation_d.h

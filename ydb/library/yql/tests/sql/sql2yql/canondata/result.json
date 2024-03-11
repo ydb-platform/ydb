@@ -13460,6 +13460,13 @@
             "uri": "https://{canondata_backend}/1599023/af9c2f81df0601cf266a0926b5ce73b6101b9115/resource.tar.gz#test_sql2yql.test_pg-values_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-variadic]": [
+        {
+            "checksum": "84521a8714501f5a9bf885905e2c034e",
+            "size": 730,
+            "uri": "https://{canondata_backend}/937458/e965a077f6aeb511184e419b0de866e505778b68/resource.tar.gz#test_sql2yql.test_pg-variadic_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-wide_sort]": [
         {
             "checksum": "0a312c05be5c91545de12d451a697d00",

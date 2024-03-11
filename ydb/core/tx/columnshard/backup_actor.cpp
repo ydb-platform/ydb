@@ -136,7 +136,9 @@ public:
 
     void Handle(TEvPrivate::TEvWriteBlobsResult::TPtr&, const TActorContext& ctx) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupActor.Handle", "TEvWriteBlobsResult");
-        SendBackupShardPersist(ctx);
+
+        auto proposePersist = std::make_unique<TEvPrivate::TEvBackupShardBatchPersist>();
+        ctx.Send(CSActorId, proposePersist.release());
     }
 
     void Handle(TEvPrivate::TEvBackupShardBatchPersistResult::TPtr&, const TActorContext& ctx) {
@@ -237,13 +239,6 @@ private:
     void SendBackupShardResult(const TActorContext& ctx) {
         auto proposeResult = std::make_unique<TEvPrivate::TEvBackupShardResult>();
         ctx.Send(SenderActorId, proposeResult.release());
-    }
-
-    void SendBackupShardPersist(const TActorContext& ctx) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("BackupActor.SendBackupShardPersist", "call");
-
-        auto proposePersist = std::make_unique<TEvPrivate::TEvBackupShardBatchPersist>();
-        ctx.Send(CSActorId, proposePersist.release());
     }
 
     void LoadBatchToStorage(const TActorContext& ctx, std::shared_ptr<arrow::RecordBatch> arrowBatch) {

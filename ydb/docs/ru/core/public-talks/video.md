@@ -1,3 +1,7 @@
+# Видеозаписи
+
+Видеозаписи выступлений спикеров команды YDB с конференций и вебинаров.
+
 {% list tabs %}
 
 - Конференции
@@ -5,8 +9,6 @@
   {% list tabs %}
 
   - 2023
-    
-    HighLoad++ Moscow, JPoint, YaTalks, Fossasia, CloudExpo {#2023-conf}
 
     {% include [HighLoad](./_includes/conferences/2023/HighLoad.md) %}
 
@@ -18,8 +20,6 @@
 
   - 2022
 
-    Highload++ Foundation, Hydra {#2022-conf}
-
     {% include [HighLoad](./_includes/conferences/2022/HighLoad.md) %}
 
     {% include [YaTalks](./_includes/conferences/2022/YaTalks.md) %}
@@ -27,8 +27,6 @@
     {% include [Hydra](./_includes/conferences/2022/Hydra.md) %}
 
   - 2021
-
-    YaTalks, Я.Субботник по разработке инфраструктуры, DevOps {#2021-conf}
 
     {% include [YaTalks](./_includes/conferences/2021/YaTalks.md) %}
 
@@ -38,13 +36,9 @@
 
   - 2020
 
-    Yandex Scale {#2020-conf}
-
     {% include [YandexScale](./_includes/conferences/2020/YandexScale.md) %}
 
   - 2019
-
-    YaTalks, Yandex Scale, HighLoad ++ Москва, HighLoad ++ Сибирь, Backend Conf, Hydra {#2019-conf}
 
     {% include [YaTalks](./_includes/conferences/2019/YaTalks.md) %}
 
@@ -58,13 +52,9 @@
 
   - 2018
 
-    about:cloud {#2018-conf}
-
     {% include [AboutCloud](./_includes/conferences/2018/about_cloud.md) %}
 
   - 2017 
-
-    about:cloud {#2017-conf}
 
     {% include [Heisenbug](./_includes/conferences/2017/Heisenbug.md) %}
 

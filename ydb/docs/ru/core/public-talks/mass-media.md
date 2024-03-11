@@ -1,11 +1,18 @@
 # Публикации в СМИ
 
-## Публикации в СМИ за 2023 год {#2023-smi}
+Публичные материалы о {{ ydb-short-name }} в СМИ.
 
-{% include [OSP](./_includes/publications/2023/osp.md) %}
+{% list tabs %}
+  
+  - 2023
+    
+    {% include [OSP](./_includes/publications/2023/osp.md) %}
 
-## Публикации в СМИ за 2021 год {#2021-smi}
+  - 2021
 
-{% include [Habr](./_includes/publications/2021/Habr.md) %}
+    {% include [Habr](./_includes/publications/2021/Habr.md) %}
 
-{% include [OSP](./_includes/publications/2021/osp.md) %}
+    {% include [OSP](./_includes/publications/2021/osp.md) %}
+
+{% endlist %}
+

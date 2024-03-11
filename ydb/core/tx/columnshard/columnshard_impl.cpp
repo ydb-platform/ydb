@@ -1025,8 +1025,8 @@ void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs:
 
 void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvBackupShardBatchPersist::TPtr& ev, const TActorContext& ctx) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TColumnShard.Handle", "TEvBackupShardBatchPersist");
-    auto ProposePersist = std::make_unique<NColumnShard::TEvPrivate::TEvBackupShardBatchPersistResult>();
-    ctx.Send(ev->Sender, ProposePersist.release());
+    auto proposePersist = std::make_unique<NColumnShard::TEvPrivate::TEvBackupShardBatchPersistResult>();
+    ctx.Send(ev->Sender, proposePersist.release());
 }
 
 void TColumnShard::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {

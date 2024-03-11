@@ -6,6 +6,8 @@
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/data_events/payload_helper.h>
+#include <ydb/core/wrappers/fake_storage.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NTxUT {
@@ -389,6 +391,52 @@ NMetadata::NFetcher::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpec
 }
 
 }
+
+namespace NKikimr {
+
+namespace NTier = NOlap::NBlobOperations::NTier;
+using TFakeExternalStorage = NWrappers::NExternalStorage::TFakeExternalStorage;
+
+std::unique_ptr<NEvents::TDataEvents::TEvWrite> PrepareEvWrite(std::shared_ptr<arrow::RecordBatch> batch,
+                                                               const ui64 txId, const ui64 tableId, const ui64 ownerId,
+                                                               const ui64 schemaVersion,
+                                                               const std::vector<ui32> columnsIds) {
+    TString blobData = NArrow::SerializeBatchNoCompression(batch);
+
+    auto evWrite = std::make_unique<NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+    const ui64 payloadIndex =
+        NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
+    evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion},
+                          columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
+
+    return evWrite;
+}
+
+std::shared_ptr<NTier::TOperator> PrepareInsertOp(const TActorId& sender, const ui64 tableId) {
+    const auto storageId = "some storageId";
+    const TActorIdentity tabletActorID(sender);
+
+    auto sharedBlobsManager = std::make_shared<NOlap::NDataSharing::TSharedBlobsManager>(NOlap::TTabletId{tableId});
+
+    NKikimrSchemeOp::TStorageTierConfig cfgProto;
+    cfgProto.SetName("some_name");
+
+    ::NKikimrSchemeOp::TS3Settings s3_settings;
+    s3_settings.set_secretkey(Singleton<TFakeExternalStorage>()->GetSecretKey());
+    s3_settings.set_endpoint("fake");
+
+    *cfgProto.MutableObjectStorage() = s3_settings;
+    NColumnShard::NTiers::TTierConfig cfg("tier_name", cfgProto);
+
+    auto* tierManager = new NColumnShard::NTiers::TManager(tableId, tabletActorID, cfg);
+
+    tierManager->Start(nullptr);
+
+    return std::make_shared<NTier::TOperator>(storageId, tabletActorID, tierManager,
+                                              sharedBlobsManager->GetStorageManagerGuarantee(storageId));
+}
+
+}   // namespace NKikimr
 
 namespace NKikimr::NColumnShard {
     NOlap::TIndexInfo BuildTableInfo(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,

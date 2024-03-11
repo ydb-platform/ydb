@@ -19,14 +19,14 @@ constexpr auto DefaultMaxChunks = 1;
 
 class TBackupWriteController : public IWriteController, public TMonitoringObjectsCounter<TBackupWriteController, true> {
 private:
-    const TActorId actorID;
+    const TActorId ActorID;
 
     void DoOnReadyResult(const NActors::TActorContext& ctx, const TBlobPutResult::TPtr& putResult) override {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupWriteController.DoOnReadyResult", "start");
 
         NOlap::TWritingBuffer bufferStub;
         auto result = std::make_unique<TEvPrivate::TEvWriteBlobsResult>(putResult, std::move(bufferStub));
-        ctx.Send(actorID, result.release());
+        ctx.Send(ActorID, result.release());
     }
     void DoOnStartSending() override {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TBackupWriteController.DoOnStartSending", "start");
@@ -35,12 +35,11 @@ private:
 public:
     TBackupWriteController(const TActorId& actorID, const std::shared_ptr<NOlap::IBlobsWritingAction>& action,
                            std::shared_ptr<arrow::RecordBatch> arrowBatch)
-        : actorID(actorID) {
+        : ActorID(actorID) {
         NArrow::TBatchSplitttingContext splitCtx(NColumnShard::TLimits::GetMaxBlobSize());
         NArrow::TSerializedBatch batch = NArrow::TSerializedBatch::Build(arrowBatch, splitCtx);
         NOlap::TWritingBlob currentBlob;
 
-        // @TODO stub
         NOlap::TWriteAggregation aggreagtion(nullptr);
         NOlap::TWideSerializedBatch wideBatch(std::move(batch), aggreagtion);
         currentBlob.AddData(wideBatch);
@@ -60,11 +59,8 @@ class TBackupActor : public TActorBootstrapped<TBackupActor> {
     const std::vector<TString> ColumnsNames;
 
     EBackupActorState State = EBackupActorState::Invalid;
-
     NKikimrSSA::TProgram ProgramProto = NKikimrSSA::TProgram();
-
     std::optional<NActors::TActorId> ScanActorId;
-
     std::shared_ptr<arrow::RecordBatch> Batch;
 
 public:
@@ -239,15 +235,15 @@ private:
     }
 
     void SendBackupShardResult(const TActorContext& ctx) {
-        auto ProposeResult = std::make_unique<TEvPrivate::TEvBackupShardResult>();
-        ctx.Send(SenderActorId, ProposeResult.release());
+        auto proposeResult = std::make_unique<TEvPrivate::TEvBackupShardResult>();
+        ctx.Send(SenderActorId, proposeResult.release());
     }
 
     void SendBackupShardPersist(const TActorContext& ctx) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("BackupActor.SendBackupShardPersist", "call");
 
-        auto ProposePersist = std::make_unique<TEvPrivate::TEvBackupShardBatchPersist>();
-        ctx.Send(CSActorId, ProposePersist.release());
+        auto proposePersist = std::make_unique<TEvPrivate::TEvBackupShardBatchPersist>();
+        ctx.Send(CSActorId, proposePersist.release());
     }
 
     void LoadBatchToStorage(const TActorContext& ctx, std::shared_ptr<arrow::RecordBatch> arrowBatch) {

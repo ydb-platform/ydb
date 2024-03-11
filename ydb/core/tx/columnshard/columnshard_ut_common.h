@@ -6,6 +6,7 @@
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
+#include <ydb/core/tx/columnshard/blobs_action/tier/storage.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -432,6 +433,17 @@ TSerializedTableRange MakeTestRange(std::pair<ui64, ui64> range, bool inclusiveF
 
 
 }
+
+namespace NKikimr {
+
+std::unique_ptr<NEvents::TDataEvents::TEvWrite> PrepareEvWrite(std::shared_ptr<arrow::RecordBatch> batch,
+                                                               const ui64 txId, const ui64 tableId, const ui64 ownerId,
+                                                               const ui64 schemaVersion,
+                                                               const std::vector<ui32> columnsIds);
+
+std::shared_ptr<NOlap::NBlobOperations::NTier::TOperator> PrepareInsertOp(const TActorId& sender, const ui64 tableId);
+
+}   // namespace NKikimr
 
 namespace NKikimr::NColumnShard {
     class TTableUpdatesBuilder {

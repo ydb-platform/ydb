@@ -164,23 +164,19 @@ struct TEvPrivate {
     };
 
     class TEvBackupShardBatchPersist
-        : public NActors::TEventPB<TEvBackupShardBatchPersist, NKikimrBackupEvents::TEvBackupShardBatchPersist,
-                                   EvBackupShardBatchPersist> {
+        : public TEventLocal<TEvBackupShardBatchPersist, EvBackupShardBatchPersist> {
     public:
         TEvBackupShardBatchPersist() = default;
     };
 
     class TEvBackupShardBatchPersistResult
-        : public NActors::TEventPB<TEvBackupShardBatchPersistResult,
-                                   NKikimrBackupEvents::TEvBackupShardBatchPersistResult,
-                                   EvBackupShardBatchPersistResult> {
+        : public TEventLocal<TEvBackupShardBatchPersistResult, EvBackupShardBatchPersistResult> {
     public:
         TEvBackupShardBatchPersistResult() = default;
     };
 
     class TEvBackupShardResult
-        : public NActors::TEventPB<TEvBackupShardResult, NKikimrBackupEvents::TEvBackupShardResult,
-                                   EvBackupShardResult> {
+        : public TEventLocal<TEvBackupShardResult, EvBackupShardResult> {
     public:
         TEvBackupShardResult() = default;
     };

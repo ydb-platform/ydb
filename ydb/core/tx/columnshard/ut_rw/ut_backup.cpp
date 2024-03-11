@@ -15,7 +15,7 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/operations/write_data.h>
-#include <ydb/core/tx/columnshard/ut_rw/common.h>
+#include <ydb/core/tx/columnshard/columnshard_ut_common.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/wrappers/fake_storage.h>

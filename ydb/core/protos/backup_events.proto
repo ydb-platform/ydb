@@ -1,5 +1,3 @@
-import "ydb/library/actors/protos/actors.proto";
-
 package NKikimrBackupEvents;
 option java_package = "ru.yandex.kikimr.proto";
 

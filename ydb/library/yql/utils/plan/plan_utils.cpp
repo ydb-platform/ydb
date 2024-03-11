@@ -119,8 +119,9 @@ bool IsLowerPriority(const TString& lhs, const TString& rhs) {
         {"==", 0},
         {"+", 1},
         {"-", 1},
-        {"*", 2},
-        {"/", 2}
+        {"%", 2},
+        {"*", 3},
+        {"/", 3}
     };
 
     auto lhsIt = OP_PRIORITY.find(lhs);

@@ -15,6 +15,7 @@ private:
     YDB_READONLY(TAtomicCounter, IndexesSkippingOnSelect, 0);
     YDB_READONLY(TAtomicCounter, IndexesApprovedOnSelect, 0);
     YDB_READONLY(TAtomicCounter, IndexesSkippedNoData, 0);
+    YDB_READONLY(TAtomicCounter, TieringUpdates, 0);
     YDB_ACCESSOR(std::optional<TDuration>, GuaranteeIndexationInterval, TDuration::Zero());
     YDB_ACCESSOR(std::optional<TDuration>, PeriodicWakeupActivationPeriod, std::nullopt);
     YDB_ACCESSOR(std::optional<TDuration>, StatsReportInterval, std::nullopt);
@@ -145,6 +146,10 @@ protected:
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const override {
         return CompactionControl;
     }
+    void OnTieringModified(const std::shared_ptr<NKikimr::NColumnShard::TTiersManager>& /*tiers*/) override {
+        TieringUpdates.Inc();
+    }
+
     virtual void DoOnDataSharingFinished(const ui64 /*tabletId*/, const TString& sessionId) override {
         TGuard<TMutex> g(Mutex);
         AFL_VERIFY(SharingIds.erase(sessionId));

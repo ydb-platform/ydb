@@ -718,8 +718,8 @@ void TColumnShard::SetupCompaction() {
     LOG_S_DEBUG("ActiveCompactions: " << BackgroundController.GetCompactionsCount() << " at tablet " << TabletID());
 }
 
-bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls, const bool force) {
-    if (!AppDataVerified().ColumnShardConfig.GetTTLEnabled()) {
+bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls) {
+    if (!AppDataVerified().ColumnShardConfig.GetTTLEnabled() || !NYDBTest::TControllers::GetColumnShardController()->IsTTLEnabled()) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_ttl")("reason", "disabled");
         return false;
     }
@@ -727,9 +727,6 @@ bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls, con
     if (BackgroundController.IsTtlActive()) {
         ACFL_DEBUG("background", "ttl")("skip_reason", "in_progress");
         return false;
-    }
-    if (force) {
-        TablesManager.MutablePrimaryIndex().OnTieringModified(Tiers, TablesManager.GetTtl());
     }
     THashMap<ui64, NOlap::TTiering> eviction = pathTtls;
     for (auto&& i : eviction) {

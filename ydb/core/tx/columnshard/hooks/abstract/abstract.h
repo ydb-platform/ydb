@@ -76,6 +76,9 @@ protected:
 public:
     using TPtr = std::shared_ptr<ICSController>;
     virtual ~ICSController() = default;
+    virtual bool IsTTLEnabled() const {
+        return true;
+    }
     void OnDataSharingFinished(const ui64 tabletId, const TString& sessionId) {
         return DoOnDataSharingFinished(tabletId, sessionId);
     }

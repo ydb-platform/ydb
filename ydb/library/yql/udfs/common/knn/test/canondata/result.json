@@ -1,4 +1,9 @@
 {
+    "test.test[CosineDistance]": [
+        {
+            "uri": "file://test.test_CosineDistance_/results.txt"
+        }
+    ],
     "test.test[CosineSimilarity]": [
         {
             "uri": "file://test.test_CosineSimilarity_/results.txt"

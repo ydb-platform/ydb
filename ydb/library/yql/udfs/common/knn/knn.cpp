@@ -171,6 +171,19 @@ std::optional<float> InnerProductSimilarity(const TUnboxedValuePod vector1, cons
     return ret;
 }
 
+std::optional<float> CosineSimilarity(const TUnboxedValuePod vector1, const TUnboxedValuePod vector2) {
+    auto innerProduct = InnerProductSimilarity(vector1, vector2);
+    if (!innerProduct)
+        return {};
+
+    float len0 = CalcLength(vector1);
+    float len1 = CalcLength(vector2);
+
+    float cosine = innerProduct.value() / len0 / len1;
+
+    return cosine;
+}
+
 SIMPLE_STRICT_UDF(TInnerProductSimilarity, TOptional<float>(TAutoMap<TListType<float>>, TAutoMap<TListType<float>>)) {
     Y_UNUSED(valueBuilder);
 
@@ -184,23 +197,29 @@ SIMPLE_STRICT_UDF(TInnerProductSimilarity, TOptional<float>(TAutoMap<TListType<f
 SIMPLE_STRICT_UDF(TCosineSimilarity, TOptional<float>(TAutoMap<TListType<float>>, TAutoMap<TListType<float>>)) {
     Y_UNUSED(valueBuilder);
 
-    auto innerProduct = InnerProductSimilarity(args[0], args[1]);
-    if (!innerProduct)
+    auto cosine = CosineSimilarity(args[0], args[1]);
+    if (!cosine)
         return {};
 
-    float len0 = CalcLength(args[0]);
-    float len1 = CalcLength(args[1]);
+    return TUnboxedValuePod{cosine.value()};
+}
 
-    float cosine = innerProduct.value() / len0 / len1;
+SIMPLE_STRICT_UDF(TCosineDistance, TOptional<float>(TAutoMap<TListType<float>>, TAutoMap<TListType<float>>)) {
+    Y_UNUSED(valueBuilder);
 
-    return TUnboxedValuePod{cosine};
+    auto cosine = CosineSimilarity(args[0], args[1]);
+    if (!cosine)
+        return {};
+
+    return TUnboxedValuePod{1 - cosine.value()};
 }
 
 SIMPLE_MODULE(TKnnModule,
     TFromBinaryString, 
     TToBinaryString,
     TInnerProductSimilarity,
-    TCosineSimilarity
+    TCosineSimilarity,
+    TCosineDistance
     )
 
 REGISTER_MODULES(TKnnModule)

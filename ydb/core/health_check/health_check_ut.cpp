@@ -56,8 +56,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         BasicTest(new NHealthCheck::TEvNodeCheckRequest());
     }
 
-    int const GROUP_START_ID = 1200;
-    int const VCARD_START_ID = 55;
+    const int GROUP_START_ID = 1200;
+    const int VCARD_START_ID = 55;
+
+    const TPathId SERVERLESS_DOMAIN_KEY = {7000000000, 2};
+    const TPathId SHARED_DOMAIN_KEY = {7000000000, 1};
+    const TString STORAGE_POOL_NAME = "/Root:test";
 
     void ChangeDescribeSchemeResult(TEvSchemeShard::TEvDescribeSchemeResult::TPtr* ev, ui64 size = 20000000, ui64 quota = 90000000) {
         auto record = (*ev)->Get()->MutableRecord();
@@ -132,49 +136,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     };
 
-    void AddGroupVSlotInControllerConfigResponse(TEvBlobStorage::TEvControllerConfigResponse::TPtr* ev, const NKikimrBlobStorage::TGroupStatus::E groupStatus, const TVector<NKikimrBlobStorage::EVDiskStatus>& vdiskStatuses) {
-        auto& pbRecord = (*ev)->Get()->Record;
-        auto pbConfig = pbRecord.mutable_response()->mutable_status(0)->mutable_baseconfig();
-
-        auto groupSample = pbConfig->group(0);
-        auto vslotSample = pbConfig->vslot(0);
-        auto vslotIdSample = pbConfig->group(0).vslotid(0);
-        pbConfig->clear_group();
-        pbConfig->clear_vslot();
-        for (auto& pdisk: *pbConfig->mutable_pdisk()) {
-            pdisk.mutable_pdiskmetrics()->set_state(NKikimrBlobStorage::TPDiskState::Normal);
-        }
-
-        auto groupId = GROUP_START_ID;
-
-        auto group = pbConfig->add_group();
-        group->CopyFrom(groupSample);
-        group->set_groupid(groupId);
-        group->set_operatingstatus(groupStatus);
-        group->set_erasurespecies(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
-
-        group->clear_vslotid();
-        auto vslotId = VCARD_START_ID;
-
-        for (auto status: vdiskStatuses) {
-            auto vslot = pbConfig->add_vslot();
-            vslot->CopyFrom(vslotSample);
-            vslot->set_vdiskidx(vslotId);
-            vslot->set_groupid(groupId);
-            vslot->set_failrealmidx(vslotId);
-            vslot->mutable_vslotid()->set_vslotid(vslotId);
-
-            auto slotId = group->add_vslotid();
-            slotId->CopyFrom(vslotIdSample);
-            slotId->set_vslotid(vslotId);
-
-            const auto *descriptor = NKikimrBlobStorage::EVDiskStatus_descriptor();
-            vslot->set_status(descriptor->FindValueByNumber(status)->name());
-
-            vslotId++;
-        }
-    };
-
     void AddGroupVSlotInControllerConfigResponseWithStaticGroup(TEvBlobStorage::TEvControllerConfigResponse::TPtr* ev,
         const NKikimrBlobStorage::TGroupStatus::E groupStatus, const TVector<NKikimrBlobStorage::EVDiskStatus>& vdiskStatuses)
     {
@@ -184,18 +145,24 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto groupSample = pbConfig->group(0);
         auto vslotSample = pbConfig->vslot(0);
         auto vslotIdSample = pbConfig->group(0).vslotid(0);
-        for (auto& group: *pbConfig->mutable_group()) {
-            group.set_operatingstatus(groupStatus);
-        }
+
         for (auto& pdisk: *pbConfig->mutable_pdisk()) {
             pdisk.mutable_pdiskmetrics()->set_state(NKikimrBlobStorage::TPDiskState::Normal);
         }
 
-        auto groupId = GROUP_START_ID;
+        pbConfig->clear_group();
+
+        auto staticGroup = pbConfig->add_group();
+        staticGroup->CopyFrom(groupSample);
+        staticGroup->set_groupid(0);
+        staticGroup->set_storagepoolid(0);
+        staticGroup->set_operatingstatus(groupStatus);
+        staticGroup->set_erasurespecies(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
 
         auto group = pbConfig->add_group();
         group->CopyFrom(groupSample);
-        group->set_groupid(groupId);
+        group->set_groupid(GROUP_START_ID);
+        group->set_storagepoolid(1);
         group->set_operatingstatus(groupStatus);
         group->set_erasurespecies(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
 
@@ -206,7 +173,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             auto vslot = pbConfig->add_vslot();
             vslot->CopyFrom(vslotSample);
             vslot->set_vdiskidx(vslotId);
-            vslot->set_groupid(groupId);
+            vslot->set_groupid(GROUP_START_ID);
             vslot->set_failrealmidx(vslotId);
             vslot->mutable_vslotid()->set_vslotid(vslotId);
 
@@ -219,6 +186,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
             vslotId++;
         }
+
+        auto spStatus = pbRecord.mutable_response()->mutable_status(1);
+        spStatus->clear_storagepool();
+        auto sPool = spStatus->add_storagepool();
+        sPool->set_storagepoolid(1);
+        sPool->set_name(STORAGE_POOL_NAME);
     };
 
     void AddVSlotInVDiskStateResponse(TEvWhiteboard::TEvVDiskStateResponse::TPtr* ev, int groupCount, int vslotCount) {
@@ -367,7 +340,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 }
                 case TEvBlobStorage::EvControllerConfigResponse: {
                     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
-                    AddGroupVSlotInControllerConfigResponse(x, groupStatus, vdiskStatuses);
+                    AddGroupVSlotInControllerConfigResponseWithStaticGroup(x, groupStatus, vdiskStatuses);
                     break;
                 }
             }
@@ -391,17 +364,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             }
         }
         UNIT_ASSERT_VALUES_EQUAL(issuesCount, total);
-    }
-
-    void ChangeUsageDescribeSchemeResult(TEvSchemeShard::TEvDescribeSchemeResult::TPtr* ev, ui64 size, ui64 quota) {
-        auto record = (*ev)->Get()->MutableRecord();
-        auto pool = record->mutable_pathdescription()->mutable_domaindescription()->add_storagepools();
-        pool->set_name("/Root:test");
-        pool->set_kind("kind");
-
-        auto domain = record->mutable_pathdescription()->mutable_domaindescription();
-        domain->mutable_diskspaceusage()->mutable_tables()->set_totalsize(size);
-        domain->mutable_databasequotas()->set_data_stream_reserved_storage_quota(quota);
     }
 
      void StorageTest(ui64 usage, ui64 quota, ui64 storageIssuesNumber, Ydb::Monitoring::StatusFlag::Status status = Ydb::Monitoring::StatusFlag::GREEN) {
@@ -558,19 +520,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     }
 
-    const TPathId SERVERLESS_DOMAIN_KEY = {7000000000, 2};
-    const TPathId SHARED_DOMAIN_KEY = {7000000000, 1};
-    const TString SHARED_STORAGE_POOL_NAME = "/Root/shared:test";
-
-    void AddSharedGroupInControllerSelectGroupsResult(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr* ev) {
-        auto& pbRecord = (*ev)->Get()->Record;
-        auto pbMatchGroups = pbRecord.add_matchinggroups();
-
-        auto group = pbMatchGroups->add_groups();
-        group->set_groupid(GROUP_START_ID);
-        group->set_storagepoolname(SHARED_STORAGE_POOL_NAME);
-    }
-
     void ChangeNavigateKeyResultServerless(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr* ev,
         NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode,
         TTestActorRuntime& runtime)
@@ -600,7 +549,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         if (record->path() == "/Root/serverless" || record->path() == "/Root/shared") {
             record->set_status(NKikimrScheme::StatusSuccess);
             auto pool = record->mutable_pathdescription()->mutable_domaindescription()->add_storagepools();
-            pool->set_name(SHARED_STORAGE_POOL_NAME);
+            pool->set_name(STORAGE_POOL_NAME);
             pool->set_kind("kind");
         }
     }
@@ -684,11 +633,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     ChangeDescribeSchemeResultServerless(x);
                     break;
                 }
-                case TEvBlobStorage::EvControllerSelectGroupsResult: {
-                    auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr*>(&ev);
-                    AddSharedGroupInControllerSelectGroupsResult(x);
-                    break;
-                }
                 case TEvBlobStorage::EvControllerConfigResponse: {
                     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
                     TVector<NKikimrBlobStorage::EVDiskStatus> vdiskStatuses = { NKikimrBlobStorage::EVDiskStatus::READY };
@@ -728,7 +672,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::GREEN);
         UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), SHARED_STORAGE_POOL_NAME);
+        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), STORAGE_POOL_NAME);
     }
 
     Y_UNIT_TEST(SpecificServerlessWithExclusiveNodes) {
@@ -775,11 +719,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     ChangeDescribeSchemeResultServerless(x);
                     break;
                 }
-                case TEvBlobStorage::EvControllerSelectGroupsResult: {
-                    auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr*>(&ev);
-                    AddSharedGroupInControllerSelectGroupsResult(x);
-                    break;
-                }
                 case TEvBlobStorage::EvControllerConfigResponse: {
                     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
                     TVector<NKikimrBlobStorage::EVDiskStatus> vdiskStatuses = { NKikimrBlobStorage::EVDiskStatus::READY };
@@ -820,7 +759,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::GREEN);
         UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), SHARED_STORAGE_POOL_NAME);
+        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), STORAGE_POOL_NAME);
     }
 
     Y_UNIT_TEST(IgnoreServerlessWhenNotSpecific) {
@@ -875,11 +814,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 case TEvSchemeShard::EvDescribeSchemeResult: {
                     auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
                     ChangeDescribeSchemeResultServerless(x);
-                    break;
-                }
-                case TEvBlobStorage::EvControllerSelectGroupsResult: {
-                    auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr*>(&ev);
-                    AddSharedGroupInControllerSelectGroupsResult(x);
                     break;
                 }
                 case TEvBlobStorage::EvControllerConfigResponse: {
@@ -968,11 +902,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     ChangeDescribeSchemeResultServerless(x);
                     break;
                 }
-                case TEvBlobStorage::EvControllerSelectGroupsResult: {
-                    auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr*>(&ev);
-                    AddSharedGroupInControllerSelectGroupsResult(x);
-                    break;
-                }
                 case TEvBlobStorage::EvControllerConfigResponse: {
                     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
                     TVector<NKikimrBlobStorage::EVDiskStatus> vdiskStatuses = { NKikimrBlobStorage::EVDiskStatus::READY };
@@ -1013,7 +942,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
                 UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::GREEN);
                 UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), SHARED_STORAGE_POOL_NAME);
+                UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), STORAGE_POOL_NAME);
             }
         }
         UNIT_ASSERT(databaseFoundInResult);
@@ -1050,11 +979,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 case TEvSchemeShard::EvDescribeSchemeResult: {
                     auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
                     ChangeDescribeSchemeResultServerless(x);
-                    break;
-                }
-                case TEvBlobStorage::EvControllerSelectGroupsResult: {
-                    auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr*>(&ev);
-                    AddSharedGroupInControllerSelectGroupsResult(x);
                     break;
                 }
                 case TEvBlobStorage::EvControllerConfigResponse: {
@@ -1096,7 +1020,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::GREEN);
         UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), SHARED_STORAGE_POOL_NAME);
+        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), STORAGE_POOL_NAME);
     }
 
     Y_UNIT_TEST(ServerlessWithExclusiveNodesWhenTroublesWithSharedNodes) {
@@ -1154,11 +1078,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     ChangeDescribeSchemeResultServerless(x);
                     break;
                 }
-                case TEvBlobStorage::EvControllerSelectGroupsResult: {
-                    auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr*>(&ev);
-                    AddSharedGroupInControllerSelectGroupsResult(x);
-                    break;
-                }
                 case TEvBlobStorage::EvControllerConfigResponse: {
                     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
                     TVector<NKikimrBlobStorage::EVDiskStatus> vdiskStatuses = { NKikimrBlobStorage::EVDiskStatus::READY };
@@ -1184,7 +1103,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
         const auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
 
-        Ctest << result.ShortDebugString();
         UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::EMERGENCY);
 
         bool serverlessDatabaseFoundInResult = false;
@@ -1204,7 +1122,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
                 UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::GREEN);
                 UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), SHARED_STORAGE_POOL_NAME);
+                UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), STORAGE_POOL_NAME);
             } else if (database_status.name() == "/Root/shared") {
                 sharedDatabaseFoundInResult = true;
 
@@ -1215,7 +1133,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
                 UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::GREEN);
                 UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), SHARED_STORAGE_POOL_NAME);
+                UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), STORAGE_POOL_NAME);
             } else if (database_status.name() == "/Root") {
                 rootDatabaseFoundInResult = true;
 
@@ -1290,11 +1208,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     ChangeDescribeSchemeResultServerless(x);
                     break;
                 }
-                case TEvBlobStorage::EvControllerSelectGroupsResult: {
-                    auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr*>(&ev);
-                    AddSharedGroupInControllerSelectGroupsResult(x);
-                    break;
-                }
                 case TEvBlobStorage::EvControllerConfigResponse: {
                     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
                     TVector<NKikimrBlobStorage::EVDiskStatus> vdiskStatuses = { NKikimrBlobStorage::EVDiskStatus::READY };
@@ -1339,7 +1252,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
                 UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::GREEN);
                 UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), SHARED_STORAGE_POOL_NAME);
+                UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), STORAGE_POOL_NAME);
             } else if (database_status.name() == "/Root/shared") {
                 sharedDatabaseFoundInResult = true;
 
@@ -1351,7 +1264,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
                 UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::GREEN);
                 UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), SHARED_STORAGE_POOL_NAME);
+                UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), STORAGE_POOL_NAME);
             } else if (database_status.name() == "/Root") {
                 rootDatabaseFoundInResult = true;
 
@@ -1474,6 +1387,68 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(database_status.compute().nodes()[0].id(), ToString(dynNodeId));
 
         UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::RED);
+        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 0);
+    }
+
+    Y_UNIT_TEST(NoBscConfigResponse) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetDynamicNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        auto &dynamicNameserviceConfig = runtime.GetAppData().DynamicNameserviceConfig;
+        dynamicNameserviceConfig->MaxStaticNodeId = runtime.GetNodeId(server.StaticNodes() - 1);
+        dynamicNameserviceConfig->MinDynamicNodeId = runtime.GetNodeId(server.StaticNodes());
+        dynamicNameserviceConfig->MaxDynamicNodeId = runtime.GetNodeId(server.StaticNodes() + server.DynamicNodes() - 1);
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigResponse) {
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        auto *request = new NHealthCheck::TEvSelfCheckRequest;
+        request->Request.set_return_verbose_status(true);
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        const auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+
+        Ctest << result.ShortDebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::EMERGENCY);
+
+        bool bscTabletIssueFoundInResult = false;
+        for (const auto &issue_log : result.issue_log()) {
+            if (issue_log.level() == 3 && issue_log.type() == "SYSTEM_TABLET") {
+                UNIT_ASSERT_VALUES_EQUAL(issue_log.location().compute().tablet().id().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(issue_log.location().compute().tablet().id()[0], ToString(MakeBSControllerID()));
+                UNIT_ASSERT_VALUES_EQUAL(issue_log.location().compute().tablet().type(), "BSController");
+                bscTabletIssueFoundInResult = true;
+            }
+        }
+        UNIT_ASSERT(bscTabletIssueFoundInResult);
+
+        UNIT_ASSERT_VALUES_EQUAL(result.database_status_size(), 1);
+        const auto &database_status = result.database_status(0);
+
+        UNIT_ASSERT_VALUES_EQUAL(database_status.name(), "/Root");
+        UNIT_ASSERT_VALUES_EQUAL(database_status.overall(), Ydb::Monitoring::StatusFlag::RED);
+
+        UNIT_ASSERT_VALUES_EQUAL(database_status.compute().overall(), Ydb::Monitoring::StatusFlag::RED);
+        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::GREEN);
         UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 0);
     }
 }

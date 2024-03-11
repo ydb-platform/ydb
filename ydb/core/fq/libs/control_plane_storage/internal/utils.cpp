@@ -128,6 +128,11 @@ std::vector<TString> GetMeteringRecords(const TString& statistics, bool billable
             if (auto* ingressNode = graph.second.GetValueByPath("IngressBytes.sum")) {
                 ingress += ingressNode->GetIntegerSafe();
             }
+            // special exclusion for PQ/YDS in YQv1
+            if (auto* pqIngressNode = graph.second.GetValueByPath("TaskRunner.Source=PqSource.Stage=Total.IngressBytes.sum")) {
+                ui64 pqIngress = pqIngressNode->GetIntegerSafe();
+                ingress = ingress > pqIngress ? (ingress - pqIngress) : 0;
+            }
         }
     }
 

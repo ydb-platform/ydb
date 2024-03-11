@@ -24,7 +24,8 @@ from google.auth import _helpers
 from google.auth import exceptions
 from google.auth import external_account
 from google.auth import transport
-
+from google.auth.credentials import DEFAULT_UNIVERSE_DOMAIN
+from google.auth.credentials import TokenState
 
 IMPERSONATE_ACCESS_TOKEN_REQUEST_METRICS_HEADER_VALUE = (
     "gl-python/3.7 auth/1.1 auth-request-type/at cred-type/imp"
@@ -149,7 +150,7 @@ class TestCredentials(object):
         default_scopes=None,
         service_account_impersonation_url=None,
         service_account_impersonation_options={},
-        universe_domain=external_account._DEFAULT_UNIVERSE_DOMAIN,
+        universe_domain=DEFAULT_UNIVERSE_DOMAIN,
     ):
         return CredentialsImpl(
             audience=cls.AUDIENCE,
@@ -385,7 +386,7 @@ class TestCredentials(object):
             quota_project_id=self.QUOTA_PROJECT_ID,
             scopes=["email"],
             default_scopes=["default2"],
-            universe_domain=external_account._DEFAULT_UNIVERSE_DOMAIN,
+            universe_domain=DEFAULT_UNIVERSE_DOMAIN,
         )
 
     def test_with_token_uri(self):
@@ -473,7 +474,7 @@ class TestCredentials(object):
             quota_project_id="project-foo",
             scopes=self.SCOPES,
             default_scopes=["default1"],
-            universe_domain=external_account._DEFAULT_UNIVERSE_DOMAIN,
+            universe_domain=DEFAULT_UNIVERSE_DOMAIN,
         )
 
     def test_with_invalid_impersonation_target_principal(self):
@@ -503,7 +504,7 @@ class TestCredentials(object):
         assert credentials.universe_domain == "dummy_universe.com"
 
         credentials = self.make_credentials()
-        assert credentials.universe_domain == external_account._DEFAULT_UNIVERSE_DOMAIN
+        assert credentials.universe_domain == DEFAULT_UNIVERSE_DOMAIN
 
     def test_with_universe_domain(self):
         credentials = self.make_credentials()
@@ -522,7 +523,7 @@ class TestCredentials(object):
             "token_url": self.TOKEN_URL,
             "credential_source": self.CREDENTIAL_SOURCE.copy(),
             "workforce_pool_user_project": self.WORKFORCE_POOL_USER_PROJECT,
-            "universe_domain": external_account._DEFAULT_UNIVERSE_DOMAIN,
+            "universe_domain": DEFAULT_UNIVERSE_DOMAIN,
         }
 
     def test_info_with_full_options(self):
@@ -547,7 +548,7 @@ class TestCredentials(object):
             "quota_project_id": self.QUOTA_PROJECT_ID,
             "client_id": CLIENT_ID,
             "client_secret": CLIENT_SECRET,
-            "universe_domain": external_account._DEFAULT_UNIVERSE_DOMAIN,
+            "universe_domain": DEFAULT_UNIVERSE_DOMAIN,
         }
 
     def test_service_account_email_without_impersonation(self):
@@ -1494,6 +1495,7 @@ class TestCredentials(object):
 
         assert credentials.valid
         assert not credentials.expired
+        assert credentials.token_state == TokenState.FRESH
 
         credentials.before_request(request, "POST", "https://example.com/api", headers)
 
@@ -1508,8 +1510,10 @@ class TestCredentials(object):
 
         assert not credentials.valid
         assert credentials.expired
+        assert credentials.token_state == TokenState.STALE
 
         credentials.before_request(request, "POST", "https://example.com/api", headers)
+        assert credentials.token_state == TokenState.FRESH
 
         # New token should be retrieved.
         assert headers == {
@@ -1551,8 +1555,10 @@ class TestCredentials(object):
 
         assert credentials.valid
         assert not credentials.expired
+        assert credentials.token_state == TokenState.FRESH
 
         credentials.before_request(request, "POST", "https://example.com/api", headers)
+        assert credentials.token_state == TokenState.FRESH
 
         # Cached token should be used.
         assert headers == {
@@ -1566,6 +1572,10 @@ class TestCredentials(object):
 
         assert not credentials.valid
         assert credentials.expired
+        assert credentials.token_state == TokenState.STALE
+
+        credentials.before_request(request, "POST", "https://example.com/api", headers)
+        assert credentials.token_state == TokenState.FRESH
 
         credentials.before_request(request, "POST", "https://example.com/api", headers)
 

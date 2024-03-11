@@ -3,6 +3,8 @@
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/tx_proxy.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
+#include <ydb/core/protos/data_events.pb.h>
 
 #include <ydb/core/kqp/topics/kqp_topics.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
@@ -124,6 +126,8 @@ public:
             : TxAlloc(txAlloc)
         {}
 
+        bool AllowTrailingResults = false;
+        NKikimrKqp::EQueryType QueryType = NKikimrKqp::EQueryType::QUERY_TYPE_UNDEFINED;
         NKikimr::TControlWrapper PerRequestDataSizeLimit;
         NKikimr::TControlWrapper MaxShardCount;
         TVector<TPhysicalTxData> Transactions;
@@ -150,6 +154,13 @@ public:
         NWilson::TTraceId TraceId;
 
         NTopic::TTopicOperations TopicOperations;
+
+        bool IsTrailingResultsAllowed() const {
+            return AllowTrailingResults && (
+                QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_QUERY ||
+                QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY
+            );
+        }
     };
 
     struct TExecPhysicalResult : public TGenericResult {

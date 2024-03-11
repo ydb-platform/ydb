@@ -48,7 +48,11 @@ TVector<TExprBase> CreateColumnsToSelectToUpdateIndex(
     return columnsToSelect;
 }
 
-TDqPhyPrecompute PrecomputeDict(const TCondenseInputResult& condenseResult, TPositionHandle pos, TExprContext& ctx) {
+} // namespace
+
+TDqPhyPrecompute PrecomputeCondenseInputResult(const TCondenseInputResult& condenseResult,
+    TPositionHandle pos, TExprContext& ctx)
+{
     auto computeDictStage = Build<TDqStage>(ctx, pos)
         .Inputs()
             .Add(condenseResult.StageInputs)
@@ -69,8 +73,6 @@ TDqPhyPrecompute PrecomputeDict(const TCondenseInputResult& condenseResult, TPos
             .Build()
         .Done();
 }
-
-} // namespace
 
 TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildSecondaryIndexVector(
     const TKikimrTableDescription& table,
@@ -127,26 +129,81 @@ TSecondaryIndexes BuildSecondaryIndexVector(const TKikimrTableDescription& table
 }
 
 TMaybeNode<TDqPhyPrecompute> PrecomputeTableLookupDict(const TDqPhyPrecompute& lookupKeys,
-    const TKikimrTableDescription& table, const THashSet<TString>& dataColumns,
-    const THashSet<TString>& keyColumns, TPositionHandle pos, TExprContext& ctx)
+    const TKikimrTableDescription& table, const TVector<TExprBase>& columnsList,
+    TPositionHandle pos, TExprContext& ctx, bool fixLookupKeys)
 {
-    auto lookupColumns = CreateColumnsToSelectToUpdateIndex(table.Metadata->KeyColumnNames, dataColumns,
-        keyColumns, pos, ctx);
-
     auto lookupColumnsList = Build<TCoAtomList>(ctx, pos)
-        .Add(lookupColumns)
+        .Add(columnsList)
         .Done();
+
+    TExprNode::TPtr keys;
+
+    // we need to left only table key columns to perform lookup
+    // unfortunately we can't do it inside lookup stage
+    if (fixLookupKeys) {
+        auto keyArg = TCoArgument(ctx.NewArgument(pos, "key"));
+        auto keysList = TCoArgument(ctx.NewArgument(pos, "keys_list"));
+        TVector<TExprBase> keyLookupTuples;
+        keyLookupTuples.reserve(table.Metadata->KeyColumnNames.size());
+
+        for (const auto& key : table.Metadata->KeyColumnNames) {
+            keyLookupTuples.emplace_back(
+                Build<TCoNameValueTuple>(ctx, pos)
+                    .Name().Build(key)
+                    .Value<TCoMember>()
+                        .Struct(keyArg)
+                        .Name().Build(key)
+                        .Build()
+                    .Done());
+        }
+
+        auto list = Build<TCoToStream>(ctx, pos)
+            .Input<TCoJust>()
+                .Input<TCoMap>()
+                    .Input(keysList)
+                    .Lambda()
+                        .Args({keyArg})
+                        .Body<TCoAsStruct>()
+                            .Add(keyLookupTuples)
+                            .Build()
+                        .Build()
+                    .Build()
+                .Build()
+            .Done().Ptr();
+
+        keys = Build<TDqStage>(ctx, pos)
+            .Inputs()
+                .Add(lookupKeys)
+                .Build()
+            .Program()
+                .Args({keysList})
+                .Body(list)
+                .Build()
+            .Settings().Build()
+            .Done().Ptr();
+
+        keys = Build<TDqPhyPrecompute>(ctx, pos)
+            .Connection<TDqCnValue>()
+                .Output()
+                    .Stage(keys)
+                    .Index().Build("0")
+                    .Build()
+                .Build()
+            .Done().Ptr();
+    } else {
+        keys = lookupKeys.Ptr();
+    }
 
     auto lookupStage = Build<TDqStage>(ctx, pos)
         .Inputs()
-            .Add(lookupKeys)
+            .Add(keys)
             .Build()
         .Program()
-            .Args({"keys_list"})
+            .Args({"keys_stage_arg"})
             .Body<TKqpLookupTable>()
                 .Table(BuildTableMeta(table, pos, ctx))
                 .LookupKeys<TCoIterator>()
-                    .List("keys_list")
+                    .List("keys_stage_arg")
                     .Build()
                 .Columns(lookupColumnsList)
                 .Build()
@@ -167,7 +224,17 @@ TMaybeNode<TDqPhyPrecompute> PrecomputeTableLookupDict(const TDqPhyPrecompute& l
         return {};
     }
 
-    return PrecomputeDict(*condenseLookupResult, lookupKeys.Pos(), ctx);
+    return PrecomputeCondenseInputResult(*condenseLookupResult, lookupKeys.Pos(), ctx);
+}
+
+TMaybeNode<TDqPhyPrecompute> PrecomputeTableLookupDict(const TDqPhyPrecompute& lookupKeys,
+    const TKikimrTableDescription& table, const THashSet<TString>& dataColumns,
+    const THashSet<TString>& keyColumns, TPositionHandle pos, TExprContext& ctx)
+{
+    auto lookupColumns = CreateColumnsToSelectToUpdateIndex(table.Metadata->KeyColumnNames, dataColumns,
+        keyColumns, pos, ctx);
+
+    return PrecomputeTableLookupDict(lookupKeys, table, lookupColumns, pos, ctx, false);
 }
 
 TExprBase MakeRowsFromDict(const TDqPhyPrecompute& dict, const TVector<TString>& dictKeys,

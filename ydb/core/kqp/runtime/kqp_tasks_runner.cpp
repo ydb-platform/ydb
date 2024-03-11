@@ -68,19 +68,13 @@ IDqOutputConsumer::TPtr KqpBuildOutputConsumer(const NDqProto::TTaskOutput& outp
     }
 }
 
-TIntrusivePtr<IDqTaskRunner> CreateKqpTaskRunner(const TDqTaskRunnerContext& execCtx,
-    const TDqTaskRunnerSettings& settings, const TLogFunc& logFunc)
-{
-    return MakeDqTaskRunner(execCtx, settings, logFunc);
-}
-
 
 TKqpTasksRunner::TKqpTasksRunner(google::protobuf::RepeatedPtrField<NDqProto::TDqTask>&& tasks,
+    NKikimr::NMiniKQL::TScopedAlloc& alloc,
     const TDqTaskRunnerContext& execCtx, const TDqTaskRunnerSettings& settings, const TLogFunc& logFunc)
     : LogFunc(logFunc)
-    , Alloc(execCtx.Alloc)
+    , Alloc(alloc)
 {
-    YQL_ENSURE(execCtx.Alloc);
     YQL_ENSURE(execCtx.TypeEnv);
 
     ApplyCtx = dynamic_cast<NMiniKQL::TKqpDatashardApplyContext *>(execCtx.ApplyCtx);
@@ -92,7 +86,7 @@ TKqpTasksRunner::TKqpTasksRunner(google::protobuf::RepeatedPtrField<NDqProto::TD
     try {
         for (auto&& task : tasks) {
             ui64 taskId = task.GetId();
-            auto runner = CreateKqpTaskRunner(execCtx, settings, logFunc);
+            auto runner = MakeDqTaskRunner(alloc, execCtx, settings, logFunc);
             if (auto* stats = runner->GetStats()) {
                 Stats.emplace(taskId, stats);
             }
@@ -236,15 +230,16 @@ const NYql::NDq::TDqTaskSettings& TKqpTasksRunner::GetTask(ui64 taskId) const {
 
 TGuard<NMiniKQL::TScopedAlloc> TKqpTasksRunner::BindAllocator(TMaybe<ui64> memoryLimit) {
     if (memoryLimit) {
-        Alloc->SetLimit(*memoryLimit);
+        Alloc.SetLimit(*memoryLimit);
     }
-    return TGuard(*Alloc);
+    return TGuard(Alloc);
 }
 
 TIntrusivePtr<TKqpTasksRunner> CreateKqpTasksRunner(google::protobuf::RepeatedPtrField<NDqProto::TDqTask>&& tasks,
+    NKikimr::NMiniKQL::TScopedAlloc& alloc,
     const TDqTaskRunnerContext& execCtx, const TDqTaskRunnerSettings& settings, const TLogFunc& logFunc)
 {
-    return new TKqpTasksRunner(std::move(tasks), execCtx, settings, logFunc);
+    return new TKqpTasksRunner(std::move(tasks), alloc, execCtx, settings, logFunc);
 }
 
 } // namespace NKqp

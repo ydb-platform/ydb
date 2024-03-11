@@ -15,17 +15,41 @@ enum class EBackendType {
 struct TMetricsData {
     TInstant Timestamp;
     std::unordered_map<TString, double> Values;
+    std::unordered_map<TString, std::map<ui64, ui64>> HistogramValues;
+};
+
+struct TAggregateSettings {
+    TDuration PeriodToStart;
+    TDuration SampleSize = TDuration::Zero(); // clear
+    TDuration MinimumStep = TDuration::Minutes(5);
+    mutable TInstant StartTimestamp = {};
+
+    bool IsItTimeToAggregate(TInstant now) const {
+        return (now - StartTimestamp > PeriodToStart + MinimumStep);
+    }
+
+    TString ToString() const {
+        return TStringBuilder() << "start=" << StartTimestamp.ToStringUpToSeconds() << " period=" << PeriodToStart << " sample=" << SampleSize << " min=" << MinimumStep;
+    }
 };
 
 class TBaseBackend {
 public:
     struct TMetricsValues {
         std::vector<TInstant> Timestamps;
-        std::vector<std::vector<double>> Values;
+        std::vector<std::vector<double>> Values; // columns
+
+        void Clear() {
+            Timestamps.clear();
+            Values.clear();
+        }
     };
 
     static void NormalizeAndDownsample(TMetricsValues& values, size_t maxPoints);
     static void FillResult(TMetricsValues& values, const NKikimrGraph::TEvGetMetrics& get, NKikimrGraph::TEvMetricsResult& result);
+    static double GetTimingForPercentile(double percentile, const TVector<ui64>& values, const TVector<ui64>& /*upper*/bounds, ui64 total);
+
+    static TString GetLogPrefix() { return {}; }
 
     std::unordered_map<TString, ui64> MetricsIndex; // mapping name -> id
 };
@@ -34,13 +58,15 @@ class TMemoryBackend : public TBaseBackend {
 public:
     void StoreMetrics(TMetricsData&& data);
     void GetMetrics(const NKikimrGraph::TEvGetMetrics& get, NKikimrGraph::TEvMetricsResult& result) const;
-    void ClearData(TInstant cutline, TInstant& newStartTimestamp);
+    void ClearData(TInstant now, const TAggregateSettings& settings);
+    void DownsampleData(TInstant now, const TAggregateSettings& settings);
+    void AggregateData(TInstant now, const TAggregateSettings& settings);
 
     TString GetLogPrefix() const;
 
     struct TMetricsRecord {
         TInstant Timestamp;
-        TSmallVec<double> Values;
+        std::vector<double> Values; // rows
 
         std::strong_ordering operator <=>(const TMetricsRecord& rec) const {
             return Timestamp.GetValue() <=> rec.Timestamp.GetValue();
@@ -60,7 +86,9 @@ public:
 
     bool StoreMetrics(NTabletFlatExecutor::TTransactionContext& txc, TMetricsData&& data);
     bool GetMetrics(NTabletFlatExecutor::TTransactionContext& txc, const NKikimrGraph::TEvGetMetrics& get, NKikimrGraph::TEvMetricsResult& result) const;
-    bool ClearData(NTabletFlatExecutor::TTransactionContext& txc, TInstant cutline, TInstant& newStartTimestamp);
+    bool ClearData(NTabletFlatExecutor::TTransactionContext& txc, TInstant now, const TAggregateSettings& settings);
+    bool DownsampleData(NTabletFlatExecutor::TTransactionContext& txc, TInstant now, const TAggregateSettings& settings);
+    bool AggregateData(NTabletFlatExecutor::TTransactionContext& txc, TInstant now, const TAggregateSettings& settings);
 
     TString GetLogPrefix() const;
 };

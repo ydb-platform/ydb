@@ -75,7 +75,7 @@ TExprNode::TPtr OptimizePgCastOverPgConst(const TExprNode::TPtr& input, TExprCon
         return input;
     }
     auto val = input->Child(0);
-    if (!val->IsCallable("PgConst")) { 
+    if (!val->IsCallable("PgConst")) {
         return input;
     }
 
@@ -85,7 +85,7 @@ TExprNode::TPtr OptimizePgCastOverPgConst(const TExprNode::TPtr& input, TExprCon
         YQL_CLOG(DEBUG, Core) << "Remove PgCast unknown->text over PgConst";
         return ctx.ChangeChild(*val, 1, castToType);
     }
-    
+
     return input;
 }
 
@@ -3087,8 +3087,8 @@ std::unordered_set<ui32> GetUselessSortedJoinInputs(const TCoEquiJoin& equiJoin)
         if (!joinTree->Head().IsAtom("Cross")) {
             std::unordered_map<std::string_view, TPartOfConstraintBase::TSetType> tableJoinKeys;
             for (const auto keys : {joinTree->Child(3), joinTree->Child(4)})
-                for (ui32 i = 0U; i < keys->ChildrenSize(); ++i)
-                    tableJoinKeys[keys->Child(i)->Content()].insert_unique(TPartOfConstraintBase::TPathType(1U, keys->Child(++i)->Content()));
+                for (ui32 i = 0U; i < keys->ChildrenSize(); i += 2)
+                    tableJoinKeys[keys->Child(i)->Content()].insert_unique(TPartOfConstraintBase::TPathType(1U, keys->Child(i + 1)->Content()));
 
             for (const auto& [label, joinKeys]: tableJoinKeys) {
                 if (const auto it = sorteds.find(label); sorteds.cend() != it) {
@@ -3691,7 +3691,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["Lookup"] = std::bind(&OptimizeContains<false, true>, _1, _2);
     map["Contains"] = std::bind(&OptimizeContains<false>, _1, _2);
     map["ListHas"] = std::bind(&OptimizeContains<true>, _1, _2);
-    map["ListUniq"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext&) {
+    map["Uniq"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext&) {
         return ctx.Builder(node->Pos())
             .Callable("DictKeys")
                 .Callable(0, "ToDict")
@@ -3713,7 +3713,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             .Seal()
             .Build();
     };
-    map["ListUniqStable"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext&) {
+    map["UniqStable"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext&) {
         const TTypeAnnotationNode* itemType = node->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
         auto expandedItemType = ExpandType(node->Pos(), *itemType, ctx);
         auto setCreate = ctx.Builder(node->Pos())
@@ -4665,6 +4665,16 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["IsDistinctFrom"] = std::bind(&OptimizeDistinctFrom<false>, _1, _2);
 
     map["StartsWith"] = map["EndsWith"] = map["StringContains"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg || node->Tail().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
+            TExprNodeList converted;
+            for (auto& child : node->ChildrenList()) {
+                const bool isPg = child->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg;
+                converted.emplace_back(ctx.WrapByCallableIf(isPg, "FromPg", std::move(child)));
+            }
+            YQL_CLOG(DEBUG, Core) << "Converting Pg strings to YQL strings in " << node->Content();
+            return ctx.ChangeChildren(*node, std::move(converted));
+        }
+
         if (node->Tail().IsCallable("String") && node->Tail().Head().Content().empty()) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " with empty string in second argument";
             if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
@@ -6272,17 +6282,33 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map["ShuffleByKeys"] = map["PartitionsByKeys"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    map["PartitionsByKeys"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (IsEmpty(node->Head(), *optCtx.Types)) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over empty input.";
-            auto lambdaResult = ctx.Builder(node->Pos()).Apply(node->Tail()).With(0, KeepConstraints(node->HeadPtr(), node->Tail().Head().Head(), ctx)).Seal().Build();
-            if (node->IsCallable("ShuffleByKeys")) {
-                auto lambdaType = node->Tail().GetTypeAnn();
-                if (lambdaType->GetKind() == ETypeAnnotationKind::Optional) {
-                    lambdaResult = ctx.NewCallable(lambdaResult->Pos(), "ToList", { lambdaResult });
-                } else if (lambdaType->GetKind() == ETypeAnnotationKind::Stream) {
-                    lambdaResult = ctx.NewCallable(lambdaResult->Pos(), "ForwardList", { lambdaResult });
-                }
+
+            TExprNode::TPtr sequence = KeepConstraints(node->HeadPtr(), node->Tail().Head().Head(), ctx);
+            auto lambdaResult = ctx.Builder(node->Pos()).Apply(node->Tail()).With(0, sequence).Seal().Build();
+            return lambdaResult;
+        }
+        return node;
+    };
+
+    map["ShuffleByKeys"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (IsEmpty(node->Head(), *optCtx.Types)) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over empty input.";
+
+            auto& lambdaArg = node->Tail().Head().Head();
+
+            TExprNode::TPtr sequence = node->HeadPtr(); // param (list)
+            sequence = ctx.NewCallable(sequence->Pos(), "ToStream", { sequence }); // lambda accepts stream, but we have list type
+            sequence = KeepConstraints(sequence, lambdaArg, ctx);
+
+            auto lambdaResult = ctx.Builder(node->Pos()).Apply(node->Tail()).With(0, sequence).Seal().Build();
+            auto lambdaType = node->Tail().GetTypeAnn();
+            if (lambdaType->GetKind() == ETypeAnnotationKind::Optional) {
+                lambdaResult = ctx.NewCallable(lambdaResult->Pos(), "ToList", { lambdaResult });
+            } else if (lambdaType->GetKind() == ETypeAnnotationKind::Stream || lambdaType->GetKind() == ETypeAnnotationKind::Flow) {
+                lambdaResult = ctx.NewCallable(lambdaResult->Pos(), "ForwardList", { lambdaResult });
             }
             return lambdaResult;
         }

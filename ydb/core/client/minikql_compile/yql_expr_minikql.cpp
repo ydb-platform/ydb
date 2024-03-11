@@ -965,7 +965,6 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
             bool includeFrom = true;
             bool includeTo = true;
             auto rangeTuple = node.Child(1);
-            ui32 keyCount = 0;
             ui32 fromComponents = 0;
             ui32 toComponents = 0;
             for (auto rangeItem : rangeTuple->Children()) {
@@ -989,7 +988,6 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
                     continue;
                 }
 
-                ++keyCount;
                 if (!rangeItem->Child(1)->IsCallable("Void")) {
                     ++fromComponents;
                 }

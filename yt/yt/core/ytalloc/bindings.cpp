@@ -127,7 +127,7 @@ private:
     void PushSmallArenaStatistics(
         NProfiling::ISensorWriter* writer,
         size_t rank,
-        const TEnumIndexedVector<ESmallArenaCounter, ssize_t>& counters)
+        const TEnumIndexedArray<ESmallArenaCounter, ssize_t>& counters)
     {
         NProfiling::TWithTagGuard withTagGuard(writer, "rank", ToString(rank));
         PushAllocationCounterStatistics(writer, "/small_arena", counters);
@@ -147,7 +147,7 @@ private:
     void PushLargeArenaStatistics(
         NProfiling::ISensorWriter* writer,
         size_t rank,
-        const TEnumIndexedVector<ELargeArenaCounter, ssize_t>& counters)
+        const TEnumIndexedArray<ELargeArenaCounter, ssize_t>& counters)
     {
         NProfiling::TWithTagGuard withTagGuard(writer, "rank", ToString(rank));
 

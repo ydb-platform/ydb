@@ -480,6 +480,14 @@ SELECT f.f1, exp(ln(f.f1)) AS exp_ln_f1
 -- check edge cases for exp
 SELECT exp('inf'::float8), exp('-inf'::float8), exp('nan'::float8);
 </sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- check edge cases for exp
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: exp
+        	-- check edge cases for exp
+	^
 <sql-statement>
 -- cube root
 SELECT ||/ float8 '27' AS three;
@@ -497,7 +505,7 @@ UPDATE FLOAT8_TBL
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 SELECT f.f1 * '1e200' from FLOAT8_TBL f;
@@ -738,7 +746,7 @@ DELETE FROM FLOAT8_TBL;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 INSERT INTO FLOAT8_TBL(f1) VALUES ('0.0');
@@ -862,13 +870,10 @@ FROM (VALUES (0), (30), (90), (150), (180),
     -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
     	-- test exact cases for trigonometric functions in degrees
 	^
-        -stdin-:<main>:4:16: Error: At function: PgIn, At function: AsList
+        -stdin-:<main>:4:16: Error: At function: PgIn
         	       sind(x) IN (-1,-0.5,0,0.5,1) AS sind_exact
 	               ^
-            -stdin-:<main>:4:16: Error: Cannot infer common type for int4 and numeric
-            	       sind(x) IN (-1,-0.5,0,0.5,1) AS sind_exact
-	               ^
-            -stdin-:<main>:4:16: Error: Cannot infer common type for numeric and int4
+            -stdin-:<main>:4:16: Error: Mismatch of types in IN expressions: float8 is not equal to numeric
             	       sind(x) IN (-1,-0.5,0,0.5,1) AS sind_exact
 	               ^
 <sql-statement>
@@ -883,13 +888,10 @@ FROM (VALUES (0), (60), (90), (120), (180),
     -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
     	SELECT x,
 	^
-        -stdin-:<main>:3:16: Error: At function: PgIn, At function: AsList
+        -stdin-:<main>:3:16: Error: At function: PgIn
         	       cosd(x) IN (-1,-0.5,0,0.5,1) AS cosd_exact
 	               ^
-            -stdin-:<main>:3:16: Error: Cannot infer common type for int4 and numeric
-            	       cosd(x) IN (-1,-0.5,0,0.5,1) AS cosd_exact
-	               ^
-            -stdin-:<main>:3:16: Error: Cannot infer common type for numeric and int4
+            -stdin-:<main>:3:16: Error: Mismatch of types in IN expressions: float8 is not equal to numeric
             	       cosd(x) IN (-1,-0.5,0,0.5,1) AS cosd_exact
 	               ^
 <sql-statement>
@@ -903,35 +905,6 @@ SELECT x,
 FROM (VALUES (0), (45), (90), (135), (180),
       (225), (270), (315), (360)) AS t(x);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
-    	SELECT x,
-	^
-        -stdin-:<main>:1:1: Error: At function: PgResultItem
-        	SELECT x,
-	^
-            -stdin-:<main>:3:16: Error: At function: PgIn, At function: AsList
-            	       tand(x) IN ('-Infinity'::float8,-1,0,
-	               ^
-                -stdin-:<main>:3:16: Error: Cannot infer common type for float8 and int4
-                	       tand(x) IN ('-Infinity'::float8,-1,0,
-	               ^
-                -stdin-:<main>:3:16: Error: Cannot infer common type for int4 and float8
-                	       tand(x) IN ('-Infinity'::float8,-1,0,
-	               ^
-        -stdin-:<main>:1:1: Error: At function: PgResultItem
-        	SELECT x,
-	^
-            -stdin-:<main>:6:16: Error: At function: PgIn, At function: AsList
-            	       cotd(x) IN ('-Infinity'::float8,-1,0,
-	               ^
-                -stdin-:<main>:6:16: Error: Cannot infer common type for float8 and int4
-                	       cotd(x) IN ('-Infinity'::float8,-1,0,
-	               ^
-                -stdin-:<main>:6:16: Error: Cannot infer common type for int4 and float8
-                	       cotd(x) IN ('-Infinity'::float8,-1,0,
-	               ^
 <sql-statement>
 SELECT x,
        asind(x),
@@ -1240,6 +1213,7 @@ with testdata(bits) as (values
   (x'1330000000000000'),
   (x'133fffffffffffff'),
   (x'3a6fa7161a4d6e0c')
+)
 select float8send(flt) as ibits,
        flt,
        flt::text::float8 as r_flt,
@@ -1251,10 +1225,9 @@ select float8send(flt) as ibits,
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:139:1: Error: ERROR:  syntax error at or near "select"
-
-    	select float8send(flt) as ibits,
-	^
+    -stdin-:<main>:145:30: Error: Unknown type: xfloat8
+    	  from (select bits::bigint::xfloat8::float8 as flt
+	                             ^
 <sql-statement>
 -- clean up, lest opr_sanity complain
 drop type xfloat8 cascade;

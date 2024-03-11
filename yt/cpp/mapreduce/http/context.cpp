@@ -16,11 +16,6 @@ bool operator==(const TClientContext& lhs, const TClientContext& rhs)
            lhs.ProxyAddress == rhs.ProxyAddress;
 }
 
-bool operator!=(const TClientContext& lhs, const TClientContext& rhs)
-{
-    return !(rhs == lhs);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

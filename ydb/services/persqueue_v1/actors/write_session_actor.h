@@ -193,6 +193,7 @@ private:
     ui64 PartitionTabletId;
     ui32 PreferedPartition;
     std::optional<ui32> ExpectedGeneration;
+    std::optional<ui64> InitialSeqNo;
 
     bool PartitionFound = false;
     // 'SourceId' is called 'MessageGroupId' since gRPC data plane API v1

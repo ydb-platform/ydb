@@ -101,17 +101,17 @@ public:
 template <typename T>
 class TSkiffRowSkipper : public ISkiffRowSkipper {
 public:
-  explicit TSkiffRowSkipper(const TMaybe<TSkiffRowHints>& hints)
-    : Parser_(CreateSkiffParser<T>(&Row_, hints))
-  { }
+    explicit TSkiffRowSkipper(const TMaybe<TSkiffRowHints>& hints)
+        : Parser_(CreateSkiffParser<T>(&Row_, hints))
+    { }
 
-  void SkipRow(NSkiff::TCheckedInDebugSkiffParser* parser) {
-    Parser_->Parse(parser);
-  }
+    void SkipRow(NSkiff::TCheckedInDebugSkiffParser* parser) {
+        Parser_->Parse(parser);
+    }
 
 private:
-  T Row_;
-  ISkiffRowParserPtr Parser_;
+    T Row_;
+    ISkiffRowParserPtr Parser_;
 };
 
 //! Creates a skipper for row type 'T'.

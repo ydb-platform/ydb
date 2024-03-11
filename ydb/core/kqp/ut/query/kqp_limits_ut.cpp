@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 
 #include <util/random/random.h>
 
@@ -17,6 +18,87 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(KqpLimits) {
+    Y_UNIT_TEST(KqpMkqlMemoryLimitException) {
+        TKikimrRunner kikimr;
+        CreateLargeTable(kikimr, 10, 10, 1'000'000, 1);
+
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SLOW_LOG, NActors::NLog::PRI_ERROR);
+
+        TControlWrapper mkqlInitialMemoryLimit;
+        TControlWrapper mkqlMaxMemoryLimit;
+
+        mkqlInitialMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
+            mkqlInitialMemoryLimit, "KqpSession.MkqlInitialMemoryLimit");
+        mkqlMaxMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
+            mkqlMaxMemoryLimit, "KqpSession.MkqlMaxMemoryLimit");
+
+        mkqlInitialMemoryLimit = 1_KB;
+        mkqlMaxMemoryLimit = 1_KB;
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT * FROM `/Root/LargeTable`;
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+    }
+
+    Y_UNIT_TEST(LargeParametersAndMkqlFailure) {
+        auto app = NKikimrConfig::TAppConfig();
+        app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
+
+        TKikimrRunner kikimr(app);
+        CreateLargeTable(kikimr, 0, 0, 0);
+
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SLOW_LOG, NActors::NLog::PRI_ERROR);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TControlWrapper mkqlInitialMemoryLimit;
+        TControlWrapper mkqlMaxMemoryLimit;
+
+        mkqlInitialMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
+            mkqlInitialMemoryLimit, "KqpSession.MkqlInitialMemoryLimit");
+        mkqlMaxMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
+            mkqlMaxMemoryLimit, "KqpSession.MkqlMaxMemoryLimit");
+
+
+        mkqlInitialMemoryLimit = 1_KB;
+        mkqlMaxMemoryLimit = 1_KB;
+
+        auto paramsBuilder = db.GetParamsBuilder();
+        auto& rowsParam = paramsBuilder.AddParam("$rows");
+
+        rowsParam.BeginList();
+        for (ui32 i = 0; i < 100; ++i) {
+            rowsParam.AddListItem()
+                .BeginStruct()
+                .AddMember("Key")
+                    .OptionalUint64(i)
+                .AddMember("KeyText")
+                    .OptionalString(TString(5000, '0' + i % 10))
+                .AddMember("Data")
+                    .OptionalInt64(i)
+                .AddMember("DataText")
+                    .OptionalString(TString(16, '0' + (i + 1) % 10))
+                .EndStruct();
+        }
+        rowsParam.EndList();
+        rowsParam.Build();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $rows AS List<Struct<Key: Uint64?, KeyText: String?, Data: Int64?, DataText: String?>>;
+
+            UPSERT INTO `/Root/LargeTable`
+            SELECT * FROM AS_TABLE($rows);
+        )"), TTxControl::BeginTx().CommitTx(), paramsBuilder.Build()).ExtractValueSync();
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+    }
+
     Y_UNIT_TEST(DatashardProgramSize) {
         auto app = NKikimrConfig::TAppConfig();
         app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);

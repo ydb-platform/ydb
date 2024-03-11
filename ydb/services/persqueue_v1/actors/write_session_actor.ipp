@@ -1,4 +1,5 @@
 #ifndef WRITE_SESSION_ACTOR_IMPL
+#include "write_session_actor.h"
 #error "Do not include this file directly"
 #endif
 
@@ -299,7 +300,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Die(const TActorContext& ctx) {
     }
 
     State = ES_DYING;
-
+    TRlHelpers::PassAway(TActorBootstrapped<TWriteSessionActor>::SelfId());
     TActorBootstrapped<TWriteSessionActor>::Die(ctx);
 }
 
@@ -389,12 +390,14 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
         //      1.2. non-empty partition_id (explicit partitioning)
         //      1.3. non-empty partition_with_generation (explicit partitioning && direct write to partition host)
         //    2. Empty producer id (no deduplication, partition is selected using round-robin).
-        bool isScenarioSupported = 
+        bool isScenarioSupported =
             !InitRequest.producer_id().empty() && (
-                InitRequest.has_message_group_id() && InitRequest.message_group_id() == InitRequest.producer_id() || 
+                InitRequest.has_message_group_id() && InitRequest.message_group_id() == InitRequest.producer_id() ||
+                InitRequest.message_group_id().empty() ||
                 InitRequest.has_partition_id() ||
-                InitRequest.has_partition_with_generation()) ||
-            InitRequest.producer_id().empty();
+                InitRequest.has_partition_with_generation())
+            ||
+            InitRequest.producer_id().empty() ;
 
         if (!isScenarioSupported) {
             CloseSession("unsupported producer_id / message_group_id / partition_id settings in init request",
@@ -418,13 +421,12 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
         if constexpr (UseMigrationProtocol) {
             return InitRequest.message_group_id();
         } else {
-            if (InitRequest.producer_id().empty()) {
+            if (InitRequest.producer_id().empty() && InitRequest.message_group_id().empty()) {
                 UseDeduplication = false;
             }
-            return InitRequest.has_message_group_id() ? InitRequest.message_group_id() : InitRequest.producer_id();
+            return !InitRequest.message_group_id().empty() ? InitRequest.message_group_id() : InitRequest.producer_id();
         }
     }();
-
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session request cookie: " << Cookie << " " << InitRequest.ShortDebugString() << " from " << PeerName);
     if (!UseDeduplication) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session request cookie: " << Cookie << ". Disable deduplication for empty producer id");
@@ -467,8 +469,9 @@ template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::InitAfterDiscovery(const TActorContext& ctx) {
     Y_UNUSED(ctx);
 
-    if (SourceId.empty()) {
-        Y_ABORT_UNLESS(!UseDeduplication);
+    if (SourceId.empty() && UseDeduplication) {
+        CloseSession("Internal server error: got empty SourceId with enabled deduplication", PersQueue::ErrorCode::VALIDATION_ERROR, ctx);
+        return;
     }
 
     InitMeta = GetInitialDataChunk(InitRequest, FullConverter->GetClientsideName(), PeerName); // ToDo[migration] - check?
@@ -631,6 +634,7 @@ template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionChooser::TEvChooseResult::TPtr& ev, const NActors::TActorContext& ctx) {
     auto* r = ev->Get();
     PartitionTabletId = r->TabletId;
+    InitialSeqNo = r->SeqNo;
     LastSourceIdUpdate = ctx.Now();
 
     ProceedPartition(r->PartitionId, ctx);
@@ -680,6 +684,7 @@ void TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const 
 
     opts.WithDeduplication(UseDeduplication);
     opts.WithSourceId(SourceId);
+    opts.WithInitialSeqNo(InitialSeqNo);
     opts.WithExpectedGeneration(ExpectedGeneration);
 
     if constexpr (UseMigrationProtocol) {
@@ -833,9 +838,14 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
     OwnerCookie = result.GetResult().OwnerCookie;
 
     const auto& maxSeqNo = result.GetResult().SourceIdInfo.GetSeqNo();
-    if (!UseDeduplication) {
-        Y_ABORT_UNLESS(maxSeqNo == 0);
-    }
+
+    // ToDo: uncomment after fixing KIKIMR-21124
+    // if (!UseDeduplication) {
+    //     if (maxSeqNo != 0) {
+    //         return CloseSession("Internal server error: have maxSeqNo != with deduplication disabled",
+    //                             PersQueue::ErrorCode::ERROR, ctx);
+    //     }
+    // }
 
     OwnerCookie = result.GetResult().OwnerCookie;
     MakeAndSentInitResponse(maxSeqNo, ctx);
@@ -1278,7 +1288,9 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NGRpcService::TGRpcRequest
         }
     } else {
         if (ev->Get()->Retryable) {
-            Request->ReplyUnavaliable();
+            TServerMessage serverMessage;
+            serverMessage.set_status(Ydb::StatusIds::UNAVAILABLE);
+            Request->GetStreamCtx()->WriteAndFinish(std::move(serverMessage), grpc::Status::OK);
         } else {
             Request->ReplyUnauthenticated("refreshed token is invalid");
         }

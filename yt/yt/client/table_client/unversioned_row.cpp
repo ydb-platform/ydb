@@ -439,11 +439,6 @@ bool operator == (const TUnversionedValue& lhs, const TUnversionedValue& rhs)
     return CompareRowValues(lhs, rhs) == 0;
 }
 
-bool operator != (const TUnversionedValue& lhs, const TUnversionedValue& rhs)
-{
-    return CompareRowValues(lhs, rhs) != 0;
-}
-
 bool operator <= (const TUnversionedValue& lhs, const TUnversionedValue& rhs)
 {
     return CompareRowValues(lhs, rhs) <= 0;
@@ -503,11 +498,6 @@ bool operator == (TUnversionedRow lhs, TUnversionedRow rhs)
     return CompareRows(lhs, rhs) == 0;
 }
 
-bool operator != (TUnversionedRow lhs, TUnversionedRow rhs)
-{
-    return CompareRows(lhs, rhs) != 0;
-}
-
 bool operator <= (TUnversionedRow lhs, TUnversionedRow rhs)
 {
     return CompareRows(lhs, rhs) <= 0;
@@ -533,11 +523,6 @@ bool operator > (TUnversionedRow lhs, TUnversionedRow rhs)
 bool operator == (TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
 {
     return CompareRows(lhs, rhs) == 0;
-}
-
-bool operator != (TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
-{
-    return CompareRows(lhs, rhs) != 0;
 }
 
 bool operator <= (TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
@@ -1314,7 +1299,7 @@ void ValidateReadTimestamp(TTimestamp timestamp)
 void ValidateGetInSyncReplicasTimestamp(TTimestamp timestamp)
 {
     if (timestamp != SyncLastCommittedTimestamp &&
-       (timestamp < MinTimestamp || timestamp > MaxTimestamp))
+        (timestamp < MinTimestamp || timestamp > MaxTimestamp))
     {
         THROW_ERROR_EXCEPTION("Invalid GetInSyncReplicas timestamp %x", timestamp);
     }
@@ -2044,9 +2029,15 @@ TLegacyKey WidenKeyPrefix(TLegacyKey key, ui32 prefixLength, ui32 keyColumnCount
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSharedRange<TRowRange> MakeSingletonRowRange(TLegacyKey lowerBound, TLegacyKey upperBound)
+TSharedRange<TRowRange> MakeSingletonRowRange(
+    TLegacyKey lowerBound,
+    TLegacyKey upperBound,
+    TRowBufferPtr rowBuffer)
 {
-    auto rowBuffer = New<TRowBuffer>();
+    if (!rowBuffer) {
+        rowBuffer = New<TRowBuffer>();
+    }
+
     TCompactVector<TRowRange, 1> ranges(1, TRowRange(
         rowBuffer->CaptureRow(lowerBound),
         rowBuffer->CaptureRow(upperBound)));

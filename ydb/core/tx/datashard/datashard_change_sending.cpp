@@ -11,6 +11,7 @@ using namespace NTabletFlatExecutor;
 
 class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
     using Schema = TDataShard::Schema;
+    using IChangeRecord = NChangeExchange::IChangeRecord;
 
     bool Precharge(NIceDb::TNiceDb& db) {
         size_t bodiesSize = 0;
@@ -48,8 +49,25 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
     template <typename TTable>
     using TFullRowset = typename TTable::Operations::template Rowset<TTable, TEqualKeyIterator<TTable>, typename TTable::TColumns>;
 
+    struct TLoadResult {
+        NTable::EReady Ready;
+        IChangeRecord::TPtr Record;
+
+        TLoadResult() = default;
+        TLoadResult(NTable::EReady ready)
+            : Ready(ready)
+        {
+        }
+
+        explicit TLoadResult(NTable::EReady ready, IChangeRecord::TPtr record)
+            : Ready(ready)
+            , Record(record)
+        {
+        }
+    };
+
     template <typename TBasicTable, typename TDetailsTable, bool HaveLock>
-    NTable::EReady LoadRecord(TChangeRecord& record, ui64 order, const std::optional<TCommittedLockChangeRecords>& commited,
+    TLoadResult LoadRecord(ui64 order, const std::optional<TCommittedLockChangeRecords>& commited,
             const TFullRowset<TBasicTable>& basic, const TFullRowset<TDetailsTable>& details) const
     {
         if (!basic.IsReady() || !details.IsReady()) {
@@ -110,8 +128,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
                 .WithTxId(basic.template GetValue<typename TBasicTable::TxId>());
         }
 
-        record = builder.Build();
-        return NTable::EReady::Data;
+        return TLoadResult(NTable::EReady::Data, builder.Build());
     }
 
     bool Select(NIceDb::TNiceDb& db) {
@@ -133,8 +150,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
                     break;
                 }
 
-                TChangeRecord record;
-                NTable::EReady ready;
+                TLoadResult result;
 
                 if (itQueue->second.LockId) {
                     auto itCommit = Self->CommittedLockChangeRecords.find(itQueue->second.LockId);
@@ -145,16 +161,16 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
                         continue;
                     }
 
-                    ready = LoadRecord<Schema::LockChangeRecords, Schema::LockChangeRecordDetails, true>(record, it->Order, itCommit->second,
+                    result = LoadRecord<Schema::LockChangeRecords, Schema::LockChangeRecordDetails, true>(it->Order, itCommit->second,
                         db.Table<Schema::LockChangeRecords>().Key(itQueue->second.LockId, itQueue->second.LockOffset).Select(),
                         db.Table<Schema::LockChangeRecordDetails>().Key(itQueue->second.LockId, itQueue->second.LockOffset).Select());
                 } else {
-                    ready = LoadRecord<Schema::ChangeRecords, Schema::ChangeRecordDetails, false>(record, it->Order, std::nullopt,
+                    result = LoadRecord<Schema::ChangeRecords, Schema::ChangeRecordDetails, false>(it->Order, std::nullopt,
                         db.Table<Schema::ChangeRecords>().Key(it->Order).Select(),
                         db.Table<Schema::ChangeRecordDetails>().Key(it->Order).Select());
                 }
 
-                switch (ready) {
+                switch (result.Ready) {
                 case NTable::EReady::Page:
                     return false;
                 case NTable::EReady::Gone:
@@ -167,13 +183,13 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
 
                 if (itQueue->second.LockId) {
                     RecordsToSend[recipient].push_back(
-                        TChangeRecordBuilder(std::move(record))
+                        TChangeRecordBuilder(result.Record)
                             .WithLockId(itQueue->second.LockId)
                             .WithLockOffset(itQueue->second.LockOffset)
                             .Build()
                     );
                 } else {
-                    RecordsToSend[recipient].push_back(std::move(record));
+                    RecordsToSend[recipient].push_back(std::move(result.Record));
                 }
 
                 MemUsage += it->BodySize;
@@ -217,7 +233,7 @@ public:
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Send " << records.size() << " change records"
                 << ": to# " << to
                 << ", at tablet# " << Self->TabletID());
-            ctx.Send(to, new TEvChangeExchange::TEvRecords(std::move(records)));
+            ctx.Send(to, new NChangeExchange::TEvChangeExchange::TEvRecords(std::move(records)));
         }
 
         size_t forgotten = 0;
@@ -230,7 +246,7 @@ public:
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Forget " << records.size() << " change records"
                 << ": to# " << to
                 << ", at tablet# " << Self->TabletID());
-            ctx.Send(to, new TEvChangeExchange::TEvForgetRecords(std::move(records)));
+            ctx.Send(to, new NChangeExchange::TEvChangeExchange::TEvForgetRecords(std::move(records)));
         }
 
         size_t left = Accumulate(Self->ChangeRecordsRequested, (size_t)0, [](size_t sum, const auto& kv) {
@@ -258,7 +274,7 @@ private:
     static constexpr size_t MemLimit = 512_KB;
     size_t MemUsage = 0;
 
-    THashMap<TActorId, TVector<TChangeRecord>> RecordsToSend;
+    THashMap<TActorId, TVector<IChangeRecord::TPtr>> RecordsToSend;
     THashMap<TActorId, TVector<ui64>> RecordsToForget;
 
 }; // TTxRequestChangeRecords
@@ -334,6 +350,8 @@ public:
                 Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);
             }
         }
+
+        Self->CheckStateChange(ctx);
     }
 
 private:
@@ -390,7 +408,7 @@ private:
 }; // TTxChangeExchangeSplitAck
 
 /// Request
-void TDataShard::Handle(TEvChangeExchange::TEvRequestRecords::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev, const TActorContext& ctx) {
     ChangeRecordsRequested[ev->Sender].insert(ev->Get()->Records.begin(), ev->Get()->Records.end());
     SetCounter(COUNTER_CHANGE_QUEUE_SIZE, Accumulate(ChangeRecordsRequested, (size_t)0, [](size_t sum, const auto& kv) {
         return sum + kv.second.size();
@@ -410,7 +428,7 @@ void TDataShard::Handle(TEvPrivate::TEvRequestChangeRecords::TPtr&, const TActor
 }
 
 /// Remove
-void TDataShard::Handle(TEvChangeExchange::TEvRemoveRecords::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev, const TActorContext& ctx) {
     ChangeRecordsToRemove.insert(ev->Get()->Records.begin(), ev->Get()->Records.end());
     ScheduleRemoveChangeRecords(ctx);
 }

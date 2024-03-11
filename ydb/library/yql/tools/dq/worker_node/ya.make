@@ -10,7 +10,7 @@ IF (NOT OS_WINDOWS)
         ydb/library/yql/dq/comp_nodes
         ydb/library/yql/dq/integration/transform
         ydb/library/yql/dq/transform
-        ydb/library/yql/minikql/comp_nodes/llvm
+        ydb/library/yql/minikql/comp_nodes/llvm14
         ydb/library/yql/providers/clickhouse/actors
         ydb/library/yql/providers/common/comp_nodes
         ydb/library/yql/providers/dq/runtime
@@ -30,7 +30,7 @@ IF (NOT OS_WINDOWS)
         ydb/library/yql/utils/failure_injector
         ydb/library/yql/utils/backtrace
         ydb/library/yql/providers/yt/comp_nodes/dq
-        ydb/library/yql/providers/yt/comp_nodes/llvm
+        ydb/library/yql/providers/yt/comp_nodes/llvm14
         ydb/library/yql/providers/yt/codec/codegen
         ydb/library/yql/providers/yt/mkql_dq
         ydb/library/yql/providers/dq/actors/yt

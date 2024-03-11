@@ -496,13 +496,8 @@ void TTabletInfo::ActualizeTabletStatistics(TInstant now) {
     Hive.ActualizeRestartStatistics(*Statistics.MutableRestartTimestamp(), barierTime.MilliSeconds());
 }
 
-ui64 TTabletInfo::GetRestartsPerPeriod(TInstant barrier) {
-    const auto& array(Statistics.GetRestartTimestamp());
-    ui64 restarts = 0;
-    for (auto itRestart = array.rbegin(); (itRestart != array.rend()) && (TInstant::MilliSeconds(*itRestart) >= barrier); ++itRestart) {
-        ++restarts;
-    }
-    return restarts;
+ui64 TTabletInfo::GetRestartsPerPeriod(TInstant barrier) const {
+    return Hive.GetRestartsPerPeriod(Statistics.GetRestartTimestamp(), barrier.MilliSeconds());
 }
 
 bool TTabletInfo::RestartsOften() const {

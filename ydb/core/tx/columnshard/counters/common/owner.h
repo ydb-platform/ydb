@@ -50,6 +50,9 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr GetDeriviative(const TString& name) const;
     void DeepSubGroup(const TString& id, const TString& value);
     void DeepSubGroup(const TString& componentName);
+    TCommonCountersOwner CreateSubGroup(const TString& param, const TString& value) const {
+        return TCommonCountersOwner(*this, param, value);
+    }
     NMonitoring::THistogramPtr GetHistogram(const TString& name, NMonitoring::IHistogramCollectorPtr&& hCollector) const;
 
     TCommonCountersOwner(const TString& module, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals = nullptr);

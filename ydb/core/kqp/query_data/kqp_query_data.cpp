@@ -77,6 +77,19 @@ Ydb::ResultSet* TKqpExecuterTxResult::GetYdb(google::protobuf::Arena* arena, TMa
     return ydbResult;
 }
 
+Ydb::ResultSet* TKqpExecuterTxResult::GetTrailingYdb(google::protobuf::Arena* arena) {
+    if (!HasTrailingResult)
+        return nullptr;
+
+    Ydb::ResultSet* ydbResult = google::protobuf::Arena::CreateMessage<Ydb::ResultSet>(arena);
+    if (TrailingResult.rows().size() > 0) {
+        ydbResult->Swap(&TrailingResult);
+    }
+
+    return ydbResult;
+}
+
+
 void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, TMaybe<ui64> rowsLimitPerWrite) {
     YQL_ENSURE(ydbResult);
     YQL_ENSURE(!Rows.IsWide());
@@ -89,7 +102,7 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, TMaybe<ui64> rowsL
         column->set_name(TString(mkqlSrcRowStructType->GetMemberName(memberIndex)));
         ExportTypeToProto(mkqlSrcRowStructType->GetMemberType(memberIndex), *column->mutable_type());
     }
-    
+
     Rows.ForEachRow([&](const NUdf::TUnboxedValue& value) -> bool {
         if (rowsLimitPerWrite) {
             if (*rowsLimitPerWrite == 0) {
@@ -223,6 +236,13 @@ NKikimrMiniKQL::TResult* TQueryData::GetMkqlTxResult(const NKqpProto::TKqpPhyRes
     auto g = TypeEnv().BindAllocator();
     return TxResults[txIndex][resultIndex].GetMkql(arena);
 }
+
+Ydb::ResultSet* TQueryData::GetTrailingTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena) {
+    auto txIndex = rb.GetTxResultBinding().GetTxIndex();
+    auto resultIndex = rb.GetTxResultBinding().GetResultIndex();
+    return TxResults[txIndex][resultIndex].GetTrailingYdb(arena);
+}
+
 
 Ydb::ResultSet* TQueryData::GetYdbTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena, TMaybe<ui64> rowsLimitPerWrite) {
     auto txIndex = rb.GetTxResultBinding().GetTxIndex();

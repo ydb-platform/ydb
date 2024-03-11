@@ -24,6 +24,10 @@ struct TS3Settings {
     NCommon::TConfSetting<bool, false> AtomicUploadCommit;         // Commit each file independently, w/o transaction semantic over all files
     NCommon::TConfSetting<bool, false> UseConcurrentDirectoryLister;
     NCommon::TConfSetting<ui64, false> MaxDiscoveryFilesPerDirectory;
+    NCommon::TConfSetting<bool, false> UseRuntimeListing; // Enables runtime listing
+    NCommon::TConfSetting<ui64, false> FileQueueBatchSizeLimit; // Limits total size of files in one PathBatch from FileQueue
+    NCommon::TConfSetting<ui64, false> FileQueueBatchObjectCountLimit; // Limits count of files in one PathBatch from FileQueue
+    NCommon::TConfSetting<ui64, false> FileQueuePrefetchSize;
 };
 
 struct TS3ClusterSettings {

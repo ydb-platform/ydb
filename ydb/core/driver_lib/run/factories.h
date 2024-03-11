@@ -56,7 +56,7 @@ struct TModuleFactories {
     std::shared_ptr<NHttpProxy::IAuthFactory> DataStreamsAuthFactory;
     std::vector<NKikimr::NMiniKQL::TComputationNodeFactory> AdditionalComputationNodeFactories;
 
-    std::unique_ptr<NWilson::IGrpcSigner>(*WilsonGrpcSignerFactory)(const NKikimrConfig::TTracingConfig::TAuthConfig&);
+    std::unique_ptr<NWilson::IGrpcSigner>(*WilsonGrpcSignerFactory)(const NKikimrConfig::TTracingConfig::TBackendConfig::TAuthConfig&);
 
     ~TModuleFactories();
 };

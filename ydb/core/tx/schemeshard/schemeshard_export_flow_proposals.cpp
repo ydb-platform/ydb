@@ -2,6 +2,7 @@
 #include "schemeshard_path_describer.h"
 
 #include <ydb/core/ydb_convert/compression.h>
+#include <ydb/public/api/protos/ydb_export.pb.h>
 
 #include <util/string/builder.h>
 #include <util/string/cast.h>
@@ -141,6 +142,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             backupSettings.SetSecretKey(exportSettings.secret_key());
             backupSettings.SetObjectKeyPattern(exportSettings.items(itemIdx).destination_prefix());
             backupSettings.SetStorageClass(exportSettings.storage_class());
+            backupSettings.SetUseVirtualAddressing(!exportSettings.disable_virtual_addressing());
 
             switch (exportSettings.scheme()) {
             case Ydb::Export::ExportToS3Settings::HTTP:

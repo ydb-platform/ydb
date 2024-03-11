@@ -339,9 +339,6 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
     }
 
     Y_UNIT_TEST(TestReusePortEnabled) {
-        if (!IsReusePortAvailable()) {
-            return; // skip test
-        }
         TString res = TestData();
         TPortManager pm;
         const ui16 port = pm.GetPort();

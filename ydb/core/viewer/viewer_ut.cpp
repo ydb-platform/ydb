@@ -600,4 +600,430 @@ Y_UNIT_TEST_SUITE(Viewer) {
         StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 80, 100, true);
         StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 90, 100, true);
     }
+
+    const TPathId SHARED_DOMAIN_KEY = {7000000000, 1};
+    const TPathId SERVERLESS_DOMAIN_KEY = {7000000000, 2};
+    const TPathId SERVERLESS_TABLE = {7000000001, 2};
+
+    void ChangeNavigateKeySetResultServerless(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr* ev,
+                                              TTestActorRuntime& runtime) {
+        TSchemeCacheNavigate::TEntry& entry((*ev)->Get()->Request->ResultSet.front());
+        TString path = CanonizePath(entry.Path);
+        if (path == "/Root/serverless" || entry.TableId.PathId == SERVERLESS_DOMAIN_KEY) {
+            entry.Status = TSchemeCacheNavigate::EStatus::Ok;
+            entry.Kind = TSchemeCacheNavigate::EKind::KindExtSubdomain;
+            entry.DomainInfo = MakeIntrusive<TDomainInfo>(SERVERLESS_DOMAIN_KEY, SHARED_DOMAIN_KEY);
+        } else if (path == "/Root/shared" || entry.TableId.PathId == SHARED_DOMAIN_KEY) {
+            entry.Status = TSchemeCacheNavigate::EStatus::Ok;
+            entry.Kind = TSchemeCacheNavigate::EKind::KindExtSubdomain;
+            entry.DomainInfo = MakeIntrusive<TDomainInfo>(SHARED_DOMAIN_KEY, SHARED_DOMAIN_KEY);
+            auto domains = runtime.GetAppData().DomainsInfo;
+            entry.DomainInfo->Params.SetHive(domains->GetHive());
+        } else if (path == "/Root/serverless/users" || entry.TableId.PathId == SERVERLESS_TABLE) {
+            entry.Status = TSchemeCacheNavigate::EStatus::Ok;
+            entry.Kind = TSchemeCacheNavigate::EKind::KindTable;
+            entry.DomainInfo = MakeIntrusive<TDomainInfo>(SERVERLESS_DOMAIN_KEY, SHARED_DOMAIN_KEY);
+            auto dirEntryInfo = MakeIntrusive<TSchemeCacheNavigate::TDirEntryInfo>();
+            dirEntryInfo->Info.SetSchemeshardId(SERVERLESS_TABLE.OwnerId);
+            dirEntryInfo->Info.SetPathId(SERVERLESS_TABLE.LocalPathId);
+            entry.Self = dirEntryInfo;
+        }
+    }
+
+    void ChangeBoardInfoServerless(TEvStateStorage::TEvBoardInfo::TPtr* ev,
+                                   const std::vector<size_t>& sharedDynNodes = {},
+                                   const std::vector<size_t>& exclusiveDynNodes = {}) {
+        auto *record = (*ev)->Get();
+        using EStatus = TEvStateStorage::TEvBoardInfo::EStatus;
+        if (record->Path == "gpc+/Root/serverless" && !exclusiveDynNodes.empty()) {
+            const_cast<EStatus&>(record->Status) = EStatus::Ok;
+            for (auto exclusiveDynNodeId : exclusiveDynNodes) {
+                TActorId actorOnExclusiveDynNode = TActorId(exclusiveDynNodeId, 0, 0, 0);
+                record->InfoEntries[actorOnExclusiveDynNode] = {};
+            }
+        } else if (record->Path == "gpc+/Root/shared" && !sharedDynNodes.empty()) {
+            const_cast<EStatus&>(record->Status) = EStatus::Ok;
+            for (auto sharedDynNodeId : sharedDynNodes) {
+                TActorId actorOnSharedDynNode = TActorId(sharedDynNodeId, 0, 0, 0);
+                record->InfoEntries[actorOnSharedDynNode] = {};
+            }
+        }
+    }
+
+    void ChangeResponseHiveNodeStatsServerless(TEvHive::TEvResponseHiveNodeStats::TPtr* ev,
+                                               size_t sharedDynNode = 0,
+                                               size_t exclusiveDynNode = 0,
+                                               size_t exclusiveDynNodeWithTablet = 0) {
+        auto &record = (*ev)->Get()->Record;
+        if (sharedDynNode) {
+            auto *sharedNodeStats = record.MutableNodeStats()->Add();
+            sharedNodeStats->SetNodeId(sharedDynNode);
+            sharedNodeStats->MutableNodeDomain()->SetSchemeShard(SHARED_DOMAIN_KEY.OwnerId);
+            sharedNodeStats->MutableNodeDomain()->SetPathId(SHARED_DOMAIN_KEY.LocalPathId);
+        }
+
+        if (exclusiveDynNode) {
+            auto *exclusiveNodeStats = record.MutableNodeStats()->Add();
+            exclusiveNodeStats->SetNodeId(exclusiveDynNode);
+            exclusiveNodeStats->MutableNodeDomain()->SetSchemeShard(SERVERLESS_DOMAIN_KEY.OwnerId);
+            exclusiveNodeStats->MutableNodeDomain()->SetPathId(SERVERLESS_DOMAIN_KEY.LocalPathId);
+        }
+        
+        if (exclusiveDynNodeWithTablet) {
+            auto *exclusiveDynNodeWithTabletStats = record.MutableNodeStats()->Add();
+            exclusiveDynNodeWithTabletStats->SetNodeId(exclusiveDynNodeWithTablet);
+            exclusiveDynNodeWithTabletStats->MutableNodeDomain()->SetSchemeShard(SERVERLESS_DOMAIN_KEY.OwnerId);
+            exclusiveDynNodeWithTabletStats->MutableNodeDomain()->SetPathId(SERVERLESS_DOMAIN_KEY.LocalPathId);
+
+            auto *stateStats = exclusiveDynNodeWithTabletStats->MutableStateStats()->Add();
+            stateStats->SetTabletType(NKikimrTabletBase::TTabletTypes::DataShard);
+            stateStats->SetVolatileState(NKikimrHive::TABLET_VOLATILE_STATE_RUNNING);
+            stateStats->SetCount(1);
+        }
+    }
+    
+    Y_UNIT_TEST(ServerlessNodesPage)
+    {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetDynamicNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.emplace("path", "/Root/serverless");
+        httpReq.CgiParameters.emplace("tablets", "true");
+        httpReq.CgiParameters.emplace("enums", "true");
+        httpReq.CgiParameters.emplace("sort", "");
+        httpReq.CgiParameters.emplace("type", "any");
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+
+        size_t staticNodeId = 0;
+        size_t sharedDynNodeId = 0;    
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
+                    auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
+                    ChangeNavigateKeySetResultServerless(x, runtime);
+                    break;
+                }
+                case TEvInterconnect::EvNodesInfo: {
+                    auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                    TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
+                    UNIT_ASSERT_EQUAL(nodes.size(), 2);
+                    staticNodeId = nodes[0];
+                    sharedDynNodeId = nodes[1];
+                    break;
+                }
+                case TEvStateStorage::EvBoardInfo: {
+                    auto *x = reinterpret_cast<TEvStateStorage::TEvBoardInfo::TPtr*>(&ev);
+                    ChangeBoardInfoServerless(x, { sharedDynNodeId });
+                    break;
+                }
+                case TEvHive::EvResponseHiveNodeStats: {
+                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
+                    ChangeResponseHiveNodeStatsServerless(x, sharedDynNodeId);
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
+        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+
+        size_t pos = result->Answer.find('{');
+        TString jsonResult = result->Answer.substr(pos);
+        Ctest << "json result: " << jsonResult << Endl;
+        NJson::TJsonValue json;
+        try {
+            NJson::ReadJsonTree(jsonResult, &json, true);
+        }
+        catch (yexception ex) {
+            Ctest << ex.what() << Endl;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("TotalNodes"), "0");
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("FoundNodes"), "0");
+    }
+
+    Y_UNIT_TEST(ServerlessWithExclusiveNodes)
+    {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetDynamicNodeCount(2)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.emplace("path", "/Root/serverless");
+        httpReq.CgiParameters.emplace("tablets", "true");
+        httpReq.CgiParameters.emplace("enums", "true");
+        httpReq.CgiParameters.emplace("sort", "");
+        httpReq.CgiParameters.emplace("type", "any");
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+
+        size_t staticNodeId = 0;
+        size_t sharedDynNodeId = 0;
+        size_t exclusiveDynNodeId = 0;    
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
+                    auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
+                    ChangeNavigateKeySetResultServerless(x, runtime);
+                    break;
+                }
+                case TEvInterconnect::EvNodesInfo: {
+                    auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                    TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
+                    UNIT_ASSERT_EQUAL(nodes.size(), 3);
+                    staticNodeId = nodes[0];
+                    sharedDynNodeId = nodes[1];
+                    exclusiveDynNodeId = nodes[2];
+                    break;
+                }
+                case TEvStateStorage::EvBoardInfo: {
+                    auto *x = reinterpret_cast<TEvStateStorage::TEvBoardInfo::TPtr*>(&ev);
+                    ChangeBoardInfoServerless(x, { sharedDynNodeId }, { exclusiveDynNodeId });
+                    break;
+                }
+                case TEvHive::EvResponseHiveNodeStats: {
+                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
+                    ChangeResponseHiveNodeStatsServerless(x, sharedDynNodeId, exclusiveDynNodeId);
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
+        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+
+        size_t pos = result->Answer.find('{');
+        TString jsonResult = result->Answer.substr(pos);
+        Ctest << "json result: " << jsonResult << Endl;
+        NJson::TJsonValue json;
+        try {
+            NJson::ReadJsonTree(jsonResult, &json, true);
+        }
+        catch (yexception ex) {
+            Ctest << ex.what() << Endl;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("TotalNodes"), "1");
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("FoundNodes"), "1");
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("Nodes").GetArray().size(), 1);
+        auto node = json.GetMap().at("Nodes").GetArray()[0].GetMap();
+        UNIT_ASSERT_VALUES_EQUAL(node.at("NodeId"), exclusiveDynNodeId);
+    }
+
+    Y_UNIT_TEST(SharedDoesntShowExclusiveNodes)
+    {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetDynamicNodeCount(2)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.emplace("path", "/Root/shared");
+        httpReq.CgiParameters.emplace("tablets", "true");
+        httpReq.CgiParameters.emplace("enums", "true");
+        httpReq.CgiParameters.emplace("sort", "");
+        httpReq.CgiParameters.emplace("type", "any");
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+
+        size_t staticNodeId = 0;
+        size_t sharedDynNodeId = 0;
+        size_t exclusiveDynNodeId = 0; 
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
+                    auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
+                    ChangeNavigateKeySetResultServerless(x, runtime);
+                    break;
+                }
+                case TEvInterconnect::EvNodesInfo: {
+                    auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                    TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
+                    UNIT_ASSERT_EQUAL(nodes.size(), 3);
+                    staticNodeId = nodes[0];
+                    sharedDynNodeId = nodes[1];
+                    exclusiveDynNodeId = nodes[2];
+                    break;
+                }
+                case TEvStateStorage::EvBoardInfo: {
+                    auto *x = reinterpret_cast<TEvStateStorage::TEvBoardInfo::TPtr*>(&ev);
+                    ChangeBoardInfoServerless(x, { sharedDynNodeId }, { exclusiveDynNodeId });
+                    break;
+                }
+                case TEvHive::EvResponseHiveNodeStats: {
+                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
+                    ChangeResponseHiveNodeStatsServerless(x, sharedDynNodeId, exclusiveDynNodeId);
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
+        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+
+        size_t pos = result->Answer.find('{');
+        TString jsonResult = result->Answer.substr(pos);
+        Ctest << "json result: " << jsonResult << Endl;
+        NJson::TJsonValue json;
+        try {
+            NJson::ReadJsonTree(jsonResult, &json, true);
+        }
+        catch (yexception ex) {
+            Ctest << ex.what() << Endl;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("TotalNodes"), "1");
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("FoundNodes"), "1");
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("Nodes").GetArray().size(), 1);
+        auto node = json.GetMap().at("Nodes").GetArray()[0].GetMap();
+        UNIT_ASSERT_VALUES_EQUAL(node.at("NodeId"), sharedDynNodeId);
+    }
+
+    Y_UNIT_TEST(ServerlessWithExclusiveNodesCheckTable)
+    {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetDynamicNodeCount(3)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.emplace("path", "/Root/serverless/users");
+        httpReq.CgiParameters.emplace("tablets", "true");
+        httpReq.CgiParameters.emplace("enums", "true");
+        httpReq.CgiParameters.emplace("sort", "");
+        httpReq.CgiParameters.emplace("type", "any");
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+
+        size_t staticNodeId = 0;
+        size_t sharedDynNodeId = 0;
+        size_t exclusiveDynNodeId = 0;
+        size_t secondExclusiveDynNodeId = 0;    
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
+                    auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
+                    ChangeNavigateKeySetResultServerless(x, runtime);
+                    break;
+                }
+                case TEvInterconnect::EvNodesInfo: {
+                    auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                    TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
+                    UNIT_ASSERT_EQUAL(nodes.size(), 4);
+                    staticNodeId = nodes[0];
+                    sharedDynNodeId = nodes[1];
+                    exclusiveDynNodeId = nodes[2];
+                    secondExclusiveDynNodeId = nodes[3];
+                    break;
+                }
+                case TEvStateStorage::EvBoardInfo: {
+                    auto *x = reinterpret_cast<TEvStateStorage::TEvBoardInfo::TPtr*>(&ev);
+                    ChangeBoardInfoServerless(x, { sharedDynNodeId }, { exclusiveDynNodeId, secondExclusiveDynNodeId });
+                    break;
+                }
+                case TEvHive::EvResponseHiveNodeStats: {
+                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
+                    ChangeResponseHiveNodeStatsServerless(x, sharedDynNodeId, exclusiveDynNodeId, secondExclusiveDynNodeId);
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
+        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+
+        size_t pos = result->Answer.find('{');
+        TString jsonResult = result->Answer.substr(pos);
+        Ctest << "json result: " << jsonResult << Endl;
+        NJson::TJsonValue json;
+        try {
+            NJson::ReadJsonTree(jsonResult, &json, true);
+        }
+        catch (yexception ex) {
+            Ctest << ex.what() << Endl;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("TotalNodes"), "2");
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("FoundNodes"), "2");
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("Nodes").GetArray().size(), 2);
+        auto firstNode = json.GetMap().at("Nodes").GetArray()[0].GetMap();
+        UNIT_ASSERT_VALUES_EQUAL(firstNode.at("NodeId"), exclusiveDynNodeId);
+        UNIT_ASSERT(!firstNode.contains("Tablets"));
+        auto secondNode = json.GetMap().at("Nodes").GetArray()[1].GetMap();
+        UNIT_ASSERT_VALUES_EQUAL(secondNode.at("NodeId"), secondExclusiveDynNodeId);
+        UNIT_ASSERT_VALUES_EQUAL(secondNode.at("Tablets").GetArray().size(), 1);
+        auto tablet = secondNode.at("Tablets").GetArray()[0].GetMap();
+        UNIT_ASSERT_VALUES_EQUAL(tablet.at("Type"), "DataShard");
+        UNIT_ASSERT_VALUES_EQUAL(tablet.at("State"), "Green");
+        UNIT_ASSERT_VALUES_EQUAL(tablet.at("Count"), 1);
+    }
 }

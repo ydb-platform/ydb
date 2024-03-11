@@ -119,8 +119,8 @@ def ydb_disk_quoted_serverless_db(ydb_cluster, ydb_root, ydb_hostel_db, ydb_safe
 
 
 @contextlib.contextmanager
-def ydb_serverless_db_with_nodes_ctx(ydb_cluster, database, hostel_db, timeout_seconds=100):
-    logger.info("setup ydb_serverless_db_with_nodes %s using hostel %s", database, hostel_db)
+def ydb_serverless_db_with_exclusive_nodes_ctx(ydb_cluster, database, hostel_db, timeout_seconds=100):
+    logger.info("setup ydb_serverless_db_with_exclusive_nodes %s using hostel %s", database, hostel_db)
 
     ydb_cluster.remove_database(
         database,
@@ -144,7 +144,7 @@ def ydb_serverless_db_with_nodes_ctx(ydb_cluster, database, hostel_db, timeout_s
     try:
         yield database
     finally:
-        logger.info("destroy ydb_serverless_db_with_nodes for %s", database)
+        logger.info("destroy ydb_serverless_db_with_exclusive_nodes for %s", database)
         ydb_cluster.remove_database(
             database,
             timeout_seconds=timeout_seconds
@@ -154,8 +154,8 @@ def ydb_serverless_db_with_nodes_ctx(ydb_cluster, database, hostel_db, timeout_s
 
 
 @pytest.fixture(scope='module')
-def ydb_serverless_db_with_nodes(ydb_cluster, ydb_root, ydb_hostel_db):
-    database_name = os.path.join(ydb_root, "serverless_with_nodes")
+def ydb_serverless_db_with_exclusive_nodes(ydb_cluster, ydb_root, ydb_hostel_db):
+    database_name = os.path.join(ydb_root, "serverless_with_exclusive_nodes")
 
-    with ydb_serverless_db_with_nodes_ctx(ydb_cluster, database_name, ydb_hostel_db):
+    with ydb_serverless_db_with_exclusive_nodes_ctx(ydb_cluster, database_name, ydb_hostel_db):
         yield database_name

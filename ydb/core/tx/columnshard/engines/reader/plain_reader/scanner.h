@@ -48,8 +48,6 @@ private:
     ui64 ZeroCount = 0;
 public:
 
-    TFetchingPlan GetColumnsFetchingPlan(const bool exclusiveSource) const;
-
     bool IsReverse() const;
     void Abort();
 

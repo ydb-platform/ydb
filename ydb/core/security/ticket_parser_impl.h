@@ -9,7 +9,7 @@
 #include <ydb/library/ycloud/impl/user_account_service.h>
 #include <ydb/library/ycloud/impl/service_account_service.h>
 #include <ydb/library/ycloud/impl/access_service.h>
-#include <ydb/library/ycloud/impl/grpc_service_cache.h>
+#include <ydb/library/grpc/actor_client/grpc_service_cache.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/mon/mon.h>
@@ -48,9 +48,16 @@ private:
     };
 
     struct TPermissionRecord {
+        enum class TTypeCase {
+            TYPE_NOT_SET,
+            USER_ACCOUNT_TYPE,
+            SERVICE_ACCOUNT_TYPE,
+            ANONYMOUS_ACCOUNT_TYPE,
+        };
+
         TString Subject;
         bool Required = false;
-        yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase SubjectType;
+        TTypeCase SubjectType;
         TEvTicketParser::TError Error;
         TStackVec<std::pair<TString, TString>> Attributes;
 
@@ -78,6 +85,7 @@ private:
 
     using TEvAccessServiceAuthenticateRequest = TEvRequestWithKey<NCloud::TEvAccessService::TEvAuthenticateRequest>;
     using TEvAccessServiceAuthorizeRequest = TEvRequestWithKey<NCloud::TEvAccessService::TEvAuthorizeRequest>;
+    using TEvAccessServiceBulkAuthorizeRequest = TEvRequestWithKey<NCloud::TEvAccessService::TEvBulkAuthorizeRequest>;
     using TEvAccessServiceGetUserAccountRequest = TEvRequestWithKey<NCloud::TEvUserAccountService::TEvGetUserAccountRequest>;
     using TEvAccessServiceGetServiceAccountRequest = TEvRequestWithKey<NCloud::TEvServiceAccountService::TEvGetServiceAccountRequest>;
 
@@ -262,7 +270,8 @@ private:
     TDuration LifeTime = TDuration::Hours(1); // for how long ticket will remain in the cache after last access
     TDuration AsSignatureExpireTime = TDuration::Minutes(1);
 
-    TActorId AccessServiceValidator;
+    TActorId AccessServiceValidatorV1;
+    TActorId AccessServiceValidatorV2;
     TActorId UserAccountService;
     TActorId ServiceAccountService;
     TString UserAccountDomain;
@@ -350,42 +359,68 @@ private:
         return request;
     }
 
+    template <typename TTokenRecord, typename TPathsContainerPtr>
+    void addResourcePaths(const TTokenRecord& record, const TString& permission, TPathsContainerPtr pathsContainer) const {
+        auto addResourcePath = [&pathsContainer] (const TString& id, const TString& type) {
+            auto resourcePath = pathsContainer->add_resource_path();
+            resourcePath->set_id(id);
+            resourcePath->set_type(type);
+        };
+
+        if (const auto databaseId = record.GetAttributeValue(permission, "database_id"); databaseId) {
+            addResourcePath(databaseId, "ydb.database");
+        } else if (const auto serviceAccountId = record.GetAttributeValue(permission, "service_account_id"); serviceAccountId) {
+            addResourcePath(serviceAccountId, "iam.serviceAccount");
+        }
+
+        if (const auto folderId = record.GetAttributeValue(permission, "folder_id"); folderId) {
+            addResourcePath(folderId, "resource-manager.folder");
+        }
+
+        if (const auto cloudId = record.GetAttributeValue(permission, "cloud_id"); cloudId) {
+            addResourcePath(cloudId, "resource-manager.cloud");
+        }
+
+        if (const TString gizmoId = record.GetAttributeValue(permission, "gizmo_id"); gizmoId) {
+            addResourcePath(gizmoId, "iam.gizmo");
+        }
+    }
+
     template <typename TTokenRecord>
-    void RequestAccessServiceAuthorization(const TString& key, TTokenRecord& record) const {
-        for (const auto& [perm, permRecord] : record.Permissions) {
-            const TString& permission(perm);
-            BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthorization(" << permission << ")");
+    void AccessServiceAuthorize(const TString& key, TTokenRecord& record) const {
+        for (const auto& [permissionName, permissionRecord] : record.Permissions) {
+            BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthorization(" << permissionName << ")");
 
             auto request = CreateAccessServiceRequest<TEvAccessServiceAuthorizeRequest>(key, record);
-
-            auto addResourcePath = [&request] (const TString& id, const TString& type) {
-                auto* resourcePath = request->Request.add_resource_path();
-                resourcePath->set_id(id);
-                resourcePath->set_type(type);
-            };
-
-            request->Request.set_permission(permission);
-
-            if (const auto databaseId = record.GetAttributeValue(permission, "database_id"); databaseId) {
-                addResourcePath(databaseId, "ydb.database");
-            } else if (const auto serviceAccountId = record.GetAttributeValue(permission, "service_account_id"); serviceAccountId) {
-                addResourcePath(serviceAccountId, "iam.serviceAccount");
-            }
-
-            if (const auto folderId = record.GetAttributeValue(permission, "folder_id"); folderId) {
-                addResourcePath(folderId, "resource-manager.folder");
-            }
-
-            if (const auto cloudId = record.GetAttributeValue(permission, "cloud_id"); cloudId) {
-                addResourcePath(cloudId, "resource-manager.cloud");
-            }
-
-            if (const TString gizmoId = record.GetAttributeValue(permission, "gizmo_id"); gizmoId) {
-                addResourcePath(gizmoId, "iam.gizmo");
-            }
-
+            request->Request.set_permission(permissionName);
+            addResourcePaths(record, permissionName, &request->Request);
             record.ResponsesLeft++;
-            Send(AccessServiceValidator, request.Release());
+            Send(AccessServiceValidatorV1, request.Release());
+        }
+    }
+
+    template <typename TTokenRecord>
+    void AccessServiceBulkAuthorize(const TString& key, TTokenRecord& record) const {
+        auto request = CreateAccessServiceRequest<TEvAccessServiceBulkAuthorizeRequest>(key, record);
+        TStringBuilder requestForPermissions;
+        for (const auto& [permissionName, permissionRecord] : record.Permissions) {
+            auto action = request->Request.mutable_actions()->add_items();
+            addResourcePaths(record, permissionName, action);
+            action->set_permission(permissionName);
+            requestForPermissions << " " << permissionName;
+        }
+        request->Request.set_result_filter(yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest::ALL_FAILED);
+        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceBulkAuthorization(" << requestForPermissions << ")");
+        record.ResponsesLeft++;
+        Send(AccessServiceValidatorV2, request.Release());
+    }
+
+    template <typename TTokenRecord>
+    void RequestAccessServiceAuthorization(const TString& key, TTokenRecord& record) const {
+        if (AppData()->FeatureFlags.GetEnableAccessServiceBulkAuthorization()) {
+            AccessServiceBulkAuthorize(key, record);
+        } else {
+            AccessServiceAuthorize(key, record);
         }
     }
 
@@ -396,26 +431,41 @@ private:
         auto request = CreateAccessServiceRequest<TEvAccessServiceAuthenticateRequest>(key, record);
 
         record.ResponsesLeft++;
-        Send(AccessServiceValidator, request.Release());
+        Send(AccessServiceValidatorV1, request.Release());
     }
 
 
-    TString GetSubjectName(const yandex::cloud::priv::servicecontrol::v1::Subject& subject) {
+    template <typename TSubject>
+    TString GetSubjectName(const TSubject& subject) {
         switch (subject.type_case()) {
-        case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kUserAccount:
+        case TSubject::TypeCase::kUserAccount:
             return subject.user_account().id() + "@" + AccessServiceDomain;
-        case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kServiceAccount:
+        case TSubject::TypeCase::kServiceAccount:
             return subject.service_account().id() + "@" + AccessServiceDomain;
-        case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kAnonymousAccount:
+        case TSubject::TypeCase::kAnonymousAccount:
             return "anonymous" "@" + AccessServiceDomain;
         default:
             return "Unknown subject type";
         }
     }
 
+    template <typename TSubjectType>
+    typename TPermissionRecord::TTypeCase ConvertSubjectType(const TSubjectType& type) {
+        switch (type) {
+        case TSubjectType::kUserAccount:
+            return TPermissionRecord::TTypeCase::USER_ACCOUNT_TYPE;
+        case TSubjectType::kServiceAccount:
+            return TPermissionRecord::TTypeCase::SERVICE_ACCOUNT_TYPE;
+        case TSubjectType::kAnonymousAccount:
+            return TPermissionRecord::TTypeCase::ANONYMOUS_ACCOUNT_TYPE;
+        default:
+            return TPermissionRecord::TTypeCase::TYPE_NOT_SET;
+        }
+    }
+
     template <typename TTokenRecord>
     bool CanInitBuiltinToken(const TString& key, TTokenRecord& record) {
-        if (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::Builtin) {
+        if (Config.GetUseBuiltinDomain() && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::Builtin)) {
             if(record.Ticket.EndsWith("@" BUILTIN_ACL_DOMAIN)) {
                 record.TokenType = TDerived::ETokenType::Builtin;
                 SetToken(key, record, new NACLib::TUserToken({
@@ -741,6 +791,140 @@ private:
         }
     }
 
+    template <typename TTokenRecord>
+    void SetAccessServiceBulkAuthorizeError(const TString& key, TTokenRecord& record, const TString& errorMessage, bool isRetryableError) {
+        for (auto& [permissionName, permissionRecord] : record.Permissions) {
+            permissionRecord.Subject.clear();
+            permissionRecord.Error = {.Message = errorMessage, .Retryable = isRetryableError};
+            BLOG_TRACE("Ticket " << record.GetMaskedTicket()
+                                << " permission " << permissionName
+                                << " now has a " << (isRetryableError ? "retryable" : "permanent")  << " error \"" << errorMessage << "\""
+                                << " retryable: " << isRetryableError);
+        }
+        SetError(key, record, {.Message = errorMessage, .Retryable = isRetryableError});
+    }
+
+    void Handle(NCloud::TEvAccessService::TEvBulkAuthorizeResponse::TPtr& ev) {
+        auto getResourcePathIdForRequiredPermissions = [] (const ::yandex::cloud::priv::accessservice::v2::Resource& resource_path) -> TString {
+            if (resource_path.type() == "resource-manager.folder") {
+                return " folder_id " + resource_path.id();
+            }
+            if (resource_path.type() == "resource-manager.cloud") {
+                return " cloud_id " + resource_path.id();
+            }
+            if (resource_path.type() == "iam.serviceAccount") {
+                return " service_account_id " + resource_path.id();
+            }
+            return "";
+        };
+
+        NCloud::TEvAccessService::TEvBulkAuthorizeResponse* response = ev->Get();
+        TEvAccessServiceBulkAuthorizeRequest* request = response->Request->Get<TEvAccessServiceBulkAuthorizeRequest>();
+        const TString& key(request->Key);
+        auto& userTokens = GetDerived()->GetUserTokens();
+        auto itToken = userTokens.find(key);
+        if (itToken == userTokens.end()) {
+            BLOG_ERROR("Ticket(key) "
+                        << MaskTicket(key)
+                        << " has expired during permission check");
+        } else {
+            auto& record = itToken->second;
+            --record.ResponsesLeft;
+            auto& examinedPermissions = record.Permissions;
+            if (response->Status.Ok()) {
+                if (response->Response.has_unauthenticated_error()) {
+                    SetAccessServiceBulkAuthorizeError(key, record, response->Response.unauthenticated_error().message(), false);
+                } else {
+                    const auto& subject = response->Response.subject();
+                    const TString subjectName = GetSubjectName(subject);
+                    const auto& subjectType = ConvertSubjectType(subject.type_case());
+                    for (auto& [permissionName, permissionRecord] : examinedPermissions) {
+                        permissionRecord.Subject = subjectName;
+                        permissionRecord.SubjectType = subjectType;
+                        permissionRecord.Error.clear();
+                    }
+                    size_t permissionDeniedCount = 0;
+                    bool hasRequiredPermissionFailed = false;
+                    std::vector<typename THashMap<TString, TPermissionRecord>::iterator> requiredPermissions;
+                    TString permissionDeniedError;
+                    const auto& results = response->Response.results();
+                    for (const auto& result : results.items()) {
+                        auto permissionDeniedIt = examinedPermissions.find(result.permission());
+                        if (permissionDeniedIt != examinedPermissions.end()) {
+                            permissionDeniedCount++;
+                            auto& permissionDeniedRecord = permissionDeniedIt->second;
+                            permissionDeniedRecord.Subject.clear();
+                            BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " permission " << result.permission() << " access denied for subject \"" << subjectName << "\"");
+                            TStringBuilder errorMessage;
+                            if (permissionDeniedRecord.IsRequired()) {
+                                hasRequiredPermissionFailed = true;
+                                errorMessage << permissionDeniedIt->first << " for";
+                                for (const auto& resourcePath : result.resource_path()) {
+                                    errorMessage << getResourcePathIdForRequiredPermissions(resourcePath);
+                                }
+                                errorMessage << " - ";
+                                requiredPermissions.push_back(permissionDeniedIt);
+                            }
+                            permissionDeniedError = result.permission_denied_error().message();;
+                            errorMessage << permissionDeniedError;
+                            permissionDeniedRecord.Error = {.Message = errorMessage, .Retryable = false};
+                        } else {
+                            BLOG_W("Received response for unknown permission " << result.permission() << " for ticket " << record.GetMaskedTicket());
+                        }
+                    }
+                    if (permissionDeniedCount < examinedPermissions.size() && !hasRequiredPermissionFailed) {
+                        record.TokenType = request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
+                        switch (subjectType) {
+                        case TPermissionRecord::TTypeCase::USER_ACCOUNT_TYPE:
+                            if (UserAccountService) {
+                                BLOG_TRACE("Ticket " << record.GetMaskedTicket()
+                                            << " asking for UserAccount(" << subjectName << ")");
+                                THolder<TEvAccessServiceGetUserAccountRequest> request = MakeHolder<TEvAccessServiceGetUserAccountRequest>(key);
+                                request->Token = record.Ticket;
+                                request->Request.set_user_account_id(subject.user_account().id());
+                                record.ResponsesLeft++;
+                                Send(UserAccountService, request.Release());
+                                return;
+                            }
+                            break;
+                        case TPermissionRecord::TTypeCase::SERVICE_ACCOUNT_TYPE:
+                            if (ServiceAccountService) {
+                                BLOG_TRACE("Ticket " << record.GetMaskedTicket()
+                                            << " asking for ServiceAccount(" << subjectName << ")");
+                                THolder<TEvAccessServiceGetServiceAccountRequest> request = MakeHolder<TEvAccessServiceGetServiceAccountRequest>(key);
+                                request->Token = record.Ticket;
+                                request->Request.set_service_account_id(subject.service_account().id());
+                                record.ResponsesLeft++;
+                                Send(ServiceAccountService, request.Release());
+                                return;
+                            }
+                            break;
+                        default:
+                            break;
+                        }
+                        SetToken(request->Key, record, new NACLib::TUserToken(record.Ticket, subjectName, {}));
+                    } else {
+                        if (hasRequiredPermissionFailed) {
+                            TStringBuilder errorMessage;
+                            auto it = requiredPermissions.cbegin();
+                            errorMessage << (*it)->second.Error.Message;
+                            ++it;
+                            for (; it != requiredPermissions.cend(); ++it) {
+                                errorMessage << ", " << (*it)->second.Error.Message;
+                            }
+                            SetError(key, record, {.Message = errorMessage, .Retryable = false});
+                        } else {
+                            SetError(key, record, {.Message = permissionDeniedError, .Retryable = false});
+                        }
+                    }
+                }
+            } else {
+                SetAccessServiceBulkAuthorizeError(key, record, response->Status.Msg, IsRetryableGrpcError(response->Status));
+            }
+            Respond(record);
+        }
+    }
+
     void Handle(NCloud::TEvAccessService::TEvAuthorizeResponse::TPtr& ev) {
         NCloud::TEvAccessService::TEvAuthorizeResponse* response = ev->Get();
         TEvAccessServiceAuthorizeRequest* request = response->Request->Get<TEvAccessServiceAuthorizeRequest>();
@@ -755,12 +939,12 @@ private:
             auto& record = itToken->second;
             TString permission = request->Request.permission();
             TString subject;
-            yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase subjectType = yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::TYPE_NOT_SET;
+            typename TPermissionRecord::TTypeCase subjectType = TPermissionRecord::TTypeCase::TYPE_NOT_SET;
             auto itPermission = record.Permissions.find(permission);
             if (itPermission != record.Permissions.end()) {
                 if (response->Status.Ok()) {
                     subject = GetSubjectName(response->Response.subject());
-                    subjectType = response->Response.subject().type_case();
+                    subjectType = ConvertSubjectType(response->Response.subject().type_case());
                     itPermission->second.Subject = subject;
                     itPermission->second.SubjectType = subjectType;
                     itPermission->second.Error.clear();
@@ -836,7 +1020,7 @@ private:
                 if (permissionsOk > 0 && retryableErrors == 0 && !requiredPermissionFailed) {
                     record.TokenType = request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
                     switch (subjectType) {
-                    case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kUserAccount:
+                    case TPermissionRecord::TTypeCase::USER_ACCOUNT_TYPE:
                         if (UserAccountService) {
                             BLOG_TRACE("Ticket " << record.GetMaskedTicket()
                                         << " asking for UserAccount(" << subject << ")");
@@ -848,7 +1032,7 @@ private:
                             return;
                         }
                         break;
-                    case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kServiceAccount:
+                    case TPermissionRecord::TTypeCase::SERVICE_ACCOUNT_TYPE:
                         if (ServiceAccountService) {
                             BLOG_TRACE("Ticket " << record.GetMaskedTicket()
                                         << " asking for ServiceAccount(" << subject << ")");
@@ -998,7 +1182,6 @@ private:
             html << "<table class='table simple-table1 table-hover table-condensed'>";
             html << "<thead><tr>";
             html << "<th>Ticket</th>";
-            html << "<th>UID</th>";
             html << "<th>Database</th>";
             html << "<th>Subject</th>";
             html << "<th>Error</th>";
@@ -1011,10 +1194,7 @@ private:
             html << "<th>Peer</th>";
             html << "</tr></thead><tbody>";
             for (const auto& [key, record] : GetDerived()->GetUserTokens()) {
-                html << "<tr>";
-                html << "<td>" << record.GetMaskedTicket() << "</td>";
-                TDerived::WriteTokenRecordValues(html, key, record);
-                html << "</tr>";
+                WriteTokenRecordValues(html, key, record);
             }
             html << "</tbody></table>";
             html << "</div>";
@@ -1054,13 +1234,13 @@ protected:
         }
 
         if (tokenType == "Bearer" || tokenType == "IAM") {
-            if (AccessServiceValidator) {
+            if (AccessServiceValidatorV1 && AccessServiceValidatorV2) {
                 return TDerived::ETokenType::AccessService;
             } else {
                 return TDerived::ETokenType::Unsupported;
             }
         } else if (tokenType == "ApiKey") {
-            if (AccessServiceValidator && Config.GetUseAccessServiceApiKey()) {
+            if (AccessServiceValidatorV1 && AccessServiceValidatorV2 && Config.GetUseAccessServiceApiKey()) {
                 return TDerived::ETokenType::ApiKey;
             } else {
                 return TDerived::ETokenType::Unsupported;
@@ -1116,7 +1296,7 @@ protected:
     template <typename TTokenRecord>
     void InitTokenRecord(const TString& key, TTokenRecord& record, TInstant) {
         if (GetDerived()->CanInitAccessServiceToken(record)) {
-            if (AccessServiceValidator) {
+            if (AccessServiceValidatorV1 && AccessServiceValidatorV2) {
                 if (record.Permissions) {
                     RequestAccessServiceAuthorization(key, record);
                 } else {
@@ -1278,7 +1458,7 @@ protected:
 
     template <typename TTokenRecord>
     bool CanRefreshAccessServiceTicket(const TTokenRecord& record) {
-        if (!AccessServiceValidator) {
+        if (!AccessServiceValidatorV1 && AccessServiceValidatorV2) {
             return false;
         }
         if (record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::ApiKey) {
@@ -1397,13 +1577,15 @@ protected:
 
     void WriteAuthorizeMethods(TStringBuilder& html) {
         html << "<tr><td>Login</td><td>" << HtmlBool(UseLoginProvider) << "</td></tr>";
-        html << "<tr><td>Access Service</td><td>" << HtmlBool((bool)AccessServiceValidator) << "</td></tr>";
+        html << "<tr><td>Access Service</td><td>" << HtmlBool((bool)AccessServiceValidatorV1 && (bool)AccessServiceValidatorV2) << "</td></tr>";
         html << "<tr><td>User Account Service</td><td>" << HtmlBool((bool)UserAccountService) << "</td></tr>";
         html << "<tr><td>Service Account Service</td><td>" << HtmlBool((bool)ServiceAccountService) << "</td></tr>";
     }
 
     template <typename TTokenRecord>
     static void WriteTokenRecordValues(TStringBuilder& html, const TString& key, const TTokenRecord& record) {
+        html << "<tr>";
+        html << "<td>" << record.GetMaskedTicket() << "</td>";
         html << "<td>" << record.Database << "</td>";
         html << "<td>" << record.Subject << "</td>";
         html << "<td>" << record.Error << "</td>";
@@ -1414,6 +1596,7 @@ protected:
         html << "<td>" << record.ExpireTime << "</td>";
         html << "<td>" << record.AccessTime << "</td>";
         html << "<td>" << record.PeerName << "</td>";
+        html << "</tr>";
     }
 
     void InitCounters(::NMonitoring::TDynamicCounterPtr counters) {
@@ -1444,21 +1627,23 @@ protected:
             }
             settings.GrpcKeepAliveTimeMs = Config.GetAccessServiceGrpcKeepAliveTimeMs();
             settings.GrpcKeepAliveTimeoutMs = Config.GetAccessServiceGrpcKeepAliveTimeoutMs();
-            AccessServiceValidator = Register(NCloud::CreateAccessService(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
+            AccessServiceValidatorV1 = Register(NCloud::CreateAccessServiceV1(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
             if (Config.GetCacheAccessServiceAuthentication()) {
-                AccessServiceValidator = Register(NCloud::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthenticateRequest, NCloud::TEvAccessService::TEvAuthenticateResponse>(
-                                                          AccessServiceValidator,
+                AccessServiceValidatorV1 = Register(NGrpcActorClient::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthenticateRequest, NCloud::TEvAccessService::TEvAuthenticateResponse>(
+                                                          AccessServiceValidatorV1,
                                                           Config.GetGrpcCacheSize(),
                                                           TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
                                                           TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
             }
             if (Config.GetCacheAccessServiceAuthorization()) {
-                AccessServiceValidator = Register(NCloud::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthorizeRequest, NCloud::TEvAccessService::TEvAuthorizeResponse>(
-                                                          AccessServiceValidator,
+                AccessServiceValidatorV1 = Register(NGrpcActorClient::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthorizeRequest, NCloud::TEvAccessService::TEvAuthorizeResponse>(
+                                                          AccessServiceValidatorV1,
                                                           Config.GetGrpcCacheSize(),
                                                           TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
                                                           TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
             }
+
+            AccessServiceValidatorV2 = Register(NCloud::CreateAccessServiceV2(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
         }
 
         if (Config.GetUseUserAccountService()) {
@@ -1469,7 +1654,7 @@ protected:
             }
             UserAccountService = Register(CreateUserAccountService(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
             if (Config.GetCacheUserAccountService()) {
-                UserAccountService = Register(NCloud::CreateGrpcServiceCache<NCloud::TEvUserAccountService::TEvGetUserAccountRequest, NCloud::TEvUserAccountService::TEvGetUserAccountResponse>(
+                UserAccountService = Register(NGrpcActorClient::CreateGrpcServiceCache<NCloud::TEvUserAccountService::TEvGetUserAccountRequest, NCloud::TEvUserAccountService::TEvGetUserAccountResponse>(
                                                       UserAccountService,
                                                       Config.GetGrpcCacheSize(),
                                                       TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
@@ -1485,7 +1670,7 @@ protected:
             }
             ServiceAccountService = Register(NCloud::CreateServiceAccountService(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
             if (Config.GetCacheServiceAccountService()) {
-                ServiceAccountService = Register(NCloud::CreateGrpcServiceCache<NCloud::TEvServiceAccountService::TEvGetServiceAccountRequest, NCloud::TEvServiceAccountService::TEvGetServiceAccountResponse>(
+                ServiceAccountService = Register(NGrpcActorClient::CreateGrpcServiceCache<NCloud::TEvServiceAccountService::TEvGetServiceAccountRequest, NCloud::TEvServiceAccountService::TEvGetServiceAccountResponse>(
                                                          ServiceAccountService,
                                                          Config.GetGrpcCacheSize(),
                                                          TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
@@ -1509,8 +1694,11 @@ protected:
     }
 
     void PassAway() override {
-        if (AccessServiceValidator) {
-            Send(AccessServiceValidator, new TEvents::TEvPoisonPill);
+        if (AccessServiceValidatorV1) {
+            Send(AccessServiceValidatorV1, new TEvents::TEvPoisonPill);
+        }
+        if (AccessServiceValidatorV2) {
+            Send(AccessServiceValidatorV2, new TEvents::TEvPoisonPill);
         }
         if (UserAccountService) {
             Send(UserAccountService, new TEvents::TEvPoisonPill);
@@ -1531,8 +1719,8 @@ public:
         GetDerived()->InitCounters(counters);
 
         GetDerived()->InitAuthProvider();
-        if (AppData() && AppData()->DomainsInfo && !AppData()->DomainsInfo->Domains.empty()) {
-            DomainName = "/" + AppData()->DomainsInfo->Domains.begin()->second->Name;
+        if (AppData() && AppData()->DomainsInfo && AppData()->DomainsInfo->Domain) {
+            DomainName = "/" + AppData()->DomainsInfo->GetDomain()->Name;
         }
 
         GetDerived()->InitTime();
@@ -1556,6 +1744,7 @@ public:
             hFunc(TEvLdapAuthProvider::TEvEnrichGroupsResponse, Handle);
             hFunc(NCloud::TEvAccessService::TEvAuthenticateResponse, Handle);
             hFunc(NCloud::TEvAccessService::TEvAuthorizeResponse, Handle);
+            hFunc(NCloud::TEvAccessService::TEvBulkAuthorizeResponse, Handle);
             hFunc(NCloud::TEvUserAccountService::TEvGetUserAccountResponse, Handle);
             hFunc(NCloud::TEvServiceAccountService::TEvGetServiceAccountResponse, Handle);
             hFunc(NMon::TEvHttpInfo, Handle);

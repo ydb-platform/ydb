@@ -23,6 +23,10 @@ class TConnectionConfig
     : public NApi::TConnectionConfig
 {
 public:
+    static TConnectionConfigPtr CreateFromClusterUrl(
+        TString clusterUrl,
+        std::optional<TString> proxyRole = {});
+
     std::optional<TString> ClusterUrl;
     std::optional<TClusterTag> ClusterTag;
     std::optional<TString> ProxyRole;

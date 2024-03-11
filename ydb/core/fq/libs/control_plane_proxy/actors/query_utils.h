@@ -17,12 +17,14 @@ TMaybe<TString> DropSecretObjectQuery(const TString& name);
 TString MakeCreateExternalDataSourceQuery(
     const FederatedQuery::ConnectionContent& connectionContent,
     const TSigner::TPtr& signer,
-    const NConfig::TCommonConfig& common);
+    const NConfig::TCommonConfig& common,
+    bool replaceIfExists);
 
 TString MakeDeleteExternalDataSourceQuery(const TString& sourceName);
 
 TString MakeCreateExternalDataTableQuery(const FederatedQuery::BindingContent& content,
-                                         const TString& connectionName);
+                                         const TString& connectionName,
+                                         bool replaceIfExists);
 
 TString MakeDeleteExternalDataTableQuery(const TString& tableName);
 

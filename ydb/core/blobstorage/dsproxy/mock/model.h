@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstring>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
 
@@ -147,6 +148,64 @@ namespace NFake {
             }
 
             return result.release();
+        }
+
+        TEvBlobStorage::TEvPatchResult* Handle(TEvBlobStorage::TEvPatch *msg) {
+            // ensure we have full blob id, with PartId set to zero
+            const TLogoBlobID& id = msg->PatchedId;
+            Y_ABORT_UNLESS(id == id.FullID());
+
+            // validate put against set blocks
+            if (IsBlocked(id.TabletID(), id.Generation())) {
+                return new TEvBlobStorage::TEvPatchResult(NKikimrProto::BLOCKED, id, GetStorageStatusFlags(), GroupId, 0.f);
+            }
+
+            // check if this blob is not being collected -- writing such blob is a violation of BS contract
+            Y_ABORT_UNLESS(!IsCollectedByBarrier(id), "Id# %s", id.ToString().data());
+
+
+            const TLogoBlobID& originalId = msg->OriginalId;
+            auto it = Blobs.find(originalId);
+            if (it == Blobs.end()) {
+                // ensure this blob is not under GC
+                Y_ABORT_UNLESS(!IsCollectedByBarrier(id), "Id# %s", id.ToString().data());
+                return new TEvBlobStorage::TEvPatchResult(NKikimrProto::ERROR, id, GetStorageStatusFlags(), GroupId, 0.f);
+            }
+
+            auto& data = it->second;
+            // TODO(kruall): check bad diffs
+            TString buffer = TString::Uninitialized(data.Buffer.GetSize());
+            auto originalBuffer = data.Buffer.GetContiguousSpan();
+            memcpy(buffer.Detach(), originalBuffer.data(), buffer.size());
+            for (ui32 diffIdx = 0; diffIdx < msg->DiffCount; ++diffIdx) {
+                auto &diff = msg->Diffs[diffIdx];
+                auto diffBuffer = diff.Buffer.GetContiguousSpan();
+                memcpy(buffer.Detach() + diff.Offset, diffBuffer.data(), diffBuffer.size());
+            }
+
+
+            // validate that there are no blobs with the same gen/step, channel, cookie, but with different size
+            const TLogoBlobID base(id.TabletID(), id.Generation(), id.Step(), id.Channel(), 0, id.Cookie());
+            auto iter = Blobs.lower_bound(base);
+            if (iter != Blobs.end()) {
+                const TLogoBlobID& existing = iter->first;
+                Y_ABORT_UNLESS(
+                    id.TabletID() != existing.TabletID() ||
+                    id.Generation() != existing.Generation() ||
+                    id.Step() != existing.Step() ||
+                    id.Cookie() != existing.Cookie() ||
+                    id.Channel() != existing.Channel() ||
+                    id == existing,
+                    "id# %s existing# %s", id.ToString().data(), existing.ToString().data());
+                if (id == existing) {
+                    Y_ABORT_UNLESS(iter->second.Buffer == buffer);
+                }
+            }
+
+            // put an entry into logo blobs database and reply with success
+            Blobs.emplace(id, TRope(buffer));
+    
+            return new TEvBlobStorage::TEvPatchResult(NKikimrProto::OK, id, GetStorageStatusFlags(), GroupId, 0.f);
         }
 
         TEvBlobStorage::TEvBlockResult* Handle(TEvBlobStorage::TEvBlock *msg) {

@@ -18,7 +18,7 @@ SRCS(
 PEERDIR(
     library/cpp/random_provider
     library/cpp/time_provider
-    ydb/library/yql/minikql/comp_nodes/llvm
+    ydb/library/yql/minikql/comp_nodes/llvm14
     ydb/library/yql/public/udf/service/exception_policy
     ydb/library/yql/providers/yt/comp_nodes
     ydb/library/yql/sql/pg_dummy

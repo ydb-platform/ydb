@@ -19,65 +19,6 @@ namespace NMiniKQL {
 
 namespace {
 
-class TForeignKernel : public TKernel {
-public:
-    TForeignKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes, NUdf::TDataTypeId returnType,
-        const std::shared_ptr<arrow::compute::Function>& function)
-        : TKernel(family, argTypes, returnType)
-        , Function(function)
-        , ArrowKernel(ResolveKernel(Function, argTypes))
-    {}
-
-    const arrow::compute::ScalarKernel& GetArrowKernel() const final {
-        return ArrowKernel;
-    }
-
-private:
-    static const arrow::compute::ScalarKernel& ResolveKernel(const std::shared_ptr<arrow::compute::Function>& function,
-        const std::vector<NUdf::TDataTypeId>& argTypes) {
-        std::vector<arrow::ValueDescr> args;
-        for (const auto& t : argTypes) {
-            args.emplace_back();
-            auto slot = NUdf::FindDataSlot(t);
-            MKQL_ENSURE(slot, "Unexpected data type");
-            MKQL_ENSURE(ConvertArrowType(*slot, args.back().type), "Can't get arrow type");
-        }
-
-        const auto kernel = ARROW_RESULT(function->DispatchExact(args));
-        return *static_cast<const arrow::compute::ScalarKernel*>(kernel);
-    }
-
-private:
-    const std::shared_ptr<arrow::compute::Function> Function;
-    const arrow::compute::ScalarKernel& ArrowKernel;
-};
-
-template <typename TInput1, typename TOutput>
-void RegisterUnary(const arrow::compute::FunctionRegistry& registry, std::string_view name, TKernelFamilyMap& kernelFamilyMap) {
-    auto func = ARROW_RESULT(registry.GetFunction(std::string(name)));
-
-    std::vector<NUdf::TDataTypeId> argTypes({ NUdf::TDataType<TInput1>::Id });
-    NUdf::TDataTypeId returnType = NUdf::TDataType<TOutput>::Id;
-
-    auto family = std::make_unique<TKernelFamilyBase>();
-    family->Adopt(argTypes, returnType, std::make_unique<TForeignKernel>(*family, argTypes, returnType, func));
-
-    Y_ENSURE(kernelFamilyMap.emplace(TString(name), std::move(family)).second);
-}
-
-template <typename TInput1, typename TInput2, typename TOutput>
-void RegisterBinary(const arrow::compute::FunctionRegistry& registry, std::string_view name, TKernelFamilyMap& kernelFamilyMap) {
-    auto func = ARROW_RESULT(registry.GetFunction(std::string(name)));
-
-    std::vector<NUdf::TDataTypeId> argTypes({ NUdf::TDataType<TInput1>::Id, NUdf::TDataType<TInput2>::Id });
-    NUdf::TDataTypeId returnType = NUdf::TDataType<TOutput>::Id;
-
-    auto family = std::make_unique<TKernelFamilyBase>();
-    family->Adopt(argTypes, returnType, std::make_unique<TForeignKernel>(*family, argTypes, returnType, func));
-
-    Y_ENSURE(kernelFamilyMap.emplace(TString(name), std::move(family)).second);
-}
-
 void RegisterDefaultOperations(IBuiltinFunctionRegistry& registry, TKernelFamilyMap& kernelFamilyMap) {
     RegisterAdd(registry);
     RegisterAdd(kernelFamilyMap);

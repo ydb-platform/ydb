@@ -133,14 +133,16 @@ public:
                 .WithLockOffset(lockOffset);
         }
 
-        auto record = builder
+        auto recordPtr = builder
             .WithPathId(pathId)
             .WithTableId(tableId.PathId)
             .WithSchemaVersion(userTable->GetTableSchemaVersion())
             .WithBody(body.SerializeAsString())
             .Build();
 
+        const auto& record = *recordPtr->Get<TChangeRecord>();
         Self->PersistChangeRecord(db, record);
+
         if (record.GetLockId() == 0) {
             Collected.push_back(TChange{
                 .Order = record.GetOrder(),

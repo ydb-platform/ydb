@@ -2,14 +2,13 @@ from dataclasses import dataclass
 import datetime
 from typing import Sequence
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
+from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
 import ydb.library.yql.providers.generic.connector.tests.test_cases.select_positive_common as select_positive_common
 import ydb.library.yql.providers.generic.connector.tests.utils.clickhouse as clickhouse
 import ydb.library.yql.providers.generic.connector.tests.utils.postgresql as postgresql
-from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     Schema,
     Column,
@@ -38,7 +37,7 @@ class TestCase(select_positive_common.TestCase):
 class Factory:
     _name = 'datetime'
 
-    def _make_test_clickhouse(self) -> TestCase:
+    def _make_test_yql_clickhouse(self) -> TestCase:
         schema = Schema(
             columns=ColumnList(
                 Column(
@@ -88,7 +87,7 @@ class Factory:
                 '1950-01-10',
                 '1850-01-10',
                 '1950-01-10 12:23:45',
-                '1850-01-10 12:23:45.678',
+                '1850-01-10 12:23:45.678910',
             ],
             # Value is OK for CH, but can be too early for YQL
             [
@@ -96,7 +95,7 @@ class Factory:
                 '1970-01-10',
                 '1950-01-10',
                 '1980-01-10 12:23:45',
-                '1950-01-10 12:23:45.678',
+                '1950-01-10 12:23:45.678910',
             ],
             # Value is OK for both CH and YQL
             [
@@ -104,7 +103,7 @@ class Factory:
                 '2004-01-10',
                 '2004-01-10',
                 '2004-01-10 12:23:45',
-                '2004-01-10 12:23:45.678',
+                '2004-01-10 12:23:45.678910',
             ],
             # Value is OK for CH, but too late for YQL
             [
@@ -112,7 +111,7 @@ class Factory:
                 '2110-01-10',
                 '2110-01-10',
                 '2106-01-10 12:23:45',
-                '2110-01-10 12:23:45.678',
+                '2110-01-10 12:23:45.678910',
             ],
             # Value is too late for both OK for CH
             # In this case ClickHouse behaviour is undefined
@@ -123,7 +122,7 @@ class Factory:
                 '2150-01-10',
                 '2300-01-10',
                 '2107-01-10 12:23:45',
-                '2300-01-10 12:23:45.678',
+                '2300-01-10 12:23:45.678910',
             ],
         ]
 
@@ -141,7 +140,7 @@ class Factory:
                 datetime.date(2004, 1, 10),
                 datetime.date(2004, 1, 10),
                 datetime.datetime(2004, 1, 10, 12, 23, 45),
-                datetime.datetime(2004, 1, 10, 12, 23, 45, 678000),
+                datetime.datetime(2004, 1, 10, 12, 23, 45, 678910),
             ],
             [
                 4,
@@ -159,22 +158,22 @@ class Factory:
             ],
         ]
 
-        data_source_kind = EDataSourceKind.CLICKHOUSE
+        test_case_name = self._name + '_YQL'
 
         return TestCase(
-            name=self._name + '_ch_YQL',
+            name_=test_case_name,
             date_time_format=EDateTimeFormat.YQL_FORMAT,
             data_in=data_in,
             data_out_=data_out,
             select_what=SelectWhat.asterisk(schema.columns),
             select_where=None,
-            data_source_kind=data_source_kind,
+            data_source_kind=EDataSourceKind.CLICKHOUSE,
+            protocol=EProtocol.NATIVE,
             schema=schema,
-            database=Database.make_for_data_source_kind(data_source_kind),
             pragmas=dict(),
         )
 
-    def _make_test_postgresql(self) -> TestCase:
+    def _make_test_yql_postgresql(self) -> TestCase:
         schema = Schema(
             columns=ColumnList(
                 Column(
@@ -194,14 +193,14 @@ class Factory:
             # Date is OK for CH, but too early for YQL
             [
                 1,
-                datetime.datetime(1950, 5, 27, 12, 23, 45, 678000),
+                datetime.datetime(1950, 5, 27, 12, 23, 45, 678910),
             ],
             # Date is OK for both CH and YQL
-            [2, datetime.datetime(1988, 11, 20, 12, 23, 45, 678000)],
+            [2, datetime.datetime(1988, 11, 20, 12, 23, 45, 678910)],
             # Date is OK for CH, but too late for YQL
             [
                 3,
-                datetime.datetime(2108, 1, 1, 12, 23, 45, 678000),
+                datetime.datetime(2108, 1, 1, 12, 23, 45, 678910),
             ],
         ]
 
@@ -213,7 +212,7 @@ class Factory:
             [
                 2,
                 # datetime.datetime(1988, 11, 20, 12, 23, 45, 678000).astimezone(ZoneInfo('UTC')).replace(tzinfo=None),
-                datetime.datetime(1988, 11, 20, 12, 23, 45, 678000),
+                datetime.datetime(1988, 11, 20, 12, 23, 45, 678910),
             ],
             [
                 3,
@@ -221,18 +220,18 @@ class Factory:
             ],
         ]
 
-        data_source_kind = EDataSourceKind.POSTGRESQL
+        test_case_name = self._name + '_YQL'
 
         return TestCase(
-            name=self._name + '_pg_YQL',
+            name_=test_case_name,
             date_time_format=EDateTimeFormat.YQL_FORMAT,
             data_in=data_in,
             data_out_=data_out,
             select_what=SelectWhat.asterisk(schema.columns),
             select_where=None,
-            data_source_kind=data_source_kind,
+            data_source_kind=EDataSourceKind.POSTGRESQL,
+            protocol=EProtocol.NATIVE,
             schema=schema,
-            database=Database.make_for_data_source_kind(data_source_kind),
             pragmas=dict(),
         )
 
@@ -277,7 +276,7 @@ class Factory:
                 '1950-01-10',
                 '1850-01-10',
                 '1950-01-10 12:23:45',
-                '1850-01-10 12:23:45.678',
+                '1850-01-10 12:23:45.678910',
             ],
             # Value is OK for CH, but can be too early for YQL
             [
@@ -285,7 +284,7 @@ class Factory:
                 '1970-01-10',
                 '1950-01-10',
                 '1980-01-10 12:23:45',
-                '1950-01-10 12:23:45.678',
+                '1950-01-10 12:23:45.678910',
             ],
             # Value is OK for both CH and YQL
             [
@@ -293,7 +292,7 @@ class Factory:
                 '2004-01-10',
                 '2004-01-10',
                 '2004-01-10 12:23:45',
-                '2004-01-10 12:23:45.678',
+                '2004-01-10 12:23:45.678910',
             ],
             # Value is OK for CH, but too late for YQL
             [
@@ -301,7 +300,7 @@ class Factory:
                 '2110-01-10',
                 '2110-01-10',
                 '2106-01-10 12:23:45',
-                '2110-01-10 12:23:45.678',
+                '2110-01-10 12:23:45.678910',
             ],
             # Value is too late for both OK for CH
             # In this case ClickHouse behaviour is undefined
@@ -312,36 +311,36 @@ class Factory:
                 '2150-01-10',
                 '2300-01-10',
                 '2107-01-10 12:23:45',
-                '2300-01-10 12:23:45.678',
+                '2300-01-10 12:23:45.678910',
             ],
         ]
 
         data_out = [
-            [1, '1970-01-01', '1900-01-01', '1970-01-01T00:00:00Z', '1900-01-01T12:23:45.678Z'],
-            [2, '1970-01-10', '1950-01-10', '1980-01-10T12:23:45Z', '1950-01-10T12:23:45.678Z'],
-            [3, '2004-01-10', '2004-01-10', '2004-01-10T12:23:45Z', '2004-01-10T12:23:45.678Z'],
-            [4, '2110-01-10', '2110-01-10', '2106-01-10T12:23:45Z', '2110-01-10T12:23:45.678Z'],
+            [1, '1970-01-01', '1900-01-01', '1970-01-01T00:00:00Z', '1900-01-01T12:23:45.67891Z'],
+            [2, '1970-01-10', '1950-01-10', '1980-01-10T12:23:45Z', '1950-01-10T12:23:45.67891Z'],
+            [3, '2004-01-10', '2004-01-10', '2004-01-10T12:23:45Z', '2004-01-10T12:23:45.67891Z'],
+            [4, '2110-01-10', '2110-01-10', '2106-01-10T12:23:45Z', '2110-01-10T12:23:45.67891Z'],
             [
                 5,
                 '2149-06-06',
                 '2299-12-31',
                 '1970-12-04T05:55:29Z',
-                '1900-01-01T00:00:00.000Z',  # TODO: strange overflow under bottom bound for datetime64
+                '1900-01-01T00:00:00Z',  # TODO: strange overflow under bottom bound for datetime64
             ],
         ]
 
-        data_source_kind = EDataSourceKind.CLICKHOUSE
+        test_case_name = self._name + '_string'
 
         return TestCase(
-            name=self._name + '_ch_string',
+            name_=test_case_name,
             date_time_format=EDateTimeFormat.STRING_FORMAT,
+            protocol=EProtocol.NATIVE,
             data_in=data_in,
             data_out_=data_out,
             select_what=SelectWhat.asterisk(schema.columns),
             select_where=None,
-            data_source_kind=data_source_kind,
+            data_source_kind=EDataSourceKind.CLICKHOUSE,
             schema=schema,
-            database=Database.make_for_data_source_kind(data_source_kind),
             pragmas=dict(),
         )
 
@@ -364,49 +363,49 @@ class Factory:
         data_in = [
             [
                 1,
-                datetime.datetime(1950, 5, 27, 12, 23, 45, 678000),
+                datetime.datetime(1950, 5, 27, 12, 23, 45, 678910),
             ],
-            [2, datetime.datetime(1988, 11, 20, 12, 23, 45, 678000)],
+            [2, datetime.datetime(1988, 11, 20, 12, 23, 45, 678910)],
             [
                 3,
-                datetime.datetime(2108, 1, 1, 12, 23, 45, 678000),
+                datetime.datetime(2108, 1, 1, 12, 23, 45, 678910),
             ],
         ]
 
         data_out = [
             [
                 1,
-                '1950-05-27T12:23:45.678Z',
+                '1950-05-27T12:23:45.67891Z',
             ],
             [
                 2,
-                '1988-11-20T12:23:45.678Z',
+                '1988-11-20T12:23:45.67891Z',
             ],
             [
                 3,
-                '2108-01-01T12:23:45.678Z',
+                '2108-01-01T12:23:45.67891Z',
             ],
         ]
 
-        data_source_kind = EDataSourceKind.POSTGRESQL
+        test_case_name = self._name + '_string'
 
         return TestCase(
-            name=self._name + '_pg_string',
+            name_=test_case_name,
             date_time_format=EDateTimeFormat.STRING_FORMAT,
             data_in=data_in,
             data_out_=data_out,
             select_what=SelectWhat.asterisk(schema.columns),
             select_where=None,
-            data_source_kind=data_source_kind,
+            data_source_kind=EDataSourceKind.POSTGRESQL,
+            protocol=EProtocol.NATIVE,
             schema=schema,
-            database=Database.make_for_data_source_kind(data_source_kind),
             pragmas=dict(),
         )
 
     def make_test_cases(self) -> Sequence[TestCase]:
         return [
-            self._make_test_clickhouse(),
-            self._make_test_postgresql(),
+            self._make_test_yql_clickhouse(),
+            self._make_test_yql_postgresql(),
             self._make_test_string_clickhouse(),
             self._make_test_string_postgresql(),
         ]

@@ -1,6 +1,5 @@
 #include "auto_config_initializer.h"
 #include "run.h"
-#include "dummy.h"
 #include "cert_auth_props.h"
 #include "service_initializer.h"
 #include "kikimr_services_initializers.h"
@@ -26,6 +25,7 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <ydb/library/actors/interconnect/interconnect_mon.h>
 #include <ydb/core/actorlib_impl/mad_squirrel.h>
+#include <ydb/core/config/init/dummy.h>
 
 #include <ydb/core/control/immediate_control_board_actor.h>
 
@@ -55,6 +55,9 @@
 #include <ydb/core/base/event_filter.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/core/protos/alloc.pb.h>
+#include <ydb/core/protos/http_config.pb.h>
+#include <ydb/core/protos/datashard_config.pb.h>
 
 #include <ydb/core/mind/local.h>
 #include <ydb/core/mind/tenant_pool.h>
@@ -111,7 +114,6 @@
 #include <ydb/services/ydb/ydb_export.h>
 #include <ydb/services/ydb/ydb_import.h>
 #include <ydb/services/ydb/ydb_logstore.h>
-#include <ydb/services/ydb/ydb_long_tx.h>
 #include <ydb/services/ydb/ydb_operation.h>
 #include <ydb/services/ydb/ydb_query.h>
 #include <ydb/services/ydb/ydb_scheme.h>
@@ -171,36 +173,34 @@ public:
             }
 
             bool isExplicitTabletIds = domain.ExplicitCoordinatorsSize() + domain.ExplicitMediatorsSize() + domain.ExplicitAllocatorsSize();
-
-            const ui32 defaultSSId = domainId;
-            const ui32 schemeBoardSSId = (domain.HasSchemeBoardSSId() && domain.GetSchemeBoardSSId()) ? domain.GetSchemeBoardSSId() : defaultSSId;
-            Y_ABORT_UNLESS(Find(domain.GetSSId(), defaultSSId) != domain.GetSSId().end());
-            Y_ABORT_UNLESS(Find(domain.GetSSId(), schemeBoardSSId) != domain.GetSSId().end());
+            Y_ABORT_UNLESS(domain.SSIdSize() == 0 || (domain.SSIdSize() == 1 && domain.GetSSId(0) == 1));
+            Y_ABORT_UNLESS(domain.HiveUidSize() == 0 || (domain.HiveUidSize() == 1 && domain.GetHiveUid(0) == 1));
 
             TDomainsInfo::TDomain::TPtr domainPtr = nullptr;
             if (isExplicitTabletIds) {
                 domainPtr = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(domainName, domainId, schemeRoot,
-                                                                                     defaultSSId, schemeBoardSSId, domain.GetSSId(),
-                                                                                     domainId, domain.GetHiveUid(),
-                                                                                     planResolution,
-                                                                                     domain.GetExplicitCoordinators(),
-                                                                                     domain.GetExplicitMediators(),
-                                                                                     domain.GetExplicitAllocators(),
-                                                                                     poolTypes);
-            } else {
-                domainPtr = TDomainsInfo::TDomain::ConstructDomain(domainName, domainId, schemeRoot,
-                                                                defaultSSId, schemeBoardSSId, domain.GetSSId(),
-                                                                domainId, domain.GetHiveUid(),
-                                                                planResolution,
-                                                                domain.GetCoordinator(), domain.GetMediator(),
-                                                                domain.GetProxy(), poolTypes);
+                    planResolution, domain.GetExplicitCoordinators(), domain.GetExplicitMediators(),
+                    domain.GetExplicitAllocators(), poolTypes);
+            } else { // compatibility code
+                std::vector<ui64> coordinators, mediators, allocators;
+                for (ui64 x : domain.GetCoordinator()) {
+                    coordinators.push_back(TDomainsInfo::MakeTxCoordinatorID(domainId, x));
+                }
+                for (ui64 x : domain.GetMediator()) {
+                    mediators.push_back(TDomainsInfo::MakeTxMediatorID(domainId, x));
+                }
+                for (ui64 x : domain.GetProxy()) {
+                    allocators.push_back(TDomainsInfo::MakeTxAllocatorID(domainId, x));
+                }
+                domainPtr = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(domainName, domainId, schemeRoot,
+                    planResolution, coordinators, mediators, allocators, poolTypes);
             }
 
             appData->DomainsInfo->AddDomain(domainPtr.Release());
         }
 
         for (const NKikimrConfig::TDomainsConfig::THiveConfig &hiveConfig : Config.GetDomainsConfig().GetHiveConfig()) {
-            appData->DomainsInfo->AddHive(hiveConfig.GetHiveUid(), hiveConfig.GetHive());
+            appData->DomainsInfo->AddHive(hiveConfig.GetHive());
         }
 
         for (const NKikimrConfig::TDomainsConfig::TNamedCompactionPolicy &policy : Config.GetDomainsConfig().GetNamedCompactionPolicy()) {
@@ -229,6 +229,7 @@ public:
         appData->EnableKqpSpilling = Config.GetTableServiceConfig().GetSpillingServiceConfig().GetLocalFileConfig().GetEnable();
 
         appData->CompactionConfig = Config.GetCompactionConfig();
+        appData->BackgroundCleaningConfig = Config.GetBackgroundCleaningConfig();
     }
 };
 
@@ -261,7 +262,6 @@ public:
 
             appData->ChannelProfiles->Profiles.emplace_back();
             TChannelProfiles::TProfile &outProfile = appData->ChannelProfiles->Profiles.back();
-            ui32 channelIdx = 0;
             for (const NKikimrConfig::TChannelProfileConfig::TProfile::TChannel &channel : profile.GetChannel()) {
                 Y_ABORT_UNLESS(channel.HasErasureSpecies());
                 Y_ABORT_UNLESS(channel.HasPDiskCategory());
@@ -275,7 +275,6 @@ public:
 
                 const TString kind = channel.GetStoragePoolKind();
                 outProfile.Channels.push_back(TChannelProfiles::TProfile::TChannel(erasure, pDiskCategory, vDiskCategory, kind));
-                ++channelIdx;
             }
         }
     }
@@ -565,8 +564,6 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["clickhouse_internal"] = &hasClickhouseInternal;
         TServiceCfg hasRateLimiter = false;
         names["rate_limiter"] = &hasRateLimiter;
-        TServiceCfg hasLongTx = false;
-        names["long_tx"] = &hasLongTx;
         TServiceCfg hasExport = services.empty();
         names["export"] = &hasExport;
         TServiceCfg hasImport = services.empty();
@@ -726,11 +723,6 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 grpcRequestProxies[0], hasScripting.IsRlAllowed()));
         }
 
-        if (hasLongTx) {
-            server.AddService(new NGRpcService::TGRpcYdbLongTxService(ActorSystem.Get(), Counters,
-                grpcRequestProxies[0], hasLongTx.IsRlAllowed()));
-        }
-
         if (hasSchemeService) {
             // RPC RL enabled
             // We have no way to disable or enable this service explicitly
@@ -841,7 +833,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
         if (hasQueryService) {
             server.AddService(new NGRpcService::TGRpcYdbQueryService(ActorSystem.Get(), Counters,
-                grpcRequestProxies[0], hasDataStreams.IsRlAllowed()));
+                grpcRequestProxies, hasDataStreams.IsRlAllowed(), grpcConfig.GetHandlersPerCompletionQueue()));
         }
 
         if (hasLogStore) {
@@ -1095,6 +1087,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasS3ProxyResolverConfig()) {
         AppData->S3ProxyResolverConfig = runConfig.AppConfig.GetS3ProxyResolverConfig();
+    }
+
+    if (runConfig.AppConfig.HasGraphConfig()) {
+        AppData->GraphConfig.CopyFrom(runConfig.AppConfig.GetGraphConfig());
     }
 
     // setup resource profiles

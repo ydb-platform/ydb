@@ -297,12 +297,12 @@ namespace NTable {
             return EReady::Data;
         }
 
-        EReady SeekToStart() noexcept
+        EReady SeekToSliceFirstRow() noexcept
         {
             return Seek(BeginRowId);
         }
 
-        EReady SeekToEnd() noexcept
+        EReady SeekToSliceLastRow() noexcept
         {
             return Seek(EndRowId - 1);
         }
@@ -544,8 +544,8 @@ namespace NTable {
                                 return Exhausted();
                             };
                             case EReady::Data: {
-                                Y_DEBUG_ABORT_UNLESS(Index.HasKeyCells(), "Non-first page is expected to have key cells");
-                                if (Index.HasKeyCells()) {
+                                Y_DEBUG_ABORT_UNLESS(Index.GetKeyCellsCount(), "Non-first page is expected to have key cells");
+                                if (Index.GetKeyCellsCount()) {
                                     if (!checkIndex()) {
                                         // First row for the next RowId
                                         MaxVersion = TRowVersion::Max();
@@ -632,8 +632,8 @@ namespace NTable {
             }
 
             // We need exact match on rowId, bail on larger values
-            Y_DEBUG_ABORT_UNLESS(Index.GetRowId() == 0 || Index.HasKeyCells(), "Non-first page is expected to have key cells");
-            if (Index.HasKeyCells()) {
+            Y_DEBUG_ABORT_UNLESS(Index.GetRowId() == 0 || Index.GetKeyCellsCount(), "Non-first page is expected to have key cells");
+            if (Index.GetKeyCellsCount()) {
                 TRowId indexRowId = Index.GetKeyCell(0).AsValue<TRowId>();
                 if (rowId < indexRowId) {
                     // We cannot compute MaxVersion anyway as indexRowId row may be presented on the previous page
@@ -675,8 +675,8 @@ namespace NTable {
                 return Terminate(ready);
             }
 
-            Y_DEBUG_ABORT_UNLESS(Index.HasKeyCells(), "Non-first page is expected to have key cells");
-            if (Y_LIKELY(Index.HasKeyCells())) {
+            Y_DEBUG_ABORT_UNLESS(Index.GetKeyCellsCount(), "Non-first page is expected to have key cells");
+            if (Y_LIKELY(Index.GetKeyCellsCount())) {
                 if (!checkIndex()) {
                     // First row for the nextRowId
                     MaxVersion = TRowVersion::Max();
@@ -706,7 +706,7 @@ namespace NTable {
             Data = Page->Begin();
             Y_ABORT_UNLESS(Data);
 
-            if (Index.HasKeyCells()) {
+            if (Index.GetKeyCellsCount()) {
                 // Must have rowId as we have checked index
                 Y_ABORT_UNLESS(checkData() && RowVersion <= rowVersion, "Index and Data are out of sync");
 
@@ -828,16 +828,16 @@ namespace NTable {
             return Main.Seek(rowId);
         }
 
-        EReady SeekToStart() noexcept
+        EReady SeekToSliceFirstRow() noexcept
         {
             ClearKey();
-            return Main.SeekToStart();
+            return Main.SeekToSliceFirstRow();
         }
 
-        EReady SeekToEnd() noexcept
+        EReady SeekToSliceLastRow() noexcept
         {
             ClearKey();
-            return Main.SeekToEnd();
+            return Main.SeekToSliceLastRow();
         }
 
         EReady Next() noexcept
@@ -1387,18 +1387,7 @@ namespace NTable {
 
         EReady Seek(const TCells key, ESeek seek) noexcept
         {
-            if (Run.size() == 1) {
-                // Avoid overhead of extra key comparisons in a single slice
-                Current = Run.begin();
-
-                if (!CurrentIt) {
-                    InitCurrent();
-                }
-
-                return CurrentIt->Seek(key, seek);
-            }
-
-            bool seekToStart = false;
+            bool seekToSliceFirstRow = false;
             TRun::const_iterator pos;
 
             switch (seek) {
@@ -1409,7 +1398,7 @@ namespace NTable {
                 case ESeek::Lower:
                     if (!key) {
                         pos = Run.begin();
-                        seekToStart = true;
+                        seekToSliceFirstRow = true;
                         break;
                     }
 
@@ -1417,8 +1406,8 @@ namespace NTable {
                     if (pos != Run.end() &&
                         TSlice::CompareSearchKeyFirstKey(key, pos->Slice, *KeyCellDefaults) <= 0)
                     {
-                        // Key is at the start of the slice
-                        seekToStart = true;
+                        // key <= FirstKey
+                        seekToSliceFirstRow = true;
                     }
                     break;
 
@@ -1432,8 +1421,8 @@ namespace NTable {
                     if (pos != Run.end() &&
                         TSlice::CompareSearchKeyFirstKey(key, pos->Slice, *KeyCellDefaults) < 0)
                     {
-                        // Key is at the start of the slice
-                        seekToStart = true;
+                        // key < FirstKey
+                        seekToSliceFirstRow = true;
                     }
                     break;
 
@@ -1452,7 +1441,7 @@ namespace NTable {
                 UpdateCurrent();
             }
 
-            if (!seekToStart) {
+            if (!seekToSliceFirstRow) {
                 auto ready = CurrentIt->Seek(key, seek);
                 if (ready != EReady::Gone) {
                     return ready;
@@ -1472,23 +1461,12 @@ namespace NTable {
                 UpdateCurrent();
             }
 
-            return SeekToStart();
+            return SeekToSliceFirstRow();
         }
 
         EReady SeekReverse(const TCells key, ESeek seek) noexcept
         {
-            if (Run.size() == 1) {
-                // Avoid overhead of extra key comparisons in a single slice
-                Current = Run.begin();
-
-                if (!CurrentIt) {
-                    InitCurrent();
-                }
-
-                return CurrentIt->SeekReverse(key, seek);
-            }
-
-            bool seekToEnd = false;
+            bool seekToSliceLastRow = false;
             TRun::const_iterator pos;
 
             switch (seek) {
@@ -1498,7 +1476,7 @@ namespace NTable {
 
                 case ESeek::Lower:
                     if (!key) {
-                        seekToEnd = true;
+                        seekToSliceLastRow = true;
                         pos = Run.end();
                         --pos;
                         break;
@@ -1508,7 +1486,8 @@ namespace NTable {
                     if (pos != Run.end() &&
                         TSlice::CompareLastKeySearchKey(pos->Slice, key, *KeyCellDefaults) <= 0)
                     {
-                        seekToEnd = true;
+                        // LastKey <= key 
+                        seekToSliceLastRow = true;
                     }
                     break;
 
@@ -1522,7 +1501,8 @@ namespace NTable {
                     if (pos != Run.end() &&
                         TSlice::CompareLastKeySearchKey(pos->Slice, key, *KeyCellDefaults) < 0)
                     {
-                        seekToEnd = true;
+                        // LastKey < key
+                        seekToSliceLastRow = true;
                     }
                     break;
 
@@ -1541,7 +1521,7 @@ namespace NTable {
                 UpdateCurrent();
             }
 
-            if (!seekToEnd) {
+            if (!seekToSliceLastRow) {
                 auto ready = CurrentIt->SeekReverse(key, seek);
                 if (ready != EReady::Gone) {
                     return ready;
@@ -1563,7 +1543,7 @@ namespace NTable {
                 UpdateCurrent();
             }
 
-            return SeekToEnd();
+            return SeekToSliceLastRow();
         }
 
         EReady Next() noexcept
@@ -1586,7 +1566,7 @@ namespace NTable {
 
             UpdateCurrent();
 
-            ready = SeekToStart();
+            ready = SeekToSliceFirstRow();
             if (ready == EReady::Page) {
                 // we haven't sought start, will do it again later  
                 Current--;
@@ -1618,7 +1598,7 @@ namespace NTable {
             --Current;
             UpdateCurrent();
 
-            ready = SeekToEnd();
+            ready = SeekToSliceLastRow();
             if (ready == EReady::Page) {
                 // we haven't sought end, will do it again later  
                 Current++;
@@ -1747,17 +1727,17 @@ namespace NTable {
             InitCurrent();
         }
 
-        Y_FORCE_INLINE EReady SeekToStart() noexcept
+        Y_FORCE_INLINE EReady SeekToSliceFirstRow() noexcept
         {
-            auto ready = CurrentIt->SeekToStart();
+            auto ready = CurrentIt->SeekToSliceFirstRow();
             Y_ABORT_UNLESS(ready != EReady::Gone,
                 "Unexpected slice without the first row");
             return ready;
         }
 
-        Y_FORCE_INLINE EReady SeekToEnd() noexcept
+        Y_FORCE_INLINE EReady SeekToSliceLastRow() noexcept
         {
-            auto ready = CurrentIt->SeekToEnd();
+            auto ready = CurrentIt->SeekToSliceLastRow();
             Y_ABORT_UNLESS(ready != EReady::Gone,
                 "Unexpected slice without the last row");
             return ready;

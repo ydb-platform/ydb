@@ -27,7 +27,7 @@ extern YT_THREAD_LOCAL(THazardThreadState*) HazardThreadState;
 
 void InitHazardThreadState();
 
-template <class T, bool = std::is_base_of_v<TRefCountedBase, T>>
+template <class T, bool = std::derived_from<T, TRefCountedBase>>
 struct THazardPtrTraits
 {
     Y_FORCE_INLINE static void* GetBasePtr(T* object)
@@ -179,16 +179,10 @@ THazardPtr<T>::THazardPtr(T* ptr, std::atomic<void*>* hazardPtr)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class U>
-bool operator==(const THazardPtr<U>& lhs, const U* rhs)
+template <class T>
+bool operator==(const THazardPtr<T>& lhs, const T* rhs)
 {
     return lhs.Get() == rhs;
-}
-
-template <class U>
-bool operator!=(const THazardPtr<U>& lhs, const U* rhs)
-{
-    return lhs.Get() != rhs;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -565,6 +565,37 @@ const TPath::TChecker& TPath::TChecker::IsTheSameDomain(const TPath& another, ES
         << ", another path: " << another.PathString());
 }
 
+const TPath::TChecker& TPath::TChecker::FailOnWrongType(const TSet<TPathElement::EPathType>& expectedTypes) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (!Path.IsResolved()) {
+        return *this;
+    }
+
+    if (Path.IsDeleted()) {
+        return *this;
+    }
+
+    if (!expectedTypes.contains(Path.Base()->PathType)) {
+        return Fail(EStatus::StatusNameConflict, TStringBuilder() << "unexpected path type"
+            << " (" << BasicPathInfo(Path.Base()) << ")"
+            << ", expected types: " << JoinSeq(", ", expectedTypes));
+    }
+
+    if (!Path.Base()->IsCreateFinished()) {
+        return Fail(EStatus::StatusMultipleModifications, TStringBuilder() << "path exists but creating right now"
+            << " (" << BasicPathInfo(Path.Base()) << ")");
+    }
+
+    return *this;
+}
+
+const TPath::TChecker& TPath::TChecker::FailOnWrongType(TPathElement::EPathType expectedType) const {
+    return FailOnWrongType(TSet<TPathElement::EPathType>{expectedType});
+}
+
 const TPath::TChecker& TPath::TChecker::FailOnExist(const TSet<TPathElement::EPathType>& expectedTypes, bool acceptAlreadyExist) const {
     if (Failed) {
         return *this;
@@ -585,7 +616,7 @@ const TPath::TChecker& TPath::TChecker::FailOnExist(const TSet<TPathElement::EPa
     }
 
     if (!Path.Base()->IsCreateFinished()) {
-        return Fail(EStatus::StatusMultipleModifications, TStringBuilder() << "path exist but creating right now"
+        return Fail(EStatus::StatusMultipleModifications, TStringBuilder() << "path exists but creating right now"
             << " (" << BasicPathInfo(Path.Base()) << ")");
     }
 
@@ -890,6 +921,23 @@ const TPath::TChecker& TPath::TChecker::NotChildren(EStatus status) const {
 
     return Fail(status, TStringBuilder() << "path has children, request doesn't accept it"
         << ", children: " << childrenCount);
+}
+
+const TPath::TChecker& TPath::TChecker::CanBackupTable(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    for (const auto& child: Path.Base()->GetChildren()) {
+        auto name = child.first;
+
+        TPath childPath = Path.Child(name);
+        if (childPath->IsTableIndex()) {
+            return Fail(status, TStringBuilder() << "path has indexes, request doesn't accept it");
+        }
+    }
+
+    return *this;
 }
 
 const TPath::TChecker& TPath::TChecker::NotDeleted(EStatus status) const {

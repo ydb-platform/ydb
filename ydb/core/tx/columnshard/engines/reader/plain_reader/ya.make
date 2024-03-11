@@ -2,16 +2,14 @@ LIBRARY()
 
 SRCS(
     scanner.cpp
-    source.cpp
     constructor.cpp
+    source.cpp
     interval.cpp
     fetched_data.cpp
     plain_read_data.cpp
-    filter_assembler.cpp
-    column_assembler.cpp
-    committed_assembler.cpp
     columns_set.cpp
     context.cpp
+    fetching.cpp
 )
 
 PEERDIR(

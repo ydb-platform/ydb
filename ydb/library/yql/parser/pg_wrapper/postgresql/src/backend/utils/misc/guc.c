@@ -3241,7 +3241,7 @@ set_config_option(const char *name, const char *value,
 				(errcode(ERRCODE_INVALID_TRANSACTION_STATE),
 				 errmsg("cannot set parameters during a parallel operation")));
 
-	record = find_option(name, true, false, elevel);
+	record = find_option(name, true, true, elevel);
 	if (record == NULL)
 		return 0;
 

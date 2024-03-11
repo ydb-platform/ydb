@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: lz4
-Version: 4.3.2
+Version: 4.3.3
 Summary: LZ4 Bindings for Python
 Home-page: https://github.com/python-lz4/python-lz4
 Author: Jonathan Underwood
@@ -10,20 +10,20 @@ Classifier: License :: OSI Approved :: BSD License
 Classifier: Intended Audience :: Developers
 Classifier: Programming Language :: C
 Classifier: Programming Language :: Python
-Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
-Requires-Python: >=3.7
+Classifier: Programming Language :: Python :: 3.12
+Requires-Python: >=3.8
 License-File: LICENSE
 Provides-Extra: docs
-Requires-Dist: sphinx (>=1.6.0) ; extra == 'docs'
+Requires-Dist: sphinx >=1.6.0 ; extra == 'docs'
 Requires-Dist: sphinx-bootstrap-theme ; extra == 'docs'
 Provides-Extra: flake8
 Requires-Dist: flake8 ; extra == 'flake8'
 Provides-Extra: tests
-Requires-Dist: pytest (!=3.3.0) ; extra == 'tests'
+Requires-Dist: pytest !=3.3.0 ; extra == 'tests'
 Requires-Dist: psutil ; extra == 'tests'
 Requires-Dist: pytest-cov ; extra == 'tests'
 

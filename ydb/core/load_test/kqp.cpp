@@ -3,6 +3,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/protos/kqp_stats.pb.h>
 
 #include <ydb/library/workload/workload_factory.h>
 #include <ydb/library/workload/stock_workload.h>
@@ -254,30 +255,30 @@ public:
         IncreaseSessions = cmd.GetIncreaseSessions();
         Total = std::make_unique<MonitoringData>();
 
-        NYdbWorkload::TWorkloadFactory factory;
         if (cmd.Workload_case() == NKikimr::TEvLoadTestRequest_TKqpLoad::WorkloadCase::kStock) {
-            WorkloadClass = NYdbWorkload::EWorkload::STOCK;
-            NYdbWorkload::TStockWorkloadParams params;
-            params.PartitionsByLoad = cmd.GetStock().GetPartitionsByLoad();
-            params.OrderCount = cmd.GetStock().GetOrderCount();
-            params.ProductCount = cmd.GetStock().GetProductCount();
-            params.Quantity = cmd.GetStock().GetQuantity();
-            params.Limit = cmd.GetStock().GetLimit();
-            params.DbPath = WorkingDir;
-            params.MinPartitions = UniformPartitionsCount;
-            WorkloadQueryGen = factory.GetWorkloadQueryGenerator(NYdbWorkload::EWorkload::STOCK, &params);
+            WorkloadClass = "stock";
+            auto params = std::make_shared<NYdbWorkload::TStockWorkloadParams>();
+            params->PartitionsByLoad = cmd.GetStock().GetPartitionsByLoad();
+            params->OrderCount = cmd.GetStock().GetOrderCount();
+            params->ProductCount = cmd.GetStock().GetProductCount();
+            params->Quantity = cmd.GetStock().GetQuantity();
+            params->Limit = cmd.GetStock().GetLimit();
+            params->DbPath = WorkingDir;
+            params->MinPartitions = UniformPartitionsCount;
+            WorkloadQueryGen = std::make_shared<NYdbWorkload::TStockWorkloadGenerator>(params.get());
+            WorkloadQueryGenParams = params;
         } else if (cmd.Workload_case() == NKikimr::TEvLoadTestRequest_TKqpLoad::WorkloadCase::kKv) {
-            WorkloadClass = NYdbWorkload::EWorkload::KV;
-            NYdbWorkload::TKvWorkloadParams params;
-            params.InitRowCount = cmd.GetKv().GetInitRowCount();
-            params.PartitionsByLoad = cmd.GetKv().GetPartitionsByLoad();
-            params.MaxFirstKey = cmd.GetKv().GetMaxFirstKey();
-            params.StringLen = cmd.GetKv().GetStringLen();
-            params.ColumnsCnt = cmd.GetKv().GetColumnsCnt();
-            params.RowsCnt = cmd.GetKv().GetRowsCnt();
-            params.MinPartitions = UniformPartitionsCount;
-            params.DbPath = WorkingDir;
-            WorkloadQueryGen = factory.GetWorkloadQueryGenerator(NYdbWorkload::EWorkload::KV, &params);
+            WorkloadClass = "kv";
+            auto params = std::make_shared<NYdbWorkload::TKvWorkloadParams>();
+            params->InitRowCount = cmd.GetKv().GetInitRowCount();
+            params->PartitionsByLoad = cmd.GetKv().GetPartitionsByLoad();
+            params->MaxFirstKey = cmd.GetKv().GetMaxFirstKey();
+            params->StringLen = cmd.GetKv().GetStringLen();
+            params->ColumnsCnt = cmd.GetKv().GetColumnsCnt();
+            params->RowsCnt = cmd.GetKv().GetRowsCnt();
+            params->MinPartitions = UniformPartitionsCount;
+            WorkloadQueryGen = std::make_shared<NYdbWorkload::TKvWorkloadGenerator>(params.get());
+            WorkloadQueryGenParams = params;
         } else {
             return;
         }
@@ -301,8 +302,8 @@ public:
 
         Become(&TKqpLoadActor::StateStart);
 
-        if (WorkloadClass == NYdbWorkload::EWorkload::STOCK) {
-            NYdbWorkload::TStockWorkloadParams* params = static_cast<NYdbWorkload::TStockWorkloadParams*>(WorkloadQueryGen->GetParams());
+        if (WorkloadClass == "stock") {
+            NYdbWorkload::TStockWorkloadParams* params = static_cast<NYdbWorkload::TStockWorkloadParams*>(WorkloadQueryGenParams.get());
             LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Starting load actor with workload STOCK, Params: {"
                 << "PartitionsByLoad: " << params->PartitionsByLoad << " "
                 << "OrderCount: " << params->OrderCount << " "
@@ -311,8 +312,8 @@ public:
                 << "Limit: " << params->Limit << " "
                 << "DbPath: " << params->DbPath << " "
                 << "MinPartitions: " << params->MinPartitions);
-        } else if (WorkloadClass == NYdbWorkload::EWorkload::KV) {
-            NYdbWorkload::TKvWorkloadParams* params = static_cast<NYdbWorkload::TKvWorkloadParams*>(WorkloadQueryGen->GetParams());
+        } else if (WorkloadClass == "kv") {
+            NYdbWorkload::TKvWorkloadParams* params = static_cast<NYdbWorkload::TKvWorkloadParams*>(WorkloadQueryGenParams.get());
             LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Starting load actor with workload KV, Params: {"
                 << "InitRowCount: " << params->InitRowCount << " "
                 << "PartitionsByLoad: " << params->PartitionsByLoad << " "
@@ -666,7 +667,7 @@ private:
     size_t NumOfSessions = 0;
     bool IncreaseSessions = false;
     size_t ResultsReceived = 0;
-    NYdbWorkload::EWorkload WorkloadClass;
+    TString WorkloadClass;
     NKikimrKqp::EQueryType QueryType;
 
     NYdbWorkload::TQueryInfoList InitData;
@@ -674,6 +675,7 @@ private:
     const TActorId Parent;
     ui64 Tag;
     ui32 DurationSeconds;
+    std::shared_ptr<NYdbWorkload::TWorkloadParams> WorkloadQueryGenParams;
     std::shared_ptr<NYdbWorkload::IWorkloadQueryGenerator> WorkloadQueryGen;
 
     // Monitoring

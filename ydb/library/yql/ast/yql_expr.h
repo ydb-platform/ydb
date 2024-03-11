@@ -20,6 +20,7 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 
+#include <util/string/ascii.h>
 #include <util/string/builder.h>
 #include <util/generic/array_ref.h>
 #include <util/generic/deque.h>
@@ -529,6 +530,26 @@ public:
         }
 
         return it - Items.begin();
+    }
+
+    TMaybe<ui32> FindItemI(const TStringBuf& name) const {
+        auto strict = FindItem(name);
+        if (strict) {
+            return strict;
+        }
+
+        TMaybe<ui32> ret;
+        for (ui32 i = 0; i < Items.size(); ++i) {
+            if (AsciiEqualsIgnoreCase(name, Items[i]->GetName())) {
+                if (ret) {
+                    return Nothing();
+                }
+
+                ret = i;
+            }
+        }
+
+        return ret;
     }
 
     const TTypeAnnotationNode* FindItemType(const TStringBuf& name) const {
@@ -2778,6 +2799,7 @@ struct TConvertToAstSettings {
     bool RefAtoms = false;
     std::function<bool(const TExprNode&)> NoInlineFunc;
     bool PrintArguments = false;
+    bool AllowFreeArgs = false;
 };
 
 TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, const TConvertToAstSettings& settings);

@@ -280,9 +280,9 @@ public:
         try {
             TSession::TPtr session = GetSession(options.SessionId());
             auto logCtx = NYql::NLog::CurrentLogContextPath();
-            return session->Queue_->Async([session, logCtx, abort=options.Abort()] () {
+            return session->Queue_->Async([session, logCtx, abort=options.Abort(), detachSnapshotTxs=options.DetachSnapshotTxs()] () {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
-                return ExecFinalize(session, abort);
+                return ExecFinalize(session, abort, detachSnapshotTxs);
             });
         } catch (...) {
             return MakeFuture(ResultFromCurrentException<TFinalizeResult>());
@@ -1217,6 +1217,10 @@ public:
         }
     }
 
+    void AddCluster(const TYtClusterConfig& cluster) override {
+        Clusters_->AddCluster(cluster, false);
+    }
+
 private:
     class TNodeResultBuilder {
     public:
@@ -1350,9 +1354,13 @@ private:
         const TString OptLLVM_;
     };
 
-    static TFinalizeResult ExecFinalize(const TSession::TPtr& session, bool abort) {
+    static TFinalizeResult ExecFinalize(const TSession::TPtr& session, bool abort, bool detachSnapshotTxs) {
         try {
             TFinalizeResult res;
+            if (detachSnapshotTxs) {
+                YQL_CLOG(INFO, ProviderYt) << "Detaching all snapshot transactions";
+                session->TxCache_.DetachSnapshotTxs();
+            }
             if (abort) {
                 YQL_CLOG(INFO, ProviderYt) << "Aborting all transactions for hidden query";
                 session->TxCache_.AbortAll();
@@ -1786,59 +1794,52 @@ private:
                 auto typeAttrFilter = TAttributeFilter().AddAttribute("type").AddAttribute("_yql_type").AddAttribute("broken");
                 auto nodeList = entry->Tx->List(prefix,
                     TListOptions().AttributeFilter(typeAttrFilter));
-
-                TVector<std::variant<TString, std::exception_ptr>> types(Reserve(nodeList.size()));
+                TVector<
+                    std::pair<
+                        TString, //name
+                        std::variant<TString, std::exception_ptr> //type or exception
+                    >
+                > items(nodeList.size());
                 {
                     auto batchGet = entry->Tx->CreateBatchRequest();
                     TVector<TFuture<void>> batchRes;
                     for (size_t i: xrange(nodeList.size())) {
-                        auto& node = nodeList[i];
-                        auto type = GetAttrType(node);
-                        if (type == "link") {
-                            types.emplace_back(type);
+                        const auto& node = nodeList[i];
+                        items[i].first = node.AsString();
+                        items[i].second = GetTypeFromNode(node, true);
+                        if (std::get<TString>(items[i].second) == "link") {
                             if (!node.GetAttributes().HasKey("broken") || !node.GetAttributes()["broken"].AsBool()) {
-                                batchRes.push_back(batchGet->Get(prefix + "/" + node.AsString(), TGetOptions().AttributeFilter(typeAttrFilter))
-                                    .Apply([i, &types] (const TFuture<NYT::TNode>& f) {
-                                        try {
-                                            types[i] = GetAttrType(f.GetValue());
-                                        } catch (...) {
-                                            types[i] = std::current_exception();
-                                        }
-                                    }));
+                                batchRes.push_back(batchGet->Get(prefix + "/" + node.AsString() + "/@", TGetOptions().AttributeFilter(typeAttrFilter))
+                                   .Apply([i, &items](const TFuture<NYT::TNode> &f) {
+                                       try {
+                                           items[i].second = GetTypeFromAttributes(f.GetValue(), true);
+                                       } catch (...) {
+                                           items[i].second = std::current_exception();
+                                       }
+                                   }));
                             }
-                        } else {
-                            types.push_back(type);
                         }
                     }
                     batchGet->ExecuteBatch();
                     WaitExceptionOrAll(batchRes).GetValue();
                 }
 
-                names.reserve(types.size());
-                errors.reserve(types.size());
-                for (size_t i: xrange(nodeList.size())) {
-                    auto& node = nodeList[i];
-                    if (auto type = std::get_if<TString>(&types[i])) {
-                        if (TStringBuf("map_node") == *type && !suffix.empty()) {
-                            names.push_back(node.AsString());
+                names.reserve(items.size());
+                errors.reserve(items.size());
+                for (const auto& item: items) {
+                    if (const auto* type = std::get_if<TString>(&item.second)) {
+                        if (
+                                (suffix.empty() && ("table" == *type || "view" == *type)) ||
+                                (!suffix.empty() && "map_node" == *type)
+                        ) {
+                            names.push_back(item.first);
                             errors.emplace_back();
-                        } else if (TStringBuf("table") == *type && suffix.empty()) {
-                            names.push_back(node.AsString());
-                            errors.emplace_back();
-                        } else if (TStringBuf("document") == *type && suffix.empty()) {
-                            if (node.HasAttributes()) {
-                                auto& attrs = node.GetAttributes();
-                                if (attrs.HasKey("_yql_type") && attrs["_yql_type"].AsString() == "view") {
-                                    names.push_back(node.AsString());
-                                    errors.emplace_back();
-                                }
-                            }
                         }
                     } else {
-                        auto exptr = std::get<std::exception_ptr>(types[i]);
+                        auto exptr = std::get<std::exception_ptr>(item.second);
                         if (filterLambda) {
                             // Delayed error processing
-                            names.push_back(node.AsString());
+                            names.push_back(item.first);
                             errors.push_back(std::move(exptr));
                         } else {
                             std::rethrow_exception(exptr);
@@ -2390,15 +2391,23 @@ private:
                 );
             for (auto& idx: idxs) {
                 batchRes.push_back(batchGet->Get(tables[idx.first].Table() + "&/@", getOpts).Apply([idx, &attributes](const TFuture<NYT::TNode>& f) {
-                    NYT::TNode attrs = f.GetValue();
-                    if (GetType(attrs) == "link") {
-                        // override some attributes by the link ones
-                        if (attrs.HasKey(QB2Premapper)) {
-                            attributes[idx.first][QB2Premapper] = attrs[QB2Premapper];
+                    try {
+                        NYT::TNode attrs = f.GetValue();
+                        if (GetTypeFromAttributes(attrs, false) == "link") {
+                            // override some attributes by the link ones
+                            if (attrs.HasKey(QB2Premapper)) {
+                                attributes[idx.first][QB2Premapper] = attrs[QB2Premapper];
+                            }
+                            if (attrs.HasKey(YqlRowSpecAttribute)) {
+                                attributes[idx.first][YqlRowSpecAttribute] = attrs[YqlRowSpecAttribute];
+                            }
                         }
-                        if (attrs.HasKey(YqlRowSpecAttribute)) {
-                            attributes[idx.first][YqlRowSpecAttribute] = attrs[YqlRowSpecAttribute];
+                    } catch (const TErrorResponse& e) {
+                        // Yt returns NoSuchTransaction as inner issue for ResolveError
+                        if (!e.IsResolveError() || e.IsNoSuchTransaction()) {
+                            throw;
                         }
+                        // Just ignore. Original table path may be deleted at this time
                     }
                 }));
             }
@@ -2419,7 +2428,7 @@ private:
                 TYtTableStatInfo::TPtr statInfo = MakeIntrusive<TYtTableStatInfo>();
                 result.Data[idx.first].Stat = statInfo;
 
-                auto type = GetType(attrs);
+                auto type = GetTypeFromAttributes(attrs, false);
                 ui16 viewSyntaxVersion = 1;
                 if (type == "document") {
                     if (attrs.HasKey(YqlTypeAttribute)) {
@@ -2570,7 +2579,7 @@ private:
                     YQL_ENSURE(tables[idx.first].InferSchemaRows() > 0);
                     requests.push_back({idx.second, tables[idx.first].Table(), tables[idx.first].InferSchemaRows()});
                 }
-                return InferSchemaFromTablesContents(execCtx->YtServer_, execCtx->GetAuth(), tx->GetId(), requests);
+                return InferSchemaFromTablesContents(execCtx->YtServer_, execCtx->GetAuth(), tx->GetId(), requests, execCtx->Session_->Queue_);
 #else
                 ythrow yexception() << "Unimplemented RPC reader on non-linux platforms";
 #endif
@@ -2702,7 +2711,7 @@ private:
         }
 
         TString type;
-        NYT::TNode rowSpec; 
+        NYT::TNode rowSpec;
         if (execCtx->Options_.FillSettings().Format == IDataProvider::EResultFormat::Skiff) {
             auto ytType =  ParseYTType(pull.Input().Ref(), ctx, execCtx, columns);
 
@@ -2977,7 +2986,7 @@ private:
                     return ExecCalc(lambda, extraUsage, tmpTablePath, execCtx, {},
                         TSkiffExprResultFactory(execCtx->Options_.FillSettings().RowsLimitPerWrite,
                             execCtx->Options_.FillSettings().AllResultsBytesLimit,
-                            hasListResult, 
+                            hasListResult,
                             rowSpec,
                             execCtx->Options_.OptLLVM()),
                         &columns,

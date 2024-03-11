@@ -1,4 +1,5 @@
 #include <ydb/core/base/path.h>
+#include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
@@ -358,6 +359,57 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
                 }
             )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS(DropTableWithInflightChanges) {
+        T t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            auto origObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+                return TTestActorRuntime::DefaultObserverFunc(ev);
+            });
+
+            TVector<THolder<IEventHandle>> enqueued;
+            runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchange::EvEnqueueRecords) {
+                    enqueued.emplace_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                return origObserver(ev);
+            });
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    TableDescription {
+                      Name: "Table"
+                      Columns { Name: "key" Type: "Uint32" }
+                      Columns { Name: "indexed" Type: "Uint32" }
+                      KeyColumnNames: ["key"]
+                    }
+                    IndexDescription {
+                      Name: "UserDefinedIndex"
+                      KeyColumnNames: ["indexed"]
+                      Type: EIndexTypeGlobalAsync
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                Prepare(runtime, "/MyRoot/Table", {1, 10, 100}, true);
+            }
+
+            TestDropTable(runtime, ++t.TxId, "/MyRoot", "Table");
+
+            runtime.SetObserverFunc(origObserver);
+            for (auto& ev : std::exchange(enqueued, {})) {
+                runtime.Send(ev.Release(), 0, true);
+            }
+
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            t.TestEnv->TestWaitTabletDeletion(runtime, {
+                TTestTxConfig::FakeHiveTablets,
+                TTestTxConfig::FakeHiveTablets + 1,
+            });
         });
     }
 }

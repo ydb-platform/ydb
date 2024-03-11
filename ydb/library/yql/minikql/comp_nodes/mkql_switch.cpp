@@ -1,7 +1,7 @@
 #include "mkql_switch.h"
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
-#include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>
+#include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_stats_registry.h>
 #include <ydb/library/yql/utils/cast.h>
@@ -295,10 +295,6 @@ private:
         ctx.Ctx = &*ctx.Func->arg_begin();
         ctx.Ctx->addAttr(Attribute::NonNull);
 
-        const auto ptrValueType = PointerType::getUnqual(valueType);
-        const auto structPtrType = PointerType::getUnqual(StructType::get(context));
-        const auto contextType = GetCompContextType(context);
-        const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt32Ty(context);
         TLLVMFieldsStructureForFlowState fieldsStruct(context);
         const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
@@ -362,8 +358,6 @@ private:
         const auto choise = SwitchInst::Create(unpack.first, loop, handler.InputIndices.size(), block);
 
         for (ui32 idx = 0U; idx < handler.InputIndices.size(); ++idx) {
-            const auto index = ConstantInt::get(indexType, idx);
-
             const auto var = BasicBlock::Create(context, (TString("var_") += ToString(idx)).c_str(), ctx.Func);
 
             choise->addCase(ConstantInt::get(indexType, handler.InputIndices[idx]), var);
@@ -384,9 +378,6 @@ public:
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
-        const auto structPtrType = PointerType::getUnqual(StructType::get(context));
-        const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt32Ty(context);
         TLLVMFieldsStructureForFlowState fieldsStruct(context);
@@ -819,7 +810,6 @@ private:
 
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);
-        const auto structPtrType = PointerType::getUnqual(StructType::get(context));
         const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(ptrValueType) : static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
@@ -941,9 +931,6 @@ private:
             BranchInst::Create(good, more, has, block);
 
             block = good;
-
-            const auto factory = ctx.GetFactory();
-            const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::CreateVariantHolder));
 
             const auto choise = SwitchInst::Create(index, stub, Handlers.size(), block);
 

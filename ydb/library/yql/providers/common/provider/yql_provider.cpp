@@ -518,7 +518,7 @@ TWriteRoleSettings ParseWriteRoleSettings(TExprList node, TExprContext& ctx) {
     return ret;
 }
 
-TWritePermissionSettings ParseWritePermissionsSettings(NNodes::TExprList node, TExprContext&) {
+TWritePermissionSettings ParseWritePermissionsSettings(TExprList node, TExprContext&) {
     TMaybeNode<TCoAtomList> permissions;
     TMaybeNode<TCoAtomList> paths;
     TMaybeNode<TCoAtomList> roleNames;
@@ -546,7 +546,8 @@ TWritePermissionSettings ParseWritePermissionsSettings(NNodes::TExprList node, T
 
 TWriteObjectSettings ParseWriteObjectSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TCoAtom> mode;
-    TMaybe<NNodes::TCoNameValueTupleList> kvFeatures;
+    TMaybe<TCoNameValueTupleList> kvFeatures;
+    TMaybe<TCoAtomList> resetFeatures;
     for (auto child : node) {
         if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
             auto tuple = maybeTuple.Cast();
@@ -556,20 +557,27 @@ TWriteObjectSettings ParseWriteObjectSettings(TExprList node, TExprContext& ctx)
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
                 mode = tuple.Value().Cast<TCoAtom>();
             } else if (name == "features") {
-                auto maybeFeatures = tuple.Value().Maybe<NNodes::TCoNameValueTupleList>();
+                auto maybeFeatures = tuple.Value().Maybe<TCoNameValueTupleList>();
                 Y_ABORT_UNLESS(maybeFeatures);
                 kvFeatures = maybeFeatures.Cast();
+            } else if (name == "resetFeatures") {
+                auto maybeFeatures = tuple.Value().Maybe<TCoAtomList>();
+                Y_ABORT_UNLESS(maybeFeatures);
+                resetFeatures = maybeFeatures.Cast();
             }
         }
     }
     if (!kvFeatures) {
         kvFeatures = Build<TCoNameValueTupleList>(ctx, node.Pos()).Done();
     }
-    TWriteObjectSettings ret(std::move(mode), std::move(*kvFeatures));
+    if (!resetFeatures) {
+        resetFeatures = Build<TCoAtomList>(ctx, node.Pos()).Done();
+    }
+    TWriteObjectSettings ret(std::move(mode), std::move(*kvFeatures), std::move(*resetFeatures));
     return ret;
 }
 
-TCommitSettings ParseCommitSettings(NNodes::TCoCommit node, TExprContext& ctx) {
+TCommitSettings ParseCommitSettings(TCoCommit node, TExprContext& ctx) {
     if (!node.Settings()) {
         return TCommitSettings(Build<TCoNameValueTupleList>(ctx, node.Pos()).Done());
     }
@@ -605,7 +613,7 @@ TCommitSettings ParseCommitSettings(NNodes::TCoCommit node, TExprContext& ctx) {
     return ret;
 }
 
-TPgObjectSettings ParsePgObjectSettings(NNodes::TExprList node, TExprContext&) {
+TPgObjectSettings ParsePgObjectSettings(TExprList node, TExprContext&) {
     TMaybeNode<TCoAtom> mode;
     TMaybeNode<TCoAtom> ifExists;
     for (auto child : node) {
@@ -1116,7 +1124,7 @@ void WriteStream(NYson::TYsonWriter& writer, const TExprNode* node, const TExprN
     writer.OnEndMap();
 }
 
-void WriteStreams(NYson::TYsonWriter& writer, TStringBuf name, const NNodes::TCoLambda& lambda) {
+void WriteStreams(NYson::TYsonWriter& writer, TStringBuf name, const TCoLambda& lambda) {
     writer.OnKeyedItem(name);
     writer.OnBeginList();
     WriteStream(writer, lambda.Body().Raw(), lambda.Args().Size() > 0 ? lambda.Args().Arg(0).Raw() : nullptr);
@@ -1422,8 +1430,8 @@ namespace {
 } //namespace
 
 bool TransformPgSetItemOption(
-    const TCoPgSelect& pgSelect, 
-    TStringBuf optionName, 
+    const TCoPgSelect& pgSelect,
+    TStringBuf optionName,
     std::function<void(const TExprBase&)> lambda
 ) {
     bool applied = false;
@@ -1459,16 +1467,16 @@ TExprNode::TPtr GetSetItemOptionValue(const TExprBase& setItemOption) {
     return nullptr;
 }
 
-bool NeedToRenamePgSelectColumns(const TCoPgSelect& pgSelect) {   
+bool NeedToRenamePgSelectColumns(const TCoPgSelect& pgSelect) {
     auto fill = NCommon::GetSetItemOption(pgSelect, "fill_target_columns");
     return fill && !NCommon::GetSetItemOptionValue(TExprBase(fill));
 }
 
 bool RenamePgSelectColumns(
-    const TCoPgSelect& node, 
+    const TCoPgSelect& node,
     TExprNode::TPtr& output,
-    TMaybe<TVector<TString>> tableColumnOrder, 
-    TExprContext& ctx, 
+    const TMaybe<TColumnOrder>& tableColumnOrder,
+    TExprContext& ctx,
     TTypeAnnotationContext& types) {
 
     bool hasValues = (bool)GetSetItemOption(node, "values");
@@ -1477,7 +1485,7 @@ bool RenamePgSelectColumns(
     TString optionName = (hasValues) ? "values" : "projection_order";
 
     auto selectorColumnOrder = types.LookupColumnOrder(node.Ref());
-    TVector<TString> insertColumnOrder;
+    TColumnOrder insertColumnOrder;
     if (auto targetColumnsOption = GetSetItemOption(node, "target_columns")) {
         auto targetColumns = GetSetItemOptionValue(TExprBase(targetColumnsOption));
         for (const auto& child : targetColumns->ChildrenList()) {
@@ -1491,8 +1499,8 @@ bool RenamePgSelectColumns(
     if (selectorColumnOrder->size() > insertColumnOrder.size()) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << Sprintf(
             "%s have %zu columns, INSERT INTO expects: %zu",
-            optionName.Data(), 
-            selectorColumnOrder->size(), 
+            optionName.Data(),
+            selectorColumnOrder->size(),
             insertColumnOrder.size()
         )));
         return false;
@@ -1541,7 +1549,7 @@ bool RenamePgSelectColumns(
             .Body(structBuilder.Done().Ptr())
         .Build()
     .Done().Ptr();
-    
+
     fill->ChangeChildrenInplace({
         fill->Child(0),
         Build<TCoAtom>(ctx, node.Pos())

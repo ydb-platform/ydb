@@ -135,7 +135,7 @@ struct TKikimrEvents : TEvents {
         ES_HEALTH_CHECK,
         ES_DQ = NYql::NDq::TDqEvents::ES_DQ_COMPUTE, // 4212
         ES_YQ, // 4213
-        ES_CHANGE_EXCHANGE,
+        ES_CHANGE_EXCHANGE_DATASHARD,
         ES_DATABASE_SERVICE, //4215
         ES_SEQUENCESHARD, // 4216
         ES_SEQUENCEPROXY, // 4217
@@ -171,6 +171,9 @@ struct TKikimrEvents : TEvents {
         ES_TABLE_CREATOR,
         ES_PQ_PARTITION_CHOOSER,
         ES_GRAPH,
+        ES_REPLICATION_SERVICE,
+        ES_CHANGE_EXCHANGE,
+        ES_S3_FILE_QUEUE,
     };
 };
 

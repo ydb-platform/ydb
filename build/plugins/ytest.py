@@ -32,6 +32,8 @@ PARTITION_MODS = ('SEQUENTIAL', 'MODULO')
 DEFAULT_TIDY_CONFIG = "build/config/tests/clang_tidy/config.yaml"
 DEFAULT_TIDY_CONFIG_MAP_PATH = "build/yandex_specific/config/clang_tidy/tidy_default_map.json"
 PROJECT_TIDY_CONFIG_MAP_PATH = "build/yandex_specific/config/clang_tidy/tidy_project_map.json"
+KTLINT_CURRENT_EDITOR_CONFIG = "arcadia/build/platform/java/ktlint/.editorconfig"
+KTLINT_OLD_EDITOR_CONFIG = "arcadia/build/platform/java/ktlint_old/.editorconfig"
 
 
 tidy_config_map = None
@@ -277,9 +279,6 @@ def validate_test(unit, kw):
                 if not is_yt_spec_contain_pool_info(filename):
                     tags.add(consts.YaTestTags.External)
                     tags.add("ya:yt_research_pool")
-
-    if valid_kw.get("USE_ARCADIA_PYTHON") == "yes" and valid_kw.get("SCRIPT-REL-PATH") == "py.test":
-        errors.append("PYTEST_SCRIPT is deprecated")
 
     partition = valid_kw.get('TEST_PARTITION', 'SEQUENTIAL')
     if partition not in PARTITION_MODS:
@@ -651,8 +650,19 @@ def onadd_check(unit, *args):
         fork_mode = unit.get('TEST_FORK_MODE') or ''
     elif check_type == "ktlint":
         test_timeout = '120'
-        ktlint_binary = '$(KTLINT_OLD)/run.bat' if unit.get('_USE_KTLINT_OLD') == 'yes' else '$(KTLINT)/run.bat'
-        extra_test_dart_data['KTLINT_BINARY'] = ktlint_binary
+        if unit.get('_USE_KTLINT_OLD') == 'yes':
+            extra_test_data = serialize_list([KTLINT_OLD_EDITOR_CONFIG])
+            extra_test_dart_data['KTLINT_BINARY'] = '$(KTLINT_OLD)/run.bat'
+            extra_test_dart_data['USE_KTLINT_OLD'] = 'yes'
+        else:
+            data_list = [KTLINT_CURRENT_EDITOR_CONFIG]
+            baseline_path_relative = unit.get('_KTLINT_BASELINE_FILE')
+            if baseline_path_relative:
+                baseline_path = unit.resolve_arc_path(baseline_path_relative).replace('$S', 'arcadia')
+                data_list += [baseline_path]
+                extra_test_dart_data['KTLINT_BASELINE_FILE'] = baseline_path_relative
+            extra_test_data = serialize_list(data_list)
+            extra_test_dart_data['KTLINT_BINARY'] = '$(KTLINT)/run.bat'
     elif check_type == "JAVA_STYLE":
         if ymake_java_test and not unit.get('ALL_SRCDIRS'):
             return
@@ -1180,14 +1190,16 @@ def onsetup_run_python(unit):
 
 def get_canonical_test_resources(unit):
     unit_path = unit.path()
-    canon_data_dir = os.path.join(unit.resolve(unit_path), CANON_DATA_DIR_NAME, unit.get('CANONIZE_SUB_PATH') or '')
-
+    if unit.get("CUSTOM_CANONDATA_PATH"):
+        path_to_canondata = unit_path.replace("$S", unit.get("CUSTOM_CANONDATA_PATH"))
+    else:
+        path_to_canondata = unit.resolve(unit_path)
+    canon_data_dir = os.path.join(path_to_canondata, CANON_DATA_DIR_NAME, unit.get('CANONIZE_SUB_PATH') or '')
     try:
         _, dirs, files = next(os.walk(canon_data_dir))
     except StopIteration:
         # path doesn't exist
         return [], []
-
     if CANON_RESULT_FILE_NAME in files:
         return _get_canonical_data_resources_v2(os.path.join(canon_data_dir, CANON_RESULT_FILE_NAME), unit_path)
     return [], []

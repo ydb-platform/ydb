@@ -198,7 +198,7 @@ int yynerrs;]])])
 # between calls to yypush_parse.
 m4_define([b4_declare_parser_state_variables], [b4_pure_if([[
     /* Number of syntax errors so far.  */
-    int yynerrs;
+    __attribute__((unused)) int yynerrs;
 ]])[
     int yystate;
     /* Number of tokens to shift before error messages enabled.  */

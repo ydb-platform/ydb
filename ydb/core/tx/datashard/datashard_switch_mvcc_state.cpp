@@ -15,8 +15,8 @@ void TDataShard::CheckMvccStateChangeCanStart(const TActorContext& ctx) {
 
                 case TShardState::Ready:
                 case TShardState::Frozen: {
-                    const auto enable = AppData(ctx)->FeatureFlags.GetEnableMvcc();
-                    if (enable && *enable != IsMvccEnabled()) {
+                    if (!IsMvccEnabled()) {
+                        // Force enable mvcc for potential old shards
                         MvccSwitchState = TSwitchState::SWITCHING;
                     } else {
                         MvccSwitchState = TSwitchState::DONE;
@@ -80,11 +80,10 @@ bool TDataShard::TTxExecuteMvccStateChange::Execute(TTransactionContext& txc, co
         Y_ABORT_UNLESS(Self->TxInFly() == 0 && Self->ImmediateInFly() == 0);
 
         auto [step, txId] = Self->LastCompleteTxVersion();
-        Self->SnapshotManager.ChangeMvccState(step, txId, txc,
-            *AppData(ctx)->FeatureFlags.GetEnableMvcc() ? EMvccState::MvccEnabled : EMvccState::MvccDisabled);
+        Self->SnapshotManager.ChangeMvccState(step, txId, txc, EMvccState::MvccEnabled);
 
         LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, TStringBuilder() << "TTxExecuteMvccStateChange.Execute"
-            << " MVCC state switched to" << (*AppData(ctx)->FeatureFlags.GetEnableMvcc() ? " enabled" : " disabled") << " state");
+            << " MVCC state switched to enabled state");
 
         ActivateWaitingOps = true;
     }

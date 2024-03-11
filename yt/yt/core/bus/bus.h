@@ -57,17 +57,10 @@ struct TBusNetworkStatistics
 
 struct TSendOptions
 {
-    static constexpr int AllParts = -1;
+    static constexpr int AllParts = std::numeric_limits<int>::max();
 
-    explicit TSendOptions(
-        EDeliveryTrackingLevel trackingLevel = EDeliveryTrackingLevel::None,
-        int checksummedPartCount = AllParts)
-        : TrackingLevel(trackingLevel)
-        , ChecksummedPartCount(checksummedPartCount)
-    { }
-
-    EDeliveryTrackingLevel TrackingLevel;
-    int ChecksummedPartCount;
+    EDeliveryTrackingLevel TrackingLevel = EDeliveryTrackingLevel::None;
+    int ChecksummedPartCount = AllParts;
     bool EnableSendCancelation = false;
 };
 
@@ -121,7 +114,7 @@ struct IBus
      *
      *  \note Thread affinity: any
      */
-    virtual TFuture<void> Send(TSharedRefArray message, const TSendOptions& options) = 0;
+    virtual TFuture<void> Send(TSharedRefArray message, const TSendOptions& options = {}) = 0;
 
     //! For socket buses, updates the TOS level.
     /*!

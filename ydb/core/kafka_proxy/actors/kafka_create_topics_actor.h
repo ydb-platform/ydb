@@ -14,12 +14,12 @@ public:
     }
 
     void Bootstrap(const NActors::TActorContext& ctx);
-    void Handle(const TEvKafka::TEvCreateTopicsResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(const TEvKafka::TEvTopicModificationResponse::TPtr& ev, const TActorContext& ctx);
     void Reply(const TActorContext& ctx);
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvKafka::TEvCreateTopicsResponse, Handle);
+            HFunc(TEvKafka::TEvTopicModificationResponse, Handle);
         }
     }
 
@@ -29,7 +29,7 @@ private:
     const TMessagePtr<TCreateTopicsRequestData> Message;
     std::unordered_set<TString> DuplicateTopicNames;
     ui32 InflyTopics = 0;
-    std::unordered_map<TString, TAutoPtr<TEvKafka::TEvCreateTopicsResponse>> TopicNamesToResponses;
+    std::unordered_map<TString, TAutoPtr<TEvKafka::TEvTopicModificationResponse>> TopicNamesToResponses;
     std::unordered_map<TString, std::pair<std::optional<ui64>, std::optional<ui64>>> TopicNamesToRetentions;
 
     TStringBuilder InputLogMessage();

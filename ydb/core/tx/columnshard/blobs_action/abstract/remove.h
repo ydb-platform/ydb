@@ -1,4 +1,5 @@
 #pragma once
+#include "blob_set.h"
 #include "common.h"
 #include <util/generic/hash_set.h>
 #include <ydb/core/tx/columnshard/blob.h>
@@ -7,37 +8,37 @@
 
 namespace NKikimr::NColumnShard {
 class TColumnShard;
-class TBlobManagerDb;
 }
 
 namespace NKikimr::NOlap {
+class TBlobManagerDb;
 
 class IBlobsDeclareRemovingAction: public ICommonBlobsAction {
 private:
+    const TTabletId SelfTabletId;
     using TBase = ICommonBlobsAction;
     std::shared_ptr<NBlobOperations::TRemoveDeclareCounters> Counters;
-    YDB_READONLY_DEF(THashSet<TUnifiedBlobId>, DeclaredBlobs);
+    YDB_READONLY_DEF(TTabletsByBlob, DeclaredBlobs);
 protected:
-    virtual void DoDeclareRemove(const TUnifiedBlobId& blobId) = 0;
-    virtual void DoOnExecuteTxAfterRemoving(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool success) = 0;
-    virtual void DoOnCompleteTxAfterRemoving(NColumnShard::TColumnShard& self) = 0;
+    virtual void DoDeclareRemove(const TTabletId tabletId, const TUnifiedBlobId& blobId) = 0;
+    virtual void DoOnExecuteTxAfterRemoving(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) = 0;
+    virtual void DoOnCompleteTxAfterRemoving(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) = 0;
 public:
-    IBlobsDeclareRemovingAction(const TString& storageId)
+    IBlobsDeclareRemovingAction(const TString& storageId, const TTabletId& selfTabletId, const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters)
         : TBase(storageId)
+        , SelfTabletId(selfTabletId)
+        , Counters(counters)
     {
 
     }
 
-    void SetCounters(const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters) {
-        Counters = counters;
+    void DeclareRemove(const TTabletId tabletId, const TUnifiedBlobId& blobId);
+    void DeclareSelfRemove(const TUnifiedBlobId& blobId);
+    void OnExecuteTxAfterRemoving(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
+        return DoOnExecuteTxAfterRemoving(self, dbBlobs, blobsWroteSuccessfully);
     }
-
-    void DeclareRemove(const TUnifiedBlobId& blobId);
-    void OnExecuteTxAfterRemoving(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool success) {
-        return DoOnExecuteTxAfterRemoving(self, dbBlobs, success);
-    }
-    void OnCompleteTxAfterRemoving(NColumnShard::TColumnShard& self) {
-        return DoOnCompleteTxAfterRemoving(self);
+    void OnCompleteTxAfterRemoving(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) {
+        return DoOnCompleteTxAfterRemoving(self, blobsWroteSuccessfully);
     }
 };
 

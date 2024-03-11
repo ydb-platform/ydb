@@ -42,12 +42,13 @@
                                                 "TopSortBy": "row.k"
                                             },
                                             {
+                                                "Condition": "k = k",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 6
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 4
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"

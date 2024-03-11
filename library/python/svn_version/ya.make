@@ -1,5 +1,7 @@
 PY23_LIBRARY()
 
+STYLE_PYTHON()
+
 PEERDIR(
     library/cpp/svnversion
     contrib/python/future
@@ -11,3 +13,7 @@ PY_SRCS(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

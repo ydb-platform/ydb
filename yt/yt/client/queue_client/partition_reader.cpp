@@ -459,7 +459,7 @@ private:
             Client_,
             {
                 .Cluster = *queueCluster,
-                .Path = QueuePath_.GetPath()
+                .Path = QueuePath_.GetPath(),
             });
 
         Opened_ = true;

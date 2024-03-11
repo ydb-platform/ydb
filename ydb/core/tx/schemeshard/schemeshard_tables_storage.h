@@ -159,6 +159,7 @@ private:
     void OnRemoveObject(const TPathId& pathId, TColumnTableInfo::TPtr object);
     TColumnTableInfo::TPtr ExtractPtr(const TPathId& id);
 public:
+    std::unordered_set<TPathId> GetAllPathIds() const;
 
     TColumnTablesLayout GetTablesLayout(const std::vector<ui64>& tabletIds) const;
 

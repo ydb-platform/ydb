@@ -8,7 +8,11 @@
 
 namespace NYdbWorkload {
 
-struct TStockWorkloadParams : public TWorkloadParams {
+class TStockWorkloadParams final: public TWorkloadParams {
+public:
+    void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
+    THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
+    TString GetWorkloadName() const override;
     size_t ProductCount = 0;
     size_t Quantity = 0;
     size_t OrderCount = 0;
@@ -18,32 +22,25 @@ struct TStockWorkloadParams : public TWorkloadParams {
     bool EnableCdc = false;
 };
 
-class TStockWorkloadGenerator : public IWorkloadQueryGenerator {
+class TStockWorkloadGenerator final: public TWorkloadQueryGeneratorBase<TStockWorkloadParams> {
 public:
-
-    static TStockWorkloadGenerator* New(const TStockWorkloadParams* params) {
-        return new TStockWorkloadGenerator(params);
-    }
-
-    virtual ~TStockWorkloadGenerator() {}
+    using TBase = TWorkloadQueryGeneratorBase<TStockWorkloadParams>;
+    TStockWorkloadGenerator(const TStockWorkloadParams* params);
 
     std::string GetDDLQueries() const override;
 
     TQueryInfoList GetInitialData() override;
 
-    std::string GetCleanDDLQueries() const override;
+    TVector<std::string> GetCleanPaths() const override;
 
     TQueryInfoList GetWorkload(int type) override;
-
-    TStockWorkloadParams* GetParams() override;
-
+    TVector<TWorkloadType> GetSupportedWorkloadTypes() const override;
     enum class EType {
         InsertRandomOrder,
         SubmitRandomOrder,
         SubmitSameOrder,
         GetRandomCustomerHistory,
-        GetCustomerHistory,
-        MaxType
+        GetCustomerHistory
     };
 
 private:
@@ -64,12 +61,9 @@ private:
     unsigned int GetProductCountInOrder();
     TProductsQuantity GenerateOrder(unsigned int productCountInOrder, int quantity);
 
-    TStockWorkloadGenerator(const TStockWorkloadParams* params);
-
     TQueryInfo FillStockData() const;
 
     std::string DbPath;
-    TStockWorkloadParams Params;
 
     std::random_device Rd;
     std::mt19937_64 Gen;

@@ -200,16 +200,12 @@ public:
     }
 
     void SetTempTables(NKikimr::NKqp::TKqpTempTablesState::TConstPtr tempTablesState) {
-        if (tempTablesState) {
-            for (const auto& [path, info] : tempTablesState->TempTables) {
-                TempTables[path.second + *tempTablesState->SessionId] = path.second;
-            }
-        }
+        TempTablesState = std::move(tempTablesState);
     }
 
 private:
     THashMap<std::pair<TString, TString>, TKikimrTableDescription> Tables;
-    THashMap<TString, TString> TempTables;
+    NKikimr::NKqp::TKqpTempTablesState::TConstPtr TempTablesState;
 };
 
 enum class TYdbOperation : ui32 {
@@ -288,11 +284,7 @@ public:
     }
 
     void SetTempTables(NKikimr::NKqp::TKqpTempTablesState::TConstPtr tempTablesState) {
-        if (tempTablesState) {
-            for (const auto& [path, info] : tempTablesState->TempTables) {
-                TempTables[path.second] = path.second + *tempTablesState->SessionId;
-            }
-        }
+        TempTablesState = std::move(tempTablesState);
     }
 
     template<class IterableKqpTableOps, class IterableKqpTableInfos>
@@ -308,34 +300,43 @@ public:
 
         bool hasScheme = false;
         bool hasData = false;
-        for (auto& pair : TableOperations) {
-            hasScheme = hasScheme || (pair.second & KikimrSchemeOps());
-            hasData = hasData || (pair.second & KikimrDataOps());
+        for (auto& [_, operation] : TableOperations) {
+            hasScheme = hasScheme || (operation & KikimrSchemeOps());
+            hasData = hasData || (operation & KikimrDataOps());
         }
 
-        THashMap<TString, NKqpProto::TKqpTableInfo> tableInfoMap;
+        THashMap<TStringBuf, const NKqpProto::TKqpTableInfo*> tableInfoMap;
+        tableInfoMap.reserve(tableInfos.size());
+        if (TableByIdMap.empty()) {
+            TableByIdMap.reserve(tableInfos.size());
+        }
+        if (TableOperations.empty()) {
+            TableOperations.reserve(operations.size());
+        }
+
         for (const auto& info : tableInfos) {
-            tableInfoMap.insert(std::make_pair(info.GetTableName(), info));
+            tableInfoMap.emplace(info.GetTableName(), &info);
 
             TKikimrPathId pathId(info.GetTableId().GetOwnerId(), info.GetTableId().GetTableId());
-            TableByIdMap.insert(std::make_pair(pathId, info.GetTableName()));
+            TableByIdMap.emplace(pathId, info.GetTableName());
         }
 
         for (const auto& op : operations) {
+            const auto newOp = TYdbOperation(op.GetOperation());
+
             auto table = op.GetTable();
-
-            auto newOp = TYdbOperation(op.GetOperation());
-            TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
-
-            auto tempTable = TempTables.FindPtr(table);
-            if (tempTable) {
-                table = *tempTable;
+            if (TempTablesState) {
+                auto tempTableInfoIt = TempTablesState->FindInfo(table, false);
+                if (tempTableInfoIt != TempTablesState->TempTables.end()) {
+                    table = tempTableInfoIt->first + TempTablesState->SessionId;
+                }
             }
 
             const auto info = tableInfoMap.FindPtr(table);
             if (!info) {
                 TString message = TStringBuilder()
                     << "Unable to find table info for table '" << table << "'";
+                const TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
                 issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_SCHEME_ERROR, message));
                 return {false, issues};
             }
@@ -343,6 +344,7 @@ public:
             if (queryType == EKikimrQueryType::Dml && (newOp & KikimrSchemeOps())) {
                 TString message = TStringBuilder() << "Operation '" << newOp
                     << "' can't be performed in data query";
+                const TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
                 issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
                 return {false, issues};
             }
@@ -351,6 +353,7 @@ public:
                 if (EffectiveIsolationLevel) {
                     TString message = TStringBuilder() << "Scheme operations can't be performed inside transaction, "
                         << "operation: " << newOp;
+                    const TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
                     issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
                     return {false, issues};
                 }
@@ -359,6 +362,7 @@ public:
             if (queryType == EKikimrQueryType::Ddl && (newOp & KikimrDataOps())) {
                 TString message = TStringBuilder() << "Operation '" << newOp
                     << "' can't be performed in scheme query";
+                const TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
                 issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
                 return {false, issues};
             }
@@ -366,6 +370,7 @@ public:
             if (queryType == EKikimrQueryType::Scan && (newOp & KikimrModifyOps())) {
                 TString message = TStringBuilder() << "Operation '" << newOp
                     << "' can't be performed in scan query";
+                const TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
                 issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
                 return {false, issues};
             }
@@ -379,7 +384,7 @@ public:
                     message = TStringBuilder() << message
                         << " Use COMMIT statement to indicate end of transaction between scheme and data operations.";
                 }
-
+                const TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
                 issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_MIXED_SCHEME_DATA_TX, message));
                 return {false, issues};
             }
@@ -387,18 +392,20 @@ public:
             if (Readonly && (newOp & KikimrModifyOps())) {
                 TString message = TStringBuilder() << "Operation '" << newOp
                     << "' can't be performed in read only transaction";
+                const TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
                 issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
                 return {false, issues};
             }
 
             auto& currentOps = TableOperations[table];
-            bool currentModify = currentOps & KikimrModifyOps();
+            const bool currentModify = currentOps & KikimrModifyOps();
             if (currentModify) {
                 if (KikimrReadOps() & newOp) {
                     if (!EnableImmediateEffects) {
                         TString message = TStringBuilder() << "Data modifications previously made to table '" << table
                             << "' in current transaction won't be seen by operation: '"
                             << newOp << "'";
+                        const TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
                         auto newIssue = AddDmlIssue(YqlIssue(pos, TIssuesIds::KIKIMR_READ_MODIFIED_TABLE, message));
                         issues.AddIssue(newIssue);
                         return {false, issues};
@@ -407,10 +414,11 @@ public:
                     HasUncommittedChangesRead = true;
                 }
 
-                if (info->GetHasIndexTables()) {
+                if ((*info)->GetHasIndexTables()) {
                     if (!EnableImmediateEffects) {
                         TString message = TStringBuilder()
                             << "Multiple modification of table with secondary indexes is not supported yet";
+                        const TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
                         issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
                         return {false, issues};
                     }
@@ -428,12 +436,12 @@ public:
     virtual ~TKikimrTransactionContextBase() = default;
 
 public:
-    THashMap<TString, TYdbOperations> TableOperations;
     bool HasUncommittedChangesRead = false;
     const bool EnableImmediateEffects;
+    THashMap<TString, TYdbOperations> TableOperations;
     THashMap<TKikimrPathId, TString> TableByIdMap;
     TMaybe<NKikimrKqp::EIsolationLevel> EffectiveIsolationLevel;
-    THashMap<TString, TString> TempTables;
+    NKikimr::NKqp::TKqpTempTablesState::TConstPtr TempTablesState;
     bool Readonly = false;
     bool Invalidated = false;
     bool Closed = false;
@@ -518,7 +526,7 @@ public:
         if (TxCtx) {
             TxCtx->SetTempTables(tempTablesState);
         }
-        TempTablesState = tempTablesState;
+        TempTablesState = std::move(tempTablesState);
     }
 
     const TIntrusiveConstPtr<NACLib::TUserToken>& GetUserToken() const {

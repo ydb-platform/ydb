@@ -3,3 +3,6 @@ items:
 - { name: Directory,                                 href: dir.md }
 - { name: Table,                                     href: table.md }
 - { name: Topic,                                     href: ../topic.md }
+- { name: Secrets,                                   href: secrets.md }
+- { name: External tables,                           href: external_table.md }
+- { name: External data source,                      href: external_data_source.md }

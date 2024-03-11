@@ -1,0 +1,6 @@
+sync_dir
+example
+udfs
+*.log
+*.sql
+*.bin

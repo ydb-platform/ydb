@@ -24,10 +24,90 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     using TSettings = TActorBenchmark::TSettings;
     using TSendReceiveActorParams = TActorBenchmark::TSendReceiveActorParams;
 
+    Y_UNIT_TEST(WithOnlyOneSharedExecutors) {
+        THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
+        TActorBenchmark::AddBasicPool(setup, 1, 1, true);
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        TThreadParkPad pad;
+        TAtomic actorsAlive = 0;
+        THPTimer Timer;
+
+        ui64 eventsPerPair = 1000;
+
+        Timer.Reset();
+        ui32 followerPoolId = 0;
+        ui32 leaderPoolId = 0;
+        TActorId followerId = actorSystem.Register(
+            new TActorBenchmark::TSendReceiveActor(
+                TSendReceiveActorParams{.OtherEvents=eventsPerPair / 2, .Allocation=true}
+            ),
+            TMailboxType::HTSwap,
+            followerPoolId
+        );
+        THolder<IActor> leader{
+            new TTestEndDecorator(THolder(new TActorBenchmark::TSendReceiveActor(
+                TSendReceiveActorParams{.OwnEvents=eventsPerPair / 2, .Receivers={followerId}, .Allocation=true}
+            )),
+            &pad,
+            &actorsAlive)
+        };
+        actorSystem.Register(leader.Release(), TMailboxType::HTSwap, leaderPoolId);
+
+        pad.Park();
+        auto elapsedTime = Timer.Passed() /  (TSettings::TotalEventsAmountPerThread * 4);
+        actorSystem.Stop();
+
+        Cerr << "Completed " << 1e9 * elapsedTime << Endl;
+    }
+
+    Y_UNIT_TEST(WithOnlyOneSharedAndOneCommonExecutors) {
+        THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
+        TActorBenchmark::AddBasicPool(setup, 2, true, true);
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        TThreadParkPad pad;
+        TAtomic actorsAlive = 0;
+        THPTimer Timer;
+
+        ui64 eventsPerPair = 1000;
+
+        Timer.Reset();
+        ui32 followerPoolId = 0;
+        ui32 leaderPoolId = 0;
+        for (ui32 idx = 0; idx < 50; ++idx) {
+            TActorId followerId = actorSystem.Register(
+                new TActorBenchmark::TSendReceiveActor(
+                    TSendReceiveActorParams{.OtherEvents=eventsPerPair / 2, .Allocation=true}
+                ),
+                TMailboxType::HTSwap,
+                followerPoolId
+            );
+            THolder<IActor> leader{
+                new TTestEndDecorator(THolder(new TActorBenchmark::TSendReceiveActor(
+                    TSendReceiveActorParams{.OwnEvents=eventsPerPair / 2, .Receivers={followerId}, .Allocation=true}
+                )),
+                &pad,
+                &actorsAlive)
+            };
+            actorSystem.Register(leader.Release(), TMailboxType::HTSwap, leaderPoolId);
+        }
+
+        pad.Park();
+        auto elapsedTime = Timer.Passed() /  (TSettings::TotalEventsAmountPerThread * 4);
+        actorSystem.Stop();
+
+        Cerr << "Completed " << 1e9 * elapsedTime << Endl;
+    }
+
     Y_UNIT_TEST(WithSharedExecutors) {
         THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
-         TActorBenchmark::AddBasicPool(setup, 2, 1, 0);
-         TActorBenchmark::AddBasicPool(setup, 2, 1, 1);
+         TActorBenchmark::AddBasicPool(setup, 2, 1, false);
+         TActorBenchmark::AddBasicPool(setup, 2, 1, true);
 
         TActorSystem actorSystem(setup);
         actorSystem.Start();
@@ -50,11 +130,13 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
                 followerPoolId
             );
             THolder<IActor> leader{
-                new TTestEndDecorator(THolder(new TActorBenchmark::TSendReceiveActor(
-                    TSendReceiveActorParams{.OwnEvents=eventsPerPair / 2, .Receivers={followerId}, .Allocation=true}
-                )),
-                &pad,
-                &actorsAlive)
+                new TTestEndDecorator(
+                    THolder(new TActorBenchmark::TSendReceiveActor(
+                        TSendReceiveActorParams{.OwnEvents=eventsPerPair / 2, .Receivers={followerId}, .Allocation=true}
+                    )),
+                    &pad,
+                    &actorsAlive
+                )
             };
             actorSystem.Register(leader.Release(), TMailboxType::HTSwap, leaderPoolId);
         }
@@ -81,7 +163,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         }
 
         pad.Park();
-        auto elapsedTime = Timer.Passed() /  (TSettings::TotalEventsAmountPerThread * 4);
+        auto elapsedTime = Timer.Passed() /  (4 * TSettings::TotalEventsAmountPerThread);
         actorSystem.Stop();
 
         Cerr << "Completed " << 1e9 * elapsedTime << Endl;

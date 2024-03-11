@@ -29,6 +29,7 @@ struct TEvKafka {
         EvKillReadSession,
         EvCommitedOffsetsResponse,
         EvCreateTopicsResponse,
+        EvReadSessionInfo,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -165,6 +166,14 @@ struct TEvKafka {
         {}
     };
 
+    struct TEvReadSessionInfo : public TEventLocal<TEvReadSessionInfo, EvReadSessionInfo> {
+        TEvReadSessionInfo(const TString& groupId)
+        : GroupId(groupId)
+        {}
+
+        TString GroupId;
+    };
+
     struct TEvKillReadSession : public TEventLocal<TEvKillReadSession, EvKillReadSession> {};
 
     struct TEvUpdateHistCounter : public TEventLocal<TEvUpdateHistCounter, EvUpdateHistCounter> {
@@ -219,7 +228,7 @@ struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffse
     std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, ui32>>> PartitionIdToOffsets;
 };
 
-struct TEvCreateTopicsResponse : public NActors::TEventLocal<TEvCreateTopicsResponse, EvCreateTopicsResponse> 
+struct TEvTopicModificationResponse : public NActors::TEventLocal<TEvTopicModificationResponse, EvCreateTopicsResponse> 
                            , public NKikimr::NGRpcProxy::V1::TEvPQProxy::TLocalResponseBase
 {
     enum EStatus {
@@ -227,13 +236,14 @@ struct TEvCreateTopicsResponse : public NActors::TEventLocal<TEvCreateTopicsResp
         ERROR,
         BAD_REQUEST,
         INVALID_CONFIG,
+        TOPIC_DOES_NOT_EXIST,
     };
 
-    TEvCreateTopicsResponse()
+    TEvTopicModificationResponse()
     {}
 
     TString TopicPath;
-    EStatus Status;
+    EKafkaErrors Status;
     TString Message;
 };
 };

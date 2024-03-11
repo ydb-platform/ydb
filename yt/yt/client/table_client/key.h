@@ -49,7 +49,6 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 bool operator==(const TKey& lhs, const TKey& rhs);
-bool operator!=(const TKey& lhs, const TKey& rhs);
 
 void FormatValue(TStringBuilderBase* builder, const TKey& key, TStringBuf format);
 TString ToString(const TKey& key);

@@ -44,6 +44,7 @@ struct TKqpPhyTxSettings {
 };
 
 constexpr TStringBuf KqpReadRangesSourceName = "KqpReadRangesSource";
+constexpr TStringBuf KqpTableSinkName = "KqpTableSinkName";
 
 static constexpr std::string_view TKqpStreamLookupStrategyName = "LookupRows"sv;
 static constexpr std::string_view TKqpStreamLookupJoinStrategyName = "LookupJoinRows"sv;

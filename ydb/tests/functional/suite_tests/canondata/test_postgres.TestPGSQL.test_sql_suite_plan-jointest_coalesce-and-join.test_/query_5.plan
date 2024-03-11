@@ -41,6 +41,7 @@
                                                 "Name": "Limit"
                                             },
                                             {
+                                                "Condition": "pkxx = _equijoin_column_0",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 6

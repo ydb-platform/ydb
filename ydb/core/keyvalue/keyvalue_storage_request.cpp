@@ -17,19 +17,21 @@ namespace NKeyValue {
 class TKeyValueStorageRequest : public TActorBootstrapped<TKeyValueStorageRequest> {
     using TBase = TActorBootstrapped<TKeyValueStorageRequest>;
 
-    ui64 ReadRequestsSent;
-    ui64 ReadRequestsReplied;
-    ui64 WriteRequestsSent;
-    ui64 WriteRequestsReplied;
-    ui64 GetStatusRequestsSent;
-    ui64 GetStatusRequestsReplied;
-    ui64 RangeRequestsSent;
-    ui64 RangeRequestsReplied;
-    ui64 InFlightLimit;
+    ui64 ReadRequestsSent = 0;
+    ui64 ReadRequestsReplied = 0;
+    ui64 WriteRequestsSent = 0;
+    ui64 WriteRequestsReplied = 0;
+    ui64 PatchRequestsSent = 0;
+    ui64 PatchRequestsReplied = 0;
+    ui64 GetStatusRequestsSent = 0;
+    ui64 GetStatusRequestsReplied = 0;
+    ui64 RangeRequestsSent = 0;
+    ui64 RangeRequestsReplied = 0;
+    ui64 InFlightLimit = 50;
     ui64 InFlightLimitSeq;
-    ui64 InFlightQueries;
-    ui64 InFlightRequestsLimit;
-    ui64 NextInFlightBatchCookie;
+    ui64 InFlightQueries = 0;
+    ui64 InFlightRequestsLimit = 10;
+    ui64 NextInFlightBatchCookie = 1;
     ui32 TabletGeneration;
 
     THolder<TIntermediate> IntermediateResults;
@@ -72,23 +74,11 @@ public:
     }
 
     TKeyValueStorageRequest(THolder<TIntermediate>&& intermediate, const TTabletStorageInfo *tabletInfo, ui32 tabletGeneration)
-        : ReadRequestsSent(0)
-        , ReadRequestsReplied(0)
-        , WriteRequestsSent(0)
-        , WriteRequestsReplied(0)
-        , GetStatusRequestsSent(0)
-        , GetStatusRequestsReplied(0)
-        , RangeRequestsSent(0)
-        , RangeRequestsReplied(0)
-        , InFlightLimit(50)
-        , InFlightLimitSeq(intermediate->SequentialReadLimit)
-        , InFlightQueries(0)
-        , InFlightRequestsLimit(10)
-        , NextInFlightBatchCookie(1)
+        : InFlightLimitSeq(intermediate->SequentialReadLimit)
         , TabletGeneration(tabletGeneration)
         , IntermediateResults(std::move(intermediate))
         , TabletInfo(const_cast<TTabletStorageInfo*>(tabletInfo))
-        , Span(TWilsonTablet::Tablet, IntermediateResults->Span.GetTraceId(), "KeyValue.StorageRequest")
+        , Span(TWilsonTablet::TabletBasic, IntermediateResults->Span.GetTraceId(), "KeyValue.StorageRequest")
     {
         IntermediateResults->Stat.KeyvalueStorageRequestSentAt = TAppData::TimeProvider->Now();
     }
@@ -152,6 +142,7 @@ public:
             str << "KeyValue# " << TabletInfo->TabletID;
             str << " EvPut cookie# " << (ui64)cookie;
             str << " > writes#" << (ui32)IntermediateResults->Writes.size();
+            str << " > commands#" << (ui32)IntermediateResults->Commands.size();
             str << " Marker# KV25";
             ReplyErrorAndDie(ctx, str.Str());
             return;
@@ -168,6 +159,60 @@ public:
         ++WriteRequestsReplied;
         IntermediateResults->Stat.GroupWrittenBytes[std::make_pair(ev->Get()->Id.Channel(), groupId)] += ev->Get()->Id.BlobSize();
         IntermediateResults->Stat.GroupWrittenIops[std::make_pair(ev->Get()->Id.Channel(), groupId)] += 1; // FIXME: count distinct blobs?
+        UpdateRequest(ctx);
+    }
+
+    void Handle(TEvBlobStorage::TEvPatchResult::TPtr &ev, const TActorContext &ctx) {
+        auto groupId = ev->Get()->GroupId;
+        CheckYellow(ev->Get()->StatusFlags, groupId);
+
+        NKikimrProto::EReplyStatus status = ev->Get()->Status;
+        if (status != NKikimrProto::OK) {
+            TInstant now = TAppData::TimeProvider->Now();
+
+            TStringStream str;
+            str << "KeyValue# " << TabletInfo->TabletID;
+            str << " Unexpected EvPatch result# " << NKikimrProto::EReplyStatus_Name(status).data();
+            str << " Deadline# " << IntermediateResults->Deadline.MilliSeconds();
+            str << " Now# " << now.MilliSeconds();
+            str << " GotAt# " << IntermediateResults->Stat.IntermediateCreatedAt.MilliSeconds();
+            str << " LastSuccess# " << LastSuccess;
+            str << " SinceLastSuccess# " << (now - LastSuccess).MilliSeconds();
+            str << " EnqueuedAs# " << IntermediateResults->Stat.EnqueuedAs;
+            str << " ErrorReason# " << ev->Get()->ErrorReason;
+            str << " Marker# KV70";
+
+            NLog::EPriority logPriority = ErrorStateMuteChecker.Register(now, MuteDuration);
+
+            ReplyErrorAndDie(ctx, str.Str(),
+                status == NKikimrProto::TIMEOUT ? NMsgBusProxy::MSTATUS_TIMEOUT : NMsgBusProxy::MSTATUS_INTERNALERROR,
+                logPriority);
+            return;
+        }
+
+        ui64 cookie = ev->Cookie;
+        ui64 patchIdx = cookie;
+        if (patchIdx >= IntermediateResults->Patches.size() && patchIdx >= IntermediateResults->Commands.size()) {
+            TStringStream str;
+            str << "KeyValue# " << TabletInfo->TabletID;
+            str << " EvPatch cookie# " << (ui64)cookie;
+            str << " > writes#" << (ui32)IntermediateResults->Patches.size();
+            str << " > commands#" << (ui32)IntermediateResults->Commands.size();
+            str << " Marker# KV71";
+            ReplyErrorAndDie(ctx, str.Str());
+            return;
+        }
+
+        TIntermediate::TPatch *patch = nullptr;
+        if (IntermediateResults->Patches.size()) {
+            patch = &IntermediateResults->Patches[patchIdx];
+        } else {
+            patch = &std::get<TIntermediate::TPatch>(IntermediateResults->Commands[patchIdx]);
+        }
+        patch->StatusFlags.Merge(ev->Get()->StatusFlags.Raw);
+        ++PatchRequestsReplied;
+        IntermediateResults->Stat.GroupWrittenBytes[std::make_pair(ev->Get()->Id.Channel(), groupId)] += ev->Get()->Id.BlobSize();
+        IntermediateResults->Stat.GroupWrittenIops[std::make_pair(ev->Get()->Id.Channel(), groupId)] += 1;
         UpdateRequest(ctx);
     }
 
@@ -296,6 +341,11 @@ public:
                 IntermediateResults->Stat.GroupReadIops[std::make_pair(response.Id.Channel(), groupId)] += 1; // FIXME: count distinct blobs?
                 read.Value.Write(readItem.ValueOffset, std::move(response.Buffer));
             } else {
+                Y_VERIFY_DEBUG_S(response.Status != NKikimrProto::NODATA, "NODATA received for TEvGet"
+                    << " TabletId# " << TabletInfo->TabletID
+                    << " Id# " << response.Id
+                    << " Key# " << read.Key);
+
                 TStringStream err;
                 if (read.Message.size()) {
                     err << read.Message << Endl;
@@ -350,14 +400,22 @@ public:
                 << " WriteRequestsSent# " << WriteRequestsSent
                 << " GetStatusRequestsReplied # " << GetStatusRequestsReplied
                 << " GetStatusRequestsSent# " << GetStatusRequestsSent
+                << " PatchRequestSent# " << PatchRequestsSent
+                << " PatchRequestReplied# " << PatchRequestsReplied
                 << " Marker# KV45");
         if (ReadRequestsReplied == ReadRequestsSent &&
                 WriteRequestsReplied == WriteRequestsSent &&
                 GetStatusRequestsReplied == GetStatusRequestsSent &&
-                RangeRequestsSent == RangeRequestsReplied) {
+                RangeRequestsSent == RangeRequestsReplied &&
+                PatchRequestsSent == PatchRequestsReplied) {
             for (auto& write : IntermediateResults->Writes) {
                 if (write.Status == NKikimrProto::UNKNOWN) {
                     write.Status = NKikimrProto::OK;
+                }
+            }
+            for (auto& patch : IntermediateResults->Patches) {
+                if (patch.Status == NKikimrProto::UNKNOWN) {
+                    patch.Status = NKikimrProto::OK;
                 }
             }
             for (auto& getStatus : IntermediateResults->GetStatuses) {
@@ -366,12 +424,17 @@ public:
                 }
             }
             for (auto& cmd : IntermediateResults->Commands) {
-                if (!std::holds_alternative<TIntermediate::TWrite>(cmd)) {
-                    continue;
+                if (std::holds_alternative<TIntermediate::TWrite>(cmd)) {
+                    auto& write = std::get<TIntermediate::TWrite>(cmd);
+                    if (write.Status == NKikimrProto::UNKNOWN) {
+                        write.Status = NKikimrProto::OK;
+                    }
                 }
-                auto& write = std::get<TIntermediate::TWrite>(cmd);
-                if (write.Status == NKikimrProto::UNKNOWN) {
-                    write.Status = NKikimrProto::OK;
+                if (std::holds_alternative<TIntermediate::TPatch>(cmd)) {
+                    auto& patch = std::get<TIntermediate::TPatch>(cmd);
+                    if (patch.Status == NKikimrProto::UNKNOWN) {
+                        patch.Status = NKikimrProto::OK;
+                    }
                 }
             }
             IntermediateResults->Stat.YellowStopChannels.reserve(YellowStopChannels.size());
@@ -453,6 +516,7 @@ public:
         Sort(ReadItems.begin(), ReadItems.end());
 
         SendWriteRequests(ctx);
+        SendPatchRequests(ctx);
         SendGetStatusRequests(ctx);
         SendRangeRequests(ctx);
 
@@ -676,10 +740,55 @@ public:
         PutTimer.Reset();
     }
 
+    void SendPatchRequests(const TActorContext &ctx) {
+        auto sendPatch = [&](ui32 i, auto &request) -> void {
+            using Type = std::decay_t<decltype(request)>;
+            if constexpr (std::is_same_v<Type, TIntermediate::TPatch>) {
+
+                ui32 originalGroupId = TabletInfo->GroupFor(request.OriginalBlobId.Channel(), request.OriginalBlobId.Generation());
+
+                TArrayHolder<TEvBlobStorage::TEvPatch::TDiff> diffs(new TEvBlobStorage::TEvPatch::TDiff[request.Diffs.size()]);
+                for (ui32 diffIdx = 0; diffIdx < request.Diffs.size(); ++diffIdx) {
+                    auto &diff = request.Diffs[diffIdx];
+                    diffs[diffIdx].Buffer = TRcBuf(diff.Buffer);
+                    diffs[diffIdx].Offset = diff.Offset;
+                }
+
+                THolder<TEvBlobStorage::TEvPatch> patch(
+                    new TEvBlobStorage::TEvPatch(
+                        originalGroupId, request.OriginalBlobId, request.PatchedBlobId, TLogoBlobID::MaxCookie,
+                        std::move(diffs), request.Diffs.size(), IntermediateResults->Deadline));
+                
+                const ui32 groupId = TabletInfo->GroupFor(request.PatchedBlobId.Channel(), request.PatchedBlobId.Generation());
+                Y_VERIFY_S(groupId != Max<ui32>(), "Patch Blob# " << request.PatchedBlobId.ToString() << " is mapped to an invalid group (-1)!");
+                LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletInfo->TabletID
+                        << " Send TEvPatch# " << patch->ToString() << " to groupId# " << groupId
+                        << " now# " << TAppData::TimeProvider->Now().MilliSeconds() << " Marker# KV69");
+
+
+                SendPatchToGroup(ctx, groupId, TabletInfo.Get(), std::move(patch), i, Span.GetTraceId());
+                ++PatchRequestsSent;
+            }
+        };
+
+        for (ui64 i : IntermediateResults->PatchIndices) {
+            auto &cmd = IntermediateResults->Commands[i];
+            Y_ABORT_UNLESS(std::holds_alternative<TIntermediate::TPatch>(cmd));
+            auto& patch = std::get<TIntermediate::TPatch>(cmd);
+            sendPatch(i, patch);
+        }
+
+        for (ui64 i = 0; i < IntermediateResults->Patches.size(); ++i) {
+            sendPatch(i, IntermediateResults->Patches[i]);
+        }
+        PutTimer.Reset();
+    }
+
     STFUNC(StateWait) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvBlobStorage::TEvGetResult, Handle);
             HFunc(TEvBlobStorage::TEvPutResult, Handle);
+            HFunc(TEvBlobStorage::TEvPatchResult, Handle);
             HFunc(TEvBlobStorage::TEvStatusResult, Handle);
             HFunc(TEvBlobStorage::TEvRangeResult, Handle);
             HFunc(TEvents::TEvWakeup, Handle);

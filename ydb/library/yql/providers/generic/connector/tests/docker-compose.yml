@@ -2,24 +2,28 @@ version: '3.4'
 services:
   postgresql:
     image: postgres:15-bullseye@sha256:3411b9f2e5239cd7867f34fcf22fe964230f7d447a71d63c283e3593d3f84085
+    container_name: ${USER}_connector-integration-tests-postgresql
     environment:
       POSTGRES_DB: db
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
     ports:
-      - 15432:5432
+      - 5432
   clickhouse:
     image: clickhouse/clickhouse-server:23-alpine@sha256:b078c1cd294632afa2aeba3530e7ba2e568513da23304354f455a25fab575c06
+    container_name: ${USER}_connector-integration-tests-clickhouse
     environment:
       CLICKHOUSE_DB: db
       CLICKHOUSE_USER: user
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_PASSWORD: password
     ports:
-      - 19000:9000
-      - 18123:8123
+      - 9000
+      - 8123
   fq-connector-go:
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.0.6-rc.8@sha256:74ebae0530d916c1842a7fddfbddc6c018763a0401f2f627a44e8829692fe41f
+    container_name: ${USER}_connector-integration-tests-fq-connector-go
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.2.0@sha256:996ea072265911945b56f5fd5c10b0655b78e6c9e455701d1985e808b5516426
+    volumes:
+      - ./fq-connector-go/config.conf:/usr/local/etc/fq-connector-go.conf
     ports:
-      - 50051:50051
-    network_mode: host
+      - 50051

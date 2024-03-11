@@ -5,6 +5,8 @@
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/utils/stream/PreallocatedStreamBuf.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/utils/stream/ResponseStream.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/Aws.h>
+#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/utils/threading/Executor.h>
+
 #include <contrib/libs/curl/include/curl/curl.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log.h>
@@ -105,6 +107,7 @@ Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(co
     if (settings.HasHttpRequestTimeoutMs()) {
         config.httpRequestTimeoutMs = settings.GetHttpRequestTimeoutMs();
     }
+    config.executor = std::make_shared<Aws::Utils::Threading::PooledThreadExecutor>(1);
     config.enableTcpKeepAlive = true;
     //    config.lowSpeedLimit = 0;
     config.maxConnections = 5;
@@ -152,6 +155,7 @@ Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(co
     Aws::Client::ClientConfiguration config;
 
     config.endpointOverride = settings.endpoint();
+    config.executor = std::make_shared<Aws::Utils::Threading::PooledThreadExecutor>(1);
     config.verifySSL = false;
     config.connectTimeoutMs = 10000;
     config.maxConnections = 5;
@@ -183,7 +187,7 @@ TString TS3ExternalStorageConfig::DoGetStorageId() const {
 }
 
 IExternalStorageOperator::TPtr TS3ExternalStorageConfig::DoConstructStorageOperator(bool verbose) const {
-    return std::make_shared<TS3ExternalStorage>(Config, Credentials, Bucket, StorageClass, verbose);
+    return std::make_shared<TS3ExternalStorage>(Config, Credentials, Bucket, StorageClass, verbose, UseVirtualAddressing);
 }
 
 TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Import::ImportFromS3Settings& settings): Config(ConfigFromSettings(settings))
@@ -204,6 +208,7 @@ TS3ExternalStorageConfig::TS3ExternalStorageConfig(const NKikimrSchemeOp::TS3Set
     : Config(ConfigFromSettings(settings))
     , Credentials(CredentialsFromSettings(settings))
     , StorageClass(ConvertStorageClass(settings.GetStorageClass()))
+    , UseVirtualAddressing(settings.GetUseVirtualAddressing())
 {
     Bucket = settings.GetBucket();
 }

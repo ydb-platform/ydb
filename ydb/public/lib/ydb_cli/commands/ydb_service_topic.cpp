@@ -94,7 +94,7 @@ namespace NYdb::NConsoleClient {
 
             return description.Str();
         }
-        
+
 namespace {
             NTopic::ECodec ParseCodec(const TString& codecStr, const TVector<NTopic::ECodec>& allowedCodecs) {
                 auto exists = ExistingCodecs.find(to_lower(codecStr));

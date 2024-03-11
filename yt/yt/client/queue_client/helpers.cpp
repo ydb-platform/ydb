@@ -33,10 +33,10 @@ THashMap<int, THashMap<i64, TPartitionRowInfo>> CollectPartitionRowInfos(
     TStringBuilder queryBuilder;
     queryBuilder.AppendString("[$tablet_index], [$row_index]");
 
-    std::optional<size_t> cumulativeDataWeightColumnId;
-    std::optional<size_t> timestampColumnId;
+    std::optional<int> cumulativeDataWeightColumnId;
+    std::optional<int> timestampColumnId;
 
-    ui32 expectedRowSize = 2;
+    int expectedRowSize = 2;
     if (params.HasCumulativeDataWeightColumn) {
         queryBuilder.AppendFormat(", [%v]", CumulativeDataWeightColumnName);
         cumulativeDataWeightColumnId = expectedRowSize;
@@ -65,16 +65,18 @@ THashMap<int, THashMap<i64, TPartitionRowInfo>> CollectPartitionRowInfos(
     YT_VERIFY(!isFirstTuple);
 
     auto query = queryBuilder.Flush();
+
+    YT_LOG_TRACE("Executing query for partition row infos (Query: %v)", query);
+
     TSelectRowsOptions options;
     options.ReplicaConsistency = EReplicaConsistency::Sync;
-    YT_LOG_TRACE("Executing query for partition row infos (Query: %v)", query);
     auto selectResult = WaitFor(client->SelectRows(query, options))
         .ValueOrThrow();
 
     THashMap<int, THashMap<i64, TPartitionRowInfo>> result;
 
-    for (const auto& row : selectResult.Rowset->GetRows()) {
-        YT_VERIFY(row.GetCount() == expectedRowSize);
+    for (auto row : selectResult.Rowset->GetRows()) {
+        YT_VERIFY(static_cast<int>(row.GetCount()) == expectedRowSize);
 
         auto tabletIndex = FromUnversionedValue<int>(row[0]);
         auto rowIndex = FromUnversionedValue<i64>(row[1]);
@@ -84,12 +86,14 @@ THashMap<int, THashMap<i64, TPartitionRowInfo>> CollectPartitionRowInfos(
                 ? FromUnversionedValue<std::optional<i64>>(row[*cumulativeDataWeightColumnId])
                 : std::nullopt,
             .Timestamp = timestampColumnId
-                ? FromUnversionedValue<std::optional<ui64>>(row[*timestampColumnId])
+                ? FromUnversionedValue<std::optional<TTimestamp>>(row[*timestampColumnId])
                 : std::nullopt,
         });
     }
 
     return result;
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NQueueClient

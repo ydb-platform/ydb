@@ -1,9 +1,51 @@
 #pragma once
 
+#include "periodic_executor_base.h"
 #include "public.h"
-#include "recurring_executor_base.h"
+
+#include <yt/yt/core/actions/callback.h>
+#include <yt/yt/core/actions/future.h>
 
 namespace NYT::NConcurrency {
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NDetail {
+
+class TScheduledInvocationTimePolicy
+{
+public:
+    using TCallbackResult = void;
+    using TOptions = std::optional<TDuration>;
+
+    explicit TScheduledInvocationTimePolicy(const TOptions& options);
+
+    void ProcessResult();
+
+    TInstant KickstartDeadline();
+
+    bool IsEnabled();
+
+    bool ShouldKickstart(const TOptions& newOptions);
+
+    void SetOptions(TOptions newOptions);
+
+    //! Returns the next time instant which is a multiple of the configured interval.
+    //! NB: If the current instant is itself a multiple of the configured interval, this method will return the next
+    //! suitable instant.
+    TInstant NextDeadline();
+
+    bool IsOutOfBandProhibited();
+
+    void Reset();
+
+private:
+    std::optional<TDuration> Interval_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -11,7 +53,7 @@ namespace NYT::NConcurrency {
 //! Given a set non-zero interval, callbacks will be executed at times, which are a multiple of this interval.
 //! E.g. if the interval is 5 minutes, callbacks will be executed at 00:00, 00:05, 00:10, etc.
 class TScheduledExecutor
-    : public TRecurringExecutorBase
+    : public NDetail::TPeriodicExecutorBase<NDetail::TScheduledInvocationTimePolicy>
 {
 public:
     //! Initializes an instance.
@@ -30,19 +72,8 @@ public:
 
     void SetInterval(std::optional<TDuration> interval);
 
-protected:
-    void ScheduleFirstCallback() override;
-    void ScheduleCallback() override;
-
-    TError MakeStoppedError() override;
-
 private:
-    std::optional<TDuration> Interval_;
-
-    //! Returns the next time instant which is a multiple of the configured interval.
-    //! NB: If the current instant is itself a multiple of the configured interval, this method will return the next
-    //! suitable instant.
-    TInstant NextDeadline();
+    using TBase = NDetail::TPeriodicExecutorBase<NDetail::TScheduledInvocationTimePolicy>;
 };
 
 DEFINE_REFCOUNTED_TYPE(TScheduledExecutor)

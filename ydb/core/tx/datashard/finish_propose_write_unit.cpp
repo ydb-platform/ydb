@@ -128,7 +128,7 @@ void TFinishProposeWriteUnit::Complete(TOperation::TPtr op, const TActorContext 
     TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 
     if (!op->HasResultSentFlag()) {
-        DataShard.IncCounter(COUNTER_PREPARE_COMPLETE);
+        DataShard.IncCounter(COUNTER_WRITE_COMPLETE);
 
         if (writeOp->GetWriteResult())
             CompleteRequest(op, ctx);
@@ -140,7 +140,7 @@ void TFinishProposeWriteUnit::Complete(TOperation::TPtr op, const TActorContext 
         Pipeline.RemoveActiveOp(op);
 
         DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
-        DataShard.EmitHeartbeats(ctx);
+        DataShard.EmitHeartbeats();
     }
 
     DataShard.SendRegistrationRequestTimeCast(ctx);
@@ -158,23 +158,22 @@ void TFinishProposeWriteUnit::CompleteRequest(TOperation::TPtr op, const TActorC
                 << DataShard.TabletID() << " send to client, propose latency: "
                 << duration.MilliSeconds() << " ms, status: " << res->GetStatus());
 
-    TString errors = res->GetError();
-    if (errors.size()) {
+    if (res->IsError()) {
         LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::FinishProposeUnit_CompleteRequest), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 
                     "Errors while proposing transaction txid " << op->GetTxId()
-                    << " at tablet " << DataShard.TabletID() << " status: "
-                    << res->GetStatus() << " errors: " << errors);
+                    << " at tablet " << DataShard.TabletID() << " " << res->GetError());
     }
 
     if (res->IsPrepared()) {
-        DataShard.IncCounter(COUNTER_PREPARE_SUCCESS_COMPLETE_LATENCY, duration);
+        DataShard.IncCounter(COUNTER_WRITE_SUCCESS_COMPLETE_LATENCY, duration);
     } else {
         DataShard.CheckSplitCanStart(ctx);
         DataShard.CheckMvccStateChangeCanStart(ctx);
     }
 
-    if (op->HasNeedDiagnosticsFlag())
-        AddDiagnosticsResult(*res);
+    AddDiagnosticsResult(*res);
+
+    DataShard.FillExecutionStats(op->GetExecutionProfile(), *res->Record.MutableTxStats());
 
     if (!gSkipRepliesFailPoint.Check(DataShard.TabletID(), op->GetTxId())) {
         if (res->IsPrepared()) {
@@ -184,7 +183,13 @@ void TFinishProposeWriteUnit::CompleteRequest(TOperation::TPtr op, const TActorC
             res->SetOrbit(std::move(op->Orbit));
         }
 
-        ctx.Send(writeOp->GetEv()->Sender, res.release(), 0, writeOp->GetEv()->Cookie);
+        if (op->IsImmediate() && !op->IsReadOnly() && !op->IsAborted() && op->MvccReadWriteVersion) {
+            DataShard.SendImmediateWriteResult(*op->MvccReadWriteVersion, op->GetTarget(), res.release(), op->GetCookie());
+        } else if (op->HasVolatilePrepareFlag() && !op->IsDirty()) {
+            DataShard.SendWithConfirmedReadOnlyLease(op->GetFinishProposeTs(), op->GetTarget(), res.release(), op->GetCookie());
+        } else {
+            ctx.Send(op->GetTarget(), res.release(), 0, op->GetCookie());
+        }
     }
 }
 
@@ -203,20 +208,17 @@ void TFinishProposeWriteUnit::UpdateCounters(const TWriteOperation* writeOp, con
 {
     const auto& res = writeOp->GetWriteResult();
     auto execLatency = TAppData::TimeProvider->Now() - writeOp->GetReceivedAt();
-    DataShard.IncCounter(COUNTER_PREPARE_EXEC_LATENCY, execLatency);
+    DataShard.IncCounter(COUNTER_WRITE_EXEC_LATENCY, execLatency);
     if (res->IsPrepared()) {
-        DataShard.IncCounter(COUNTER_PREPARE_SUCCESS);
+        DataShard.IncCounter(COUNTER_WRITE_SUCCESS);
     } else {
-        if (writeOp->IsDirty())
-            DataShard.IncCounter(COUNTER_PREPARE_DIRTY);
-
         if (res->IsError()) {
-            DataShard.IncCounter(COUNTER_PREPARE_ERROR);
+            DataShard.IncCounter(COUNTER_WRITE_ERROR);
             LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::FinishProposeUnit_UpdateCounters), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 
                         "Prepare transaction failed. txid " << writeOp->GetTxId() 
                         << " at tablet " << DataShard.TabletID() << " errors: " << res->GetError());
         } else {
-            DataShard.IncCounter(COUNTER_PREPARE_IMMEDIATE);
+            DataShard.IncCounter(COUNTER_WRITE_IMMEDIATE);
         }
     }
 }

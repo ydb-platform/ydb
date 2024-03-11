@@ -364,6 +364,16 @@ public:
         iterRange.MaxInclusive = toInclusive;
         const bool reverse = State.Reverse;
 
+        if (TArrayRef<const TCell> cells = keyFromCells.GetCells()) {
+            if (!fromInclusive || cells.size() >= TableInfo.KeyColumnTypes.size()) {
+                Self->GetKeyAccessSampler()->AddSample(TableId, cells);
+            } else {
+                TVector<TCell> extended(cells.begin(), cells.end());
+                extended.resize(TableInfo.KeyColumnTypes.size());
+                Self->GetKeyAccessSampler()->AddSample(TableId, extended);
+            }
+        }
+
         EReadStatus result;
         if (!reverse) {
             auto iter = txc.DB.IterateRange(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
@@ -1498,7 +1508,7 @@ public:
             PrepareValidationInfo(ctx, state);
         } else {
             // There should be no keys when reading sysm tables
-            ValidationInfo.Loaded = true;
+            ValidationInfo.SetLoaded();
         }
     }
 
@@ -1797,7 +1807,7 @@ private:
             }
         }
 
-        ValidationInfo.Loaded = true;
+        ValidationInfo.SetLoaded();
     }
 
     void AcquireLock(TReadIteratorState& state, const TActorContext& ctx) {
@@ -2026,8 +2036,7 @@ public:
                                     snapshotUnavailable = true;
                                 }
                             } else {
-                                auto prioritizedMvccSnapshotReads = Self->GetEnablePrioritizedMvccSnapshotReads();
-                                TRowVersion unreadableEdge = Self->Pipeline.GetUnreadableEdge(prioritizedMvccSnapshotReads);
+                                TRowVersion unreadableEdge = Self->Pipeline.GetUnreadableEdge();
                                 if (state.ReadVersion >= unreadableEdge) {
                                     LWTRACK(ReadWaitSnapshot, request->Orbit, state.ReadVersion.Step, state.ReadVersion.TxId);
                                     Self->Pipeline.AddWaitingReadIterator(state.ReadVersion, std::move(Ev), ctx);
@@ -2107,7 +2116,6 @@ public:
 
                 const ui64 tieBreaker = Self->NextTieBreakerIndex++;
                 Op = new TReadOperation(Self, ctx.Now(), tieBreaker, Ev);
-                Op->OperationSpan = NWilson::TSpan(TWilsonTablet::Tablet, readSpan.GetTraceId(), "ReadIterator.ReadOperation", NWilson::EFlags::AUTO_END);
 
                 Op->BuildExecutionPlan(false);
                 Self->Pipeline.GetExecutionUnit(Op->GetCurrentUnit()).AddOperation(Op);
@@ -2537,7 +2545,8 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
     auto* request = ev->Get();
     
     if (!request->ReadSpan) {
-        request->ReadSpan = NWilson::TSpan(TWilsonTablet::Tablet, std::move(ev->TraceId), "DataShard.Read");
+        request->ReadSpan = NWilson::TSpan(TWilsonTablet::TabletTopLevel, std::move(ev->TraceId), "Datashard.Read", NWilson::EFlags::AUTO_END);
+        request->ReadSpan.Attribute("Shard", std::to_string(TabletID()));
     }
 
     const auto& record = request->Record;

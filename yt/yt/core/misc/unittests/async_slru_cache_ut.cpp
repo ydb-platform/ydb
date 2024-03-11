@@ -422,9 +422,9 @@ TEST(TAsyncSlruCacheTest, AddThenImmediatelyRemove)
     auto cache = New<TCountingSlruCache>(std::move(config));
 
     auto persistentValue = New<TSimpleCachedValue>(
-        /* key */ 0,
-        /* value */ 42,
-        /* weight */ 100);
+        /*key*/ 0,
+        /*value*/ 42,
+        /*weight*/ 100);
 
     {
         auto cookie = cache->BeginInsert(0);
@@ -437,9 +437,9 @@ TEST(TAsyncSlruCacheTest, AddThenImmediatelyRemove)
     {
         auto cookie = cache->BeginInsert(1);
         auto temporaryValue = New<TSimpleCachedValue>(
-            /* key */ 1,
-            /* value */ 43,
-            /* weight */ 100);
+            /*key*/ 1,
+            /*value*/ 43,
+            /*weight*/ 100);
         cookie.EndInsert(temporaryValue);
         temporaryValue.Reset();
         EXPECT_EQ(cache->GetItemCount(), 0);
@@ -695,7 +695,7 @@ TEST(TAsyncSlruGhostCacheTest, Lookups)
         auto oldLargeCounters = cache->ReadLargeGhostCounters();
 
         for (int index = 0; index < 6; ++index) {
-            cache->Lookup(index);
+            YT_UNUSED_FUTURE(cache->Lookup(index));
         }
 
         auto smallCount = cache->ReadSmallGhostCounters() - oldSmallCounters;
@@ -736,7 +736,7 @@ TEST(TAsyncSlruGhostCacheTest, MoveConstructCookie)
         auto oldLargeCounters = cache->ReadLargeGhostCounters();
 
         for (int index = 0; index < 5; ++index) {
-            cache->Lookup(index);
+            YT_UNUSED_FUTURE(cache->Lookup(index));
         }
 
         auto smallCount = cache->ReadSmallGhostCounters() - oldSmallCounters;
@@ -799,7 +799,7 @@ TEST(TAsyncSlruGhostCacheTest, MoveAssignCookie)
         auto oldLargeCounters = cache->ReadLargeGhostCounters();
 
         for (int index = 0; index < 5; ++index) {
-            cache->Lookup(index);
+            YT_UNUSED_FUTURE(cache->Lookup(index));
         }
 
         auto smallCount = cache->ReadSmallGhostCounters() - oldSmallCounters;

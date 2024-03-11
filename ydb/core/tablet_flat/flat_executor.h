@@ -413,6 +413,8 @@ class TExecutor
     THashMap<ui64, THolder<TScanSnapshot>> ScanSnapshots;
     ui64 ScanSnapshotId = 1;
 
+    class TActiveTransactionZone;
+
     bool ActiveTransaction = false;
     bool BrokenTransaction = false;
     ui32 ActivateTransactionWaiting = 0;

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
-#include <ydb/core/tx/columnshard/blob_manager.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/wrappers/abstract.h>
 #include "gc_info.h"
@@ -21,15 +20,13 @@ protected:
         Y_ABORT_UNLESS(status == NKikimrProto::EReplyStatus::OK);
     }
 
-    virtual void DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs) override;
+    virtual void DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) override;
     virtual void DoOnCompleteTxBeforeWrite(NColumnShard::TColumnShard& /*self*/) override {
         return;
     }
 
-    virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool success) override;
-    virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& /*self*/) override {
-
-    }
+    virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) override;
+    virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) override;
 public:
     virtual bool NeedDraftTransaction() const override {
         return true;

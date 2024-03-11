@@ -1,0 +1,7 @@
+items:
+- name: "{{ ydb-short-name }} Server"
+  href: changelog-server.md
+- name: "{{ ydb-short-name }} CLI"
+  href: changelog-cli.md
+- name: Security changelog
+  href: security-changelog.md

@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -75,7 +75,7 @@ char *stripcredentials(const char *url)
 
     return nurl;
   }
-  error:
+error:
   curl_url_cleanup(u);
   return NULL;
 }
@@ -87,11 +87,12 @@ static int xattr(int fd,
   int err = 0;
   if(value) {
 #ifdef DEBUGBUILD
+    (void)fd;
     if(getenv("CURL_FAKE_XATTR")) {
       printf("%s => %s\n", attr, value);
     }
     return 0;
-#endif
+#else
 #ifdef HAVE_FSETXATTR_6
     err = fsetxattr(fd, attr, value, strlen(value), 0, 0);
 #elif defined(HAVE_FSETXATTR_5)
@@ -104,6 +105,7 @@ static int xattr(int fd,
          attribute */
       err = (rc < 0 ? -1 : 0);
     }
+#endif
 #endif
   }
   return err;

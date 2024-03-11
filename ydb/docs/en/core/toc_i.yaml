@@ -26,17 +26,11 @@ items:
 - { name: Integrations,                                    include: { mode: link, path: integrations/toc_p.yaml } }
 - { name: Working with the YDB CLI,                        include: { mode: link, path: reference/ydb-cli/toc_p.yaml } }
 - { name: Working with the YDB SDK,                        include: { mode: link, path: reference/ydb-sdk/toc_p.yaml } }
+- { name: Working with the Kafka API,                      include: { mode: link, path: reference/kafka-api/toc_p.yaml } }
 - { name: Development,                                     include: { mode: link, path: development/toc_p.yaml } }
 # Footer
 - { name: Questions and answers,                        include: { mode: link, path: faq/toc_p.yaml } }
 - include: { mode: link, path: downloads/toc_p.yaml }
 - name: Public talks
   href: public-talks.md
-- name: Changelog
-  items:
-  - name: "{{ ydb-short-name }} Server"
-    href: changelog-server.md
-  - name: "{{ ydb-short-name }} CLI"
-    href: changelog-cli.md
-  - name: Security changelog
-    href: security-changelog.md
+- { name: Changelog,                                     include: { mode: link, path: toc_changelog.yaml } }

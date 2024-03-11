@@ -19,37 +19,37 @@ namespace NKafka {
      * Pipeline:
      *
      * client                                 server
-     *          JOIN_GROUP request(topics)
-     *          ---------------->
-     *          JOIN_GROUP response()
-     *          <----------------
+     *           JOIN_GROUP request(topics)
+     *           ---------------->
+     *           JOIN_GROUP response()
+     *           <----------------
      *
-     *          SYNC_GROUP request()
-     *          ---------------->
-     *          SYNC_GROUP response(partitions to read)
-     *          <----------------
+     *           SYNC_GROUP request()
+     *           ---------------->
+     *           SYNC_GROUP response(partitions to read)
+     *           <----------------
      *
-     *          HEARTBEAT request()
-     *          ---------------->
-     *          HEARTBEAT response(status = OK)
-     *          <---------------- 
+     *           HEARTBEAT request()
+     *           ---------------->
+     *           HEARTBEAT response(status = OK)
+     *           <---------------- 
      *
-     *          HEARTBEAT request()
-     *          ---------------->
-     *          HEARTBEAT response(status = REBALANCE_IN_PROGRESS) //if partitions to read list changes
-     *          <---------------- 
+     *           HEARTBEAT request()
+     *           ---------------->
+     *           HEARTBEAT response(status = REBALANCE_IN_PROGRESS) //if partitions to read list changes
+     *           <---------------- 
      *
-     *          JOIN_GROUP request(topics) //client send again, because REBALANCE_IN_PROGRESS in heartbeat response
-     *          ---------------->
+     *           JOIN_GROUP request(topics) //client send again, because REBALANCE_IN_PROGRESS in heartbeat response
+     *           ---------------->
      *
-     *          ...
-     *          ...
-     *          ...
+     *           ...
+     *           ...
+     *           ...
      *
-     *          LEAVE_GROUP request()
-     *          ---------------->
-     *          LEAVE_GROUP response()
-     *          <----------------   
+     *           LEAVE_GROUP request()
+     *           ---------------->
+     *           LEAVE_GROUP response()
+     *           <----------------   
      */
 
 class TKafkaReadSessionActor: public NActors::TActorBootstrapped<TKafkaReadSessionActor> {
@@ -64,6 +64,11 @@ struct TPartitionsInfo {
     THashSet<ui64> ReadingNow;
     THashSet<ui64> ToRelease;
     THashSet<ui64> ToLock;
+};
+
+struct TNewPartitionToLockInfo {
+    ui64 PartitionId;
+    TInstant LockOn;
 };
 
 struct TNextRequestError {
@@ -91,25 +96,27 @@ private:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            //from client
+
+            // from client
             HFunc(TEvKafka::TEvJoinGroupRequest, HandleJoinGroup);
             HFunc(TEvKafka::TEvSyncGroupRequest, HandleSyncGroup);
             HFunc(TEvKafka::TEvLeaveGroupRequest, HandleLeaveGroup);
             HFunc(TEvKafka::TEvHeartbeatRequest, HandleHeartbeat);
 
-            //from TReadInitAndAuthActor
+            // from TReadInitAndAuthActor
             HFunc(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk, HandleAuthOk);
             HFunc(NGRpcProxy::V1::TEvPQProxy::TEvCloseSession, HandleAuthCloseSession);
 
-            //from PQRB
+            // from PQRB
             HFunc(TEvPersQueue::TEvLockPartition, HandleLockPartition);
             HFunc(TEvPersQueue::TEvReleasePartition, HandleReleasePartition);
             HFunc(TEvPersQueue::TEvError, HandleBalancerError);
             
-            //from Pipe
+            // from Pipe
             HFunc(TEvTabletPipe::TEvClientConnected, HandlePipeConnected);
             HFunc(TEvTabletPipe::TEvClientDestroyed, HandlePipeDestroyed);
             
+            // others
             HFunc(TEvKafka::TEvWakeup, HandleWakeup);
             SFunc(TEvents::TEvPoison, Die);
         }
@@ -167,8 +174,10 @@ private:
     THashMap<TString, NGRpcProxy::TTopicHolder> TopicsInfo; // topic -> info
     NPersQueue::TTopicsToConverter TopicsToConverter;
     THashSet<TString> TopicsToReadNames;
+    THashMap<TString, TString> OriginalTopicNames;
     THashMap<TString, TPartitionsInfo> TopicPartitions;
     THashMap<TString, NPersQueue::TTopicConverterPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching
+    THashMap<TString, TVector<TNewPartitionToLockInfo>> NewPartitionsToLockOnTime; // Topic -> PartitionsToLock
 
     static constexpr NTabletPipe::TClientRetryPolicy RetryPolicyForPipes = {
         .RetryLimitCount = 21,

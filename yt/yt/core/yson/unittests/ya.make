@@ -12,10 +12,12 @@ SRCS(
     depth_limiting_yson_consumer_ut.cpp
     filter_ut.cpp
     lexer_ut.cpp
+    list_verb_lazy_yson_consumer_ut.cpp
     protobuf_scalar_type_ut.cpp
     protobuf_yson_schema_ut.cpp
     protobuf_yson_ut.cpp
     ypath_designated_yson_consumer_ut.cpp
+    ypath_filtering_yson_consumer_ut.cpp
     yson_parser_ut.cpp
     yson_pull_parser_ut.cpp
     yson_token_writer_ut.cpp

@@ -4,14 +4,14 @@ namespace NKikimr {
 namespace NHive {
 
 ENodeSelectionPolicy TDomainInfo::GetNodeSelectionPolicy() const {
-    if (!ServerlessComputeResourcesMode) {
+    if (ServerlessComputeResourcesMode.Empty()) {
         return ENodeSelectionPolicy::Default;
     }
 
     switch (*ServerlessComputeResourcesMode) {
-        case NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED:
+        case NKikimrSubDomains::EServerlessComputeResourcesModeExclusive:
             return ENodeSelectionPolicy::PreferObjectDomain;
-        case NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED:
+        case NKikimrSubDomains::EServerlessComputeResourcesModeShared:
             return ENodeSelectionPolicy::Default;
         default:
             return ENodeSelectionPolicy::Default;

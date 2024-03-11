@@ -71,6 +71,7 @@ private:
     TString Description;
     ui32 NumberOfRetries = 10;
     TString Compression;
+    bool UseVirtualAddressing = true;
 };
 
 }

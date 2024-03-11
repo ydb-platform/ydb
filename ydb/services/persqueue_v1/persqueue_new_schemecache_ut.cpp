@@ -463,7 +463,7 @@ namespace NKikimr::NPersQueueTests {
                                       "topic.write.bytes",
                                       "topic.write.messages",
                                       "api.grpc.topic.stream_write.bytes",
-                                      "api.grpc.topic.stream_write.partition_throttled_milliseconds",
+                                      "topic.write.partition_throttled_milliseconds",
                                       "topic.write.message_size_bytes",
                                       "api.grpc.topic.stream_write.messages",
                                       "topic.write.lag_milliseconds",

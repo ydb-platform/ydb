@@ -96,6 +96,8 @@ struct IJournalClientBase
 
 struct IJournalClient
 {
+    virtual ~IJournalClient() = default;
+
     virtual TFuture<void> TruncateJournal(
         const NYPath::TYPath& path,
         i64 rowCount,

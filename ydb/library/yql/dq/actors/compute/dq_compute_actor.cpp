@@ -1,4 +1,4 @@
-#include "dq_compute_actor_impl.h"
+#include "dq_sync_compute_actor_base.h"
 #include "dq_compute_actor.h"
 #include "dq_task_runner_exec_ctx.h"
 
@@ -27,8 +27,8 @@ TDqExecutionSettings& GetDqExecutionSettingsForTests() {
     return ExecutionSettings;
 }
 
-class TDqComputeActor : public TDqComputeActorBase<TDqComputeActor> {
-    using TBase = TDqComputeActorBase<TDqComputeActor>;
+class TDqComputeActor : public TDqSyncComputeActorBase<TDqComputeActor> {
+    using TBase = TDqSyncComputeActorBase<TDqComputeActor>;
 
 public:
     static constexpr char ActorName[] = "DQ_COMPUTE_ACTOR";
@@ -54,10 +54,10 @@ public:
             };
         }
 
-        auto taskRunner = TaskRunnerFactory(Task, RuntimeSettings.StatsMode, logger);
+        auto taskRunner = TaskRunnerFactory(GetAllocator(), Task, RuntimeSettings.StatsMode, logger);
         SetTaskRunner(taskRunner);
         auto wakeup = [this]{ ContinueExecute(EResumeSource::CABootstrapWakeup); };
-        TDqTaskRunnerExecutionContext execCtx(TxId, RuntimeSettings.UseSpilling, std::move(wakeup));
+        TDqTaskRunnerExecutionContext execCtx(TxId, std::move(wakeup));
         PrepareTaskRunner(execCtx);
 
         ContinueExecute(EResumeSource::CABootstrap);

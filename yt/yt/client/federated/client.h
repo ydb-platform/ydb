@@ -20,9 +20,11 @@ namespace NYT::NClient::NFederated {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Creates federated client with given underlying clients.
-NApi::IClientPtr CreateClient(const std::vector<NApi::IClientPtr>& clients, TFederationConfigPtr config);
+//! Creates a federated client with given underlying clients.
+NApi::IClientPtr CreateClient(
+    std::vector<NApi::IClientPtr> clients,
+    TFederationConfigPtr config);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // NYT::NClient::NFederated
+} // namespace NYT::NClient::NFederated

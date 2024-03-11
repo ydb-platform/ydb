@@ -9,7 +9,6 @@ from ydb.library.yql.providers.generic.connector.tests.utils.settings import Set
 from ydb.library.yql.providers.generic.connector.tests.utils.generate import generate_table_data
 import ydb.library.yql.providers.generic.connector.tests.utils.clickhouse as clickhouse
 import ydb.library.yql.providers.generic.connector.tests.utils.postgresql as postgresql
-from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     Schema,
     Column,
@@ -30,7 +29,6 @@ class TestCase(BaseTestCase):
     select_what: SelectWhat
     select_where: Optional[SelectWhere]
     data_out_: Optional[Sequence]
-    protocol: EProtocol = EProtocol.NATIVE
     check_output_schema: bool = False
 
     @property
@@ -186,16 +184,18 @@ class Factory:
         for param in params:
             (select_what, data_out, data_source_kinds) = param
 
+            test_case_name = f'column_selection_{select_what}'
+
             for data_source_kind in data_source_kinds:
                 test_case = TestCase(
                     data_in=data_in,
                     data_source_kind=data_source_kind,
-                    database=Database.make_for_data_source_kind(data_source_kind),
+                    protocol=EProtocol.NATIVE,
                     select_what=select_what,
                     select_where=None,
                     schema=schema,
                     data_out_=data_out,
-                    name=f'column_selection_{EDataSourceKind.Name(data_source_kind)}_{select_what}',
+                    name_=test_case_name,
                     pragmas=dict(),
                 )
 
@@ -205,9 +205,9 @@ class Factory:
 
     def _large_table(self) -> Sequence[TestCase]:
         '''
-        In this test the dataset is obviously large than a single page
+        In this test the dataset is obviously larger than a single page
         (a single message of ReadSplits protocol), so it will take at least several protocol messages
-        to transfer the table from Connector to the engine (dqrun, kqprun).
+        to transfer the table from Connector to the engine (dqrun/kqprun).
 
         Therefore, we will check:
         1. Connector's data prefetching logic
@@ -216,19 +216,18 @@ class Factory:
         # TODO: assert connector stats when it will be accessible
         '''
 
-        # FIXME: uncomment to debug YQ-2729
-        # table_size = 2.5 * self.ss.connector.paging_bytes_per_page * self.ss.connector.paging_prefetch_queue_capacity
-        table_size = self.ss.connector.paging_bytes_per_page * self.ss.connector.paging_prefetch_queue_capacity / 1000
+        table_size = 2.5 * self.ss.connector.paging_bytes_per_page * self.ss.connector.paging_prefetch_queue_capacity
+        # table_size = self.ss.connector.paging_bytes_per_page * self.ss.connector.paging_prefetch_queue_capacity / 1000
 
         schema = Schema(
             columns=ColumnList(
                 Column(
-                    name='col_int64',
+                    name='col_01_int64',
                     ydb_type=Type.INT64,
                     data_source_type=DataSourceType(ch=clickhouse.Int32(), pg=postgresql.Int8()),
                 ),
                 Column(
-                    name='col_string',
+                    name='col_02_utf8',
                     ydb_type=Type.UTF8,
                     data_source_type=DataSourceType(ch=clickhouse.String(), pg=postgresql.Text()),
                 ),
@@ -236,19 +235,32 @@ class Factory:
         )
 
         data_in = generate_table_data(schema=schema, bytes_soft_limit=table_size)
+        print("BIRD", data_in)
+
+        # Assuming that request will look something like:
+        #
+        # SELECT * FROM table WHERE id = (SELECT MAX(id) FROM table)
+        #
+        # We expect last line to be the answer
+        data_out = [data_in[-1]]
+
         data_source_kinds = [EDataSourceKind.CLICKHOUSE, EDataSourceKind.POSTGRESQL]
+
+        test_case_name = 'large_table'
 
         test_cases = []
         for data_source_kind in data_source_kinds:
             tc = TestCase(
-                name='large_table',
+                name_=test_case_name,
                 data_source_kind=data_source_kind,
+                protocol=EProtocol.NATIVE,
                 data_in=data_in,
-                data_out_=data_in,
+                data_out_=data_out,
                 select_what=SelectWhat.asterisk(schema.columns),
-                select_where=None,
+                select_where=SelectWhere(
+                    expression_='col_01_int64 IN (SELECT MAX(col_01_int64) FROM {cluster_name}.{table_name})'
+                ),
                 schema=schema,
-                database=Database.make_for_data_source_kind(data_source_kind),
                 pragmas=dict(),
             )
 
@@ -275,7 +287,6 @@ class Factory:
                 continue
             for protocol in protocols[base_tc.data_source_kind]:
                 tc = replace(base_tc)
-                tc.name += f'_{EProtocol.Name(protocol)}'
                 tc.protocol = protocol
                 test_cases.append(tc)
 

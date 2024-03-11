@@ -15,44 +15,48 @@ void TCleanupColumnEngineChanges::DoDebugString(TStringOutput& out) const {
     }
 }
 
-void TCleanupColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) {
-    self.IncCounter(NColumnShard::COUNTER_PORTIONS_ERASED, PortionsToDrop.size());
-    THashSet<TUnifiedBlobId> blobIds;
+void TCleanupColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
     THashSet<ui64> pathIds;
-    for (auto&& p : PortionsToDrop) {
-        auto removing = BlobsAction.GetRemoving(p);
-        for (auto&& r : p.Records) {
-            removing->DeclareRemove(r.BlobRange.BlobId);
+    if (self) {
+        THashMap<TString, THashSet<TUnifiedBlobId>> blobIdsByStorage;
+        for (auto&& p : PortionsToDrop) {
+            p.RemoveFromDatabase(context.DBWrapper);
+
+            p.FillBlobIdsByStorage(blobIdsByStorage, context.EngineLogs.GetVersionedIndex());
+            pathIds.emplace(p.GetPathId());
         }
-        pathIds.emplace(p.GetPathId());
-        self.IncCounter(NColumnShard::COUNTER_RAW_BYTES_ERASED, p.RawBytesSum());
-    }
-    for (auto&& p: pathIds) {
-        self.TablesManager.TryFinalizeDropPath(context.Txc, p);
+        for (auto&& i : blobIdsByStorage) {
+            auto action = BlobsAction.GetRemoving(i.first);
+            for (auto&& b : i.second) {
+                action->DeclareRemove((TTabletId)self->TabletID(), b);
+            }
+        }
+
+        if (context.DB) {
+            for (auto&& p : pathIds) {
+                self->TablesManager.TryFinalizeDropPath(*context.DB, p);
+            }
+        }
     }
 }
 
-bool TCleanupColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) {
-    THashSet<TUnifiedBlobId> blobIds;
+void TCleanupColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
     for (auto& portionInfo : PortionsToDrop) {
-        if (!self.ErasePortion(portionInfo)) {
+        if (!context.EngineLogs.ErasePortion(portionInfo)) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot erase portion")("portion", portionInfo.DebugString());
-            continue;
-        }
-        for (auto& record : portionInfo.Records) {
-            self.ColumnsTable->Erase(context.DB, portionInfo, record);
         }
     }
-
-    return true;
+    context.TriggerActivity = NeedRepeat ? NColumnShard::TBackgroundActivity::Cleanup() : NColumnShard::TBackgroundActivity::None();
+    if (self) {
+        self->IncCounter(NColumnShard::COUNTER_PORTIONS_ERASED, PortionsToDrop.size());
+        for (auto&& p : PortionsToDrop) {
+            self->IncCounter(NColumnShard::COUNTER_RAW_BYTES_ERASED, p.RawBytesSum());
+        }
+    }
 }
 
 void TCleanupColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     self.BackgroundController.StartCleanup();
-}
-
-void TCleanupColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TColumnShard& /*self*/, TWriteIndexCompleteContext& context) {
-    context.TriggerActivity = NeedRepeat ? NColumnShard::TBackgroundActivity::Cleanup() : NColumnShard::TBackgroundActivity::None();
 }
 
 void TCleanupColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& /*context*/) {

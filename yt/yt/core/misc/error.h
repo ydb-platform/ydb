@@ -1,10 +1,8 @@
 #pragma once
 
 #include "public.h"
-#include "property.h"
-#include "optional.h"
 
-#include <yt/yt/core/yson/string.h>
+#include <yt/yt/core/yson/public.h>
 
 #include <yt/yt/core/ytree/public.h>
 
@@ -14,7 +12,12 @@
 
 #include <yt/yt/core/threading/public.h>
 
+#include <library/cpp/yt/yson/public.h>
+
 #include <library/cpp/yt/yson_string/convert.h>
+#include <library/cpp/yt/yson_string/string.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 #include <util/system/getpid.h>
 
@@ -36,30 +39,29 @@ public:
     constexpr TErrorCode();
     explicit constexpr TErrorCode(int value);
     template <class E>
-    requires std::is_enum_v<E>
+        requires std::is_enum_v<E>
     constexpr TErrorCode(E value);
 
     constexpr operator int() const;
 
     template <class E>
-    requires std::is_enum_v<E>
+        requires std::is_enum_v<E>
     constexpr operator E() const;
 
     void Save(TStreamSaveContext& context) const;
     void Load(TStreamLoadContext& context);
 
+    template <class E>
+        requires std::is_enum_v<E>
+    constexpr bool operator == (E rhs) const;
+
+    constexpr bool operator == (TErrorCode rhs) const;
 private:
     int Value_;
 };
 
 void FormatValue(TStringBuilderBase* builder, TErrorCode code, TStringBuf spec);
 TString ToString(TErrorCode code);
-
-template <class E>
-requires std::is_enum_v<E>
-constexpr bool operator == (TErrorCode lhs, E rhs);
-
-constexpr bool operator == (TErrorCode lhs, TErrorCode rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -68,21 +70,18 @@ constexpr int ErrorSerializationDepthLimit = 16;
 ////////////////////////////////////////////////////////////////////////////////
 
 //! When this guard is set, newly created errors do not have non-deterministic
-//! system attributes and have "datetime" attribute overridden with a given value.
+//! system attributes and have "datetime" and "host" attributes overridden with a given values.
 class TErrorSanitizerGuard
     : public TNonCopyable
 {
 public:
-    using TLocalHostNameSanitizerSignature = TString (TStringBuf);
-    using THostNameSanitizer = TCallback<TLocalHostNameSanitizerSignature>;
-
-    explicit TErrorSanitizerGuard(TInstant datetimeOverride, THostNameSanitizer localHostNameSanitizer);
+    TErrorSanitizerGuard(TInstant datetimeOverride, TSharedRef localHostNameOverride);
     ~TErrorSanitizerGuard();
 
 private:
     const bool SavedEnabled_;
     const TInstant SavedDatetimeOverride_;
-    const THostNameSanitizer SavedLocalHostNameSanitizer_;
+    const TSharedRef SavedLocalHostNameOverride_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -239,7 +238,6 @@ private:
     void MakeMutable();
 
     friend bool operator == (const TError& lhs, const TError& rhs);
-    friend bool operator != (const TError& lhs, const TError& rhs);
 
     friend void ToProto(NProto::TError* protoError, const TError& error);
     friend void FromProto(TError* error, const NProto::TError& protoError);
@@ -254,7 +252,6 @@ private:
 };
 
 bool operator == (const TError& lhs, const TError& rhs);
-bool operator != (const TError& lhs, const TError& rhs);
 
 void ToProto(NProto::TError* protoError, const TError& error);
 void FromProto(TError* error, const NProto::TError& protoError);
@@ -343,7 +340,7 @@ struct TErrorAdaptor
 // Make these to correctly forward TError to Wrap call.
 template <class TErrorLike, class... TArgs>
     requires
-        std::is_base_of_v<TError, std::remove_cvref_t<TErrorLike>> &&
+        std::derived_from<std::remove_cvref_t<TErrorLike>, TError> &&
         std::constructible_from<TError, TArgs...>
 void ThrowErrorExceptionIfFailed(TErrorLike&& error, TArgs&&... args);
 

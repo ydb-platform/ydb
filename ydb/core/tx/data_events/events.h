@@ -2,8 +2,10 @@
 
 #include <library/cpp/lwtrace/shuttle.h>
 
+#include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/base/events.h>
+#include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/event_pb.h>
@@ -37,15 +39,30 @@ struct TDataEvents {
     public:
         TEvWrite() = default;
 
-        TEvWrite(ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode) {
-            Y_ABORT_UNLESS(txMode != NKikimrDataEvents::TEvWrite::MODE_UNSPECIFIED);
 
+        TEvWrite(const ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode) {
+            Y_ABORT_UNLESS(txMode != NKikimrDataEvents::TEvWrite::MODE_UNSPECIFIED);
+            Record.SetTxMode(txMode);
             Record.SetTxId(txId);
+        }
+
+        TEvWrite(NKikimrDataEvents::TEvWrite::ETxMode txMode) {
+            Y_ABORT_UNLESS(txMode != NKikimrDataEvents::TEvWrite::MODE_UNSPECIFIED);
             Record.SetTxMode(txMode);
         }
 
-        void AddOperation(NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, ui64 tableId, 
-            ui64 schemaVersion, const std::vector<ui32>& columnIds,
+        TEvWrite& SetTxId(const ui64 txId) {
+            Record.SetTxId(txId);
+            return *this;
+        }
+
+        TEvWrite& SetLockId(const ui64 lockTxId, const ui64 lockNodeId) {
+            Record.SetLockTxId(lockTxId);
+            Record.SetLockNodeId(lockNodeId);
+            return *this;
+        }
+
+        void AddOperation(NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, const TTableId& tableId, const std::vector<ui32>& columnIds,
             ui64 payloadIndex, NKikimrDataEvents::EDataFormat payloadFormat) {
             Y_ABORT_UNLESS(operationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED);
             Y_ABORT_UNLESS(payloadFormat != NKikimrDataEvents::FORMAT_UNSPECIFIED);
@@ -54,8 +71,9 @@ struct TDataEvents {
             operation->SetType(operationType);
             operation->SetPayloadFormat(payloadFormat);
             operation->SetPayloadIndex(payloadIndex);
-            operation->MutableTableId()->SetTableId(tableId);
-            operation->MutableTableId()->SetSchemaVersion(schemaVersion);
+            operation->MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
+            operation->MutableTableId()->SetTableId(tableId.PathId.LocalPathId);
+            operation->MutableTableId()->SetSchemaVersion(tableId.SchemaVersion);
             operation->MutableColumnIds()->Assign(columnIds.begin(), columnIds.end());
         }
 
@@ -86,7 +104,7 @@ struct TDataEvents {
             return result;
         }
 
-        static std::unique_ptr<TEvWriteResult> BuildCommited(const ui64 origin, const ui64 txId) {
+        static std::unique_ptr<TEvWriteResult> BuildCompleted(const ui64 origin, const ui64 txId) {
             auto result = std::make_unique<TEvWriteResult>();
             result->Record.SetOrigin(origin);
             result->Record.SetTxId(txId);
@@ -104,6 +122,19 @@ struct TDataEvents {
             result->Record.SetMaxStep(transactionInfo.GetMaxStep());
             result->Record.MutableDomainCoordinators()->CopyFrom(transactionInfo.GetDomainCoordinators());
             return result;
+        }
+
+        void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites) {
+            auto entry = Record.AddTxLocks();
+            entry->SetLockId(lockId);
+            entry->SetDataShard(shard);
+            entry->SetGeneration(generation);
+            entry->SetCounter(counter);
+            entry->SetSchemeShard(ssId);
+            entry->SetPathId(pathId);
+            if (hasWrites) {
+                entry->SetHasWrites(true);
+            }
         }
 
         TString GetError() const {

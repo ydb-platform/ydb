@@ -14,6 +14,10 @@ PEERDIR(
     ydb/core/formats/arrow
 
     ydb/library/actors/core
+    ydb/core/tx/columnshard/engines/scheme/indexes
+    ydb/core/tx/columnshard/engines/scheme/statistics
+    ydb/core/tx/columnshard/engines/scheme/abstract
+    ydb/core/tx/columnshard/blobs_action/abstract
 )
 
 YQL_LAST_ABI_VERSION()

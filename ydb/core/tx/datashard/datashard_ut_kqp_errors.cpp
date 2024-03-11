@@ -34,14 +34,11 @@ bool HasIssue(const TIssues& issues, ui32 code, TStringBuf message, std::functio
 
 class TLocalFixture {
 public:
-    TLocalFixture(bool disableSnaphots = false) {
+    TLocalFixture() {
         TPortManager pm;
         NKikimrConfig::TAppConfig app;
         app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TServerSettings serverSettings(pm.GetPort(2134));
-        if (disableSnaphots) {
-            serverSettings.SetEnableMvccSnapshotReads(false);
-        }
         serverSettings.SetDomainName("Root")
             .SetNodeCount(2)
             .SetUseRealThreads(false)
@@ -229,7 +226,7 @@ Y_UNIT_TEST(ProposeError) {
 }
 
 Y_UNIT_TEST(ProposeRequestUndelivered) {
-    TLocalFixture fixture(true);
+    TLocalFixture fixture;
     auto mitm = [&](TAutoPtr<IEventHandle> &ev) {
         if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
             auto forwardEvent = ev.Get()->Get<TEvPipeCache::TEvForward>();
@@ -255,8 +252,8 @@ Y_UNIT_TEST(ProposeRequestUndelivered) {
     UNIT_ASSERT_C(HasIssue(issues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
         "Kikimr cluster or one of its subsystems was unavailable."), record.GetResponse().DebugString());
 
-    UNIT_ASSERT_C(HasIssue(issues, NYql::TIssuesIds::DEFAULT_ERROR, "", [] (const TIssue& issue) {
-            return issue.GetMessage().StartsWith("Could not deliver program to shard ");
+    UNIT_ASSERT_C(HasIssue(issues, NKikimrIssues::TIssuesIds::TX_STATE_UNKNOWN, "", [] (const TIssue& issue) {
+            return issue.GetMessage().StartsWith("Tx state unknown for shard");
         }), record.GetResponse().DebugString());
 }
 
@@ -299,24 +296,6 @@ void TestProposeResultLost(TTestActorRuntime& runtime, TActorId client, const TS
     auto& record = ev->Get()->Record.GetRef();
     // Cerr << record.DebugString() << Endl;
     fn(record);
-}
-
-Y_UNIT_TEST(ProposeResultLost_RoTx) {
-    TLocalFixture fixture(true);
-    TestProposeResultLost(*fixture.Runtime, fixture.Client,
-        Q_("select * from `/Root/table-1`"),
-        [](const NKikimrKqp::TEvQueryResponse& record) {
-            UNIT_ASSERT_VALUES_EQUAL_C(record.GetYdbStatus(), Ydb::StatusIds::UNAVAILABLE, record.DebugString());
-
-            TIssues issues;
-            IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
-            UNIT_ASSERT_C(HasIssue(issues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                "Kikimr cluster or one of its subsystems was unavailable."), record.GetResponse().DebugString());
-
-            UNIT_ASSERT_C(HasIssue(issues, NKikimrIssues::TIssuesIds::TX_STATE_UNKNOWN, "", [] (const TIssue& issue) {
-                return issue.GetMessage().StartsWith("Tx state unknown for shard ");
-            }), record.GetResponse().DebugString());
-        });
 }
 
 Y_UNIT_TEST(ProposeResultLost_RwTx) {

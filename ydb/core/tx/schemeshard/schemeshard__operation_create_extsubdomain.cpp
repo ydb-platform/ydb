@@ -217,6 +217,7 @@ public:
             }
 
             alter->SetSharedHive(sharedHive);
+            alter->SetServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesModeShared);
         }
 
         if (settings.HasDeclaredSchemeQuotas()) {

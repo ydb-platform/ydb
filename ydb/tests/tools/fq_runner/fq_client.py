@@ -412,6 +412,38 @@ class FederatedQueryClient(object):
         return self.create_connection(request, check_issues)
 
     @retry.retry_intrusive
+    def create_postgresql_connection(self, name, database_name, database_id, login, password,
+                                     secure=False, visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.service_account('sa'), check_issues=True):
+        request = fq.CreateConnectionRequest()
+        request.content.name = name
+        pg = request.content.setting.postgresql_cluster
+        pg.database_name = database_name
+        pg.database_id = database_id
+        pg.secure = secure
+        pg.login = login
+        pg.password = password
+
+        pg.auth.CopyFrom(auth_method)
+        request.content.acl.visibility = visibility
+        return self.create_connection(request, check_issues)
+
+    @retry.retry_intrusive
+    def create_clickhouse_connection(self, name, database_name, database_id, login, password,
+                                     secure=False, visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.service_account('sa'), check_issues=True):
+        request = fq.CreateConnectionRequest()
+        request.content.name = name
+        ch = request.content.setting.clickhouse_cluster
+        ch.database_name = database_name
+        ch.database_id = database_id
+        ch.secure = secure
+        ch.login = login
+        ch.password = password
+
+        ch.auth.CopyFrom(auth_method)
+        request.content.acl.visibility = visibility
+        return self.create_connection(request, check_issues)
+
+    @retry.retry_intrusive
     def list_connections(self, visibility, name_substring=None, limit=100, check_issues=True, page_token=""):
         request = fq.ListConnectionsRequest()
         request.filter.visibility = visibility

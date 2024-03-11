@@ -21,6 +21,7 @@ private:
 
     THashMap<TWriteId, TInsertedData> Inserted;
     THashMap<TWriteId, TInsertedData> Aborted;
+    mutable TInstant MinInsertedTs = TInstant::Zero();
 
     std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>> Priorities;
     THashMap<ui64, TPathInfo> PathInfo;
@@ -35,7 +36,7 @@ private:
 public:
     THashSet<TWriteId> GetInsertedByPathId(const ui64 pathId) const;
 
-    THashSet<TWriteId> GetDeprecatedInsertions(const TInstant timeBorder) const;
+    THashSet<TWriteId> GetExpiredInsertions(const TInstant timeBorder, const ui64 limit) const;
 
     const THashMap<TWriteId, TInsertedData>& GetInserted() const {
         return Inserted;
@@ -46,8 +47,10 @@ public:
 
     const TInsertedData* AddAborted(TInsertedData&& data, const bool load = false);
     bool EraseAborted(const TWriteId writeId);
+    bool HasAborted(const TWriteId writeId);
 
     bool EraseCommitted(const TInsertedData& data);
+    bool HasCommitted(const TInsertedData& data);
 
     const TInsertedData* AddInserted(TInsertedData&& data, const bool load = false);
     std::optional<TInsertedData> ExtractInserted(const TWriteId id);

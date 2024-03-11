@@ -133,7 +133,6 @@ ui32 CheckMeteringFile(TTempFileHandle* meteringFile, const TString& streamPath,
                        std::function<void(const NJson::TJsonValue::TMapType& map)> tags_check,
                        std::function<void(const NJson::TJsonValue::TMapType& map)> labels_check,
                        std::function<void(const NJson::TJsonValue::TMapType& map)> usage_check) {
-    Sleep(TDuration::Seconds(1));
     if (meteringFile->IsOpen()) {
         meteringFile->Flush();
         meteringFile->Close();
@@ -377,6 +376,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             }
         }
 
+        sleep(1);
+
         auto putUnitsSchemaFound =
             CheckMeteringFile(testServer.MeteringFile.Get(), "/Root/" + streamName, "yds.events.puts.v1",
                           [](const NJson::TJsonValue::TMapType& map) {
@@ -463,6 +464,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 sleep(1);
             }
         }
+
+        sleep(1);
 
         auto storageSchemaFound =
             CheckMeteringFile(testServer.MeteringFile.Get(), "/Root/" + streamName, "yds.storage.reserved.v1",
@@ -646,6 +649,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT(res.GetValue().IsSuccess());
         }
 
+        sleep(1);
+
         auto storageSchemaFound =
             CheckMeteringFile(testServer.MeteringFile.Get(), "/Root/" + streamName, "yds.storage.reserved.v1",
                             [](const NJson::TJsonValue::TMapType& map) {
@@ -772,6 +777,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+
+        sleep(1);
 
         auto putUnitsSchemaFound =
             CheckMeteringFile(testServer.MeteringFile.Get(), streamPath, "yds.events.puts.v1",
@@ -1235,6 +1242,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             }
         }
 
+        sleep(1);
+
         CheckMeteringFile(testServer.MeteringFile.Get(), "/Root/" + streamName,
                           "yds.throughput.reserved.v1",
                           [](const NJson::TJsonValue::TMapType& map) {
@@ -1504,25 +1513,25 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             }
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 0);
             Cerr << result.GetResult().DebugString() << Endl;
-            Cerr << "Second put records\n";
 
+            Cerr << "Second put records (async)\n";
+            auto secondWriteAsync = client.PutRecords(streamPath, records);
+
+            Cerr << Now().Seconds() << "Third put records\n";
             result = client.PutRecords(streamPath, records).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            if (result.GetStatus() != EStatus::SUCCESS) {
+                result.GetIssues().PrintTo(Cerr);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records(0).error_code(), "ProvisionedThroughputExceededException");
+
+            result = secondWriteAsync.ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             if (result.GetStatus() != EStatus::SUCCESS) {
                 result.GetIssues().PrintTo(Cerr);
             }
             Cerr << result.GetResult().DebugString() << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 4);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records(0).error_code(), "ProvisionedThroughputExceededException");
-
-            Sleep(TDuration::Seconds(4));
-
-            Cerr << "Third put records\n";
-            result = client.PutRecords(streamPath, records).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            if (result.GetStatus() != EStatus::SUCCESS) {
-                result.GetIssues().PrintTo(Cerr);
-            }
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 0);
             Cerr << result.GetResult().DebugString() << Endl;
 

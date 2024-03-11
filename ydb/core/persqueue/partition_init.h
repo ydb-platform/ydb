@@ -62,7 +62,7 @@ public:
     virtual bool Handle(STFUNC_SIG);
 
     TPartition* Partition() const;
-    ui32 PartitionId() const;
+    const TPartitionId& PartitionId() const;
     TString TopicName() const;
 
     const TString Name;

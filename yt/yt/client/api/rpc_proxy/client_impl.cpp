@@ -495,9 +495,9 @@ TFuture<TYsonString> TClient::GetTablePivotKeys(
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.GetTablePivotKeys();
-    req->set_represent_key_as_list(options.RepresentKeyAsList);
     SetTimeoutOptions(*req, options);
 
+    req->set_represent_key_as_list(options.RepresentKeyAsList);
     req->set_path(path);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetTablePivotKeysPtr& rsp) {
@@ -512,13 +512,14 @@ TFuture<void> TClient::CreateTableBackup(
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.CreateTableBackup();
-    ToProto(req->mutable_manifest(), *manifest);
-
     SetTimeoutOptions(*req, options);
+
+    ToProto(req->mutable_manifest(), *manifest);
     req->set_checkpoint_timestamp_delay(ToProto<i64>(options.CheckpointTimestampDelay));
     req->set_checkpoint_check_period(ToProto<i64>(options.CheckpointCheckPeriod));
     req->set_checkpoint_check_timeout(ToProto<i64>(options.CheckpointCheckTimeout));
     req->set_force(options.Force);
+    req->set_preserve_account(options.PreserveAccount);
 
     return req->Invoke().As<void>();
 }
@@ -530,12 +531,13 @@ TFuture<void> TClient::RestoreTableBackup(
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.RestoreTableBackup();
-    ToProto(req->mutable_manifest(), *manifest);
-
     SetTimeoutOptions(*req, options);
+
+    ToProto(req->mutable_manifest(), *manifest);
     req->set_force(options.Force);
     req->set_mount(options.Mount);
     req->set_enable_replicas(options.EnableReplicas);
+    req->set_preserve_account(options.PreserveAccount);
 
     return req->Invoke().As<void>();
 }
@@ -1489,8 +1491,8 @@ TFuture<TPutFileToCacheResult> TClient::PutFileToCache(
 
     auto req = proxy.PutFileToCache();
     SetTimeoutOptions(*req, options);
-    ToProto(req->mutable_transactional_options(), options);
 
+    ToProto(req->mutable_transactional_options(), options);
     req->set_path(path);
     req->set_md5(expectedMD5);
     req->set_cache_path(options.CachePath);
@@ -1624,7 +1626,6 @@ TFuture<void> TClient::TruncateJournal(
     return req->Invoke().As<void>();
 }
 
-
 TFuture<int> TClient::BuildSnapshot(const TBuildSnapshotOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -1745,11 +1746,13 @@ TFuture<void> TClient::HealExecNode(
 
 TFuture<void> TClient::SuspendCoordinator(
     TCellId coordinatorCellId,
-    const TSuspendCoordinatorOptions& /*options*/)
+    const TSuspendCoordinatorOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.SuspendCoordinator();
+    SetTimeoutOptions(*req, options);
+
     ToProto(req->mutable_coordinator_cell_id(), coordinatorCellId);
 
     return req->Invoke().As<void>();
@@ -1757,11 +1760,13 @@ TFuture<void> TClient::SuspendCoordinator(
 
 TFuture<void> TClient::ResumeCoordinator(
     TCellId coordinatorCellId,
-    const TResumeCoordinatorOptions& /*options*/)
+    const TResumeCoordinatorOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.ResumeCoordinator();
+    SetTimeoutOptions(*req, options);
+
     ToProto(req->mutable_coordinator_cell_id(), coordinatorCellId);
 
     return req->Invoke().As<void>();
@@ -1774,6 +1779,8 @@ TFuture<void> TClient::MigrateReplicationCards(
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.MigrateReplicationCards();
+    SetTimeoutOptions(*req, options);
+
     ToProto(req->mutable_chaos_cell_id(), chaosCellId);
     ToProto(req->mutable_replication_card_ids(), options.ReplicationCardIds);
     if (options.DestinationCellId) {
@@ -1835,11 +1842,12 @@ TFuture<TMaintenanceId> TClient::AddMaintenance(
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.AddMaintenance();
+    SetTimeoutOptions(*req, options);
+
     req->set_component(ConvertMaintenanceComponentToProto(component));
     req->set_address(address);
     req->set_type(ConvertMaintenanceTypeToProto(type));
     req->set_comment(comment);
-    SetTimeoutOptions(*req, options);
 
     return req->Invoke().Apply(BIND([] (const TErrorOr<TApiServiceProxy::TRspAddMaintenancePtr>& rsp) {
         return FromProto<TMaintenanceId>(rsp.ValueOrThrow()->id());
@@ -1855,6 +1863,8 @@ TFuture<TMaintenanceCounts> TClient::RemoveMaintenance(
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.RemoveMaintenance();
+    SetTimeoutOptions(*req, options);
+
     req->set_component(ConvertMaintenanceComponentToProto(component));
     req->set_address(address);
 
@@ -1873,8 +1883,6 @@ TFuture<TMaintenanceCounts> TClient::RemoveMaintenance(
         [&] (const TString& user) {
             req->set_user(user);
         });
-
-    SetTimeoutOptions(*req, options);
 
     return req->Invoke().Apply(BIND([] (const TErrorOr<TApiServiceProxy::TRspRemoveMaintenancePtr>& rsp) {
         auto rspValue = rsp.ValueOrThrow();
@@ -2011,61 +2019,252 @@ TFuture<TRequestRestartResult> TClient::RequestRestart(
 }
 
 TFuture<NQueryTrackerClient::TQueryId> TClient::StartQuery(
-    NQueryTrackerClient::EQueryEngine /*engine*/,
-    const TString& /*query*/,
-    const TStartQueryOptions& /*options*/)
+    NQueryTrackerClient::EQueryEngine engine,
+    const TString& query,
+    const TStartQueryOptions& options)
 {
-    ThrowUnimplemented("StartQuery");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.StartQuery();
+    SetTimeoutOptions(*req, options);
+
+    req->set_query_tracker_stage(options.QueryTrackerStage);
+    req->set_engine(NProto::ConvertQueryEngineToProto(engine));
+    req->set_query(query);
+    req->set_draft(options.Draft);
+
+    if (options.Settings) {
+        req->set_settings(ConvertToYsonString(options.Settings).ToString());
+    }
+    if (options.Annotations) {
+        req->set_annotations(ConvertToYsonString(options.Annotations).ToString());
+    }
+    if (options.AccessControlObject) {
+        req->set_access_control_object(*options.AccessControlObject);
+    }
+
+    for (const auto& file : options.Files) {
+        auto* protoFile = req->add_files();
+        protoFile->set_name(file->Name);
+        protoFile->set_content(file->Content);
+        protoFile->set_type(static_cast<NProto::EContentType>(file->Type));
+    }
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspStartQueryPtr& rsp) {
+        return FromProto<NQueryTrackerClient::TQueryId>(rsp->query_id());
+    }));
 }
 
 TFuture<void> TClient::AbortQuery(
-    NQueryTrackerClient::TQueryId /*queryId*/,
-    const TAbortQueryOptions& /*options*/)
+    NQueryTrackerClient::TQueryId queryId,
+    const TAbortQueryOptions& options)
 {
-    ThrowUnimplemented("AbortQuery");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.AbortQuery();
+    SetTimeoutOptions(*req, options);
+
+    req->set_query_tracker_stage(options.QueryTrackerStage);
+    ToProto(req->mutable_query_id(), queryId);
+
+    if (options.AbortMessage) {
+        req->set_abort_message(*options.AbortMessage);
+    }
+
+    return req->Invoke().AsVoid();
 }
 
 TFuture<TQueryResult> TClient::GetQueryResult(
-    NQueryTrackerClient::TQueryId /*queryId*/,
-    i64 /*resultIndex*/,
-    const TGetQueryResultOptions& /*options*/)
+    NQueryTrackerClient::TQueryId queryId,
+    i64 resultIndex,
+    const TGetQueryResultOptions& options)
 {
-    ThrowUnimplemented("GetQueryResult");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetQueryResult();
+    SetTimeoutOptions(*req, options);
+
+    req->set_query_tracker_stage(options.QueryTrackerStage);
+    ToProto(req->mutable_query_id(), queryId);
+    req->set_result_index(resultIndex);
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryResultPtr& rsp) {
+        return TQueryResult{
+            .Id = FromProto<NQueryTrackerClient::TQueryId>(rsp->query_id()),
+            .ResultIndex = rsp->result_index(),
+            .Error = FromProto<TError>(rsp->error()),
+            .Schema = rsp->has_schema() ? FromProto<NTableClient::TTableSchemaPtr>(rsp->schema()) : nullptr,
+            .DataStatistics = FromProto<NChunkClient::NProto::TDataStatistics>(rsp->data_statistics()),
+            .IsTruncated = rsp->is_truncated(),
+        };
+    }));
 }
 
 TFuture<IUnversionedRowsetPtr> TClient::ReadQueryResult(
-    NQueryTrackerClient::TQueryId /*queryId*/,
-    i64 /*resultIndex*/,
-    const TReadQueryResultOptions& /*options*/)
+    NQueryTrackerClient::TQueryId queryId,
+    i64 resultIndex,
+    const TReadQueryResultOptions& options)
 {
-    ThrowUnimplemented("AbortQuery");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.ReadQueryResult();
+    SetTimeoutOptions(*req, options);
+
+    req->set_query_tracker_stage(options.QueryTrackerStage);
+    ToProto(req->mutable_query_id(), queryId);
+    req->set_result_index(resultIndex);
+
+    if (options.Columns) {
+        auto* protoColumns = req->mutable_columns();
+        for (const auto& column : *options.Columns) {
+            protoColumns->add_items(column);
+        }
+    }
+    if (options.LowerRowIndex) {
+        req->set_lower_row_index(*options.LowerRowIndex);
+    }
+    if (options.UpperRowIndex) {
+        req->set_upper_row_index(*options.UpperRowIndex);
+    }
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspReadQueryResultPtr& rsp) {
+        return DeserializeRowset<TUnversionedRow>(
+            rsp->rowset_descriptor(),
+            MergeRefsToRef<TRpcProxyClientBufferTag>(rsp->Attachments()));
+    }));
 }
 
 TFuture<TQuery> TClient::GetQuery(
-    NQueryTrackerClient::TQueryId /*queryId*/,
-    const TGetQueryOptions& /*options*/)
+    NQueryTrackerClient::TQueryId queryId,
+    const TGetQueryOptions& options)
 {
-    ThrowUnimplemented("GetQuery");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetQuery();
+    SetTimeoutOptions(*req, options);
+
+    req->set_query_tracker_stage(options.QueryTrackerStage);
+    ToProto(req->mutable_query_id(), queryId);
+
+    if (options.Attributes) {
+        ToProto(req->mutable_attributes(), options.Attributes);
+    }
+    if (options.Timestamp) {
+        req->set_timestamp(ToProto<i64>(options.Timestamp));
+    }
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryPtr& rsp) {
+        return FromProto<TQuery>(rsp->query());
+    }));
 }
 
 TFuture<TListQueriesResult> TClient::ListQueries(
-    const TListQueriesOptions& /*options*/)
+    const TListQueriesOptions& options)
 {
-    ThrowUnimplemented("ListQueries");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.ListQueries();
+    SetTimeoutOptions(*req, options);
+
+    req->set_query_tracker_stage(options.QueryTrackerStage);
+
+    if (options.FromTime) {
+        req->set_from_time(NYT::ToProto<i64>(*options.FromTime));
+    }
+    if (options.ToTime) {
+        req->set_to_time(NYT::ToProto<i64>(*options.ToTime));
+    }
+    if (options.CursorTime) {
+        req->set_cursor_time(NYT::ToProto<i64>(*options.CursorTime));
+    }
+    req->set_cursor_direction(static_cast<NProto::EOperationSortDirection>(options.CursorDirection));
+
+    if (options.UserFilter) {
+        req->set_user_filter(*options.UserFilter);
+    }
+    if (options.StateFilter) {
+        req->set_state_filter(NProto::ConvertQueryStateToProto(*options.StateFilter));
+    }
+    if (options.EngineFilter) {
+        req->set_engine_filter(NProto::ConvertQueryEngineToProto(*options.EngineFilter));
+    }
+    if (options.SubstrFilter) {
+        req->set_substr_filter(*options.SubstrFilter);
+    }
+
+    req->set_limit(options.Limit);
+
+    if (options.Attributes) {
+        ToProto(req->mutable_attributes(), options.Attributes);
+    }
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspListQueriesPtr& rsp) {
+        return TListQueriesResult{
+            .Queries = FromProto<std::vector<TQuery>>(rsp->queries()),
+            .Incomplete = rsp->incomplete(),
+            .Timestamp = rsp->timestamp(),
+        };
+    }));
 }
 
 TFuture<void> TClient::AlterQuery(
-    NQueryTrackerClient::TQueryId /*queryId*/,
-    const TAlterQueryOptions& /*options*/)
+    NQueryTrackerClient::TQueryId queryId,
+    const TAlterQueryOptions& options)
 {
-    ThrowUnimplemented("AlterQuery");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.AlterQuery();
+    SetTimeoutOptions(*req, options);
+
+    req->set_query_tracker_stage(options.QueryTrackerStage);
+    ToProto(req->mutable_query_id(), queryId);
+
+    if (options.Annotations) {
+        req->set_annotations(ConvertToYsonString(options.Annotations).ToString());
+    }
+    if (options.AccessControlObject) {
+        req->set_access_control_object(*options.AccessControlObject);
+    }
+
+    return req->Invoke().AsVoid();
 }
 
-TFuture<TBundleConfigDescriptorPtr> TClient::GetBundleConfig(
+TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
+    const TGetQueryTrackerInfoOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetQueryTrackerInfo();
+    SetTimeoutOptions(*req, options);
+
+    req->set_query_tracker_stage(options.QueryTrackerStage);
+
+    if (options.Attributes) {
+        ToProto(req->mutable_attributes(), options.Attributes);
+    }
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryTrackerInfoPtr& rsp) {
+        return TGetQueryTrackerInfoResult{
+            .ClusterName = rsp->cluster_name(),
+            .SupportedFeatures = TYsonString(rsp->supported_features()),
+            .AccessControlObjects = FromProto<std::vector<TString>>(rsp->access_control_objects()),
+        };
+    }));
+}
+
+TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr> TClient::GetBundleConfig(
     const TString& /*bundleName*/,
-    const TGetBundleConfigOptions& /*options*/)
+    const NBundleControllerClient::TGetBundleConfigOptions& /*options*/)
 {
     ThrowUnimplemented("GetBundleConfig");
+}
+
+TFuture<void> TClient::SetBundleConfig(
+    const TString& /*bundleName*/,
+    const NBundleControllerClient::TBundleTargetConfigPtr& /*bundleConfig*/,
+    const NBundleControllerClient::TSetBundleConfigOptions& /*options*/)
+{
+    ThrowUnimplemented("SetBundleConfig");
 }
 
 TFuture<void> TClient::SetUserPassword(
@@ -2100,6 +2299,151 @@ TFuture<TListUserTokensResult> TClient::ListUserTokens(
     const TListUserTokensOptions& /*options*/)
 {
     ThrowUnimplemented("ListUserTokens");
+}
+
+TFuture<TGetPipelineSpecResult> TClient::GetPipelineSpec(
+    const NYPath::TYPath& pipelinePath,
+    const TGetPipelineSpecOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetPipelineSpec();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetPipelineSpecPtr& rsp) {
+        return TGetPipelineSpecResult{
+            .Version = FromProto<NFlow::TVersion>(rsp->version()),
+            .Spec = TYsonString(rsp->spec()),
+        };
+    }));
+}
+
+TFuture<TSetPipelineSpecResult> TClient::SetPipelineSpec(
+    const NYPath::TYPath& pipelinePath,
+    const NYson::TYsonString& spec,
+    const TSetPipelineSpecOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.SetPipelineSpec();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+    req->set_spec(spec.ToString());
+    req->set_force(options.Force);
+    if (options.ExpectedVersion) {
+        req->set_expected_version(ToProto<i64>(*options.ExpectedVersion));
+    }
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSetPipelineSpecPtr& rsp) {
+        return TSetPipelineSpecResult{
+            .Version = FromProto<NFlow::TVersion>(rsp->version()),
+        };
+    }));
+}
+
+TFuture<TGetPipelineDynamicSpecResult> TClient::GetPipelineDynamicSpec(
+    const NYPath::TYPath& pipelinePath,
+    const TGetPipelineDynamicSpecOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetPipelineDynamicSpec();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetPipelineDynamicSpecPtr& rsp) {
+        return TGetPipelineDynamicSpecResult{
+            .Version = FromProto<NFlow::TVersion>(rsp->version()),
+            .Spec = TYsonString(rsp->spec()),
+        };
+    }));
+}
+
+TFuture<TSetPipelineDynamicSpecResult> TClient::SetPipelineDynamicSpec(
+    const NYPath::TYPath& pipelinePath,
+    const NYson::TYsonString& spec,
+    const TSetPipelineDynamicSpecOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.SetPipelineDynamicSpec();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+    req->set_spec(spec.ToString());
+    if (options.ExpectedVersion) {
+        req->set_expected_version(ToProto<i64>(*options.ExpectedVersion));
+    }
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSetPipelineDynamicSpecPtr& rsp) {
+        return TSetPipelineDynamicSpecResult{
+            .Version = FromProto<NFlow::TVersion>(rsp->version()),
+        };
+    }));
+}
+
+TFuture<void> TClient::StartPipeline(
+    const NYPath::TYPath& pipelinePath,
+    const TStartPipelineOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.StartPipeline();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+
+    return req->Invoke().AsVoid();
+}
+
+TFuture<void> TClient::StopPipeline(
+    const NYPath::TYPath& pipelinePath,
+    const TStopPipelineOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.StopPipeline();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+
+    return req->Invoke().AsVoid();
+}
+
+TFuture<void> TClient::PausePipeline(
+    const NYPath::TYPath& pipelinePath,
+    const TPausePipelineOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.PausePipeline();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+
+    return req->Invoke().AsVoid();
+}
+
+TFuture<TPipelineStatus> TClient::GetPipelineStatus(
+    const NYPath::TYPath& pipelinePath,
+    const TGetPipelineStatusOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetPipelineStatus();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetPipelineStatusPtr& rsp) {
+        return TPipelineStatus{
+            .State = FromProto<NFlow::EPipelineState>(rsp->state()),
+        };
+    }));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

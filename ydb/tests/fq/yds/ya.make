@@ -33,6 +33,9 @@ TEST_SRCS(
     test_pq_read_write.py
     test_public_metrics.py
     test_read_rules_deletion.py
+    test_recovery.py
+    test_recovery_match_recognize.py
+    test_recovery_mz.py
     test_restart_query.py
     test_select_1.py
     test_select_limit_db_id.py

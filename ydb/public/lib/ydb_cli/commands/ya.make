@@ -5,8 +5,6 @@ SRCS(
     interactive/line_reader.cpp
     benchmark_utils.cpp
     click_bench.cpp
-    kv_workload.cpp
-    stock_workload.cpp
     topic_operations_scenario.cpp
     topic_read_scenario.cpp
     topic_write_scenario.cpp
@@ -35,6 +33,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/fmt
     contrib/restricted/patched/replxx
     library/cpp/histogram/hdr
     library/cpp/protobuf/json
@@ -70,6 +69,7 @@ RESOURCE(
     click_bench_queries.sql click_bench_queries.sql
     click_bench_schema.sql click_bench_schema.sql
     tpch_schema.sql tpch_schema.sql
+    tpch_queries.sql tpch_queries.sql
     click_bench_canonical/q0.result q0.result
     click_bench_canonical/q1.result q1.result
     click_bench_canonical/q2.result q2.result

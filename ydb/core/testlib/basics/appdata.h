@@ -10,6 +10,11 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/tx/datashard/export_iface.h>
 #include <ydb/core/tx/datashard/export_s3.h>
+#include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/table_service_config.pb.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 
 namespace NKikimr {
 
@@ -61,7 +66,8 @@ namespace NKikimr {
         NActors::TTestActorRuntime::TEgg Unwrap() noexcept;
 
         void AddDomain(TDomainsInfo::TDomain* domain);
-        void AddHive(ui32 hiveUid, ui64 hive);
+        void AddHive(ui64 hive);
+        inline void AddHive(ui32, ui64 hive) { AddHive(hive); }
         void ClearDomainsAndHive();
         void SetChannels(TIntrusivePtr<TChannelProfiles> channels);
         void SetBSConf(NKikimrBlobStorage::TNodeWardenServiceSet config);
@@ -97,6 +103,7 @@ namespace NKikimr {
         NKikimrPQ::TPQConfig PQConfig;
         NKikimrConfig::TAwsCompatibilityConfig AwsCompatibilityConfig;
         NKikimrConfig::TS3ProxyResolverConfig S3ProxyResolverConfig;
+        NKikimrConfig::TGraphConfig GraphConfig;
 
     private:
         TAutoPtr<TMine> Mine;

@@ -319,42 +319,73 @@ struct TTxId {
     }
 };
 
+}
+
+template<>
+struct THash<NKikimr::NKqp::TTxId> {
+    inline size_t operator()(const NKikimr::NKqp::TTxId& id) const noexcept {
+        return THash<NKikimr::TULID>()(id.Id);
+    }
+};
+
+namespace NKikimr::NKqp {
+    
 class TTransactionsCache {
-    TLRUCache<TTxId, TIntrusivePtr<TKqpTransactionContext>> Active;
+    size_t MaxActiveSize;
+    THashMap<TTxId, TIntrusivePtr<TKqpTransactionContext>, THash<NKikimr::NKqp::TTxId>> Active;
     std::deque<TIntrusivePtr<TKqpTransactionContext>> ToBeAborted;
+
+    auto FindOldestTransaction() {
+        if (Active.empty()) {
+            return std::end(Active);
+        }
+        auto oldest = std::begin(Active);
+        for (auto it = std::next(oldest); it != std::end(Active); ++it) {
+            if (oldest->second->LastAccessTime > it->second->LastAccessTime) {
+                oldest = it;
+            }
+        }
+        return oldest;
+    }
+
 public:
     ui64 EvictedTx = 0;
     TDuration IdleTimeout;
 
     TTransactionsCache(size_t size, TDuration idleTimeout)
-        : Active(size)
+        : MaxActiveSize(size)
         , IdleTimeout(idleTimeout)
-    {}
-
-    size_t Size() {
-        return Active.Size();
+    {
+        Active.reserve(MaxActiveSize);
     }
 
-    size_t MaxSize() {
-        return Active.GetMaxSize();
+    size_t Size() const {
+        return Active.size();
+    }
+
+    size_t MaxSize() const {
+        return MaxActiveSize;
     }
 
     TIntrusivePtr<TKqpTransactionContext> Find(const TTxId& id) {
-        if (auto it = Active.Find(id); it != Active.End()) {
-            it.Value()->Touch();
-            return *it;
+        auto it = Active.find(id);
+        if (it != std::end(Active)) {
+            it->second->Touch();
+            return it->second;
         } else {
-            return {};
+            return nullptr;
         }
     }
 
-    TIntrusivePtr<TKqpTransactionContext> ReleaseTransaction(const TTxId& txId) {
-        if (auto it = Active.FindWithoutPromote(txId); it != Active.End()) {
-            auto ret = std::move(it.Value());
-            Active.Erase(it);
-            return ret;
+    TIntrusivePtr<TKqpTransactionContext> ReleaseTransaction(const TTxId& id) {
+        const auto it = Active.find(id);
+        if (it != std::end(Active)) {
+            auto result = std::move(it->second);
+            Active.erase(it);
+            return result;
+        } else {
+            return nullptr;
         }
-        return {};
     }
 
     void AddToBeAborted(TIntrusivePtr<TKqpTransactionContext> ctx) {
@@ -362,20 +393,20 @@ public:
     }
 
     bool RemoveOldTransactions() {
-        if (Active.Size() < Active.GetMaxSize()) {
+        if (Active.size() < MaxActiveSize) {
+            return true;
+        }
+
+        auto oldestIt = FindOldestTransaction();
+        auto currentIdle = TInstant::Now() - oldestIt->second->LastAccessTime;
+        if (currentIdle >= IdleTimeout) {
+            oldestIt->second->Invalidate();
+            ToBeAborted.emplace_back(std::move(oldestIt->second));
+            Active.erase(oldestIt);
+            ++EvictedTx;
             return true;
         } else {
-            auto it = Active.FindOldest();
-            auto currentIdle = TInstant::Now() - it.Value()->LastAccessTime;
-            if (currentIdle >= IdleTimeout) {
-                it.Value()->Invalidate();
-                ToBeAborted.emplace_back(std::move(it.Value()));
-                Active.Erase(it);
-                ++EvictedTx;
-                return true;
-            } else {
-                return false;
-            }
+            return false;
         }
     }
 
@@ -383,15 +414,15 @@ public:
         if (!RemoveOldTransactions()) {
             return false;
         }
-        return Active.Insert(std::make_pair(txId, txCtx));
+        return Active.emplace(txId, txCtx).second;
     }
 
     void FinalCleanup() {
-        for (auto it = Active.Begin(); it != Active.End(); ++it) {
-            it.Value()->Invalidate();
-            ToBeAborted.emplace_back(std::move(it.Value()));
+        for (auto& item : Active) {
+            item.second->Invalidate();
+            ToBeAborted.emplace_back(std::move(item.second));
         }
-        Active.Clear();
+        Active.clear();
     }
 
     size_t ToBeAbortedSize() {
@@ -409,13 +440,9 @@ std::pair<bool, std::vector<NYql::TIssue>> MergeLocks(const NKikimrMiniKQL::TTyp
 bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfiguration& config, bool rollbackTx,
     bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery);
 
-bool HasOlapTableInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
+bool HasOlapTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
+bool HasOlapTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
+bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
+bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 
 }  // namespace NKikimr::NKqp
-
-template<>
-struct THash<NKikimr::NKqp::TTxId> {
-    inline size_t operator()(const NKikimr::NKqp::TTxId& id) const noexcept {
-        return THash<NKikimr::TULID>()(id.Id);
-    }
-};

@@ -1057,6 +1057,24 @@ void RegisterDqYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler)
             return TRuntimeNode();
         });
 
+    compiler.OverrideCallable(TDqReadBlockWideWrap::CallableName(),
+        [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
+            const auto wrapper = TDqReadWrapBase(&node);
+            if (wrapper.Input().Maybe<TYtReadTable>().IsValid()) {
+                auto ytRead = wrapper.Input().Cast<TYtReadTable>();
+                auto cluster = TString{ytRead.DataSource().Cluster().Value()};
+                const auto outputType = NCommon::BuildType(wrapper.Ref(),
+                    *ytRead.Input().Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[0]->Cast<TListExprType>()->GetItemType(), ctx.ProgramBuilder);
+
+                auto values = BuildTableContentCall("YtTableInputFile", outputType, cluster,
+                    ytRead.Input().Ref(), Nothing(), ctx, false, THashSet<TString>{"num", "index"});
+                values = ApplyPathRangesAndSampling(values, outputType, ytRead.Input().Ref(), ctx);
+                return ctx.ProgramBuilder.FromFlow(ctx.ProgramBuilder.WideToBlocks(ExpandFlow(ctx.ProgramBuilder.ToFlow(values), ctx)));
+            }
+
+            return TRuntimeNode();
+        });
+
     compiler.OverrideCallable(TYtDqWideWrite::CallableName(),
         [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
             const auto wideWrite = TYtDqWideWrite(&node);

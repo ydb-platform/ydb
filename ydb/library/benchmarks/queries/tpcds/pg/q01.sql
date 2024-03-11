@@ -18,7 +18,7 @@ where ctr1.ctr_total_return > (select avg(ctr_total_return)*1.2::numeric
 from customer_total_return ctr2
 where ctr1.ctr_store_sk = ctr2.ctr_store_sk)
 and s_store_sk = ctr1.ctr_store_sk
-and s_state = 'TN'
+and s_state = 'NM'
 and ctr1.ctr_customer_sk = c_customer_sk
 order by c_customer_id
 limit 100;

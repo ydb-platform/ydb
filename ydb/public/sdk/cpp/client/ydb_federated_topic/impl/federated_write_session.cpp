@@ -37,6 +37,7 @@ TFederatedWriteSession::TFederatedWriteSession(const TFederatedWriteSessionSetti
 
 void TFederatedWriteSession::Start() {
     // TODO validate settings?
+    Settings.EventHandlers_.HandlersExecutor_->Start();
     with_lock(Lock) {
         ClientEventsQueue->PushEvent(NTopic::TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
         ClientHasToken = true;
@@ -148,7 +149,7 @@ std::shared_ptr<TDbInfo> TFederatedWriteSession::SelectDatabaseImpl() {
 
 void TFederatedWriteSession::OnFederatedStateUpdateImpl() {
     if (!FederationState->Status.IsSuccess()) {
-        CloseImpl(FederationState->Status.GetStatus(), NYql::TIssues{});
+        CloseImpl(FederationState->Status.GetStatus(), NYql::TIssues(FederationState->Status.GetIssues()));
         return;
     }
 

@@ -4,11 +4,6 @@
 --
 SET DATESTYLE = 'ISO';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DATESTYLE
-    	--
-	^
 <sql-statement>
 SET IntervalStyle to postgres;
 </sql-statement>
@@ -286,12 +281,7 @@ COPY INTERVAL_MULDIV_TBL FROM STDIN;
 999 mon 999 days
 \.
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:1: Error: ERROR:  syntax error at or near "41"
-
-    	41 mon 12 days 360:00
-	^
+Metacommand \. is not supported
 <sql-statement>
 SELECT span * 0.3 AS product
 FROM INTERVAL_MULDIV_TBL;
@@ -314,11 +304,6 @@ DROP TABLE INTERVAL_MULDIV_TBL;
 <sql-statement>
 SET DATESTYLE = 'postgres';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DATESTYLE
-    	SET DATESTYLE = 'postgres';
-	^
 <sql-statement>
 SET IntervalStyle to postgres_verbose;
 </sql-statement>
@@ -366,11 +351,6 @@ SELECT justify_interval(interval '1 month -1 hour') as "1 month -1 hour";
 -- test fractional second input, and detection of duplicate units
 SET DATESTYLE = 'ISO';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DATESTYLE
-    	-- test fractional second input, and detection of duplicate units
-	^
 <sql-statement>
 SET IntervalStyle TO postgres;
 </sql-statement>

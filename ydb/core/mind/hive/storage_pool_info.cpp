@@ -22,11 +22,11 @@ TStorageGroupInfo& TStoragePoolInfo::GetStorageGroup(TStorageGroupId groupId) {
 }
 
 bool TStoragePoolInfo::AcquireAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel, TStorageGroupId groupId) {
-    return GetStorageGroup(groupId).AcquireAllocationUnit(tablet, channel);
+    return GetStorageGroup(groupId).AcquireAllocationUnit(tablet->GetChannel(channel));
 }
 
 bool TStoragePoolInfo::ReleaseAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel, TStorageGroupId groupId) {
-    return GetStorageGroup(groupId).ReleaseAllocationUnit(tablet, channel);
+    return GetStorageGroup(groupId).ReleaseAllocationUnit(tablet->GetChannel(channel));
 }
 
 void TStoragePoolInfo::UpdateStorageGroup(TStorageGroupId groupId, const TEvControllerSelectGroupsResult::TGroupParameters& groupParameters) {
@@ -180,6 +180,28 @@ bool TStoragePoolInfo::AddTabletToWait(TTabletId tabletId) {
 
 TVector<TTabletId> TStoragePoolInfo::PullWaitingTablets() {
     return std::move(TabletsWaiting);
+}
+
+TStoragePoolInfo::TStats TStoragePoolInfo::GetStats() const {
+    TStoragePoolInfo::TStats stats = {};
+    if (Groups.empty()) {
+        return stats;
+    }
+    using TValue = decltype(Groups)::value_type;
+    auto [minIt, maxIt] = std::minmax_element(Groups.begin(), Groups.end(), [](const TValue& lhs, const TValue& rhs) {
+        return lhs.second.GetUsage() < rhs.second.GetUsage();
+    });
+    stats.MinUsage = minIt->second.GetUsage();
+    stats.MaxUsage = maxIt->second.GetUsage();
+    stats.MinUsageGroupId = minIt->first;
+    stats.MaxUsageGroupId = maxIt->first;
+    if (stats.MaxUsage > 0) {
+        double minUsageToBalance = Settings->GetMinGroupUsageToBalance();
+        double minUsage = std::max(stats.MinUsage, minUsageToBalance);
+        double maxUsage = std::max(stats.MaxUsage, minUsageToBalance);
+        stats.Scatter = (maxUsage - minUsage) / maxUsage;
+    }
+    return stats;
 }
 
 } // NHive

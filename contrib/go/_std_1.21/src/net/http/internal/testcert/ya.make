@@ -1,7 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    testcert.go
-)
-
+IF (TRUE)
+    SRCS(
+		testcert.go
+    )
+ENDIF()
 END()

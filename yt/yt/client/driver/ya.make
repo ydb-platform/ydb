@@ -22,6 +22,7 @@ SRCS(
     table_commands.cpp
     transaction_commands.cpp
     internal_commands.cpp
+    flow_commands.cpp
 )
 
 PEERDIR(

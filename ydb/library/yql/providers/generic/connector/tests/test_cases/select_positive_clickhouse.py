@@ -7,7 +7,6 @@ from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 impo
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
 import ydb.library.yql.providers.generic.connector.tests.utils.clickhouse as clickhouse
-from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     Schema,
     Column,
@@ -115,8 +114,10 @@ class Factory:
             ),
         )
 
+        test_case_name = 'primitive_types'
+
         tc = TestCase(
-            name='primitive_types_clickhouse',
+            name_=test_case_name,
             schema=schema,
             select_what=SelectWhat.asterisk(schema.columns),
             select_where=None,
@@ -201,7 +202,7 @@ class Factory:
                 ],
             ],
             data_source_kind=EDataSourceKind.CLICKHOUSE,
-            database=Database.make_for_data_source_kind(EDataSourceKind.CLICKHOUSE),
+            protocol=EProtocol.NATIVE,
             pragmas=dict(),
             check_output_schema=True,
         )
@@ -232,15 +233,17 @@ class Factory:
         # for the sake of CH output sorting
         data_in_nullable[1][0] = data_out_nullable[1][0] = True
 
+        test_case_name_nullable = 'primitive_types_nullable'
+
         tc_nullable = TestCase(
-            name='primitive_types_clickhouse_nullable',
+            name_=test_case_name_nullable,
             schema=schema_nullable,
             select_what=SelectWhat.asterisk(schema_nullable.columns),
             select_where=None,
             data_source_kind=EDataSourceKind.CLICKHOUSE,
-            database=Database.make_for_data_source_kind(EDataSourceKind.CLICKHOUSE),
             data_in=data_in_nullable,
             data_out_=data_out_nullable,
+            protocol=EProtocol.NATIVE,
             pragmas=dict(),
             check_output_schema=True,
         )
@@ -265,8 +268,10 @@ class Factory:
             )
         )
 
+        test_case_name = 'constant'
+
         tc = TestCase(
-            name='constant_clickhouse',
+            name_=test_case_name,
             schema=schema,
             select_what=SelectWhat(SelectWhat.Item(name='42', kind='expr')),
             select_where=None,
@@ -293,7 +298,7 @@ class Factory:
                 ],
             ],
             data_source_kind=EDataSourceKind.CLICKHOUSE,
-            database=Database.make_for_data_source_kind(EDataSourceKind.CLICKHOUSE),
+            protocol=EProtocol.NATIVE,
             pragmas=dict(),
         )
 
@@ -314,8 +319,10 @@ class Factory:
             )
         )
 
+        test_case_name = 'count'
+
         tc = TestCase(
-            name='count_clickhouse',
+            name_=test_case_name,
             schema=schema,
             select_what=SelectWhat(SelectWhat.Item(name='COUNT(*)', kind='expr')),
             select_where=None,
@@ -338,8 +345,8 @@ class Factory:
                     4,
                 ],
             ],
+            protocol=EProtocol.NATIVE,
             data_source_kind=EDataSourceKind.CLICKHOUSE,
-            database=Database.make_for_data_source_kind(EDataSourceKind.CLICKHOUSE),
             pragmas=dict(),
         )
 
@@ -381,18 +388,19 @@ class Factory:
         ]
 
         data_source_kind = EDataSourceKind.CLICKHOUSE
+        test_case_name = 'pushdown'
 
         return [
             TestCase(
-                name=f'pushdown_{EDataSourceKind.Name(data_source_kind)}',
+                name_=test_case_name,
                 data_in=data_in,
                 data_out_=data_out,
                 pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
                 select_what=SelectWhat(SelectWhat.Item(name='col_string')),
                 select_where=SelectWhere('col_int32 = 1'),
                 data_source_kind=data_source_kind,
+                protocol=EProtocol.NATIVE,
                 schema=schema,
-                database=Database.make_for_data_source_kind(data_source_kind),
             )
         ]
 
@@ -412,7 +420,6 @@ class Factory:
         for base_tc in base_test_cases:
             for protocol in protocols:
                 tc = replace(base_tc)
-                tc.name += f'_{EProtocol.Name(protocol)}'
                 tc.protocol = protocol
                 test_cases.append(tc)
         return test_cases

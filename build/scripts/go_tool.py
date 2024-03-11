@@ -26,6 +26,7 @@ vet_report_ext = '.vet.txt'
 FIXED_CGO1_SUFFIX = '.fixed.cgo1.go'
 
 COMPILE_OPTIMIZATION_FLAGS = ('-N',)
+IGNORED_FLAGS = ['-fprofile-instr-generate', '-fcoverage-mapping']
 
 
 def get_trimpath_args(args):
@@ -117,7 +118,8 @@ def preprocess_args(args):
     args.srcs = srcs
 
     if args.extldflags:
-        args.extldflags = pwa.ProcessWholeArchiveOption(args.targ_os).construct_cmd(args.extldflags)
+        tmp = [flag for flag in args.extldflags if flag not in IGNORED_FLAGS]
+        args.extldflags = pwa.ProcessWholeArchiveOption(args.targ_os).construct_cmd(tmp)
 
     classify_srcs(args.srcs, args)
 

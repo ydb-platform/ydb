@@ -17,3 +17,5 @@ TOptimizerStatistics& TOptimizerStatistics::operator+=(const TOptimizerStatistic
     Cost += other.Cost;
     return *this;
 }
+
+const TVector<TString>& TOptimizerStatistics::EmptyColumns = TVector<TString>();

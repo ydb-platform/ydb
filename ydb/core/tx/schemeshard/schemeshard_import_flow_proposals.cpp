@@ -25,7 +25,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     }
 
     auto& modifyScheme = *record.AddTransaction();
-    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
     modifyScheme.SetInternal(true);
 
     const TPath domainPath = TPath::Init(importInfo->DomainPathId, ss);
@@ -37,13 +37,49 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
 
     modifyScheme.SetWorkingDir(wdAndPath.first);
 
-    auto& tableDesc = *modifyScheme.MutableCreateTable();
+    auto* indexedTable = modifyScheme.MutableCreateIndexedTable();
+    auto& tableDesc = *(indexedTable->MutableTableDescription());
     tableDesc.SetName(wdAndPath.second);
 
     Y_ABORT_UNLESS(ss->TableProfilesLoaded);
     Ydb::StatusIds::StatusCode status;
-    if (!FillTableDescription(modifyScheme, item.Scheme, ss->TableProfiles, status, error)) {
+    if (!FillTableDescription(modifyScheme, item.Scheme, ss->TableProfiles, status, error, true)) {
         return nullptr;
+    }
+
+    for(const auto& column: item.Scheme.columns()) {
+        switch (column.default_value_case()) {
+            case Ydb::Table::ColumnMeta::kFromSequence: {
+                const auto& fromSequence = column.from_sequence();
+
+                auto seqDesc = indexedTable->MutableSequenceDescription()->Add();
+                seqDesc->SetName(fromSequence.name());
+                if (fromSequence.has_min_value()) {
+                    seqDesc->SetMinValue(fromSequence.min_value());
+                }
+                if (fromSequence.has_max_value()) {
+                    seqDesc->SetMaxValue(fromSequence.max_value());
+                }
+                if (fromSequence.has_start_value()) {
+                    seqDesc->SetStartValue(fromSequence.start_value());
+                }
+                if (fromSequence.has_cache()) {
+                    seqDesc->SetCache(fromSequence.cache());
+                }
+                if (fromSequence.has_increment()) {
+                    seqDesc->SetIncrement(fromSequence.increment());
+                }
+                if (fromSequence.has_cycle()) {
+                    seqDesc->SetCycle(fromSequence.cycle());
+                }
+
+                break;
+            }
+            case Ydb::Table::ColumnMeta::kFromLiteral: {
+                break;
+            }
+            default: break;
+        }
     }
 
     return propose;
@@ -126,6 +162,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
             restoreSettings.SetAccessKey(importInfo->Settings.access_key());
             restoreSettings.SetSecretKey(importInfo->Settings.secret_key());
             restoreSettings.SetObjectKeyPattern(importInfo->Settings.items(itemIdx).source_prefix());
+            restoreSettings.SetUseVirtualAddressing(!importInfo->Settings.disable_virtual_addressing());
 
             switch (importInfo->Settings.scheme()) {
             case Ydb::Import::ImportFromS3Settings::HTTP:

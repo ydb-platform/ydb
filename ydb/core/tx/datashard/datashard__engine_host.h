@@ -2,6 +2,8 @@
 
 #include "defs.h"
 #include "change_collector.h"
+#include "key_validator.h"
+#include "operation.h"
 
 #include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
@@ -20,6 +22,7 @@ using NTabletFlatExecutor::TTransactionContext;
 namespace NDataShard {
 
 class TDataShard;
+class TDataShardUserDb;
 
 TIntrusivePtr<TThrRefBase> InitDataShardSysTables(TDataShard* self);
 
@@ -40,43 +43,35 @@ public:
         ui64 TotalKeysSize = 0;
     };
 
-    struct TColumnWriteMeta {
-        NTable::TColumn Column;
-        ui32 MaxValueSizeBytes = 0;
-    };
-
-    TEngineBay(TDataShard * self, TTransactionContext& txc, const TActorContext& ctx,
-               std::pair<ui64, ui64> stepTxId);
+    TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId);
 
     virtual ~TEngineBay();
 
     const NMiniKQL::IEngineFlat * GetEngine() const { return Engine.Get(); }
     NMiniKQL::IEngineFlat * GetEngine();
     NMiniKQL::TEngineHost * GetEngineHost() { return EngineHost.Get(); }
+
+    TDataShardUserDb& GetUserDb();
+    const TDataShardUserDb& GetUserDb() const;
+
     void SetLockTxId(ui64 lockTxId, ui32 lockNodeId);
     void SetUseLlvmRuntime(bool llvmRuntime) { EngineSettings->LlvmRuntime = llvmRuntime; }
 
     EResult Validate() {
-        if (Info.Loaded)
+        if (KeyValidator.GetInfo().Loaded)
             return EResult::Ok;
         Y_ABORT_UNLESS(Engine);
-        return Engine->Validate(Info);
+        return Engine->Validate(KeyValidator.GetInfo());
     }
 
     EResult ReValidateKeys() {
-        Y_ABORT_UNLESS(Info.Loaded);
+        Y_ABORT_UNLESS(KeyValidator.GetInfo().Loaded);
         Y_ABORT_UNLESS(Engine);
-        return Engine->ValidateKeys(Info);
+        return Engine->ValidateKeys(KeyValidator.GetInfo());
     }
 
-    void AddReadRange(const TTableId& tableId, const TVector<NTable::TColumn>& columns, const TTableRange& range,
-        const TVector<NScheme::TTypeInfo>& keyTypes, ui64 itemsLimit = 0, bool reverse = false);
-
-    void AddWriteRange(const TTableId& tableId, const TTableRange& range, const TVector<NScheme::TTypeInfo>& keyTypes,
-        const TVector<TColumnWriteMeta>& columns, bool isPureEraseOp);
-
     void MarkTxLoaded() {
-        Info.Loaded = true;
+        KeyValidator.GetInfo().SetLoaded();
     }
 
     /// @note it expects TValidationInfo keys are materialized outsize of engine's allocs
@@ -96,10 +91,10 @@ public:
         EngineHost.Reset();
     }
 
-    ui64 GetStep() const { return StepTxId.first; }
-    ui64 GetTxId() const { return StepTxId.second; }
-
-    const TValidationInfo& TxInfo() const { return Info; }
+    TKeyValidator& GetKeyValidator() { return KeyValidator; }
+    const TKeyValidator& GetKeyValidator() const { return KeyValidator; }
+    TValidationInfo& TxInfo() { return KeyValidator.GetInfo(); }
+    const TValidationInfo& TxInfo() const { return KeyValidator.GetInfo(); }
     TEngineBay::TSizes CalcSizes(bool needsTotalKeysSize) const;
 
     void SetWriteVersion(TRowVersion writeVersion);
@@ -107,8 +102,6 @@ public:
     void SetVolatileTxId(ui64 txId);
     void SetIsImmediateTx();
     void SetIsRepeatableSnapshot();
-
-    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion);
 
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const;
     void ResetCollectedChanges();
@@ -125,14 +118,12 @@ public:
     NMiniKQL::TKqpDatashardComputeContext& GetKqpComputeCtx();
 
 private:
-    std::pair<ui64, ui64> StepTxId;
+    TStepOrder StepTxId;
     THolder<NMiniKQL::TEngineHost> EngineHost;
     THolder<NMiniKQL::TEngineFlatSettings> EngineSettings;
     THolder<NMiniKQL::IEngineFlat> Engine;
-    TValidationInfo Info;
+    TKeyValidator KeyValidator;
     TEngineHostCounters EngineHostCounters;
-    ui64 LockTxId;
-    ui32 LockNodeId;
     NYql::NDq::TLogFunc KqpLogFunc;
     THolder<NUdf::IApplyContext> KqpApplyCtx;
     THolder<NMiniKQL::TKqpDatashardComputeContext> ComputeCtx;

@@ -91,7 +91,6 @@ PEERDIR(
     ydb/core/graph/api
     ydb/core/protos
     ydb/core/protos/out
-    ydb/core/scheme
     ydb/library/aclib
     ydb/library/login
     ydb/library/pdisk_io

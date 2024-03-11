@@ -111,7 +111,8 @@ IConnectionReaderPtr CreateInputConnectionFromPath(
 IConnectionWriterPtr CreateOutputConnectionFromPath(
     const TString& pipePath,
     const NConcurrency::IPollerPtr& poller,
-    const TRefCountedPtr& pipeHolder);
+    const TRefCountedPtr& pipeHolder,
+    std::optional<int> capacity = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

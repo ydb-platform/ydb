@@ -13,6 +13,7 @@ public:
     NActors::TPollerToken::TPtr PollerToken;
     THashSet<TActorId> Connections;
     TDeque<THttpIncomingRequestPtr> RecycledRequests;
+    ui32 MaxRecycledRequestsCount = 0;
     std::shared_ptr<TPrivateEndpointInfo> Endpoint;
 
     TAcceptorActor(const TActorId& owner, const TActorId& poller)
@@ -43,6 +44,7 @@ protected:
     void HandleInit(TEvHttpProxy::TEvAddListeningPort::TPtr event, const NActors::TActorContext& ctx) {
         TString address = event->Get()->Address;
         ui16 port = event->Get()->Port;
+        MaxRecycledRequestsCount = event->Get()->MaxRecycledRequestsCount;
         Socket = new TSocketDescriptor(SocketType::GuessAddressFamily(address));
         // for unit tests :(
         SetSockOpt(Socket->Socket, SOL_SOCKET, SO_REUSEADDR, (int)true);
@@ -141,6 +143,9 @@ protected:
     void Handle(TEvHttpProxy::TEvHttpConnectionClosed::TPtr event, const NActors::TActorContext&) {
         Connections.erase(event->Get()->ConnectionID);
         for (auto& req : event->Get()->RecycledRequests) {
+            if (RecycledRequests.size() >= MaxRecycledRequestsCount) {
+                break;
+            }
             req->Clear();
             RecycledRequests.push_back(std::move(req));
         }

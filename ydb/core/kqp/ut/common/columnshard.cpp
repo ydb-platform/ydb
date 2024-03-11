@@ -1,20 +1,43 @@
 #include "columnshard.h"
-#include <ydb/core/formats/arrow/serializer/full.h>
 #include <ydb/core/testlib/cs_helper.h>
 
 namespace NKikimr {
 namespace NKqp {
+
+    TString GetConfigProtoWithName(const TString & tierName) {
+        return TStringBuilder() << "Name : \"" << tierName << "\"\n" <<
+        R"(
+            ObjectStorage : {
+                Endpoint: "fake"
+                Bucket: "fake"
+                SecretableAccessKey: {
+                    Value: {
+                        Data: "secretAccessKey"
+                    }
+                }
+                SecretableSecretKey: {
+                    Value: {
+                        Data: "secretSecretKey"
+                    }
+                }
+            }
+        )";
+    }
+
     using namespace NYdb;
 
     TTestHelper::TTestHelper(const TKikimrSettings& settings)
         : Kikimr(settings)
         , TableClient(Kikimr.GetTableClient())
-        , LongTxClient(Kikimr.GetDriver())
         , Session(TableClient.CreateSession().GetValueSync().GetSession())
     {}
 
     NKikimr::NKqp::TKikimrRunner& TTestHelper::GetKikimr() {
         return Kikimr;
+    }
+
+    TTestActorRuntime& TTestHelper::GetRuntime() {
+        return *Kikimr.GetTestServer().GetRuntime();
     }
 
     NYdb::NTable::TSession& TTestHelper::GetSession() {
@@ -27,24 +50,36 @@ namespace NKqp {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    void TTestHelper::InsertData(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const std::function<void()> onBeforeCommit /*= {}*/, const EStatus opStatus /*= EStatus::SUCCESS*/) {
-        NLongTx::TLongTxBeginResult resBeginTx = LongTxClient.BeginWriteTx().GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resBeginTx.Status().GetStatus(), EStatus::SUCCESS, resBeginTx.Status().GetIssues().ToString());
+    void TTestHelper::CreateTier(const TString& tierName) {
+        auto result = Session.ExecuteSchemeQuery("CREATE OBJECT " + tierName + " (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName(tierName) + "`").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
 
-        auto txId = resBeginTx.GetResult().tx_id();
-        auto batch = updates.BuildArrow();
-        TString data = NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(batch);
+    TString TTestHelper::CreateTieringRule(const TString& tierName, const TString& columnName) {
+        const TString ruleName = tierName + "_" + columnName;
+        const TString configTieringStr = TStringBuilder() <<  R"({
+            "rules" : [
+                {
+                    "tierName" : ")" << tierName << R"(",
+                    "durationForEvict" : "10d"
+                }
+            ]
+        })";
+        auto result = Session.ExecuteSchemeQuery("CREATE OBJECT IF NOT EXISTS " + ruleName + " (TYPE TIERING_RULE) WITH (defaultColumn = " + columnName + ", description = `" + configTieringStr + "`)").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        return ruleName;
+    }
 
-        NLongTx::TLongTxWriteResult resWrite =
-            LongTxClient.Write(txId, table.GetName(), txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resWrite.Status().GetStatus(), opStatus, resWrite.Status().GetIssues().ToString());
+    void TTestHelper::SetTiering(const TString& tableName, const TString& ruleName) {
+        auto alterQuery = TStringBuilder() << "ALTER TABLE `" << tableName <<  "` SET (TIERING = '" << ruleName << "')";
+        auto result = Session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
 
-        if (onBeforeCommit) {
-            onBeforeCommit();
-        }
-
-        NLongTx::TLongTxCommitResult resCommitTx = LongTxClient.CommitTx(txId).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
+    void TTestHelper::ResetTiering(const TString& tableName) {
+        auto alterQuery = TStringBuilder() << "ALTER TABLE `" << tableName <<  "` RESET (TIERING)";
+        auto result = Session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     void TTestHelper::BulkUpsert(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus /*= Ydb::StatusIds::SUCCESS*/) {
@@ -80,7 +115,8 @@ namespace NKqp {
             }
         }
         for (auto shard : shards) {
-            RebootTablet(*runtime, shard, sender);
+            Kikimr.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+                    new TEvents::TEvPoisonPill(), shard, false));
         }
     }
 

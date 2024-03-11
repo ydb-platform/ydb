@@ -9,6 +9,8 @@
 #include <ydb/library/yql/public/udf/udf_terminator.h>
 
 #ifndef MKQL_DISABLE_CODEGEN
+Y_PRAGMA_DIAGNOSTIC_PUSH
+Y_PRAGMA("GCC diagnostic ignored \"-Wreturn-type-c-linkage\"")
 extern "C" NKikimr::NUdf::TUnboxedValuePod DataFromString(const NKikimr::NUdf::TUnboxedValuePod data, NKikimr::NUdf::EDataSlot slot) {
     return NKikimr::NMiniKQL::ValueFromString(slot, data.AsStringRef());
 }
@@ -16,6 +18,7 @@ extern "C" NKikimr::NUdf::TUnboxedValuePod DataFromString(const NKikimr::NUdf::T
 extern "C" NYql::NDecimal::TInt128 DecimalFromString(const NKikimr::NUdf::TUnboxedValuePod decimal, ui8 precision, ui8 scale) {
     return NYql::NDecimal::FromStringEx(decimal.AsStringRef(), precision, scale);
 }
+Y_PRAGMA_DIAGNOSTIC_POP
 #endif
 
 namespace NKikimr {

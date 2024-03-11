@@ -470,7 +470,7 @@ int TClickBenchCommandClean::Run(TConfig& config) {
     static const char DropDdlTmpl[] = "DROP TABLE `%s`;";
     char dropDdl[sizeof(DropDdlTmpl) + 8192*3]; // 32*256 for DbPath
     TString fullPath = FullTablePath(config.Database, Table);
-    int res = std::sprintf(dropDdl, DropDdlTmpl, fullPath.c_str());
+    int res = std::snprintf(dropDdl, sizeof(dropDdl), DropDdlTmpl, fullPath.c_str());
     if (res < 0) {
         Cerr << "Failed to generate DROP DDL query for `" << fullPath << "` table." << Endl;
         return -1;
@@ -575,23 +575,23 @@ void TClickBenchCommandRun::Config(TConfig& config) {
 
     config.Opts->MutuallyExclusiveOpt(includeOpt, excludeOpt);
 
-    config.Opts->AddLongOption("executor", "Query executor type."
+    config.Opts->AddLongOption("executer", "Query executer type."
             " Options: scan, generic\n"
             "scan - use scan queries;\n"
             "generic - use generic queries.")
-        .DefaultValue("scan").StoreResult(&QueryExecutorType);
+        .DefaultValue("scan").StoreResult(&QueryExecuterType);
 };
 
 
 int TClickBenchCommandRun::Run(TConfig& config) {
-    if (QueryExecutorType == "scan") {
+    if (QueryExecuterType == "scan") {
         const bool okay = RunBench<NYdb::NTable::TTableClient>(config);
         return !okay;
-    } else if (QueryExecutorType == "generic") {
+    } else if (QueryExecuterType == "generic") {
         const bool okay = RunBench<NYdb::NQuery::TQueryClient>(config);
         return !okay;
     } else {
-        ythrow yexception() << "Incorrect executor type. Available options: \"scan\", \"generic\"." << Endl;
+        ythrow yexception() << "Incorrect executer type. Available options: \"scan\", \"generic\"." << Endl;
     }
 };
 

@@ -50,12 +50,13 @@
                                                 "Predicate": "Not Exist(item.qa.id) Or item.qa.id > 0"
                                             },
                                             {
+                                                "Condition": "a_id = id",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 14
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 12
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"

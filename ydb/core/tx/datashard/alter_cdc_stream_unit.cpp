@@ -88,8 +88,8 @@ public:
         return EExecutionStatus::DelayCompleteNoMoreRestarts;
     }
 
-    void Complete(TOperation::TPtr, const TActorContext& ctx) override {
-        DataShard.EmitHeartbeats(ctx);
+    void Complete(TOperation::TPtr, const TActorContext&) override {
+        DataShard.EmitHeartbeats();
     }
 };
 

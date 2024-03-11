@@ -30,6 +30,23 @@ public:
         Y_ABORT_UNLESS(RawBytes);
     }
 
+    TString DebugString() const {
+        return TStringBuilder() << "{"
+            << "serialized_bytes=" << SerializedBytes << ";"
+            << "records=" << RecordsCount << ";"
+            << "raw_bytes=" << RawBytes << ";"
+            << "}";
+    }
+
+    double GetSerializedBytesPerRecord() const {
+        AFL_VERIFY(RecordsCount);
+        return 1.0 * SerializedBytes / RecordsCount;
+    }
+    double GetRawBytesPerRecord() const {
+        AFL_VERIFY(RecordsCount);
+        return 1.0 * RawBytes / RecordsCount;
+    }
+
     ui64 GetSerializedBytes() const{
         return SerializedBytes;
     }
@@ -54,28 +71,51 @@ public:
         Y_ABORT_UNLESS(RawBytes >= stat.RawBytes);
         RawBytes -= stat.RawBytes;
     }
+};
 
-    double GetPackedRecordSize() const {
-        return (double)SerializedBytes / RecordsCount;
+class TBatchSerializationStat {
+protected:
+    double SerializedBytesPerRecord = 0;
+    double RawBytesPerRecord = 0;
+public:
+    TBatchSerializationStat() = default;
+    TBatchSerializationStat(const ui64 bytes, const ui64 recordsCount, const ui64 rawBytes) {
+        Y_ABORT_UNLESS(recordsCount);
+        SerializedBytesPerRecord = 1.0 * bytes / recordsCount;
+        RawBytesPerRecord = 1.0 * rawBytes / recordsCount;
+    }
+
+    TString DebugString() const {
+        return TStringBuilder() << "{sbpr=" << SerializedBytesPerRecord << ";rbpr=" << RawBytesPerRecord << "}";
+    }
+
+    TBatchSerializationStat(const TSimpleSerializationStat& simple) {
+        SerializedBytesPerRecord = simple.GetSerializedBytesPerRecord();
+        RawBytesPerRecord = simple.GetRawBytesPerRecord();
+    }
+
+    void Merge(const TSimpleSerializationStat& item) {
+        SerializedBytesPerRecord += item.GetSerializedBytesPerRecord();
+        RawBytesPerRecord += item.GetRawBytesPerRecord();
     }
 
     std::optional<ui64> PredictOptimalPackRecordsCount(const ui64 recordsCount, const ui64 blobSize) const {
-        if (!RecordsCount) {
+        if (!SerializedBytesPerRecord) {
             return {};
         }
-        const ui64 fullSize = 1.0 * recordsCount / RecordsCount * SerializedBytes;
+        const ui64 fullSize = 1.0 * recordsCount * SerializedBytesPerRecord;
         if (fullSize < blobSize) {
             return recordsCount;
         } else {
-            return std::floor(1.0 * blobSize / SerializedBytes * RecordsCount);
+            return std::floor(1.0 * blobSize / SerializedBytesPerRecord);
         }
     }
 
     std::optional<ui64> PredictOptimalSplitFactor(const ui64 recordsCount, const ui64 blobSize) const {
-        if (!RecordsCount) {
+        if (!SerializedBytesPerRecord) {
             return {};
         }
-        const ui64 fullSize = 1.0 * recordsCount / RecordsCount * SerializedBytes;
+        const ui64 fullSize = 1.0 * recordsCount * SerializedBytesPerRecord;
         if (fullSize < blobSize) {
             return 1;
         } else {
@@ -84,27 +124,9 @@ public:
     }
 };
 
-class TBatchSerializationStat: public TSimpleSerializationStat {
-private:
-    using TBase = TSimpleSerializationStat;
-public:
-    using TBase::TBase;
-    TBatchSerializationStat(const TSimpleSerializationStat& item)
-        : TBase(item)
-    {
-
-    }
-
-    void Merge(const TSimpleSerializationStat& item) {
-        SerializedBytes += item.GetSerializedBytes();
-        RawBytes += item.GetRawBytes();
-        AFL_VERIFY(RecordsCount == item.GetRecordsCount())("self_count", RecordsCount)("new_count", item.GetRecordsCount());
-    }
-
-};
-
 class TColumnSerializationStat: public TSimpleSerializationStat {
 private:
+    using TBase = TSimpleSerializationStat;
     YDB_READONLY(ui32, ColumnId, 0);
     YDB_READONLY_DEF(std::string, ColumnName);
 public:
@@ -114,10 +136,18 @@ public:
 
     }
 
+    double GetPackedRecordSize() const {
+        return (double)SerializedBytes / RecordsCount;
+    }
+
     TColumnSerializationStat RecalcForRecordsCount(const ui64 recordsCount) const {
         TColumnSerializationStat result(ColumnId, ColumnName);
         result.Merge(TSimpleSerializationStat(SerializedBytes / RecordsCount * recordsCount, recordsCount, RawBytes / RecordsCount * recordsCount));
         return result;
+    }
+
+    TString DebugString() const {
+        return TStringBuilder() << "{id=" << ColumnId << ";name=" << ColumnName << ";details=" << TBase::DebugString() << "}";
     }
 
     void Merge(const TSimpleSerializationStat& item) {
@@ -133,6 +163,16 @@ private:
     std::map<ui32, TColumnSerializationStat*> StatsByColumnId;
     std::map<std::string, TColumnSerializationStat*> StatsByColumnName;
 public:
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "{columns=";
+        for (auto&& i : ColumnStat) {
+            sb << i.DebugString();
+        }
+        sb << ";}";
+        return sb;
+    }
+
     void Merge(const TSerializationStats& item) {
         for (auto&& i : item.ColumnStat) {
             AddStat(i);

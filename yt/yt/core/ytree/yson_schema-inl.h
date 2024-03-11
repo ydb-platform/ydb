@@ -21,10 +21,7 @@ template <class T>
 concept CIsEnum = TEnumTraits<T>::IsEnum;
 
 template <class T>
-concept CIsYsonStruct = std::is_base_of_v<TYsonStructBase, T>;
-
-template <class T>
-concept CIsProtobufMessage = std::is_base_of_v<google::protobuf::Message, std::decay_t<T>>;
+concept CIsProtobufMessage = std::derived_from<std::decay_t<T>, google::protobuf::Message>;
 
 template <class T>
 concept CIsNullable = std::is_same_v<T, std::unique_ptr<typename T::value_type>> ||
@@ -92,7 +89,7 @@ void WriteSchema(const T&, NYson::IYsonConsumer* consumer)
         .EndMap();
 }
 
-template <CIsYsonStruct T>
+template <CYsonStructDerived T>
 void WriteSchema(const NYT::TIntrusivePtr<T>& value, NYson::IYsonConsumer* consumer)
 {
     BuildYsonFluently(consumer)
@@ -104,7 +101,7 @@ void WriteSchema(const NYT::TIntrusivePtr<T>& value, NYson::IYsonConsumer* consu
         .EndMap();
 }
 
-template <CIsYsonStruct T>
+template <CYsonStructDerived T>
 void WriteSchema(const T& value, NYson::IYsonConsumer* consumer)
 {
     return value.WriteSchema(consumer);

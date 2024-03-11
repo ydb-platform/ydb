@@ -78,7 +78,7 @@ auto GetChangeRecordsWithDetails(TTestActorRuntime& runtime, const TActorId& sen
     const auto details = GetChangeRecordDetails(runtime, sender, tabletId);
     UNIT_ASSERT_VALUES_EQUAL(records.size(), details.size());
 
-    THashMap<TPathId, TVector<TChangeRecord>> result;
+    THashMap<TPathId, TVector<NChangeExchange::IChangeRecord::TPtr>> result;
     for (size_t i = 0; i < records.size(); ++i) {
         const auto& record = records.at(i);
         const auto& detail = details.at(i);
@@ -87,7 +87,7 @@ auto GetChangeRecordsWithDetails(TTestActorRuntime& runtime, const TActorId& sen
         const auto& pathId = std::get<4>(record);
         auto it = result.find(pathId);
         if (it == result.end()) {
-            it = result.emplace(pathId, TVector<TChangeRecord>()).first;
+            it = result.emplace(pathId, TVector<NChangeExchange::IChangeRecord::TPtr>()).first;
         }
 
         it->second.push_back(
@@ -309,8 +309,8 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
 
             UNIT_ASSERT_VALUES_EQUAL(expected.size(), actual.size());
             for (size_t i = 0; i < expected.size(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecord::Parse(actual.at(i).GetBody(), tagToName));
-                UNIT_ASSERT_VALUES_EQUAL(actual.at(i).GetSchemaVersion(), entry.TableId.SchemaVersion);
+                UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecord::Parse(actual.at(i)->GetBody(), tagToName));
+                UNIT_ASSERT_VALUES_EQUAL(actual.at(i)->Get<TChangeRecord>()->GetSchemaVersion(), entry.TableId.SchemaVersion);
             }
         }
     }
@@ -710,8 +710,8 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
             UNIT_ASSERT_VALUES_EQUAL(expected.size(), actual.size());
             for (size_t i = 0; i < expected.size(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecord::Parse(actual.at(i).GetBody(), tagToName));
-                UNIT_ASSERT_VALUES_EQUAL(actual.at(i).GetSchemaVersion(), entry.TableId.SchemaVersion);
+                UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecord::Parse(actual.at(i)->GetBody(), tagToName));
+                UNIT_ASSERT_VALUES_EQUAL(actual.at(i)->Get<TChangeRecord>()->GetSchemaVersion(), entry.TableId.SchemaVersion);
             }
         }
     }
@@ -739,11 +739,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     TShardedTableOptions SimpleTable() {
-        return TShardedTableOptions()
-            .Columns({
-                {"key", "Uint32", true, false},
-                {"value", "Uint32", false, false},
-            });
+        return TShardedTableOptions();
     }
 
     TCdcStream KeysOnly() {
@@ -886,11 +882,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
     TShardedTableOptions TinyCacheTable() {
         return TShardedTableOptions()
-            .ExecutorCacheSize(1)
-            .Columns({
-                {"key", "Uint32", true, false},
-                {"value", "Uint32", false, false},
-            });
+            .ExecutorCacheSize(1);
     }
 
     Y_UNIT_TEST(PageFaults) {

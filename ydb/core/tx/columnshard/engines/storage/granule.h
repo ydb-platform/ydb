@@ -8,6 +8,7 @@
 namespace NKikimr::NOlap {
 
 class TGranulesStorage;
+class TColumnChunkLoadContext;
 
 class TDataClassSummary: public NColumnShard::TBaseGranuleDataClassSummary {
 private:
@@ -176,6 +177,12 @@ private:
     void OnAdditiveSummaryChange() const;
     YDB_READONLY(TMonotonic, LastCompactionInstant, TMonotonic::Zero());
 public:
+    void RefreshTiering(const std::optional<TTiering>& /*tiering*/) {
+    }
+
+    void StartActualizationIndex() {
+    }
+
     NJson::TJsonValue OptimizerSerializeToJson() const {
         return OptimizerPlanner->SerializeToJsonVisual();
     }
@@ -188,12 +195,22 @@ public:
         LastCompactionInstant = TMonotonic::Now();
     }
 
-    std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> self, const THashSet<TPortionAddress>& busyPortions) const {
-        return OptimizerPlanner->GetOptimizationTask(limits, self, busyPortions);
+    std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
+        return OptimizerPlanner->GetOptimizationTask(limits, self, locksManager);
     }
 
     const std::map<NArrow::TReplaceKey, THashMap<ui64, std::shared_ptr<TPortionInfo>>>& GroupOrderedPortionsByPK() const {
         return PortionsByPK;
+    }
+
+    std::map<ui32, std::shared_ptr<TPortionInfo>> GetPortionsOlderThenSnapshot(const TSnapshot& border) const {
+        std::map<ui32, std::shared_ptr<TPortionInfo>> result;
+        for (auto&& i : Portions) {
+            if (i.second->RecordSnapshotMin() <= border) {
+                result.emplace(i.first, i.second);
+            }
+        }
+        return result;
     }
 
     void OnAfterPortionsLoad() {
@@ -206,8 +223,7 @@ public:
     std::shared_ptr<NOlap::TSerializationStats> BuildSerializationStats(ISnapshotSchema::TPtr schema) const {
         auto result = std::make_shared<NOlap::TSerializationStats>();
         for (auto&& i : GetAdditiveSummary().GetCompacted().GetColumnStats()) {
-            auto field = schema->GetFieldByColumnId(i.first);
-            AFL_VERIFY(field)("column_id", i.first)("schema", schema->DebugString());
+            auto field = schema->GetFieldByColumnIdVerified(i.first);
             NOlap::TColumnSerializationStat columnInfo(i.first, field->name());
             columnInfo.Merge(i.second);
             result->AddStat(columnInfo);
@@ -258,10 +274,20 @@ public:
             ;
     }
 
-    void AddColumnRecord(const TIndexInfo& indexInfo, const TPortionInfo& portion, const TColumnRecord& rec, const NKikimrTxColumnShard::TIndexPortionMeta* portionMeta);
+    std::shared_ptr<TPortionInfo> UpsertPortionOnLoad(const TPortionInfo& portion);
+
+    void AddColumnRecordOnLoad(const TIndexInfo& indexInfo, const TPortionInfo& portion, const TColumnChunkLoadContext& rec, const NKikimrTxColumnShard::TIndexPortionMeta* portionMeta);
 
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;
+    }
+
+    std::vector<std::shared_ptr<TPortionInfo>> GetPortionsVector() const {
+        std::vector<std::shared_ptr<TPortionInfo>> result;
+        for (auto&& i : Portions) {
+            result.emplace_back(i.second);
+        }
+        return result;
     }
 
     ui64 GetPathId() const {

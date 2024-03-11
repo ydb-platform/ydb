@@ -2,9 +2,8 @@
 
 namespace NKikimr::NOlap {
 
-void TSplittedBlob::Take(const IPortionColumnChunk::TPtr& chunk) {
+void TSplittedBlob::Take(const std::shared_ptr<IPortionDataChunk>& chunk) {
     Chunks.emplace_back(chunk);
     Size += chunk->GetPackedSize();
 }
-
 }

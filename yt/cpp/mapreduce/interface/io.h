@@ -300,12 +300,6 @@ public:
         return Reader_ == it.Reader_;
     }
 
-    /// Inequality operator.
-    bool operator!=(const TTableReaderIterator& it) const
-    {
-        return Reader_ != it.Reader_;
-    }
-
     /// Dereference operator.
     TTableReader<T>& operator*()
     {

@@ -107,6 +107,42 @@ namespace NYql::NConnector::NTest {
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
+    void CreateYdbExternalDataSource(
+        const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr,
+        const TString& dataSourceName,
+        const TString& login,
+        const TString& password,
+        const TString& endpoint,
+        bool useTls,
+        const TString& databaseName)
+    {
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(
+            R"(
+            CREATE OBJECT {data_source_name}_password (TYPE SECRET) WITH (value={password});
+
+            CREATE EXTERNAL DATA SOURCE {data_source_name} WITH (
+                SOURCE_TYPE="{source_type}",
+                LOCATION="{endpoint}",
+                AUTH_METHOD="BASIC",
+                LOGIN="{login}",
+                DATABASE_NAME="{database}",
+                PASSWORD_SECRET_NAME="{data_source_name}_password",
+                USE_TLS="{use_tls}"
+            );
+        )",
+            "data_source_name"_a = dataSourceName,
+            "login"_a = login,
+            "password"_a = password,
+            "use_tls"_a = useTls ? "TRUE" : "FALSE",
+            "source_type"_a = ToString(NYql::EDatabaseType::Ydb),
+            "endpoint"_a = endpoint,
+            "database"_a = databaseName);
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
     std::shared_ptr<arrow::RecordBatch> MakeEmptyRecordBatch(size_t rowsCount) {
         return arrow::RecordBatch::Make(
             std::make_shared<arrow::Schema>(arrow::FieldVector()),

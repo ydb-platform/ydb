@@ -21,6 +21,9 @@ using namespace NNet;
 
 #ifndef _win_
 
+//! NB: You can't set size smaller than that of a page size
+constexpr int SmallPipeCapacity = 4096;
+
 TEST(TPipeIOHolder, CanInstantiate)
 {
     auto pipe = TPipeFactory().Create();
@@ -66,6 +69,23 @@ TBlob ReadAll(IConnectionReaderPtr reader, bool useWaitFor)
     return whole;
 }
 
+void WriteAll(IConnectionWriterPtr writer, const char* data, size_t size, size_t blockSize)
+{
+    while (size > 0) {
+        const size_t currentBlockSize = std::min(blockSize, size);
+        auto buffer = TSharedRef(data, currentBlockSize, nullptr);
+        auto error = WaitFor(writer->Write(buffer));
+        THROW_ERROR_EXCEPTION_IF_FAILED(error);
+        size -= currentBlockSize;
+        data += currentBlockSize;
+    }
+
+    {
+        auto error = WaitFor(writer->Close());
+        THROW_ERROR_EXCEPTION_IF_FAILED(error);
+    }
+}
+
 TEST(TAsyncWriterTest, AsyncCloseFail)
 {
     auto pipe = TPipeFactory().Create();
@@ -108,7 +128,7 @@ TEST(TAsyncWriterTest, WriteFailed)
     ::memset(buffer.Begin(), 'a', buffer.Size());
 
     auto asyncWriteResult = writer->Write(buffer);
-    reader->Abort();
+    YT_UNUSED_FUTURE(reader->Abort());
 
     EXPECT_FALSE(asyncWriteResult.Get().IsOK())
         << ToString(asyncWriteResult.Get());
@@ -148,6 +168,13 @@ protected:
 
     void TearDown() override
     { }
+
+    void SetUpWithCapacity(int capacity)
+    {
+        auto pipe = TNamedPipe::Create("./namedpipewcap", 0660, capacity);
+        Reader = pipe->CreateAsyncReader();
+        Writer = pipe->CreateAsyncWriter();
+    }
 
     IConnectionReaderPtr Reader;
     IConnectionWriterPtr Writer;
@@ -246,21 +273,74 @@ TEST_F(TNamedPipeReadWriteTest, ReadWrite)
     EXPECT_EQ(text, TString(textFromPipe.Begin(), textFromPipe.End()));
 }
 
-void WriteAll(IConnectionWriterPtr writer, const char* data, size_t size, size_t blockSize)
+TEST_F(TNamedPipeReadWriteTest, CapacityJustWorks)
 {
-    while (size > 0) {
-        const size_t currentBlockSize = std::min(blockSize, size);
-        auto buffer = TSharedRef(data, currentBlockSize, nullptr);
-        auto error = WaitFor(writer->Write(buffer));
-        THROW_ERROR_EXCEPTION_IF_FAILED(error);
-        size -= currentBlockSize;
-        data += currentBlockSize;
-    }
+    SetUpWithCapacity(SmallPipeCapacity);
 
-    {
-        auto error = WaitFor(writer->Close());
-        THROW_ERROR_EXCEPTION_IF_FAILED(error);
-    }
+    TString text(5, 'a');
+    text.push_back('\n');
+    auto writeBuffer = TSharedRef::FromString(text);
+
+    auto writeFuture = Writer->Write(writeBuffer);
+    EXPECT_TRUE(writeFuture.Get().IsOK());
+
+    auto readBuffer = TSharedMutableRef::Allocate(5000, {.InitializeStorage = false});
+    auto readResult = Reader->Read(readBuffer).Get();
+
+    EXPECT_EQ(text, TString(readBuffer.Begin(), readResult.Value()));
+}
+
+TEST_F(TNamedPipeReadWriteTest, CapacityOverflow)
+{
+    SetUpWithCapacity(SmallPipeCapacity);
+    auto readerQueue = New<NConcurrency::TActionQueue>("Reader");
+
+    TString text(5000, 'a');
+    text.push_back('\n');
+    auto writeBuffer = TSharedRef::FromString(text);
+    auto writeFuture = Writer->Write(writeBuffer);
+
+    TDelayedExecutor::WaitForDuration(TDuration::Seconds(1));
+    EXPECT_FALSE(writeFuture.IsSet());
+
+    auto readFuture = BIND([&] {
+        auto readBuffer = TSharedMutableRef::Allocate(6000, {.InitializeStorage = false});
+        auto readResult = Reader->Read(readBuffer).Get();
+
+        EXPECT_TRUE(readResult.IsOK());
+        EXPECT_EQ(text.substr(0, 4096), TString(readBuffer.Begin(), readResult.Value()));
+    })
+        .AsyncVia(readerQueue->GetInvoker())
+        .Run();
+
+    EXPECT_TRUE(readFuture.Get().IsOK());
+    EXPECT_TRUE(writeFuture.Get().IsOK());
+}
+
+TEST_F(TNamedPipeReadWriteTest, CapacityDontDiscardSurplus)
+{
+    SetUpWithCapacity(SmallPipeCapacity);
+    auto readerQueue = New<NConcurrency::TActionQueue>("Reader");
+    auto writerQueue = New<NConcurrency::TActionQueue>("Writer");
+
+    TString text(5000, 'a');
+    text.push_back('\n');
+
+    auto writeFuture = BIND(&WriteAll, Writer, text.data(), text.size(), text.size())
+        .AsyncVia(writerQueue->GetInvoker())
+        .Run();
+
+    TDelayedExecutor::WaitForDuration(TDuration::Seconds(1));
+    EXPECT_FALSE(writeFuture.IsSet());
+
+    auto readFuture = BIND(&ReadAll, Reader, false)
+        .AsyncVia(readerQueue->GetInvoker())
+        .Run();
+
+    auto readResult = readFuture.Get().ValueOrThrow();
+    EXPECT_EQ(text, TString(readResult.Begin(), readResult.End()));
+
+    EXPECT_TRUE(writeFuture.Get().IsOK());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -279,7 +359,7 @@ TEST_P(TPipeBigReadWriteTest, RealReadWrite)
 
     std::vector<char> data(dataSize, 'a');
 
-    BIND([&] () {
+    YT_UNUSED_FUTURE(BIND([&] () {
         auto dice = std::bind(
             std::uniform_int_distribution<int>(0, 127),
             std::default_random_engine());
@@ -287,7 +367,7 @@ TEST_P(TPipeBigReadWriteTest, RealReadWrite)
             data[i] = dice();
         }
     })
-    .AsyncVia(queue->GetInvoker()).Run();
+    .AsyncVia(queue->GetInvoker()).Run());
 
     auto writeError =  BIND(&WriteAll, Writer, data.data(), data.size(), blockSize)
         .AsyncVia(queue->GetInvoker())

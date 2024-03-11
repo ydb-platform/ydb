@@ -340,7 +340,8 @@ ISubOperation::TPtr CreateForceDropUnsafe(TOperationId id, TTxState::ETxState st
 ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = { });
 ISubOperation::TPtr CreateNewTable(TOperationId id, TTxState::ETxState state);
 
-ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx,
+    const THashSet<TString>& localSequences = { });
 ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState state);
 TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 
@@ -369,16 +370,22 @@ ISubOperation::TPtr CreateUpdateMainTableOnIndexMove(TOperationId id, TTxState::
 
 // External Table
 // Create
-ISubOperation::TPtr CreateNewExternalTable(TOperationId id, const TTxTransaction& tx);
+TVector<ISubOperation::TPtr> CreateNewExternalTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 ISubOperation::TPtr CreateNewExternalTable(TOperationId id, TTxState::ETxState state);
+// Alter
+ISubOperation::TPtr CreateAlterExternalTable(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateAlterExternalTable(TOperationId id, TTxState::ETxState state);
 // Drop
 ISubOperation::TPtr CreateDropExternalTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropExternalTable(TOperationId id, TTxState::ETxState state);
 
 // External Data Source
 // Create
-ISubOperation::TPtr CreateNewExternalDataSource(TOperationId id, const TTxTransaction& tx);
+TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 ISubOperation::TPtr CreateNewExternalDataSource(TOperationId id, TTxState::ETxState state);
+// Alter
+ISubOperation::TPtr CreateAlterExternalDataSource(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateAlterExternalDataSource(TOperationId id, TTxState::ETxState state);
 // Drop
 ISubOperation::TPtr CreateDropExternalDataSource(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropExternalDataSource(TOperationId id, TTxState::ETxState state);

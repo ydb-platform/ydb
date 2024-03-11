@@ -21,7 +21,9 @@ def settings() -> Settings:
 
 @pytest.fixture
 def clickhouse_client(settings) -> utils.clickhouse.Client:
-    return utils.clickhouse.make_client(settings.clickhouse)
+    client = utils.clickhouse.make_client(settings.clickhouse)
+    yield client
+    client.close()
 
 
 @pytest.fixture

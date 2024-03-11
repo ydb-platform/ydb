@@ -95,13 +95,13 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             return false;
         }
 
-        THashMap<ui64, TRowVersion> lastVersion;
+        THashMap<ui64, NOlap::TSnapshot> lastVersion;
         while (!rowset.EndOfSet()) {
             const ui64 pathId = rowset.GetValue<Schema::TableVersionInfo::PathId>();
             Y_ABORT_UNLESS(Tables.contains(pathId));
-            TRowVersion version(
+            NOlap::TSnapshot version(
                 rowset.GetValue<Schema::TableVersionInfo::SinceStep>(),
-                rowset.GetValue<Schema::TableVersionInfo::SinceTxId>());
+                    rowset.GetValue<Schema::TableVersionInfo::SinceTxId>());
 
             auto& table = Tables.at(pathId);
             TTableInfo::TTableVersionInfo versionInfo;
@@ -112,10 +112,11 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             if (!table.IsDropped()) {
                 auto& ttlSettings = versionInfo.GetTtlSettings();
                 if (ttlSettings.HasEnabled()) {
-                    if (!lastVersion.contains(pathId) || lastVersion[pathId] < version) {
+                    auto vIt = lastVersion.find(pathId);
+                    if (vIt == lastVersion.end() || vIt->second < version) {
                         TTtl::TDescription description(ttlSettings.GetEnabled());
                         Ttl.SetPathTtl(pathId, std::move(description));
-                        lastVersion[pathId] = version;
+                        lastVersion.emplace(pathId, version);
                     }
                 }
             }
@@ -136,7 +137,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             const ui32 id = rowset.GetValue<Schema::SchemaPresetVersionInfo::Id>();
             Y_ABORT_UNLESS(SchemaPresets.contains(id));
             auto& preset = SchemaPresets.at(id);
-            TRowVersion version(
+            NOlap::TSnapshot version(
                 rowset.GetValue<Schema::SchemaPresetVersionInfo::SinceStep>(),
                 rowset.GetValue<Schema::SchemaPresetVersionInfo::SinceTxId>());
 
@@ -208,18 +209,15 @@ ui64 TTablesManager::GetMemoryUsage() const {
     return memory;
 }
 
-void TTablesManager::DropTable(const ui64 pathId, const TRowVersion& version, NIceDb::TNiceDb& db) {
+void TTablesManager::DropTable(const ui64 pathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {
     auto& table = Tables.at(pathId);
     table.SetDropVersion(version);
     PathsToDrop.insert(pathId);
     Ttl.DropPathTtl(pathId);
-    if (PrimaryIndex) {
-        PrimaryIndex->OnTieringModified(nullptr, Ttl);
-    }
-    Schema::SaveTableDropVersion(db, pathId, version.Step, version.TxId);
+    Schema::SaveTableDropVersion(db, pathId, version.GetPlanStep(), version.GetTxId());
 }
 
-void TTablesManager::DropPreset(const ui32 presetId, const TRowVersion& version, NIceDb::TNiceDb& db) {
+void TTablesManager::DropPreset(const ui32 presetId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {
     auto& preset = SchemaPresets.at(presetId);
     Y_ABORT_UNLESS(preset.GetName() != "default", "Cannot drop the default preset");
     preset.SetDropVersion(version);
@@ -247,14 +245,14 @@ bool TTablesManager::RegisterSchemaPreset(const TSchemaPreset& schemaPreset, NIc
     return true;
 }
 
-void TTablesManager::AddSchemaVersion(const ui32 presetId, const TRowVersion& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db) {
+void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapshot& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db) {
     Y_ABORT_UNLESS(SchemaPresets.contains(presetId));
     auto preset = SchemaPresets.at(presetId);
 
     TSchemaPreset::TSchemaPresetVersionInfo versionInfo;
     versionInfo.SetId(presetId);
-    versionInfo.SetSinceStep(version.Step);
-    versionInfo.SetSinceTxId(version.TxId);
+    versionInfo.SetSinceStep(version.GetPlanStep());
+    versionInfo.SetSinceTxId(version.GetTxId());
     *versionInfo.MutableSchema() = schema;
 
     auto& schemaPreset = SchemaPresets.at(presetId);
@@ -268,8 +266,10 @@ void TTablesManager::AddSchemaVersion(const ui32 presetId, const TRowVersion& ve
     }
 }
 
-void TTablesManager::AddTableVersion(const ui64 pathId, const TRowVersion& version, const TTableInfo::TTableVersionInfo& versionInfo, NIceDb::TNiceDb& db) {
-    auto& table = Tables.at(pathId);
+void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& version, const TTableInfo::TTableVersionInfo& versionInfo, NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager>& manager) {
+    auto it = Tables.find(pathId);
+    AFL_VERIFY(it != Tables.end());
+    auto& table = it->second;
 
     if (versionInfo.HasSchemaPresetId()) {
         Y_ABORT_UNLESS(SchemaPresets.contains(versionInfo.GetSchemaPresetId()));
@@ -293,17 +293,18 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const TRowVersion& versi
             Ttl.DropPathTtl(pathId);
         }
         if (PrimaryIndex) {
-            PrimaryIndex->OnTieringModified(nullptr, Ttl);
+            PrimaryIndex->OnTieringModified(manager, Ttl, pathId);
         }
     }
     Schema::SaveTableVersionInfo(db, pathId, version, versionInfo);
     table.AddVersion(version, versionInfo);
 }
 
-void TTablesManager::IndexSchemaVersion(const TRowVersion& version, const NKikimrSchemeOp::TColumnTableSchema& schema) {
-    NOlap::TSnapshot snapshot{version.Step, version.TxId};
-    NOlap::TIndexInfo indexInfo = DeserializeIndexInfoFromProto(schema);
-    indexInfo.SetAllKeys();
+void TTablesManager::IndexSchemaVersion(const NOlap::TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema) {
+    std::optional<NOlap::TIndexInfo> indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema, StoragesManager);
+    Y_ABORT_UNLESS(indexInfoOptional);
+    NOlap::TIndexInfo indexInfo = std::move(*indexInfoOptional);
+    indexInfo.SetAllKeys(StoragesManager);
     const bool isFirstPrimaryIndexInitialization = !PrimaryIndex;
     if (!PrimaryIndex) {
         PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, NOlap::TCompactionLimits(), StoragesManager);
@@ -314,13 +315,6 @@ void TTablesManager::IndexSchemaVersion(const TRowVersion& version, const NKikim
             PrimaryIndex->RegisterTable(i.first);
         }
     }
-    PrimaryIndex->OnTieringModified(nullptr, Ttl);
-}
-
-NOlap::TIndexInfo TTablesManager::DeserializeIndexInfoFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema) {
-    std::optional<NOlap::TIndexInfo> indexInfo = NOlap::TIndexInfo::BuildFromProto(schema);
-    Y_ABORT_UNLESS(indexInfo);
-    return *indexInfo;
 }
 
 TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId)
@@ -329,7 +323,7 @@ TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& s
 {
 }
 
-bool TTablesManager::TryFinalizeDropPath(NTabletFlatExecutor::TTransactionContext& txc, const ui64 pathId) {
+bool TTablesManager::TryFinalizeDropPath(NTable::TDatabase& dbTable, const ui64 pathId) {
     auto itDrop = PathsToDrop.find(pathId);
     if (itDrop == PathsToDrop.end()) {
         return false;
@@ -338,10 +332,10 @@ bool TTablesManager::TryFinalizeDropPath(NTabletFlatExecutor::TTransactionContex
         return false;
     }
     PathsToDrop.erase(itDrop);
-    NIceDb::TNiceDb db(txc.DB);
+    NIceDb::TNiceDb db(dbTable);
     NColumnShard::Schema::EraseTableInfo(db, pathId);
     const auto& table = Tables.find(pathId);
-    Y_ABORT_UNLESS(table != Tables.end(), "No schema for path %lu", pathId); 
+    Y_ABORT_UNLESS(table != Tables.end(), "No schema for path %lu", pathId);
     for (auto&& tableVersion : table->second.GetVersions()) {
         NColumnShard::Schema::EraseTableVersionInfo(db, pathId, tableVersion.first);
     }

@@ -143,12 +143,20 @@ void TConsumerProtocolAssignment::Read(TKafkaReadable& _readable, TKafkaVersion 
 }
 
 void TConsumerProtocolAssignment::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    auto useVarintSize = _version > 3;
     _version = ASSIGNMENT_VERSION;
+
     if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
         ythrow yexception() << "Can't write version " << _version << " of TConsumerProtocolAssignment";
     }
     
-    _writable.writeUnsignedVarint(Size(ASSIGNMENT_VERSION) + 1);
+    if (useVarintSize) {
+        _writable.writeUnsignedVarint(Size(_version) + 1);
+    } else {
+        TKafkaInt32 size = Size(_version);
+        _writable << size;
+    }
+    
     _writable << _version;
     NPrivate::TWriteCollector _collector;
     NPrivate::Write<AssignedPartitionsMeta>(_collector, _writable, _version, AssignedPartitions);

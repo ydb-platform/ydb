@@ -3,7 +3,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_block_reader.h>
 #include <ydb/library/yql/minikql/computation/mkql_block_builder.h>
 #include <ydb/library/yql/minikql/computation/mkql_block_impl.h>
-#include <ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h>  // Y_IGNORE
 
 #include <ydb/library/yql/minikql/arrow/arrow_defs.h>
 #include <ydb/library/yql/minikql/arrow/arrow_util.h>
@@ -114,7 +114,6 @@ public:
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
         const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt64Ty(context);
 
@@ -629,7 +628,7 @@ public:
 
         ICodegeneratorInlineWideNode::TGettersList getters(width);
         for (size_t idx = 0U; idx < getters.size(); ++idx) {
-            getters[idx] = [idx, width, getType, getPtr, valueType, indexType, arrayType, ptrValuesType, stateType, statePtrType, stateOnStack, getBlocks = getres.second](const TCodegenContext& ctx, BasicBlock*& block) {
+            getters[idx] = [idx, width, getType, getPtr, indexType, arrayType, ptrValuesType, stateType, statePtrType, stateOnStack, getBlocks = getres.second](const TCodegenContext& ctx, BasicBlock*& block) {
                 auto& context = ctx.Codegen.GetContext();
                 const auto init = BasicBlock::Create(context, "init", ctx.Func);
                 const auto call = BasicBlock::Create(context, "call", ctx.Func);
@@ -979,7 +978,6 @@ public:
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
         const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt64Ty(context);
         const auto arrayType = ArrayType::get(valueType, Width_);
@@ -1120,6 +1118,52 @@ private:
     const size_t WideFieldsIndex_;
 };
 
+class TBlockExpandChunkedStreamWrapper : public TMutableComputationNode<TBlockExpandChunkedStreamWrapper> {
+using TBaseComputation =  TMutableComputationNode<TBlockExpandChunkedStreamWrapper>;
+class TExpanderState : public TComputationValue<TExpanderState> {
+using TBase = TComputationValue<TExpanderState>;
+public:
+    TExpanderState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, NUdf::TUnboxedValue&& stream, size_t width)
+        : TBase(memInfo), HolderFactory_(ctx.HolderFactory), State_(ctx.HolderFactory.Create<TBlockState>(width)), Stream_(stream) {}
+
+    NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+        auto& s = *static_cast<TBlockState*>(State_.AsBoxed().Get());
+        if (!s.Count) {
+            s.ClearValues();
+            auto result = Stream_.WideFetch(s.Values.data(), width);
+            if (NUdf::EFetchStatus::Ok != result) {
+                return result;
+            }
+            s.FillArrays();
+        }
+        
+        const auto sliceSize = s.Slice();
+        for (size_t i = 0; i < width; ++i) {
+            output[i] = s.Get(sliceSize, HolderFactory_, i);
+        }
+        return NUdf::EFetchStatus::Ok;
+    }
+
+private:
+    const THolderFactory& HolderFactory_;
+    NUdf::TUnboxedValue State_;
+    NUdf::TUnboxedValue Stream_;
+};
+public:
+    TBlockExpandChunkedStreamWrapper(TComputationMutables& mutables, IComputationNode* stream, size_t width)
+        : TBaseComputation(mutables, EValueRepresentation::Boxed)
+        , Stream_(stream)
+        , Width_(width) {}
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        return ctx.HolderFactory.Create<TExpanderState>(ctx, std::move(Stream_->GetValue(ctx)), Width_);
+    }
+    void RegisterDependencies() const override {}
+private:
+    IComputationNode* const Stream_;
+    const size_t Width_;
+};
+
 } // namespace
 
 IComputationNode* WrapToBlocks(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
@@ -1184,13 +1228,21 @@ IComputationNode* WrapReplicateScalar(TCallable& callable, const TComputationNod
 
 IComputationNode* WrapBlockExpandChunked(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args, got " << callable.GetInputsCount());
+    if (callable.GetInput(0).GetStaticType()->IsStream()) {
+        const auto streamType = AS_TYPE(TStreamType, callable.GetInput(0).GetStaticType());
+        const auto wideComponents = GetWideComponents(streamType);
+        const auto computation = dynamic_cast<IComputationNode*>(LocateNode(ctx.NodeLocator, callable, 0));
 
-    const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
-    const auto wideComponents = GetWideComponents(flowType);
+        MKQL_ENSURE(computation != nullptr, "Expected computation node");
+        return new TBlockExpandChunkedStreamWrapper(ctx.Mutables, computation, wideComponents.size());
+    } else {
+        const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
+        const auto wideComponents = GetWideComponents(flowType);
 
-    const auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
-    MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
-    return new TBlockExpandChunkedWrapper(ctx.Mutables, wideFlow, wideComponents.size());
+        const auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
+        MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
+        return new TBlockExpandChunkedWrapper(ctx.Mutables, wideFlow, wideComponents.size());
+    }
 }
 
 }

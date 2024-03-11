@@ -3,6 +3,9 @@
 #include "hooks/abstract/abstract.h"
 #include "resource_subscriber/actor.h"
 #include "engines/writer/buffer/actor.h"
+#include "engines/column_engine_logs.h"
+
+#include <ydb/core/protos/table_stats.pb.h>
 
 namespace NKikimr {
 
@@ -20,7 +23,7 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
 
     StoragesManager->Stop();
     if (Tiers) {
-        Tiers->Stop();
+        Tiers->Stop(true);
     }
 }
 
@@ -56,6 +59,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr.release());
 
     const auto selfActorId = SelfId();
+    StoragesManager->Initialize();
     Tiers = std::make_shared<TTiersManager>(TabletID(), SelfId(),
         [selfActorId](const TActorContext& ctx) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "tiering_new_event");
@@ -138,7 +142,11 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
     Y_UNUSED(ctx);
     ui64 readCookie = ev->Get()->RequestCookie;
     LOG_S_DEBUG("Finished read cookie: " << readCookie << " at tablet " << TabletID());
-    InFlightReadsTracker.RemoveInFlightRequest(ev->Get()->RequestCookie);
+    const NOlap::TVersionedIndex* index = nullptr;
+    if (HasIndex()) {
+        index = &GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex();
+    }
+    InFlightReadsTracker.RemoveInFlightRequest(ev->Get()->RequestCookie, index);
 
     ui64 txId = ev->Get()->TxId;
     if (ScanTxInFlight.contains(txId)) {
@@ -254,11 +262,9 @@ ui64 TColumnShard::MemoryUsage() const {
     ui64 memory =
         ProgressTxController->GetMemoryUsage() +
         ScanTxInFlight.size() * (sizeof(ui64) + sizeof(TInstant)) +
-        AltersInFlight.size() * sizeof(TAlterMeta) +
-        CommitsInFlight.size() * sizeof(TCommitMeta) +
         LongTxWrites.size() * (sizeof(TWriteId) + sizeof(TLongTxWriteInfo)) +
         LongTxWritesByUniqueId.size() * (sizeof(TULID) + sizeof(void*)) +
-        (WaitingReads.size() + WaitingScans.size()) * (sizeof(TRowVersion) + sizeof(void*)) +
+        (WaitingScans.size()) * (sizeof(NOlap::TSnapshot) + sizeof(void*)) +
         TabletCounters->Simple()[COUNTER_PREPARED_RECORDS].Get() * sizeof(NOlap::TInsertedData) +
         TabletCounters->Simple()[COUNTER_COMMITTED_RECORDS].Get() * sizeof(NOlap::TInsertedData);
     memory += TablesManager.GetMemoryUsage();
@@ -293,13 +299,14 @@ void TColumnShard::UpdateResourceMetrics(const TActorContext& ctx, const TUsage&
     metrics->TryUpdate(ctx);
 }
 
-void TColumnShard::ConfigureStats(const NOlap::TColumnEngineStats& indexStats, ::NKikimrTableStats::TTableStats * tabletStats) {
+void TColumnShard::ConfigureStats(const NOlap::TColumnEngineStats& indexStats,
+                                  ::NKikimrTableStats::TTableStats* tabletStats) {
     NOlap::TSnapshot lastIndexUpdate = TablesManager.GetPrimaryIndexSafe().LastUpdate();
-    auto activeIndexStats = indexStats.Active(); // data stats excluding inactive and evicted
+    auto activeIndexStats = indexStats.Active();   // data stats excluding inactive and evicted
 
     if (activeIndexStats.Rows < 0 || activeIndexStats.Bytes < 0) {
-        LOG_S_WARN("Negative stats counter. Rows: " << activeIndexStats.Rows
-            << " Bytes: " << activeIndexStats.Bytes << TabletID());
+        LOG_S_WARN("Negative stats counter. Rows: " << activeIndexStats.Rows << " Bytes: " << activeIndexStats.Bytes
+                                                    << TabletID());
 
         activeIndexStats.Rows = (activeIndexStats.Rows < 0) ? 0 : activeIndexStats.Rows;
         activeIndexStats.Bytes = (activeIndexStats.Bytes < 0) ? 0 : activeIndexStats.Bytes;
@@ -309,7 +316,7 @@ void TColumnShard::ConfigureStats(const NOlap::TColumnEngineStats& indexStats, :
     tabletStats->SetDataSize(activeIndexStats.Bytes + TabletCounters->Simple()[COUNTER_COMMITTED_BYTES].Get());
 
     // TODO: we need row/dataSize counters for evicted data (managed by tablet but stored outside)
-    //tabletStats->SetIndexSize(); // TODO: calc size of internal tables
+    // tabletStats->SetIndexSize(); // TODO: calc size of internal tables
 
     tabletStats->SetLastAccessTime(LastAccessTime.MilliSeconds());
     tabletStats->SetLastUpdateTime(lastIndexUpdate.GetPlanStep());
@@ -330,7 +337,7 @@ void TColumnShard::FillTxTableStats(::NKikimrTableStats::TTableStats* tableStats
 }
 
 void TColumnShard::FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
-    ev->Record.SetShardState(2); // NKikimrTxDataShard.EDatashardState.Ready
+    ev->Record.SetShardState(2);   // NKikimrTxDataShard.EDatashardState.Ready
     ev->Record.SetGeneration(Executor()->Generation());
     ev->Record.SetRound(StatsReportRound++);
     ev->Record.SetNodeId(ctx.ExecutorThread.ActorSystem->NodeId);
@@ -346,13 +353,14 @@ void TColumnShard::FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDa
     }
 }
 
-void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
+void TColumnShard::FillColumnTableStats(const TActorContext& ctx,
+                                        std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
     if (!TablesManager.HasPrimaryIndex()) {
         return;
     }
     const auto& tablesIndexStats = TablesManager.MutablePrimaryIndex().GetStats();
     LOG_S_DEBUG("There are stats for " << tablesIndexStats.size() << " tables");
-    for(const auto& [tableLocalID, columnStats] : tablesIndexStats) {
+    for (const auto& [tableLocalID, columnStats] : tablesIndexStats) {
         if (!columnStats) {
             LOG_S_ERROR("SendPeriodicStats: empty stats");
             continue;
@@ -362,7 +370,7 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_pt
         periodicTableStats->SetDatashardId(TabletID());
         periodicTableStats->SetTableLocalId(tableLocalID);
 
-        periodicTableStats->SetShardState(2); // NKikimrTxDataShard.EDatashardState.Ready
+        periodicTableStats->SetShardState(2);   // NKikimrTxDataShard.EDatashardState.Ready
         periodicTableStats->SetGeneration(Executor()->Generation());
         periodicTableStats->SetRound(StatsReportRound++);
         periodicTableStats->SetNodeId(ctx.ExecutorThread.ActorSystem->NodeId);
@@ -411,4 +419,4 @@ void TColumnShard::SendPeriodicStats() {
     NTabletPipe::SendData(ctx, StatsReportPipe, ev.release());
 }
 
-}
+}   // namespace NKikimr::NColumnShard

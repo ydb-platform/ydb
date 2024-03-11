@@ -11,19 +11,16 @@
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
 NWrappers::NExternalStorage::IExternalStorageOperator::TPtr TOperator::GetCurrentOperator() const {
-    const ui32 idx = CurrentOperatorIdx.Val();
-    AFL_VERIFY(idx < ExternalStorageOperators.size())("idx", idx)("size", ExternalStorageOperators.size());
-    auto result = ExternalStorageOperators[idx];
-    Y_ABORT_UNLESS(result);
-    return result;
+    TGuard<TSpinLock> changeLock(ChangeOperatorLock);
+    return ExternalStorageOperator;
 }
 
-std::shared_ptr<IBlobsDeclareRemovingAction> TOperator::DoStartDeclareRemovingAction() {
-    return std::make_shared<TDeclareRemovingAction>(GetStorageId(), GCInfo);
+std::shared_ptr<IBlobsDeclareRemovingAction> TOperator::DoStartDeclareRemovingAction(const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters) {
+    return std::make_shared<TDeclareRemovingAction>(GetStorageId(), GetSelfTabletId(), counters, GCInfo);
 }
 
 std::shared_ptr<IBlobsWritingAction> TOperator::DoStartWritingAction() {
-    return std::make_shared<TWriteAction>(GetStorageId(), GetCurrentOperator(), TabletId, GCInfo);
+    return std::make_shared<TWriteAction>(GetStorageId(), GetCurrentOperator(), (ui64)GetSelfTabletId(), GCInfo);
 }
 
 std::shared_ptr<IBlobsReadingAction> TOperator::DoStartReadingAction() {
@@ -32,12 +29,16 @@ std::shared_ptr<IBlobsReadingAction> TOperator::DoStartReadingAction() {
 
 std::shared_ptr<IBlobsGCAction> TOperator::DoStartGCAction(const std::shared_ptr<TRemoveGCCounters>& counters) const {
     std::deque<TUnifiedBlobId> draftBlobIds;
-    std::deque<TUnifiedBlobId> deleteBlobIds;
-    if (!GCInfo->ExtractForGC(draftBlobIds, deleteBlobIds, 100000)) {
-        return nullptr;
+    TBlobsCategories categories(TTabletId(0));
+    {
+        TTabletsByBlob deleteBlobIds;
+        if (!GCInfo->ExtractForGC(draftBlobIds, deleteBlobIds, 100000)) {
+            return nullptr;
+        }
+        categories = GetSharedBlobs()->BuildRemoveCategories(std::move(deleteBlobIds));
     }
-    auto gcTask = std::make_shared<TGCTask>(GetStorageId(), std::move(draftBlobIds), std::move(deleteBlobIds), GetCurrentOperator(), counters);
-    TActorContext::AsActorContext().Register(new TGarbageCollectionActor(gcTask, TabletActorId));
+    auto gcTask = std::make_shared<TGCTask>(GetStorageId(), std::move(draftBlobIds), GetCurrentOperator(), std::move(categories), counters);
+    TActorContext::AsActorContext().Register(new TGarbageCollectionActor(gcTask, TabletActorId, GetSelfTabletId()));
     return gcTask;
 }
 
@@ -48,40 +49,64 @@ void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager* ti
     } else {
         settings.SetEndpoint("nowhere");
     }
+    {
+        TGuard<TSpinLock> changeLock(ChangeOperatorLock);
+        if (CurrentS3Settings && CurrentS3Settings->SerializeAsString() == settings.SerializeAsString()) {
+            return;
+        }
+    }
     auto extStorageConfig = NWrappers::NExternalStorage::IExternalStorageConfig::Construct(settings);
     AFL_VERIFY(extStorageConfig);
     auto extStorageOperator = extStorageConfig->ConstructStorageOperator(false);
-    extStorageOperator->InitReplyAdapter(std::make_shared<NOlap::NBlobOperations::NTier::TRepliesAdapter>());
-    ExternalStorageOperators.emplace_back(extStorageOperator);
-    if (CurrentOperatorIdx.Val() + 1 < (i64)ExternalStorageOperators.size()) {
-        CurrentOperatorIdx.Inc();
-    }
+    extStorageOperator->InitReplyAdapter(std::make_shared<NOlap::NBlobOperations::NTier::TRepliesAdapter>(GetStorageId()));
+    TGuard<TSpinLock> changeLock(ChangeOperatorLock);
+    CurrentS3Settings = settings;
+    ExternalStorageOperator = extStorageOperator;
 }
 
-TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard& shard)
-    : TBase(storageId)
-    , TabletId(shard.TabletID())
+void TOperator::InitNewExternalOperator() {
+    AFL_VERIFY(InitializationConfig);
+    auto extStorageOperator = InitializationConfig->ConstructStorageOperator(false);
+    extStorageOperator->InitReplyAdapter(std::make_shared<NOlap::NBlobOperations::NTier::TRepliesAdapter>(GetStorageId()));
+    TGuard<TSpinLock> changeLock(ChangeOperatorLock);
+    ExternalStorageOperator = extStorageOperator;
+}
+
+TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager)
+    : TBase(storageId, storageSharedBlobsManager)
     , TabletActorId(shard.SelfId())
 {
     InitNewExternalOperator(shard.GetTierManagerPointer(storageId));
 }
 
-void TOperator::DoOnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& tiers) {
-    AFL_VERIFY(ExternalStorageOperators.size());
+TOperator::TOperator(const TString& storageId, const TActorId& shardActorId, const std::shared_ptr<NWrappers::IExternalStorageConfig>& storageConfig,
+    const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager)
+    : TBase(storageId, storageSharedBlobsManager)
+    , TabletActorId(shardActorId)
+    , InitializationConfig(storageConfig)
+{
+    InitNewExternalOperator();
+}
+
+void TOperator::DoOnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& tiers) {
     auto* tierManager = tiers->GetManagerOptional(TBase::GetStorageId());
-    ui32 cleanCount = ExternalStorageOperators.size() - 1;
     if (tierManager) {
         InitNewExternalOperator(tierManager);
     } else {
-        cleanCount = ExternalStorageOperators.size();
+        TGuard<TSpinLock> changeLock(ChangeOperatorLock);
+        ExternalStorageOperator = nullptr;
     }
-    for (ui32 i = 0; i < cleanCount; ++i) {
-        if (ExternalStorageOperators[i].use_count() == 1) {
-            ExternalStorageOperators[i] = nullptr;
-        } else {
-            break;
-        }
+}
+
+bool TOperator::DoLoad(IBlobManagerDb& dbBlobs) {
+    TTabletsByBlob blobsToDelete;
+    std::deque<TUnifiedBlobId> draftBlobIdsToRemove;
+    if (!dbBlobs.LoadTierLists(GetStorageId(), blobsToDelete, draftBlobIdsToRemove, GetSelfTabletId())) {
+        return false;
     }
+    GCInfo->MutableBlobsToDelete() = std::move(blobsToDelete);
+    GCInfo->MutableDraftBlobIdsToRemove() = std::move(draftBlobIdsToRemove);
+    return true;
 }
 
 }

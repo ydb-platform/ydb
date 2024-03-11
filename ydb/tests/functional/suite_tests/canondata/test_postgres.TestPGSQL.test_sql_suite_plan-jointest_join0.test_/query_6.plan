@@ -50,12 +50,13 @@
                                                 "Predicate": "item.t1.stringu1 > item.t2.stringu2"
                                             },
                                             {
+                                                "Condition": "subq1.y1 = unique1",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 32
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 30
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
@@ -187,12 +188,13 @@
                                         "Node Type": "InnerJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
+                                                "Condition": "unique2 = d1",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 1
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 16
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"
@@ -227,12 +229,13 @@
                                                                         "Node Type": "LeftJoin (MapJoin)",
                                                                         "Operators": [
                                                                             {
+                                                                                "Condition": "f1 = v1.x2",
                                                                                 "Inputs": [
                                                                                     {
                                                                                         "ExternalPlanNodeId": 12
                                                                                     },
                                                                                     {
-                                                                                        "Other": "ConstantExpression"
+                                                                                        "ExternalPlanNodeId": 10
                                                                                     }
                                                                                 ],
                                                                                 "Name": "LeftJoin (MapJoin)"
@@ -258,12 +261,13 @@
                                                                                                         "Node Type": "LeftJoin (MapJoin)",
                                                                                                         "Operators": [
                                                                                                             {
+                                                                                                                "Condition": "x1 = y2",
                                                                                                                 "Inputs": [
                                                                                                                     {
                                                                                                                         "ExternalPlanNodeId": 6
                                                                                                                     },
                                                                                                                     {
-                                                                                                                        "Other": "ConstantExpression"
+                                                                                                                        "ExternalPlanNodeId": 4
                                                                                                                     }
                                                                                                                 ],
                                                                                                                 "Name": "LeftJoin (MapJoin)"

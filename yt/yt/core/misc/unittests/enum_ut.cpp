@@ -13,8 +13,8 @@ DEFINE_ENUM(EColor,
     ((Red)  (10))
     ((Green)(20))
     ((Blue) (30))
-     (Black)
-     (White)
+    (Black)
+    (White)
 );
 
 TEST(TEnumTest, SaveAndLoad)

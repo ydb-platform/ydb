@@ -293,7 +293,7 @@ namespace NYql {
                     req->Digest = digest;
                 }
 
-                Client->GetNode(nodePath + "/@md5")
+                YT_UNUSED_FUTURE(Client->GetNode(nodePath + "/@md5")
                     .Apply(BIND([request, attributes, digest](const TErrorOr<NYT::NYson::TYsonString>& err) mutable {
                         auto req = request.Lock();
                         if (!req) {
@@ -302,10 +302,10 @@ namespace NYql {
                         if (err.IsOK() && digest == NYTree::ConvertTo<TString>(err.Value())) {
                             YQL_CLOG(INFO, ProviderDq) << "File already uploaded";
                             try {
-                                req->Client->SetNode(req->NodePath + "/@yql_last_update",
+                                YT_UNUSED_FUTURE(req->Client->SetNode(req->NodePath + "/@yql_last_update",
                                     NYT::NYson::TYsonString(
                                         NYT::NodeToYsonString(NYT::TNode(ToString(TInstant::Now()))
-                                    )));
+                                    ))));
                             } catch (...) { }
                             return VoidFuture;
                         } else if (err.IsOK() || err.FindMatching(NYT::NYTree::EErrorCode::ResolveError)) {
@@ -363,7 +363,7 @@ namespace NYql {
                         if (auto req = request.Lock()) {
                             req->Complete(new TEvWriteFileResponse(requestId, err));
                         }
-                    }));
+                    })));
             } catch (const std::exception& ex) {
                 if (auto req = request.Lock()) {
                     req->Complete(new TEvWriteFileResponse(requestId, ex));
@@ -385,7 +385,7 @@ namespace NYql {
 
                 auto nodePath = remotePath.GetPath();
 
-                Client->GetNode(nodePath + "/@md5")
+               YT_UNUSED_FUTURE(Client->GetNode(nodePath + "/@md5")
                     .Apply(BIND([request, nodePath, readerOptions](const TErrorOr<NYT::NYson::TYsonString>& err) mutable {
                         auto req = request.Lock();
                         if (!req) {
@@ -411,7 +411,7 @@ namespace NYql {
                         if (auto req = request.Lock()) {
                             req->Complete(new TEvReadFileResponse(requestId, err));
                         }
-                    }));
+                    })));
             } catch (const std::exception& ex) {
                 if (auto req = request.Lock()) {
                     req->Complete(new TEvReadFileResponse(requestId, ex));
@@ -448,14 +448,14 @@ namespace NYql {
                 auto operationId = std::get<0>(*ev->Get());
                 auto options = std::get<1>(*ev->Get());
 
-                Client->GetOperation(operationId, options).Apply(BIND([=](const TErrorOr<TOperation>& result) {
+                YT_UNUSED_FUTURE(Client->GetOperation(operationId, options).Apply(BIND([=](const TErrorOr<TOperation>& result) {
                     return NYT::NYson::ConvertToYsonString(result.ValueOrThrow()).ToString();
                 }))
                 .Apply(BIND([=](const TErrorOr<TString>& result) {
                     if (auto req = request.Lock()) {
                         req->Complete(new TEvGetOperationResponse(requestId, result));
                     }
-                }));
+                })));
             } catch (const std::exception& ex) {
                 if (auto req = request.Lock()) {
                     req->Complete(new TEvGetOperationResponse(requestId, ex));
@@ -470,11 +470,11 @@ namespace NYql {
             try {
                 auto options = std::get<0>(*ev->Get());
 
-                Client->ListOperations(options).Apply(BIND([=](const TErrorOr<NYT::NApi::TListOperationsResult>& result) {
+                YT_UNUSED_FUTURE(Client->ListOperations(options).Apply(BIND([=](const TErrorOr<NYT::NApi::TListOperationsResult>& result) {
                     if (auto req = request.Lock()) {
                         req->Complete(new TEvListOperationsResponse(requestId, result));
                     }
-                }));
+                })));
             } catch (const std::exception& ex) {
                 if (auto req = request.Lock()) {
                     req->Complete(new TEvListOperationsResponse(requestId, ex));
@@ -491,14 +491,14 @@ namespace NYql {
                 auto jobId = std::get<1>(*ev->Get());
                 auto options = std::get<2>(*ev->Get());
 
-                Client->GetJob(operationId, jobId, options).Apply(BIND([=](const TErrorOr<NYT::NYson::TYsonString>& result) {
+                YT_UNUSED_FUTURE(Client->GetJob(operationId, jobId, options).Apply(BIND([=](const TErrorOr<NYT::NYson::TYsonString>& result) {
                     return result.ValueOrThrow().ToString();
                 }))
                 .Apply(BIND([=](const TErrorOr<TString>& result) {
                     if (auto req = request.Lock()) {
                         req->Complete(new TEvGetJobResponse(requestId, result));
                     }
-                }));
+                })));
             } catch (const std::exception& ex) {
                 if (auto req = request.Lock()) {
                     req->Complete(new TEvGetJobResponse(requestId, ex));
@@ -513,7 +513,7 @@ namespace NYql {
             auto request = NewRequest<TRequest>(requestId, ev->Sender, ctx);
 
             try {
-                Client->ListNode(path, options)
+                YT_UNUSED_FUTURE(Client->ListNode(path, options)
                     .Apply(BIND([=](const TErrorOr<NYT::NYson::TYsonString>& result) {
                         return result.ValueOrThrow().ToString();
                     }))
@@ -521,7 +521,7 @@ namespace NYql {
                         if (auto req = request.Lock()) {
                             req->Complete(new TEvListNodeResponse(requestId, result));
                         }
-                    }));
+                    })));
             } catch (const std::exception& ex) {
                 if (auto req = request.Lock()) {
                     req->Complete(new TEvListNodeResponse(requestId, ex));
@@ -536,12 +536,12 @@ namespace NYql {
             auto requestId = ev->Get()->RequestId;
             auto request = NewRequest<TRequest>(requestId, ev->Sender, ctx);
 
-            Client->SetNode(path, value, options)
+            YT_UNUSED_FUTURE(Client->SetNode(path, value, options)
                 .Apply(BIND([=](const TErrorOr<void>& result) {
                     if (auto req = request.Lock()) {
                         req->Complete(new TEvSetNodeResponse(requestId, result));
                     }
-                }));
+                })));
         }
 
         void OnGetNode(TEvGetNode::TPtr& ev, const TActorContext& ctx) {
@@ -550,12 +550,12 @@ namespace NYql {
             auto requestId = ev->Get()->RequestId;
             auto request = NewRequest<TRequest>(requestId, ev->Sender, ctx);
 
-            Client->GetNode(path, options)
+            YT_UNUSED_FUTURE(Client->GetNode(path, options)
                 .Apply(BIND([=](const TErrorOr<NYT::NYson::TYsonString>& result) {
                     if (auto req = request.Lock()) {
                         req->Complete(new TEvGetNodeResponse(requestId, result));
                     }
-                }));
+                })));
         }
 
         void OnRemoveNode(TEvRemoveNode::TPtr& ev, const TActorContext& ctx) {
@@ -564,12 +564,12 @@ namespace NYql {
             auto requestId = ev->Get()->RequestId;
             auto request = NewRequest<TRequest>(requestId, ev->Sender, ctx);
 
-            Client->RemoveNode(path, options)
+            YT_UNUSED_FUTURE(Client->RemoveNode(path, options)
                 .Apply(BIND([=](const TErrorOr<void>& result) {
                     if (auto req = request.Lock()) {
                         req->Complete(new TEvRemoveNodeResponse(requestId, result));
                     }
-                }));
+                })));
         }
 
         void OnCreateNode(TEvCreateNode::TPtr& ev, const TActorContext& ctx) {
@@ -579,12 +579,12 @@ namespace NYql {
             auto requestId = ev->Get()->RequestId;
             auto request = NewRequest<TRequest>(requestId, ev->Sender, ctx);
 
-            Client->CreateNode(path, type, options)
+            YT_UNUSED_FUTURE(Client->CreateNode(path, type, options)
                 .Apply(BIND([=](const TErrorOr<NYT::NCypressClient::TNodeId>& result) {
                     if (auto req = request.Lock()) {
                         req->Complete(new TEvCreateNodeResponse(requestId, result));
                     }
-                }));
+                })));
         }
 
         void OnStartTransaction(TEvStartTransaction::TPtr& ev, const TActorContext& ctx) {
@@ -593,12 +593,12 @@ namespace NYql {
             auto requestId = ev->Get()->RequestId;
             auto request = NewRequest<TRequest>(requestId, ev->Sender, ctx);
 
-            Client->StartTransaction(type, options)
+            YT_UNUSED_FUTURE(Client->StartTransaction(type, options)
                 .Apply(BIND([=](const TErrorOr<ITransactionPtr>& result) {
                     if (auto req = request.Lock()) {
                         req->Complete(new TEvStartTransactionResponse(requestId, result));
                     }
-                }));
+                })));
         }
 
         void OnPrintJobStderr(TEvPrintJobStderr::TPtr& ev, const TActorContext& ctx) {
@@ -607,23 +607,23 @@ namespace NYql {
 
             YQL_CLOG(DEBUG, ProviderDq) << "Printing stderr of operation " << ToString(operationId);
 
-            Client->ListJobs(operationId)
+            YT_UNUSED_FUTURE(Client->ListJobs(operationId)
                 .Apply(BIND([operationId, client = MakeWeak(Client)](const TListJobsResult& result) {
                     if (auto cli = client.Lock()) {
                         for (const auto& job : result.Jobs) {
                             YQL_CLOG(DEBUG, ProviderDq) << "Printing stderr (" << ToString(operationId) << "," << ToString(job.Id) << ")";
 
-                            cli->GetJobStderr(operationId, job.Id)
+                            YT_UNUSED_FUTURE(cli->GetJobStderr(operationId, job.Id)
                                 .Apply(BIND([jobId = job.Id, operationId](const TSharedRef& data) {
                                     YQL_CLOG(DEBUG, ProviderDq)
                                         << "Stderr ("
                                         << ToString(operationId) << ","
                                         << ToString(jobId) << ")"
                                         << TString(data.Begin(), data.Size());
-                                }));
+                                })));
                         }
                     }
-                }));
+                })));
         }
 
         IClientPtr Client;

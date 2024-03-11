@@ -1,0 +1,77 @@
+on:
+  repository_dispatch:
+    types: [embedded_ui_refresh]
+  workflow_dispatch:
+    inputs:
+      asset_name:
+        description: Release asset name
+        required: true
+        default: embedded-ui
+      repository:
+        description: Source repository
+        required: true
+        default: ydb-platform/ydb-embedded-ui
+      tag_name:
+        description: Release tag
+        required: true
+
+name: Embedded UI Refresh
+
+jobs:
+  main:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      ASSET_NAME: ${{ github.event.inputs && github.event.inputs.asset_name || github.event.client_payload.asset_name }}
+      REPOSITORY: ${{ github.event.inputs && github.event.inputs.repository || github.event.client_payload.repository }}
+      TAG_NAME: ${{ github.event.inputs && github.event.inputs.tag_name || github.event.client_payload.tag_name }}
+      TEMP_ASSET_DIR: /tmp/asset
+    steps:
+      - uses: actions/checkout@v4
+      - name: Asset Download
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release download $TAG_NAME --repo $REPOSITORY --pattern $ASSET_NAME.zip --dir $TEMP_ASSET_DIR
+      - name: Asset Placement
+        env:
+          ASSET_DIR: monitoring
+          START_POINTER: "# GENERATED MONITORING RESOURCES START"
+          END_POINTER: "# GENERATED MONITORING RESOURCES END"
+          WORKING_DIR: ydb/core/viewer
+        run: |
+          set -e
+
+          unzip $TEMP_ASSET_DIR/$ASSET_NAME.zip -d $TEMP_ASSET_DIR
+          
+          cd $WORKING_DIR
+          rm -rf $ASSET_DIR
+          mkdir $ASSET_DIR
+          mv -vf $TEMP_ASSET_DIR/$ASSET_NAME/* $ASSET_DIR
+          
+          # List of files in the target directory.
+          NEW_RESOURCES=$(find $ASSET_DIR -type f | sort)
+          
+          # Current indentation of the start pointer line.
+          INDENTATION=$(grep -e "$START_POINTER" ya.make | perl -lane 's/^(\s+)(.*)+$/$1/e; print')
+          
+          # Replacing resources list between start and end pointers with saving the current indentation.
+          perl -0777 -pi -e "s/\s+$START_POINTER.*$END_POINTER/
+          $INDENTATION$START_POINTER
+          ${INDENTATION}RESOURCE(
+          $(echo "$NEW_RESOURCES" | perl -e "while (<>) {chomp; print \"$INDENTATION    \$_ \$_\\n\";}" | sed -E 's/\//\\\//g')
+          $INDENTATION)
+          $INDENTATION$END_POINTER/s" ya.make
+      - name: Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          commit-message: "build: refresh Embedded UI (${{ env.TAG_NAME }})"
+          branch: embedded-ui-${{ env.TAG_NAME }}
+          delete-branch: true
+          title: "build: refresh Embedded UI (${{ env.TAG_NAME }})"
+          body: |
+            ### Embedded UI Refresh
+
+            Embedded UI [${{ env.TAG_NAME }}](https://github.com/${{ env.REPOSITORY }}/releases/tag/${{ env.TAG_NAME }}) ([CHANGELOG.md](https://github.com/${{ env.REPOSITORY }}/blob/${{ env.TAG_NAME }}/CHANGELOG.md)).

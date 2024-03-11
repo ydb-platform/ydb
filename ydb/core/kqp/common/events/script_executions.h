@@ -1,8 +1,11 @@
 #pragma once
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/kqp_stats.pb.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 
@@ -20,14 +23,16 @@ enum EFinalizationStatus : i32 {
 };
 
 struct TEvForgetScriptExecutionOperation : public NActors::TEventLocal<TEvForgetScriptExecutionOperation, TKqpScriptExecutionEvents::EvForgetScriptExecutionOperation> {
-    explicit TEvForgetScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id)
+    explicit TEvForgetScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id, TInstant deadline)
         : Database(database)
         , OperationId(id)
+        , Deadline(deadline)
     {
     }
 
     TString Database;
     NOperationId::TOperationId OperationId;
+    TInstant Deadline;
 };
 
 struct TEvForgetScriptExecutionOperationResponse : public NActors::TEventLocal<TEvForgetScriptExecutionOperationResponse, TKqpScriptExecutionEvents::EvForgetScriptExecutionOperationResponse> {
@@ -219,20 +224,28 @@ struct TEvFetchScriptResultsQueryResponse : public NActors::TEventLocal<TEvFetch
 };
 
 struct TEvSaveScriptExternalEffectRequest : public NActors::TEventLocal<TEvSaveScriptExternalEffectRequest, TKqpScriptExecutionEvents::EvSaveScriptExternalEffectRequest> {
+    struct TDescription {
+        TDescription(const TString& executionId, const TString& database, const TString& customerSuppliedId, const TString& userToken)
+            : ExecutionId(executionId)
+            , Database(database)
+            , CustomerSuppliedId(customerSuppliedId)
+            , UserToken(userToken)
+        {}
+
+        TString ExecutionId;
+        TString Database;
+
+        TString CustomerSuppliedId;
+        TString UserToken;
+        std::vector<NKqpProto::TKqpExternalSink> Sinks;
+        std::vector<TString> SecretNames;
+    };
+    
     TEvSaveScriptExternalEffectRequest(const TString& executionId, const TString& database, const TString& customerSuppliedId, const TString& userToken)
-        : ExecutionId(executionId)
-        , Database(database)
-        , CustomerSuppliedId(customerSuppliedId)
-        , UserToken(userToken)
+        : Description(executionId, database, customerSuppliedId, userToken)
     {}
 
-    TString ExecutionId;
-    TString Database;
-
-    TString CustomerSuppliedId;
-    TString UserToken;
-    std::vector<NKqpProto::TKqpExternalSink> Sinks;
-    std::vector<TString> SecretNames;
+    TDescription Description;
 };
 
 struct TEvSaveScriptExternalEffectResponse : public NActors::TEventLocal<TEvSaveScriptExternalEffectResponse, TKqpScriptExecutionEvents::EvSaveScriptExternalEffectResponse> {
@@ -246,31 +259,41 @@ struct TEvSaveScriptExternalEffectResponse : public NActors::TEventLocal<TEvSave
 };
 
 struct TEvScriptFinalizeRequest : public NActors::TEventLocal<TEvScriptFinalizeRequest, TKqpScriptExecutionEvents::EvScriptFinalizeRequest> {
+    struct TDescription {
+        TDescription(EFinalizationStatus finalizationStatus, const TString& executionId, const TString& database,
+        Ydb::StatusIds::StatusCode operationStatus, Ydb::Query::ExecStatus execStatus, NYql::TIssues issues, std::optional<NKqpProto::TKqpStatsQuery> queryStats,
+        std::optional<TString> queryPlan, std::optional<TString> queryAst, std::optional<ui64> leaseGeneration)
+            : FinalizationStatus(finalizationStatus)
+            , ExecutionId(executionId)
+            , Database(database)
+            , OperationStatus(operationStatus)
+            , ExecStatus(execStatus)
+            , Issues(std::move(issues))
+            , QueryStats(std::move(queryStats))
+            , QueryPlan(std::move(queryPlan))
+            , QueryAst(std::move(queryAst))
+            , LeaseGeneration(leaseGeneration)
+        {}
+
+        EFinalizationStatus FinalizationStatus;
+        TString ExecutionId;
+        TString Database;
+        Ydb::StatusIds::StatusCode OperationStatus;
+        Ydb::Query::ExecStatus ExecStatus;
+        NYql::TIssues Issues;
+        std::optional<NKqpProto::TKqpStatsQuery> QueryStats;
+        std::optional<TString> QueryPlan;
+        std::optional<TString> QueryAst;
+        std::optional<ui64> LeaseGeneration;
+    };
+
     TEvScriptFinalizeRequest(EFinalizationStatus finalizationStatus, const TString& executionId, const TString& database,
         Ydb::StatusIds::StatusCode operationStatus, Ydb::Query::ExecStatus execStatus, NYql::TIssues issues = {}, std::optional<NKqpProto::TKqpStatsQuery> queryStats = std::nullopt,
         std::optional<TString> queryPlan = std::nullopt, std::optional<TString> queryAst = std::nullopt, std::optional<ui64> leaseGeneration = std::nullopt)
-        : FinalizationStatus(finalizationStatus)
-        , ExecutionId(executionId)
-        , Database(database)
-        , OperationStatus(operationStatus)
-        , ExecStatus(execStatus)
-        , Issues(std::move(issues))
-        , QueryStats(std::move(queryStats))
-        , QueryPlan(std::move(queryPlan))
-        , QueryAst(std::move(queryAst))
-        , LeaseGeneration(leaseGeneration)
+        : Description(finalizationStatus, executionId, database, operationStatus, execStatus, issues, queryStats, queryPlan, queryAst, leaseGeneration)
     {}
 
-    EFinalizationStatus FinalizationStatus;
-    TString ExecutionId;
-    TString Database;
-    Ydb::StatusIds::StatusCode OperationStatus;
-    Ydb::Query::ExecStatus ExecStatus;
-    NYql::TIssues Issues;
-    std::optional<NKqpProto::TKqpStatsQuery> QueryStats;
-    std::optional<TString> QueryPlan;
-    std::optional<TString> QueryAst;
-    std::optional<ui64> LeaseGeneration;
+    TDescription Description;
 };
 
 struct TEvScriptFinalizeResponse : public NActors::TEventLocal<TEvScriptFinalizeResponse, TKqpScriptExecutionEvents::EvScriptFinalizeResponse> {
@@ -282,15 +305,14 @@ struct TEvScriptFinalizeResponse : public NActors::TEventLocal<TEvScriptFinalize
 };
 
 struct TEvSaveScriptFinalStatusResponse : public NActors::TEventLocal<TEvSaveScriptFinalStatusResponse, TKqpScriptExecutionEvents::EvSaveScriptFinalStatusResponse> {
-    TEvSaveScriptFinalStatusResponse(const TString& customerSuppliedId, const TString& userToken)
-        : CustomerSuppliedId(customerSuppliedId)
-        , UserToken(userToken)
-    {}
-
+    bool ApplicateScriptExternalEffectRequired = false;
+    bool OperationAlreadyFinalized = false;
     TString CustomerSuppliedId;
     TString UserToken;
     std::vector<NKqpProto::TKqpExternalSink> Sinks;
     std::vector<TString> SecretNames;
+    Ydb::StatusIds::StatusCode Status;
+    NYql::TIssues Issues;
 };
 
 struct TEvDescribeSecretsResponse : public NActors::TEventLocal<TEvDescribeSecretsResponse, TKqpScriptExecutionEvents::EvDescribeSecretsResponse> {

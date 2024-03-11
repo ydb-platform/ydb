@@ -7,7 +7,6 @@ package poll
 import (
 	"syscall"
 	_ "unsafe" // for go:linkname
-
 )
 
 // OpenDir returns a pointer to a DIR structure suitable for

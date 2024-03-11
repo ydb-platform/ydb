@@ -702,7 +702,7 @@ NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase 
             .Table(lookup.Table())
             .Columns(lookup.Columns())
             .InputType(ExpandType(lookup.Pos(), *lookup.LookupKeys().Ref().GetTypeAnn(), ctx))
-            .LookupStrategy().Build(TKqpStreamLookupStrategyName)
+            .LookupStrategy(lookup.LookupStrategy())
             .Done();
 
     } else if (lookup.LookupKeys().Maybe<TDqCnUnionAll>()) {
@@ -713,7 +713,7 @@ NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase 
             .Table(lookup.Table())
             .Columns(lookup.Columns())
             .InputType(ExpandType(lookup.Pos(), *output.Ref().GetTypeAnn(), ctx))
-            .LookupStrategy().Build(TKqpStreamLookupStrategyName)
+            .LookupStrategy(lookup.LookupStrategy())
             .Done();
     } else {
         return node;
@@ -738,32 +738,24 @@ NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase 
 }
 
 NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStages(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx) {
-    if (!node.Maybe<TKqlStreamIdxLookupJoin>()) {
+    if (!node.Maybe<TKqlIndexLookupJoin>()) {
         return node;
     }
 
-    const auto& idxLookupJoin = node.Cast<TKqlStreamIdxLookupJoin>();
-    YQL_ENSURE(idxLookupJoin.LeftInput().Maybe<TDqCnUnionAll>(), "Expected UnionAll as left input");
-
-    auto output = idxLookupJoin.LeftInput().Cast<TDqCnUnionAll>().Output();
-    auto cnStreamIdxLookupJoin = Build<TKqpCnStreamLookup>(ctx, idxLookupJoin.Pos())
-        .Output(output)
-        .Table(idxLookupJoin.RightTable())
-        .Columns(idxLookupJoin.RightColumns())
-        .InputType(ExpandType(idxLookupJoin.Pos(), *output.Ref().GetTypeAnn(), ctx))
-        .LookupStrategy().Build(TKqpStreamLookupJoinStrategyName)
-        .Done();
+    const auto& idxLookupJoin = node.Cast<TKqlIndexLookupJoin>();
 
     return Build<TDqCnUnionAll>(ctx, node.Pos())
         .Output()
             .Stage<TDqStage>()
             .Inputs()
-                .Add(cnStreamIdxLookupJoin)
+                .Add(idxLookupJoin.Input())
                 .Build()
             .Program()
                 .Args({"stream_lookup_join_output"})
                 .Body<TKqpIndexLookupJoin>()
-                    .Input("stream_lookup_join_output")
+                    .Input<TCoToStream>()
+                        .Input("stream_lookup_join_output")
+                        .Build()
                     .JoinType(idxLookupJoin.JoinType())
                     .LeftLabel(idxLookupJoin.LeftLabel())
                     .RightLabel(idxLookupJoin.RightLabel())

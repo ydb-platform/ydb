@@ -84,7 +84,7 @@ YT_DEFINE_ERROR_ENUM(
     ((NoInSyncReplicas)                       (1736))
     ((CellHasNoAssignedPeers)                 (1737))
     ((TableSchemaIncompatible)                (1738))
-    ((BundleIsBanned)                           (1739))
+    ((BundleIsBanned)                         (1739))
 );
 
 DEFINE_ENUM(EInMemoryMode,
@@ -186,6 +186,7 @@ DEFINE_ENUM(ETableReplicaStatus,
 DEFINE_ENUM(ETabletActionKind,
     ((Move)                     (0))
     ((Reshard)                  (1))
+    ((SmoothMove)               (2))
 );
 
 DEFINE_ENUM(ETabletActionState,
@@ -200,6 +201,10 @@ DEFINE_ENUM(ETabletActionState,
     ((Completed)                (7))
     ((Failing)                  (8))
     ((Failed)                   (9))
+
+    ((MountingAuxiliary)        (11))
+    ((WaitingForSmoothMove)     (12))
+    ((AbortingSmoothMove)       (13))
 );
 
 DEFINE_ENUM(ETabletServiceFeatures,
@@ -207,7 +212,12 @@ DEFINE_ENUM(ETabletServiceFeatures,
 );
 
 DEFINE_ENUM(ESecondaryIndexKind,
-    ((FullSync)  (0))
+    ((FullSync)                 (0))
+    ((Unfolding)                (1))
+);
+
+DEFINE_ENUM(ERowMergerType,
+    (Legacy)
 );
 
 ////////////////////////////////////////////////////////////////////////////////

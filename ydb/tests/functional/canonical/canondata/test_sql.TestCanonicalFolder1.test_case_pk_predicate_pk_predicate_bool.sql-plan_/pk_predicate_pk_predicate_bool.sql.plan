@@ -12,6 +12,19 @@
                         "Value"
                     ],
                     "limit": "1001",
+                    "scan_by": [
+                        "Key1 [false, false]",
+                        "Key2 [true, true]",
+                        "Key1 [true, true]",
+                        "Key2 [false, false]"
+                    ],
+                    "type": "Scan"
+                },
+                {
+                    "columns": [
+                        "Value"
+                    ],
+                    "limit": "1001",
                     "lookup_by": [
                         "Key1 (false)"
                     ],
@@ -32,12 +45,6 @@
                         "Key2 (null, true)"
                     ],
                     "type": "Scan"
-                },
-                {
-                    "columns": [
-                        "Value"
-                    ],
-                    "type": "Lookup"
                 }
             ]
         }

@@ -1,10 +1,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/tx/columnshard/splitter/rb_splitter.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
-#include <ydb/core/formats/arrow/serializer/batch_only.h>
 #include <ydb/core/formats/arrow/simple_builder/batch.h>
 #include <ydb/core/formats/arrow/simple_builder/filler.h>
-#include <ydb/core/formats/arrow/serializer/full.h>
+#include <ydb/core/formats/arrow/serializer/native.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
 Y_UNIT_TEST_SUITE(Splitter) {
@@ -23,7 +22,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         }
 
         virtual NKikimr::NOlap::TColumnSaver GetColumnSaver(const ui32 columnId) const override {
-            return NKikimr::NOlap::TColumnSaver(nullptr, std::make_shared<NKikimr::NArrow::NSerialization::TFullDataSerializer>(arrow::ipc::IpcWriteOptions::Defaults()));
+            return NKikimr::NOlap::TColumnSaver(nullptr, std::make_shared<NSerialization::TNativeSerializer>(arrow::ipc::IpcOptions::Defaults()));
         }
 
         virtual std::optional<NKikimr::NOlap::TColumnSerializationStat> GetColumnSerializationStats(const ui32 /*columnId*/) const override {
@@ -36,12 +35,11 @@ Y_UNIT_TEST_SUITE(Splitter) {
         NKikimr::NOlap::TColumnLoader GetColumnLoader(const ui32 columnId) const {
             arrow::FieldVector v = {std::make_shared<arrow::Field>(GetColumnName(columnId), std::make_shared<arrow::StringType>())};
             auto schema = std::make_shared<arrow::Schema>(v);
-            return NKikimr::NOlap::TColumnLoader(nullptr, std::make_shared<NKikimr::NArrow::NSerialization::TFullDataDeserializer>(), schema, columnId);
+            return NKikimr::NOlap::TColumnLoader(nullptr, NSerialization::TSerializerContainer::GetDefaultSerializer(), schema, columnId);
         }
 
         virtual std::shared_ptr<arrow::Field> GetField(const ui32 columnId) const override {
-            Y_ABORT_UNLESS(false);
-            return nullptr;
+            return std::make_shared<arrow::Field>(GetColumnName(columnId), std::make_shared<arrow::StringType>());
         }
 
         virtual ui32 GetColumnId(const std::string& columnName) const override {
@@ -74,15 +72,14 @@ Y_UNIT_TEST_SUITE(Splitter) {
         void Execute(std::shared_ptr<arrow::RecordBatch> batch) {
             NKikimr::NColumnShard::TIndexationCounters counters("test");
             NKikimr::NOlap::TRBSplitLimiter limiter(counters.SplitterCounters, Schema, batch, NKikimr::NOlap::TSplitSettings());
-            std::vector<std::vector<NKikimr::NOlap::IPortionColumnChunk::TPtr>> chunksForBlob;
+            std::vector<std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>>> chunksForBlob;
             std::map<std::string, std::vector<std::shared_ptr<arrow::RecordBatch>>> restoredBatch;
             std::vector<i64> blobsSize;
             bool hasMultiSplit = false;
             ui32 blobsCount = 0;
             ui32 slicesCount = 0;
-            ui32 chunksCount = 0;
             std::shared_ptr<arrow::RecordBatch> sliceBatch;
-            while (limiter.Next(chunksForBlob, sliceBatch)) {
+            while (limiter.Next(chunksForBlob, sliceBatch, NKikimr::NOlap::TEntityGroups("default"))) {
                 ++slicesCount;
                 TStringBuilder sb;
                 std::map<ui32, ui32> recordsCountByColumn;
@@ -91,10 +88,11 @@ Y_UNIT_TEST_SUITE(Splitter) {
                     ui64 blobSize = 0;
                     sb << "[";
                     std::set<ui32> blobColumnChunks;
-                    for (auto&& i : chunks) {
-                        ++chunksCount;
+                    for (auto&& iData : chunks) {
+                        auto i = dynamic_pointer_cast<NKikimr::NOlap::IPortionColumnChunk>(iData);
+                        AFL_VERIFY(i);
                         const ui32 columnId = i->GetColumnId();
-                        recordsCountByColumn[columnId] += i->GetRecordsCount();
+                        recordsCountByColumn[columnId] += i->GetRecordsCountVerified();
                         restoredBatch[Schema->GetColumnName(columnId)].emplace_back(*Schema->GetColumnLoader(columnId).Apply(i->GetData()));
                         blobSize += i->GetData().size();
                         if (i->GetRecordsCount() != NKikimr::NOlap::TSplitSettings().GetMinRecordsCount() && !blobColumnChunks.emplace(columnId).second) {

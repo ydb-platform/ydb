@@ -18,6 +18,17 @@ using namespace NNet;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TConnectionConfigPtr TConnectionConfig::CreateFromClusterUrl(
+    TString clusterUrl,
+    std::optional<TString> proxyRole)
+{
+    auto config = New<TConnectionConfig>();
+    config->ClusterUrl = std::move(clusterUrl);
+    config->ProxyRole = std::move(proxyRole);
+    config->Postprocess();
+    return config;
+}
+
 void TConnectionConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("cluster_url", &TThis::ClusterUrl)
@@ -89,7 +100,7 @@ void TConnectionConfig::Register(TRegistrar registrar)
         .Default(NCompression::ECodec::None);
     registrar.Parameter("response_codec", &TThis::ResponseCodec)
         .Default(NCompression::ECodec::None);
-    // COMPAT(kiselyovp): legacy RPC codecs
+    // COMPAT(danilalexeev  ): legacy RPC codecs
     registrar.Parameter("enable_legacy_rpc_codecs", &TThis::EnableLegacyRpcCodecs)
         .Default(true);
 

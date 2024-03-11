@@ -18,6 +18,8 @@ namespace NKikimr {
         double AccumWeight = 0;
 
     public:
+        TGenerator() = default;
+
         template<typename T>
         TGenerator(const google::protobuf::RepeatedPtrField<T>& setting) {
             for (const auto& item : setting) {

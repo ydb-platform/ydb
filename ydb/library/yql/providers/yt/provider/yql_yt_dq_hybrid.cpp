@@ -64,108 +64,162 @@ private:
     }
 
     bool CanReplaceOnHybrid(const TYtOutputOpBase& operation) const {
-        if (!State_->IsHybridEnabledForCluster(operation.DataSink().Cluster().Value()))
+        if (!State_->IsHybridEnabledForCluster(operation.DataSink().Cluster().Value())) {
+            PushHybridStat("SkipDisabledCluster", operation.Raw()->Content());
             return false;
+        }
 
         if (operation.Ref().StartsExecution() || operation.Ref().HasResult())
             return false;
 
-        if (operation.Output().Size() != 1U)
+        if (operation.Output().Size() != 1U) {
+            PushHybridStat("SkipMultipleOutputs", operation.Raw()->Content());
             return false;
+        }
 
-        if (const auto& trans = operation.Maybe<TYtTransientOpBase>(); trans && trans.Cast().Input().Size() != 1U)
+        if (const auto& trans = operation.Maybe<TYtTransientOpBase>(); trans && trans.Cast().Input().Size() != 1U) {
+            PushHybridStat("SkipMultipleInputs", operation.Raw()->Content());
             return false;
+        }
 
-        return !HasSetting(*operation.Ref().Child(4U), EYtSettingType::NoDq);
+        const auto& settings = *operation.Ref().Child(4U);
+        if (HasSettingsExcept(settings, DqOpSupportedSettings)) {
+            if (!NYql::HasSetting(settings, EYtSettingType::NoDq)) {
+                PushHybridStat("SkipUnsupportedDqOpSettings", operation.Raw()->Content());
+            }
+            return false;
+        }
+
+        return true;
     }
 
-    std::optional<std::array<ui64, 2U>> CanReadHybrid(const TYtSection& section) const {
-        if (HasSettingsExcept(section.Settings().Ref(), DqReadSupportedSettings))
-            return std::nullopt;
+    bool HasDescOrderOutput(const TYtOutputOpBase& operation) const {
+        TYqlRowSpecInfo outRowSpec(operation.Output().Item(0).RowSpec());
+        if (outRowSpec.IsSorted() && outRowSpec.HasAuxColumns()) {
+            PushHybridStat("SkipDescSort", operation.Raw()->Content());
+            return true;
+        }
+        return false;
+    }
 
-        std::array<ui64, 2U> stat = {{0ULL, 0ULL}};
+    bool CanReadHybrid(const TYtSection& section, const TStringBuf& nodeName, bool orderedInput) const {
+        if (HasSettingsExcept(section.Settings().Ref(), DqReadSupportedSettings)) {
+            PushHybridStat("SkipUnsupportedDqReadSettings", nodeName);
+            return false;
+        }
+
+        ui64 dataSize = 0ULL, dataChunks = 0ULL;
         for (const auto& path : section.Paths()) {
-            if (const TYtPathInfo info(path); info.Ranges)
-                return std::nullopt;
-            else if (const auto& tableInfo = info.Table;
-                !tableInfo || !tableInfo->Stat || !tableInfo->Meta || !tableInfo->RowSpec || tableInfo->Meta->IsDynamic || NYql::HasSetting(tableInfo->Settings.Ref(), EYtSettingType::WithQB))
-                return std::nullopt;
-            else {
-                auto tableSize = tableInfo->Stat->DataSize;
-                if (tableInfo->Meta->Attrs.Value("erasure_codec", "none") != "none") {
-                    if (const auto codecCpu = State_->Configuration->ErasureCodecCpuForDq.Get(tableInfo->Cluster)) {
-                        tableSize *=* codecCpu;
-                    }
+            const TYtPathInfo info(path);
+            const auto& tableInfo = info.Table;
+            if (!tableInfo || !tableInfo->Stat || !tableInfo->Meta || !tableInfo->RowSpec) {
+                return false;
+            }
+            const auto canUseYtPartitioningApi = State_->Configuration->_EnableYtPartitioning.Get(tableInfo->Cluster).GetOrElse(false);
+            if ((info.Ranges || tableInfo->Meta->IsDynamic) && !canUseYtPartitioningApi) {
+                return false;
+            }
+            if (NYql::HasSetting(tableInfo->Settings.Ref(), EYtSettingType::WithQB)) {
+                PushHybridStat("SkipWithQB", nodeName);
+                return false;
+            }
+            auto tableSize = tableInfo->Stat->DataSize;
+            if (tableInfo->Meta->Attrs.Value("erasure_codec", "none") != "none") {
+                if (const auto codecCpu = State_->Configuration->ErasureCodecCpuForDq.Get(tableInfo->Cluster)) {
+                    tableSize *=* codecCpu;
+                }
+            }
+
+            dataSize += tableSize;
+            dataChunks += tableInfo->Stat->ChunkCount;
+        }
+        const auto chunksLimit = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ);
+
+        const auto sizeLimit = orderedInput ?
+            State_->Configuration->HybridDqDataSizeLimitForOrdered.Get().GetOrElse(DefaultHybridDqDataSizeLimitForOrdered):
+            State_->Configuration->HybridDqDataSizeLimitForUnordered.Get().GetOrElse(DefaultHybridDqDataSizeLimitForUnordered);
+
+        if (dataSize > sizeLimit || dataChunks > chunksLimit) {
+            PushHybridStat("SkipOverLimits", nodeName);
+            return false;
+        }
+                
+        return true;
+    }
+
+    bool CanExecuteInHybrid(const TExprNode::TPtr& handler, const TStringBuf& nodeName, bool orderedInput) const {
+        bool flow = false;
+        auto sources = FindNodes(handler,
+                                        [](const TExprNode::TPtr& node) {
+                                            return !TYtOutput::Match(node.Get());
+                                        },
+                                        [](const TExprNode::TPtr& node) {
+                                            return TYtTableContent::Match(node.Get());
+                                        });
+        TNodeSet flowSources;
+        std::for_each(sources.cbegin(), sources.cend(), [&flowSources](const TExprNode::TPtr& node) { flowSources.insert(node.Get()); });
+        return !FindNonYieldTransparentNode(handler, *State_->Types, flowSources) &&
+            !FindNode(handler, [&flow, this, &nodeName, orderedInput] (const TExprNode::TPtr& node) {
+                if (TCoScriptUdf::Match(node.Get()) && NKikimr::NMiniKQL::IsSystemPython(NKikimr::NMiniKQL::ScriptTypeFromStr(node->Head().Content()))) {
+                    return true;
                 }
 
-                stat.front() += tableSize;
-                stat.back() += tableInfo->Stat->ChunkCount;
-            }
-        }
-        return stat;
-    }
-
-    TMaybeNode<TExprBase> TryYtFillByDq(TExprBase node, TExprContext& ctx) const {
-        if (const auto fill = node.Cast<TYtFill>(); CanReplaceOnHybrid(fill)) {
-            const auto sizeLimit = State_->Configuration->HybridDqDataSizeLimitForOrdered.Get().GetOrElse(DefaultHybridDqDataSizeLimitForOrdered);
-            const auto chunksLimit = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ);
-            if (bool flow = false; !FindNode(fill.Content().Ptr(), [&flow, sizeLimit, chunksLimit, this] (const TExprNode::TPtr& node) {
-                if (node->IsCallable(TCoForwardList::CallableName()))
-                    return true;
-                if (node->IsCallable(TCoCollect::CallableName()) && ETypeAnnotationKind::List != node->Head().GetTypeAnn()->GetKind())
-                    return true;
-                if (const auto tableContent = TMaybeNode<TYtTableContent>(node)) {
+                if (const auto& tableContent = TMaybeNode<TYtTableContent>(node)) {
                     if (!flow)
                         return true;
                     if (const auto& maybeRead = tableContent.Cast().Input().Maybe<TYtReadTable>()) {
-                        if (const auto& read = maybeRead.Cast(); 1U != read.Input().Size())
+                        const auto& read = maybeRead.Cast();
+                        if (1U != read.Input().Size()) {
+                            PushHybridStat("SkipMultipleInputs", nodeName);
                             return true;
-                        else {
-                            const auto stat = CanReadHybrid(read.Input().Item(0));
-                            return !stat || stat->front() > sizeLimit || stat->back() > chunksLimit;
                         }
+                        if(!CanReadHybrid(read.Input().Item(0), nodeName, orderedInput)) {
+                            return true;
+                        }
+                        return false;
                     }
                 }
                 flow = node->IsCallable(TCoToFlow::CallableName()) && node->Head().IsCallable(TYtTableContent::CallableName());
                 return false;
-            })) {
-                TExprNode::TListType flags;
-                flags.emplace_back(ctx.NewAtom(fill.Pos(), "FallbackOnError", TNodeFlags::Default));
-                flags.emplace_back(ctx.NewAtom(fill.Pos(), "FallbackOpYtFill", TNodeFlags::Default));
+            });
+    }
 
-                return Build<TYtTryFirst>(ctx, fill.Pos())
-                    .First<TYtDqProcessWrite>()
-                        .World(fill.World())
-                        .DataSink(fill.DataSink())
-                        .Output(fill.Output())
-                        .Input<TDqCnResult>()
-                            .Output()
-                                .Stage<TDqStage>()
-                                    .Inputs().Build()
-                                    .Program<TCoLambda>()
-                                        .Args({})
-                                        .Body<TDqWrite>()
-                                            .Input(CloneCompleteFlow(fill.Content().Body().Ptr(), ctx))
-                                            .Provider().Value(YtProviderName).Build()
-                                            .Settings<TCoNameValueTupleList>().Build()
-                                        .Build()
+    TMaybeNode<TExprBase> TryYtFillByDq(TExprBase node, TExprContext& ctx) const {
+        const TStringBuf nodeName = node.Raw()->Content();
+        const auto fill = node.Cast<TYtFill>();
+        if (CanReplaceOnHybrid(fill) && CanExecuteInHybrid(fill.Content().Ptr(), nodeName, true)) {
+            YQL_CLOG(INFO, ProviderYt) << "Rewrite " << nodeName << " node by hybrid";
+            return Build<TYtTryFirst>(ctx, fill.Pos())
+                .First<TYtDqProcessWrite>()
+                    .World(fill.World())
+                    .DataSink(fill.DataSink())
+                    .Output(fill.Output())
+                    .Input<TDqCnResult>()
+                        .Output()
+                            .Stage<TDqStage>()
+                                .Inputs().Build()
+                                .Program<TCoLambda>()
+                                    .Args({})
+                                    .Body<TDqWrite>()
+                                        .Input(CloneCompleteFlow(fill.Content().Body().Ptr(), ctx))
+                                        .Provider().Value(YtProviderName).Build()
+                                        .Settings<TCoNameValueTupleList>().Build()
                                     .Build()
-                                    .Settings(TDqStageSettings{.PartitionMode = TDqStageSettings::EPartitionMode::Single}.BuildNode(ctx, fill.Pos()))
                                 .Build()
-                                .Index().Build(ctx.GetIndexAsString(0), TNodeFlags::Default)
+                                .Settings(TDqStageSettings{.PartitionMode = TDqStageSettings::EPartitionMode::Single}.BuildNode(ctx, fill.Pos()))
                             .Build()
-                            .ColumnHints().Build()
+                            .Index().Build(ctx.GetIndexAsString(0), TNodeFlags::Default)
                         .Build()
-                        .Flags().Add(std::move(flags)).Build()
+                        .ColumnHints().Build()
                     .Build()
-                    .Second<TYtFill>()
-                        .InitFrom(fill)
-                        .Settings(NYql::AddSetting(fill.Settings().Ref(), EYtSettingType::NoDq, {}, ctx))
-                    .Build()
-                    .Done();
-            }
+                    .Flags().Add(GetHybridFlags(fill, ctx)).Build()
+                .Build()
+                .Second<TYtFill>()
+                    .InitFrom(fill)
+                    .Settings(NYql::AddSetting(fill.Settings().Ref(), EYtSettingType::NoDq, {}, ctx))
+                .Build()
+                .Done();
         }
-
         return node;
     }
 
@@ -234,10 +288,6 @@ private:
         auto settings = NYql::AddSetting(sort.Settings().Ref(), EYtSettingType::NoDq, {}, ctx);
         auto operation = ctx.ChangeChild(sort.Ref(), TYtTransientOpBase::idx_Settings, std::move(settings));
 
-        TExprNode::TListType flags;
-        flags.emplace_back(ctx.NewAtom(sort.Pos(), "FallbackOnError", TNodeFlags::Default));
-        flags.emplace_back(ctx.NewAtom(sort.Pos(), "FallbackOpYtSort", TNodeFlags::Default));
-
         return Build<TYtTryFirst>(ctx, sort.Pos())
             .First<TYtDqProcessWrite>()
                 .World(std::move(newWorld))
@@ -261,185 +311,124 @@ private:
                     .Build()
                     .ColumnHints().Build()
                 .Build()
-                .Flags().Add(std::move(flags)).Build()
+                .Flags().Add(GetHybridFlags(sort, ctx)).Build()
             .Build()
             .Second(std::move(operation))
             .Done();
     }
 
     TMaybeNode<TExprBase> TryYtSortByDq(TExprBase node, TExprContext& ctx) const {
-        if (const auto sort = node.Cast<TYtSort>(); CanReplaceOnHybrid(sort)) {
-            if (const auto sizeLimit = State_->Configuration->HybridDqDataSizeLimitForOrdered.Get().GetOrElse(DefaultHybridDqDataSizeLimitForOrdered)) {
-                const auto info = TYtTableBaseInfo::Parse(sort.Input().Item(0).Paths().Item(0).Table());
-                const auto chunksLimit = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ);
-                if (const auto stat = CanReadHybrid(sort.Input().Item(0))) {
-                    if (stat->front() <= sizeLimit && stat->back() <= chunksLimit) {
-                        YQL_CLOG(INFO, ProviderYt) << "Sort on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
-                        PushStat("HybridTry");
-                        PushHybridStat("Try", node.Raw()->Content());
-                        return MakeYtSortByDq(sort, ctx);
-                    }
-                    PushStat("HybridSkipOverLimits");
-                    PushHybridStat("SkipOverLimits", node.Raw()->Content());
-                }
-            }
+        const auto sort = node.Cast<TYtSort>();
+        const TStringBuf nodeName = node.Raw()->Content();
+        if (CanReplaceOnHybrid(sort) && CanReadHybrid(sort.Input().Item(0), node.Raw()->Content(), true) && !HasDescOrderOutput(sort)) {
+            PushHybridStat("Try", nodeName);
+            YQL_CLOG(INFO, ProviderYt) << "Rewrite " << nodeName << " node by hybrid";
+            return MakeYtSortByDq(sort, ctx);
         }
-
         return node;
     }
 
     TMaybeNode<TExprBase> TryYtMergeByDq(TExprBase node, TExprContext& ctx) const {
-        if (const auto merge = node.Cast<TYtMerge>(); CanReplaceOnHybrid(merge) && !NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::CombineChunks)) {
-            if (const auto sizeLimit = State_->Configuration->HybridDqDataSizeLimitForOrdered.Get().GetOrElse(DefaultHybridDqDataSizeLimitForOrdered)) {
-                const auto info = TYtTableBaseInfo::Parse(merge.Input().Item(0).Paths().Item(0).Table());
-                const auto chunksLimit = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ);
-                if (const auto stat = CanReadHybrid(merge.Input().Item(0))) {
-                    if (stat->front() <= sizeLimit && stat->back() <= chunksLimit) {
-                        YQL_CLOG(INFO, ProviderYt) << "Merge on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
-                        PushStat("HybridTry");
-                        PushHybridStat("Try", node.Raw()->Content());
-                        return MakeYtSortByDq(merge, ctx);
-                    }
-                    PushStat("HybridSkipOverLimits");
-                    PushHybridStat("SkipOverLimits", node.Raw()->Content());
-                }
-            }
+        const auto merge = node.Cast<TYtMerge>();
+        const TStringBuf nodeName = node.Raw()->Content();
+        if (CanReplaceOnHybrid(merge) && CanReadHybrid(merge.Input().Item(0), node.Raw()->Content(), true) && !HasDescOrderOutput(merge)) {
+            PushHybridStat("Try", nodeName);
+            YQL_CLOG(INFO, ProviderYt) << "Rewrite " << nodeName << " node by hybrid";
+            return MakeYtSortByDq(merge, ctx);
         }
-
         return node;
     }
 
-    bool CanExecuteInHybrid(const TExprNode::TPtr& handler, ui64 chunksLimit, ui64 sizeLimit) const {
-        bool flow = false;
-        return IsYieldTransparent(handler, *State_->Types) &&
-            !FindNode(handler, [&flow, sizeLimit, chunksLimit, this] (const TExprNode::TPtr& node) {
-                if (TCoScriptUdf::Match(node.Get()) && NKikimr::NMiniKQL::IsSystemPython(NKikimr::NMiniKQL::ScriptTypeFromStr(node->Head().Content()))) {
-                    return true;
-                }
-
-                if (const auto& tableContent = TMaybeNode<TYtTableContent>(node)) {
-                    if (!flow)
-                        return true;
-                    if (const auto& maybeRead = tableContent.Cast().Input().Maybe<TYtReadTable>()) {
-                        if (const auto& read = maybeRead.Cast(); 1U != read.Input().Size())
-                            return true;
-                        else {
-                            const auto stat = CanReadHybrid(read.Input().Item(0));
-                            return !stat || stat->front() > sizeLimit || stat->back() > chunksLimit;
-                        }
-                    }
-                }
-                flow = node->IsCallable(TCoToFlow::CallableName()) && node->Head().IsCallable(TYtTableContent::CallableName());
-                return false;
-            });
-    }
-
     TMaybeNode<TExprBase> TryYtMapByDq(TExprBase node, TExprContext& ctx) const {
-        if (const auto map = node.Cast<TYtMap>(); CanReplaceOnHybrid(map)) {
-            const auto chunksLimit = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ);
-            bool ordered = NYql::HasSetting(map.Settings().Ref(), EYtSettingType::Ordered);
-            if (!ordered) {
-                auto setting = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::JobCount);
-                if (setting && FromString<ui64>(setting->Child(1)->Content()) == 1) {
-                    ordered = true;
-                }
-            }
-            const auto sizeLimit = ordered ?
-                State_->Configuration->HybridDqDataSizeLimitForOrdered.Get().GetOrElse(DefaultHybridDqDataSizeLimitForOrdered):
-                State_->Configuration->HybridDqDataSizeLimitForUnordered.Get().GetOrElse(DefaultHybridDqDataSizeLimitForUnordered);
-            if (const auto stat = CanReadHybrid(map.Input().Item(0))) {
-                if (stat->front() <= sizeLimit && stat->back() <= chunksLimit) {
-                    if (CanExecuteInHybrid(map.Mapper().Ptr(), chunksLimit, sizeLimit)) {
-                        YQL_CLOG(INFO, ProviderYt) << "Map on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
-                        PushStat("HybridTry");
-                        PushHybridStat("Try", node.Raw()->Content());
-                        TSyncMap syncList;
-                        const auto& paths = map.Input().Item(0).Paths();
-                        for (auto i = 0U; i < paths.Size(); ++i) {
-                            if (const auto mayOut = paths.Item(i).Table().Maybe<TYtOutput>()) {
-                                syncList.emplace(GetOutputOp(mayOut.Cast()).Ptr(), syncList.size());
-                            }
-                        }
-                        auto newWorld = ApplySyncListToWorld(map.World().Ptr(), syncList, ctx);
-
-                        auto settings = ctx.NewList(map.Input().Pos(), {});
-                        if (!ordered) {
-                            settings = NYql::AddSetting(*settings, EYtSettingType::Split, nullptr, ctx);
-                        }
-
-                        auto stage = Build<TDqStage>(ctx, map.Pos())
-                            .Inputs().Build()
-                            .Program<TCoLambda>()
-                                .Args({})
-                                .Body<TDqWrite>()
-                                    .Input<TExprApplier>()
-                                        .Apply(map.Mapper())
-                                        .With<TCoToFlow>(0)
-                                            .Input<TYtTableContent>()
-                                                .Input<TYtReadTable>()
-                                                    .World<TCoWorld>().Build()
-                                                    .DataSource<TYtDSource>()
-                                                        .Category(map.DataSink().Category())
-                                                        .Cluster(map.DataSink().Cluster())
-                                                    .Build()
-                                                    .Input(map.Input())
-                                                .Build()
-                                                .Settings(std::move(settings))
-                                            .Build()
-                                        .Build()
-                                    .Build()
-                                    .Provider().Value(YtProviderName).Build()
-                                    .Settings<TCoNameValueTupleList>().Build()
-                                .Build()
-                            .Build()
-                            .Settings(TDqStageSettings{.PartitionMode = ordered ? TDqStageSettings::EPartitionMode::Single : TDqStageSettings::EPartitionMode::Default}.BuildNode(ctx, map.Pos()))
-                            .Done();
-
-                        if (!ordered) {
-                            stage = Build<TDqStage>(ctx, map.Pos())
-                                .Inputs()
-                                    .Add<TDqCnUnionAll>()
-                                        .Output()
-                                            .Stage(std::move(stage))
-                                            .Index().Build(ctx.GetIndexAsString(0), TNodeFlags::Default)
-                                            .Build()
-                                        .Build()
-                                    .Build()
-                                .Program().Args({"pass"}).Body("pass").Build()
-                                .Settings(TDqStageSettings().BuildNode(ctx, map.Pos()))
-                                .Done();
-                        }
-
-                        TExprNode::TListType flags;
-                        flags.emplace_back(ctx.NewAtom(map.Pos(), "FallbackOnError", TNodeFlags::Default));
-                        flags.emplace_back(ctx.NewAtom(map.Pos(), "FallbackOpYtMap", TNodeFlags::Default));
-
-                        return Build<TYtTryFirst>(ctx, map.Pos())
-                            .First<TYtDqProcessWrite>()
-                                .World(std::move(newWorld))
-                                .DataSink(map.DataSink())
-                                .Output(map.Output())
-                                .Input<TDqCnResult>()
-                                    .Output()
-                                        .Stage(std::move(stage))
-                                        .Index().Build(ctx.GetIndexAsString(0), TNodeFlags::Default)
-                                        .Build()
-                                    .ColumnHints().Build()
-                                    .Build()
-                                .Flags().Add(std::move(flags)).Build()
-                                .Build()
-                            .Second<TYtMap>()
-                                .InitFrom(map)
-                                .Settings(NYql::AddSetting(map.Settings().Ref(), EYtSettingType::NoDq, {}, ctx))
-                                .Build()
-                            .Done();
-                    }
-                }
-                PushStat("HybridOverLimits");
-                PushHybridStat("SkipOverLimits", node.Raw()->Content());
+        const TStringBuf& nodeName = node.Raw()->Content();
+        const auto map = node.Cast<TYtMap>();
+        bool ordered = NYql::HasSetting(map.Settings().Ref(), EYtSettingType::Ordered);
+        if (!ordered) {
+            auto setting = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::JobCount);
+            if (setting && FromString<ui64>(setting->Child(1)->Content()) == 1) {
+                ordered = true;
             }
         }
+        if (CanReplaceOnHybrid(map) && CanReadHybrid(map.Input().Item(0), nodeName, ordered) && CanExecuteInHybrid(map.Mapper().Ptr(), nodeName, ordered)) {
+            YQL_CLOG(INFO, ProviderYt) << "Rewrite " << nodeName << " node by hybrid";
+            PushHybridStat("Try", nodeName);
+            TSyncMap syncList;
+            const auto& paths = map.Input().Item(0).Paths();
+            for (auto i = 0U; i < paths.Size(); ++i) {
+                if (const auto mayOut = paths.Item(i).Table().Maybe<TYtOutput>()) {
+                    syncList.emplace(GetOutputOp(mayOut.Cast()).Ptr(), syncList.size());
+                }
+            }
+            auto newWorld = ApplySyncListToWorld(map.World().Ptr(), syncList, ctx);
 
+            auto settings = ctx.NewList(map.Input().Pos(), {});
+            if (!ordered) {
+                settings = NYql::AddSetting(*settings, EYtSettingType::Split, nullptr, ctx);
+            }
+
+            auto stage = Build<TDqStage>(ctx, map.Pos())
+                .Inputs().Build()
+                .Program<TCoLambda>()
+                    .Args({})
+                    .Body<TDqWrite>()
+                        .Input<TExprApplier>()
+                            .Apply(map.Mapper())
+                            .With<TCoToFlow>(0)
+                                .Input<TYtTableContent>()
+                                    .Input<TYtReadTable>()
+                                        .World<TCoWorld>().Build()
+                                        .DataSource<TYtDSource>()
+                                            .Category(map.DataSink().Category())
+                                            .Cluster(map.DataSink().Cluster())
+                                        .Build()
+                                        .Input(map.Input())
+                                    .Build()
+                                    .Settings(std::move(settings))
+                                .Build()
+                            .Build()
+                        .Build()
+                        .Provider().Value(YtProviderName).Build()
+                        .Settings<TCoNameValueTupleList>().Build()
+                    .Build()
+                .Build()
+                .Settings(TDqStageSettings{.PartitionMode = ordered ? TDqStageSettings::EPartitionMode::Single : TDqStageSettings::EPartitionMode::Default}.BuildNode(ctx, map.Pos()))
+                .Done();
+
+            if (!ordered) {
+                stage = Build<TDqStage>(ctx, map.Pos())
+                    .Inputs()
+                        .Add<TDqCnUnionAll>()
+                            .Output()
+                                .Stage(std::move(stage))
+                                .Index().Build(ctx.GetIndexAsString(0), TNodeFlags::Default)
+                                .Build()
+                            .Build()
+                        .Build()
+                    .Program().Args({"pass"}).Body("pass").Build()
+                    .Settings(TDqStageSettings().BuildNode(ctx, map.Pos()))
+                    .Done();
+            }
+
+            return Build<TYtTryFirst>(ctx, map.Pos())
+                .First<TYtDqProcessWrite>()
+                    .World(std::move(newWorld))
+                    .DataSink(map.DataSink())
+                    .Output(map.Output())
+                    .Input<TDqCnResult>()
+                        .Output()
+                            .Stage(std::move(stage))
+                            .Index().Build(ctx.GetIndexAsString(0), TNodeFlags::Default)
+                            .Build()
+                        .ColumnHints().Build()
+                        .Build()
+                    .Flags().Add(GetHybridFlags(map, ctx)).Build()
+                    .Build()
+                .Second<TYtMap>()
+                    .InitFrom(map)
+                    .Settings(NYql::AddSetting(map.Settings().Ref(), EYtSettingType::NoDq, {}, ctx))
+                    .Build()
+                .Done();
+        }
         return node;
     }
 
@@ -581,10 +570,6 @@ private:
 
         auto reducer = ctx.NewLambda(reduce.Pos(), ctx.NewArguments(reduce.Pos(), {std::move(arg)}), std::move(body));
 
-        TExprNode::TListType flags;
-        flags.emplace_back(ctx.NewAtom(reduce.Pos(), "FallbackOnError", TNodeFlags::Default));
-        flags.emplace_back(ctx.NewAtom(reduce.Pos(), "FallbackOpYtReduce", TNodeFlags::Default));
-
         return Build<TYtTryFirst>(ctx, reduce.Pos())
             .template First<TYtDqProcessWrite>()
                 .World(std::move(newWorld))
@@ -614,7 +599,7 @@ private:
                     .Build()
                     .ColumnHints().Build()
                 .Build()
-                .Flags().Add(std::move(flags)).Build()
+                .Flags().Add(GetHybridFlags(reduce, ctx)).Build()
             .Build()
             .template Second<TYtOperation>()
                 .InitFrom(reduce)
@@ -624,62 +609,49 @@ private:
     }
 
     TMaybeNode<TExprBase> TryYtReduceByDq(TExprBase node, TExprContext& ctx) const {
-        if (const auto reduce = node.Cast<TYtReduce>(); CanReplaceOnHybrid(reduce)) {
-            const auto chunksLimit = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ);
-            const auto sizeLimit = State_->Configuration->HybridDqDataSizeLimitForOrdered.Get().GetOrElse(DefaultHybridDqDataSizeLimitForOrdered);
-            if (const auto stat = CanReadHybrid(reduce.Input().Item(0))) {
-                if (stat->front() <= sizeLimit && stat->back() <= chunksLimit) {
-                    if (CanExecuteInHybrid(reduce.Reducer().Ptr(), chunksLimit, sizeLimit)) {
-                        if (ETypeAnnotationKind::Struct == GetSeqItemType(*reduce.Reducer().Args().Arg(0).Ref().GetTypeAnn()).GetKind()) {
-                            YQL_CLOG(INFO, ProviderYt) << "Reduce on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
-                            PushStat("HybridTry");
-                            PushHybridStat("Try", node.Raw()->Content());
-                            return MakeYtReduceByDq(reduce, ctx);
-                        }
-                    }
-                }
-                PushStat("HybridSkipOverLimits");
-                PushHybridStat("SkipOverLimits", node.Raw()->Content());
+        const TStringBuf& nodeName = node.Raw()->Content();
+        const auto reduce = node.Cast<TYtReduce>();
+        if (CanReplaceOnHybrid(reduce) && CanReadHybrid(reduce.Input().Item(0), nodeName, true) && CanExecuteInHybrid(reduce.Reducer().Ptr(), nodeName, true)) {
+            if (ETypeAnnotationKind::Struct != GetSeqItemType(*reduce.Reducer().Args().Arg(0).Ref().GetTypeAnn()).GetKind()) {
+                PushHybridStat("SkipNotStructReducerType", nodeName);
+                return node;
             }
+            YQL_CLOG(INFO, ProviderYt) << "Rewrite " << nodeName << " node by hybrid";
+            PushHybridStat("Try", nodeName);
+            return MakeYtReduceByDq(reduce, ctx);
         }
-
         return node;
     }
 
     TMaybeNode<TExprBase> TryYtMapReduceByDq(TExprBase node, TExprContext& ctx) const {
-        if (const auto mapReduce = node.Cast<TYtMapReduce>(); CanReplaceOnHybrid(mapReduce)) {
-            const auto chunksLimit = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ);
-            const auto sizeLimit = State_->Configuration->HybridDqDataSizeLimitForOrdered.Get().GetOrElse(DefaultHybridDqDataSizeLimitForOrdered);
-            if (const auto stat = CanReadHybrid(mapReduce.Input().Item(0))) {
-                if (stat->front() <= sizeLimit && stat->back() <= chunksLimit) {
-                    if (CanExecuteInHybrid(mapReduce.Reducer().Ptr(), chunksLimit, sizeLimit) && CanExecuteInHybrid(mapReduce.Mapper().Ptr(), chunksLimit, sizeLimit)) {
-                        if (ETypeAnnotationKind::Struct == GetSeqItemType(*mapReduce.Reducer().Args().Arg(0).Ref().GetTypeAnn()).GetKind()) {
-                            YQL_CLOG(INFO, ProviderYt) << "MapReduce on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
-                            PushHybridStat("Try", node.Raw()->Content());
-                            PushStat("HybridTry");
-                            return MakeYtReduceByDq(mapReduce, ctx);
-                        }
-                    }
-                }
-                PushHybridStat("SkipOverLimits", node.Raw()->Content());
-                PushStat("HybridOverLimits");
+        const TStringBuf& nodeName = node.Raw()->Content();
+        const auto mapReduce = node.Cast<TYtMapReduce>();
+        if (CanReplaceOnHybrid(mapReduce) && CanReadHybrid(mapReduce.Input().Item(0), nodeName, true) &&
+            CanExecuteInHybrid(mapReduce.Reducer().Ptr(), nodeName, true) && CanExecuteInHybrid(mapReduce.Mapper().Ptr(), nodeName, true)) {
+            if (ETypeAnnotationKind::Struct != GetSeqItemType(*mapReduce.Reducer().Args().Arg(0).Ref().GetTypeAnn()).GetKind()) {
+                PushHybridStat("SkipNotStructReducerType", nodeName);
+                return node;
             }
+            YQL_CLOG(INFO, ProviderYt) << "Rewrite " << nodeName << " node by hybrid";
+            PushHybridStat("Try", nodeName);
+            return MakeYtReduceByDq(mapReduce, ctx);
         }
-
         return node;
     }
 
-    void PushStat(const std::string_view& name) const {
+    void PushHybridStat(const TStringBuf& statName, const TStringBuf& nodeName) const {
         with_lock(State_->StatisticsMutex) {
-            State_->Statistics[Max<ui32>()].Entries.emplace_back(TString{name}, 0, 0, 0, 0, 1);
+            State_->Statistics[Max<ui32>()].Entries.emplace_back("Hybrid" + TString{statName}, 0, 0, 0, 0, 1);
+            State_->HybridStatistics[nodeName].Entries.emplace_back(TString{statName}, 0, 0, 0, 0, 1);
         }
     };
 
-    void PushHybridStat(TStringBuf statName, TStringBuf opName) const {
-        with_lock(State_->StatisticsMutex) {
-            State_->HybridStatistics[opName].Entries.emplace_back(TString{statName}, 0, 0, 0, 0, 1);
-        }
-    };
+    TExprNode::TListType GetHybridFlags(TExprBase node, TExprContext& ctx) const {
+        TExprNode::TListType flags;
+        flags.emplace_back(ctx.NewAtom(node.Pos(), "FallbackOnError", TNodeFlags::Default));
+        flags.emplace_back(ctx.NewAtom(node.Pos(), "FallbackOp" + TString(node.Raw()->Content()), TNodeFlags::Default));
+        return flags;
+    }
 
     const TYtState::TPtr State_;
     const THolder<IGraphTransformer> Finalizer_;

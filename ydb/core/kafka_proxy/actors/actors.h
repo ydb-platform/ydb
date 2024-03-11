@@ -5,10 +5,16 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
+#include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h> // strange
 
 #include "../kafka_messages.h"
 
 namespace NKafka {
+
+static constexpr int ProxyNodeId = 1;
+static constexpr char UnderlayPrefix[] = "u-";
+
+static_assert(sizeof(UnderlayPrefix) == 3);
 
 enum EAuthSteps {
     WAIT_HANDSHAKE,
@@ -27,12 +33,13 @@ struct TContext {
     const NKikimrConfig::TKafkaProxyConfig& Config;
 
     TActorId ConnectionId;
-    TString ClientId;
+    TString KafkaClient;
 
 
     EAuthSteps AuthenticationStep = EAuthSteps::WAIT_HANDSHAKE;
     TString SaslMechanism;
 
+    TString GroupId;
     TString DatabasePath;
     TString FolderId;
     TString CloudId;
@@ -128,6 +135,9 @@ inline EKafkaErrors ConvertErrorCode(Ydb::PersQueue::ErrorCode::ErrorCode code) 
             return EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION;
         case Ydb::PersQueue::ErrorCode::ErrorCode::ACCESS_DENIED:
             return EKafkaErrors::TOPIC_AUTHORIZATION_FAILED;
+        case Ydb::PersQueue::ErrorCode::ErrorCode::SET_OFFSET_ERROR_COMMIT_TO_FUTURE:
+        case Ydb::PersQueue::ErrorCode::ErrorCode::SET_OFFSET_ERROR_COMMIT_TO_PAST:
+            return EKafkaErrors::OFFSET_OUT_OF_RANGE;
         default:
             return EKafkaErrors::UNKNOWN_SERVER_ERROR;
     }
@@ -159,5 +169,7 @@ NActors::IActor* CreateKafkaFindCoordinatorActor(const TContext::TPtr context, c
 NActors::IActor* CreateKafkaOffsetCommitActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TOffsetCommitRequestData>& message);
 NActors::IActor* CreateKafkaOffsetFetchActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TOffsetFetchRequestData>& message);
 NActors::IActor* CreateKafkaCreateTopicsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TCreateTopicsRequestData>& message);
+NActors::IActor* CreateKafkaCreatePartitionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TCreatePartitionsRequestData>& message);
+NActors::IActor* CreateKafkaAlterConfigsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TAlterConfigsRequestData>& message);
 
 } // namespace NKafka

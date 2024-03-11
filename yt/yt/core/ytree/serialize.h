@@ -11,6 +11,8 @@
 
 #include <library/cpp/yt/small_containers/compact_vector.h>
 
+#include <library/cpp/yt/containers/enum_indexed_array.h>
+
 #include <optional>
 
 namespace NYT::NYTree {
@@ -137,9 +139,9 @@ void Serialize(const std::tuple<T...>& value, NYson::IYsonConsumer* consumer);
 template <template<typename...> class C, class... T, class K = typename C<T...>::key_type>
 void Serialize(const C<T...>& value, NYson::IYsonConsumer* consumer);
 
-// TEnumIndexedVector
+// TEnumIndexedArray
 template <class E, class T, E Min, E Max>
-void Serialize(const TEnumIndexedVector<E, T, Min, Max>& value, NYson::IYsonConsumer* consumer);
+void Serialize(const TEnumIndexedArray<E, T, Min, Max>& value, NYson::IYsonConsumer* consumer);
 
 // Subtypes of google::protobuf::Message
 template <class T>
@@ -236,9 +238,9 @@ void Deserialize(std::tuple<T...>& value, INodePtr node);
 template <template<typename...> class C, class... T, class K = typename C<T...>::key_type>
 void Deserialize(C<T...>& value, INodePtr node);
 
-// TEnumIndexedVector
+// TEnumIndexedArray
 template <class E, class T, E Min, E Max>
-void Deserialize(TEnumIndexedVector<E, T, Min, Max>& vector, INodePtr node);
+void Deserialize(TEnumIndexedArray<E, T, Min, Max>& vector, INodePtr node);
 
 // Subtypes of google::protobuf::Message
 template <class T>

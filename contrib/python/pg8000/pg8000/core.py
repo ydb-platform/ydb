@@ -277,7 +277,7 @@ class CoreConnection:
         )
         self.notifications = deque(maxlen=100)
         self.notices = deque(maxlen=100)
-        self.parameter_statuses = deque(maxlen=100)
+        self.parameter_statuses = {}
 
         if user is None:
             raise InterfaceError("The 'user' connection parameter cannot be None")
@@ -842,20 +842,20 @@ class CoreConnection:
 
     def handle_PARAMETER_STATUS(self, data, context):
         pos = data.find(NULL_BYTE)
-        key, value = data[:pos], data[pos + 1 : -1]
-        self.parameter_statuses.append((key, value))
-        if key == b"client_encoding":
-            encoding = value.decode("ascii").lower()
+        key, value = data[:pos].decode("ascii"), data[pos + 1 : -1].decode("ascii")
+        self.parameter_statuses[key] = value
+        if key == "client_encoding":
+            encoding = value.lower()
             self._client_encoding = PG_PY_ENCODINGS.get(encoding, encoding)
 
-        elif key == b"integer_datetimes":
-            if value == b"on":
+        elif key == "integer_datetimes":
+            if value == "on":
                 pass
 
             else:
                 pass
 
-        elif key == b"server_version":
+        elif key == "server_version":
             pass
 
 

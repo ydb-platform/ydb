@@ -14,7 +14,6 @@
 
 #if defined(PROFILE_MEMORY_ALLOCATIONS)
 #include <library/cpp/lfalloc/alloc_profiler/profiler.h>
-#include <library/cpp/ytalloc/api/ytalloc.h>
 #endif
 
 #if defined(_linux_) && !defined(WITH_VALGRIND)
@@ -58,105 +57,6 @@ namespace NActors {
             }
         };
 
-        class TYtAllocProfiler: public IProfilerLogic {
-        public:
-            TYtAllocProfiler() {
-                Init();
-            }
-
-            void Start() override {
-                SetEnabled(true);
-            }
-
-            void Stop(IOutputStream& out, size_t limit, bool forLog) override {
-                Y_UNUSED(forLog);
-                DumpStats(out, limit);
-                SetEnabled(false);
-            }
-
-        private:
-            static int BacktraceProvider(void** frames, int maxFrames, int skipFrames) {
-                int count = BackTrace(frames, maxFrames);
-                if (count > skipFrames) {
-                    std::copy(&frames[skipFrames], &frames[count], frames);
-                    count -= skipFrames;
-                }
-                return count;
-            }
-
-            static void Init() {
-                using namespace NYT::NYTAlloc;
-
-                SetBacktraceProvider(BacktraceProvider);
-                SetProfilingBacktraceDepth(MaxAllocationProfilingBacktraceDepth);
-
-                // profile every allocation of any size
-                SetAllocationProfilingSamplingRate(1);
-                SetMinProfilingBytesUsedToReport(0);
-            }
-
-            static void SetEnabled(bool enabled) {
-                using namespace NYT::NYTAlloc;
-
-                SetAllocationProfilingEnabled(enabled);
-
-                for (size_t rank = 0; rank < SmallRankCount; ++rank) {
-                    SetSmallArenaAllocationProfilingEnabled(rank, enabled);
-                }
-
-                for (size_t rank = 0; rank < LargeRankCount; ++rank) {
-                    SetLargeArenaAllocationProfilingEnabled(rank, enabled);
-                }
-            }
-
-            static void DumpStats(IOutputStream& out, size_t limit) {
-                using namespace NYT::NYTAlloc;
-
-                struct TLess {
-                    static auto AsTupleRef(const TProfiledAllocation& a) {
-                        return std::forward_as_tuple(
-                            a.Counters[EBasicCounter::BytesUsed],
-                            a.Counters[EBasicCounter::BytesAllocated],
-                            a.Counters[EBasicCounter::BytesFreed]);
-                    }
-
-                    bool operator()(const TProfiledAllocation& l, const TProfiledAllocation& r) {
-                        return AsTupleRef(r) < AsTupleRef(l);
-                    }
-                };
-
-                auto allocations = GetProfiledAllocationStatistics();
-                Sort(allocations, TLess());
-
-                NAllocProfiler::TStats total;
-                for (const auto& a : allocations) {
-                    total.Alloc(a.Counters[EBasicCounter::BytesAllocated]);
-                    total.Free(a.Counters[EBasicCounter::BytesFreed]);
-                }
-
-                TAllocDumper dumper(out);
-                dumper.DumpTotal(total);
-
-                size_t printedCount = 0;
-                for (const auto& a : allocations) {
-                    NAllocProfiler::TAllocationInfo allocInfo;
-                    allocInfo.Tag = 0;  // not supported
-                    allocInfo.Stats.Allocs = a.Counters[EBasicCounter::BytesAllocated];
-                    allocInfo.Stats.Frees = a.Counters[EBasicCounter::BytesFreed];
-                    allocInfo.Stats.CurrentSize = a.Counters[EBasicCounter::BytesUsed];
-
-                    allocInfo.Stack.resize(a.Backtrace.FrameCount);
-                    for (int i = 0; i < a.Backtrace.FrameCount; ++i) {
-                        allocInfo.Stack[i] = a.Backtrace.Frames[i];
-                    }
-
-                    dumper.DumpEntry(allocInfo);
-                    if (++printedCount >= limit) {
-                        break;
-                    }
-                }
-            }
-        };
 #endif // PROFILE_MEMORY_ALLOCATIONS
 
 #if defined(EXEC_PROFILER_ENABLED)
@@ -206,8 +106,6 @@ namespace NActors {
 #if defined(PROFILE_MEMORY_ALLOCATIONS)
             if (name.StartsWith("lf")) {
                 profiler = std::make_unique<TLfAllocProfiler>();
-            } else if (name.StartsWith("yt")) {
-                profiler = std::make_unique<TYtAllocProfiler>();
             }
 #endif // PROFILE_MEMORY_ALLOCATIONS
 

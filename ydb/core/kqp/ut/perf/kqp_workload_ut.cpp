@@ -4,9 +4,12 @@
 
 #include <ydb/library/workload/workload_factory.h>
 #include <ydb/library/workload/stock_workload.h>
+#include <ydb/library/workload/stock_workload.h_serialized.h>
 #include <ydb/library/workload/kv_workload.h>
+#include <ydb/library/workload/kv_workload.h_serialized.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
+#include <util/generic/serialized_enum.h>
 
 namespace NKikimr::NKqp {
 
@@ -28,30 +31,24 @@ void ExecuteQuery(TTableClient& db, TSession& session, NYdbWorkload::TQueryInfo&
     }
 }
 
-void Test(NYdbWorkload::EWorkload workloadType) {
+void Test(const TString& workloadType) {
     auto settings = TKikimrSettings().SetWithSampleTables(false);
     auto kikimr = TKikimrRunner{settings};
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
-    std::unique_ptr<NYdbWorkload::TWorkloadParams> params;
-    if (workloadType == NYdbWorkload::EWorkload::STOCK) {
-        auto stockParams = std::make_unique<NYdbWorkload::TStockWorkloadParams>();
+    auto params = NYdbWorkload::TWorkloadFactory::MakeHolder(workloadType);
+    UNIT_ASSERT(params);
+    if (auto* stockParams = dynamic_cast<NYdbWorkload::TStockWorkloadParams*>(params.Get())) {
         stockParams->ProductCount = 100;
         stockParams->Quantity = 1000;
         stockParams->OrderCount = 100;
         stockParams->Limit = 10;
         stockParams->MinPartitions = 40;
         stockParams->PartitionsByLoad = true;
-        params = std::move(stockParams);
-    } else if (workloadType == NYdbWorkload::EWorkload::KV) {
-        params = std::make_unique<NYdbWorkload::TKvWorkloadParams>();
-    } else {
-        UNIT_ASSERT(false);
     }
-    UNIT_ASSERT(params);
     params->DbPath = "/Root";
-    auto workloadQueryGen = NYdbWorkload::TWorkloadFactory().GetWorkloadQueryGenerator(workloadType, params.get());
+    auto workloadQueryGen = params->CreateGenerator();
 
     auto result = session.ExecuteSchemeQuery(workloadQueryGen->GetDDLQueries()).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -62,17 +59,17 @@ void Test(NYdbWorkload::EWorkload workloadType) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
     int maxType = 0;
-    if (workloadType == NYdbWorkload::EWorkload::STOCK) {
-        maxType = static_cast<int>(NYdbWorkload::TStockWorkloadGenerator::EType::MaxType);
-    } else if (workloadType == NYdbWorkload::EWorkload::KV) {
-        maxType = static_cast<int>(NYdbWorkload::TKvWorkloadGenerator::EType::MaxType);
+    if (workloadType == "stock") {
+        maxType = GetEnumItemsCount<NYdbWorkload::TStockWorkloadGenerator::EType>();
+    } else if (workloadType == "kv") {
+        maxType = GetEnumItemsCount<NYdbWorkload::TKvWorkloadGenerator::EType>();
     }
     for (int type = 0; type < maxType; ++type) {
         size_t InFlight = 10;
         NPar::LocalExecutor().RunAdditionalThreads(InFlight);
         NPar::LocalExecutor().ExecRange([&db, type, &params, workloadType](int /*id*/) {
             TTimer t;
-            auto workloadQueryGen = NYdbWorkload::TWorkloadFactory().GetWorkloadQueryGenerator(workloadType, params.get());
+            auto workloadQueryGen = params->CreateGenerator();
             auto session = db.CreateSession().GetValueSync().GetSession();
             for (size_t i = 0; i < REPEATS; ++i) {
                 auto queriesList = workloadQueryGen->GetWorkload(type);
@@ -88,11 +85,11 @@ void Test(NYdbWorkload::EWorkload workloadType) {
 
 Y_UNIT_TEST_SUITE(KqpWorkload) {
     Y_UNIT_TEST(STOCK) {
-        Test(NYdbWorkload::EWorkload::STOCK);
+        Test("stock");
     }
 
     Y_UNIT_TEST(KV) {
-        Test(NYdbWorkload::EWorkload::KV);
+        Test("kv");
     }
 }
 }

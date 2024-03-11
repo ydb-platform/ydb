@@ -2,6 +2,8 @@ GO_LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
-SRCS(messageset.go)
+SRCS(
+    messageset.go
+)
 
 END()

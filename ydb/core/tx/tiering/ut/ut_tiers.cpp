@@ -533,7 +533,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         ui32 grpcPort = pm.GetPort();
         ui32 msgbPort = pm.GetPort();
 
-        Tests::TServerSettings serverSettings(msgbPort);
+        NKikimrProto::TAuthConfig authConfig;
+        authConfig.SetUseBuiltinDomain(true);
+        Tests::TServerSettings serverSettings(msgbPort, authConfig);
         serverSettings.Port = msgbPort;
         serverSettings.GrpcPort = grpcPort;
         serverSettings.SetDomainName("Root")
@@ -546,7 +548,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
         server->EnableGRpc(grpcPort);
         Tests::TClient client(serverSettings);
-        Tests::NCommon::TLoggerInit(server->GetRuntime()).SetComponents({ NKikimrServices::TX_COLUMNSHARD }).Initialize();
+        Tests::NCommon::TLoggerInit(server->GetRuntime()).Clear().SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").Initialize();
 
         auto& runtime = *server->GetRuntime();
 //        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
@@ -561,11 +563,12 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         //        runtime.SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
 
         TLocalHelper lHelper(*server);
+        lHelper.SetOptionalStorageId("__DEFAULT");
         lHelper.StartSchemaRequest("CREATE OBJECT secretAccessKey ( "
             "TYPE SECRET) WITH (value = ak)");
         lHelper.StartSchemaRequest("CREATE OBJECT secretSecretKey ( "
-            "TYPE SECRET) WITH (value = sk)");
-        Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("sk");
+            "TYPE SECRET) WITH (value = fakeSecret)");
+        Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
 
         lHelper.StartSchemaRequest("CREATE OBJECT tier1 ( "
             "TYPE TIER) WITH (tierConfig = `" + TierConfigProtoStr + "`)");

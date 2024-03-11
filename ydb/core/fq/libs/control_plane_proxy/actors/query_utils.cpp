@@ -12,7 +12,8 @@ namespace NFq {
 namespace NPrivate {
 
 TString MakeCreateExternalDataTableQuery(const FederatedQuery::BindingContent& content,
-                                         const TString& connectionName) {
+                                         const TString& connectionName,
+                                         bool replaceIfExists) {
     using namespace fmt::literals;
 
     auto bindingName         = content.name();
@@ -69,23 +70,22 @@ TString MakeCreateExternalDataTableQuery(const FederatedQuery::BindingContent& c
 
     return fmt::format(
         R"(
-                CREATE EXTERNAL TABLE {externalTableName} (
+                CREATE {replaceIfSupported} EXTERNAL TABLE {externalTableName} (
                     {columns}
                 ) WITH (
                     {withOptions}
                 );)",
+        "replaceIfSupported"_a = replaceIfExists ? "OR REPLACE" : "",
         "externalTableName"_a = EncloseAndEscapeString(bindingName, '`'),
-        "columns"_a           = JoinMapRange(",\n",
-                                   subset.schema().column().begin(),
+        "columns"_a = JoinMapRange(",\n", subset.schema().column().begin(),
                                    subset.schema().column().end(),
                                    columnsTransformFunction),
-        "withOptions"_a       = JoinMapRange(",\n",
-                                       withOptions.begin(),
-                                       withOptions.end(),
-                                       [](const std::pair<TString, TString>& kv) -> TString {
-                                           return TStringBuilder{} << "   " << kv.first
-                                                                   << " = " << kv.second;
-                                       }));
+        "withOptions"_a =
+            JoinMapRange(",\n", withOptions.begin(), withOptions.end(),
+                         [](const std::pair<TString, TString> &kv) -> TString {
+                           return TStringBuilder{} << "   " << kv.first << " = "
+                                                   << kv.second;
+                         }));
 }
 
 TString SignAccountId(const TString& id, const TSigner::TPtr& signer) {
@@ -149,7 +149,7 @@ TString CreateAuthParamsQuery(const FederatedQuery::ConnectionSetting& setting,
                     )",
                 "auth_method"_a = ToString(authMethod),
                 "login"_a = EncloseAndEscapeString(GetLogin(setting).GetOrElse({}), '"'),
-                "password_secret_name"_a = EncloseAndEscapeString(signer ? "k1" + name : TString{}, '"'));
+                "password_secret_name"_a = EncloseAndEscapeString("k2" + name, '"'));
         case EYdbComputeAuth::MDB_BASIC:
             return fmt::format(
                 R"(,
@@ -163,14 +163,15 @@ TString CreateAuthParamsQuery(const FederatedQuery::ConnectionSetting& setting,
                 "service_account_id"_a = EncloseAndEscapeString(ExtractServiceAccountId(setting), '"'),
                 "sa_secret_name"_a = EncloseAndEscapeString(signer ? "k1" + name : TString{}, '"'),
                 "login"_a = EncloseAndEscapeString(GetLogin(setting).GetOrElse({}), '"'),
-                "password_secret_name"_a = EncloseAndEscapeString(signer ? "k2" + name : TString{}, '"'));
+                "password_secret_name"_a = EncloseAndEscapeString("k2" + name, '"'));
     }
 }
 
 TString MakeCreateExternalDataSourceQuery(
     const FederatedQuery::ConnectionContent& connectionContent,
     const TSigner::TPtr& signer,
-    const NConfig::TCommonConfig& common) {
+    const NConfig::TCommonConfig& common,
+    bool replaceIfExists) {
     using namespace fmt::literals;
 
     TString properties;
@@ -185,11 +186,12 @@ TString MakeCreateExternalDataSourceQuery(
                     MDB_CLUSTER_ID={mdb_cluster_id},
                     DATABASE_NAME={database_name},
                     PROTOCOL="{protocol}",
-                    USE_TLS="true"
+                    USE_TLS="{use_tls}"
                 )",
                 "mdb_cluster_id"_a = EncloseAndEscapeString(connectionContent.setting().clickhouse_cluster().database_id(), '"'),
                 "database_name"_a = EncloseAndEscapeString(connectionContent.setting().clickhouse_cluster().database_name(), '"'),
-                "protocol"_a = common.GetUseNativeProtocolForClickHouse() ? "NATIVE" : "HTTP");
+                "protocol"_a = common.GetUseNativeProtocolForClickHouse() ? "NATIVE" : "HTTP",
+                "use_tls"_a = common.GetDisableSslForGenericDataSources() ? "false" : "true");
         break;
         case FederatedQuery::ConnectionSetting::kDataStreams:
         break;
@@ -213,11 +215,12 @@ TString MakeCreateExternalDataSourceQuery(
                     MDB_CLUSTER_ID={mdb_cluster_id},
                     DATABASE_NAME={database_name},
                     PROTOCOL="NATIVE",
-                    USE_TLS="true"
+                    USE_TLS="{use_tls}"
                     {schema}
                 )",
                 "mdb_cluster_id"_a = EncloseAndEscapeString(connectionContent.setting().postgresql_cluster().database_id(), '"'),
                 "database_name"_a = EncloseAndEscapeString(connectionContent.setting().postgresql_cluster().database_name(), '"'),
+                "use_tls"_a = common.GetDisableSslForGenericDataSources() ? "false" : "true",
                 "schema"_a =  schema ? ", SCHEMA=" + EncloseAndEscapeString(schema, '"') : TString{});
         break;
     }
@@ -225,11 +228,12 @@ TString MakeCreateExternalDataSourceQuery(
     auto sourceName = connectionContent.name();
     return fmt::format(
         R"(
-                CREATE EXTERNAL DATA SOURCE {external_source} WITH (
+                CREATE {replaceIfSupported} EXTERNAL DATA SOURCE {external_source} WITH (
                     {properties}
                     {auth_params}
                 );
             )",
+        "replaceIfSupported"_a = replaceIfExists ? "OR REPLACE" : "",
         "external_source"_a = EncloseAndEscapeString(sourceName, '`'),
         "properties"_a = properties,
         "auth_params"_a =

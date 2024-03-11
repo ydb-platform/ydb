@@ -7,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 2016 - 2022, Steve Holme, <steve_holme@hotmail.com>.
+ * Copyright (C) Steve Holme, <steve_holme@hotmail.com>.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -26,7 +26,7 @@
 
 #include "curl_setup.h"
 
-#if defined(WIN32)
+#if defined(_WIN32)
 
 /* Version condition */
 typedef enum {
@@ -51,6 +51,6 @@ bool curlx_verify_windows_version(const unsigned int majorVersion,
                                   const PlatformIdentifier platform,
                                   const VersionCondition condition);
 
-#endif /* WIN32 */
+#endif /* _WIN32 */
 
 #endif /* HEADER_CURL_VERSION_WIN32_H */

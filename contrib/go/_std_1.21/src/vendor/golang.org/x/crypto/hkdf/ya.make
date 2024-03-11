@@ -1,7 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    hkdf.go
-)
-
+IF (TRUE)
+    SRCS(
+		hkdf.go
+    )
+ENDIF()
 END()

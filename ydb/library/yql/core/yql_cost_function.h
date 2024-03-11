@@ -14,6 +14,8 @@
 */
 namespace NYql {
 
+struct IProviderContext;
+
 namespace NDq {    
 /**
  * Join column is a struct that records the relation label and 
@@ -43,16 +45,19 @@ bool operator < (const TJoinColumn& c1, const TJoinColumn& c2);
 
 }
 
-enum EJoinImplType {
+enum EJoinAlgoType {
     DictJoin,
     MapJoin,
-    GraceJoin
+    GraceJoin,
+    LookupJoin
 };
 
-TOptimizerStatistics ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, 
-    const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, EJoinImplType joinType);
+static const EJoinAlgoType AllJoinAlgos[] = { DictJoin, MapJoin, GraceJoin, LookupJoin };
 
 TOptimizerStatistics ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, 
-    const TVector<TString>& leftJoinKeys, const TVector<TString>& rightJoinKeys, EJoinImplType joinType);
+    const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, EJoinAlgoType joinAlgo, const IProviderContext& ctx);
+
+TOptimizerStatistics ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, 
+    const TVector<TString>& leftJoinKeys, const TVector<TString>& rightJoinKeys, EJoinAlgoType joinAlgo, const IProviderContext& ctx);
 
 }

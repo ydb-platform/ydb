@@ -2,11 +2,13 @@
 
 #include "httpheader.h"
 
+#include <string>
+
 #include <util/system/compat.h>
 #include <library/cpp/http/misc/httpcodes.h>
 
 class httpDigestHandler {
-protected:
+private:
     const char* User_;
     const char* Password_;
     char* Nonce_;
@@ -15,18 +17,16 @@ protected:
 
     void clear();
 
-    void generateCNonce(char* outCNonce);
-
     void digestCalcHA1(const THttpAuthHeader& hd,
                        char* outSessionKey,
-                       char* outCNonce);
+                       const std::string& outCNonce);
 
     void digestCalcResponse(const THttpAuthHeader& hd,
                             const char* method,
                             const char* path,
                             const char* nonceCount,
                             char* outResponse,
-                            char* outCNonce);
+                            const std::string& outCNonce);
 
 public:
     httpDigestHandler();

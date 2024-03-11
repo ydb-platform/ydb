@@ -16,6 +16,8 @@ SRCS(
     actors/kafka_offset_fetch_actor.cpp
     actors/kafka_offset_commit_actor.cpp
     actors/kafka_create_topics_actor.cpp
+    actors/kafka_create_partitions_actor.cpp
+    actors/kafka_alter_configs_actor.cpp
     kafka_connection.cpp
     kafka_connection.h
     kafka_constants.h

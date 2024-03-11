@@ -4,11 +4,7 @@ LICENSE(BSD-3-Clause)
 
 SRCS(
     strings.go
-    strings_unsafe.go
+    strings_unsafe_go121.go
 )
 
-GO_TEST_SRCS(strings_test.go)
-
 END()
-
-RECURSE(gotest)

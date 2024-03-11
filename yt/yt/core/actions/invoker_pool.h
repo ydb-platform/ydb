@@ -2,7 +2,6 @@
 
 #include "public.h"
 
-
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -16,7 +15,7 @@ namespace NYT {
  *  invoker types: see below IInvokerPool, IPrioritizedInvokerPool, ISuspendableInvokerPool, etc.
 */
 template <class TInvoker>
-class IGenericInvokerPool
+class TGenericInvokerPool
     : public virtual TRefCounted
 {
 public:
@@ -25,19 +24,13 @@ public:
 
     //! Returns reference to the invoker from the underlying storage by the integer #index.
     //! Parameter #index is supposed to take values in the [0, implementation-defined limit) range.
-    const TIntrusivePtr<TInvoker>& GetInvoker(int index) const
-    {
-        return DoGetInvoker(index);
-    }
+    const TIntrusivePtr<TInvoker>& GetInvoker(int index) const;
 
     //! Returns reference to the invoker from the underlying storage by the enum #index.
     //! Parameter #index is supposed to take values in the [0, implementation-defined limit) range.
     template <class E>
         requires TEnumTraits<E>::IsEnum
-    const TIntrusivePtr<TInvoker>& GetInvoker(E index) const
-    {
-        return DoGetInvoker(ToUnderlying(index));
-    }
+    const TIntrusivePtr<TInvoker>& GetInvoker(E index) const;
 
 protected:
     //! Returns reference to the invoker from the underlying storage by the integer #index.
@@ -60,7 +53,7 @@ void ResumeInvokerPool(const ISuspendableInvokerPoolPtr& suspendableInvokerPool)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class IDiagnosableInvokerPool
+class TDiagnosableInvokerPool
     : public IInvokerPool
 {
 public:
@@ -69,31 +62,26 @@ public:
         i64 EnqueuedActionCount = 0;
         i64 DequeuedActionCount = 0;
         i64 WaitingActionCount = 0;
-        // TODO(eshcherbin): Use max wait time instead of average wait time?
-        TDuration AverageWaitTime;
+        TDuration TotalTimeEstimate;
     };
 
     //! Returns statistics of the invoker by the integer #index.
     //! Parameter #index is supposed to take values in the [0, implementation-defined limit) range.
-    TInvokerStatistics GetInvokerStatistics(int index) const
-    {
-        return DoGetInvokerStatistics(index);
-    }
+    TInvokerStatistics GetInvokerStatistics(int index) const;
 
     //! Returns statistics of the invoker by the integer #index.
     //! Parameter #index is supposed to take values in the [0, implementation-defined limit) range.
     template <class E>
         requires TEnumTraits<E>::IsEnum
-    TInvokerStatistics GetInvokerStatistics(E index) const
-    {
-        return DoGetInvokerStatistics(ToUnderlying(index));
-    }
+    TInvokerStatistics GetInvokerStatistics(E index) const;
+
+    virtual void UpdateActionTimeRelevancyHalflife(TDuration newHalflife) = 0;
 
 protected:
     virtual TInvokerStatistics DoGetInvokerStatistics(int index) const = 0;
 };
 
-DEFINE_REFCOUNTED_TYPE(IDiagnosableInvokerPool)
+DEFINE_REFCOUNTED_TYPE(TDiagnosableInvokerPool)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -119,8 +107,8 @@ template <
     class TInvokerFunctor,
     class TInputInvoker,
     class TOutputInvoker = typename NDetail::TTransformInvokerPoolHelper<TInvokerFunctor, TInputInvoker>::TOutputInvoker>
-TIntrusivePtr<IGenericInvokerPool<TOutputInvoker>> TransformInvokerPool(
-    TIntrusivePtr<IGenericInvokerPool<TInputInvoker>> inputInvokerPool,
+TIntrusivePtr<TGenericInvokerPool<TOutputInvoker>> TransformInvokerPool(
+    TIntrusivePtr<TGenericInvokerPool<TInputInvoker>> inputInvokerPool,
     TInvokerFunctor&& functor);
 
 ////////////////////////////////////////////////////////////////////////////////

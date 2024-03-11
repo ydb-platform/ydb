@@ -32,8 +32,16 @@ TMaybe<TCondenseInputResult> CondenseInputToDictByPk(const NYql::NNodes::TExprBa
 
 NYql::NNodes::TMaybeNode<NYql::NNodes::TDqPhyPrecompute> PrecomputeTableLookupDict(
     const NYql::NNodes::TDqPhyPrecompute& lookupKeys, const NYql::TKikimrTableDescription& table,
+    const TVector<NYql::NNodes::TExprBase>& columnsList,
+    NYql::TPositionHandle pos, NYql::TExprContext& ctx, bool fixLookupKeys);
+
+NYql::NNodes::TMaybeNode<NYql::NNodes::TDqPhyPrecompute> PrecomputeTableLookupDict(
+    const NYql::NNodes::TDqPhyPrecompute& lookupKeys, const NYql::TKikimrTableDescription& table,
     const THashSet<TString>& dataColumns, const THashSet<TString>& keyColumns, NYql::TPositionHandle pos,
     NYql::TExprContext& ctx);
+
+NYql::NNodes::TDqPhyPrecompute PrecomputeCondenseInputResult(const TCondenseInputResult& condenseResult,
+    NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
 // Creates key selector using PK of given table
 NYql::NNodes::TCoLambda MakeTableKeySelector(const NYql::TKikimrTableMetadataPtr tableMeta, NYql::TPositionHandle pos,
@@ -61,7 +69,8 @@ NYql::NNodes::TExprBase MakeRowsFromTupleDict(const NYql::NNodes::TDqPhyPrecompu
     const THashSet<TStringBuf>& columns, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
 NYql::NNodes::TMaybeNode<NYql::NNodes::TDqCnUnionAll> MakeConditionalInsertRows(const NYql::NNodes::TExprBase& input,
-    const NYql::TKikimrTableDescription& table, bool abortOnError, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+    const NYql::TKikimrTableDescription& table, const TMaybe<THashSet<TStringBuf>>& inputColumn, bool abortOnError,
+    NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
 enum class TKqpPhyUpsertIndexMode {
     Upsert,
@@ -72,6 +81,7 @@ NYql::NNodes::TMaybeNode<NYql::NNodes::TExprList> KqpPhyUpsertIndexEffectsImpl(T
     const NYql::NNodes::TExprBase& inputRows,
     const NYql::NNodes::TCoAtomList& inputColumns,
     const NYql::NNodes::TCoAtomList& returningColumns,
+    const NYql::NNodes::TCoAtomList& columnsWithDefaults,
 
     const NYql::TKikimrTableDescription& table, const NYql::NNodes::TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& settings,
     NYql::TPositionHandle pos, NYql::TExprContext& ctx);

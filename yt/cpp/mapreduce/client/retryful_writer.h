@@ -39,6 +39,7 @@ public:
         : ClientRetryPolicy_(std::move(clientRetryPolicy))
         , TransactionPinger_(std::move(transactionPinger))
         , Context_(context)
+        , AutoFinish_(options.AutoFinish_)
         , Command_(command)
         , Format_(format)
         , BufferSize_(GetBufferSize(options.WriterOptions_))
@@ -77,7 +78,7 @@ public:
 
     size_t GetRetryBlockRemainingSize() const
     {
-      return (BufferSize_ > Buffer_.size()) ? (BufferSize_ - Buffer_.size()) : 0;
+        return (BufferSize_ > Buffer_.size()) ? (BufferSize_ - Buffer_.size()) : 0;
     }
 
 protected:
@@ -91,6 +92,7 @@ private:
     const IClientRetryPolicyPtr ClientRetryPolicy_;
     const ITransactionPingerPtr TransactionPinger_;
     const TClientContext Context_;
+    const bool AutoFinish_;
     TString Command_;
     TMaybe<TFormat> Format_;
     const size_t BufferSize_;

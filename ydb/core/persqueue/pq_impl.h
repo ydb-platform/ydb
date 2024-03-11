@@ -12,6 +12,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
 
 #include <ydb/library/actors/interconnect/interconnect.h>
 
@@ -88,6 +89,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvPartitionClientInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
 
@@ -103,6 +105,8 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     void ReadTxInfo(const NKikimrClient::TKeyValueResponse::TReadResult& read,
                     const TActorContext& ctx);
+    void ReadTxWrites(const NKikimrClient::TKeyValueResponse::TReadResult& read,
+                      const TActorContext& ctx);
     void ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult& read,
                     const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange,
                     const TActorContext& ctx);
@@ -165,8 +169,8 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     ui64 GetAllowedStep() const;
 
-    void Handle(TEvPQ::TEvSourceIdRequest::TPtr& ev, const TActorContext& ctx);
-    void ProcessSourceIdRequests(ui32 partitionId);
+    void Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
+    void ProcessCheckPartitionStatusRequests(const TPartitionId& partitionId);
 
     TString LogPrefix() const;
 
@@ -186,11 +190,22 @@ public:
 private:
     bool ConfigInited;
     ui32 PartitionsInited;
+    ui32 OriginalPartitionsCount;
     bool InitCompleted = false;
-    THashMap<ui32, TPartitionInfo> Partitions;
+    THashMap<TPartitionId, TPartitionInfo> Partitions;
     THashMap<TString, TIntrusivePtr<TEvTabletCounters::TInFlightCookie>> CounterEventsInflight;
 
+    struct TTxWriteInfo {
+        THashMap<ui32, TPartitionId> Partitions;
+        TMaybe<ui64> TxId;
+        NKikimrLongTxService::TEvLockStatus::EStatus LongTxSubscriptionStatus = NKikimrLongTxService::TEvLockStatus::STATUS_UNSPECIFIED;
+    };
+
+    THashMap<ui64, TTxWriteInfo> TxWrites;
+    ui32 NextSupportivePartitionId = 100'000;
+
     TActorId CacheActor;
+    TActorId ReadBalancerActorId;
 
     TSet<TChangeNotification> ChangeConfigNotification;
     NKikimrPQ::TPQTabletConfig NewConfig;
@@ -335,7 +350,7 @@ private:
     void SendEvProposePartitionConfig(const TActorContext& ctx,
                                       TDistributedTransaction& tx);
 
-    TPartition* CreatePartitionActor(ui32 partitionId,
+    TPartition* CreatePartitionActor(const TPartitionId& partitionId,
                                      const NPersQueue::TTopicConverterPtr topicConverter,
                                      const NKikimrPQ::TPQTabletConfig& config,
                                      bool newPartition,
@@ -343,6 +358,12 @@ private:
     void CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
                              NPersQueue::TTopicConverterPtr topicConverter,
                              const TActorContext& ctx);
+    void CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& config,
+                                 const NKikimrPQ::TPQTabletConfig::TPartition& partition,
+                                 NPersQueue::TTopicConverterPtr topicConverter,
+                                 const TPartitionId& partitionId,
+                                 bool newPartition,
+                                 const TActorContext& ctx);
     void EnsurePartitionsAreNotDeleted(const NKikimrPQ::TPQTabletConfig& config) const;
 
     void BeginWriteConfig(const NKikimrPQ::TPQTabletConfig& cfg,
@@ -399,13 +420,65 @@ private:
     bool CanProcessPlanStepQueue() const;
     bool CanProcessWriteTxs() const;
     bool CanProcessDeleteTxs() const;
+    bool CanProcessTxWrites() const;
 
     ui64 GetGeneration();
     void DestroySession(TPipeInfo& pipeInfo);
     bool UseMediatorTimeCast = true;
 
-    THashMap<ui32, TVector<TEvPQ::TEvSourceIdRequest::TPtr>> SourceIdRequests;
+    THashMap<ui32, TVector<TEvPQ::TEvCheckPartitionStatusRequest::TPtr>> CheckPartitionStatusRequests;
     TMaybe<ui64> TabletGeneration;
+
+    TMaybe<TPartitionId> FindPartitionId(const NKikimrPQ::TDataTransaction& txBody) const;
+
+    void InitPlanStep(const NKikimrPQ::TTabletTxInfo& info = {});
+    void SavePlanStep(NKikimrPQ::TTabletTxInfo& info);
+
+    void InitTxWrites(const NKikimrPQ::TTabletTxInfo& info, const TActorContext& ctx);
+    void SaveTxWrites(NKikimrPQ::TTabletTxInfo& info);
+
+    void HandleEventForSupportivePartition(const ui64 responseCookie,
+                                           TEvPersQueue::TEvRequest::TPtr& event,
+                                           const TActorId& sender,
+                                           const TActorContext& ctx);
+    void HandleEventForSupportivePartition(const ui64 responseCookie,
+                                           const NKikimrClient::TPersQueuePartitionRequest& req,
+                                           const TActorId& sender,
+                                           const TActorContext& ctx);
+    void HandleGetOwnershipRequestForSupportivePartition(const ui64 responseCookie,
+                                                         const NKikimrClient::TPersQueuePartitionRequest& req,
+                                                         const TActorId& sender,
+                                                         const TActorContext& ctx);
+    void HandleReserveBytesRequestForSupportivePartition(const ui64 responseCookie,
+                                                         const NKikimrClient::TPersQueuePartitionRequest& req,
+                                                         const TActorId& sender,
+                                                         const TActorContext& ctx);
+    void HandleWriteRequestForSupportivePartition(const ui64 responseCookie,
+                                                  const NKikimrClient::TPersQueuePartitionRequest& req,
+                                                  const TActorContext& ctx);
+
+    void ForwardGetOwnershipToSupportivePartitions(const TActorContext& ctx);
+
+    //
+    // list of supporive partitions created before writing
+    //
+    THashSet<TPartitionId> NewSupportivePartitions;
+    //
+    // list of supportive partitions for which actors should be created
+    //
+    THashSet<TPartitionId> PendingSupportivePartitions;
+
+    TPartitionInfo& GetPartitionInfo(const TPartitionId& partitionId);
+    const TPartitionInfo& GetPartitionInfo(const NKikimrClient::TPersQueuePartitionRequest& request) const;
+    void AddSupportivePartition(const TPartitionId& shadowPartitionId);
+    void CreateSupportivePartitionActors(const TActorContext& ctx);
+    void CreateSupportivePartitionActor(const TPartitionId& shadowPartitionId, const TActorContext& ctx);
+    NKikimrPQ::TPQTabletConfig MakeSupportivePartitionConfig() const;
+    void SubscribeWriteId(ui64 writeId, const TActorContext& ctx);
+
+    bool AllOriginalPartitionsInited() const;
+
+    void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
 };
 
 

@@ -155,7 +155,7 @@ void SerializeYsonPathsMap(
             // previous one in order to close necessary number of maps.
             commonDepth = SkipEqualTokens(currentTokenizer, previousTokenizer);
 
-             // Close all redundant maps.
+            // Close all redundant maps.
             while (previousDepth > commonDepth) {
                 consumer->OnEndMap();
                 --previousDepth;

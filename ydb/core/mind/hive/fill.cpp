@@ -32,6 +32,14 @@ protected:
         PassAway();
     }
 
+    TString GetDescription() const override {
+        return TStringBuilder() << "Fill(" << NodeId << ")";
+    }
+
+    TSubActorId GetId() const override {
+        return SelfId().LocalId();
+    }
+
     void ReplyAndDie(NKikimrProto::EReplyStatus status, const TActorContext& ctx) {
         ctx.Send(Initiator, new TEvHive::TEvFillNodeResult(status));
         Die(ctx);

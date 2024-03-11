@@ -1,28 +1,57 @@
 #pragma once
 
+#include "config.h"
+#include "periodic_executor_base.h"
 #include "public.h"
-#include "recurring_executor_base.h"
+
+#include <yt/yt/core/actions/callback.h>
+#include <yt/yt/core/actions/future.h>
+
+#include <yt/yt/core/misc/backoff_strategy.h>
 
 namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TPeriodicExecutorOptions
+namespace NDetail {
+
+class TDefaultInvocationTimePolicy
+    : private TPeriodicExecutorOptions
 {
-    static constexpr double DefaultJitter = 0.2;
+public:
+    using TCallbackResult = void;
+    using TOptions = TPeriodicExecutorOptions;
 
-    //! Interval between usual consequent invocations; if null then no invocations will be happening.
-    std::optional<TDuration> Period;
-    TDuration Splay;
-    double Jitter = 0.0;
+    explicit TDefaultInvocationTimePolicy(const TOptions& options);
 
-    //! Sets #Period and Applies set#DefaultJitter.
-    static TPeriodicExecutorOptions WithJitter(TDuration period);
+    void ProcessResult();
+
+    TInstant KickstartDeadline();
+
+    bool IsEnabled();
+
+    bool ShouldKickstart(const TOptions& newOptions);
+
+    void SetOptions(TOptions newOptions);
+
+    bool ShouldKickstart(const std::optional<TDuration>& period);
+
+    void SetOptions(std::optional<TDuration> period);
+
+    TInstant NextDeadline();
+
+    bool IsOutOfBandProhibited();
+
+    void Reset();
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NDetail
 
 //! Helps to perform certain actions periodically.
 class TPeriodicExecutor
-    : public TRecurringExecutorBase
+    : public NDetail::TPeriodicExecutorBase<NDetail::TDefaultInvocationTimePolicy>
 {
 public:
     //! Initializes an instance.
@@ -36,29 +65,20 @@ public:
      */
     TPeriodicExecutor(
         IInvokerPtr invoker,
-        TClosure callback,
-        TPeriodicExecutorOptions options);
+        TPeriodicCallback callback,
+        NConcurrency::TPeriodicExecutorOptions options);
 
     TPeriodicExecutor(
         IInvokerPtr invoker,
-        TClosure callback,
+        TPeriodicCallback callback,
         std::optional<TDuration> period = {});
 
     //! Changes execution period.
     void SetPeriod(std::optional<TDuration> period);
 
-protected:
-    void ScheduleFirstCallback() override;
-    void ScheduleCallback() override;
-
-    TError MakeStoppedError() override;
-
 private:
-    std::optional<TDuration> Period_;
-    const TDuration Splay_;
-    const double Jitter_;
+    using TBase = NDetail::TPeriodicExecutorBase<NDetail::TDefaultInvocationTimePolicy>;
 
-    TDuration NextDelay();
 };
 
 DEFINE_REFCOUNTED_TYPE(TPeriodicExecutor)

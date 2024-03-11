@@ -795,6 +795,20 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
                 return false;
             }
             break;
+        case EYtSettingType::MutationId:
+            if (!EnsureTupleSize(*setting, 2, ctx)) {
+                return false;
+            }
+            if (!EnsureAtom(*setting->Child(1), ctx)) {
+                return false;
+            }
+            ui32 mutationId;
+            if (!TryFromString(setting->Child(1)->Content(), mutationId)) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting->Child(1)->Pos()), TStringBuilder()
+                    << "Expected a number, but got: " << TString{setting->Child(1)->Content()}.Quote()));
+                return false;
+            }
+            break;
         }
     }
 

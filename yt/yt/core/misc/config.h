@@ -10,6 +10,40 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TExponentialBackoffOptions
+{
+    static constexpr int DefaultInvocationCount = 10;
+    static constexpr auto DefaultMinBackoff = TDuration::Seconds(1);
+    static constexpr auto DefaultMaxBackoff = TDuration::Seconds(5);
+    static constexpr double DefaultBackoffMultiplier = 1.5;
+    static constexpr double DefaultBackoffJitter = 0.1;
+
+    int InvocationCount = DefaultInvocationCount;
+    TDuration MinBackoff = DefaultMinBackoff;
+    TDuration MaxBackoff = DefaultMaxBackoff;
+    double BackoffMultiplier = DefaultBackoffMultiplier;
+    double BackoffJitter = DefaultBackoffJitter;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TConstantBackoffOptions
+{
+    static constexpr int DefaultInvocationCount = 10;
+    static constexpr auto DefaultBackoff = TDuration::Seconds(3);
+    static constexpr double DefaultBackoffJitter = 0.1;
+
+    int InvocationCount = DefaultInvocationCount;
+    TDuration Backoff = DefaultBackoff;
+    double BackoffJitter = DefaultBackoffJitter;
+
+    operator TExponentialBackoffOptions() const;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! TODO(arkady-e1ppa): Make configs below pairs of POD-structs and TExternalizedYsonStruct.
+
 class TLogDigestConfig
     : public NYTree::TYsonStruct
 {
@@ -60,32 +94,6 @@ DEFINE_REFCOUNTED_TYPE(THistogramDigestConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DEFINE_ENUM(EHistoricUsageAggregationMode,
-    ((None)                     (0))
-    ((ExponentialMovingAverage) (1))
-);
-
-class THistoricUsageConfig
-    : public NYTree::TYsonStruct
-{
-public:
-    EHistoricUsageAggregationMode AggregationMode;
-
-    //! Parameter of exponential moving average (EMA) of the aggregated usage.
-    //! Roughly speaking, it means that current usage ratio is twice as relevant for the
-    //! historic usage as the usage ratio alpha seconds ago.
-    //! EMA for unevenly spaced time series was adapted from here: https://clck.ru/HaGZs
-    double EmaAlpha;
-
-    REGISTER_YSON_STRUCT(THistoricUsageConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(THistoricUsageConfig)
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TAdaptiveHedgingManagerConfig
     : public virtual NYTree::TYsonStruct
 {
@@ -108,6 +116,35 @@ public:
 };
 
 DEFINE_REFCOUNTED_TYPE(TAdaptiveHedgingManagerConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NDetail {
+
+class TExponentialBackoffOptionsSerializer
+    : public virtual NYTree::TExternalizedYsonStruct
+{
+public:
+    REGISTER_EXTERNALIZED_YSON_STRUCT(TExponentialBackoffOptions, TExponentialBackoffOptionsSerializer);
+
+    static void Register(TRegistrar registrar);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TConstantBackoffOptionsSerializer
+    : public NYTree::TExternalizedYsonStruct
+{
+public:
+    REGISTER_EXTERNALIZED_YSON_STRUCT(TConstantBackoffOptions, TConstantBackoffOptionsSerializer);
+
+    static void Register(TRegistrar registrar);
+};
+
+} // namespace NDetail
+
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TExponentialBackoffOptions, NDetail::TExponentialBackoffOptionsSerializer);
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TConstantBackoffOptions, NDetail::TConstantBackoffOptionsSerializer);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -190,6 +190,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             TTableInfo::TColumn& column = alterData->Columns[colId];
             column = TTableInfo::TColumn(colName, colId, typeInfo, typeMod, col.GetNotNull());
             column.Family = columnFamily ? columnFamily->GetId() : 0;
+            column.IsBuildInProgress = col.GetIsBuildInProgress();
             if (source)
                 column.CreateVersion = alterData->AlterVersion;
             if (col.HasDefaultFromSequence()) {
@@ -2305,7 +2306,7 @@ TColumnTableInfo::TColumnTableInfo(
 
     if (Description.HasSchema()) {
         TOlapSchema schema;
-        schema.Parse(Description.GetSchema());
+        schema.ParseFromLocalDB(Description.GetSchema());
     }
 
     ColumnShards.reserve(Sharding.GetColumnShards().size());

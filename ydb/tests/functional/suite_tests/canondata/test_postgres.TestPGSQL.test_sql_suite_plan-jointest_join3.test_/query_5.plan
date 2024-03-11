@@ -42,12 +42,13 @@
                                                 "Name": "Limit"
                                             },
                                             {
+                                                "Condition": "k = p_1.k",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 3
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "InternalOperatorId": 2
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"
@@ -135,12 +136,13 @@
                                         "Node Type": "LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
+                                                "Condition": "k = k",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 14
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 12
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
@@ -269,26 +271,20 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "CTE Name": "precompute_0_0",
-                                        "Node Type": "TablePointLookup-ConstantExpr",
+                                        "Node Type": "TableRangeScan",
                                         "Operators": [
                                             {
-                                                "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    }
-                                                ],
-                                                "Name": "TablePointLookup",
+                                                "Inputs": [],
+                                                "Name": "TableRangeScan",
                                                 "ReadColumns": [
                                                     "k",
                                                     "pd"
                                                 ],
+                                                "ReadRangesExpectedSize": 1,
+                                                "ReadRangesKeys": [
+                                                    "k"
+                                                ],
                                                 "Table": "postgres_jointest/join3.test_plan/parent"
-                                            },
-                                            {
-                                                "Inputs": [],
-                                                "Iterator": "precompute_0_0",
-                                                "Name": "Iterator"
                                             }
                                         ],
                                         "PlanNodeId": 1,
@@ -326,14 +322,14 @@
             "reads": [
                 {
                     "columns": [
-                        "k"
+                        "k",
+                        "pd"
                     ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 },
                 {
                     "columns": [
-                        "k",
-                        "pd"
+                        "k"
                     ],
                     "type": "Lookup"
                 }

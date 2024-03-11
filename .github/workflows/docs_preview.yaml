@@ -10,6 +10,9 @@ on:
 jobs:
   post-build:
     permissions: write-all
+    concurrency:
+      group: preview-documentation-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
       - name: Upload

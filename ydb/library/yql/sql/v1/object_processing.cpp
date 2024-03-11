@@ -36,19 +36,25 @@ bool TObjectProcessorImpl::DoInit(TContext& ctx, ISource* src) {
 }
 
 INode::TPtr TCreateObject::FillFeatures(INode::TPtr options) const {
-    if (Features.size()) {
+    if (!Features.empty()) {
         auto features = Y();
         for (auto&& i : Features) {
             if (i.second.HasNode()) {
-                features = L(features, Q(Y(BuildQuotedAtom(Pos, i.first), i.second.Build())));
+                features->Add(Q(Y(BuildQuotedAtom(Pos, i.first), i.second.Build())));
             } else {
-                features = L(features, Q(Y(BuildQuotedAtom(Pos, i.first))));
+                features->Add(Q(Y(BuildQuotedAtom(Pos, i.first))));
             }
         }
-        return L(options, Q(Y(Q("features"), Q(features))));
-    } else {
-        return options;
+        options->Add(Q(Y(Q("features"), Q(features))));
     }
+    if (!FeaturesToReset.empty()) {
+        auto reset = Y();
+        for (const auto& featureName : FeaturesToReset) {
+            reset->Add(BuildQuotedAtom(Pos, featureName));
+        }
+        options->Add(Q(Y(Q("resetFeatures"), Q(reset))));
+    }
+    return options;
 }
 
 TObjectOperatorContext::TObjectOperatorContext(TScopedStatePtr scoped)

@@ -37,6 +37,7 @@ private:
     TVector<TItem> Items;
     TString Description;
     ui32 NumberOfRetries = 10;
+    bool UseVirtualAddressing = true;
 };
 
 class TCommandImportFromFile : public TClientCommandTree {

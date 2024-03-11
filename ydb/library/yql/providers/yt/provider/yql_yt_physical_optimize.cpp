@@ -1158,9 +1158,17 @@ private:
                 TVector<TStringBuf> sortKeys;
                 if (const auto sorted = list.Ref().GetConstraint<TSortedConstraintNode>()) {
                     for (const auto& key : sorted->GetContent()) {
-                        if (key.second && !key.first.empty() && key.first.front().size() == 1U) {
-                            sortKeys.emplace_back(key.first.front().front());
-                        } else {
+                        bool appropriate = false;
+                        if (key.second && !key.first.empty()) {
+                            for (auto& alt: key.first) {
+                                if (alt.size() == 1U) {
+                                    sortKeys.emplace_back(alt.front());
+                                    appropriate = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!appropriate) {
                             break;
                         }
                     }
@@ -1169,46 +1177,50 @@ private:
             }
         }
 
-        // Only Lookup and Merge strategies use a table sort
-        if (state->Configuration->JoinMergeTablesLimit.Get().GetOrElse(0)
-            || (state->Configuration->LookupJoinLimit.Get().GetOrElse(0) && state->Configuration->LookupJoinMaxRows.Get().GetOrElse(0))) {
-            TVector<const TExprNode*> joinTreeNodes;
-            joinTreeNodes.push_back(equiJoin.Arg(equiJoin.ArgCount() - 2).Raw());
-            while (!joinTreeNodes.empty()) {
-                const TExprNode* joinTree = joinTreeNodes.back();
-                joinTreeNodes.pop_back();
+        // Only Lookup, Merge, and Star strategies use a table sort
+        if (!state->Configuration->JoinMergeTablesLimit.Get().GetOrElse(0)
+            && !(state->Configuration->LookupJoinLimit.Get().GetOrElse(0) && state->Configuration->LookupJoinMaxRows.Get().GetOrElse(0))
+            && !(state->Configuration->JoinEnableStarJoin.Get().GetOrElse(false) && state->Configuration->JoinAllowColumnRenames.Get().GetOrElse(true))
+        ) {
+            return tableSortKeys;
+        }
 
-                if (!joinTree->Child(1)->IsAtom()) {
-                    joinTreeNodes.push_back(joinTree->Child(1));
-                }
+        TVector<const TExprNode*> joinTreeNodes;
+        joinTreeNodes.push_back(equiJoin.Arg(equiJoin.ArgCount() - 2).Raw());
+        while (!joinTreeNodes.empty()) {
+            const TExprNode* joinTree = joinTreeNodes.back();
+            joinTreeNodes.pop_back();
 
-                if (!joinTree->Child(2)->IsAtom()) {
-                    joinTreeNodes.push_back(joinTree->Child(2));
-                }
+            if (!joinTree->Child(1)->IsAtom()) {
+                joinTreeNodes.push_back(joinTree->Child(1));
+            }
 
-                if (joinTree->Child(0)->Content() != "Cross") {
-                    THashMap<TStringBuf, THashSet<TStringBuf>> tableJoinKeys;
-                    for (auto keys: {joinTree->Child(3), joinTree->Child(4)}) {
-                        for (ui32 i = 0; i < keys->ChildrenSize(); i += 2) {
-                            auto tableName = keys->Child(i)->Content();
-                            auto column = keys->Child(i + 1)->Content();
-                            tableJoinKeys[tableName].insert(column);
-                        }
+            if (!joinTree->Child(2)->IsAtom()) {
+                joinTreeNodes.push_back(joinTree->Child(2));
+            }
+
+            if (joinTree->Child(0)->Content() != "Cross") {
+                THashMap<TStringBuf, THashSet<TStringBuf>> tableJoinKeys;
+                for (auto keys: {joinTree->Child(3), joinTree->Child(4)}) {
+                    for (ui32 i = 0; i < keys->ChildrenSize(); i += 2) {
+                        auto tableName = keys->Child(i)->Content();
+                        auto column = keys->Child(i + 1)->Content();
+                        tableJoinKeys[tableName].insert(column);
                     }
+                }
 
-                    for (auto& [label, joinKeys]: tableJoinKeys) {
-                        if (auto sortKeys = tableSortKeys.FindPtr(label)) {
-                            if (joinKeys.size() <= sortKeys->first.size()) {
-                                bool matched = true;
-                                for (size_t i = 0; i < joinKeys.size(); ++i) {
-                                    if (!joinKeys.contains(sortKeys->first[i])) {
-                                        matched = false;
-                                        break;
-                                    }
+                for (auto& [label, joinKeys]: tableJoinKeys) {
+                    if (auto sortKeys = tableSortKeys.FindPtr(label)) {
+                        if (joinKeys.size() <= sortKeys->first.size()) {
+                            bool matched = true;
+                            for (size_t i = 0; i < joinKeys.size(); ++i) {
+                                if (!joinKeys.contains(sortKeys->first[i])) {
+                                    matched = false;
+                                    break;
                                 }
-                                if (matched) {
-                                    ++sortKeys->second;
-                                }
+                            }
+                            if (matched) {
+                                ++sortKeys->second;
                             }
                         }
                     }
@@ -1489,7 +1501,7 @@ private:
 
     template<bool IsTop>
     TMaybeNode<TExprBase> Sort(TExprBase node, TExprContext& ctx) const {
-        if (State_->Types->EvaluationInProgress) {
+        if (State_->Types->EvaluationInProgress || State_->PassiveExecution) {
             return node;
         }
 
@@ -1728,7 +1740,7 @@ private:
     }
 
     TMaybeNode<TExprBase> PartitionByKey(TExprBase node, TExprContext& ctx) const {
-        if (State_->Types->EvaluationInProgress) {
+        if (State_->Types->EvaluationInProgress || State_->PassiveExecution) {
             return node;
         }
 
@@ -1874,12 +1886,24 @@ private:
             }
         }
 
+        const bool canUseMapInsteadOfReduce = keySelectorLambda.Body().Ref().IsComplete() &&
+            partByKey.SortDirections().Maybe<TCoVoid>() &&
+            State_->Configuration->PartitionByConstantKeysViaMap.Get().GetOrElse(DEFAULT_PARTITION_BY_CONSTANT_KEYS_VIA_MAP);
+
+        if (canUseMapInsteadOfReduce) {
+            YQL_ENSURE(!canUseReduce);
+            YQL_ENSURE(sortByColumns.empty());
+            useSystemColumns = false;
+        }
+
         auto settingsBuilder = Build<TCoNameValueTupleList>(ctx, node.Pos());
-        settingsBuilder
-            .Add()
-                .Name().Value(ToString(EYtSettingType::ReduceBy)).Build()
-                .Value(TExprBase(ToColumnPairList(reduceByColumns, node.Pos(), ctx)))
-            .Build();
+        if (!canUseMapInsteadOfReduce) {
+            settingsBuilder
+                .Add()
+                    .Name().Value(ToString(EYtSettingType::ReduceBy)).Build()
+                    .Value(TExprBase(ToColumnPairList(reduceByColumns, node.Pos(), ctx)))
+                .Build();
+        }
 
         if (!sortByColumns.empty()) {
             settingsBuilder
@@ -2266,7 +2290,14 @@ private:
             TExprNode::TPtr keyExtractor;
             TExprNode::TPtr handler;
 
-            if (useSystemColumns) {
+            if (canUseMapInsteadOfReduce) {
+                groupSwitch = Build<TCoLambda>(ctx, handlerLambda.Pos())
+                    .Args({"key", "item"})
+                    .Body<TCoBool>()
+                        .Literal().Build("false")
+                    .Build()
+                    .Done().Ptr();
+            } else if (useSystemColumns) {
                 groupSwitch = Build<TCoLambda>(ctx, handlerLambda.Pos())
                     .Args({"key", "item"})
                     .Body<TCoSqlExtractKey>()
@@ -2325,17 +2356,21 @@ private:
                     .Build()
                     .Done().Ptr();
 
-                handler = Build<TCoLambda>(ctx, handlerLambda.Pos())
-                    .Args({"item"})
-                    .Body<TCoRemovePrefixMembers>()
-                        .Input("item")
-                        .Prefixes()
-                            .Add()
-                                .Value(YqlSysColumnKeySwitch)
+                if (canUseMapInsteadOfReduce) {
+                    handler = BuildIdentityLambda(handlerLambda.Pos(), ctx).Ptr();
+                } else {
+                    handler = Build<TCoLambda>(ctx, handlerLambda.Pos())
+                        .Args({"item"})
+                        .Body<TCoRemovePrefixMembers>()
+                            .Input("item")
+                            .Prefixes()
+                                .Add()
+                                    .Value(YqlSysColumnKeySwitch)
+                                .Build()
                             .Build()
                         .Build()
-                    .Build()
-                    .Done().Ptr();
+                        .Done().Ptr();
+                }
             }
 
             handlerLambda = Build<TCoLambda>(ctx, handlerLambda.Pos())
@@ -2429,12 +2464,31 @@ private:
             return WrapOp(reduce, ctx);
         }
 
-        if (needMap && (builder.NeedMap() || multiInput)) {
+        if (needMap && (builder.NeedMap() || multiInput) && !canUseMapInsteadOfReduce) {
             settingsBuilder
                 .Add()
                     .Name().Value(ToString(EYtSettingType::ReduceFilterBy)).Build()
                     .Value(TExprBase(ToAtomList(filterColumns, node.Pos(), ctx)))
                 .Build();
+        }
+
+        if (canUseMapInsteadOfReduce && !filterColumns.empty()) {
+            reducer = Build<TCoLambda>(ctx, reducer.Pos())
+                .Args({"input"})
+                .Body<TExprApplier>()
+                    .Apply(reducer)
+                    .With<TCoMap>(0)
+                        .Input("input")
+                        .Lambda()
+                            .Args({"item"})
+                            .Body<TCoSelectMembers>()
+                                .Input("item")
+                                .Members(ToAtomList(filterColumns, node.Pos(), ctx))
+                            .Build()
+                        .Build()
+                    .Build()
+                .Build()
+                .Done();
         }
 
         bool unordered = ctx.IsConstraintEnabled<TSortedConstraintNode>();
@@ -2519,6 +2573,26 @@ private:
             }
         }
 
+        if (canUseMapInsteadOfReduce) {
+            settingsBuilder
+                .Add()
+                    .Name().Value(ToString(EYtSettingType::JobCount)).Build()
+                    .Value(TExprBase(ctx.NewAtom(node.Pos(), 1u)))
+                .Build();
+
+            auto result = Build<TYtMap>(ctx, node.Pos())
+                .World(ApplySyncListToWorld(world.Ptr(), syncList, ctx))
+                .DataSink(GetDataSink(input, ctx))
+                .Input(ConvertInputTable(input, ctx, TConvertInputOpts().MakeUnordered(unordered)))
+                .Output()
+                    .Add(ConvertOutTables(node.Pos(), outItemType, ctx, State_, &partByKey.Ref().GetConstraintSet()))
+                .Build()
+                .Settings(settingsBuilder.Done())
+                .Mapper(reducer)
+                .Done();
+            return WrapOp(result, ctx);
+        }
+
         if (forceMapper && mapper.Maybe<TCoVoid>()) {
             mapper = MakeJobLambda<false>(Build<TCoLambda>(ctx, node.Pos()).Args({"stream"}).Body("stream").Done(), useMapFlow, ctx);
         }
@@ -2537,7 +2611,7 @@ private:
     }
 
     TMaybeNode<TExprBase> FlatMap(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
-        if (State_->Types->EvaluationInProgress) {
+        if (State_->Types->EvaluationInProgress || State_->PassiveExecution) {
             return node;
         }
 
@@ -2622,7 +2696,7 @@ private:
     }
 
     TMaybeNode<TExprBase> CombineByKey(TExprBase node, TExprContext& ctx) const {
-        if (State_->Types->EvaluationInProgress) {
+        if (State_->Types->EvaluationInProgress || State_->PassiveExecution) {
             return node;
         }
 
@@ -2810,6 +2884,10 @@ private:
     }
 
     TMaybeNode<TExprBase> DqWrite(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
+        if (State_->PassiveExecution) {
+            return node;
+        }
+
         auto write = node.Cast<TYtWriteTable>();
         if (!TDqCnUnionAll::Match(write.Content().Raw())) {
             return node;
@@ -3296,6 +3374,10 @@ private:
     }
 
     TMaybeNode<TExprBase> Fill(TExprBase node, TExprContext& ctx) const {
+        if (State_->PassiveExecution) {
+            return node;
+        }
+
         auto write = node.Cast<TYtWriteTable>();
 
         auto mode = NYql::GetSetting(write.Settings().Ref(), EYtSettingType::Mode);
@@ -3326,6 +3408,13 @@ private:
             return {};
         }
         TYtOutTableInfo outTable(outItemType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+
+        {
+            auto path = write.Table().Name().StringValue();
+            auto commitEpoch = TEpochInfo::Parse(write.Table().CommitEpoch().Ref()).GetOrElse(0);
+            auto dstRowSpec = State_->TablesData->GetTable(cluster, path, commitEpoch).RowSpec;
+            outTable.RowSpec->SetColumnOrder(dstRowSpec->GetColumnOrder());
+        }
         auto content = write.Content();
         if (auto sorted = content.Ref().GetConstraint<TSortedConstraintNode>()) {
             const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
@@ -3446,6 +3535,10 @@ private:
     }
 
     TMaybeNode<TExprBase> Extend(TExprBase node, TExprContext& ctx) const {
+        if (State_->PassiveExecution) {
+            return node;
+        }
+
         auto extend = node.Cast<TCoExtendBase>();
 
         bool allAreTables = true;
@@ -4271,7 +4364,7 @@ private:
 
     template <typename TLMapType>
     TMaybeNode<TExprBase> LMap(TExprBase node, TExprContext& ctx) const {
-        if (State_->Types->EvaluationInProgress) {
+        if (State_->Types->EvaluationInProgress || State_->PassiveExecution) {
             return node;
         }
 
@@ -4555,6 +4648,9 @@ private:
         if (NYql::HasSetting(innerMap.Settings().Ref(), EYtSettingType::Flow) != NYql::HasSetting(outerMap.Settings().Ref(), EYtSettingType::Flow)) {
             return node;
         }
+        if (NYql::HasAnySetting(outerMap.Settings().Ref(), EYtSettingType::JobCount)) {
+            return node;
+        }
         if (!path.Ranges().Maybe<TCoVoid>()) {
             return node;
         }
@@ -4690,6 +4786,9 @@ private:
         if (NYql::HasAnySetting(inner.Settings().Ref(), EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::JobCount)) {
             return node;
         }
+        if (NYql::HasSetting(outerMap.Settings().Ref(), EYtSettingType::JobCount)) {
+            return node;
+        }
         if (outerMap.Input().Item(0).Settings().Size() != 0) {
             return node;
         }
@@ -4798,7 +4897,7 @@ private:
     }
 
     TMaybeNode<TExprBase> AssumeSorted(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
-        if (State_->Types->EvaluationInProgress) {
+        if (State_->Types->EvaluationInProgress || State_->PassiveExecution) {
             return node;
         }
 
@@ -5455,7 +5554,7 @@ private:
     }
 
     TMaybeNode<TExprBase> EquiJoin(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
-        if (State_->Types->EvaluationInProgress) {
+        if (State_->Types->EvaluationInProgress || State_->PassiveExecution) {
             return node;
         }
 
@@ -5763,7 +5862,8 @@ private:
 
         const bool tryReorder = State_->Types->CostBasedOptimizer != ECostBasedOptimizerType::Disable
             && equiJoin.Input().Size() > 2
-            && HasOnlyOneJoinType(*equiJoin.Joins().Ptr(), "Inner");
+            && HasOnlyOneJoinType(*equiJoin.Joins().Ptr(), "Inner")
+            && !HasSetting(equiJoin.JoinOptions().Ref(), "cbo_passed");
 
         const bool waitAllInputs = State_->Configuration->JoinWaitAllInputs.Get().GetOrElse(false) || tryReorder;
 
@@ -6077,6 +6177,10 @@ private:
     }
 
     TMaybeNode<TExprBase> ReadWithSettings(TExprBase node, TExprContext& ctx) const {
+        if (State_->PassiveExecution) {
+            return node;
+        }
+
         auto maybeRead = node.Cast<TCoRight>().Input().Maybe<TYtReadTable>();
         if (!maybeRead) {
             return node;
@@ -6153,6 +6257,10 @@ private:
     }
 
     TMaybeNode<TExprBase> ReplaceStatWriteTable(TExprBase node, TExprContext& ctx) const {
+        if (State_->PassiveExecution) {
+            return node;
+        }
+
         auto write = node.Cast<TStatWriteTable>();
         auto input = write.Input();
 
@@ -6934,22 +7042,17 @@ private:
                         continue;
                     }
 
-                    if (NYql::HasSetting(innerMerge.Settings().Ref(), EYtSettingType::KeepSorted)) {
-                        if (!AllOf(innerMergeSection.Paths(), [](const auto& path) {
-                            auto op = path.Table().template Maybe<TYtOutput>().Operation();
-                            return op && (op.template Maybe<TYtTouch>() || (op.Raw()->HasResult() && op.Raw()->GetResult().IsWorld()));
-                        })) {
-                            continue;
-                        }
+                    auto mergeOutRowSpec = TYqlRowSpecInfo(innerMerge.Output().Item(0).RowSpec());
+                    const bool sortedMerge = mergeOutRowSpec.IsSorted();
+                    if (hasTakeSkip && sortedMerge && NYql::HasSetting(innerMerge.Settings().Ref(), EYtSettingType::KeepSorted)) {
+                        continue;
                     }
                     if (hasTakeSkip && AnyOf(innerMergeSection.Paths(), [](const auto& path) { return !path.Ranges().template Maybe<TCoVoid>(); })) {
                         continue;
                     }
 
                     const bool unordered = IsUnorderedOutput(path.Table().Cast<TYtOutput>());
-                    auto mergeOutRowSpec = TYqlRowSpecInfo(innerMerge.Output().Item(0).RowSpec());
                     if (innerMergeSection.Paths().Size() > 1) {
-                        const bool sortedMerge = mergeOutRowSpec.IsSorted();
                         if (hasTakeSkip && sortedMerge) {
                             continue;
                         }
@@ -7367,6 +7470,14 @@ private:
         if (!rowSpec.IsSorted()) {
             return node;
         }
+        TMaybeNode<TExprBase> columns;
+        if (rowSpec.HasAuxColumns()) {
+            TSet<TStringBuf> members;
+            for (auto item: rowSpec.GetType()->GetItems()) {
+                members.insert(item->GetName());
+            }
+            columns = TExprBase(ToAtomList(members, merge.Pos(), ctx));
+        }
 
         auto mergeSection = merge.Input().Item(0);
         if (NYql::HasSettingsExcept(mergeSection.Settings().Ref(), EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2)) {
@@ -7399,7 +7510,10 @@ private:
                         .Input()
                             .Add()
                                 .Paths()
-                                    .Add(path)
+                                    .Add<TYtPath>()
+                                        .InitFrom(path)
+                                        .Columns(columns.IsValid() ? columns.Cast() : path.Columns())
+                                    .Build()
                                 .Build()
                                 .Settings(section.Settings())
                             .Build()

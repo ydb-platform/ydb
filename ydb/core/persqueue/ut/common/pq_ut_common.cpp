@@ -5,6 +5,7 @@
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/partition.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
+#include <ydb/core/persqueue/utils.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -49,7 +50,7 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
             }
             request->Record.MutableTabletConfig()->SetCacheSize(10_MB);
             request->Record.SetTxId(12345);
-            auto tabletConfig = request->Record.MutableTabletConfig();
+            auto* tabletConfig = request->Record.MutableTabletConfig();
             if (runtime.GetAppData().PQConfig.GetTopicsAreFirstClassCitizen()) {
                 tabletConfig->SetTopicName("topic");
                 tabletConfig->SetTopicPath(runtime.GetAppData().PQConfig.GetDatabase() + "/topic");
@@ -93,6 +94,7 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
                 if (u.first != "user")
                     tabletConfig->AddReadRules(u.first);
             }
+
             runtime.SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
             TEvPersQueue::TEvUpdateConfigResponse* result =
                 runtime.GrabEdgeEvent<TEvPersQueue::TEvUpdateConfigResponse>(handle);
@@ -136,7 +138,7 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
 }
 
 
-void CmdGetOffset(const ui32 partition, const TString& user, i64 offset, TTestContext& tc, i64 ctime,
+void CmdGetOffset(const ui32 partition, const TString& user, i64 expectedOffset, TTestContext& tc, i64 ctime,
                   ui64 writeTime) {
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse *result;
@@ -174,7 +176,7 @@ void CmdGetOffset(const ui32 partition, const TString& user, i64 offset, TTestCo
                     }
                 }
             }
-            UNIT_ASSERT((offset == -1 && !resp.HasOffset()) || (i64)resp.GetOffset() == offset);
+            UNIT_ASSERT((expectedOffset == -1 && !resp.HasOffset()) || (i64)resp.GetOffset() == expectedOffset);
             if (writeTime > 0) {
                 UNIT_ASSERT(resp.HasWriteTimestampEstimateMS());
                 UNIT_ASSERT(resp.GetWriteTimestampEstimateMS() >= writeTime);
@@ -537,6 +539,21 @@ void CmdWrite(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender,
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse *result;
 
+ 
+    runtime->SetObserverFunc(
+            [&](TAutoPtr<IEventHandle>& ev) {
+                if (auto* msg = ev->CastAsLocal<TEvQuota::TEvRequest>()) {
+                    Cerr << "Captured kesus quota request event\n";
+                    runtime->Send(new IEventHandle(
+                            ev->Sender, TActorId{},
+                            new TEvQuota::TEvClearance(TEvQuota::TEvClearance::EResult::Success), 0, ev->Cookie));
+
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            }
+    );
+
     if (msn != -1) msgSeqNo = msn;
     TString cookie = ownerCookie;
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
@@ -574,6 +591,7 @@ void CmdWrite(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender,
 
             if (error) {
                 UNIT_ASSERT(
+                    result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_INACTIVE ||
                     result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_IS_FULL ||
                     result->Record.GetErrorCode() == NPersQueue::NErrorCode::BAD_REQUEST ||
                     result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRONG_COOKIE
@@ -848,10 +866,10 @@ TVector<TString> CmdSourceIdRead(TTestContext& tc) {
             sourceIds.clear();
             auto read = request->Record.AddCmdReadRange();
             auto range = read->MutableRange();
-            NPQ::TKeyPrefix ikeyFrom(NPQ::TKeyPrefix::TypeInfo, 0, NPQ::TKeyPrefix::MarkProtoSourceId);
+            NPQ::TKeyPrefix ikeyFrom(NPQ::TKeyPrefix::TypeInfo, TPartitionId(0), NPQ::TKeyPrefix::MarkProtoSourceId);
             range->SetFrom(ikeyFrom.Data(), ikeyFrom.Size());
             range->SetIncludeFrom(true);
-            NPQ::TKeyPrefix ikeyTo(NPQ::TKeyPrefix::TypeInfo, 0, NPQ::TKeyPrefix::MarkUserDeprecated);
+            NPQ::TKeyPrefix ikeyTo(NPQ::TKeyPrefix::TypeInfo, TPartitionId(0), NPQ::TKeyPrefix::MarkUserDeprecated);
             range->SetTo(ikeyTo.Data(), ikeyTo.Size());
             range->SetIncludeTo(false);
             Cout << request.Get()->ToString() << Endl;
@@ -1093,7 +1111,7 @@ void CmdForgetRead(const TCmdDirectReadSettings& settings, TTestContext& tc) {
 }
 
 void FillUserInfo(NKikimrClient::TKeyValueRequest_TCmdWrite* write, const TString& client, ui32 partition, ui64 offset) {
-    NPQ::TKeyPrefix ikey(NPQ::TKeyPrefix::TypeInfo, partition, NPQ::TKeyPrefix::MarkUser);
+    NPQ::TKeyPrefix ikey(NPQ::TKeyPrefix::TypeInfo, TPartitionId(partition), NPQ::TKeyPrefix::MarkUser);
     ikey.Append(client.c_str(), client.size());
 
     NKikimrPQ::TUserInfo userInfo;
@@ -1117,7 +1135,7 @@ void FillDeprecatedUserInfo(NKikimrClient::TKeyValueRequest_TCmdWrite* write, co
     TString session = "test-session";
     ui32 gen = 1;
     ui32 step = 2;
-    NPQ::TKeyPrefix ikeyDeprecated(NPQ::TKeyPrefix::TypeInfo, partition, NPQ::TKeyPrefix::MarkUserDeprecated);
+    NPQ::TKeyPrefix ikeyDeprecated(NPQ::TKeyPrefix::TypeInfo, TPartitionId(partition), NPQ::TKeyPrefix::MarkUserDeprecated);
     ikeyDeprecated.Append(client.c_str(), client.size());
 
     TBuffer idataDeprecated = NPQ::NDeprecatedUserData::Serialize(offset, gen, step, session);

@@ -2,14 +2,7 @@ PROGRAM(ydbd)
 
 IF (OS_LINUX)
     ALLOCATOR(TCMALLOC_256K)
-ELSE()
-    IF (PROFILE_MEMORY_ALLOCATIONS)
-        ALLOCATOR(LF_DBG)
-    ELSE()
-        ALLOCATOR(LF_YT)
-    ENDIF()
 ENDIF()
-
 
 IF (OS_DARWIN)
     STRIP()
@@ -90,6 +83,7 @@ CHECK_DEPENDENT_DIRS(
     tools/rorescompiler
     util
     ydb
+    yt
 )
 
 YQL_LAST_ABI_VERSION()

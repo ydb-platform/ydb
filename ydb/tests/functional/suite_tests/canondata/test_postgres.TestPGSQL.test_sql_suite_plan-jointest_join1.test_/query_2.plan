@@ -43,12 +43,13 @@
                                                 "TopSortBy": ""
                                             },
                                             {
+                                                "Condition": "i = i",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 3
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "InternalOperatorId": 2
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"

@@ -18,12 +18,14 @@ public:
     }
 
     TNodePtr Build(const TSQLv1ParserAST& ast);
+    TNodePtr Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_core>& ast);
 
     bool Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core);
 private:
     bool DeclareStatement(const TRule_declare_stmt& stmt);
     bool ExportStatement(const TRule_export_stmt& stmt);
     bool AlterTableAction(const TRule_alter_table_action& node, TAlterTableParameters& params);
+    bool AlterExternalTableAction(const TRule_alter_external_table_action& node, TAlterTableParameters& params);
     bool AlterTableAddColumn(const TRule_alter_table_add_column& node, TAlterTableParameters& params);
     bool AlterTableDropColumn(const TRule_alter_table_drop_column& node, TAlterTableParameters& params);
     bool AlterTableAlterColumn(const TRule_alter_table_alter_column& node, TAlterTableParameters& params);

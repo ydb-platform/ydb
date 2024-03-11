@@ -60,7 +60,7 @@ void TAlterReplicationCardCommand::Register(TRegistrar registrar)
         .Optional(/*init*/ false);
     registrar.ParameterWithUniversalAccessor<std::optional<TReplicationCardCollocationId>>(
         "replication_card_collocation_id",
-         [] (TThis* command) -> auto& {
+        [] (TThis* command) -> auto& {
             return command->Options.ReplicationCardCollocationId;
         })
         .Optional(/*init*/ false);

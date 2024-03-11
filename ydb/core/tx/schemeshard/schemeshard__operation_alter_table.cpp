@@ -87,11 +87,19 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
 
     // Ignore column ids if they were passed by user!
     for (auto& col : *copyAlter.MutableColumns()) {
-        if (col.GetNotNull()) {
-            errStr = Sprintf("Not null columns is not supported for alter command");
+        bool hasDefault = col.HasDefaultFromLiteral();
+        if (hasDefault && !context.SS->EnableAddColumsWithDefaults) {
+            errStr = Sprintf("Column addition with default value is not supported now.");
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
         }
+
+        if (col.GetNotNull() && !hasDefault) {
+            errStr = Sprintf("Not null columns without defaults are not supported.");
+            status = NKikimrScheme::StatusInvalidParameter;
+            return nullptr;
+        }
+
         col.ClearId();
     }
 

@@ -68,7 +68,9 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
         db.Table<Schema::BuildColumnOperationSettings>().Key(info->Id, i).Update(
             NIceDb::TUpdate<Schema::BuildColumnOperationSettings::ColumnName>(info->BuildColumns[i].ColumnName),
             NIceDb::TUpdate<Schema::BuildColumnOperationSettings::DefaultFromLiteral>(
-                TString(info->BuildColumns[i].DefaultFromLiteral.SerializeAsString()))
+                TString(info->BuildColumns[i].DefaultFromLiteral.SerializeAsString())),
+            NIceDb::TUpdate<Schema::BuildColumnOperationSettings::NotNull>(info->BuildColumns[i].NotNull),
+            NIceDb::TUpdate<Schema::BuildColumnOperationSettings::FamilyName>(info->BuildColumns[i].FamilyName)
         );
     }
 }

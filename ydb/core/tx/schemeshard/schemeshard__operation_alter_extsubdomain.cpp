@@ -273,10 +273,10 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TP
         }
 
         switch (input.GetServerlessComputeResourcesMode()) {
-            case EServerlessComputeResourcesMode::SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED:
-                return paramError("can not set ServerlessComputeResourcesMode to SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED");
-            case EServerlessComputeResourcesMode::SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED:
-            case EServerlessComputeResourcesMode::SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED:
+            case EServerlessComputeResourcesMode::EServerlessComputeResourcesModeUnspecified:
+                return paramError("can not set ServerlessComputeResourcesMode to EServerlessComputeResourcesModeUnspecified");
+            case EServerlessComputeResourcesMode::EServerlessComputeResourcesModeExclusive:
+            case EServerlessComputeResourcesMode::EServerlessComputeResourcesModeShared:
                 break; // ok
             default:
                 return paramError("unknown ServerlessComputeResourcesMode");
@@ -769,7 +769,7 @@ public:
             event->Record.MutableDomainKey()->SetSchemeShard(pathId.OwnerId);
             event->Record.MutableDomainKey()->SetPathId(pathId.LocalPathId);
             const auto& serverlessComputeResourcesMode = subDomain->GetServerlessComputeResourcesMode();
-            if (serverlessComputeResourcesMode) {
+            if (serverlessComputeResourcesMode.Defined()) {
                 event->Record.SetServerlessComputeResourcesMode(*serverlessComputeResourcesMode);
             }
 

@@ -1,3 +1,5 @@
 items:
 - name: Log records collection in a Kubernetes cluster using FluentBit and YDB
   href: fluent-bit.md
+- name: Schema migrations with goose
+  href: goose.md

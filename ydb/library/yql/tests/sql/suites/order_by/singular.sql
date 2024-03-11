@@ -1,5 +1,6 @@
 /* postgres can not */
 /* syntax version 1 */
+/* hybridfile can not YQL-17743 */
 use plato;
 
 insert into @foo

@@ -168,12 +168,14 @@ TExprNode::TPtr MakeWidePointRangeLambda(TPositionHandle pos, const TTypeAnnotat
         case EDataSlot::Int64:  name = "Int64"; maxValueStr = ToString(Max<i64>()); break;
         case EDataSlot::Uint64: name = "Uint64"; maxValueStr = ToString(Max<ui64>()); break;
 
-        case EDataSlot::Date:     name = "Date"; maxValueStr = ToString(NUdf::MAX_DATE - 1); break;
-        case EDataSlot::Datetime: name = "Datetime"; maxValueStr = ToString(NUdf::MAX_DATETIME - 1); break;
+        case EDataSlot::Date:        name = "Date"; maxValueStr = ToString(NUdf::MAX_DATE - 1); break;
+        case EDataSlot::Datetime:    name = "Datetime"; maxValueStr = ToString(NUdf::MAX_DATETIME - 1); break;
+        case EDataSlot::Timestamp:   name = "Timestamp"; maxValueStr = ToString(NUdf::MAX_TIMESTAMP - 1); break;
+        case EDataSlot::Date32:      name = "Date32"; maxValueStr = ToString(NUdf::MAX_DATE32); break;
+        case EDataSlot::Datetime64:  name = "Datetime64"; maxValueStr = ToString(NUdf::MAX_DATETIME64); break;
+        case EDataSlot::Timestamp64: name = "Timestamp64"; maxValueStr = ToString(NUdf::MAX_TIMESTAMP64); break;
         default:
-            YQL_ENSURE(keySlot == EDataSlot::Timestamp);
-            name = "Timestamp";
-            maxValueStr = ToString(NUdf::MAX_TIMESTAMP - 1);
+            ythrow yexception() << "Unexpected type: " << baseKeyType->Cast<TDataExprType>()->GetName();
     }
 
     TExprNode::TPtr maxValue = ctx.NewCallable(pos, name, { ctx.NewAtom(pos, maxValueStr, TNodeFlags::Default) });
@@ -184,6 +186,12 @@ TExprNode::TPtr MakeWidePointRangeLambda(TPositionHandle pos, const TTypeAnnotat
         addValue = ctx.NewCallable(pos, "Interval", { ctx.NewAtom(pos, "1000000", TNodeFlags::Default) });
     } else if (keySlot == EDataSlot::Timestamp) {
         addValue = ctx.NewCallable(pos, "Interval", { ctx.NewAtom(pos, "1", TNodeFlags::Default) });
+    } else if (keySlot == EDataSlot::Date32) {
+        addValue = ctx.NewCallable(pos, "Interval64", { ctx.NewAtom(pos, "86400000000", TNodeFlags::Default) });
+    } else if (keySlot == EDataSlot::Datetime64) {
+        addValue = ctx.NewCallable(pos, "Interval64", { ctx.NewAtom(pos, "1000000", TNodeFlags::Default) });
+    } else if (keySlot == EDataSlot::Timestamp64) {
+        addValue = ctx.NewCallable(pos, "Interval64", { ctx.NewAtom(pos, "1", TNodeFlags::Default) });
     } else {
         addValue = ctx.NewCallable(pos, name, { ctx.NewAtom(pos, "1", TNodeFlags::Default) });
     }
@@ -519,4 +527,51 @@ TExprNode::TPtr ExpandRangeFor(const TExprNode::TPtr& node, TExprContext& ctx) {
     return result;
 }
 
+TExprNode::TPtr ExpandRangeToPg(const TExprNode::TPtr& node, TExprContext& ctx) {
+    YQL_ENSURE(node->IsCallable("RangeToPg"));
+    const size_t numComponents = node->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->
+        Cast<TTupleExprType>()->GetItems().front()->Cast<TTupleExprType>()->GetSize();
+    return ctx.Builder(node->Pos())
+        .Callable("OrderedMap")
+            .Add(0, node->HeadPtr())
+            .Lambda(1)
+                .Param("range")
+                .Callable("StaticMap")
+                    .Arg(0, "range")
+                    .Lambda(1)
+                        .Param("boundary")
+                        .List()
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                for (size_t i = 0; i < numComponents; ++i) {
+                                    if (i % 2 == 0) {
+                                        parent
+                                            .Callable(i, "Nth")
+                                                .Arg(0, "boundary")
+                                                .Atom(1, i)
+                                            .Seal();
+                                    } else {
+                                        parent
+                                            .Callable(i, "Map")
+                                                .Callable(0, "Nth")
+                                                    .Arg(0, "boundary")
+                                                    .Atom(1, i)
+                                                .Seal()
+                                                .Lambda(1)
+                                                    .Param("unwrapped")
+                                                    .Callable("ToPg")
+                                                        .Arg(0, "unwrapped")
+                                                    .Seal()
+                                                .Seal()
+                                            .Seal();
+                                    }
+                                }
+                                return parent;
+                            })
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
 }

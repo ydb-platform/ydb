@@ -115,7 +115,7 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
     Self->CreateChangeSender(ctx);
     Self->EnqueueChangeRecords(std::move(ChangeRecords));
     Self->MaybeActivateChangeSender(ctx);
-    Self->EmitHeartbeats(ctx);
+    Self->EmitHeartbeats();
 
     if (!Self->ChangesQueue) {
         if (!Self->ChangeExchangeSplitter.Done()) {
@@ -589,13 +589,11 @@ public:
 
             Self->PersistSys(db, Schema::Sys_State, Self->State);
 
-            if (AppData(ctx)->FeatureFlags.GetEnableMvcc()) {
-                auto state = *AppData(ctx)->FeatureFlags.GetEnableMvcc() ? EMvccState::MvccEnabled : EMvccState::MvccDisabled;
-                Self->PersistSys(db, Schema::SysMvcc_State, (ui32)state);
+            auto state = EMvccState::MvccEnabled;
+            Self->PersistSys(db, Schema::SysMvcc_State, (ui32)state);
 
-                LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, TStringBuilder() << "TxInitSchema.Execute"
-                    << " MVCC state switched to" << (*AppData(ctx)->FeatureFlags.GetEnableMvcc() ? " enabled" : " disabled") << " state");
-            }
+            LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, TStringBuilder() << "TxInitSchema.Execute"
+                << " MVCC state switched to  enabled state");
 
             Self->MvccSwitchState = TSwitchState::DONE;
         }
@@ -607,12 +605,8 @@ public:
             LOAD_SYS_BYTES(db, Schema::Sys_SubDomainInfo, rawProcessingParams)
 
             if (rawProcessingParams.empty()) {
-                auto appdata = AppData(ctx);
-                const ui32 selfDomain = appdata->DomainsInfo->GetDomainUidByTabletId(Self->TabletID());
-                Y_ABORT_UNLESS(selfDomain != appdata->DomainsInfo->BadDomainId);
-                const auto& domain = appdata->DomainsInfo->GetDomain(selfDomain);
-
-                NKikimrSubDomains::TProcessingParams params = ExtractProcessingParams(domain);
+                auto *domain = AppData(ctx)->DomainsInfo->GetDomain();
+                NKikimrSubDomains::TProcessingParams params = ExtractProcessingParams(*domain);
                 LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchema.Execute Persist Sys_SubDomainInfo");
                 Self->PersistSys(db, Schema::Sys_SubDomainInfo, params.SerializeAsString());
             }

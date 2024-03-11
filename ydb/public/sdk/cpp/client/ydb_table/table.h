@@ -1818,6 +1818,7 @@ public:
         const TMaybe<TDataQuery>& dataQuery, bool fromCache, const TMaybe<TQueryStats>& queryStats);
 
     const TVector<TResultSet>& GetResultSets() const;
+    TVector<TResultSet> ExtractResultSets() &&;
     TResultSet GetResultSet(size_t resultIndex) const;
 
     TResultSetParser GetResultSetParser(size_t resultIndex) const;
@@ -2007,19 +2008,3 @@ class TReadRowsResult : public TStatus {
 
 } // namespace NTable
 } // namespace NYdb
-
-Y_DECLARE_OUT_SPEC(inline, NYdb::NTable::TIndexDescription, o, x) {
-    return x.Out(o);
-}
-
-Y_DECLARE_OUT_SPEC(inline, NYdb::NTable::TChangefeedDescription, o, x) {
-    return x.Out(o);
-}
-
-Y_DECLARE_OUT_SPEC(inline, NYdb::NTable::TValueSinceUnixEpochModeSettings::EUnit, o, x) {
-    return NYdb::NTable::TValueSinceUnixEpochModeSettings::Out(o, x);
-}
-
-Y_DECLARE_OUT_SPEC(inline, NYdb::NTable::TTxSettings, o, x) {
-    return x.Out(o);
-}

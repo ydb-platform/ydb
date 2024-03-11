@@ -2,6 +2,8 @@
 
 #include <yt/yt/core/misc/common.h>
 
+#include <util/generic/size_literals.h>
+
 namespace NYT::NHttp {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -28,10 +30,13 @@ DECLARE_REFCOUNTED_CLASS(TCorsConfig)
 
 DECLARE_REFCOUNTED_CLASS(TConnectionPool)
 
+DECLARE_REFCOUNTED_CLASS(TSharedRefOutputStream)
+
 ////////////////////////////////////////////////////////////////////////////////
 
-extern const TString DefaultServer;
-extern const TString DefaultUserAgent;
+using TContentEncoding = TString;
+
+static constexpr size_t DefaultStreamBufferSize = 32_KB;
 
 ////////////////////////////////////////////////////////////////////////////////
 

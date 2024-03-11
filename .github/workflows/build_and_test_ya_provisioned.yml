@@ -13,10 +13,12 @@ on:
         description: "Build preset"
         options:
           - debug
+          - release
           - relwithdebinfo
           - release-asan
           - release-tsan
           - release-msan
+          - release-cmake14
       test_size:
         type: choice
         default: "small,medium,large"
@@ -90,14 +92,16 @@ on:
       put_build_results_to_cache:
         type: boolean
         default: true
+      commit_sha:
+        type: string
+        default: ""
 jobs:
   main:
     uses: ./.github/workflows/build_and_test_ya.yml
     with:
       # FIXME: always use auto-provisioned here?
       runner_label: ${{ inputs.runner_label }}
-      # naive check for -asan, -tsan, -msan
-      runner_additional_label: ${{ contains(inputs.build_preset, '-') && format('build-preset-{0}', inputs.build_preset) || '' }}
+      runner_additional_label: ${{ format('build-preset-{0}', inputs.build_preset) }}
       build_target: ${{ inputs.build_target }}
       build_preset: ${{ inputs.build_preset }}
       run_build: ${{ inputs.run_build }}
@@ -107,4 +111,5 @@ jobs:
       link_threads: ${{ inputs.link_threads }}
       test_threads: ${{ inputs.test_threads }}
       put_build_results_to_cache: ${{ inputs.put_build_results_to_cache }}
+      commit_sha: ${{ inputs.commit_sha }}
     secrets: inherit

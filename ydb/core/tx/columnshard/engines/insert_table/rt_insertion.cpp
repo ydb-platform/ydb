@@ -111,13 +111,22 @@ THashSet<NKikimr::NOlap::TWriteId> TInsertionSummary::GetInsertedByPathId(const 
     return result;
 }
 
-THashSet<NKikimr::NOlap::TWriteId> TInsertionSummary::GetDeprecatedInsertions(const TInstant timeBorder) const {
+THashSet<NKikimr::NOlap::TWriteId> TInsertionSummary::GetExpiredInsertions(const TInstant timeBorder, const ui64 limit) const {
+    if (timeBorder < MinInsertedTs) {
+        return {};
+    }
+
     THashSet<TWriteId> toAbort;
+    TInstant newMin = TInstant::Max();
     for (auto& [writeId, data] : Inserted) {
-        if (data.GetMeta().GetDirtyWriteTime() && data.GetMeta().GetDirtyWriteTime() < timeBorder) {
+        const TInstant dataInsertTs = data.GetMeta().GetDirtyWriteTime();
+        if (dataInsertTs < timeBorder && toAbort.size() < limit) {
             toAbort.insert(writeId);
+        } else {
+            newMin = Min(newMin, dataInsertTs);
         }
     }
+    MinInsertedTs = (toAbort.size() == Inserted.size()) ? TInstant::Zero() : newMin;
     return toAbort;
 }
 
@@ -128,6 +137,14 @@ bool TInsertionSummary::EraseAborted(const TWriteId writeId) {
     }
     Counters.Aborted.Erase(it->second.BlobSize());
     Aborted.erase(it);
+    return true;
+}
+
+bool TInsertionSummary::HasAborted(const TWriteId writeId) {
+    auto it = Aborted.find(writeId);
+    if (it == Aborted.end()) {
+        return false;
+    }
     return true;
 }
 
@@ -144,6 +161,14 @@ bool TInsertionSummary::EraseCommitted(const TInsertedData& data) {
     } else {
         return true;
     }
+}
+
+bool TInsertionSummary::HasCommitted(const TInsertedData& data) {
+    TPathInfo* pathInfo = GetPathInfoOptional(data.PathId);
+    if (!pathInfo) {
+        return false;
+    }
+    return pathInfo->HasCommitted(data);
 }
 
 const NKikimr::NOlap::TInsertedData* TInsertionSummary::AddAborted(TInsertedData&& data, const bool load /*= false*/) {

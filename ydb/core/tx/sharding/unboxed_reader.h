@@ -17,6 +17,7 @@ struct TExternalTableColumn {
     NScheme::TTypeInfo Type;
     TString TypeMod;
     bool NotNull;
+    bool IsBuildInProgress = false;
 };
 
 struct TColumnUnboxedPlaceInfo: public TExternalTableColumn {

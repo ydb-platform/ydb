@@ -40,6 +40,7 @@ class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
     TString FilterTenant;
+    TSubDomainKey FilterSubDomainKey;
     TString FilterPath;
     TString FilterStoragePool;
     std::unordered_set<TNodeId> FilterNodeIds;
@@ -76,6 +77,7 @@ class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
         Memory,
         CPU,
         LoadAverage,
+        Missing,
     };
     ESort Sort = ESort::NodeId;
     bool ReverseSort = false;
@@ -168,6 +170,8 @@ public:
                 Sort = ESort::CPU;
             } else if (sort == "LoadAverage") {
                 Sort = ESort::LoadAverage;
+            } else if (sort == "Missing") {
+                Sort = ESort::Missing;
             }
         }
     }
@@ -402,27 +406,30 @@ public:
                 if (HiveId == 0) {
                     HiveId = entry.DomainInfo->Params.GetHive();
                 }
+                if (!FilterSubDomainKey) {
+                    const auto ownerId = entry.DomainInfo->DomainKey.OwnerId;
+                    const auto localPathId = entry.DomainInfo->DomainKey.LocalPathId;
+                    FilterSubDomainKey = TSubDomainKey(ownerId, localPathId);
+                }
+
+                if (FilterTenant.empty()) {
+                    RequestForTenant(path);
+                }
+                
                 if (entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
                     TPathId resourceDomainKey(entry.DomainInfo->ResourcesDomainKey);
                     BLOG_TRACE("Requesting navigate for resource domain " << resourceDomainKey);
                     RequestSchemeCacheNavigate(resourceDomainKey);
                     ++RequestsBeforeNodeList;
-                } else {
-                    if (FilterTenant.empty()) {
-                        RequestForTenant(path);
-                    }
-                    if (Storage) {
-                        if (entry.DomainDescription) {
-                            for (const auto& storagePool : entry.DomainDescription->Description.GetStoragePools()) {
-                                TString storagePoolName = storagePool.GetName();
-                                THolder<TEvBlobStorage::TEvControllerSelectGroups> request = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
-                                request->Record.SetReturnAllMatchingGroups(true);
-                                request->Record.AddGroupParameters()->MutableStoragePoolSpecifier()->SetName(storagePoolName);
-                                BLOG_TRACE("Requesting BSControllerSelectGroups for " << storagePoolName);
-                                RequestBSControllerSelectGroups(std::move(request));
-                                ++RequestsBeforeNodeList;
-                            }
-                        }
+                } else if (Storage && entry.DomainDescription) {
+                    for (const auto& storagePool : entry.DomainDescription->Description.GetStoragePools()) {
+                        TString storagePoolName = storagePool.GetName();
+                        THolder<TEvBlobStorage::TEvControllerSelectGroups> request = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
+                        request->Record.SetReturnAllMatchingGroups(true);
+                        request->Record.AddGroupParameters()->MutableStoragePoolSpecifier()->SetName(storagePoolName);
+                        BLOG_TRACE("Requesting BSControllerSelectGroups for " << storagePoolName);
+                        RequestBSControllerSelectGroups(std::move(request));
+                        ++RequestsBeforeNodeList;
                     }
                 }
             } else {
@@ -458,6 +465,10 @@ public:
     void Handle(TEvHive::TEvResponseHiveNodeStats::TPtr& ev) {
         BLOG_TRACE("ResponseHiveNodeStats()");
         for (const NKikimrHive::THiveNodeStats& nodeStats : ev->Get()->Record.GetNodeStats()) {
+            const TSubDomainKey nodeSubDomainKey = TSubDomainKey(nodeStats.GetNodeDomain());
+            if (FilterSubDomainKey && FilterSubDomainKey != nodeSubDomainKey) {
+                continue;
+            }
             ui32 nodeId = nodeStats.GetNodeId();
             auto& tabletInfo(TabletInfo[nodeId]);
             for (const NKikimrHive::THiveDomainStatsStateCount& stateStats : nodeStats.GetStateStats()) {
@@ -511,14 +522,18 @@ public:
     }
 
     void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        BLOG_TRACE("Received TEvBoardInfo");
         if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
+            BLOG_TRACE("Received TEvBoardInfo");
             for (const auto& [actorId, infoEntry] : ev->Get()->InfoEntries) {
                 auto nodeId(actorId.NodeId());
                 BLOG_TRACE("BoardInfo filter node by " << nodeId);
                 FilterNodeIds.insert(nodeId);
             }
+        } else {
+            BLOG_TRACE("Error receiving TEvBoardInfo response");
+            FilterNodeIds = { 0 };
         }
+
         if (--RequestsBeforeNodeList == 0) {
             ProcessNodeIds();
         }
@@ -668,6 +683,16 @@ public:
         return 0;
     }
 
+    static uint32 GetMissing(const NKikimrViewer::TNodeInfo& nodeInfo) {
+        uint32 missing = 0;
+        for (const auto& pDisk : nodeInfo.GetPDisks()) {
+            if (pDisk.state() != NKikimrBlobStorage::TPDiskState::Normal) {
+                missing++;
+            }
+        }
+        return missing;
+    }
+
     void ReplyAndPassAway() {
         NKikimrViewer::TNodesInfo result;
 
@@ -780,6 +805,9 @@ public:
                 case ESort::LoadAverage:
                     SortCollection(*result.MutableNodes(), [](const NKikimrViewer::TNodeInfo& node) { return GetLoadAverage(node.GetSystemState());}, ReverseSort);
                     break;
+                case ESort::Missing:
+                    SortCollection(*result.MutableNodes(), [](const NKikimrViewer::TNodeInfo& node) { return GetMissing(node);}, ReverseSort);
+                    break;
             }
         }
 
@@ -809,13 +837,13 @@ public:
         for (NKikimrViewer::TNodeInfo& nodeInfo : *result.MutableNodes()) {
             if (Storage) {
                 {
-                    auto cont(*nodeInfo.MutablePDisks());
+                    auto& cont(*nodeInfo.MutablePDisks());
                     std::sort(cont.begin(), cont.end(), [](const NKikimrWhiteboard::TPDiskStateInfo& a, const NKikimrWhiteboard::TPDiskStateInfo& b) -> bool {
                         return a.GetPath() < b.GetPath();
                     });
                 }
                 {
-                    auto cont(*nodeInfo.MutableVDisks());
+                    auto& cont(*nodeInfo.MutableVDisks());
                     std::sort(cont.begin(), cont.end(), [](const NKikimrWhiteboard::TVDiskStateInfo& a, const NKikimrWhiteboard::TVDiskStateInfo& b) -> bool {
                         return VDiskIDFromVDiskID(a.GetVDiskId()) < VDiskIDFromVDiskID(b.GetVDiskId());
                     });
@@ -823,7 +851,7 @@ public:
             }
             if (Tablets) {
                 {
-                    auto cont(*nodeInfo.MutableTablets());
+                    auto& cont(*nodeInfo.MutableTablets());
                     std::sort(cont.begin(), cont.end(), [](const NKikimrViewer::TTabletStateInfo& a, const NKikimrViewer::TTabletStateInfo& b) -> bool {
                         return a.GetType() < b.GetType();
                     });
@@ -861,7 +889,7 @@ struct TJsonRequestParameters<TJsonNodes> {
                       {"name":"type","in":"query","description":"nodes type to get (static,dynamic,any)","required":false,"type":"string"},
                       {"name":"storage","in":"query","description":"return storage info","required":false,"type":"boolean"},
                       {"name":"tablets","in":"query","description":"return tablets info","required":false,"type":"boolean"},
-                      {"name":"sort","in":"query","description":"sort by (NodeId,Host,DC,Rack,Version,Uptime,Memory,CPU,LoadAverage)","required":false,"type":"string"},
+                      {"name":"sort","in":"query","description":"sort by (NodeId,Host,DC,Rack,Version,Uptime,Memory,CPU,LoadAverage,Missing)","required":false,"type":"string"},
                       {"name":"offset","in":"query","description":"skip N nodes","required":false,"type":"integer"},
                       {"name":"limit","in":"query","description":"limit to N nodes","required":false,"type":"integer"},
                       {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"},

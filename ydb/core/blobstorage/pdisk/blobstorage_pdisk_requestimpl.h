@@ -13,6 +13,7 @@
 #include <ydb/core/blobstorage/crypto/secured_block.h>
 #include <ydb/library/schlab/schine/job_kind.h>
 #include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/library/actors/wilson/wilson_span_stack.h>
 
 #include <util/generic/utility.h>
 #include <util/generic/ptr.h>
@@ -55,7 +56,7 @@ public:
     NHPTimer::STime ScheduleTime = 0;
 
     // Tracing
-    mutable NWilson::TSpan Span;
+    mutable NWilson::TSpanStack SpanStack;
     mutable NLWTrace::TOrbit Orbit;
 public:
     TRequestBase(const TActorId &sender, TReqId reqId, TOwner owner, TOwnerRound ownerRound, ui8 priorityClass,
@@ -67,9 +68,11 @@ public:
         , PriorityClass(priorityClass)
         , OwnerGroupType(EOwnerGroupType::Dynamic)
         , CreationTime(HPNow())
-        , Span(std::move(span))
+        , SpanStack(std::move(span))
     {
-        Span.EnableAutoEnd();
+        if (auto span = SpanStack.PeekTop()) {
+            span->EnableAutoEnd();
+        }
     }
 
     void SetOwnerGroupType(bool isStaticGroupOwner) {
@@ -180,13 +183,17 @@ public:
     TLogPosition Position;
     ui64 SizeLimit;
 
-    TLogRead(const NPDisk::TEvReadLog::TPtr &ev, TAtomicBase reqIdx)
+    TLogRead(const NPDisk::TEvReadLog::TPtr &ev, ui32 pdiskId, TAtomicBase reqIdx)
         : TRequestBase(ev->Sender, TReqId(TReqId::LogRead, reqIdx), ev->Get()->Owner, ev->Get()->OwnerRound, NPriInternal::LogRead,
-                NWilson::TSpan(TWilson::PDisk, std::move(ev->TraceId), "PDisk.LogRead"))
+                NWilson::TSpan(TWilson::PDiskTopLevel, std::move(ev->TraceId), "PDisk.LogRead"))
         , Position(ev->Get()->Position)
         , SizeLimit(ev->Get()->SizeLimit)
     {
-        Span.Attribute("size_limit", static_cast<i64>(ev->Get()->SizeLimit));
+        if (auto span = SpanStack.PeekTop()) {
+            (*span)
+                .Attribute("size_limit", static_cast<i64>(ev->Get()->SizeLimit))
+                .Attribute("pdisk_id", pdiskId);
+        }
     }
 
     ERequestType GetType() const override {
@@ -205,17 +212,21 @@ public:
     TCompletionAction *CompletionAction;
     TReqId ReqId;
 
-    TLogReadContinue(const NPDisk::TEvReadLogContinue::TPtr &ev, TAtomicBase /*reqIdx*/)
+    TLogReadContinue(const NPDisk::TEvReadLogContinue::TPtr &ev, ui32 pdiskId, TAtomicBase /*reqIdx*/)
         : TRequestBase(ev->Sender, ev->Get()->ReqId, 0, 0, NPriInternal::LogRead,
-                NWilson::TSpan(TWilson::PDisk, std::move(ev->TraceId), "PDisk.LogReadContinue"))
+                NWilson::TSpan(TWilson::PDiskTopLevel, std::move(ev->TraceId), "PDisk.LogReadContinue"))
         , Data(ev->Get()->Data)
         , Size(ev->Get()->Size)
         , Offset(ev->Get()->Offset)
         , CompletionAction(ev->Get()->CompletionAction)
         , ReqId(ev->Get()->ReqId)
     {
-        Span.Attribute("size", ev->Get()->Size)
-            .Attribute("offset", static_cast<i64>(ev->Get()->Offset));
+        if (auto span = SpanStack.PeekTop()) {
+            (*span)
+                .Attribute("size", ev->Get()->Size)
+                .Attribute("offset", static_cast<i64>(ev->Get()->Offset))
+                .Attribute("pdisk_id", pdiskId);
+        }
     }
 
     ERequestType GetType() const override {
@@ -837,11 +848,15 @@ public:
 //
 class TAskForCutLog : public TRequestBase {
 public:
-    TAskForCutLog(const NPDisk::TEvAskForCutLog::TPtr &ev, TAtomicBase reqIdx)
+    TAskForCutLog(const NPDisk::TEvAskForCutLog::TPtr &ev, ui32 pdiskId, TAtomicBase reqIdx)
         : TRequestBase(ev->Sender, TReqId(TReqId::AskForCutLog, reqIdx), ev->Get()->Owner, ev->Get()->OwnerRound, NPriInternal::Other,
-                NWilson::TSpan(TWilson::PDisk, std::move(ev->TraceId), "PDisk.AskForCutLog")
+                NWilson::TSpan(TWilson::PDiskTopLevel, std::move(ev->TraceId), "PDisk.AskForCutLog")
             )
-    {}
+    {
+        if (auto span = SpanStack.PeekTop()) {
+            span->Attribute("pdisk_id", pdiskId);
+        }
+    }
 
     ERequestType GetType() const override {
         return ERequestType::RequestAskForCutLog;

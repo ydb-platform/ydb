@@ -384,6 +384,16 @@
     - lwip/stats.h
     - lwip/sys.h
     - lwip/tcpip.h
+    # contrib/libs/connectedhomeip/src/crypto uses boringssl on OS_DARWIN
+    - openssl/aead.h:
+      - contrib/libs/connectedhomeip/third_party/boringssl/repo/src/include/openssl/aead.h
+    - openssl/base.h:
+      - contrib/libs/connectedhomeip/third_party/boringssl/repo/src/include/openssl/base.h
+    - openssl/is_boringssl.h:
+      - contrib/libs/connectedhomeip/third_party/boringssl/repo/src/include/openssl/is_boringssl.h
+    # contrib/libs/connectedhomeip: src/lib/support, src/inet, src/system on OS_DARWIN
+    - nlfaultinjection.hpp:
+      - contrib/libs/connectedhomeip/third_party/nlfaultinjection/include/nlfaultinjection.hpp
 
 - source_filter: "^contrib/libs/glibcasm"
   includes:
@@ -502,3 +512,18 @@
 - source_filter: "^contrib/libs/fp16/include/fp16/psimd.h"
   includes:
     - psimd.h
+
+- source_filter: "^vendor/github.com/NVIDIA"
+  includes:
+    - nvml.h: 
+      - vendor/github.com/NVIDIA/go-dcgm/pkg/dcgm/nvml.h
+      - vendor/github.com/NVIDIA/go-nvml/gen/nvml/nvml.h
+      - vendor/github.com/NVIDIA/go-nvml/pkg/nvml/nvml.h
+
+- source_filter: "^smart_devices/third_party/beken_freertos_sdk"
+  includes:
+    - error.h: smart_devices/third_party/beken_freertos_sdk/beken378/common/error.h
+    - errno.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/lwip_intf/lwip-2.1.2/src/include/lwip/errno.h
+    - netdb.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/lwip_intf/lwip-2.1.2/src/include/lwip/netdb.h
+    - signal.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/wpa_supplicant_2_9/bk_patch/signal.h
+    - check_config.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/mbedtls/mbedtls-2.27.0/include/mbedtls/check_config.h

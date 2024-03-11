@@ -32,7 +32,7 @@
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/ycloud/api/access_service.h>
 #include <ydb/library/ycloud/api/iam_token_service.h>
-#include <ydb/library/ycloud/impl/grpc_service_cache.h>
+#include <ydb/library/grpc/actor_client/grpc_service_cache.h>
 #include <ydb/library/ycloud/impl/access_service.h>
 #include <ydb/library/ycloud/impl/iam_token_service.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
@@ -93,7 +93,7 @@ namespace NKikimr::NHttpProxy {
         case NYdb::EStatus::ABORTED:
             return TException("Aborted", HTTP_BAD_REQUEST);
         case NYdb::EStatus::UNAVAILABLE:
-            return TException("Unavailable", HTTP_BAD_REQUEST);
+            return TException("Unavailable", HTTP_SERVICE_UNAVAILABLE);
         case NYdb::EStatus::TIMEOUT:
             return TException("RequestExpired", HTTP_BAD_REQUEST);
         case NYdb::EStatus::BAD_SESSION:
@@ -409,11 +409,21 @@ namespace NKikimr::NHttpProxy {
 
                 HttpContext.ResponseData.Status = status;
                 HttpContext.ResponseData.ErrorText = errorText;
-                HttpContext.DoReply(ctx, issueCode);
+                ReplyToHttpContext(ctx, issueCode);
 
                 ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
 
                 TBase::Die(ctx);
+            }
+
+            void ReplyToHttpContext(const TActorContext& ctx, std::optional<size_t> issueCode = std::nullopt) {
+                ReportLatencyCounters(ctx);
+
+                if (issueCode.has_value()) {
+                    HttpContext.DoReply(ctx, issueCode.value());
+                } else {
+                    HttpContext.DoReply(ctx);
+                }
             }
 
             void ReportInputCounters(const TActorContext& ctx) {
@@ -478,7 +488,6 @@ namespace NKikimr::NHttpProxy {
                                 HttpContext.ContentType == MIME_CBOR);
                     FillOutputCustomMetrics<TProtoResult>(
                         *(dynamic_cast<TProtoResult*>(ev->Get()->Message.Get())), HttpContext, ctx);
-                    ReportLatencyCounters(ctx);
                     /* deprecated metric: */ ctx.Send(MakeMetricsServiceID(),
                              new TEvServerlessProxy::TEvCounter{1, true, true,
                                  BuildLabels(Method, HttpContext, "api.http.success_per_second", setStreamPrefix)
@@ -495,7 +504,7 @@ namespace NKikimr::NHttpProxy {
                                   {"code", "200"},
                                   {"name", "api.http.data_streams.response.count"}}
                          });
-                    HttpContext.DoReply(ctx);
+                    ReplyToHttpContext(ctx);
                 } else {
                     auto retryClass =
                         NYdb::NPersQueue::GetRetryErrorClass(ev->Get()->Status->GetStatus());

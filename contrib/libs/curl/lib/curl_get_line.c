@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -41,17 +41,41 @@ char *Curl_get_line(char *buf, int len, FILE *input)
   bool partial = FALSE;
   while(1) {
     char *b = fgets(buf, len, input);
+
     if(b) {
       size_t rlen = strlen(b);
-      if(rlen && (b[rlen-1] == '\n')) {
+
+      if(!rlen)
+        break;
+
+      if(b[rlen-1] == '\n') {
+        /* b is \n terminated */
         if(partial) {
           partial = FALSE;
           continue;
         }
         return b;
       }
-      /* read a partial, discard the next piece that ends with newline */
-      partial = TRUE;
+      else if(feof(input)) {
+        if(partial)
+          /* Line is already too large to return, ignore rest */
+          break;
+
+        if(rlen + 1 < (size_t) len) {
+          /* b is EOF terminated, insert missing \n */
+          b[rlen] = '\n';
+          b[rlen + 1] = '\0';
+          return b;
+        }
+        else
+          /* Maximum buffersize reached + EOF
+           * This line is impossible to add a \n to so we'll ignore it
+           */
+          break;
+      }
+      else
+        /* Maximum buffersize reached */
+        partial = TRUE;
     }
     else
       break;

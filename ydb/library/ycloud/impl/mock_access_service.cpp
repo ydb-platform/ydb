@@ -1,10 +1,9 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor.h>
 #include <library/cpp/json/json_value.h>
-#include <ydb/public/api/client/yc_private/servicecontrol/access_service.grpc.pb.h>
 #include "access_service.h"
-#include "grpc_service_client.h"
-#include "grpc_service_cache.h"
+#include <ydb/library/grpc/actor_client/grpc_service_client.h>
+#include <ydb/library/grpc/actor_client/grpc_service_cache.h>
 
 namespace NCloud {
 

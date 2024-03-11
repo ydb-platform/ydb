@@ -7,9 +7,8 @@
 #include <ydb/core/grpc_services/rpc_long_tx.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/converter.h>
-#include <ydb/core/io_formats/csv.h>
+#include <ydb/core/io_formats/arrow/csv_arrow.h>
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
@@ -23,13 +22,14 @@
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
-#include <ydb/public/api/grpc/draft/ydb_long_tx_v1.pb.h>
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 
 #include <util/string/join.h>
 #include <util/string/vector.h>
@@ -169,7 +169,6 @@ private:
     TString ErrorMessage;
     std::shared_ptr<NYql::TIssues> Issues = std::make_shared<NYql::TIssues>();
     NLongTxService::TLongTxId LongTxId;
-    NThreading::TFuture<Ydb::LongTx::WriteResponse> WriteBatchResult;
     TUploadCounters UploadCounters;
 
 protected:
@@ -210,18 +209,21 @@ protected:
     std::shared_ptr<arrow::RecordBatch> Batch;
     float RuCost = 0.0;
 
+    NWilson::TSpan Span;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return DerivedActivityType;
     }
 
-    explicit TUploadRowsBase(TDuration timeout = TDuration::Max(), bool diskQuotaExceeded = false)
+    explicit TUploadRowsBase(TDuration timeout = TDuration::Max(), bool diskQuotaExceeded = false, NWilson::TSpan span = {})
         : TBase()
         , SchemeCache(MakeSchemeCacheID())
         , LeaderPipeCache(MakePipePeNodeCacheID(false))
         , Timeout((timeout && timeout <= DEFAULT_TIMEOUT) ? timeout : DEFAULT_TIMEOUT)
         , Status(Ydb::StatusIds::SUCCESS)
         , DiskQuotaExceeded(diskQuotaExceeded)
+        , Span(std::move(span))
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
@@ -234,10 +236,10 @@ public:
         for (auto& pr : ShardUploadRetryStates) {
             if (pr.second.SentOverloadSeqNo) {
                 auto* msg = new TEvDataShard::TEvOverloadUnsubscribe(pr.second.SentOverloadSeqNo);
-                ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(msg, pr.first, false));
+                ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(msg, pr.first, false), 0, 0, Span.GetTraceId());
             }
         }
-        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
+        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0), 0, 0, Span.GetTraceId());
         if (TimeoutTimerActorId) {
             ctx.Send(TimeoutTimerActorId, new TEvents::TEvPoisonPill());
         }
@@ -332,6 +334,7 @@ private:
 private:
     void Handle(TEvents::TEvPoison::TPtr&, const TActorContext& ctx) {
         OnBeforePoison(ctx);
+        Span.EndError("poison");
         Die(ctx);
     }
 
@@ -372,21 +375,6 @@ private:
         Y_ABORT_UNLESS(ResolveNamesResult);
 
         auto& entry = ResolveNamesResult->ResultSet.front();
-
-        for (const auto& index : entry.Indexes) {
-            switch (index.GetType()) {
-            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
-                if (AppData(ctx)->FeatureFlags.GetEnableBulkUpsertToAsyncIndexedTables()) {
-                    continue;
-                } else {
-                    errorMessage = "Bulk upsert is not supported for tables with indexes";
-                    return false;
-                }
-            default:
-                errorMessage = "Only async-indexed tables are supported by BulkUpsert";
-                return false;
-            }
-        }
 
         TVector<ui32> keyColumnIds;
         THashMap<TString, ui32> columnByName;
@@ -519,6 +507,40 @@ private:
             }
         }
 
+        std::unordered_set<std::string_view> UpdatingValueColumns;
+        if (UpsertIfExists) {
+            for(const auto& name: ValueColumnNames) {
+                UpdatingValueColumns.emplace(name);
+            }
+        }
+
+        for (const auto& index : entry.Indexes) {
+            if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalAsync &&
+                AppData(ctx)->FeatureFlags.GetEnableBulkUpsertToAsyncIndexedTables()) {
+                continue;
+            }
+
+            bool allowUpdate = UpsertIfExists;
+            for(auto& column : index.GetKeyColumnNames()) {
+                allowUpdate &= (UpdatingValueColumns.find(column) == UpdatingValueColumns.end());
+                if (!allowUpdate) {
+                    break;
+                }
+            }
+
+            for(auto& column : index.GetDataColumnNames()) {
+                allowUpdate &= (UpdatingValueColumns.find(column) == UpdatingValueColumns.end());
+                if (!allowUpdate) {
+                    break;
+                }
+            }
+
+            if (!allowUpdate) {
+                errorMessage = "Only async-indexed tables are supported by BulkUpsert";
+                return false;
+            }
+        }
+
         if (makeYqbSchema) {
             Id2Position.clear();
             YdbSchema.resize(KeyColumnTypes.size() + ValueColumnTypes.size());
@@ -547,6 +569,12 @@ private:
             return false;
         }
 
+        if (!notNullColumnsLeft.empty() && UpsertIfExists) {
+            // columns are not specified but upsert is executed in update mode
+            // and we will not change these not null columns.
+            notNullColumnsLeft.clear();
+        }
+
         if (!notNullColumnsLeft.empty()) {
             errorMessage = Sprintf("Missing not null columns: %s", JoinSeq(", ", notNullColumnsLeft).c_str());
             return false;
@@ -572,7 +600,7 @@ private:
         entry.SyncVersion = true;
         entry.ShowPrivatePath = AllowWriteToPrivateTable;
         request->ResultSet.emplace_back(entry);
-        ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
+        ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, 0, Span.GetTraceId());
 
         TimeoutTimerActorId = CreateLongTimer(ctx, Timeout,
             new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup()));
@@ -720,7 +748,7 @@ private:
         // Begin Long Tx for writing a batch into OLAP table
         TActorId longTxServiceId = NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId());
         NKikimrLongTxService::TEvBeginTx::EMode mode = NKikimrLongTxService::TEvBeginTx::MODE_WRITE_ONLY;
-        ctx.Send(longTxServiceId, new NLongTxService::TEvLongTxService::TEvBeginTx(GetDatabase(), mode));
+        ctx.Send(longTxServiceId, new NLongTxService::TEvLongTxService::TEvBeginTx(GetDatabase(), mode), 0, 0, Span.GetTraceId());
         TBase::Become(&TThis::StateWaitBeginLongTx);
     }
 
@@ -838,7 +866,7 @@ private:
             LogPrefix() << "rolling back LongTx '" << LongTxId.ToString() << "'");
 
         TActorId longTxServiceId = NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId());
-        ctx.Send(longTxServiceId, new NLongTxService::TEvLongTxService::TEvRollbackTx(LongTxId));
+        ctx.Send(longTxServiceId, new NLongTxService::TEvLongTxService::TEvRollbackTx(LongTxId), 0, 0, Span.GetTraceId());
     }
 
     STFUNC(StateWaitWriteBatchResult) {
@@ -864,7 +892,7 @@ private:
 
     void CommitLongTx(const TActorContext& ctx) {
         TActorId longTxServiceId = NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId());
-        ctx.Send(longTxServiceId, new NLongTxService::TEvLongTxService::TEvCommitTx(LongTxId));
+        ctx.Send(longTxServiceId, new NLongTxService::TEvLongTxService::TEvCommitTx(LongTxId), 0, 0, Span.GetTraceId());
         TBase::Become(&TThis::StateWaitCommitLongTx);
     }
 
@@ -943,7 +971,7 @@ private:
         request->ResultSet.emplace_back(std::move(keyRange));
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));
-        ctx.Send(SchemeCache, resolveReq.Release());
+        ctx.Send(SchemeCache, resolveReq.Release(), 0, 0, Span.GetTraceId());
 
         TBase::Become(&TThis::StateWaitResolveShards);
     }
@@ -1004,7 +1032,7 @@ private:
         ev->Record.SetOverloadSubscribe(seqNo);
         state->SentOverloadSeqNo = seqNo;
 
-        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery);
+        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
     }
 
     void MakeShardRequests(const NActors::TActorContext& ctx) {
@@ -1041,6 +1069,9 @@ private:
                 ev->Record.SetCancelDeadlineMs(Deadline().MilliSeconds());
 
                 ev->Record.SetTableId(keyRange->TableId.PathId.LocalPathId);
+                if (keyRange->TableId.SchemaVersion) {
+                    ev->Record.SetSchemaVersion(keyRange->TableId.SchemaVersion);
+                }
                 for (const auto& fd : KeyColumnPositions) {
                     ev->Record.MutableRowScheme()->AddKeyColumnIds(fd.ColId);
                 }
@@ -1083,7 +1114,7 @@ private:
             ev->Record.SetOverloadSubscribe(seqNo);
             uploadRetryStates[idx]->SentOverloadSeqNo = seqNo;
 
-            ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery);
+            ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
 
             auto res = ShardRepliesLeft.insert(shardId);
             if (!res.second) {
@@ -1107,7 +1138,7 @@ private:
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) {
-        ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()));
+        ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()), 0, 0, Span.GetTraceId());
 
         SetError(Ydb::StatusIds::UNAVAILABLE, Sprintf("Failed to connect to shard %" PRIu64, ev->Get()->TabletId));
         ShardRepliesLeft.erase(ev->Get()->TabletId);
@@ -1144,7 +1175,7 @@ private:
             switch (shardResponse.GetStatus()) {
             case NKikimrTxDataShard::TError::WRONG_SHARD_STATE:
             case NKikimrTxDataShard::TError::SHARD_IS_BLOCKED:
-                ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()));
+                ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()), 0, 0, Span.GetTraceId());
                 status = Ydb::StatusIds::OVERLOADED;
                 break;
             case NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED:
@@ -1177,7 +1208,7 @@ private:
         }
 
         // Notify the cache that we are done with the pipe
-        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(shardId));
+        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(shardId), 0, 0, Span.GetTraceId());
 
         ShardRepliesLeft.erase(shardId);
         ShardUploadRetryStates.erase(shardId);
@@ -1240,6 +1271,7 @@ private:
             Y_DEBUG_ABORT_UNLESS(status != ::Ydb::StatusIds::SUCCESS);
             RollbackLongTx(ctx);
         }
+        Span.EndOk();
 
         Die(ctx);
     }

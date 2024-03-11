@@ -49,7 +49,6 @@ _LOGGER = logging.getLogger(__name__)
 
 # The Google OAuth 2.0 token endpoint. Used for authorized user credentials.
 _GOOGLE_OAUTH2_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
-_DEFAULT_UNIVERSE_DOMAIN = "googleapis.com"
 
 
 class Credentials(credentials.ReadOnlyScoped, credentials.CredentialsWithQuotaProject):
@@ -86,7 +85,8 @@ class Credentials(credentials.ReadOnlyScoped, credentials.CredentialsWithQuotaPr
         enable_reauth_refresh=False,
         granted_scopes=None,
         trust_boundary=None,
-        universe_domain=_DEFAULT_UNIVERSE_DOMAIN,
+        universe_domain=credentials.DEFAULT_UNIVERSE_DOMAIN,
+        account=None,
     ):
         """
         Args:
@@ -131,6 +131,7 @@ class Credentials(credentials.ReadOnlyScoped, credentials.CredentialsWithQuotaPr
             trust_boundary (str): String representation of trust boundary meta.
             universe_domain (Optional[str]): The universe domain. The default
                 universe domain is googleapis.com.
+            account (Optional[str]): The account associated with the credential.
         """
         super(Credentials, self).__init__()
         self.token = token
@@ -148,7 +149,8 @@ class Credentials(credentials.ReadOnlyScoped, credentials.CredentialsWithQuotaPr
         self.refresh_handler = refresh_handler
         self._enable_reauth_refresh = enable_reauth_refresh
         self._trust_boundary = trust_boundary
-        self._universe_domain = universe_domain or _DEFAULT_UNIVERSE_DOMAIN
+        self._universe_domain = universe_domain or credentials.DEFAULT_UNIVERSE_DOMAIN
+        self._account = account or ""
 
     def __getstate__(self):
         """A __getstate__ method must exist for the __setstate__ to be called
@@ -160,7 +162,11 @@ class Credentials(credentials.ReadOnlyScoped, credentials.CredentialsWithQuotaPr
         # unpickling certain callables (lambda, functools.partial instances)
         # because they need to be importable.
         # Instead, the refresh_handler setter should be used to repopulate this.
-        del state_dict["_refresh_handler"]
+        if "_refresh_handler" in state_dict:
+            del state_dict["_refresh_handler"]
+
+        if "_refresh_worker" in state_dict:
+            del state_dict["_refresh_worker"]
         return state_dict
 
     def __setstate__(self, d):
@@ -180,9 +186,14 @@ class Credentials(credentials.ReadOnlyScoped, credentials.CredentialsWithQuotaPr
         self._rapt_token = d.get("_rapt_token")
         self._enable_reauth_refresh = d.get("_enable_reauth_refresh")
         self._trust_boundary = d.get("_trust_boundary")
-        self._universe_domain = d.get("_universe_domain") or _DEFAULT_UNIVERSE_DOMAIN
+        self._universe_domain = (
+            d.get("_universe_domain") or credentials.DEFAULT_UNIVERSE_DOMAIN
+        )
         # The refresh_handler setter should be used to repopulate this.
         self._refresh_handler = None
+        self._refresh_worker = None
+        self._use_non_blocking_refresh = d.get("_use_non_blocking_refresh", False)
+        self._account = d.get("_account", "")
 
     @property
     def refresh_token(self):
@@ -262,6 +273,11 @@ class Credentials(credentials.ReadOnlyScoped, credentials.CredentialsWithQuotaPr
             raise TypeError("The provided refresh_handler is not a callable or None.")
         self._refresh_handler = value
 
+    @property
+    def account(self):
+        """str: The user account associated with the credential. If the account is unknown an empty string is returned."""
+        return self._account
+
     @_helpers.copy_docstring(credentials.CredentialsWithQuotaProject)
     def with_quota_project(self, quota_project_id):
 
@@ -280,6 +296,7 @@ class Credentials(credentials.ReadOnlyScoped, credentials.CredentialsWithQuotaPr
             enable_reauth_refresh=self._enable_reauth_refresh,
             trust_boundary=self._trust_boundary,
             universe_domain=self._universe_domain,
+            account=self._account,
         )
 
     @_helpers.copy_docstring(credentials.CredentialsWithTokenUri)
@@ -300,13 +317,14 @@ class Credentials(credentials.ReadOnlyScoped, credentials.CredentialsWithQuotaPr
             enable_reauth_refresh=self._enable_reauth_refresh,
             trust_boundary=self._trust_boundary,
             universe_domain=self._universe_domain,
+            account=self._account,
         )
 
-    def with_universe_domain(self, universe_domain):
-        """Create a copy of the credential with the given universe domain.
+    def with_account(self, account):
+        """Returns a copy of these credentials with a modified account.
 
         Args:
-            universe_domain (str): The universe domain value.
+            account (str): The account to set
 
         Returns:
             google.oauth2.credentials.Credentials: A new credentials instance.
@@ -326,7 +344,29 @@ class Credentials(credentials.ReadOnlyScoped, credentials.CredentialsWithQuotaPr
             rapt_token=self.rapt_token,
             enable_reauth_refresh=self._enable_reauth_refresh,
             trust_boundary=self._trust_boundary,
+            universe_domain=self._universe_domain,
+            account=account,
+        )
+
+    @_helpers.copy_docstring(credentials.CredentialsWithUniverseDomain)
+    def with_universe_domain(self, universe_domain):
+
+        return self.__class__(
+            self.token,
+            refresh_token=self.refresh_token,
+            id_token=self.id_token,
+            token_uri=self._token_uri,
+            client_id=self.client_id,
+            client_secret=self.client_secret,
+            scopes=self.scopes,
+            default_scopes=self.default_scopes,
+            granted_scopes=self.granted_scopes,
+            quota_project_id=self.quota_project_id,
+            rapt_token=self.rapt_token,
+            enable_reauth_refresh=self._enable_reauth_refresh,
+            trust_boundary=self._trust_boundary,
             universe_domain=universe_domain,
+            account=self._account,
         )
 
     def _metric_header_for_usage(self):
@@ -334,7 +374,7 @@ class Credentials(credentials.ReadOnlyScoped, credentials.CredentialsWithQuotaPr
 
     @_helpers.copy_docstring(credentials.Credentials)
     def refresh(self, request):
-        if self._universe_domain != _DEFAULT_UNIVERSE_DOMAIN:
+        if self._universe_domain != credentials.DEFAULT_UNIVERSE_DOMAIN:
             raise exceptions.RefreshError(
                 "User credential refresh is only supported in the default "
                 "googleapis.com universe domain, but the current universe "
@@ -475,6 +515,7 @@ class Credentials(credentials.ReadOnlyScoped, credentials.CredentialsWithQuotaPr
             rapt_token=info.get("rapt_token"),  # may not exist
             trust_boundary=info.get("trust_boundary"),  # may not exist
             universe_domain=info.get("universe_domain"),  # may not exist
+            account=info.get("account", ""),  # may not exist
         )
 
     @classmethod
@@ -519,6 +560,7 @@ class Credentials(credentials.ReadOnlyScoped, credentials.CredentialsWithQuotaPr
             "scopes": self.scopes,
             "rapt_token": self.rapt_token,
             "universe_domain": self._universe_domain,
+            "account": self._account,
         }
         if self.expiry:  # flatten expiry timestamp
             prep["expiry"] = self.expiry.isoformat() + "Z"

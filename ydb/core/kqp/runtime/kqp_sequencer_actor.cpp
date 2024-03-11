@@ -207,7 +207,6 @@ private:
     i64 ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) {
         auto guard = BindAllocator();
 
-        size_t rowsInReply = 0;
         bool hasSequences = true;
         i64 totalSize = 0;
 
@@ -219,7 +218,6 @@ private:
         }
 
         while(PendingRows.size() > 0 && freeSpace > 0 && hasSequences) {
-            ++rowsInReply;
             --UnprocessedRows;
             i64 rowSize = 0;
             NUdf::TUnboxedValue currentValue = std::move(PendingRows.front());

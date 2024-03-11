@@ -50,12 +50,13 @@
                                                 "Predicate": "item.b.thousand == item.a.q1 And item.a.q1 == item.b.hundred"
                                             },
                                             {
+                                                "Condition": "q1 = unique2",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 6
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 4
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"

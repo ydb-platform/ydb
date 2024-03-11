@@ -1,16 +1,21 @@
 #include "batch_slice.h"
 #include "simple.h"
+#include <ydb/library/accessor/validator.h>
 
 namespace NKikimr::NOlap {
 
-bool TGeneralSerializedSlice::GroupBlobs(std::vector<TSplittedBlob>& blobs) {
-    std::vector<IPortionColumnChunk::TPtr> chunksInProgress;
-    std::sort(Columns.begin(), Columns.end());
-    for (auto&& i : Columns) {
+bool TGeneralSerializedSlice::GroupBlobsImpl(const TString& currentGroupName, const std::set<ui32>& entityIds, std::vector<TSplittedBlob>& blobs) {
+    std::vector<std::shared_ptr<IPortionDataChunk>> chunksInProgress;
+    std::sort(Data.begin(), Data.end());
+    for (auto&& i : Data) {
+        if (!entityIds.empty() && !entityIds.contains(i.GetEntityId())) {
+            continue;
+        }
         for (auto&& p : i.GetChunks()) {
             chunksInProgress.emplace_back(p);
         }
     }
+    AFL_VERIFY(chunksInProgress.size());
     std::vector<TSplittedBlob> result;
     Y_ABORT_UNLESS(Settings.GetMaxBlobSize() >= 2 * Settings.GetMinBlobSize());
     while (chunksInProgress.size()) {
@@ -19,7 +24,7 @@ bool TGeneralSerializedSlice::GroupBlobs(std::vector<TSplittedBlob>& blobs) {
             fullSize += i->GetPackedSize();
         }
         if (fullSize < Settings.GetMaxBlobSize()) {
-            result.emplace_back(TSplittedBlob());
+            result.emplace_back(TSplittedBlob(currentGroupName));
             for (auto&& i : chunksInProgress) {
                 result.back().Take(i);
             }
@@ -38,7 +43,7 @@ bool TGeneralSerializedSlice::GroupBlobs(std::vector<TSplittedBlob>& blobs) {
                     Y_ABORT_UNLESS(otherSize >= Settings.GetMinBlobSize());
                     Y_ABORT_UNLESS(partSize < Settings.GetMaxBlobSize());
                     if (partSize >= Settings.GetMinBlobSize()) {
-                        result.emplace_back(TSplittedBlob());
+                        result.emplace_back(TSplittedBlob(currentGroupName));
                         for (ui32 chunk = 0; chunk < i; ++chunk) {
                             result.back().Take(chunksInProgress[chunk]);
                         }
@@ -49,17 +54,17 @@ bool TGeneralSerializedSlice::GroupBlobs(std::vector<TSplittedBlob>& blobs) {
                         Y_ABORT_UNLESS((i64)chunksInProgress[i]->GetPackedSize() > Settings.GetMinBlobSize() - partSize);
                         Y_ABORT_UNLESS(otherSize - (Settings.GetMinBlobSize() - partSize) >= Settings.GetMinBlobSize());
 
-                        std::vector<IPortionColumnChunk::TPtr> newChunks;
-                        const bool splittable = chunksInProgress[i]->GetRecordsCount() > 1;
+                        std::vector<std::shared_ptr<IPortionDataChunk>> newChunks;
+                        const bool splittable = chunksInProgress[i]->IsSplittable();
                         if (splittable) {
                             Counters->BySizeSplitter.OnTrashSerialized(chunksInProgress[i]->GetPackedSize());
                             const std::vector<ui64> sizes = {(ui64)(Settings.GetMinBlobSize() - partSize)};
-                            newChunks = chunksInProgress[i]->InternalSplit(Schema->GetColumnSaver(chunksInProgress[i]->GetColumnId()), Counters, sizes);
+                            newChunks = chunksInProgress[i]->InternalSplit(Schema->GetColumnSaver(chunksInProgress[i]->GetEntityId()), Counters, sizes);
                             chunksInProgress.erase(chunksInProgress.begin() + i);
                             chunksInProgress.insert(chunksInProgress.begin() + i, newChunks.begin(), newChunks.end());
                         }
 
-                        TSplittedBlob newBlob;
+                        TSplittedBlob newBlob(currentGroupName);
                         for (ui32 chunk = 0; chunk <= i; ++chunk) {
                             newBlob.Take(chunksInProgress[chunk]);
                         }
@@ -81,10 +86,10 @@ bool TGeneralSerializedSlice::GroupBlobs(std::vector<TSplittedBlob>& blobs) {
     ui32 currentChunkIdx = 0;
     for (auto&& i : result) {
         for (auto&& c : i.GetChunks()) {
-            Y_ABORT_UNLESS(c->GetColumnId());
-            if (!lastColumnId || *lastColumnId != c->GetColumnId()) {
-                Y_ABORT_UNLESS(columnIds.emplace(c->GetColumnId()).second);
-                lastColumnId = c->GetColumnId();
+            Y_ABORT_UNLESS(c->GetEntityId());
+            if (!lastColumnId || *lastColumnId != c->GetEntityId()) {
+                Y_ABORT_UNLESS(columnIds.emplace(c->GetEntityId()).second);
+                lastColumnId = c->GetEntityId();
                 currentChunkIdx = 0;
             }
             c->SetChunkIdx(currentChunkIdx++);
@@ -94,58 +99,58 @@ bool TGeneralSerializedSlice::GroupBlobs(std::vector<TSplittedBlob>& blobs) {
     return true;
 }
 
-TGeneralSerializedSlice::TGeneralSerializedSlice(const std::map<ui32, std::vector<IPortionColumnChunk::TPtr>>& data,
-    ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings)
+TGeneralSerializedSlice::TGeneralSerializedSlice(const std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters,
+                                                 const TSplitSettings& settings)
     : Schema(schema)
     , Counters(counters)
     , Settings(settings) {
-
     std::optional<ui32> recordsCount;
-    for (auto&& [columnId, chunks] : data) {
-        auto f = schema->GetField(columnId);
-        TSplittedColumn column(f, columnId);
-        column.AddChunks(chunks);
-        if (!recordsCount) {
-            recordsCount = column.GetRecordsCount();
-        } else {
-            AFL_VERIFY(*recordsCount == column.GetRecordsCount())("records_count", *recordsCount)("column", column.GetRecordsCount());
+    for (auto&& [entityId, chunks] : data) {
+        TSplittedEntity entity(entityId);
+        entity.SetChunks(chunks);
+        if (!!entity.GetRecordsCount()) {
+            if (!recordsCount) {
+                recordsCount = entity.GetRecordsCount();
+            } else {
+                AFL_VERIFY(*recordsCount == entity.GetRecordsCount())("records_count", *recordsCount)("column", entity.GetRecordsCount());
+            }
         }
-        Size += column.GetSize();
-        Columns.emplace_back(std::move(column));
+        Size += entity.GetSize();
+        Data.emplace_back(std::move(entity));
     }
     Y_ABORT_UNLESS(recordsCount);
     RecordsCount = *recordsCount;
 }
 
-TGeneralSerializedSlice::TGeneralSerializedSlice(ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings)
-    : Schema(schema)
+TGeneralSerializedSlice::TGeneralSerializedSlice(const ui32 recordsCount, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings)
+    : RecordsCount(recordsCount)
+    , Schema(schema)
     , Counters(counters)
     , Settings(settings)
 {
 }
 
-TBatchSerializedSlice::TBatchSerializedSlice(std::shared_ptr<arrow::RecordBatch> batch, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings)
-    : TBase(schema, counters, settings)
+TBatchSerializedSlice::TBatchSerializedSlice(const std::shared_ptr<arrow::RecordBatch>& batch, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings)
+    : TBase(TValidator::CheckNotNull(batch)->num_rows(), schema, counters, settings)
     , Batch(batch)
 {
     Y_ABORT_UNLESS(batch);
-    RecordsCount = batch->num_rows();
-    Columns.reserve(batch->num_columns());
+    Data.reserve(batch->num_columns());
     for (auto&& i : batch->schema()->fields()) {
-        TSplittedColumn c(i, schema->GetColumnId(i->name()));
-        Columns.emplace_back(std::move(c));
+        TSplittedEntity c(schema->GetColumnId(i->name()));
+        Data.emplace_back(std::move(c));
     }
 
     ui32 idx = 0;
     for (auto&& i : batch->columns()) {
-        auto& c = Columns[idx];
-        auto columnSaver = schema->GetColumnSaver(c.GetColumnId());
-        auto stats = schema->GetColumnSerializationStats(c.GetColumnId());
+        auto& c = Data[idx];
+        auto columnSaver = schema->GetColumnSaver(c.GetEntityId());
+        auto stats = schema->GetColumnSerializationStats(c.GetEntityId());
         TSimpleSplitter splitter(columnSaver, Counters);
         splitter.SetStats(stats);
-        std::vector<IPortionColumnChunk::TPtr> chunks;
-        for (auto&& i : splitter.Split(i, c.GetField(), Settings.GetMaxBlobSize())) {
-            chunks.emplace_back(std::make_shared<TSplittedColumnChunk>(c.GetColumnId(), i, Schema));
+        std::vector<std::shared_ptr<IPortionDataChunk>> chunks;
+        for (auto&& i : splitter.Split(i, Schema->GetField(c.GetEntityId()), Settings.GetMaxBlobSize())) {
+            chunks.emplace_back(std::make_shared<TSplittedColumnChunk>(c.GetEntityId(), i, Schema));
         }
         c.SetChunks(chunks);
         Size += c.GetSize();
@@ -154,11 +159,11 @@ TBatchSerializedSlice::TBatchSerializedSlice(std::shared_ptr<arrow::RecordBatch>
 }
 
 void TGeneralSerializedSlice::MergeSlice(TGeneralSerializedSlice&& slice) {
-    Y_ABORT_UNLESS(Columns.size() == slice.Columns.size());
+    Y_ABORT_UNLESS(Data.size() == slice.Data.size());
     RecordsCount += slice.GetRecordsCount();
-    for (ui32 i = 0; i < Columns.size(); ++i) {
-        Size += slice.Columns[i].GetSize();
-        Columns[i].Merge(std::move(slice.Columns[i]));
+    for (ui32 i = 0; i < Data.size(); ++i) {
+        Size += slice.Data[i].GetSize();
+        Data[i].Merge(std::move(slice.Data[i]));
     }
 }
 

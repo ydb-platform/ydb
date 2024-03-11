@@ -77,6 +77,10 @@ bool IsSupportedDataType(const TCoDataCtor& node, const TSettings& settings) {
         return true;
     }
 
+    if (settings.IsEnabled(TSettings::EFeatureFlag::TimestampCtor) && node.Maybe<TCoTimestamp>()) {
+        return true;
+    }
+
     if (settings.IsEnabled(TSettings::EFeatureFlag::StringTypes)) {
         if (node.Maybe<TCoUtf8>() || node.Maybe<TCoString>()) {
             return true;
@@ -99,11 +103,9 @@ bool IsSupportedCast(const TCoSafeCast& cast, const TSettings& settings) {
     }
     YQL_ENSURE(maybeDataType.IsValid());
 
-    auto dataType = maybeDataType.Cast();
-    if (dataType.Type().Value() == "Int32") {
-        return cast.Value().Maybe<TCoString>().IsValid();
-    } else if (dataType.Type().Value() == "Timestamp") {
-        return cast.Value().Maybe<TCoUint32>().IsValid();
+    const auto dataType = maybeDataType.Cast();
+    if (dataType.Type().Value() == "Int32") { // TODO: Support any numeric casts.
+        return cast.Value().Maybe<TCoString>() || cast.Value().Maybe<TCoUtf8>();
     }
     return false;
 }
@@ -330,10 +332,6 @@ bool IsMemberColumn(const TExprBase& node, const TExprNode* lambdaArg) {
     return false;
 }
 
-bool IsSupportedArithmeticalExpression(const TExprBase& node, const TSettings& settings) {
-    return settings.IsEnabled(TSettings::EFeatureFlag::ArithmeticalExpressions) && node.Maybe<TCoBinaryArithmetic>();
-}
-
 bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lambdaArg, const TSettings& settings) {
     if (auto maybeSafeCast = node.Maybe<TCoSafeCast>()) {
         return IsSupportedCast(maybeSafeCast.Cast(), settings);
@@ -355,11 +353,11 @@ bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lamb
         return true;
     } else if (settings.IsEnabled(TSettings::EFeatureFlag::ParameterExpression) && node.Maybe<TCoParameter>()) {
         return true;
-    } else if (IsSupportedArithmeticalExpression(node, settings)) {
-        TCoBinaryArithmetic op = node.Cast<TCoBinaryArithmetic>();
-        return CheckExpressionNodeForPushdown(op.Left(), lambdaArg, settings) && CheckExpressionNodeForPushdown(op.Right(), lambdaArg, settings);
+    } else if (const auto op = node.Maybe<TCoUnaryArithmetic>(); op && settings.IsEnabled(TSettings::EFeatureFlag::UnaryOperators)) {
+        return CheckExpressionNodeForPushdown(op.Cast().Arg(), lambdaArg, settings);
+    } else if (const auto op = node.Maybe<TCoBinaryArithmetic>(); op && settings.IsEnabled(TSettings::EFeatureFlag::ArithmeticalExpressions)) {
+        return CheckExpressionNodeForPushdown(op.Cast().Left(), lambdaArg, settings) && CheckExpressionNodeForPushdown(op.Cast().Right(), lambdaArg, settings);
     }
-
     return false;
 }
 
@@ -386,18 +384,21 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
         return false;
     }
 
-    bool equality = compare.Maybe<TCoCmpEqual>() || compare.Maybe<TCoCmpNotEqual>();
-    auto leftList = GetComparisonNodes(compare.Left());
-    auto rightList = GetComparisonNodes(compare.Right());
+    const auto leftList = GetComparisonNodes(compare.Left());
+    const auto rightList = GetComparisonNodes(compare.Right());
     YQL_ENSURE(leftList.size() == rightList.size(), "Different sizes of lists in comparison!");
 
     for (size_t i = 0; i < leftList.size(); ++i) {
         if (!CheckExpressionNodeForPushdown(leftList[i], lambdaArg, settings) || !CheckExpressionNodeForPushdown(rightList[i], lambdaArg, settings)) {
             return false;
         }
-        if (!IsComparableTypes(leftList[i], rightList[i], equality, inputType, settings)) {
-            return false;
+
+        if (!settings.IsEnabled(TSettings::EFeatureFlag::DoNotCheckCompareArgumentsTypes)) {
+            if (!IsComparableTypes(leftList[i], rightList[i], compare.Maybe<TCoCmpEqual>() || compare.Maybe<TCoCmpNotEqual>(), inputType, settings)) {
+                return false;
+            }
         }
+
         if (IsLikeOperator(compare) && settings.IsEnabled(TSettings::EFeatureFlag::LikeOperatorOnlyForUtf8) && !IsSupportedLikeForUtf8(leftList[i], rightList[i])) {
             // (KQP OLAP) If SSA_RUNTIME_VERSION == 2 Column Shard doesn't have LIKE kernel for binary strings
             return false;

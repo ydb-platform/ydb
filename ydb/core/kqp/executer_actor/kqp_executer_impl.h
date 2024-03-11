@@ -11,6 +11,7 @@
 
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
+#include <ydb/core/kqp/runtime/kqp_transport.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
@@ -34,6 +35,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
+#include <ydb/library/yql/dq/common/dq_serialized_batch.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
@@ -44,6 +46,7 @@
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+
 
 #include <util/generic/size_literals.h>
 
@@ -119,7 +122,7 @@ public:
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
         TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-        ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase")
+        ui32 statementResultIndex, ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase", bool streamResult = false)
         : Request(std::move(request))
         , Database(database)
         , UserToken(userToken)
@@ -130,6 +133,8 @@ public:
         , MaximalSecretsSnapshotWaitTime(maximalSecretsSnapshotWaitTime)
         , AggregationSettings(aggregation)
         , HasOlapTable(false)
+        , StreamResult(streamResult)
+        , StatementResultIndex(statementResultIndex)
     {
         TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
         TasksGraph.GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
@@ -157,6 +162,14 @@ public:
 
     TActorId SelfId() {
        return TActorBootstrapped<TDerived>::SelfId();
+    }
+
+    TString BuildMemoryLimitExceptionMessage() const {
+        if (Request.TxAlloc) {
+            return TStringBuilder() << "Memory limit exception at " << CurrentStateFuncName()
+                << ", current limit is " << Request.TxAlloc->Alloc.GetLimit() << " bytes.";
+        }
+        return TStringBuilder() << "Memory limit exception at " << CurrentStateFuncName();
     }
 
     void ReportEventElapsedTime() {
@@ -232,6 +245,135 @@ protected:
             LOG_D(sb);
         }
         return true;
+    }
+
+    struct TEvComputeChannelDataOOB {
+        NYql::NDqProto::TEvComputeChannelData Proto;
+        TRope Payload;
+
+        size_t Size() const {
+            return Proto.GetChannelData().GetData().GetRaw().size() + Payload.size();
+        }
+
+        ui32 RowCount() const {
+            return Proto.GetChannelData().GetData().GetRows();
+        }
+    };
+
+    void HandleChannelData(NYql::NDq::TEvDqCompute::TEvChannelData::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+        auto& channelData = record.GetChannelData();
+        auto& channel = TasksGraph.GetChannel(channelData.GetChannelId());
+        auto& task = TasksGraph.GetTask(channel.SrcTask);
+        const TActorId channelComputeActorId = ev->Sender;
+
+        auto& txResult = ResponseEv->TxResults[channel.DstInputIndex];
+        auto [it, _] = ResultChannelToComputeActor.emplace(channel.Id, ev->Sender);
+        YQL_ENSURE(it->second == channelComputeActorId);
+
+        if (StreamResult && txResult.IsStream && txResult.QueryResultIndex.Defined()) {
+
+            TEvComputeChannelDataOOB computeData;
+            computeData.Proto = std::move(ev->Get()->Record);
+            if (computeData.Proto.GetChannelData().GetData().HasPayloadId()) {
+                computeData.Payload = ev->Get()->GetPayload(computeData.Proto.GetChannelData().GetData().GetPayloadId());
+            }
+
+            const bool trailingResults = (
+                computeData.Proto.GetChannelData().GetFinished() &&
+                Request.IsTrailingResultsAllowed());
+
+            TVector<NYql::NDq::TDqSerializedBatch> batches(1);
+            auto& batch = batches.front();
+
+            batch.Proto = std::move(*computeData.Proto.MutableChannelData()->MutableData());
+            batch.Payload = std::move(computeData.Payload);
+
+            TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
+            auto resultSet = protoBuilder.BuildYdbResultSet(std::move(batches), txResult.MkqlItemType, txResult.ColumnOrder);
+
+            if (!trailingResults) {
+                auto streamEv = MakeHolder<TEvKqpExecuter::TEvStreamData>();
+                streamEv->Record.SetSeqNo(computeData.Proto.GetSeqNo());
+                streamEv->Record.SetQueryResultIndex(*txResult.QueryResultIndex + StatementResultIndex);
+                streamEv->Record.SetChannelId(channel.Id);
+                streamEv->Record.MutableResultSet()->Swap(&resultSet);
+
+                LOG_D("Send TEvStreamData to " << Target << ", seqNo: " << streamEv->Record.GetSeqNo()
+                    << ", nRows: " << streamEv->Record.GetResultSet().rows().size());
+
+                this->Send(Target, streamEv.Release());
+
+            } else {
+                auto ackEv = MakeHolder<NYql::NDq::TEvDqCompute::TEvChannelDataAck>();
+                ackEv->Record.SetSeqNo(computeData.Proto.GetSeqNo());
+                ackEv->Record.SetChannelId(channel.Id);
+                ackEv->Record.SetFreeSpace(50_MB);
+                this->Send(channelComputeActorId, ackEv.Release(), /* TODO: undelivery */ 0, /* cookie */ channel.Id);
+                txResult.TrailingResult.Swap(&resultSet);
+                txResult.HasTrailingResult = true;
+                LOG_D("staging TEvStreamData to " << Target << ", seqNo: " << computeData.Proto.GetSeqNo()
+                    << ", nRows: " << txResult.TrailingResult.rows().size());
+            }
+
+            return;
+        }
+
+        NYql::NDq::TDqSerializedBatch batch;
+        batch.Proto = std::move(*record.MutableChannelData()->MutableData());
+        if (batch.Proto.HasPayloadId()) {
+            batch.Payload = ev->Get()->GetPayload(batch.Proto.GetPayloadId());
+        }
+
+        YQL_ENSURE(channel.DstTask == 0);
+
+        if (Stats) {
+            Stats->ResultBytes += batch.Size();
+            Stats->ResultRows += batch.RowCount();
+        }
+
+        LOG_T("Got result, channelId: " << channel.Id << ", shardId: " << task.Meta.ShardId
+            << ", inputIndex: " << channel.DstInputIndex << ", from: " << ev->Sender
+            << ", finished: " << channelData.GetFinished());
+
+        ResponseEv->TakeResult(channel.DstInputIndex, std::move(batch));
+        LOG_T("Send ack to channelId: " << channel.Id << ", seqNo: " << record.GetSeqNo() << ", to: " << ev->Sender);
+
+        auto ackEv = MakeHolder<NYql::NDq::TEvDqCompute::TEvChannelDataAck>();
+        ackEv->Record.SetSeqNo(record.GetSeqNo());
+        ackEv->Record.SetChannelId(channel.Id);
+        ackEv->Record.SetFreeSpace(50_MB);
+        this->Send(channelComputeActorId, ackEv.Release(), /* TODO: undelivery */ 0, /* cookie */ channel.Id);
+    }
+
+    void HandleStreamAck(TEvKqpExecuter::TEvStreamDataAck::TPtr& ev) {
+        ui64 channelId;
+        if (ResponseEv->TxResults.size() == 1) {
+            channelId = ResultChannelToComputeActor.begin()->first;
+        } else {
+            channelId = ev->Get()->Record.GetChannelId();
+        }
+
+        auto it = ResultChannelToComputeActor.find(channelId);
+        YQL_ENSURE(it != ResultChannelToComputeActor.end());
+        const auto channelComputeActorId = it->second;
+
+        ui64 seqNo = ev->Get()->Record.GetSeqNo();
+        i64 freeSpace = ev->Get()->Record.GetFreeSpace();
+
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId
+            << ", send ack to channelId: " << channelId
+            << ", seqNo: " << seqNo
+            << ", enough: " << ev->Get()->Record.GetEnough()
+            << ", freeSpace: " << freeSpace
+            << ", to: " << channelComputeActorId);
+
+        auto ackEv = MakeHolder<NYql::NDq::TEvDqCompute::TEvChannelDataAck>();
+        ackEv->Record.SetSeqNo(seqNo);
+        ackEv->Record.SetChannelId(channelId);
+        ackEv->Record.SetFreeSpace(freeSpace);
+        ackEv->Record.SetFinish(ev->Get()->Record.GetEnough());
+        this->Send(channelComputeActorId, ackEv.Release(), /* TODO: undelivery */ 0, /* cookie */ channelId);
     }
 
     void HandleComputeStats(NYql::NDq::TEvDqCompute::TEvState::TPtr& ev) {
@@ -626,7 +768,7 @@ protected:
             auto& record = channelsInfoEv->Record;
 
             for (auto& channelId : channelIds) {
-                FillChannelDesc(TasksGraph, *record.AddUpdate(), TasksGraph.GetChannel(channelId), TasksGraph.GetMeta().ChannelTransportVersion);
+                FillChannelDesc(TasksGraph, *record.AddUpdate(), TasksGraph.GetChannel(channelId), TasksGraph.GetMeta().ChannelTransportVersion, false);
             }
 
             LOG_T("Sending channels info to compute actor: " << computeActorId << ", channels: " << channelIds.size());
@@ -737,28 +879,45 @@ protected:
         }
     }
 
+    void BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTasksGraph::TTaskType& task) {
+        const auto& extSink = sink.GetExternalSink();
+        auto sinkName = extSink.GetSinkName();
+        if (sinkName) {
+            auto structuredToken = NYql::CreateStructuredTokenParser(extSink.GetAuthInfo()).ToBuilder().ReplaceReferences(SecureParams).ToJson();
+            task.Meta.SecureParams.emplace(sinkName, structuredToken);
+            if (GetUserRequestContext()->TraceId) {
+                task.Meta.TaskParams.emplace("fq.job_id", GetUserRequestContext()->CustomerSuppliedId);
+                // "fq.restart_count"
+            }
+        }
+
+        auto& output = task.Outputs[sink.GetOutputIndex()];
+        output.Type = TTaskOutputType::Sink;
+        output.SinkType = extSink.GetType();
+        output.SinkSettings = extSink.GetSettings();
+    }
+
+    void BuildInternalSinks(const NKqpProto::TKqpSink& sink, TKqpTasksGraph::TTaskType& task) {
+        const auto& intSink = sink.GetInternalSink();
+        auto& output = task.Outputs[sink.GetOutputIndex()];
+        output.Type = TTaskOutputType::Sink;
+        output.SinkType = intSink.GetType();
+        output.SinkSettings = intSink.GetSettings();
+    }
+
     void BuildSinks(const NKqpProto::TKqpPhyStage& stage, TKqpTasksGraph::TTaskType& task) {
         if (stage.SinksSize() > 0) {
             YQL_ENSURE(stage.SinksSize() == 1, "multiple sinks are not supported");
             const auto& sink = stage.GetSinks(0);
-            YQL_ENSURE(sink.HasExternalSink(), "only external sinks are supported");
-            const auto& extSink = sink.GetExternalSink();
             YQL_ENSURE(sink.GetOutputIndex() < task.Outputs.size());
 
-            auto sinkName = extSink.GetSinkName();
-            if (sinkName) {
-                auto structuredToken = NYql::CreateStructuredTokenParser(extSink.GetAuthInfo()).ToBuilder().ReplaceReferences(SecureParams).ToJson();
-                task.Meta.SecureParams.emplace(sinkName, structuredToken);
-                if (GetUserRequestContext()->TraceId) {
-                    task.Meta.TaskParams.emplace("fq.job_id", GetUserRequestContext()->CustomerSuppliedId);
-                    // "fq.restart_count"
-                }
+            if (sink.HasInternalSink()) {
+                BuildInternalSinks(sink, task);
+            } else if (sink.HasExternalSink()) {
+                BuildExternalSinks(sink, task);
+            } else {
+                YQL_ENSURE(false, "unknown sink type");
             }
-
-            auto& output = task.Outputs[sink.GetOutputIndex()];
-            output.Type = TTaskOutputType::Sink;
-            output.SinkType = extSink.GetType();
-            output.SinkSettings = extSink.GetSettings();
         }
     }
 
@@ -949,7 +1108,7 @@ protected:
                 settings->SetMaxInFlightShards(*maxInFlightShards);
             }
 
-            if (!limitTasksPerNode && shardId) {
+            if (shardId) {
                 settings->SetShardIdHint(*shardId);
             }
 
@@ -1025,6 +1184,11 @@ protected:
                     NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings = input.Meta.SourceSettings;
 
                     const auto& shardsRangesForTask = rangesDistribution[taskIndex];
+
+                    if (shardsRangesForTask.size() > 1) {
+                        settings->ClearShardIdHint();
+                    }
+
                     for (const auto& shardRanges : shardsRangesForTask) {
                         shardRanges->SerializeTo(settings);
                     }
@@ -1038,9 +1202,15 @@ protected:
             }
         };
 
+        bool isFullScan = false;
         const THashMap<ui64, TShardInfo> partitions = SourceScanStageIdToParititions.empty()
-            ? PrunePartitions(source, stageInfo, HolderFactory(), TypeEnv())
+            ? PrunePartitions(source, stageInfo, HolderFactory(), TypeEnv(), isFullScan)
             : SourceScanStageIdToParititions.at(stageInfo.Id);
+
+        if (isFullScan && !source.HasItemsLimit()) {
+            Counters->Counters->FullScansExecuted->Inc();
+        }
+
         if (partitions.size() > 0 && source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards()) {
             auto [startShard, shardInfo] = MakeVirtualTablePartition(source, stageInfo, HolderFactory(), TypeEnv());
             if (Stats) {
@@ -1118,6 +1288,7 @@ protected:
 
                 case NKqpProto::TKqpPhyConnection::kStreamLookup:
                     UnknownAffectedShardCount = true;
+		    [[fallthrough]];
                 case NKqpProto::TKqpPhyConnection::kMap:
                     partitionsCount = originStageInfo.Tasks.size();
                     break;
@@ -1311,9 +1482,14 @@ protected:
             Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.TablePath == op.GetTable().GetPath());
 
             auto columns = BuildKqpColumns(op, tableInfo);
-            auto partitions = PrunePartitions(op, stageInfo, HolderFactory(), TypeEnv());
+            bool isFullScan;
+            auto partitions = PrunePartitions(op, stageInfo, HolderFactory(), TypeEnv(), isFullScan);
             const bool isOlapScan = (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange);
             auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
+
+            if (isFullScan && readSettings.ItemsLimit) {
+                Counters->Counters->FullScansExecuted->Inc();
+            }
 
             if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadRange) {
                 stageInfo.Meta.SkipNullKeys.assign(op.GetReadRange().GetSkipNullKeys().begin(),
@@ -1348,6 +1524,7 @@ protected:
                         auto& task = TasksGraph.GetTask(taskIdx);
                         task.Meta.SetEnableShardsSequentialScan(readSettings.Sorted);
                         PrepareScanMetaForUsage(task.Meta, keyTypes);
+                        BuildSinks(stage, task);
                     }
                 }
 
@@ -1375,6 +1552,7 @@ protected:
                         task.Meta.ScanTask = true;
                         task.Meta.Type = TTaskMeta::TTaskType::Scan;
                         task.SetMetaId(metaGlueingId);
+                        BuildSinks(stage, task);
                     }
                 }
             }
@@ -1570,6 +1748,12 @@ protected:
     }
 
     void InitializeChannelProxies() {
+        // notice: forward all respones to executer if
+        // trailing results are allowed.
+        // temporary, will be removed in the next pr.
+        if (Request.IsTrailingResultsAllowed())
+            return;
+
         for(const auto& channel: TasksGraph.GetChannels()) {
             if (channel.DstTask) {
                 continue;
@@ -1599,7 +1783,7 @@ protected:
         IActor* proxy;
         if (txResult.IsStream && txResult.QueryResultIndex.Defined()) {
             proxy = CreateResultStreamChannelProxy(TxId, channel.Id, txResult.MkqlItemType,
-                txResult.ColumnOrder, *txResult.QueryResultIndex, Target, this->SelfId());
+                txResult.ColumnOrder, *txResult.QueryResultIndex, Target, this->SelfId(), StatementResultIndex);
         } else {
             proxy = CreateResultDataChannelProxy(TxId, channel.Id, this->SelfId(),
                 channel.DstInputIndex, ResponseEv.get());
@@ -1728,9 +1912,14 @@ protected:
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig AggregationSettings;
     TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
     bool HasOlapTable = false;
+    bool StreamResult = false;
     bool HasDatashardSourceScan = false;
     bool UnknownAffectedShardCount = false;
+
+    THashMap<ui64, TActorId> ResultChannelToComputeActor;
     THashMap<NYql::NDq::TStageId, THashMap<ui64, TShardInfo>> SourceScanStageIdToParititions;
+
+    ui32 StatementResultIndex;
 
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
@@ -1744,14 +1933,15 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
-    TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext);
+    TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
+    const bool enableOlapSink, ui32 statementResultIndex);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
     TPreparedQueryHolder::TConstPtr preparedQuery, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
-    TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext);
+    TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex);
 
 } // namespace NKqp
 } // namespace NKikimr

@@ -1,8 +1,6 @@
-import itertools
-from typing import List, Tuple, Sequence
+from typing import List
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
-from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
+from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
 from ydb.library.yql.providers.generic.connector.tests.test_cases.base import BaseTestCase
 
 
@@ -10,26 +8,22 @@ TestCase = BaseTestCase
 
 
 class Factory:
-    def __basic_cases(self) -> Sequence[Tuple[str, Database]]:
-        return [
-            ('missing_table', Database()),
-        ]
-
     def make_test_cases(self) -> List[TestCase]:
         data_source_kinds = (
             EDataSourceKind.CLICKHOUSE,
             EDataSourceKind.POSTGRESQL,
         )
 
-        product = itertools.product(self.__basic_cases(), data_source_kinds)
-
         test_cases = []
-        for p in product:
-            test_case = TestCase(name=p[0][0], database=p[0][1], data_source_kind=p[1], pragmas=dict())
+        for data_source_kind in data_source_kinds:
+            test_case_name = 'missing_table'
 
-            # modify data source kind
-            test_case.data_source_kind = test_case.data_source_kind
-            test_case.name += f'_{EDataSourceKind.Name(test_case.data_source_kind)}'
+            test_case = TestCase(
+                name_=test_case_name,
+                data_source_kind=data_source_kind,
+                protocol=EProtocol.NATIVE,
+                pragmas=dict(),
+            )
 
             test_cases.append(test_case)
 

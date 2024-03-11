@@ -29,7 +29,8 @@ public:
 
     MOCK_METHOD(NHiveClient::ITransactionParticipantPtr, CreateTransactionParticipant,
         (NHiveClient::TCellId,
-        const TTransactionParticipantOptions&), (override));
+        const TTransactionParticipantOptions&),
+        (override));
 
     MOCK_METHOD(void, ClearMetadataCaches, (), (override));
     MOCK_METHOD(void, Terminate, (), (override));

@@ -1,17 +1,9 @@
 GO_LIBRARY()
-
-SRCS(
-    ar.go
-    file.go
-    xcoff.go
-)
-
-GO_TEST_SRCS(
-    ar_test.go
-    file_test.go
-)
-
+IF (TRUE)
+    SRCS(
+		ar.go
+		file.go
+		xcoff.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

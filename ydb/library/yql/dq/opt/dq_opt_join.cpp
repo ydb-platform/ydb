@@ -167,6 +167,11 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
     leftJoinKeys.reserve(joinKeysCount);
     TVector<TCoAtom> rightJoinKeys;
     rightJoinKeys.reserve(joinKeysCount);
+    TVector<TCoAtom> leftJoinKeyNames;
+    leftJoinKeyNames.reserve(joinKeysCount);
+    TVector<TCoAtom> rightJoinKeyNames;
+    rightJoinKeyNames.reserve(joinKeysCount);
+
     auto joinKeysBuilder = Build<TDqJoinKeyTupleList>(ctx, left->Input.Pos());
 
     for (size_t i = 0; i < joinKeysCount; ++i) {
@@ -197,6 +202,9 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
 
         leftJoinKeys.emplace_back(leftKey);
         rightJoinKeys.emplace_back(rightKey);
+
+        leftJoinKeyNames.emplace_back(leftColumnAtom);
+        rightJoinKeyNames.emplace_back(rightColumnAtom);
     }
 
     if (EHashJoinMode::Off == mode || EHashJoinMode::Map == mode || !(leftAny || rightAny)) {
@@ -207,6 +215,12 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
             .RightLabel(rightTableLabel)
             .JoinType(joinTuple.Type())
             .JoinKeys(joinKeysBuilder.Done())
+            .LeftJoinKeyNames()
+                .Add(leftJoinKeyNames)
+                .Build()
+            .RightJoinKeyNames()
+                .Add(rightJoinKeyNames)
+                .Build()
             .Done();
         return TJoinInputDesc(Nothing(), dqJoin, std::move(resultKeys));
     } else {
@@ -223,6 +237,12 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
             .RightLabel(rightTableLabel)
             .JoinType(joinTuple.Type())
             .JoinKeys(joinKeysBuilder.Done())
+            .LeftJoinKeyNames()
+                .Add(leftJoinKeyNames)
+                .Build()
+            .RightJoinKeyNames()
+                .Add(rightJoinKeyNames)
+                .Build()
             .Flags().Add(std::move(flags)).Build()
             .Done();
         return TJoinInputDesc(Nothing(), dqJoin, std::move(resultKeys));
@@ -325,6 +345,8 @@ TDqPhyMapJoin DqMakePhyMapJoin(const TDqJoin& join, const TExprBase& leftInput, 
         .RightLabel(join.RightLabel())
         .JoinType(join.JoinType())
         .JoinKeys(join.JoinKeys())
+        .LeftJoinKeyNames(join.LeftJoinKeyNames())
+        .RightJoinKeyNames(join.RightJoinKeyNames())
         .Done();
 }
 
@@ -501,6 +523,8 @@ TExprBase DqRewriteRightJoinToLeft(const TExprBase node, TExprContext& ctx) {
             .Value(RotateRightJoinType(dqJoin.JoinType().Value()))
             .Build()
         .JoinKeys(joinKeysBuilder.Done())
+        .LeftJoinKeyNames(dqJoin.LeftJoinKeyNames())
+        .RightJoinKeyNames(dqJoin.RightJoinKeyNames())
         .Flags(newFlags)
         .Done();
 }
@@ -561,7 +585,9 @@ TExprBase DqRewriteLeftPureJoin(const TExprBase node, TExprContext& ctx, const T
         .InitFrom(join)
         .LeftInput(leftConnection)
         .JoinType().Build(joinType)
-        .Done();
+        .LeftJoinKeyNames(join.LeftJoinKeyNames())
+        .RightJoinKeyNames(join.RightJoinKeyNames())
+        .Done();  
 }
 
 TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx) {
@@ -708,6 +734,8 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
             .RightLabel(join.RightLabel())
             .JoinType(join.JoinType())
             .JoinKeys(join.JoinKeys())
+            .LeftJoinKeyNames(join.LeftJoinKeyNames())
+            .RightJoinKeyNames(join.RightJoinKeyNames())
             .Done();
     }
 
@@ -812,6 +840,8 @@ TExprBase DqBuildJoinDict(const TDqJoin& join, TExprContext& ctx) {
             .RightLabel(join.RightLabel())
             .JoinType(join.JoinType())
             .JoinKeys(join.JoinKeys())
+            .LeftJoinKeyNames(join.LeftJoinKeyNames())
+            .RightJoinKeyNames(join.RightJoinKeyNames())
             .Done();
 
         joinStage = Build<TDqStage>(ctx, join.Pos())
@@ -845,6 +875,8 @@ TExprBase DqBuildJoinDict(const TDqJoin& join, TExprContext& ctx) {
             .RightLabel(join.RightLabel())
             .JoinType(join.JoinType())
             .JoinKeys(join.JoinKeys())
+            .LeftJoinKeyNames(join.LeftJoinKeyNames())
+            .RightJoinKeyNames(join.RightJoinKeyNames())
             .Done();
 
         joinStage = Build<TDqStage>(ctx, join.Pos())
@@ -877,6 +909,8 @@ TExprBase DqBuildJoinDict(const TDqJoin& join, TExprContext& ctx) {
             .RightLabel(join.RightLabel())
             .JoinType(join.JoinType())
             .JoinKeys(join.JoinKeys())
+            .LeftJoinKeyNames(join.LeftJoinKeyNames())
+            .RightJoinKeyNames(join.RightJoinKeyNames())
             .Done();
 
         joinStage = Build<TDqStage>(ctx, join.Pos())
@@ -1155,26 +1189,57 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
         }
     }
 
+    auto buildNewStage = [&](TCoLambda remapLambda, TDqCnUnionAll& conn) {
+        auto collectStage = Build<TDqStage>(ctx, conn.Pos())
+            .Inputs()
+                .Add(conn)
+                .Build()
+            .Program(remapLambda)
+            .Settings(TDqStageSettings().BuildNode(ctx, conn.Pos()))
+            .Done();
+
+        conn = Build<TDqCnUnionAll>(ctx, conn.Pos())
+            .Output()
+                .Stage(collectStage)
+                .Index().Build(0U)
+                .Build()
+            .Done().Cast<TDqCnUnionAll>();
+    };
+
     if (!remapLeft.empty() || !remapRight.empty()) {
         auto joinKeys = join.JoinKeys().Ref().ChildrenList();
         auto connLeft = join.LeftInput().Cast<TDqCnUnionAll>();
         auto connRight = join.RightInput().Cast<TDqCnUnionAll>();
 
         std::vector<std::pair<TDqCnUnionAll, TCoLambda>> remaps;
+        bool canPushLeftLambdaToStage = false;
+        bool canPushRightLambdaToStage = false;
 
-        if (!remapLeft.empty())
-            remaps.emplace_back(connLeft, PrepareJoinSide<true>(connLeft.Pos(), leftNames, leftJoinKeys, remapLeft, filter || rightKind, joinKeys, ctx));
+        if (!remapLeft.empty()) {
+            auto lambda = PrepareJoinSide<true>(connLeft.Pos(), leftNames, leftJoinKeys, remapLeft, filter || rightKind, joinKeys, ctx);
+            if (!IsDqDependsOnStageOutput(join.RightInput(), connLeft.Output().Stage(), FromString<ui32>(connLeft.Output().Index().Value()))) {
+                remaps.emplace_back(connLeft, std::move(lambda));
+                canPushLeftLambdaToStage = true;
+            } else {
+                buildNewStage(std::move(lambda), connLeft);
+            }
+        }
 
-        if (!remapRight.empty())
-            remaps.emplace_back(connRight, PrepareJoinSide<false>(connRight.Pos(), rightNames, rightJoinKeys, remapRight, filter || leftKind, joinKeys, ctx));
+        if (!remapRight.empty()) {
+            auto lambda = PrepareJoinSide<false>(connRight.Pos(), rightNames, rightJoinKeys, remapRight, filter || leftKind, joinKeys, ctx);
+            if (!IsDqDependsOnStageOutput(join.RightInput(), connLeft.Output().Stage(), FromString<ui32>(connLeft.Output().Index().Value()))) {
+                remaps.emplace_back(connRight, std::move(lambda));
+                canPushRightLambdaToStage = true;
+            } else {
+                buildNewStage(std::move(lambda), connRight);
+            }
+        }
 
-        DqPushLambdasToStagesUnionAll(remaps, ctx, optCtx);
-
-        if (!remapLeft.empty())
-            connLeft = remaps.front().first;
-
-        if (!remapRight.empty())
-            connRight = remaps.back().first;
+        if (!remaps.empty()) {
+            DqPushLambdasToStagesUnionAll(remaps, ctx, optCtx);
+            connLeft = canPushLeftLambdaToStage ? remaps.front().first : connLeft;
+            connRight = canPushRightLambdaToStage ? remaps.back().first : connRight;
+        }
 
         const auto& items = GetSeqItemType(*join.Ref().GetTypeAnn()).Cast<TStructExprType>()->GetItems();
         TExprNode::TListType fields(items.size());
@@ -1285,7 +1350,9 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
                             return parent;
                         })
                     .Seal()
-                    .List(shift + 5).Add(std::move(flags)).Seal()
+                    .List(shift + 5).Add(join.LeftJoinKeyNames().Ref().ChildrenList()).Seal()
+                    .List(shift + 6).Add(join.RightJoinKeyNames().Ref().ChildrenList()).Seal()
+                    .List(shift + 7).Add(std::move(flags)).Seal()
                 .Seal()
                 .Build();
             break;

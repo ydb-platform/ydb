@@ -11,7 +11,6 @@ SRCS(
     ydb_scheme.cpp
     ydb_scripting.cpp
     ydb_table.cpp
-    ydb_long_tx.cpp
 )
 
 PEERDIR(

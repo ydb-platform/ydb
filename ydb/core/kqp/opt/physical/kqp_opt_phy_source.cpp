@@ -40,7 +40,6 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
     };
     TMaybe<TMatchedRead> matched;
 
-    TMaybeNode<TKqpReadTable> mayberead;
     VisitExpr(stage.Program().Body().Ptr(), [&](const TExprNode::TPtr& node) {
             TExprBase expr(node);
             if (auto cast = expr.Maybe<TKqpReadTable>()) {

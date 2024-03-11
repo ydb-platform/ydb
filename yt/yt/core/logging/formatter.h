@@ -22,8 +22,26 @@ struct ILogFormatter
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TPlainTextLogFormatter
+class TLogFormatterBase
     : public ILogFormatter
+{
+protected:
+    TLogFormatterBase(
+        bool enableSystemMessages,
+        bool enableSourceLocation);
+
+    bool AreSystemMessagesEnabled() const;
+    bool IsSourceLocationEnabled() const;
+
+private:
+    const bool EnableSystemMessages_;
+    const bool EnableSourceLocation_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TPlainTextLogFormatter
+    : public TLogFormatterBase
 {
 public:
     explicit TPlainTextLogFormatter(
@@ -36,8 +54,6 @@ public:
     void WriteLogSkippedEvent(IOutputStream* outputStream, i64 count, TStringBuf skippedBy) override;
 
 private:
-    const bool EnableSystemMessages_;
-
     TRawFormatter<MessageBufferSize> Buffer_;
     TPlainTextEventFormatter EventFormatter_;
 };
@@ -45,15 +61,15 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 class TStructuredLogFormatter
-    : public ILogFormatter
+    : public TLogFormatterBase
 {
 public:
     TStructuredLogFormatter(
         ELogFormat format,
         THashMap<TString, NYTree::INodePtr> commonFields,
-        bool enableControlMessages = true,
+        bool enableSystemMessages = true,
         bool enableSourceLocation = false,
-        bool enableInstant = true,
+        bool enableSystemFields = true,
         NJson::TJsonFormatConfigPtr jsonFormat = nullptr);
 
     i64 WriteFormatted(IOutputStream* outputStream, const TLogEvent& event) override;
@@ -64,9 +80,7 @@ public:
 private:
     const ELogFormat Format_;
     const THashMap<TString, NYTree::INodePtr> CommonFields_;
-    const bool EnableSystemMessages_;
-    const bool EnableSourceLocation_;
-    const bool EnableInstant_;
+    const bool EnableSystemFields_;
     const NJson::TJsonFormatConfigPtr JsonFormat_;
 
     TCachingDateFormatter CachingDateFormatter_;

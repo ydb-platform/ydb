@@ -5,7 +5,6 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <util/stream/output.h>
 #include <ydb/core/graph/shard/backends.h>
-#include <ydb/core/graph/api/service.h>
 
 #ifdef NDEBUG
 #define Ctest Cnull
@@ -258,24 +257,59 @@ Y_UNIT_TEST_SUITE(GraphShard) {
         }
     }
 
+    Y_UNIT_TEST(NormalizeAndDownsample6) {
+        NGraph::TBaseBackend::TMetricsValues values;
+        values.Timestamps = {
+            TInstant::Seconds( 100 ),
+            TInstant::Seconds( 200 ),
+            TInstant::Seconds( 300 ),
+            TInstant::Seconds( 400 ),
+            TInstant::Seconds( 500 ),
+            TInstant::Seconds( 510 ),
+            TInstant::Seconds( 520 ),
+            TInstant::Seconds( 530 ),
+            TInstant::Seconds( 540 ),
+            TInstant::Seconds( 550 ),
+            TInstant::Seconds( 560 ),
+            TInstant::Seconds( 570 ),
+            TInstant::Seconds( 580 ),
+            TInstant::Seconds( 590 ),
+            TInstant::Seconds( 600 )
+        };
+        values.Values.push_back({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15});
+
+        {
+            NGraph::TBaseBackend::NormalizeAndDownsample(values, 1);
+            Ctest << values.Timestamps << Endl;
+            Ctest << values.Values << Endl;
+            std::vector<TInstant> canonTimestamps = {
+                TInstant::Seconds( 600 )
+            };
+            std::vector<double> canonValues = {8};
+            UNIT_ASSERT(values.Timestamps == canonTimestamps);
+            UNIT_ASSERT(values.Values.size() == 1);
+            UNIT_ASSERT(values.Values[0] == canonValues);
+        }
+    }
+
     Y_UNIT_TEST(CheckHistogramToPercentileConversions) {
         TVector<ui64> bounds = {2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, std::numeric_limits<ui64>::max()};
         TVector<ui64> values = {10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 0};
         ui64 total = std::accumulate(values.begin(), values.end(), 0);
         UNIT_ASSERT(total == 100);
-        auto p50 = NGraph::GetTimingForPercentile(50, values, bounds, total);
+        auto p50 = NGraph::TBaseBackend::GetTimingForPercentile(.50, values, bounds, total);
         Ctest << "p50=" << p50 << Endl;
         UNIT_ASSERT(!isnan(p50));
         UNIT_ASSERT(abs(p50 - 32) < 0.01); // 32ms
-        auto p75 = NGraph::GetTimingForPercentile(75, values, bounds, total);
+        auto p75 = NGraph::TBaseBackend::GetTimingForPercentile(.75, values, bounds, total);
         Ctest << "p75=" << p75 << Endl;
         UNIT_ASSERT(!isnan(p75));
         UNIT_ASSERT(abs(p75 - 192) < 0.01); // 192ms
-        auto p90 = NGraph::GetTimingForPercentile(90, values, bounds, total);
+        auto p90 = NGraph::TBaseBackend::GetTimingForPercentile(.90, values, bounds, total);
         Ctest << "p90=" << p90 << Endl;
         UNIT_ASSERT(!isnan(p90));
         UNIT_ASSERT(abs(p90 - 512) < 0.01); // 512ms
-        auto p99 = NGraph::GetTimingForPercentile(99, values, bounds, total);
+        auto p99 = NGraph::TBaseBackend::GetTimingForPercentile(.99, values, bounds, total);
         Ctest << "p99=" << p99 << Endl;
         UNIT_ASSERT(!isnan(p99));
         UNIT_ASSERT(abs(p99 - 972.8) < 0.01); // 972.8ms

@@ -121,7 +121,7 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
             if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{op.DataSink().Cluster().Value()})) {
                 return false;
             }
-            syncList.emplace(op.Ptr(), syncList.size());
+            syncList.emplace(out.Cast().Operation().Ptr(), syncList.size());
             return true;
         }
     }

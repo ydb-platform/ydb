@@ -1,7 +1,8 @@
 #include "datashard_impl.h"
-#include "datashard_counters.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
+
+#include <ydb/core/tx/locks/time_counters.h>
 
 namespace NKikimr {
 namespace NDataShard {

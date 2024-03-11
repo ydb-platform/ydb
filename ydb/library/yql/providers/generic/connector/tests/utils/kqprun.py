@@ -4,13 +4,12 @@ from typing import Final
 
 import jinja2
 
-import yatest.common
-
 import json
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 
+import ydb.library.yql.providers.generic.connector.tests.utils.artifacts as artifacts
 from ydb.library.yql.providers.generic.connector.tests.utils.runner import Result, Runner
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import Schema
@@ -52,17 +51,17 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
 {% for cluster in generic_settings.clickhouse_clusters %}
 
 {% if cluster.protocol == EProtocol.NATIVE %}
-{% set CLICKHOUSE_PORT = settings.clickhouse.native_port %}
+{% set CLICKHOUSE_PORT = settings.clickhouse.native_port_internal %}
 {% set CLICKHOUSE_PROTOCOL = NATIVE %}
 {% elif cluster.protocol == EProtocol.HTTP %}
-{% set CLICKHOUSE_PORT = settings.clickhouse.http_port %}
+{% set CLICKHOUSE_PORT = settings.clickhouse.http_port_internal %}
 {% set CLICKHOUSE_PROTOCOL = HTTP %}
 {% endif %}
 
 {{ create_data_source(
     CLICKHOUSE,
     settings.clickhouse.cluster_name,
-    settings.clickhouse.host,
+    settings.clickhouse.host_internal,
     CLICKHOUSE_PORT,
     settings.clickhouse.username,
     settings.clickhouse.password,
@@ -76,8 +75,8 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
 {{ create_data_source(
     POSTGRESQL,
     settings.postgresql.cluster_name,
-    settings.postgresql.host,
-    settings.postgresql.port,
+    settings.postgresql.host_internal,
+    settings.postgresql.port_internal,
     settings.postgresql.username,
     settings.postgresql.password,
     NATIVE,
@@ -154,24 +153,24 @@ class KqpRunner(Runner):
         self.kqprun_path = kqprun_path
         self.settings = settings
 
-    def run(self, test_dir: Path, script: str, generic_settings: GenericSettings) -> Result:
+    def run(self, test_name: str, script: str, generic_settings: GenericSettings) -> Result:
         LOGGER.debug(script)
 
         # Create file with YQL script
-        script_path = test_dir.joinpath('script.yql')
+        script_path = artifacts.make_path(test_name=test_name, artifact_name='script.yql')
         with open(script_path, "w") as f:
             f.write(script)
 
         # Create config
-        app_conf_path = test_dir.joinpath('app_confif.conf')
+        app_conf_path = artifacts.make_path(test_name=test_name, artifact_name='app_conf.txt')
         self.app_conf_renderer.render(app_conf_path, settings=self.settings, generic_settings=generic_settings)
 
         # Create scheme
-        scheme_path = test_dir.joinpath('scheme.txt')
+        scheme_path = artifacts.make_path(test_name=test_name, artifact_name='scheme.txt')
         self.scheme_renderer.render(scheme_path, settings=self.settings, generic_settings=generic_settings)
 
         # Run kqprun
-        result_path = test_dir.joinpath('result.json')
+        result_path = artifacts.make_path(test_name=test_name, artifact_name='result.json')
 
         # For debug add option --trace-opt to args
         cmd = f'{self.kqprun_path} -s {scheme_path} -p {script_path} --app-config={app_conf_path} --result-file={result_path} --result-format=full'
@@ -180,7 +179,6 @@ class KqpRunner(Runner):
         data_out = None
         data_out_with_types = None
         schema = None
-        unique_suffix = test_dir.name
 
         if out.returncode == 0:
             # Parse output
@@ -205,23 +203,21 @@ class KqpRunner(Runner):
                 data_out_with_types.append(schema.cast_row(row_values))
 
             LOGGER.debug('Schema: %s', schema)
-            LOGGER.debug('Data out: %s', data_out)
-            LOGGER.debug('Data out with types: %s', data_out_with_types)
+
+            artifacts.dump_json(data_out, test_name, "data_out.yson")
+            artifacts.dump_str(data_out_with_types, test_name, "data_out_with_types.yson")
 
         else:
-            LOGGER.error('STDOUT: ')
-            for line in out.stdout.decode('utf-8').splitlines():
-                LOGGER.error(line)
-            LOGGER.error('STDERR: ')
-            for line in out.stderr.decode('utf-8').splitlines():
-                LOGGER.error(line)
+            LOGGER.error(
+                'Execution failed:\n\nSTDOUT: %s\n\nSTDERR: %s\n\n',
+                out.stdout.decode('utf-8'),
+                out.stderr.decode('utf-8'),
+            )
 
-        err_file = yatest.common.output_path(f'kqprun-{unique_suffix}.err')
-        with open(err_file, "w") as f:
+        with open(artifacts.make_path(test_name, "kqprun.err"), "w") as f:
             f.write(out.stderr.decode('utf-8'))
 
-        out_file = yatest.common.output_path(f'kqprun-{unique_suffix}.out')
-        with open(out_file, "w") as f:
+        with open(artifacts.make_path(test_name, "kqprun.out"), "w") as f:
             f.write(out.stdout.decode('utf-8'))
 
         return Result(

@@ -30,7 +30,17 @@ protected:
 
     void ReadMessage(TTopicReadSessionPtr reader, NTable::TTransaction& tx, ui64 offset);
 
-    void WriteMessage(const TString& data);
+    void WriteMessage(const TString& message);
+    void WriteMessages(const TVector<TString>& messages,
+                       const TString& topic, const TString& groupId,
+                       NTable::TTransaction& tx);
+
+    void CreateTopic(const TString& path = TEST_TOPIC,
+                     const TString& consumer = TEST_CONSUMER,
+                     size_t partitionCount = 1,
+                     std::optional<size_t> maxPartitionCount = std::nullopt);
+
+    void WriteToTopicWithInvalidTxId(bool invalidTxId);
 
 protected:
     const TDriver& GetDriver() const;
@@ -131,7 +141,7 @@ E TFixture::ReadEvent(TTopicReadSessionPtr reader)
     return *ev;
 }
 
-void TFixture::WriteMessage(const TString& data)
+void TFixture::WriteMessage(const TString& message)
 {
     NTopic::TWriteSessionSettings options;
     options.Path(TEST_TOPIC);
@@ -139,13 +149,83 @@ void TFixture::WriteMessage(const TString& data)
 
     NTopic::TTopicClient client(GetDriver());
     auto session = client.CreateSimpleBlockingWriteSession(options);
-    UNIT_ASSERT(session->Write(data));
+    UNIT_ASSERT(session->Write(message));
     session->Close();
+}
+
+void TFixture::WriteMessages(const TVector<TString>& messages,
+                             const TString& topic, const TString& groupId,
+                             NTable::TTransaction& tx)
+{
+    NTopic::TWriteSessionSettings options;
+    options.Path(topic);
+    options.MessageGroupId(groupId);
+
+    NTopic::TTopicClient client(GetDriver());
+    auto session = client.CreateSimpleBlockingWriteSession(options);
+
+    for (auto& message : messages) {
+        NTopic::TWriteMessage params(message);
+        params.Tx(tx);
+        UNIT_ASSERT(session->Write(std::move(params)));
+    }
+
+    UNIT_ASSERT(session->Close());
+}
+
+void TFixture::CreateTopic(const TString& path,
+                           const TString& consumer,
+                           size_t partitionCount,
+                           std::optional<size_t> maxPartitionCount)
+
+{
+    Setup->CreateTopic(path, consumer, partitionCount, maxPartitionCount);
 }
 
 const TDriver& TFixture::GetDriver() const
 {
     return *Driver;
+}
+
+void TFixture::WriteToTopicWithInvalidTxId(bool invalidTxId)
+{
+    auto tableSession = CreateSession();
+    auto tx = BeginTx(tableSession);
+
+    NTopic::TWriteSessionSettings options;
+    options.Path(TEST_TOPIC);
+    options.MessageGroupId(TEST_MESSAGE_GROUP_ID);
+
+    NTopic::TTopicClient client(GetDriver());
+    auto writeSession = client.CreateWriteSession(options);
+
+    auto event = writeSession->GetEvent(true);
+    UNIT_ASSERT(event.Defined() && std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event.GetRef()));
+    auto token = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event.GetRef()).ContinuationToken);
+
+    NTopic::TWriteMessage params("message");
+    params.Tx(tx);
+
+    if (invalidTxId) {
+        CommitTx(tx, EStatus::SUCCESS);
+    } else {
+        UNIT_ASSERT(tableSession.Close().ExtractValueSync().IsSuccess());
+    }
+
+    writeSession->Write(std::move(token), std::move(params));
+
+    while (true) {
+        event = writeSession->GetEvent(true);
+        UNIT_ASSERT(event.Defined());
+        auto& v = event.GetRef();
+        if (auto e = std::get_if<TWriteSessionEvent::TAcksEvent>(&v); e) {
+            UNIT_ASSERT(false);
+        } else if (auto e = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&v); e) {
+            ;
+        } else if (auto e = std::get_if<TSessionClosedEvent>(&v); e) {
+            break;
+        }
+    }
 }
 
 Y_UNIT_TEST_F(SessionAbort, TFixture)
@@ -215,30 +295,94 @@ Y_UNIT_TEST_F(TwoSessionOneConsumer, TFixture)
 
 Y_UNIT_TEST_F(WriteToTopic, TFixture)
 {
-    NTopic::TWriteSessionSettings options;
-    options.Path(TEST_TOPIC);
-    options.MessageGroupId(TEST_MESSAGE_GROUP_ID);
+    TString topic[2] = {
+        TEST_TOPIC,
+        TEST_TOPIC + "_2"
+    };
+
+    CreateTopic(topic[1]);
 
     auto session = CreateSession();
     auto tx = BeginTx(session);
 
-    auto writeMessages = [&](const TVector<TString>& messages) {
-        NTopic::TTopicClient client(GetDriver());
-        auto session = client.CreateSimpleBlockingWriteSession(options);
-
-        for (auto& message : messages) {
-            NTopic::TWriteMessage params(message);
-            params.Tx(tx);
-            UNIT_ASSERT(session->Write(std::move(params)));
-        }
-
-        UNIT_ASSERT(session->Close());
-    };
-
-    writeMessages({"a", "bb", "ccc", "dddd"});
-    writeMessages({"eeeee", "ffffff", "ggggggg"});
+    WriteMessages({"#1", "#2", "#3"}, topic[0], TEST_MESSAGE_GROUP_ID, tx);
+    WriteMessages({"#4", "#5"}, topic[1], TEST_MESSAGE_GROUP_ID, tx);
 
     CommitTx(tx, EStatus::ABORTED);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Invalid_Session, TFixture)
+{
+    WriteToTopicWithInvalidTxId(false);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Invalid_Tx, TFixture)
+{
+    WriteToTopicWithInvalidTxId(true);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Two_WriteSession, TFixture)
+{
+    TString topicPath[2] = {
+        TEST_TOPIC,
+        TEST_TOPIC + "_2"
+    };
+
+    CreateTopic(topicPath[1]);
+
+    auto createWriteSession = [](NTopic::TTopicClient& client, const TString& topicPath) {
+        NTopic::TWriteSessionSettings options;
+        options.Path(topicPath);
+        options.MessageGroupId(TEST_MESSAGE_GROUP_ID);
+
+        return client.CreateWriteSession(options);
+    };
+
+    auto writeMessage = [](auto& ws, const TString& message, auto& tx) {
+        NTopic::TWriteMessage params(message);
+        params.Tx(tx);
+
+        auto event = ws->GetEvent(true);
+        UNIT_ASSERT(event.Defined() && std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event.GetRef()));
+        auto token = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event.GetRef()).ContinuationToken);
+
+        ws->Write(std::move(token), std::move(params));
+    };
+
+    auto tableSession = CreateSession();
+    auto tx = BeginTx(tableSession);
+
+    NTopic::TTopicClient client(GetDriver());
+
+    auto ws0 = createWriteSession(client, topicPath[0]);
+    auto ws1 = createWriteSession(client, topicPath[1]);
+
+    writeMessage(ws0, "message-1", tx);
+    writeMessage(ws1, "message-2", tx);
+
+    size_t acks = 0;
+
+    while (acks < 2) {
+        auto event = ws0->GetEvent(false);
+        if (!event) {
+            event = ws1->GetEvent(false);
+            if (!event) {
+                Sleep(TDuration::MilliSeconds(10));
+                continue;
+            }
+        }
+
+        auto& v = event.GetRef();
+        if (auto e = std::get_if<TWriteSessionEvent::TAcksEvent>(&v); e) {
+            ++acks;
+        } else if (auto e = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&v); e) {
+            ;
+        } else if (auto e = std::get_if<TSessionClosedEvent>(&v); e) {
+            break;
+        }
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(acks, 2);
 }
 
 }

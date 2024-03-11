@@ -39,7 +39,6 @@ namespace NYql::NDqs {
         NActors::TActorId QuoterServiceActorId;
         bool ComputeActorOwnsCounters = false;
         bool DropTaskCountersOnFinish = true;
-        bool UseSpilling = false;
     };
 
     NActors::IActor* CreateLocalWorkerManager(const TLocalWorkerManagerOptions& options);

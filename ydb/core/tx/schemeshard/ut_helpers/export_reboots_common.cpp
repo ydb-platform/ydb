@@ -2,6 +2,10 @@
 
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
+#include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
+#include <ydb/core/protos/msgbus_kv.pb.h>
+
 namespace NSchemeShardUT_Private {
 namespace NExportReboots {
 

@@ -5,16 +5,15 @@
 
 namespace NKikimr::NOlap::NCompaction {
 
-std::vector<NKikimr::NOlap::IPortionColumnChunk::TPtr> TChunkPreparation::DoInternalSplit(const TColumnSaver& saver, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const std::vector<ui64>& splitSizes) const {
+std::vector<std::shared_ptr<IPortionDataChunk>> TChunkPreparation::DoInternalSplitImpl(const TColumnSaver& saver, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const {
     auto loader = SchemaInfo->GetColumnLoaderVerified(Record.ColumnId);
     auto rb = NArrow::TStatusValidator::GetValid(loader->Apply(Data));
 
     auto chunks = TSimpleSplitter(saver, counters).SplitBySizes(rb, Data, splitSizes);
-    std::vector<IPortionColumnChunk::TPtr> newChunks;
+    std::vector<std::shared_ptr<IPortionDataChunk>> newChunks;
     for (auto&& i : chunks) {
         Y_ABORT_UNLESS(i.GetSlicedBatch()->num_columns() == 1);
-        newChunks.emplace_back(std::make_shared<TChunkPreparation>(
-            saver.Apply(i.GetSlicedBatch()), i.GetSlicedBatch()->column(0), ColumnId, SchemaInfo));
+        newChunks.emplace_back(std::make_shared<TChunkPreparation>(saver.Apply(i.GetSlicedBatch()), i.GetSlicedBatch()->column(0), GetColumnId(), SchemaInfo));
     }
     return newChunks;
 }
@@ -33,7 +32,7 @@ std::shared_ptr<arrow::Array> TColumnPortion::AppendBlob(const TString& data, co
 //        CurrentPortionRecords += columnChunk.GetMeta().GetNumRowsVerified();
 //        return nullptr;
 //    } else {
-        NChanges::TGeneralCompactionCounters::OnSplittedBlobAppend(columnChunk.BlobRange.GetBlobSize());
+        NChanges::TGeneralCompactionCounters::OnSplittedBlobAppend(columnChunk.BlobRange.GetSize());
         auto batch = NArrow::TStatusValidator::GetValid(Context.GetLoader()->Apply(data));
         AFL_VERIFY(batch->num_columns() == 1);
         auto batchArray = batch->column(0);

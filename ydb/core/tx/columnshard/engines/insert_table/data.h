@@ -2,6 +2,7 @@
 #include "meta.h"
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/engines/defs.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 
 namespace NKikimr::NOlap {

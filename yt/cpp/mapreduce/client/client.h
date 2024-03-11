@@ -388,7 +388,7 @@ public:
         const TNode::TListType& keys,
         const TDeleteRowsOptions& options) override;
 
-     void TrimRows(
+    void TrimRows(
         const TYPath& path,
         i64 tabletIndex,
         i64 rowCount,

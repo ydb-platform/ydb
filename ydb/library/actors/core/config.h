@@ -35,6 +35,16 @@ namespace NActors {
         i16 SharedExecutorsCount = 0;
         i16 SoftProcessingDurationTs = 0;
         EASProfile ActorSystemProfile = EASProfile::Default;
+        bool HasSharedThread = false;
+    };
+
+    struct TSharedExecutorPoolConfig {
+        ui32 Threads = 1;
+        ui64 SpinThreshold = 100;
+        TCpuMask Affinity; // Executor thread affinity
+        TDuration TimePerMailbox = TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX;
+        ui32 EventsPerMailbox = TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
+        i16 SoftProcessingDurationTs = 0;
     };
 
     struct TIOExecutorPoolConfig {
@@ -54,6 +64,7 @@ namespace NActors {
         TVector<TBasicExecutorPoolConfig> Basic;
         TVector<TIOExecutorPoolConfig> IO;
         TVector<TSelfPingInfo> PingInfoByPool;
+        TSharedExecutorPoolConfig Shared;
 
         ui32 GetExecutorsCount() const {
             return Basic.size() + IO.size();

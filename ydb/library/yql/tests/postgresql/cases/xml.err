@@ -13,6 +13,18 @@ INSERT INTO xmltest VALUES (2, '<value>two</value>');
 <sql-statement>
 INSERT INTO xmltest VALUES (3, '<wrong');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO xmltest VALUES (3, '<wrong');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid XML document
+DETAIL:  line 1: Couldn't find end of Start Tag wrong line 1
+	<wrong
+	      ^
+
+        	INSERT INTO xmltest VALUES (3, '<wrong');
+	^
 <sql-statement>
 SELECT * FROM xmltest;
 </sql-statement>
@@ -655,6 +667,18 @@ SELECT '<>' IS NOT DOCUMENT;
 <sql-statement>
 SELECT xmlagg(data) FROM xmltest;
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT xmlagg(data) FROM xmltest;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid XML document
+DETAIL:  line 1: Extra content at the end of the document
+	<value>one</value><value>two</value>
+	                  ^
+
+        	SELECT xmlagg(data) FROM xmltest;
+	^
 <sql-statement>
 SELECT xmlagg(data) FROM xmltest WHERE id > 10;
 </sql-statement>
@@ -875,11 +899,22 @@ CREATE VIEW xmlview9 AS SELECT xmlserialize(content 'good' as text);
 SELECT table_name, view_definition FROM information_schema.views
   WHERE table_name LIKE 'xmlview%' ORDER BY 1;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:41: Error: Unknown cluster: information_schema
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
     	SELECT table_name, view_definition FROM information_schema.views
-	                                        ^
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	SELECT table_name, view_definition FROM information_schema.views
+	^
+                -stdin-:<main>:2:20: Error: At function: PgLike
+                	  WHERE table_name LIKE 'xmlview%' ORDER BY 1;
+	                   ^
+                    -stdin-:<main>:2:20: Error: Expected pg text, but got name
+                    	  WHERE table_name LIKE 'xmlview%' ORDER BY 1;
+	                   ^
 <sql-statement>
 -- Text XPath expressions evaluation
 SELECT xpath('/value', data) FROM xmltest;
@@ -1358,12 +1393,7 @@ SELECT xml_is_well_formed('abc');
 -- error messages, we suppress the DETAIL in this test.
 \set VERBOSITY terse
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:11:1: Error: ERROR:  syntax error at or near "\"
-
-    	\set VERBOSITY terse
-	^
+Metacommand \set VERBOSITY terse is not supported
 <sql-statement>
 SELECT xpath('/*', '<invalidns xmlns=''&lt;''/>');
 </sql-statement>

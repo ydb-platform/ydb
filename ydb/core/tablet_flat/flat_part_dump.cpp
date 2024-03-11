@@ -122,7 +122,7 @@ namespace {
         Out
             << " + Index{" << (ui16)label.Type << " rev "
             << label.Format << ", " << label.Size << "b}"
-            << " " << index->Count << " rec" << Endl
+            << " " << index->Count + (index.GetLastKeyRecord() ? 1 : 0) << " rec" << Endl
             << " |  Page     Row    Bytes  (";
 
         for (auto off : xrange(part.Scheme->Groups[0].KeyTypes.size())) {
@@ -133,18 +133,8 @@ namespace {
 
         Out << ")" << Endl;
 
-        for (auto iter = index->Begin(); iter; iter++) {
+        auto printIndexKey = [&](const NPage::TIndex::TRecord* record) {
             key.clear();
-
-            if (depth < 2 && iter.Off() >= 10) {
-                Out
-                    << " | -- skipped " << index->Count - iter.Off()
-                    << " entries, depth level " << depth << Endl;
-
-                break;
-            }
-
-            auto record = iter.GetRecord();
             for (const auto &info: part.Scheme->Groups[0].ColsKeyIdx)
                 key.push_back(record->Cell(info));
 
@@ -161,6 +151,22 @@ namespace {
             Key(key, *part.Scheme);
 
             Out << Endl;
+        };
+
+        for (auto iter = index->Begin(); iter; iter++) {
+            if (depth < 2 && iter.Off() >= 10) {
+                Out
+                    << " | -- skipped " << index->Count - iter.Off()
+                    << " entries, depth level " << depth << Endl;
+
+                break;
+            }
+
+            printIndexKey(iter.GetRecord());
+        }
+
+        if (index.GetLastKeyRecord()) {
+            printIndexKey(index.GetLastKeyRecord());
         }
     }
 

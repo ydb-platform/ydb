@@ -151,6 +151,7 @@ STRICT_STFUNC_EXC(TDqComputeActorCheckpoints::StateFunc,
     hFunc(TEvDqCompute::TEvRun, Handle);
     hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
     hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
+    hFunc(NActors::TEvents::TEvUndelivered, Handle);
     hFunc(TEvRetryQueuePrivate::TEvRetry, Handle);
     hFunc(TEvents::TEvWakeup, Handle);
     cFunc(TEvents::TEvPoisonPill::EventType, PassAway);,
@@ -393,6 +394,13 @@ void TDqComputeActorCheckpoints::Handle(NActors::TEvInterconnect::TEvNodeConnect
     EventsQueue.HandleNodeConnected(ev->Get()->NodeId);
 }
 
+void TDqComputeActorCheckpoints::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+    LOG_D("Handle undelivered");
+    if (!EventsQueue.HandleUndelivered(ev)) {
+        LOG_E("TEvUndelivered: " << ev->Get()->SourceType);
+    }
+}
+
 void TDqComputeActorCheckpoints::Handle(TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
     Y_UNUSED(ev);
     EventsQueue.Retry();
@@ -472,7 +480,7 @@ void TDqComputeActorCheckpoints::RegisterCheckpoint(const NDqProto::TCheckpoint&
         YQL_ENSURE(PendingCheckpoint.Checkpoint->GetGeneration() == checkpoint.GetGeneration());
         YQL_ENSURE(PendingCheckpoint.Checkpoint->GetId() == checkpoint.GetId());
     }
-    LOG_PCP_D("Got checkpoint barrier from channel " << channelId);
+    LOG_PCP_T("Got checkpoint barrier from channel " << channelId);
     ComputeActor->ResumeExecution(EResumeSource::CheckpointRegister);
 }
 

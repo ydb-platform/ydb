@@ -1,14 +1,15 @@
+Registering pre-existing tables
+	TIME_TBL
+	TIMESTAMPTZ_TBL
+	TIMESTAMP_TBL
+	INTERVAL_TBL
+	TIMETZ_TBL
 <sql-statement>
 --
 -- HOROLOGY
 --
 SET DateStyle = 'Postgres, MDY';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DateStyle
-    	--
-	^
 <sql-statement>
 SHOW TimeZone;  -- Many of these tests depend on the prevailing setting
 </sql-statement>
@@ -73,11 +74,6 @@ HINT:  Perhaps you need a different "datestyle" setting.
 <sql-statement>
 set datestyle to dmy;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: datestyle
-    	set datestyle to dmy;
-	^
 <sql-statement>
 SELECT timestamp with time zone '27/12/2001 04:05:06.789-08';
 </sql-statement>
@@ -94,11 +90,6 @@ HINT:  Perhaps you need a different "datestyle" setting.
 <sql-statement>
 reset datestyle;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
-    	reset datestyle;
-	^
 <sql-statement>
 SELECT timestamp with time zone 'Y2001M12D27H04M05S06.789+08';
 </sql-statement>
@@ -151,11 +142,6 @@ SELECT timestamp with time zone '12.27.2001 04:05:06.789-08';
 <sql-statement>
 SET DateStyle = 'German';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DateStyle
-    	SET DateStyle = 'German';
-	^
 <sql-statement>
 SELECT timestamp with time zone '27.12.2001 04:05:06.789+08';
 </sql-statement>
@@ -185,11 +171,6 @@ HINT:  Perhaps you need a different "datestyle" setting.
 <sql-statement>
 SET DateStyle = 'ISO';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DateStyle
-    	SET DateStyle = 'ISO';
-	^
 <sql-statement>
 -- As of 7.4, allow time without time zone having a time zone specified
 SELECT time without time zone '040506.789+08';
@@ -224,11 +205,6 @@ SELECT time with time zone 'T040506.789 -08';
 <sql-statement>
 SET DateStyle = 'Postgres, MDY';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DateStyle
-    	SET DateStyle = 'Postgres, MDY';
-	^
 <sql-statement>
 -- Check Julian dates BC
 SELECT date 'J1520447' AS "Confucius' Birthday";
@@ -368,17 +344,9 @@ SELECT timestamptz(date '1994-01-01', time with time zone '11:00-5') AS "Jan_01_
 <sql-statement>
 SELECT d1 + interval '1 year' AS one_year FROM TIMESTAMP_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TIMESTAMP_TBL
-    
 <sql-statement>
 SELECT d1 - interval '1 year' AS one_year FROM TIMESTAMP_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TIMESTAMP_TBL
-    
 <sql-statement>
 SELECT timestamp with time zone '1996-03-01' - interval '1 second' AS "Feb 29";
 </sql-statement>
@@ -451,17 +419,9 @@ SELECT timestamptz(date '1994-01-01', time with time zone '11:00-5') AS "Jan_01_
 <sql-statement>
 SELECT d1 + interval '1 year' AS one_year FROM TIMESTAMPTZ_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TIMESTAMPTZ_TBL
-    
 <sql-statement>
 SELECT d1 - interval '1 year' AS one_year FROM TIMESTAMPTZ_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TIMESTAMPTZ_TBL
-    
 <sql-statement>
 --
 -- time, interval arithmetic
@@ -537,28 +497,16 @@ SELECT t.d1 AS t, i.f1 AS i, t.d1 + i.f1 AS "add", t.d1 - i.f1 AS "subtract"
     AND i.f1 BETWEEN '00:00' AND '23:00'
   ORDER BY 1,2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TIMESTAMP_TBL
-    
 <sql-statement>
 SELECT t.f1 AS t, i.f1 AS i, t.f1 + i.f1 AS "add", t.f1 - i.f1 AS "subtract"
   FROM TIME_TBL t, INTERVAL_TBL i
   ORDER BY 1,2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TIME_TBL
-    
 <sql-statement>
 SELECT t.f1 AS t, i.f1 AS i, t.f1 + i.f1 AS "add", t.f1 - i.f1 AS "subtract"
   FROM TIMETZ_TBL t, INTERVAL_TBL i
   ORDER BY 1,2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.INTERVAL_TBL
-    
 <sql-statement>
 -- SQL9x OVERLAPS operator
 -- test with time zone
@@ -761,10 +709,6 @@ INSERT INTO TEMP_TIMESTAMP (f1)
   WHERE d1 BETWEEN '13-jun-1957' AND '1-jan-1997'
    OR d1 BETWEEN '1-jan-1999' AND '1-jan-2010';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TIMESTAMP_TBL
-    
 <sql-statement>
 SELECT f1 AS "timestamp"
   FROM TEMP_TIMESTAMP
@@ -775,20 +719,12 @@ SELECT d.f1 AS "timestamp", t.f1 AS "interval", d.f1 + t.f1 AS plus
   FROM TEMP_TIMESTAMP d, INTERVAL_TBL t
   ORDER BY plus, "timestamp", "interval";
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.INTERVAL_TBL
-    
 <sql-statement>
 SELECT d.f1 AS "timestamp", t.f1 AS "interval", d.f1 - t.f1 AS minus
   FROM TEMP_TIMESTAMP d, INTERVAL_TBL t
   WHERE isfinite(d.f1)
   ORDER BY minus, "timestamp", "interval";
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.INTERVAL_TBL
-    
 <sql-statement>
 SELECT d.f1 AS "timestamp",
    timestamp with time zone '1980-01-06 00:00 GMT' AS gpstime_zero,
@@ -893,11 +829,6 @@ RESET TimeZone;
 --
 SET DateStyle TO 'US,Postgres';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DateStyle
-    	--
-	^
 <sql-statement>
 SHOW DateStyle;
 </sql-statement>
@@ -909,33 +840,15 @@ SHOW DateStyle;
 <sql-statement>
 SELECT d1 AS us_postgres FROM TIMESTAMP_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TIMESTAMP_TBL
-    
 <sql-statement>
 SET DateStyle TO 'US,ISO';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DateStyle
-    	SET DateStyle TO 'US,ISO';
-	^
 <sql-statement>
 SELECT d1 AS us_iso FROM TIMESTAMP_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TIMESTAMP_TBL
-    
 <sql-statement>
 SET DateStyle TO 'US,SQL';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DateStyle
-    	SET DateStyle TO 'US,SQL';
-	^
 <sql-statement>
 SHOW DateStyle;
 </sql-statement>
@@ -947,18 +860,9 @@ SHOW DateStyle;
 <sql-statement>
 SELECT d1 AS us_sql FROM TIMESTAMP_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TIMESTAMP_TBL
-    
 <sql-statement>
 SET DateStyle TO 'European,Postgres';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DateStyle
-    	SET DateStyle TO 'European,Postgres';
-	^
 <sql-statement>
 SHOW DateStyle;
 </sql-statement>
@@ -970,32 +874,25 @@ SHOW DateStyle;
 <sql-statement>
 INSERT INTO TIMESTAMP_TBL VALUES('13/06/1957');
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TIMESTAMP_TBL
-    
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMP_TBL VALUES('13/06/1957');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "13/06/1957"
+HINT:  Perhaps you need a different "datestyle" setting.
+
+        	INSERT INTO TIMESTAMP_TBL VALUES('13/06/1957');
+	^
 <sql-statement>
 SELECT count(*) as one FROM TIMESTAMP_TBL WHERE d1 = 'Jun 13 1957';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TIMESTAMP_TBL
-    
 <sql-statement>
 SELECT d1 AS european_postgres FROM TIMESTAMP_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TIMESTAMP_TBL
-    
 <sql-statement>
 SET DateStyle TO 'European,ISO';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DateStyle
-    	SET DateStyle TO 'European,ISO';
-	^
 <sql-statement>
 SHOW DateStyle;
 </sql-statement>
@@ -1007,18 +904,9 @@ SHOW DateStyle;
 <sql-statement>
 SELECT d1 AS european_iso FROM TIMESTAMP_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TIMESTAMP_TBL
-    
 <sql-statement>
 SET DateStyle TO 'European,SQL';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DateStyle
-    	SET DateStyle TO 'European,SQL';
-	^
 <sql-statement>
 SHOW DateStyle;
 </sql-statement>
@@ -1030,18 +918,9 @@ SHOW DateStyle;
 <sql-statement>
 SELECT d1 AS european_sql FROM TIMESTAMP_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.TIMESTAMP_TBL
-    
 <sql-statement>
 RESET DateStyle;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
-    	RESET DateStyle;
-	^
 <sql-statement>
 --
 -- to_timestamp()

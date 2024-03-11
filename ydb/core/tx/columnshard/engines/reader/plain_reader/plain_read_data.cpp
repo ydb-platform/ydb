@@ -33,15 +33,10 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<NOlap::TReadContext>& conte
             } else {
                 insertedPortionsBytes += (*itPortion)->BlobsBytes();
             }
-            auto start = GetReadMetadata()->BuildSortedPosition((*itPortion)->IndexKeyStart());
-            auto finish = GetReadMetadata()->BuildSortedPosition((*itPortion)->IndexKeyEnd());
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", start.DebugJson())("finish", finish.DebugJson());
-            sources.emplace_back(std::make_shared<TPortionDataSource>(sourceIdx++, *itPortion, SpecialReadContext, start, finish));
+            sources.emplace_back(std::make_shared<TPortionDataSource>(sourceIdx++, *itPortion, SpecialReadContext, (*itPortion)->IndexKeyStart(), (*itPortion)->IndexKeyEnd()));
             ++itPortion;
         } else {
-            auto start = GetReadMetadata()->BuildSortedPosition(itCommitted->GetFirstVerified());
-            auto finish = GetReadMetadata()->BuildSortedPosition(itCommitted->GetLastVerified());
-            sources.emplace_back(std::make_shared<TCommittedDataSource>(sourceIdx++, *itCommitted, SpecialReadContext, start, finish));
+            sources.emplace_back(std::make_shared<TCommittedDataSource>(sourceIdx++, *itCommitted, SpecialReadContext, itCommitted->GetFirstVerified(), itCommitted->GetLastVerified()));
             committedPortionsBytes += itCommitted->GetSize();
             ++itCommitted;
         }
@@ -52,7 +47,7 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<NOlap::TReadContext>& conte
     stats->IndexPortions = GetReadMetadata()->SelectInfo->PortionsOrderedPK.size();
     stats->IndexBatches = GetReadMetadata()->NumIndexedBlobs();
     stats->CommittedBatches = GetReadMetadata()->CommittedBlobs.size();
-    stats->SchemaColumns = (*SpecialReadContext->GetProgramInputColumns() - *SpecialReadContext->GetSpecColumns()).GetSize();
+    stats->SchemaColumns = (*SpecialReadContext->GetProgramInputColumns() - *SpecialReadContext->GetSpecColumns()).GetColumnsCount();
     stats->CommittedPortionsBytes = committedPortionsBytes;
     stats->InsertedPortionsBytes = insertedPortionsBytes;
     stats->CompactedPortionsBytes = compactedPortionsBytes;
@@ -60,10 +55,7 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<NOlap::TReadContext>& conte
 }
 
 std::vector<NKikimr::NOlap::TPartialReadResult> TPlainReadData::DoExtractReadyResults(const int64_t maxRowsInBatch) {
-    if ((GetContext().GetIsInternalRead() && ReadyResultsCount < maxRowsInBatch) && !Scanner->IsFinished()) {
-        return {};
-    }
-    auto result = TPartialReadResult::SplitResults(std::move(PartialResults), maxRowsInBatch, GetContext().GetIsInternalRead());
+    auto result = TPartialReadResult::SplitResults(std::move(PartialResults), maxRowsInBatch);
     ui32 count = 0;
     for (auto&& r: result) {
         count += r.GetRecordsCount();

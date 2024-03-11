@@ -33,8 +33,12 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TShardState = std::pair<TShardIdx, THolder<TShardInfo>>;
     TStack<TShardState> Shards;
 
-    using TSubDomainState = std::pair<TPathId, TSubDomainInfo::TPtr>;
-    TStack<TSubDomainState> SubDomains;
+    // Actually, any single subdomain should not be grabbed at more than one version
+    // per transaction/operation.
+    // And transaction/operation could not work on more than one subdomain.
+    // But just to be on the safe side (migrated paths, anyone?) we allow several
+    // subdomains to be grabbed.
+    THashMap<TPathId, TSubDomainInfo::TPtr> SubDomains;
 
     using TTxState = std::pair<TOperationId, THolder<TTxState>>;
     TStack<TTxState> TxStates;
@@ -78,7 +82,7 @@ public:
     void GrabExternalTable(TSchemeShard* ss, const TPathId& pathId);
 
     void GrabExternalDataSource(TSchemeShard* ss, const TPathId& pathId);
-    
+
     void GrabNewView(TSchemeShard* ss, const TPathId& pathId);
     void GrabView(TSchemeShard* ss, const TPathId& pathId);
 

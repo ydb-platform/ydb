@@ -17,7 +17,7 @@
 #include <library/cpp/lwtrace/shuttle.h>
 
 namespace NActors {
-    struct TExecutorThreadCtx;
+    struct TSharedExecutorThreadCtx;
     
     struct TWorkerContext {
         TWorkerId WorkerId;
@@ -35,7 +35,8 @@ namespace NActors {
         bool IsNeededToWaitNextActivation = true;
         i64 HPStart = 0;
         ui32 ExecutedEvents = 0;
-        TExecutorThreadCtx *ThreadCtx;
+        TSharedExecutorThreadCtx *SharedThread = nullptr;
+        
 
         TWorkerContext(TWorkerId workerId, TCpuId cpuId)
             : WorkerId(workerId)

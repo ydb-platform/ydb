@@ -18,6 +18,7 @@ PEERDIR(
     ydb/library/binary_json
     ydb/library/dynumber
     ydb/library/services
+    ydb/library/yql/core/arrow_kernels/request
 )
 
 IF (OS_WINDOWS)

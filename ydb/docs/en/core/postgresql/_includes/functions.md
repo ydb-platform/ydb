@@ -3866,16 +3866,16 @@ Table 9.57. General-Purpose Aggregate Functions
 #|
 ||Function|Description|Partial Mode|Example||
 ||array_agg ( anynonarray ) → anyarray|
-Collects all the input values, including nulls, into an array. (NOT SUPPORTED)|
+Collects all the input values, including nulls, into an array.|
 No|
 ```sql
-#SELECT array_agg(x) FROM (VALUES (1),(2)) a(x) → {1,2}
+SELECT array_agg(x) FROM (VALUES (1),(2)) a(x) → {1,2}
 ```||
 ||array_agg ( anyarray ) → anyarray|
-Concatenates all the input arrays into an array of one higher dimension. (The inputs must all have the same dimensionality, and cannot be empty or null.) (NOT SUPPORTED)|
+Concatenates all the input arrays into an array of one higher dimension. (The inputs must all have the same dimensionality, and cannot be empty or null.)|
 No|
 ```sql
-#SELECT array_agg(x) FROM (VALUES (Array[1,2]),(Array[3,4])) a(x) → {{1,2},{3,4}}
+SELECT array_agg(x) FROM (VALUES (Array[1,2]),(Array[3,4])) a(x) → {{1,2},{3,4}}
 ```||
 ||avg ( smallint ) → numeric  
 avg ( integer ) → numeric  

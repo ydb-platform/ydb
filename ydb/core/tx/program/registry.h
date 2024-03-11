@@ -14,13 +14,7 @@ private:
 
 public: 
     bool Parse(const TString& serialized);
-
-    NSsa::TFunctionPtr GetFunction(const size_t index) const {
-        if (index <= Functions.size()) {
-            return Functions[index];
-        }
-        return nullptr;
-    }
+    NSsa::TFunctionPtr GetFunction(const size_t index) const;
 };
 
 }

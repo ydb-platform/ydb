@@ -133,15 +133,12 @@ namespace NKikimr {
             }
 
             const auto& domainsInfo = app->Domains;
-            if (!domainsInfo || domainsInfo->Domains.size() == 0) {
+            if (!domainsInfo || !domainsInfo->Domain) {
                 return;
             }
 
-            Y_ABORT_UNLESS(domainsInfo->Domains.size() == 1);
-            for (const auto &xpair : domainsInfo->Domains) {
-                const TDomainsInfo::TDomain *domain = xpair.second.Get();
-                UseFakeTimeCast |= domain->Mediators.size() == 0;
-            }
+            const TDomainsInfo::TDomain *domain = domainsInfo->GetDomain();
+            UseFakeTimeCast |= domain->Mediators.size() == 0;
         }
 
         void Birth(ui32 node) noexcept override
@@ -670,9 +667,8 @@ namespace NKikimr {
         return prev;
     }
 
-    void SetupChannelProfiles(TAppPrepare &app, ui32 domainId, ui32 nchannels) {
-        Y_ABORT_UNLESS(app.Domains && app.Domains->Domains.contains(domainId));
-        auto& poolKinds = app.Domains->GetDomain(domainId).StoragePoolTypes;
+    void SetupChannelProfiles(TAppPrepare &app, ui32 nchannels) {
+        auto& poolKinds = app.Domains->GetDomain()->StoragePoolTypes;
         Y_ABORT_UNLESS(!poolKinds.empty());
 
         TIntrusivePtr<TChannelProfiles> channelProfiles = new TChannelProfiles;
@@ -717,7 +713,7 @@ namespace NKikimr {
         app.SetChannels(std::move(channelProfiles));
     }
 
-    void SetupBoxAndStoragePool(TTestActorRuntime &runtime, const TActorId& sender, ui32 domainId, ui32 nGroups) {
+    void SetupBoxAndStoragePool(TTestActorRuntime &runtime, const TActorId& sender, ui32 nGroups) {
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
 
@@ -747,13 +743,13 @@ namespace NKikimr {
         host.SetHostConfigId(hostConfig.GetHostConfigId());
         bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineBox()->CopyFrom(boxConfig);
 
-        for (const auto& [kind, pool] : runtime.GetAppData().DomainsInfo->Domains[domainId]->StoragePoolTypes) {
+        for (const auto& [kind, pool] : runtime.GetAppData().DomainsInfo->GetDomain()->StoragePoolTypes) {
             NKikimrBlobStorage::TDefineStoragePool storagePool(pool);
             storagePool.SetNumGroups(nGroups);
             bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool()->CopyFrom(storagePool);
         }
 
-        runtime.SendToPipe(MakeBSControllerID(domainId), sender, bsConfigureRequest.Release(), 0, GetPipeConfigWithRetries());
+        runtime.SendToPipe(MakeBSControllerID(), sender, bsConfigureRequest.Release(), 0, GetPipeConfigWithRetries());
 
         TAutoPtr<IEventHandle> handleConfigureResponse;
         auto configureResponse = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(handleConfigureResponse);
@@ -896,7 +892,6 @@ namespace NKikimr {
         if (SUPPRESS_REBOOTS || GetEnv("FAST_UT")=="1")
             return;
 
-        ui32 runCount = 0;
         ui32 eventCountBeforeReboot = 0;
         if (selectedReboot != Max<ui32>()) {
             eventCountBeforeReboot = selectedReboot;
@@ -914,7 +909,6 @@ namespace NKikimr {
                 Cout << "===> BEGIN dispatch: " << dispatchName << "\n";
 
             try {
-                ++runCount;
                 activeZone = false;
                 TTestActorRuntime::TEventFilter filter = filterFactory();
                 TPipeResetObserver pipeResetingObserver(eventCountBeforeReboot, activeZone, filter, tabletIds);
@@ -1447,8 +1441,12 @@ namespace NKikimr {
             
             const TSubDomainKey subdomainKey(ev->Get()->Record.GetDomainKey());
             NHive::TDomainInfo& domainInfo = State->Domains[subdomainKey];
-            domainInfo.ServerlessComputeResourcesMode = ev->Get()->Record.GetServerlessComputeResourcesMode();
-
+            if (ev->Get()->Record.HasServerlessComputeResourcesMode()) {
+                domainInfo.ServerlessComputeResourcesMode = ev->Get()->Record.GetServerlessComputeResourcesMode();
+            } else {
+                domainInfo.ServerlessComputeResourcesMode.Clear();
+            }
+            
             auto response = std::make_unique<TEvHive::TEvUpdateDomainReply>();
             response->Record.SetTxId(ev->Get()->Record.GetTxId());
             response->Record.SetOrigin(TabletID());

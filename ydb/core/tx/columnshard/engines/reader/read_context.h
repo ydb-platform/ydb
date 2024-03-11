@@ -57,7 +57,6 @@ class TReadContext {
 private:
     YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, StoragesManager);
     const NColumnShard::TConcreteScanCounters Counters;
-    YDB_READONLY(bool, IsInternalRead, false);
     TReadMetadataBase::TConstPtr ReadMetadata;
     NResourceBroker::NSubscribe::TTaskContext ResourcesTaskContext;
     const TActorId ScanActorId;
@@ -97,11 +96,10 @@ public:
         return ResourcesTaskContext;
     }
 
-    TReadContext(const std::shared_ptr<IStoragesManager>& storagesManager, const NColumnShard::TConcreteScanCounters& counters, const bool isInternalRead, const TReadMetadataBase::TConstPtr& readMetadata,
+    TReadContext(const std::shared_ptr<IStoragesManager>& storagesManager, const NColumnShard::TConcreteScanCounters& counters, const TReadMetadataBase::TConstPtr& readMetadata,
         const TActorId& scanActorId, const TActorId& resourceSubscribeActorId, const TActorId& readCoordinatorActorId, const NOlap::TComputeShardingPolicy& computeShardingPolicy)
         : StoragesManager(storagesManager)
         , Counters(counters)
-        , IsInternalRead(isInternalRead)
         , ReadMetadata(readMetadata)
         , ResourcesTaskContext("CS::SCAN_READ", counters.ResourcesSubscriberCounters)
         , ScanActorId(scanActorId)
@@ -165,8 +163,6 @@ public:
 
     TString DebugString(const bool verbose) const {
         TStringBuilder sb;
-        sb << "internal:" << Context->GetIsInternalRead() << ";"
-            ;
         sb << DoDebugString(verbose);
         return sb;
     }

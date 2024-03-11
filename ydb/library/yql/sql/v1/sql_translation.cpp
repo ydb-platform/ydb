@@ -53,6 +53,33 @@ TString CollectTokens(const TRule_select_stmt& selectStatement) {
     return tokenCollector.Tokens;
 }
 
+NSQLTranslation::TTranslationSettings CreateViewTranslationSettings(const NSQLTranslation::TTranslationSettings& base) {
+    NSQLTranslation::TTranslationSettings settings;
+    
+    settings.ClusterMapping = base.ClusterMapping;
+    settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
+
+    return settings;
+}
+
+TNodePtr BuildViewSelect(const TRule_select_stmt& query, TContext& ctx) {
+    const auto viewTranslationSettings = CreateViewTranslationSettings(ctx.Settings);
+    TContext viewParsingContext(viewTranslationSettings, {}, ctx.Issues);
+    TSqlSelect select(viewParsingContext, viewTranslationSettings.Mode);
+    TPosition pos;
+    auto source = select.Build(query, pos);
+    if (!source) {
+        return nullptr;
+    }
+    return BuildSelectResult(
+        pos,
+        std::move(source),
+        false,
+        false,
+        viewParsingContext.Scoped
+    );
+}
+
 }
 
 namespace NSQLTranslationV1 {
@@ -1378,11 +1405,15 @@ bool TSqlTranslation::FillFamilySettings(const TRule_family_settings& settingsNo
 
 
 
-bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCreateTableParameters& params)
+bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCreateTableParameters& params, const bool isCreateTableAs)
 {
     switch (node.Alt_case()) {
         case TRule_create_table_entry::kAltCreateTableEntry1:
         {
+            if (isCreateTableAs) {
+                Ctx.Error() << "Column types are not supported for CREATE TABLE AS";
+                return false;
+            }
             // column_schema
             auto columnSchema = ColumnSchemaImpl(node.GetAlt_create_table_entry1().GetRule_column_schema1());
             if (!columnSchema) {
@@ -1482,6 +1513,10 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
         }
         case TRule_create_table_entry::kAltCreateTableEntry4:
         {
+            if (isCreateTableAs) {
+                Ctx.Error() << "Column families are not supported for CREATE TABLE AS";
+                return false;
+            }
             // family_entry
             auto& family_entry = node.GetAlt_create_table_entry4().GetRule_family_entry1();
             TFamilyEntry family(IdEx(family_entry.GetRule_an_id2(), *this));
@@ -1499,6 +1534,19 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
             if (!CreateChangefeed(changefeed, expr, params.Changefeeds)) {
                 return false;
             }
+            break;
+        }
+        case TRule_create_table_entry::kAltCreateTableEntry6:
+        {
+            if (!isCreateTableAs) {
+                Ctx.Error() << "Column requires a type";
+                return false;
+            }
+            // an_id_schema
+            const TString name(Id(node.GetAlt_create_table_entry6().GetRule_an_id_schema1(), *this));
+            const TPosition pos(Context().Pos());
+
+            params.Columns.push_back(TColumnSchema(pos, name, nullptr, true, {}, false, nullptr));
             break;
         }
         default:
@@ -1780,15 +1828,22 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
         TTableSettings& settings, ETableType tableType, bool alter, bool reset) {
     switch (tableType) {
     case ETableType::ExternalTable:
-        return StoreExternalTableSettingsEntry(id, value, settings);
+        return StoreExternalTableSettingsEntry(id, value, settings, alter, reset);
     case ETableType::Table:
     case ETableType::TableStore:
         return StoreTableSettingsEntry(id, value, settings, alter, reset);
     }
 }
 
-bool TSqlTranslation::StoreExternalTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, TTableSettings& settings) {
+bool TSqlTranslation::StoreExternalTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value,
+        TTableSettings& settings, bool alter, bool reset) {
+    YQL_ENSURE(value || reset);
+    YQL_ENSURE(!reset || reset && alter);
     if (to_lower(id.Name) == "data_source") {
+        if (reset) {
+            Ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
         TDeferredAtom dataSource;
         if (!StoreString(*value, dataSource, Ctx, to_upper(id.Name))) {
             return false;
@@ -1799,16 +1854,27 @@ bool TSqlTranslation::StoreExternalTableSettingsEntry(const TIdentifier& id, con
         root->Add("String", Ctx.GetPrefixedPath(service, cluster, dataSource));
         settings.DataSourcePath = root;
     } else if (to_lower(id.Name) == "location") {
-        if (!StoreString(*value, settings.Location, Ctx)) {
-            Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
-            return false;
+        if (reset) {
+            settings.Location.Reset();
+        } else {
+            TNodePtr location;
+            if (!StoreString(*value, location, Ctx)) {
+                Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+                return false;
+            }
+            settings.Location.Set(location);
         }
     } else {
-        settings.ExternalSourceParameters.emplace_back(id, nullptr);
-        auto& parameter = settings.ExternalSourceParameters.back();
-        if (!StoreString(*value, parameter.second, Ctx)) {
-            Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
-            return false;
+        auto& setting = settings.ExternalSourceParameters.emplace_back();
+        if (reset) {
+            setting.Reset(id);
+        } else {
+            TNodePtr node;
+            if (!StoreString(*value, node, Ctx)) {
+                Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+                return false;
+            }
+            setting.Set(std::pair<TIdentifier, TNodePtr>{id, std::move(node)});
         }
     }
     return true;
@@ -1817,7 +1883,7 @@ bool TSqlTranslation::StoreExternalTableSettingsEntry(const TIdentifier& id, con
 bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value,
         TTableSettings& settings, bool alter, bool reset) {
     YQL_ENSURE(value || reset);
-    YQL_ENSURE(!reset || reset & alter);
+    YQL_ENSURE(!reset || reset && alter);
     if (to_lower(id.Name) == "compaction_policy") {
         if (reset) {
             Ctx.Error() << to_upper(id.Name) << " reset is not supported";
@@ -2866,7 +2932,7 @@ TNodePtr TSqlTranslation::ValueConstructor(const TRule_value_constructor& node) 
 
 TNodePtr TSqlTranslation::ListLiteral(const TRule_list_literal& node) {
     TVector<TNodePtr> values;
-    values.push_back(new TAstAtomNodeImpl(Ctx.Pos(), "AsList", TNodeFlags::Default));
+    values.push_back(new TAstAtomNodeImpl(Ctx.Pos(), "AsListMayWarn", TNodeFlags::Default));
 
     TSqlExpression sqlExpr(Ctx, Mode);
     if (node.HasBlock2() && !ExprList(sqlExpr, values, node.GetBlock2().GetRule_expr_list1())) {
@@ -4178,34 +4244,43 @@ TNodePtr TSqlTranslation::IfStatement(const TRule_if_stmt& stmt) {
 
 TNodePtr TSqlTranslation::ForStatement(const TRule_for_stmt& stmt) {
     bool isEvaluate = stmt.HasBlock1();
+    bool isParallel = stmt.HasBlock2();
     TSqlExpression expr(Ctx, Mode);
     TString itemArgName;
-    if (!NamedNodeImpl(stmt.GetRule_bind_parameter3(), itemArgName, *this)) {
+    if (!NamedNodeImpl(stmt.GetRule_bind_parameter4(), itemArgName, *this)) {
         return {};
     }
     TPosition itemArgNamePos = Ctx.Pos();
 
-    auto exprNode = expr.Build(stmt.GetRule_expr5());
+    auto exprNode = expr.Build(stmt.GetRule_expr6());
     if (!exprNode) {
         return{};
     }
 
     itemArgName = PushNamedAtom(itemArgNamePos, itemArgName);
-    auto bodyNode = DoStatement(stmt.GetRule_do_stmt6(), true, { itemArgName });
+    if (isParallel) {
+        ++Ctx.ParallelModeCount;
+    }
+
+    auto bodyNode = DoStatement(stmt.GetRule_do_stmt7(), true, { itemArgName });
+    if (isParallel) {
+        --Ctx.ParallelModeCount;
+    }
+    
     PopNamedNode(itemArgName);
     if (!bodyNode) {
         return{};
     }
 
     TNodePtr elseNode;
-    if (stmt.HasBlock7()) {
-        elseNode = DoStatement(stmt.GetBlock7().GetRule_do_stmt2(), true);
+    if (stmt.HasBlock8()) {
+        elseNode = DoStatement(stmt.GetBlock8().GetRule_do_stmt2(), true);
         if (!elseNode) {
             return{};
         }
     }
 
-    return BuildWorldForNode(Ctx.Pos(), exprNode, bodyNode, elseNode, isEvaluate);
+    return BuildWorldForNode(Ctx.Pos(), exprNode, bodyNode, elseNode, isEvaluate, isParallel);
 }
 
 bool TSqlTranslation::BindParameterClause(const TRule_bind_parameter& node, TDeferredAtom& result) {
@@ -4307,6 +4382,11 @@ bool TSqlTranslation::StoreDataSourceSettingsEntry(const TIdentifier& id, const 
     return true;
 }
 
+bool TSqlTranslation::StoreDataSourceSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result) {
+    const TIdentifier id = IdEx(entry.GetRule_an_id1(), *this);
+    return StoreDataSourceSettingsEntry(id, &entry.GetRule_table_setting_value3(), result);
+}
+
 bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settingsNode) {
     const auto& firstEntry = settingsNode.GetRule_table_settings_entry3();
     if (!StoreDataSourceSettingsEntry(IdEx(firstEntry.GetRule_an_id1(), *this), &firstEntry.GetRule_table_setting_value3(),
@@ -4327,6 +4407,42 @@ bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferre
         return false;
     }
     return true;
+}
+
+bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_external_data_source_action& alterAction) {
+    switch (alterAction.Alt_case()) {
+        case TRule_alter_external_data_source_action::kAltAlterExternalDataSourceAction1: {
+            const auto& action = alterAction.GetAlt_alter_external_data_source_action1().GetRule_alter_table_set_table_setting_uncompat1();
+            if (!StoreDataSourceSettingsEntry(IdEx(action.GetRule_an_id2(), *this), &action.GetRule_table_setting_value3(), result)) {
+                return false;
+            }
+            return true;
+        }
+        case TRule_alter_external_data_source_action::kAltAlterExternalDataSourceAction2: {
+            const auto& action = alterAction.GetAlt_alter_external_data_source_action2().GetRule_alter_table_set_table_setting_compat1();
+            if (!StoreDataSourceSettingsEntry(action.GetRule_alter_table_setting_entry3(), result)) {
+                return false;
+            }
+            for (const auto& entry : action.GetBlock4()) {
+                if (!StoreDataSourceSettingsEntry(entry.GetRule_alter_table_setting_entry2(), result)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        case TRule_alter_external_data_source_action::kAltAlterExternalDataSourceAction3: {
+            const auto& action = alterAction.GetAlt_alter_external_data_source_action3().GetRule_alter_table_reset_table_setting1();
+            const TString key = to_lower(IdEx(action.GetRule_an_id3(), *this).Name);
+            toReset.insert(key);
+            for (const auto& keys : action.GetBlock4()) {
+                const TString key = to_lower(IdEx(keys.GetRule_an_id2(), *this).Name);
+                toReset.insert(key);
+            }
+            return true;
+        }
+        case TRule_alter_external_data_source_action::ALT_NOT_SET:
+            Y_ABORT("You should change implementation according to grammar changes");
+    }
 }
 
 bool TSqlTranslation::ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result) {
@@ -4425,19 +4541,11 @@ bool TSqlTranslation::ParseViewQuery(std::map<TString, TDeferredAtom>& features,
     const TString queryText = CollectTokens(query);
     features["query_text"] = {Ctx.Pos(), queryText};
 
-    {
-        TSqlSelect select(Ctx, Mode);
-        TPosition pos;
-        auto source = select.Build(query, pos);
-        if (!source) {
-            return false;
-        }
-        features["query_ast"] = {BuildSelectResult(pos,
-                                                   std::move(source),
-                                                   false,
-                                                   false,
-                                                   Ctx.Scoped), Ctx};
+    const auto viewSelect = BuildViewSelect(query, Ctx);
+    if (!viewSelect) {
+        return false;
     }
+    features["query_ast"] = {viewSelect, Ctx};
 
     return true;
 }

@@ -432,7 +432,7 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
 
     Y_UNIT_TEST(CheckStats) {
         const size_t size = 4;
-        const size_t msgCount = 1e4;
+        const size_t msgCount = 5e3;
         TBasicExecutorPool* executorPool = new TBasicExecutorPool(0, size, 50);
 
         auto setup = GetActorSystemSetup(executorPool);
@@ -441,17 +441,23 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
 
         auto begin = TInstant::Now();
 
-        auto actor = new TTestSenderActor();
-        auto actorId = actorSystem.Register(actor);
-        actor->Start(actor->SelfId(), msgCount);
-        actorSystem.Send(actorId, new TEvMsg());
+        auto load = [&]() {
+            auto actor = new TTestSenderActor();
+            auto actorId = actorSystem.Register(actor);
+            actor->Start(actor->SelfId(), msgCount);
+            actorSystem.Send(actorId, new TEvMsg());
 
-        while (actor->GetCounter()) {
-            auto now = TInstant::Now();
-            UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Counter is " << actor->GetCounter());
+            while (actor->GetCounter()) {
+                auto now = TInstant::Now();
+                UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Counter is " << actor->GetCounter());
 
-            Sleep(TDuration::MilliSeconds(1));
-        }
+                Sleep(TDuration::MilliSeconds(1));
+            }
+        };
+
+        load();
+        Sleep(TDuration::MilliSeconds(10));
+        load();
 
         TVector<TExecutorThreadStats> stats;
         TExecutorPoolStats poolStats;
@@ -461,8 +467,8 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
             stats[0].Aggregate(stats[idx]);
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].SentEvents, msgCount - 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].ReceivedEvents, msgCount);
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].SentEvents, 2 * msgCount - 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].ReceivedEvents, 2 * msgCount);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].PreemptedEvents, 0);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].NonDeliveredEvents, 0);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].EmptyMailboxActivation, 0);
@@ -470,18 +476,18 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         UNIT_ASSERT(stats[0].ElapsedTicks > 0);
         UNIT_ASSERT(stats[0].ParkedTicks > 0);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].BlockedTicks, 0);
-        UNIT_ASSERT(stats[0].ActivationTimeHistogram.TotalSamples >= msgCount / TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].EventDeliveryTimeHistogram.TotalSamples, msgCount);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].EventProcessingCountHistogram.TotalSamples, msgCount);
+        UNIT_ASSERT(stats[0].ActivationTimeHistogram.TotalSamples >= 2 * msgCount / TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX);
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].EventDeliveryTimeHistogram.TotalSamples, 2 * msgCount);
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].EventProcessingCountHistogram.TotalSamples, 2 * msgCount);
         UNIT_ASSERT(stats[0].EventProcessingTimeHistogram.TotalSamples > 0);
         UNIT_ASSERT(stats[0].ElapsedTicksByActivity[NActors::TActorTypeOperator::GetOtherActivityIndex()] > 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].ReceivedEventsByActivity[NActors::TActorTypeOperator::GetOtherActivityIndex()], msgCount);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].ActorsAliveByActivity[NActors::TActorTypeOperator::GetOtherActivityIndex()], 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].ReceivedEventsByActivity[NActors::TActorTypeOperator::GetOtherActivityIndex()], 2 * msgCount);
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].ActorsAliveByActivity[NActors::TActorTypeOperator::GetOtherActivityIndex()], 2);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].ScheduledEventsByActivity[NActors::TActorTypeOperator::GetOtherActivityIndex()], 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolActorRegistrations, 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolActorRegistrations, 2);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolDestroyedActors, 0);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolAllocatedMailboxes, 4095); // one line
-        UNIT_ASSERT(stats[0].MailboxPushedOutByTime + stats[0].MailboxPushedOutByEventCount >= msgCount / TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX);
+        UNIT_ASSERT(stats[0].MailboxPushedOutByTime + stats[0].MailboxPushedOutByEventCount >= 2 * msgCount / TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].MailboxPushedOutBySoftPreemption, 0);
     }
 }

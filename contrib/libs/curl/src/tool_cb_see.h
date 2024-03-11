@@ -7,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -25,7 +25,7 @@
  ***************************************************************************/
 #include "tool_setup.h"
 
-#if defined(WIN32) && !defined(HAVE_FTRUNCATE)
+#if defined(_WIN32) && !defined(HAVE_FTRUNCATE)
 
 int tool_ftruncate64(int fd, curl_off_t where);
 
@@ -35,7 +35,7 @@ int tool_ftruncate64(int fd, curl_off_t where);
 #define HAVE_FTRUNCATE 1
 #define USE_TOOL_FTRUNCATE 1
 
-#endif /* WIN32  && ! HAVE_FTRUNCATE */
+#endif /* _WIN32 && ! HAVE_FTRUNCATE */
 
 /*
 ** callback for CURLOPT_SEEKFUNCTION

@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -22,6 +22,11 @@
  *
  ***************************************************************************/
 #include "curl_setup.h"
+
+#if defined(USE_OPENSSL) || \
+  defined(USE_WOLFSSL) || \
+  (defined(USE_NGTCP2) && defined(USE_NGHTTP3)) || \
+  defined(USE_QUICHE)
 
 #include "keylog.h"
 #include <curl/curl.h>
@@ -55,7 +60,7 @@ Curl_tls_keylog_open(void)
     if(keylog_file_name) {
       keylog_file_fp = fopen(keylog_file_name, FOPEN_APPENDTEXT);
       if(keylog_file_fp) {
-#ifdef WIN32
+#ifdef _WIN32
         if(setvbuf(keylog_file_fp, NULL, _IONBF, 0))
 #else
         if(setvbuf(keylog_file_fp, NULL, _IOLBF, 4096))
@@ -157,3 +162,5 @@ Curl_tls_keylog_write(const char *label,
   fputs(line, keylog_file_fp);
   return true;
 }
+
+#endif  /* TLS or QUIC backend */

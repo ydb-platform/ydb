@@ -1,13 +1,16 @@
 #pragma once
 #include "settings.h"
+#include <ydb/core/protos/counters_columnshard.pb.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/action.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
-#include <ydb/core/tx/columnshard/engines/columns_table.h>
+#include <ydb/core/tx/columnshard/data_locks/locks/abstract.h>
+#include <ydb/core/tx/columnshard/data_locks/locks/composite.h>
+#include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/portions/with_blobs.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
-#include <ydb/core/protos/counters_columnshard.pb.h>
-#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
@@ -36,13 +39,10 @@ class TPortionInfoWithBlobs;
 struct TPortionEvictionFeatures {
     const TString TargetTierName;
     const ui64 PathId;      // portion path id for cold-storage-key construct
-    bool DataChanges = true;
-    const std::shared_ptr<IBlobsStorageOperator> StorageOperator;
 
-    TPortionEvictionFeatures(const TString& targetTierName, const ui64 pathId, const std::shared_ptr<IBlobsStorageOperator>& storageOperator)
+    TPortionEvictionFeatures(const TString& targetTierName, const ui64 pathId)
         : TargetTierName(targetTierName)
         , PathId(pathId)
-        , StorageOperator(storageOperator)
     {}
 };
 
@@ -72,10 +72,10 @@ public:
 
 class TWriteIndexContext: TNonCopyable {
 public:
-    NTabletFlatExecutor::TTransactionContext& Txc;
-    std::shared_ptr<NColumnShard::TBlobManagerDb> BlobManagerDb;
+    NTable::TDatabase* DB;
     IDbWrapper& DBWrapper;
-    TWriteIndexContext(NTabletFlatExecutor::TTransactionContext& txc, IDbWrapper& dbWrapper);
+    TColumnEngineForLogs& EngineLogs;
+    TWriteIndexContext(NTable::TDatabase* db, IDbWrapper& dbWrapper, TColumnEngineForLogs& engineLogs);
 };
 
 class TChangesFinishContext {
@@ -100,25 +100,16 @@ public:
     const ui64 BytesWritten;
     const TDuration Duration;
     NColumnShard::TBackgroundActivity& TriggerActivity;
+    TColumnEngineForLogs& EngineLogs;
     TWriteIndexCompleteContext(const TActorContext& actorContext, const ui32 blobsWritten, const ui64 bytesWritten
-        , const TDuration d, NColumnShard::TBackgroundActivity& triggerActivity)
+        , const TDuration d, NColumnShard::TBackgroundActivity& triggerActivity, TColumnEngineForLogs& engineLogs)
         : ActorContext(actorContext)
         , BlobsWritten(blobsWritten)
         , BytesWritten(bytesWritten)
         , Duration(d)
         , TriggerActivity(triggerActivity)
+        , EngineLogs(engineLogs)
     {
-
-    }
-};
-
-class TApplyChangesContext: TNonCopyable {
-public:
-    IDbWrapper& DB;
-    const TSnapshot Snapshot;
-    TApplyChangesContext(IDbWrapper& db, const TSnapshot& snapshot)
-        : DB(db)
-        , Snapshot(snapshot) {
 
     }
 };
@@ -144,7 +135,6 @@ public:
         Started,
         Constructed,
         Compiled,
-        Applied,
         Written,
         Finished,
         Aborted
@@ -154,10 +144,9 @@ private:
 protected:
     virtual void DoDebugString(TStringOutput& out) const = 0;
     virtual void DoCompile(TFinalizationContext& context) = 0;
-    virtual void DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) = 0;
-    virtual void DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) = 0;
+    virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) = 0;
+    virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) = 0;
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) = 0;
-    virtual bool DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) = 0;
     virtual bool NeedConstruction() const {
         return true;
     }
@@ -173,7 +162,20 @@ protected:
 
     const TString TaskIdentifier = TGUID::Create().AsGuidString();
     virtual ui64 DoCalcMemoryForUsage() const = 0;
+    virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const = 0;
+    std::shared_ptr<NDataLocks::ILock> BuildDataLock() const {
+        return DoBuildDataLock();
+    }
+
 public:
+    class IMemoryPredictor {
+    public:
+        virtual ui64 AddPortion(const TPortionInfo& portionInfo) = 0;
+        virtual ~IMemoryPredictor() = default;
+    };
+
+    void OnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context);
+
     ui64 CalcMemoryForUsage() const {
         return DoCalcMemoryForUsage();
     }
@@ -203,30 +205,22 @@ public:
         return Stage == EStage::Aborted;
     }
 
-    virtual THashSet<TPortionAddress> GetTouchedPortions() const = 0;
-
     void StartEmergency();
     void AbortEmergency();
 
     void Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context);
     void Start(NColumnShard::TColumnShard& self);
-    bool ApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context);
 
     virtual ui32 GetWritePortionsCount() const = 0;
     virtual TPortionInfoWithBlobs* GetWritePortionInfo(const ui32 index) = 0;
     virtual bool NeedWritePortion(const ui32 index) const = 0;
 
-    void WriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context);
-    void WriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context);
+    void WriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context);
+    void WriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context);
 
     void Compile(TFinalizationContext& context) noexcept;
 
-    void SetBlobs(THashMap<TBlobRange, TString>&& blobs) {
-        Y_ABORT_UNLESS(!blobs.empty());
-        Blobs = std::move(blobs);
-    }
-
-    THashMap<TBlobRange, TString> Blobs;
+    NBlobOperations::NRead::TCompositeReadBlobs Blobs;
     std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
 
     std::vector<std::shared_ptr<IBlobsReadingAction>> GetReadingActions() const {
@@ -238,11 +232,7 @@ public:
     TString DebugString() const;
 
     ui64 TotalBlobsSize() const {
-        ui64 size = 0;
-        for (const auto& [_, blob] : Blobs) {
-            size += blob.size();
-        }
-        return size;
+        return Blobs.GetTotalBlobsSize();
     }
 
 };

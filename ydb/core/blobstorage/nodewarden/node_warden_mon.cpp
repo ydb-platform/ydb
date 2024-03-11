@@ -103,6 +103,13 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
             }
         }
 
+        TAG(TH3) { out << "StorageConfig"; }
+        DIV() {
+            TString s;
+            NProtoBuf::TextFormat::PrintToString(StorageConfig, &s);
+            out << s;
+        }
+
         RenderLocalDrives(out);
 
         TAG(TH3) { out << "PDisks"; }

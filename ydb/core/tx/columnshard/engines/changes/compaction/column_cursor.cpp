@@ -63,7 +63,7 @@ bool TPortionColumnCursor::NextChunk() {
         ChunkRecordIndexStartPosition += CurrentChunkRecordsCount;
         CurrentBlobChunk = BlobChunks[ChunkIdx];
         CurrentColumnChunk = ColumnChunks[ChunkIdx];
-        CurrentChunkRecordsCount = CurrentBlobChunk->GetRecordsCount();
+        CurrentChunkRecordsCount = CurrentBlobChunk->GetRecordsCountVerified();
         return true;
     }
 }

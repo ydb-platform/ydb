@@ -6,8 +6,7 @@
 
 package bytealg
 
-import _ "unsafe"
-// For go:linkname
+import _ "unsafe" // For go:linkname
 
 //go:noescape
 func Compare(a, b []byte) int

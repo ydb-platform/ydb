@@ -53,8 +53,15 @@ from uuid import UUID
 import attr
 
 from hypothesis._settings import note_deprecation
-from hypothesis.control import cleanup, current_build_context, note
+from hypothesis.control import (
+    RandomSeeder,
+    cleanup,
+    current_build_context,
+    deprecate_random_in_strategy,
+    note,
+)
 from hypothesis.errors import (
+    HypothesisSideeffectWarning,
     HypothesisWarning,
     InvalidArgument,
     ResolutionFailed,
@@ -69,6 +76,7 @@ from hypothesis.internal.charmap import (
 from hypothesis.internal.compat import (
     Concatenate,
     ParamSpec,
+    bit_count,
     ceil,
     floor,
     get_type_hints,
@@ -109,7 +117,7 @@ from hypothesis.strategies._internal.collections import (
 from hypothesis.strategies._internal.deferred import DeferredStrategy
 from hypothesis.strategies._internal.functions import FunctionStrategy
 from hypothesis.strategies._internal.lazy import LazyStrategy, unwrap_strategies
-from hypothesis.strategies._internal.misc import just, none, nothing
+from hypothesis.strategies._internal.misc import BooleansStrategy, just, none, nothing
 from hypothesis.strategies._internal.numbers import (
     IntegersStrategy,
     Real,
@@ -150,14 +158,14 @@ else:
 
 
 @cacheable
-@defines_strategy()
+@defines_strategy(force_reusable_values=True)
 def booleans() -> SearchStrategy[bool]:
     """Returns a strategy which generates instances of :class:`python:bool`.
 
     Examples from this strategy will shrink towards ``False`` (i.e.
     shrinking will replace ``True`` with ``False`` where possible).
     """
-    return SampledFromStrategy([False, True], repr_="booleans()")
+    return BooleansStrategy()
 
 
 @overload
@@ -201,6 +209,48 @@ def sampled_from(
     that behaviour, use ``sampled_from(seq) if seq else nothing()``.
     """
     values = check_sample(elements, "sampled_from")
+    try:
+        if isinstance(elements, type) and issubclass(elements, enum.Enum):
+            repr_ = f"sampled_from({elements.__module__}.{elements.__name__})"
+        else:
+            repr_ = f"sampled_from({elements!r})"
+    except Exception:  # pragma: no cover
+        repr_ = None
+    if isclass(elements) and issubclass(elements, enum.Flag):
+        # Combinations of enum.Flag members (including empty) are also members.  We generate these
+        # dynamically, because static allocation takes O(2^n) memory.  LazyStrategy is used for the
+        # ease of force_repr.
+        # Add all named values, both flag bits (== list(elements)) and aliases. The aliases are
+        # necessary for full coverage for flags that would fail enum.NAMED_FLAGS check, and they
+        # are also nice values to shrink to.
+        flags = sorted(
+            set(elements.__members__.values()),
+            key=lambda v: (bit_count(v.value), v.value),
+        )
+        # Finally, try to construct the empty state if it is not named. It's placed at the
+        # end so that we shrink to named values.
+        flags_with_empty = flags
+        if not flags or flags[0].value != 0:
+            try:
+                flags_with_empty = [*flags, elements(0)]
+            except TypeError:  # pragma: no cover
+                # Happens on some python versions (at least 3.12) when there are no named values
+                pass
+        inner = [
+            # Consider one or no named flags set, with shrink-to-named-flag behaviour.
+            # Special cases (length zero or one) are handled by the inner sampled_from.
+            sampled_from(flags_with_empty),
+        ]
+        if len(flags) > 1:
+            inner += [
+                # Uniform distribution over number of named flags or combinations set. The overlap
+                # at r=1 is intentional, it may lead to oversampling but gives consistent shrinking
+                # behaviour.
+                integers(min_value=1, max_value=len(flags))
+                .flatmap(lambda r: sets(sampled_from(flags), min_size=r, max_size=r))
+                .map(lambda s: elements(reduce(operator.or_, s))),
+            ]
+        return LazyStrategy(one_of, args=inner, kwargs={}, force_repr=repr_)
     if not values:
         if (
             isinstance(elements, type)
@@ -216,21 +266,6 @@ def sampled_from(
         raise InvalidArgument("Cannot sample from a length-zero sequence.")
     if len(values) == 1:
         return just(values[0])
-    try:
-        if isinstance(elements, type) and issubclass(elements, enum.Enum):
-            repr_ = f"sampled_from({elements.__module__}.{elements.__name__})"
-        else:
-            repr_ = f"sampled_from({elements!r})"
-    except Exception:  # pragma: no cover
-        repr_ = None
-    if isclass(elements) and issubclass(elements, enum.Flag):
-        # Combinations of enum.Flag members are also members.  We generate
-        # these dynamically, because static allocation takes O(2^n) memory.
-        # LazyStrategy is used for the ease of force_repr.
-        inner = sets(sampled_from(list(values)), min_size=1).map(
-            lambda s: reduce(operator.or_, s)
-        )
-        return LazyStrategy(lambda: inner, args=[], kwargs={}, force_repr=repr_)
     return SampledFromStrategy(values, repr_)
 
 
@@ -969,14 +1004,6 @@ def randoms(
     )
 
 
-class RandomSeeder:
-    def __init__(self, seed):
-        self.seed = seed
-
-    def __repr__(self):
-        return f"RandomSeeder({self.seed!r})"
-
-
 class RandomModule(SearchStrategy):
     def do_draw(self, data):
         # It would be unsafe to do run this method more than once per test case,
@@ -1438,7 +1465,7 @@ def _from_type(thing: Type[Ex]) -> SearchStrategy[Ex]:
                 kwargs[k] = from_type_guarded(hints[k])
                 if p.default is not Parameter.empty and kwargs[k] is not ...:
                     kwargs[k] = just(p.default) | kwargs[k]
-        if params and not kwargs:
+        if params and not kwargs and not issubclass(thing, BaseException):
             from_type_repr = repr_call(from_type, (thing,), {})
             builds_repr = repr_call(builds, (thing,), {})
             warnings.warn(
@@ -1806,9 +1833,11 @@ def _composite(f):
         params = params[1:]
     newsig = sig.replace(
         parameters=params,
-        return_annotation=SearchStrategy
-        if sig.return_annotation is sig.empty
-        else SearchStrategy[sig.return_annotation],
+        return_annotation=(
+            SearchStrategy
+            if sig.return_annotation is sig.empty
+            else SearchStrategy[sig.return_annotation]
+        ),
     )
 
     @defines_strategy()
@@ -2075,6 +2104,10 @@ def runner(*, default: Any = not_set) -> SearchStrategy[Any]:
     The exact meaning depends on the entry point, but it will usually be the
     associated 'self' value for it.
 
+    If you are using this in a rule for stateful testing, this strategy
+    will return the instance of the :class:`~hypothesis.stateful.RuleBasedStateMachine`
+    that the rule is running for.
+
     If there is no current test runner and a default is provided, return
     that default. If no default is provided, raises InvalidArgument.
 
@@ -2095,15 +2128,18 @@ class DataObject:
         self.count = 0
         self.conjecture_data = data
 
+    __signature__ = Signature()  # hide internals from Sphinx introspection
+
     def __repr__(self):
         return "data(...)"
 
     def draw(self, strategy: SearchStrategy[Ex], label: Any = None) -> Ex:
         check_strategy(strategy, "strategy")
-        result = self.conjecture_data.draw(strategy)
         self.count += 1
         printer = RepresentationPrinter(context=current_build_context())
         desc = f"Draw {self.count}{'' if label is None else f' ({label})'}: "
+        with deprecate_random_in_strategy("{}from {!r}", desc, strategy):
+            result = self.conjecture_data.draw(strategy, observe_as=f"generate:{desc}")
         if TESTCASE_CALLBACKS:
             self.conjecture_data._observability_args[desc] = to_jsonable(result)
 
@@ -2153,7 +2189,7 @@ def data() -> SearchStrategy[DataObject]:
     complete information.
 
     Examples from this strategy do not shrink (because there is only one),
-    but the result of calls to each draw() call shrink as they normally would.
+    but the result of calls to each ``data.draw()`` call shrink as they normally would.
     """
     return DataStrategy()
 
@@ -2196,14 +2232,25 @@ def register_type_strategy(
             f"{custom_type=} is not allowed to be registered, "
             f"because there is no such thing as a runtime instance of {custom_type!r}"
         )
-    elif not (isinstance(strategy, SearchStrategy) or callable(strategy)):
+    if not (isinstance(strategy, SearchStrategy) or callable(strategy)):
         raise InvalidArgument(
             f"{strategy=} must be a SearchStrategy, or a function that takes "
             "a generic type and returns a specific SearchStrategy"
         )
-    elif isinstance(strategy, SearchStrategy) and strategy.is_empty:
-        raise InvalidArgument(f"{strategy=} must not be empty")
-    elif types.has_type_arguments(custom_type):
+    if isinstance(strategy, SearchStrategy):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", HypothesisSideeffectWarning)
+
+            # Calling is_empty forces materialization of lazy strategies. If this is done at import
+            # time, lazy strategies will warn about it; here, we force that warning to raise to
+            # avoid the materialization. Ideally, we'd just check if the strategy is lazy, but the
+            # lazy strategy may be wrapped underneath another strategy so that's complicated.
+            try:
+                if strategy.is_empty:
+                    raise InvalidArgument(f"{strategy=} must not be empty")
+            except HypothesisSideeffectWarning:  # pragma: no cover
+                pass
+    if types.has_type_arguments(custom_type):
         raise InvalidArgument(
             f"Cannot register generic type {custom_type!r}, because it has type "
             "arguments which would not be handled.  Instead, register a function "

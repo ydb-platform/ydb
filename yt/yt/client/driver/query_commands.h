@@ -123,4 +123,18 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////
 
+class TGetQueryTrackerInfoCommand
+    : public TTypedCommand<NApi::TGetQueryTrackerInfoOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetQueryTrackerInfoCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NDriver

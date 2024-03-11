@@ -200,6 +200,8 @@ TFuture<TExportToS3Response> TExportClient::ExportToS3(const TExportToS3Settings
         request.mutable_settings()->set_compression(*settings.Compression_);
     }
 
+    request.mutable_settings()->set_disable_virtual_addressing(!settings.UseVirtualAddressing_);
+
     return Impl_->ExportToS3(std::move(request), settings);
 }
 

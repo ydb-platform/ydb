@@ -1,11 +1,11 @@
 /***************************************************************************
  *                                  _   _ ____  _
- *  Project                     ___| | | |  _ | |
+ *  Project                     ___| | | |  _ \| |
  *                             / __| | | | |_) | |
  *                            | (__| |_| |  _ <| |___
- *                             ___|___/|_| ______|
+ *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -42,6 +42,7 @@ struct curl_easyoption Curl_easyopts[] = {
   {"CAINFO", CURLOPT_CAINFO, CURLOT_STRING, 0},
   {"CAINFO_BLOB", CURLOPT_CAINFO_BLOB, CURLOT_BLOB, 0},
   {"CAPATH", CURLOPT_CAPATH, CURLOT_STRING, 0},
+  {"CA_CACHE_TIMEOUT", CURLOPT_CA_CACHE_TIMEOUT, CURLOT_LONG, 0},
   {"CERTINFO", CURLOPT_CERTINFO, CURLOT_LONG, 0},
   {"CHUNK_BGN_FUNCTION", CURLOPT_CHUNK_BGN_FUNCTION, CURLOT_FUNCTION, 0},
   {"CHUNK_DATA", CURLOPT_CHUNK_DATA, CURLOT_CBPTR, 0},
@@ -119,6 +120,7 @@ struct curl_easyoption Curl_easyopts[] = {
   {"HAPPY_EYEBALLS_TIMEOUT_MS", CURLOPT_HAPPY_EYEBALLS_TIMEOUT_MS,
    CURLOT_LONG, 0},
   {"HAPROXYPROTOCOL", CURLOPT_HAPROXYPROTOCOL, CURLOT_LONG, 0},
+  {"HAPROXY_CLIENT_IP", CURLOPT_HAPROXY_CLIENT_IP, CURLOT_STRING, 0},
   {"HEADER", CURLOPT_HEADER, CURLOT_LONG, 0},
   {"HEADERDATA", CURLOPT_HEADERDATA, CURLOT_CBPTR, 0},
   {"HEADERFUNCTION", CURLOPT_HEADERFUNCTION, CURLOT_FUNCTION, 0},
@@ -163,7 +165,9 @@ struct curl_easyoption Curl_easyopts[] = {
   {"MAIL_AUTH", CURLOPT_MAIL_AUTH, CURLOT_STRING, 0},
   {"MAIL_FROM", CURLOPT_MAIL_FROM, CURLOT_STRING, 0},
   {"MAIL_RCPT", CURLOPT_MAIL_RCPT, CURLOT_SLIST, 0},
-  {"MAIL_RCPT_ALLLOWFAILS", CURLOPT_MAIL_RCPT_ALLLOWFAILS, CURLOT_LONG, 0},
+  {"MAIL_RCPT_ALLLOWFAILS", CURLOPT_MAIL_RCPT_ALLOWFAILS,
+   CURLOT_LONG, CURLOT_FLAG_ALIAS},
+  {"MAIL_RCPT_ALLOWFAILS", CURLOPT_MAIL_RCPT_ALLOWFAILS, CURLOT_LONG, 0},
   {"MAXAGE_CONN", CURLOPT_MAXAGE_CONN, CURLOT_LONG, 0},
   {"MAXCONNECTS", CURLOPT_MAXCONNECTS, CURLOT_LONG, 0},
   {"MAXFILESIZE", CURLOPT_MAXFILESIZE, CURLOT_LONG, 0},
@@ -241,6 +245,7 @@ struct curl_easyoption Curl_easyopts[] = {
    CURLOT_STRING, 0},
   {"PROXY_TRANSFER_MODE", CURLOPT_PROXY_TRANSFER_MODE, CURLOT_LONG, 0},
   {"PUT", CURLOPT_PUT, CURLOT_LONG, 0},
+  {"QUICK_EXIT", CURLOPT_QUICK_EXIT, CURLOT_LONG, 0},
   {"QUOTE", CURLOPT_QUOTE, CURLOT_SLIST, 0},
   {"RANDOM_FILE", CURLOPT_RANDOM_FILE, CURLOT_STRING, 0},
   {"RANGE", CURLOPT_RANGE, CURLOT_STRING, 0},
@@ -368,6 +373,6 @@ struct curl_easyoption Curl_easyopts[] = {
  */
 int Curl_easyopts_check(void)
 {
-  return ((CURLOPT_LASTENTRY%10000) != (320 + 1));
+  return ((CURLOPT_LASTENTRY%10000) != (323 + 1));
 }
 #endif

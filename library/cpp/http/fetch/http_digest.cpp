@@ -47,21 +47,19 @@ const char* httpDigestHandler::getHeaderInstruction() const {
 }
 
 /************************************************************/
-void httpDigestHandler::generateCNonce(char* outCNonce) {
-    if (!*outCNonce)
-        sprintf(outCNonce, "%ld", (long)time(nullptr));
-}
-
-/************************************************************/
-inline void addMD5(MD5& ctx, const char* value) {
+Y_FORCE_INLINE void addMD5(MD5& ctx, const char* value) {
     ctx.Update((const unsigned char*)(value), strlen(value));
 }
 
-inline void addMD5(MD5& ctx, const char* value, int len) {
+Y_FORCE_INLINE void addMD5(MD5& ctx, const char* value, int len) {
     ctx.Update((const unsigned char*)(value), len);
 }
 
-inline void addMD5Sep(MD5& ctx) {
+Y_FORCE_INLINE void addMD5(MD5& ctx, std::string_view str) {
+    ctx.Update(str);
+}
+
+Y_FORCE_INLINE void addMD5Sep(MD5& ctx) {
     addMD5(ctx, ":", 1);
 }
 
@@ -69,7 +67,7 @@ inline void addMD5Sep(MD5& ctx) {
 /* calculate H(A1) as per spec */
 void httpDigestHandler::digestCalcHA1(const THttpAuthHeader& hd,
                                       char* outSessionKey,
-                                      char* outCNonce) {
+                                      const std::string& outCNonce) {
     MD5 ctx;
     ctx.Init();
     addMD5(ctx, User_);
@@ -81,8 +79,6 @@ void httpDigestHandler::digestCalcHA1(const THttpAuthHeader& hd,
     if (hd.algorithm == 1) { //MD5-sess
         unsigned char digest[16];
         ctx.Final(digest);
-
-        generateCNonce(outCNonce);
 
         ctx.Init();
         ctx.Update(digest, 16);
@@ -103,7 +99,7 @@ void httpDigestHandler::digestCalcResponse(const THttpAuthHeader& hd,
                                            const char* method,
                                            const char* nonceCount,
                                            char* outResponse,
-                                           char* outCNonce) {
+                                           const std::string& outCNonce) {
     char HA1[33];
     digestCalcHA1(hd, HA1, outCNonce);
 
@@ -123,9 +119,6 @@ void httpDigestHandler::digestCalcResponse(const THttpAuthHeader& hd,
     addMD5Sep(ctx);
 
     if (hd.qop_auth) {
-        if (!*outCNonce)
-            generateCNonce(outCNonce);
-
         addMD5(ctx, nonceCount, 8);
         addMD5Sep(ctx);
         addMD5(ctx, outCNonce);
@@ -141,7 +134,7 @@ void httpDigestHandler::digestCalcResponse(const THttpAuthHeader& hd,
 bool httpDigestHandler::processHeader(const THttpAuthHeader* header,
                                       const char* path,
                                       const char* method,
-                                      const char* cnonce) {
+                                      const char* cnonceIn) {
     if (!User_ || !header || !header->use_auth || !header->realm || !header->nonce)
         return false;
 
@@ -161,16 +154,12 @@ bool httpDigestHandler::processHeader(const THttpAuthHeader* header,
     NonceCount_++;
 
     char nonceCount[20];
-    sprintf(nonceCount, "%08d", NonceCount_);
+    snprintf(nonceCount, sizeof(nonceCount), "%08d", NonceCount_);
 
-    char CNonce[50];
-    if (cnonce)
-        strcpy(CNonce, cnonce);
-    else
-        CNonce[0] = 0;
+    std::string cNonce = cnonceIn ? std::string(cnonceIn) : std::to_string(time(nullptr));
 
     char response[33];
-    digestCalcResponse(*header, path, method, nonceCount, response, CNonce);
+    digestCalcResponse(*header, path, method, nonceCount, response, cNonce);
 
     //digest-response  = 1#( username | realm | nonce | digest-uri
     //                   | response | [ algorithm ] | [cnonce] |
@@ -189,8 +178,8 @@ bool httpDigestHandler::processHeader(const THttpAuthHeader* header,
     if (header->qop_auth)
         out << ", qop=auth";
     out << ", nc=" << nonceCount;
-    if (CNonce[0])
-        out << ", cnonce=\"" << CNonce << "\"";
+    if (!cNonce.empty())
+        out << ", cnonce=\"" << cNonce << "\"";
     out << ", response=\"" << response << "\"";
     if (header->opaque)
         out << ", opaque=\"" << header->opaque << "\"";

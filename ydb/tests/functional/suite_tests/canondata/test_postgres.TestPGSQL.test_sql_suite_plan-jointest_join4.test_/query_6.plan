@@ -41,12 +41,13 @@
                                                 "Name": "Limit"
                                             },
                                             {
+                                                "Condition": "zt3.f3 = f1",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 28
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 26
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
@@ -177,12 +178,13 @@
                                         "Node Type": "LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
+                                                "Condition": "f2 = f3",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 14
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 12
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"

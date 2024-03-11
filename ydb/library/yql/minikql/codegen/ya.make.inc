@@ -47,8 +47,6 @@ COPY_FILE(
         codegen_llvm_deps.h
 )
 
-NO_COMPILER_WARNINGS()
-
 IF (NOT WINDOWS)
     PEERDIR(
         contrib/libs/cxxsupp/builtins

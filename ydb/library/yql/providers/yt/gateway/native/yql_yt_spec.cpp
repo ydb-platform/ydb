@@ -191,6 +191,14 @@ void FillSpec(NYT::TNode& spec,
         spec["annotations"] = *val;
     }
 
+    if (auto val = settings->StartedBy.Get(cluster)) {
+        spec["started_by"] = *val;
+    }
+
+    if (auto val = settings->Description.Get(cluster)) {
+        spec["description"] = *val;
+    }
+
     if (!opProps.HasFlags(EYtOpProp::IntermediateData)) {
         if (auto val = settings->MaxJobCount.Get(cluster)) {
             spec["max_job_count"] = static_cast<i64>(*val);
@@ -463,6 +471,14 @@ void FillSpec(NYT::TNode& spec,
         if (auto val = settings->_ForceJobSizeAdjuster.Get(cluster)) {
             spec["force_job_size_adjuster"] = *val;
         }
+    }
+
+    if (opProps.HasFlags(EYtOpProp::WithMapper)) {
+        spec["mapper"]["environment"]["TMPDIR"] = ".";
+    }
+
+    if (opProps.HasFlags(EYtOpProp::WithReducer)) {
+        spec["reducer"]["environment"]["TMPDIR"] = ".";
     }
 }
 

@@ -4,15 +4,26 @@
 
 #include <ydb/core/change_exchange/change_record.h>
 #include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
+
+#include <util/generic/maybe.h>
+
+namespace NKikimrChangeExchange {
+    class TChangeRecord;
+}
 
 namespace NKikimr::NDataShard {
 
 class TChangeRecordBuilder;
 
-class TChangeRecord: public NChangeExchange::TChangeRecord {
+class TChangeRecord: public NChangeExchange::TChangeRecordBase {
     friend class TChangeRecordBuilder;
 
 public:
+    ui64 GetGroup() const override { return Group; }
+    ui64 GetStep() const override { return Step; }
+    ui64 GetTxId() const override { return TxId; }
+    EKind GetKind() const override { return Kind; }
     ui64 GetLockId() const { return LockId; }
     ui64 GetLockOffset() const { return LockOffset; }
     const TPathId& GetPathId() const { return PathId; }
@@ -23,12 +34,19 @@ public:
 
     void Serialize(NKikimrChangeExchange::TChangeRecord& record) const;
 
+    TConstArrayRef<TCell> GetKey() const;
     TString GetPartitionKey() const;
-    bool IsBroadcast() const;
+    i64 GetSeqNo() const;
+    TInstant GetApproximateCreationDateTime() const;
+    bool IsBroadcast() const override;
 
-    void Out(IOutputStream& out) const;
+    void Out(IOutputStream& out) const override;
 
 private:
+    ui64 Group = 0;
+    ui64 Step = 0;
+    ui64 TxId = 0;
+    EKind Kind;
     ui64 LockId = 0;
     ui64 LockOffset = 0;
     TPathId PathId;
@@ -37,39 +55,63 @@ private:
     TPathId TableId;
     TUserTable::TCPtr Schema;
 
+    mutable TMaybe<TOwnedCellVec> Key;
+    mutable TMaybe<TString> PartitionKey;
+
 }; // TChangeRecord
 
 class TChangeRecordBuilder: public NChangeExchange::TChangeRecordBuilder<TChangeRecord, TChangeRecordBuilder> {
 public:
-    using NChangeExchange::TChangeRecordBuilder<TChangeRecord, TChangeRecordBuilder>::TChangeRecordBuilder;
+    using TBase::TBase;
+
+    explicit TChangeRecordBuilder(EKind kind)
+        : TBase()
+    {
+        GetRecord()->Kind = kind;
+    }
+
+    TSelf& WithGroup(ui64 group) {
+        GetRecord()->Group = group;
+        return static_cast<TSelf&>(*this);
+    }
+
+    TSelf& WithStep(ui64 step) {
+        GetRecord()->Step = step;
+        return static_cast<TSelf&>(*this);
+    }
+
+    TSelf& WithTxId(ui64 txId) {
+        GetRecord()->TxId = txId;
+        return static_cast<TSelf&>(*this);
+    }
 
     TSelf& WithLockId(ui64 lockId) {
-        Record.LockId = lockId;
+        GetRecord()->LockId = lockId;
         return static_cast<TSelf&>(*this);
     }
 
     TSelf& WithLockOffset(ui64 lockOffset) {
-        Record.LockOffset = lockOffset;
+        GetRecord()->LockOffset = lockOffset;
         return static_cast<TSelf&>(*this);
     }
 
     TSelf& WithPathId(const TPathId& pathId) {
-        Record.PathId = pathId;
+        GetRecord()->PathId = pathId;
         return static_cast<TSelf&>(*this);
     }
 
     TSelf& WithTableId(const TPathId& tableId) {
-        Record.TableId = tableId;
+        GetRecord()->TableId = tableId;
         return static_cast<TSelf&>(*this);
     }
 
     TSelf& WithSchemaVersion(ui64 version) {
-        Record.SchemaVersion = version;
+        GetRecord()->SchemaVersion = version;
         return static_cast<TSelf&>(*this);
     }
 
     TSelf& WithSchema(TUserTable::TCPtr schema) {
-        Record.Schema = schema;
+        GetRecord()->Schema = schema;
         return static_cast<TSelf&>(*this);
     }
 

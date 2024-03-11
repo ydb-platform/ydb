@@ -426,6 +426,9 @@ void THive::Handle(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr& ev) {
                     Execute(CreateUpdateTabletGroups(tabletId));
                 }
             }
+            if (tablets.empty()) {
+                ProcessStorageBalancer();
+            }
         } else {
             BLOG_ERROR("THive::Handle TEvControllerSelectGroupsResult: obsolete BSC response");
         }
@@ -608,7 +611,7 @@ void THive::BuildCurrentConfig() {
     BLOG_D("THive::BuildCurrentConfig CurrentConfig = " << CurrentConfig.ShortDebugString());
     TabletLimit.clear();
     for (const auto& tabletLimit : CurrentConfig.GetDefaultTabletLimit()) {
-        TabletLimit.emplace(tabletLimit.GetType(), tabletLimit);
+        TabletLimit.insert_or_assign(tabletLimit.GetType(), tabletLimit);
     }
     DefaultDataCentersPreference.clear();
     for (const NKikimrConfig::THiveTabletPreference& tabletPreference : CurrentConfig.GetDefaultTabletPreference()) {
@@ -938,11 +941,8 @@ void THive::Handle(TEvHive::TEvReassignTablet::TPtr &ev) {
 void THive::OnActivateExecutor(const TActorContext&) {
     BLOG_D("THive::OnActivateExecutor");
     TDomainsInfo* domainsInfo = AppData()->DomainsInfo.Get();
-    HiveUid = domainsInfo->GetDefaultHiveUid(domainsInfo->Domains.begin()->first);
-    HiveDomain = domainsInfo->GetHiveDomainUid(HiveUid);
-    const TDomainsInfo::TDomain& domain = domainsInfo->GetDomain(HiveDomain);
-    RootHiveId = domainsInfo->GetHive(domain.DefaultHiveUid);
-    Y_ABORT_UNLESS(HiveUid != Max<ui32>() && HiveDomain != TDomainsInfo::BadDomainId);
+    const TDomainsInfo::TDomain& domain = *domainsInfo->GetDomain();
+    RootHiveId = domainsInfo->GetHive();
     HiveId = TabletID();
     HiveGeneration = Executor()->Generation();
     RootDomainKey = TSubDomainKey(domain.SchemeRoot, 1);
@@ -1014,14 +1014,9 @@ void THive::AssignTabletGroups(TLeaderTabletInfo& tablet) {
 
 void THive::SendToBSControllerPipe(IEventBase* payload) {
     if (!BSControllerPipeClient) {
-        Y_ABORT_UNLESS(AppData()->DomainsInfo);
-        ui32 domainUid = HiveDomain;
-        ui64 defaultStateStorageGroup = AppData()->DomainsInfo->GetDefaultStateStorageGroup(domainUid);
-
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-        BSControllerPipeClient = Register(NTabletPipe::CreateClient(
-            SelfId(), MakeBSControllerID(defaultStateStorageGroup), pipeConfig));
+        BSControllerPipeClient = Register(NTabletPipe::CreateClient(SelfId(), MakeBSControllerID(), pipeConfig));
     }
     NTabletPipe::SendData(SelfId(), BSControllerPipeClient, payload);
 }
@@ -1782,6 +1777,8 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
 
 void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo *info, const NKikimrHive::TEvRequestHiveInfo &req) {
     if (info) {
+        TInstant now = TActivationContext::Now();
+        TInstant restartsBarrierTime = now - GetTabletRestartsPeriod();
         auto& tabletInfo = *response.AddTablets();
         tabletInfo.SetTabletID(tabletId);
         tabletInfo.SetTabletType(info->Type);
@@ -1800,7 +1797,7 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
         if (!info->IsRunning()) {
             tabletInfo.SetLastAliveTimestamp(info->Statistics.GetLastAliveTimestamp());
         }
-        tabletInfo.SetRestartsPerPeriod(info->Statistics.RestartTimestampSize());
+        tabletInfo.SetRestartsPerPeriod(info->GetRestartsPerPeriod(restartsBarrierTime));
         if (req.GetReturnMetrics()) {
             tabletInfo.MutableMetrics()->CopyFrom(info->GetResourceValues());
         }
@@ -1831,7 +1828,7 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
                 if (!follower.IsRunning()) {
                     tabletInfo.SetLastAliveTimestamp(follower.Statistics.GetLastAliveTimestamp());
                 }
-                tabletInfo.SetRestartsPerPeriod(follower.Statistics.RestartTimestampSize());
+                tabletInfo.SetRestartsPerPeriod(follower.GetRestartsPerPeriod(restartsBarrierTime));
                 if (req.GetReturnMetrics()) {
                     tabletInfo.MutableMetrics()->CopyFrom(follower.GetResourceValues());
                 }
@@ -1843,16 +1840,14 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
 void THive::Handle(TEvHive::TEvRequestHiveInfo::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     TAutoPtr<TEvHive::TEvResponseHiveInfo> response = new TEvHive::TEvResponseHiveInfo();
-    TInstant now = TlsActivationContext->Now();
     if (record.HasTabletID()) {
         TTabletId tabletId = record.GetTabletID();
         NKikimrHive::TForwardRequest forwardRequest;
         if (CheckForForwardTabletRequest(tabletId, forwardRequest)) {
             response->Record.MutableForwardRequest()->CopyFrom(forwardRequest);
         }
-        TLeaderTabletInfo* tablet = FindTablet(tabletId);
+        const TLeaderTabletInfo* tablet = FindTablet(tabletId);
         if (tablet) {
-            tablet->ActualizeTabletStatistics(now);
             FillTabletInfo(response->Record, record.GetTabletID(), tablet, record);
         } else {
             BLOG_W("Can't find the tablet from RequestHiveInfo(TabletID=" << tabletId << ")");
@@ -1866,7 +1861,6 @@ void THive::Handle(TEvHive::TEvRequestHiveInfo::TPtr& ev) {
             if (it->second.IsDeleting()) {
                 continue;
             }
-            it->second.ActualizeTabletStatistics(now);
             FillTabletInfo(response->Record, it->first, &it->second, record);
         }
         response->Record.set_starttimetimestamp(StartTime().MilliSeconds());
@@ -1955,13 +1949,15 @@ void THive::Handle(TEvHive::TEvRequestHiveDomainStats::TPtr& ev) {
 
 void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
     const auto& request(ev->Get()->Record);
+    TInstant now = TActivationContext::Now();
+    TInstant restartsBarrierTime = now - GetNodeRestartWatchPeriod();
     THolder<TEvHive::TEvResponseHiveNodeStats> response = MakeHolder<TEvHive::TEvResponseHiveNodeStats>();
     auto& record = response->Record;
     if (request.GetReturnExtendedTabletInfo()) {
         record.SetExtendedTabletInfo(true);
     }
     for (auto it = Nodes.begin(); it != Nodes.end(); ++it) {
-        const TNodeInfo& node = it->second;
+        TNodeInfo& node = it->second;
         if (node.IsUnknown()) {
             continue;
         }
@@ -2035,7 +2031,7 @@ void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
         if (!node.IsAlive()) {
             nodeStats.SetLastAliveTimestamp(node.Statistics.GetLastAliveTimestamp());
         }
-        nodeStats.SetRestartsPerPeriod(node.Statistics.RestartTimestampSize());
+        nodeStats.SetRestartsPerPeriod(node.GetRestartsPerPeriod(restartsBarrierTime));
     }
     Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
@@ -2050,12 +2046,12 @@ void THive::Handle(TEvHive::TEvRequestHiveStorageStats::TPtr& ev) {
             auto& pbGroup = *pbPool.AddGroups();
             pbGroup.SetGroupID(id);
             pbGroup.SetAcquiredUnits(group.Units.size());
-            pbGroup.SetAcquiredIOPS(group.AcquiredIOPS);
-            pbGroup.SetAcquiredThroughput(group.AcquiredThroughput);
-            pbGroup.SetAcquiredSize(group.AcquiredSize);
-            pbGroup.SetMaximumIOPS(group.MaximumIOPS);
-            pbGroup.SetMaximumThroughput(group.MaximumThroughput);
-            pbGroup.SetMaximumSize(group.MaximumSize);
+            pbGroup.SetAcquiredIOPS(group.AcquiredResources.IOPS);
+            pbGroup.SetAcquiredThroughput(group.AcquiredResources.Throughput);
+            pbGroup.SetAcquiredSize(group.AcquiredResources.Size);
+            pbGroup.SetMaximumIOPS(group.MaximumResources.IOPS);
+            pbGroup.SetMaximumThroughput(group.MaximumResources.Throughput);
+            pbGroup.SetMaximumSize(group.MaximumResources.Size);
             pbGroup.SetAllocatedSize(group.GroupParameters.GetAllocatedSize());
             pbGroup.SetAvailableSize(group.GroupParameters.GetAvailableSize());
         }
@@ -2170,8 +2166,15 @@ TResourceRawValues THive::GetDefaultResourceInitialMaximumValues() {
 
 void THive::ProcessTabletBalancer() {
     if (!ProcessTabletBalancerScheduled && !ProcessTabletBalancerPostponed && BootQueue.BootQueue.empty()) {
-        Schedule(GetBalancerCooldown(), new TEvPrivate::TEvProcessTabletBalancer());
+        Schedule(GetBalancerCooldown(LastBalancerTrigger), new TEvPrivate::TEvProcessTabletBalancer());
         ProcessTabletBalancerScheduled = true;
+    }
+}
+
+void THive::ProcessStorageBalancer() {
+    if (!ProcessStorageBalancerScheduled && BootQueue.BootQueue.empty()) {
+        Schedule(GetBalancerCooldown(EBalancerType::Storage), new TEvPrivate::TEvProcessStorageBalancer());
+        ProcessStorageBalancerScheduled = true;
     }
 }
 
@@ -2201,7 +2204,6 @@ THive::THiveStats THive::GetStats() const {
         minValues = piecewise_min(minValues, stats.Values[i].ResourceNormValues);
         maxValues = piecewise_max(maxValues, stats.Values[i].ResourceNormValues);
     }
-
 
     auto minValuesToBalance = GetMinNodeUsageToBalance();
     maxValues = piecewise_max(maxValues, minValuesToBalance);
@@ -2358,6 +2360,41 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
     Send(SelfId(), new TEvPrivate::TEvBalancerOut());
 }
 
+void THive::Handle(TEvPrivate::TEvProcessStorageBalancer::TPtr&) {
+    ProcessStorageBalancerScheduled = false;
+    if (StoragePools.empty()) {
+        return;
+    }
+    using TPoolStat = std::pair<TStoragePoolInfo::TStats, const TStoragePoolInfo&>;
+    std::vector<TPoolStat> poolStats;
+    poolStats.reserve(StoragePools.size());
+    for (const auto& [name, pool] : StoragePools) {
+        poolStats.emplace_back(pool.GetStats(), pool);
+    }
+    auto& [stats, pool] = *std::max_element(poolStats.begin(), poolStats.end(), [](const TPoolStat& lhs, const TPoolStat& rhs) {
+        return lhs.first.Scatter < rhs.first.Scatter;
+    });
+    StorageScatter = stats.Scatter;
+    TabletCounters->Simple()[NHive::COUNTER_STORAGE_SCATTER].Set(StorageScatter * 100);
+    if (StorageScatter > GetMinStorageScatterToBalance()) {
+        BLOG_D("Storage Scatter = " << stats.Scatter << " in pool " << pool.Name << ", starting StorageBalancer");
+        ui64 numReassigns = 1;
+        auto it = pool.Groups.find(stats.MaxUsageGroupId);
+        if (it != pool.Groups.end()) {
+            // We want a ballpark estimate of how many reassigns it would take to balance the pool
+            // Using the number of units in the most loaded group ensures we won't reassign the whole pool on a whim,
+            // while also giving the balancer some room to work.
+            // Note that the balancer is not actually required to do that many reassigns, but will never do more
+            numReassigns = it->second.Units.size();
+        }
+        StartHiveStorageBalancer({
+            .NumReassigns = numReassigns,
+            .MaxInFlight = GetStorageBalancerInflight(),
+            .StoragePool = pool.Name
+        });
+    }
+}
+
 void THive::UpdateTotalResourceValues(
         const TNodeInfo* node,
         const TTabletInfo* tablet,
@@ -2411,6 +2448,16 @@ void THive::RemoveSubActor(ISubActor* subActor) {
         ProcessTabletBalancerPostponed = false;
         ProcessTabletBalancer();
     }
+}
+
+bool THive::StopSubActor(TSubActorId subActorId) {
+    for (auto* subActor : SubActors) {
+        if (subActor->GetId() == subActorId) {
+            subActor->Cleanup();
+            return true;
+        }
+    }
+    return false;
 }
 
 bool THive::IsValidMetrics(const NKikimrTabletBase::TMetrics& metrics) {
@@ -2649,8 +2696,8 @@ void THive::UpdateTabletFollowersNumber(TLeaderTabletInfo& tablet, NIceDb::TNice
     }
 }
 
-TDuration THive::GetBalancerCooldown() const {
-    switch(LastBalancerTrigger) {
+TDuration THive::GetBalancerCooldown(EBalancerType balancerType) const {
+    switch(balancerType) {
         case EBalancerType::Scatter:
         case EBalancerType::ScatterCounter:
         case EBalancerType::ScatterCPU:
@@ -2687,8 +2734,6 @@ ui64 THive::GetObjectImbalance(TFullObjectId object) {
 THive::THive(TTabletStorageInfo *info, const TActorId &tablet)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
-    , HiveUid(Max<ui32>())
-    , HiveDomain(Max<ui32>())
     , RootHiveId()
     , HiveId(Max<ui64>())
     , HiveGeneration(0)
@@ -2776,7 +2821,7 @@ void THive::RequestPoolsInformation() {
         }
         SendToBSControllerPipe(ev.Release());
     }
-    Schedule(TDuration::Minutes(10), new TEvPrivate::TEvRefreshStorageInfo());
+    Schedule(GetStorageInfoRefreshFrequency(), new TEvPrivate::TEvRefreshStorageInfo());
 }
 
 ui32 THive::GetEventPriority(IEventHandle* ev) {
@@ -2869,6 +2914,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvPrivate::TEvRefreshStorageInfo, Handle);
         hFunc(TEvPrivate::TEvLogTabletMoves, Handle);
         hFunc(TEvPrivate::TEvStartStorageBalancer, Handle);
+        hFunc(TEvPrivate::TEvProcessStorageBalancer, Handle);
         hFunc(TEvHive::TEvUpdateDomain, Handle);
     }
 }
@@ -2969,6 +3015,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvPrivate::TEvLogTabletMoves::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvStartStorageBalancer::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvUpdateDomain::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvProcessStorageBalancer::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -2992,9 +3039,7 @@ void THive::Handle(TEvHive::TEvResponseTabletIdSequence::TPtr& ev) {
 }
 
 void THive::RequestFreeSequence() {
-    TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-    TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
-    TTabletId rootHiveId = domains->GetHive(domain->DefaultHiveUid);
+    TTabletId rootHiveId = AppData()->DomainsInfo->GetHive();
     if (rootHiveId != TabletID()) {
         size_t sequenceIndex = Sequencer.NextFreeSequenceIndex();
         size_t sequenceSize = GetRequestSequenceSize();
@@ -3297,6 +3342,11 @@ void THive::ActualizeRestartStatistics(google::protobuf::RepeatedField<google::p
         ++it;
     }
     array.erase(begin, it);
+}
+
+ui64 THive::GetRestartsPerPeriod(const google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier) {
+    auto it = std::lower_bound(restartTimestamps.begin(), restartTimestamps.end(), barrier);
+    return restartTimestamps.end() - it;
 }
 
 bool THive::IsSystemTablet(TTabletTypes::EType type) {

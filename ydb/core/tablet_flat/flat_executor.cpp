@@ -97,6 +97,32 @@ TTableSnapshotContext::~TTableSnapshotContext() = default;
 
 using namespace NResourceBroker;
 
+class TExecutor::TActiveTransactionZone {
+public:
+    explicit TActiveTransactionZone(TExecutor* self) noexcept
+        : Self(self)
+    {
+        Y_DEBUG_ABORT_UNLESS(!Self->ActiveTransaction);
+        Self->ActiveTransaction = true;
+        Active = true;
+    }
+
+    ~TActiveTransactionZone() noexcept {
+        Done();
+    }
+
+    void Done() noexcept {
+        if (Active) {
+            Self->ActiveTransaction = false;
+            Active = false;
+        }
+    }
+
+private:
+    TExecutor* Self;
+    bool Active = false;
+};
+
 TExecutor::TExecutor(
         NFlatExecutorSetup::ITablet* owner,
         const TActorId& ownerActorId)
@@ -876,6 +902,9 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
     if (update->IsSnapshot) // do nothing over snapshot after initial one
         return;
 
+    // Protect against recursive transactions in callbacks
+    TActiveTransactionZone activeTransaction(this);
+
     TString schemeUpdate;
     TString dataUpdate;
     TStackVec<TString> partSwitches;
@@ -940,6 +969,11 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
         if (schemeUpdate) {
             ReadResourceProfile();
             ReflectSchemeSettings();
+            Owner->OnFollowerSchemaUpdated();
+        }
+
+        if (dataUpdate) {
+            Owner->OnFollowerDataUpdated();
         }
     }
 
@@ -1006,8 +1040,10 @@ void TExecutor::ApplyFollowerAuxUpdate(const TString &auxBody) {
     const TString aux = NPageCollection::TSlicer::Lz4()->Decode(auxBody);
     TProtoBox<NKikimrExecutorFlat::TFollowerAux> proto(aux);
 
-    if (proto.HasUserAuxUpdate())
+    if (proto.HasUserAuxUpdate()) {
+        TActiveTransactionZone activeTransaction(this);
         Owner->OnLeaderUserAuxUpdate(std::move(proto.GetUserAuxUpdate()));
+    }
 }
 
 void TExecutor::RequestFromSharedCache(TAutoPtr<NPageCollection::TFetch> fetch,
@@ -1644,9 +1680,7 @@ void TExecutor::Enqueue(TAutoPtr<ITransaction> self, const TActorContext &ctx) {
 }
 
 void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ctx) {
-    Y_DEBUG_ABORT_UNLESS(!ActiveTransaction);
-
-    ActiveTransaction = true;
+    TActiveTransactionZone activeTransaction(this);
     ++seat->Retries;
 
     THPTimer cpuTimer;
@@ -1736,7 +1770,7 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
     }
     PrivatePageCache->ResetTouchesAndToLoad(false);
 
-    ActiveTransaction = false;
+    activeTransaction.Done();
     PlanTransactionActivation();
 }
 
@@ -2813,7 +2847,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
     Y_ABORT_UNLESS(msg->Generation == Generation());
     const ui32 step = msg->Step;
 
-    ActiveTransaction = true;
+    TActiveTransactionZone activeTransaction(this);
 
     GcLogic->OnCommitLog(step, msg->ConfirmedOnSend, ctx);
     CommitManager->Confirm(step);
@@ -2907,7 +2941,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
         std::move(msg->GroupWrittenOps),
         ctx);
 
-    ActiveTransaction = false;
+    activeTransaction.Done();
     PlanTransactionActivation();
 
     MaybeRelaxRejectProbability();
@@ -3236,7 +3270,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
         return Broken();
     }
 
-    ActiveTransaction = true;
+    TActiveTransactionZone activeTransaction(this);
 
     const ui64 snapStamp = msg->Params->Edge.TxStamp ? msg->Params->Edge.TxStamp
         : MakeGenStepPair(Generation(), msg->Step);
@@ -3469,7 +3503,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
     Owner->CompactionComplete(tableId, OwnerCtx());
     MaybeRelaxRejectProbability();
 
-    ActiveTransaction = false;
+    activeTransaction.Done();
 
     if (LogicSnap->MayFlush(false)) {
         MakeLogSnapshot();
@@ -4190,13 +4224,17 @@ TString TExecutor::CheckBorrowConsistency() {
             [&](const TIntrusiveConstPtr<NTable::TColdPart>& part) {
                 knownBundles.insert(part->Label);
             });
+        Database->EnumerateTableTxStatusParts(tableId,
+            [&](const TIntrusiveConstPtr<NTable::TTxStatusPart>& part) {
+                knownBundles.insert(part->Label);
+            });
     }
     return BorrowLogic->DebugCheckBorrowConsistency(knownBundles);
 }
 
 TTransactionWaitPad::TTransactionWaitPad(THolder<TSeat> seat)
     : Seat(std::move(seat))
-    , WaitingSpan(NWilson::TSpan(TWilsonTablet::Tablet, Seat->GetTxTraceId(), "Tablet.Transaction.Wait"))
+    , WaitingSpan(NWilson::TSpan(TWilsonTablet::TabletDetailed, Seat->GetTxTraceId(), "Tablet.Transaction.Wait"))
 {}
 
 TTransactionWaitPad::~TTransactionWaitPad()

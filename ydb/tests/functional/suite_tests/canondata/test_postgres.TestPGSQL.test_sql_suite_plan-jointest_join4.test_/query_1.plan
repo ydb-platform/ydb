@@ -50,12 +50,13 @@
                                                 "Predicate": "{b1: ExtractMembers.nt2.b1,b2: ExtractMembers.nt2.b2,b3: ExtractMembers.nt2.b1 And {a1: ExtractMembers.a1,a2: ExtractMembers.a2,a3: Exist(ExtractMembers.id),id: ExtractMembers.id}.a3,id: ExtractMembers.nt2.id,nt1_id: ExtractMembers.nt2.nt1_id}.b3"
                                             },
                                             {
+                                                "Condition": "nt2_id = nt2.id",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 12
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 10
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
@@ -81,12 +82,13 @@
                                                                         "Node Type": "LeftJoin (MapJoin)",
                                                                         "Operators": [
                                                                             {
+                                                                                "Condition": "nt1_id = id",
                                                                                 "Inputs": [
                                                                                     {
                                                                                         "ExternalPlanNodeId": 6
                                                                                     },
                                                                                     {
-                                                                                        "Other": "ConstantExpression"
+                                                                                        "ExternalPlanNodeId": 4
                                                                                     }
                                                                                 ],
                                                                                 "Name": "LeftJoin (MapJoin)"

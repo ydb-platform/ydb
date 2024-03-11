@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(2.25.2)
+VERSION(2.28.0)
 
 LICENSE(Apache-2.0)
 
@@ -34,6 +34,7 @@ PY_SRCS(
     google/auth/_helpers.py
     google/auth/_jwt_async.py
     google/auth/_oauth2client.py
+    google/auth/_refresh_worker.py
     google/auth/_service_account_info.py
     google/auth/api_key.py
     google/auth/app_engine.py

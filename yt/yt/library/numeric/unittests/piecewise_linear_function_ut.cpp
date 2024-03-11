@@ -262,7 +262,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
                 4, 4.1, 4.2, 4.3,
                 5, 5.1,
                 6, 6.1, 6.2
-             }
+            }
         },
         {
             /* Name */ "eightSortedSegments",
@@ -286,7 +286,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
                 5, 5.1,
                 6, 6.1, 6.2,
                 7, 7.1
-             }
+            }
         }
     };
 

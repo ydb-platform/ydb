@@ -22,12 +22,12 @@ TTopicSdkTestSetup::TTopicSdkTestSetup(const TString& testCaseName, const NKikim
     }
 }
 
-void TTopicSdkTestSetup::CreateTopic(const TString& path, const TString& consumer, size_t partitionCount)
+void TTopicSdkTestSetup::CreateTopic(const TString& path, const TString& consumer, size_t partitionCount, std::optional<size_t> maxPartitionCount)
 {
     TTopicClient client(MakeDriver());
 
     TCreateTopicSettings topics;
-    TPartitioningSettings partitions(partitionCount, partitionCount);
+    TPartitioningSettings partitions(partitionCount, maxPartitionCount.value_or(partitionCount));
 
     topics.PartitioningSettings(partitions);
     TConsumerSettings<TCreateTopicSettings> consumers(topics, consumer);

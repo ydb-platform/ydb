@@ -1,7 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    deps.go
-)
-
+IF (TRUE)
+    SRCS(
+		deps.go
+    )
+ENDIF()
 END()

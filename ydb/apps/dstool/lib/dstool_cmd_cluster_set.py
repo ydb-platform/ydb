@@ -24,6 +24,9 @@ def add_options(p):
     g.add_argument('--pdisk-space-color-border', choices=choices, help='PDisk space color border')
     choices = kikimr_bsconfig.TSerialManagementStage.E.keys()
     g.add_argument('--disk-management-mode', type=str, choices=choices, help='Disk management mode')
+    g.add_argument('--enable-self-heal-local-policy', action='store_const', const=True, dest='self_heal_local_policy', help='Enable SelfHeal local policy for cluster')
+    g.add_argument('--disable-self-heal-local-policy', action='store_const', const=False, dest='self_heal_local_policy', help='Disable SelfHeal local policy for cluster')
+    
     common.add_basic_format_options(p)
 
 
@@ -63,6 +66,8 @@ def create_request(args):
         cmd.MaxScrubbedDisksAtOnce.append(args.max_scrubbed_disks_at_once)
     if args.pdisk_space_color_border is not None:
         cmd.PDiskSpaceColorBorder.append(disk_color.TPDiskSpaceColor.E.Value(args.pdisk_space_color_border))
+    if args.self_heal_local_policy is not None:
+        cmd.UseSelfHealLocalPolicy.append(args.self_heal_local_policy)
 
     return request
 

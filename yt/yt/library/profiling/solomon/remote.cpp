@@ -145,7 +145,7 @@ void TRemoteRegistry::Transfer(const NProto::TSensorDump& dump)
                 transferValue(&sensorSet->TimeHistogramsCube_, ESensorType::TimeHistogram, NYT::FromProto<TTimeHistogramSnapshot>(projection.time_histogram()));
             } else if (projection.has_gauge_histogram()) {
                 transferValue(&sensorSet->GaugeHistogramsCube_, ESensorType::GaugeHistogram, NYT::FromProto<TGaugeHistogramSnapshot>(projection.gauge_histogram()));
-             } else if (projection.has_rate_histogram()) {
+            } else if (projection.has_rate_histogram()) {
                 transferValue(&sensorSet->RateHistogramsCube_, ESensorType::RateHistogram, NYT::FromProto<TRateHistogramSnapshot>(projection.rate_histogram()));
             } else {
                 // Ignore unknown types.

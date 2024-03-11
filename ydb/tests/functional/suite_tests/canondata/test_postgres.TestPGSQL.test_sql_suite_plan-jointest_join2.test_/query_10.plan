@@ -42,12 +42,13 @@
                                                 "TopSortBy": "row.x1"
                                             },
                                             {
+                                                "Condition": "x_1.x1 = x1",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 20
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 12
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
@@ -64,12 +65,13 @@
                                                         "Node Type": "LeftJoin (MapJoin)",
                                                         "Operators": [
                                                             {
+                                                                "Condition": "x1 = y1",
                                                                 "Inputs": [
                                                                     {
                                                                         "ExternalPlanNodeId": 18
                                                                     },
                                                                     {
-                                                                        "Other": "ConstantExpression"
+                                                                        "ExternalPlanNodeId": 16
                                                                     }
                                                                 ],
                                                                 "Name": "LeftJoin (MapJoin)"

@@ -93,10 +93,10 @@ class TObjectWithFullRC
     , public TRefCounted
 { };
 
-using TObjectWithExtrinsicRCPtr = TIntrusivePtr<TObjectWithFullRC>;
-using TObjectWithExtrinsicRCConstPtr = TIntrusivePtr<const TObjectWithFullRC>;
-using TObjectWithExtrinsicRCWkPtr = TWeakPtr<TObjectWithFullRC>;
-using TObjectWithExtrinsicRCConstWkPtr = TWeakPtr<const TObjectWithFullRC>;
+using TObjectWithFullRCPtr = TIntrusivePtr<TObjectWithFullRC>;
+using TObjectWithFullRCConstPtr = TIntrusivePtr<const TObjectWithFullRC>;
+using TObjectWithFullRCWkPtr = TWeakPtr<TObjectWithFullRC>;
+using TObjectWithFullRCConstWkPtr = TWeakPtr<const TObjectWithFullRC>;
 
 // Below there is a series of either reference-counted or not classes
 // with simple inheritance and both virtual and non-virtual methods.
@@ -700,43 +700,60 @@ TEST_F(TBindTest, UnretainedWrapper)
 //     not canceled.
 TEST_F(TBindTest, WeakPtr)
 {
-    TObjectWithExtrinsicRCPtr object = New<TObjectWithFullRC>();
-    TObjectWithExtrinsicRCWkPtr objectWk(object);
+    TObjectWithFullRCPtr object = New<TObjectWithFullRC>();
+    TObjectWithFullRCWkPtr objectWk(object);
 
     EXPECT_CALL(*object, VoidMethod0());
+    EXPECT_CALL(*object, IntMethod0()).WillOnce(Return(42));
+    EXPECT_CALL(*object, IntConstMethod0()).WillOnce(Return(13));
     EXPECT_CALL(*object, VoidConstMethod0()).Times(2);
 
-    TClosure boundMethod =
+    TClosure voidMethod =
         BIND(
             &TObjectWithFullRC::VoidMethod0,
-            TObjectWithExtrinsicRCWkPtr(object));
-    boundMethod();
+            TObjectWithFullRCWkPtr(object));
+    voidMethod();
 
-    TClosure constMethodNonConstObject =
+    TCallback<int()> intMethod =
+        BIND(
+            ThrowOnDestroyed(&TObjectWithFullRC::IntMethod0),
+            TObjectWithFullRCWkPtr(object));
+    EXPECT_EQ(42, intMethod());
+
+    TCallback<int()> constIntMethodNonConstObject =
+        BIND(
+            ThrowOnDestroyed(&TObjectWithFullRC::IntConstMethod0),
+            TObjectWithFullRCWkPtr(object));
+    EXPECT_EQ(13, constIntMethodNonConstObject());
+
+    TClosure constVoidMethodNonConstObject =
         BIND(
             &TObject::VoidConstMethod0,
-            TObjectWithExtrinsicRCWkPtr(object));
-    constMethodNonConstObject();
+            TObjectWithFullRCWkPtr(object));
+    constVoidMethodNonConstObject();
 
-    TClosure constMethodConstObject =
+    TClosure constVoidMethodConstObject =
         BIND(
             &TObject::VoidConstMethod0,
-            TObjectWithExtrinsicRCConstWkPtr(object));
-    constMethodConstObject();
+            TObjectWithFullRCConstWkPtr(object));
+    constVoidMethodConstObject();
 
     TCallback<int(int)> normalFunc =
         BIND(
             &FunctionWithWeakParam<TObjectWithFullRC>,
-            TObjectWithExtrinsicRCWkPtr(object));
+            TObjectWithFullRCWkPtr(object));
 
     EXPECT_EQ(1, normalFunc(1));
 
     object.Reset();
     ASSERT_TRUE(objectWk.IsExpired());
 
-    boundMethod();
-    constMethodNonConstObject();
-    constMethodConstObject();
+    voidMethod();
+    constVoidMethodNonConstObject();
+    constVoidMethodConstObject();
+
+    EXPECT_THROW_WITH_ERROR_CODE(intMethod(), NYT::EErrorCode::Canceled);
+    EXPECT_THROW_WITH_ERROR_CODE(constIntMethodNonConstObject(), NYT::EErrorCode::Canceled);
 
     EXPECT_EQ(2, normalFunc(2));
 }

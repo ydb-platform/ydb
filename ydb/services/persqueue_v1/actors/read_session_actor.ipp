@@ -1,6 +1,8 @@
 #ifndef READ_SESSION_ACTOR_IMPL
-    #error "Do not include this file directly"
+#include "read_session_actor.h"
+#error "Do not include this file directly"
 #endif
+
 
 #include "helpers.h"
 #include "read_init_auth_actor.h"
@@ -369,7 +371,7 @@ void TReadSessionActor<UseMigrationProtocol>::Die(const TActorContext& ctx) {
 
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " is DEAD");
     ctx.Send(GetPQReadServiceActorID(), new TEvPQProxy::TEvSessionDead(Cookie));
-
+    TRlHelpers::PassAway(TActorBootstrapped<TReadSessionActor>::SelfId());
     TActorBootstrapped<TReadSessionActor>::Die(ctx);
 }
 
@@ -533,19 +535,23 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReleased::TP
         return;
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " got Released from client"
-        << ": partition# " << it->second.Partition);
+    auto& partitionInfo = it->second;
 
-    Y_ABORT_UNLESS(it->second.LockSent);
-//    ReleasePartition(it, true, ctx);
+    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " got Released from client"
+        << ": partition# " << partitionInfo.Partition);
+
+    if (!partitionInfo.LockSent) {
+        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
+            << "release of partition that is not requested is forbiden for " << partitionInfo.Partition, ctx);
+    }
 
     if (ev->Get()->Graceful || !DirectRead) {
-        if (!it->second.Releasing) {
-            auto p = it->second.Partition;
+        if (!partitionInfo.Releasing) {
+            auto p = partitionInfo.Partition;
             return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
                 << "graceful release of partition that is not requested for release is forbiden for " << p, ctx);
         }
-        if (it->second.Stopping) { // Ignore release for graceful request if alredy got stopping
+        if (partitionInfo.Stopping) { // Ignore release for graceful request if alredy got stopping
             return;
         }
         if (!DirectRead) {
@@ -555,9 +561,9 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReleased::TP
         }
     } else {
         Y_ABORT_UNLESS(DirectRead);
-        if (!it->second.Stopping) {
+        if (!partitionInfo.Stopping) {
             return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
-                << "release of partition that is not requested is forbiden for " << it->second.Partition, ctx);
+                << "release of partition that is not requested is forbiden for " << partitionInfo.Partition, ctx);
         }
         //TODO: filter all direct reads 
         ReleasePartition(it, true, ctx);
@@ -621,8 +627,13 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvCommitDone::
         return;
     }
 
-    auto it = Partitions.find(ev->Get()->AssignId);
-    Y_ABORT_UNLESS(it != Partitions.end());
+    auto assignId = ev->Get()->AssignId;
+    auto it = Partitions.find(assignId);
+    if (it == Partitions.end()) {
+        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
+            << "unknown partition_session_id " << assignId << " #01", ctx);
+    }
+
     Y_ABORT_UNLESS(it->second.Offset < ev->Get()->Offset);
     it->second.NextRanges.EraseInterval(it->second.Offset, ev->Get()->Offset);
 
@@ -810,7 +821,10 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
 
     for (const auto& topic : init.topics_read_settings()) {
         auto it = TopicsList.ClientTopics.find(getTopicPath(topic));
-        Y_ABORT_UNLESS(it != TopicsList.ClientTopics.end());
+        if (it == TopicsList.ClientTopics.end()) {
+            return CloseSession(PersQueue::ErrorCode::ACCESS_DENIED,
+                TStringBuilder() << "unknown topic " << getTopicPath(topic), ctx);
+        }
 
         for (const auto& converter : it->second) {
             const auto internalName = converter->GetOriginalPath();
@@ -1213,13 +1227,22 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvPartitionSta
         return;
     }
 
-    auto it = Partitions.find(ev->Get()->Partition.AssignId);
-    Y_ABORT_UNLESS(it != Partitions.end());
+    auto assignId = ev->Get()->Partition.AssignId;
+    auto it = Partitions.find(assignId);
+    if (it == Partitions.end()) {
+        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
+            << "unknown partition_session_id " << assignId << " #02", ctx);
+    }
+
 
     TServerMessage result;
     result.set_status(Ydb::StatusIds::SUCCESS);
     if (ev->Get()->Init) {
-        Y_ABORT_UNLESS(!it->second.LockSent);
+        if (it->second.LockSent) {
+            return CloseSession(PersQueue::ErrorCode::ERROR, TStringBuilder()
+                << "Inconsistent state #01", ctx);
+        }
+
         it->second.LockSent = true;
         it->second.Offset = ev->Get()->Offset;
 
@@ -1258,7 +1281,10 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvPartitionSta
 
         }
     } else {
-        Y_ABORT_UNLESS(it->second.LockSent);
+        if (!it->second.LockSent) {
+            return CloseSession(PersQueue::ErrorCode::ERROR, TStringBuilder()
+                << "Inconsistent state #02", ctx);
+        }
 
         if constexpr (UseMigrationProtocol) {
             result.mutable_partition_status()->mutable_topic()->set_path(it->second.Topic->GetFederationPath());
@@ -1293,23 +1319,32 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvUpdateSessio
     if (!DirectRead) {
         return;
     }
-    auto it = Partitions.find(ev->Get()->Partition.AssignId);
-    Y_ABORT_UNLESS(it != Partitions.end());
+    auto assignId = ev->Get()->Partition.AssignId;
+    auto it = Partitions.find(assignId);
+    if (it == Partitions.end()) {
+        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
+            << "unknown partition_session_id " << assignId << " #03", ctx);
+    }
+
+    auto& partitionInfo = it->second;
 
     TServerMessage result;
     result.set_status(Ydb::StatusIds::SUCCESS);
 
-    Y_ABORT_UNLESS(it->second.LockSent);
+    if (!partitionInfo.LockSent) {
+        return CloseSession(PersQueue::ErrorCode::ERROR, TStringBuilder()
+            << "Inconsistent state #03", ctx);
+    }
 
     if constexpr (!UseMigrationProtocol) {
-        result.mutable_update_partition_session()->set_partition_session_id(it->first);
+        result.mutable_update_partition_session()->set_partition_session_id(assignId);
         result.mutable_update_partition_session()->mutable_partition_location()->set_node_id(ev->Get()->NodeId);
         result.mutable_update_partition_session()->mutable_partition_location()->set_generation(ev->Get()->Generation);
 
     }
 
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " sending to client update partition stream event");
-    SendControlMessage(it->second.Partition, std::move(result), ctx);
+    SendControlMessage(partitionInfo.Partition, std::move(result), ctx);
 }
 
 
@@ -1362,6 +1397,7 @@ void TReadSessionActor<UseMigrationProtocol>::SendReleaseSignal(typename TPartit
     }
 
     Y_ABORT_UNLESS(it->second.LockSent);
+
     it->second.ReleaseSent = true;
 }
 
@@ -1430,9 +1466,19 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvPartitionRel
         return;
     }
 
-    auto it = Partitions.find(ev->Get()->Partition.AssignId);
-    Y_ABORT_UNLESS(it != Partitions.end());
-    Y_ABORT_UNLESS(it->second.Releasing);
+    auto assignId = ev->Get()->Partition.AssignId;
+    auto it = Partitions.find(assignId);
+    if (it == Partitions.end()) {
+        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
+            << "unknown partition_session_id " << assignId << " #04", ctx);
+    }
+
+    auto& partitionInfo = it->second;
+
+    if (!partitionInfo.Releasing) {
+        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
+            << "partition " << partitionInfo.Partition << " not in releasing state", ctx);
+    }
 
     ReleasePartition(it, false, ctx); // no reads could be here - this is release from partition
 }
@@ -1627,7 +1673,9 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(NGRpcService::TGRpcRequestP
         }
     } else {
         if (ev->Get()->Retryable) {
-            Request->ReplyUnavaliable();
+            TServerMessage serverMessage;
+            serverMessage.set_status(Ydb::StatusIds::UNAVAILABLE);
+            Request->GetStreamCtx()->WriteAndFinish(std::move(serverMessage), grpc::Status::OK);
         } else {
             Request->ReplyUnauthenticated("refreshed token is invalid");
         }
@@ -1702,12 +1750,18 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadResponse::T
     ui64 assignId;
 
     if constexpr (UseMigrationProtocol) {
-        Y_ABORT_UNLESS(response.data_batch().partition_data_size() == 1);
+        if (response.data_batch().partition_data_size() != 1) {
+            return CloseSession(PersQueue::ErrorCode::ErrorCode::BAD_REQUEST, "partition_data must contains one element", ctx);
+        }
         partitionCookie = response.data_batch().partition_data(0).cookie().partition_cookie();
-        Y_ABORT_UNLESS(partitionCookie != 0); // cookie is assigned
+        if (partitionCookie == 0) { // cookie is assigned
+            return CloseSession(PersQueue::ErrorCode::ErrorCode::BAD_REQUEST, "partition_cookie must be assigned", ctx);
+        }
         assignId = response.data_batch().partition_data(0).cookie().assign_id();
     } else {
-        Y_ABORT_UNLESS(response.read_response().partition_data_size() == 1);
+        if (response.read_response().partition_data_size() != 1) {
+            return CloseSession(PersQueue::ErrorCode::ErrorCode::BAD_REQUEST, "partition_data must contains one element", ctx);
+        }
         assignId = response.read_response().partition_data(0).partition_session_id();
     }
 
@@ -1719,8 +1773,16 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadResponse::T
     }
 
     auto it = Partitions.find(assignId);
-    Y_ABORT_UNLESS(it != Partitions.end());
-    Y_ABORT_UNLESS(it->second.Reading);
+    if (it == Partitions.end()) {
+        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
+            << "unknown partition_session_id " << assignId << " #05", ctx);
+    }
+
+    if (!it->second.Reading) {
+        return CloseSession(PersQueue::ErrorCode::ERROR, TStringBuilder()
+            << "Inconsistent state #05", ctx);
+    }
+
     it->second.Reading = false;
 
     if constexpr (UseMigrationProtocol) {
@@ -1780,7 +1842,11 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvDirectReadRe
     }
 
     auto it = Partitions.find(assignId);
-    Y_ABORT_UNLESS(it != Partitions.end());
+    if (it == Partitions.end()) {
+        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
+            << "unknown partition_session_id " << assignId << " #06", ctx);
+    }
+
     Y_ABORT_UNLESS(it->second.Reading);
     it->second.Reading = false;
 
@@ -1874,7 +1940,10 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessAnswer(typename TFormedRead
 
     if (formedResponse->IsDirectRead) {
         auto it = Partitions.find(formedResponse->AssignId);
-        Y_ABORT_UNLESS(it != Partitions.end());
+        if (it == Partitions.end()) {
+            return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
+                << "unknown partition_session_id " << formedResponse->AssignId << " #07", ctx);
+        }
         it->second.DirectReads[formedResponse->DirectReadId] = {formedResponse->DirectReadId, sizeEstimation};
         it->second.LastDirectReadId = formedResponse->DirectReadId;
 

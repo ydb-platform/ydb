@@ -6,6 +6,7 @@
 #include "flat_dbase_change.h"
 #include "flat_dbase_misc.h"
 #include "flat_iterator.h"
+#include "flat_table_observer.h"
 #include "util_basics.h"
 
 namespace NKikimr {
@@ -56,6 +57,8 @@ public:
     TDatabase(const TDatabase&) = delete;
     TDatabase(TDatabaseImpl *databaseImpl = nullptr) noexcept;
     ~TDatabase();
+
+    void SetTableObserver(ui32 table, TIntrusivePtr<ITableObserver> ptr) noexcept;
 
     /* Returns durable monotonic change number for table or entire database
         on default (table = Max<ui32>()). Serial is incremented for each

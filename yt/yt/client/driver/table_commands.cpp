@@ -441,7 +441,7 @@ void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
     Options.AdjustDataWeightPerPartition = AdjustDataWeightPerPartition;
 
     auto partitions = WaitFor(context->GetClient()->PartitionTables(Paths, Options))
-       .ValueOrThrow();
+        .ValueOrThrow();
 
     context->ProduceOutputValue(ConvertToYsonString(partitions));
 }
@@ -788,6 +788,20 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         "use_canonical_null_relations",
         [] (TThis* command) -> auto& {
             return command->Options.UseCanonicalNullRelations;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "merge_versioned_rows",
+        [] (TThis* command) -> auto& {
+            return command->Options.MergeVersionedRows;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<NApi::EExecutionBackend>>(
+        "execution_backend",
+        [] (TThis* command) -> auto& {
+            return command->Options.ExecutionBackend;
         })
         .Optional(/*init*/ false);
 }
@@ -1556,6 +1570,13 @@ void TCreateTableBackupCommand::Register(TRegistrar registrar)
             return command->Options.Force;
         })
         .Default(false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "preserve_account",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveAccount;
+        })
+        .Default(false);
 }
 
 void TCreateTableBackupCommand::DoExecute(ICommandContextPtr context)
@@ -1590,6 +1611,13 @@ void TRestoreTableBackupCommand::Register(TRegistrar registrar)
         "enable_replicas",
         [] (TThis* command) -> auto& {
             return command->Options.EnableReplicas;
+        })
+        .Default(false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "preserve_account",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveAccount;
         })
         .Default(false);
 }

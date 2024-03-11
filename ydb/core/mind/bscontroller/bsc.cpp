@@ -75,21 +75,23 @@ void TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
                 failedByPDisk |= {Topology.get(), slot->GetShortVDiskId()};
             }
         }
-        auto deriveStatus = [&](const auto& failed) {
-            auto& checker = *Topology->QuorumChecker;
-            if (!failed.GetNumSetItems()) { // all disks of group are operational
-                return NKikimrBlobStorage::TGroupStatus::FULL;
-            } else if (!checker.CheckFailModelForGroup(failed)) { // fail model exceeded
-                return NKikimrBlobStorage::TGroupStatus::DISINTEGRATED;
-            } else if (checker.IsDegraded(failed)) { // group degraded
-                return NKikimrBlobStorage::TGroupStatus::DEGRADED;
-            } else if (failed.GetNumSetItems()) { // group partially available, but not degraded
-                return NKikimrBlobStorage::TGroupStatus::PARTIAL;
-            } else {
-                Y_ABORT("unexpected case");
-            }
-        };
-        Status.MakeWorst(deriveStatus(failed), deriveStatus(failed | failedByPDisk));
+        Status.MakeWorst(DeriveStatus(Topology.get(), failed), DeriveStatus(Topology.get(), failed | failedByPDisk));
+    }
+}
+
+NKikimrBlobStorage::TGroupStatus::E TBlobStorageController::DeriveStatus(const TBlobStorageGroupInfo::TTopology *topology,
+        const TBlobStorageGroupInfo::TGroupVDisks& failed) {
+    auto& checker = *topology->QuorumChecker;
+    if (!failed.GetNumSetItems()) { // all disks of group are operational
+        return NKikimrBlobStorage::TGroupStatus::FULL;
+    } else if (!checker.CheckFailModelForGroup(failed)) { // fail model exceeded
+        return NKikimrBlobStorage::TGroupStatus::DISINTEGRATED;
+    } else if (checker.IsDegraded(failed)) { // group degraded
+        return NKikimrBlobStorage::TGroupStatus::DEGRADED;
+    } else if (failed.GetNumSetItems()) { // group partially available, but not degraded
+        return NKikimrBlobStorage::TGroupStatus::PARTIAL;
+    } else {
+        Y_ABORT("unexpected case");
     }
 }
 
@@ -149,6 +151,8 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
                 SysViewChangedVSlots.insert(vslotId);
                 SysViewChangedGroups.insert(vdiskId.GroupID);
             }
+        } else {
+            Y_FAIL("no storage configuration provided");
         }
     }
 

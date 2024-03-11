@@ -231,7 +231,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         waitMeteringMessage();
 
         {
-            TString meteringData = R"({"usage":{"start":1600452120,"quantity":59,"finish":1600452179,"type":"delta","unit":"byte*second"},"tags":{"ydb_size":11664},"id":"8751008-3-1600452120-1600452179-11664","cloud_id":"CLOUD_ID_VAL","source_wt":1600452180,"source_id":"sless-docapi-ydb-storage","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
+            TString meteringData = R"({"usage":{"start":1600452120,"quantity":59,"finish":1600452179,"type":"delta","unit":"byte*second"},"tags":{"ydb_size":11664},"id":"72057594046678944-3-1600452120-1600452179-11664","cloud_id":"CLOUD_ID_VAL","source_wt":1600452180,"source_id":"sless-docapi-ydb-storage","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
             meteringData += "\n";
             UNIT_ASSERT_NO_DIFF(meteringMessages, meteringData);
         }
@@ -247,7 +247,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         waitMeteringMessage();
 
         {
-            TString meteringData = R"({"usage":{"start":1600452180,"quantity":59,"finish":1600452239,"type":"delta","unit":"byte*second"},"tags":{"ydb_size":0},"id":"8751008-3-1600452180-1600452239-0","cloud_id":"CLOUD_ID_VAL","source_wt":1600452240,"source_id":"sless-docapi-ydb-storage","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
+            TString meteringData = R"({"usage":{"start":1600452180,"quantity":59,"finish":1600452239,"type":"delta","unit":"byte*second"},"tags":{"ydb_size":0},"id":"72057594046678944-3-1600452180-1600452239-0","cloud_id":"CLOUD_ID_VAL","source_wt":1600452240,"source_id":"sless-docapi-ydb-storage","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
             meteringData += "\n";
             UNIT_ASSERT_NO_DIFF(meteringMessages, meteringData);
         }
@@ -285,10 +285,24 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         env.TestWaitNotification(runtime, txId);
 
         ui64 sharedHive = 0;
+        ui64 sharedDbSchemeShard = 0;
         TestDescribeResult(DescribePath(runtime, "/MyRoot/SharedDB"),
                            {NLs::PathExist,
                             NLs::IsExternalSubDomain("SharedDB"),
-                            NLs::ExtractDomainHive(&sharedHive)});
+                            NLs::ExtractDomainHive(&sharedHive),
+                            NLs::ExtractTenantSchemeshard(&sharedDbSchemeShard),
+                            NLs::ServerlessComputeResourcesMode(EServerlessComputeResourcesModeUnspecified)});
+
+        UNIT_ASSERT(sharedHive != 0
+                    && sharedHive != (ui64)-1
+                    && sharedHive != TTestTxConfig::Hive);
+        UNIT_ASSERT(sharedDbSchemeShard != 0
+                    && sharedDbSchemeShard != (ui64)-1
+                    && sharedDbSchemeShard != TTestTxConfig::SchemeShard);
+                    
+        TestDescribeResult(DescribePath(runtime, sharedDbSchemeShard, "/MyRoot/SharedDB"),
+                           {NLs::PathExist,
+                            NLs::ServerlessComputeResourcesMode(EServerlessComputeResourcesModeUnspecified)});
 
         TString createData = Sprintf(
             R"(
@@ -324,7 +338,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/ServerLess0"),
                            {NLs::PathExist,
                             NLs::IsExternalSubDomain("ServerLess0"),
-                            NLs::ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED),
+                            NLs::ServerlessComputeResourcesMode(EServerlessComputeResourcesModeShared),
                             NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
 
         UNIT_ASSERT(tenantSchemeShard != 0
@@ -333,7 +347,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLess0"),
                            {NLs::PathExist,
-                            NLs::ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED)});
+                            NLs::ServerlessComputeResourcesMode(EServerlessComputeResourcesModeShared)});
         
         auto checkServerlessComputeResourcesMode = [&](EServerlessComputeResourcesMode serverlessComputeResourcesMode) {
             TString alterData = Sprintf(
@@ -353,8 +367,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             env.TestServerlessComputeResourcesModeInHive(runtime, "/MyRoot/ServerLess0", serverlessComputeResourcesMode, sharedHive);
         };
 
-        checkServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED);
-        checkServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED);
+        checkServerlessComputeResourcesMode(EServerlessComputeResourcesModeExclusive);
+        checkServerlessComputeResourcesMode(EServerlessComputeResourcesModeShared);
     }
 
     Y_UNIT_TEST(TestServerlessComputeResourcesModeValidation) {
@@ -421,19 +435,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         // Try to change ServerlessComputeResourcesMode not on serverless database
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
             R"(
-                ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED
+                ServerlessComputeResourcesMode: EServerlessComputeResourcesModeShared
                 Name: "SharedDB"
             )",
             {{ TEvSchemeShard::EStatus::StatusInvalidParameter, "only for serverless" }}
         );
 
-        // Try to set ServerlessComputeResourcesMode to SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED
+        // Try to set ServerlessComputeResourcesMode to EServerlessComputeResourcesModeUnspecified
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
             R"(
-                ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED
+                ServerlessComputeResourcesMode: EServerlessComputeResourcesModeUnspecified
                 Name: "ServerLess0"
             )",
-            {{ TEvSchemeShard::EStatus::StatusInvalidParameter, "SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED" }}
+            {{ TEvSchemeShard::EStatus::StatusInvalidParameter, "EServerlessComputeResourcesModeUnspecified" }}
         );
     }
 
@@ -501,7 +515,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
             R"(
-                ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED
+                ServerlessComputeResourcesMode: EServerlessComputeResourcesModeExclusive
                 Name: "ServerLess0"
             )",
             {{ TEvSchemeShard::EStatus::StatusPreconditionFailed, "Unsupported: feature flag EnableServerlessExclusiveDynamicNodes is off" }}

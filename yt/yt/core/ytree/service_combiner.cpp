@@ -289,7 +289,7 @@ private:
     {
         std::vector<TFuture<std::vector<TString>>> serviceListFutures;
         for (const auto& service : Services_) {
-            auto asyncList = AsyncYPathList(service, TYPath() /* path */, std::numeric_limits<i64>::max() /* limit */);
+            auto asyncList = AsyncYPathList(service, TYPath() /*path*/, std::numeric_limits<i64>::max() /*limit*/);
             serviceListFutures.push_back(asyncList);
         }
         auto asyncResult = AllSucceeded(serviceListFutures);

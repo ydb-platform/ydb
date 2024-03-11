@@ -55,21 +55,21 @@ public:
         return !!Writing;
     }
 
-    void OnExecuteTxAfterAction(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool success) {
+    void OnExecuteTxAfterAction(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
         if (Removing) {
-            Removing->OnExecuteTxAfterRemoving(self, dbBlobs, success);
+            Removing->OnExecuteTxAfterRemoving(self, dbBlobs, blobsWroteSuccessfully);
         }
         if (Writing) {
-            Writing->OnExecuteTxAfterWrite(self, dbBlobs, success);
+            Writing->OnExecuteTxAfterWrite(self, dbBlobs, blobsWroteSuccessfully);
         }
     }
 
-    void OnCompleteTxAfterAction(NColumnShard::TColumnShard& self) {
+    void OnCompleteTxAfterAction(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) {
         if (Removing) {
-            Removing->OnCompleteTxAfterRemoving(self);
+            Removing->OnCompleteTxAfterRemoving(self, blobsWroteSuccessfully);
         }
         if (Writing) {
-            Writing->OnCompleteTxAfterWrite(self);
+            Writing->OnCompleteTxAfterWrite(self, blobsWroteSuccessfully);
         }
     }
 };
@@ -93,6 +93,14 @@ public:
         , ConsumerId(consumerId)
     {
 
+    }
+
+    TString GetStorageIds() const {
+        TStringBuilder sb;
+        for (auto&& i : StorageActions) {
+            sb << i.first << ",";
+        }
+        return sb;
     }
 
     ui32 GetWritingBlobsCount() const {
@@ -144,15 +152,15 @@ public:
         return false;
     }
 
-    void OnExecuteTxAfterAction(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool success) {
+    void OnExecuteTxAfterAction(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
         for (auto&& i : StorageActions) {
-            i.second.OnExecuteTxAfterAction(self, dbBlobs, success);
+            i.second.OnExecuteTxAfterAction(self, dbBlobs, blobsWroteSuccessfully);
         }
     }
 
-    void OnCompleteTxAfterAction(NColumnShard::TColumnShard& self) {
+    void OnCompleteTxAfterAction(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) {
         for (auto&& i : StorageActions) {
-            i.second.OnCompleteTxAfterAction(self);
+            i.second.OnCompleteTxAfterAction(self, blobsWroteSuccessfully);
         }
     }
 
@@ -160,19 +168,13 @@ public:
         return GetStorageAction(storageId).GetRemoving(ConsumerId);
     }
 
-    std::shared_ptr<IBlobsDeclareRemovingAction> GetRemoving(const TPortionInfo& portionInfo);
-
     std::shared_ptr<IBlobsWritingAction> GetWriting(const TString& storageId) {
         return GetStorageAction(storageId).GetWriting(ConsumerId);
     }
 
-    std::shared_ptr<IBlobsWritingAction> GetWriting(const TPortionInfo& portionInfo);
-
     std::shared_ptr<IBlobsReadingAction> GetReading(const TString& storageId) {
         return GetStorageAction(storageId).GetReading(ConsumerId);
     }
-
-    std::shared_ptr<IBlobsReadingAction> GetReading(const TPortionInfo& portionInfo);
 
 };
 

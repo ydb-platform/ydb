@@ -144,47 +144,47 @@ Y_WEAK void SetEnableMadvisePopulate(bool /*value*/)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Y_WEAK TEnumIndexedVector<ETotalCounter, ssize_t> GetTotalAllocationCounters()
+Y_WEAK TEnumIndexedArray<ETotalCounter, ssize_t> GetTotalAllocationCounters()
 {
     return {};
 }
 
-Y_WEAK TEnumIndexedVector<ESmallCounter, ssize_t> GetSmallAllocationCounters()
+Y_WEAK TEnumIndexedArray<ESmallCounter, ssize_t> GetSmallAllocationCounters()
 {
     return {};
 }
 
-Y_WEAK TEnumIndexedVector<ELargeCounter, ssize_t> GetLargeAllocationCounters()
+Y_WEAK TEnumIndexedArray<ELargeCounter, ssize_t> GetLargeAllocationCounters()
 {
     return {};
 }
 
-Y_WEAK std::array<TEnumIndexedVector<ESmallArenaCounter, ssize_t>, SmallRankCount> GetSmallArenaAllocationCounters()
+Y_WEAK std::array<TEnumIndexedArray<ESmallArenaCounter, ssize_t>, SmallRankCount> GetSmallArenaAllocationCounters()
 {
     return {};
 }
 
-Y_WEAK std::array<TEnumIndexedVector<ELargeArenaCounter, ssize_t>, LargeRankCount> GetLargeArenaAllocationCounters()
+Y_WEAK std::array<TEnumIndexedArray<ELargeArenaCounter, ssize_t>, LargeRankCount> GetLargeArenaAllocationCounters()
 {
     return {};
 }
 
-Y_WEAK TEnumIndexedVector<EHugeCounter, ssize_t> GetHugeAllocationCounters()
+Y_WEAK TEnumIndexedArray<EHugeCounter, ssize_t> GetHugeAllocationCounters()
 {
     return {};
 }
 
-Y_WEAK TEnumIndexedVector<ESystemCounter, ssize_t> GetSystemAllocationCounters()
+Y_WEAK TEnumIndexedArray<ESystemCounter, ssize_t> GetSystemAllocationCounters()
 {
     return {};
 }
 
-Y_WEAK TEnumIndexedVector<EUndumpableCounter, ssize_t> GetUndumpableAllocationCounters()
+Y_WEAK TEnumIndexedArray<EUndumpableCounter, ssize_t> GetUndumpableAllocationCounters()
 {
     return {};
 }
 
-Y_WEAK TEnumIndexedVector<ETimingEventType, TTimingEventCounters> GetTimingEventCounters()
+Y_WEAK TEnumIndexedArray<ETimingEventType, TTimingEventCounters> GetTimingEventCounters()
 {
     return {};
 }

@@ -1,7 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    errors.go
-)
-
+IF (TRUE)
+    SRCS(
+		errors.go
+    )
+ENDIF()
 END()

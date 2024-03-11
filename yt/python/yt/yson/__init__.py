@@ -32,6 +32,7 @@ Examples:
 """
 
 from __future__ import print_function
+import os
 
 from . import writer  # noqa
 from . import parser  # noqa
@@ -63,7 +64,8 @@ except ImportError:
         message = str(error)
         if "No module named" not in message:
             import sys as _sys
-            print("Warning! Failed to import dump_parquet binding: " + message, file=_sys.stderr)
+            if os.environ.get("YT_LOG_LEVEL", "").lower() == "debug":
+                print("Warning! Failed to import dump_parquet binding: " + message, file=_sys.stderr)
 
 if TYPE is None:
     from .parser import load, loads  # noqa

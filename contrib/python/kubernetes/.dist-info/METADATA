@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: kubernetes
-Version: 28.1.0
+Version: 29.0.0
 Summary: Kubernetes python client
 Home-page: https://github.com/kubernetes-client/python
 Author: Kubernetes
@@ -32,7 +32,7 @@ Requires-Dist: websocket-client !=0.40.0,!=0.41.*,!=0.42.*,>=0.32.0
 Requires-Dist: requests
 Requires-Dist: requests-oauthlib
 Requires-Dist: oauthlib >=3.2.2
-Requires-Dist: urllib3 <2.0,>=1.24.2
+Requires-Dist: urllib3 >=1.24.2
 Requires-Dist: ipaddress >=1.0.17 ; python_version=="2.7"
 Provides-Extra: adal
 Requires-Dist: adal >=1.0.2 ; extra == 'adal'

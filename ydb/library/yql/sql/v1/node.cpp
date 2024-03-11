@@ -1284,6 +1284,14 @@ void IAggregation::DoUpdateState() const {
     State.Set(ENodeState::OverWindow, AggMode == EAggregateMode::OverWindow);
 }
 
+const TString* IAggregation::GetGenericKey() const {
+    return nullptr;
+}
+
+void IAggregation::Join(IAggregation*) {
+    YQL_ENSURE(false, "Should not be called");
+}
+
 const TString& IAggregation::GetName() const {
     return Name;
 }
@@ -1406,10 +1414,7 @@ StringContentInternal(TContext& ctx, TPosition pos, const TString& input, EStrin
     TString str = input;
     if (mode == EStringContentMode::TypedStringLiteral) {
         auto lower = to_lower(str);
-        if (lower.EndsWith("u")) {
-            str = str.substr(0, str.Size() - 1);
-            result.Type = NKikimr::NUdf::EDataSlot::Utf8;
-        } else if (lower.EndsWith("y")) {
+        if (lower.EndsWith("y")) {
             str = str.substr(0, str.Size() - 1);
             result.Type = NKikimr::NUdf::EDataSlot::Yson;
         } else if (lower.EndsWith("j")) {
@@ -1427,6 +1432,21 @@ StringContentInternal(TContext& ctx, TPosition pos, const TString& input, EStrin
         } else if (lower.EndsWith("pv")) {
             str = str.substr(0, str.Size() - 2);
             result.PgType = "PgVarchar";
+        } else if (lower.EndsWith("s")) {
+            str = str.substr(0, str.Size() - 1);
+            result.Type = NKikimr::NUdf::EDataSlot::String;
+        } else if (lower.EndsWith("u")) {
+            str = str.substr(0, str.Size() - 1);
+            result.Type = NKikimr::NUdf::EDataSlot::Utf8;
+        } else {
+            if (ctx.Scoped->WarnUntypedStringLiterals) {
+                ctx.Warning(pos, TIssuesIds::YQL_UNTYPED_STRING_LITERALS)
+                << "Please add suffix u for Utf8 strings or s for arbitrary binary strings";
+            }
+
+            if (ctx.Scoped->UnicodeLiterals) {
+                result.Type = NKikimr::NUdf::EDataSlot::Utf8;
+            }
         }
     }
 

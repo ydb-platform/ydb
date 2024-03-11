@@ -193,12 +193,13 @@ private:
 
 /*______________________________________________________________________________________________*/
 
-class TAbstractFactory: public IProxyFactory {
+class TLocalFactory: public IProxyFactory {
 public:
-    TAbstractFactory(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+    TLocalFactory(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
         TTaskTransformFactory taskTransformFactory,
-        std::shared_ptr<NKikimr::NMiniKQL::TComputationPatternLRUCache> patternCache)
+        std::shared_ptr<NKikimr::NMiniKQL::TComputationPatternLRUCache> patternCache,
+        bool terminateOnError)
         : DeterministicMode(!!GetEnv("YQL_DETERMINISTIC_MODE"))
         , RandomProvider(
             DeterministicMode
@@ -210,6 +211,7 @@ public:
                 : CreateDefaultTimeProvider())
         , FunctionRegistry(functionRegistry)
         , TaskTransformFactory(std::move(taskTransformFactory))
+        , TerminateOnError(terminateOnError)
     {
         ExecutionContext.FuncRegistry = FunctionRegistry;
         ExecutionContext.ComputationFactory = compFactory;
@@ -218,34 +220,11 @@ public:
         ExecutionContext.PatternCache = patternCache;
     }
 
-protected:
-    bool DeterministicMode;
-    TIntrusivePtr<IRandomProvider> RandomProvider;
-    TIntrusivePtr<ITimeProvider> TimeProvider;
-    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
-    TTaskTransformFactory TaskTransformFactory;
-
-    NDq::TDqTaskRunnerContext ExecutionContext;
-};
-
-/*______________________________________________________________________________________________*/
-
-class TLocalFactory: public TAbstractFactory {
-public:
-    TLocalFactory(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
-        TTaskTransformFactory taskTransformFactory,
-        std::shared_ptr<NKikimr::NMiniKQL::TComputationPatternLRUCache> patternCache,
-        bool terminateOnError)
-        : TAbstractFactory(functionRegistry, compFactory, taskTransformFactory, patternCache)
-        , TerminateOnError(terminateOnError)
-    { }
-
-    ITaskRunner::TPtr GetOld(const TDqTaskSettings& task, const TString& traceId) override {
-        return new TLocalTaskRunner(task, Get(task, NDqProto::DQ_STATS_MODE_BASIC, traceId));
+    ITaskRunner::TPtr GetOld(NKikimr::NMiniKQL::TScopedAlloc& alloc, const TDqTaskSettings& task, const TString& traceId) override {
+        return new TLocalTaskRunner(task, Get(alloc, task, NDqProto::DQ_STATS_MODE_BASIC, traceId));
     }
 
-    TIntrusivePtr<NDq::IDqTaskRunner> Get(const TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const TString& traceId) override {
+    TIntrusivePtr<NDq::IDqTaskRunner> Get(NKikimr::NMiniKQL::TScopedAlloc& alloc, const TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const TString& traceId) override {
         Y_UNUSED(traceId);
         NDq::TDqTaskRunnerSettings settings;
         settings.TerminateOnError = TerminateOnError;
@@ -283,10 +262,16 @@ public:
         }
         auto ctx = ExecutionContext;
         ctx.FuncProvider = TaskTransformFactory(settings.TaskParams, ctx.FuncRegistry);
-        return MakeDqTaskRunner(ctx, settings, { });
+        return MakeDqTaskRunner(alloc, ctx, settings, { });
     }
 
 private:
+    bool DeterministicMode;
+    TIntrusivePtr<IRandomProvider> RandomProvider;
+    TIntrusivePtr<ITimeProvider> TimeProvider;
+    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
+    TTaskTransformFactory TaskTransformFactory;
+    NDq::TDqTaskRunnerContext ExecutionContext;
     const bool TerminateOnError;
 };
 

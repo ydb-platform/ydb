@@ -46,4 +46,14 @@ message TExampleMessage
     map<string, string> string_to_string_map = 35[(NYT.NYson.NProto.yson_map) = true];
     map<int32, int32> int32_to_int32_map = 36[(NYT.NYson.NProto.yson_map) = true];
     map<int32, string> int32_to_string_map = 37[(NYT.NYson.NProto.yson_map) = true];
+
+    enum EEnum {
+        VALUE0 = 0;
+        VALUE1 = 1;
+    };
+
+    optional EEnum enum_int = 38 [(NYT.NYson.NProto.enum_yson_storage_type) = EYST_INT];
+    repeated EEnum enum_int_repeated = 39 [(NYT.NYson.NProto.enum_yson_storage_type) = EYST_INT];
+    optional EEnum enum_string = 40 [(NYT.NYson.NProto.enum_yson_storage_type) = EYST_STRING];
+    repeated EEnum enum_string_repeated = 41 [(NYT.NYson.NProto.enum_yson_storage_type) = EYST_STRING];
 }

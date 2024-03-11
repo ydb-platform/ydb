@@ -10,13 +10,13 @@ namespace NKikimr::NOlap::NCompaction {
 
 class TPortionColumnCursor {
 private:
-    std::vector<IPortionColumnChunk::TPtr> BlobChunks;
+    std::vector<std::shared_ptr<IPortionDataChunk>> BlobChunks;
     std::vector<const TColumnRecord*> ColumnChunks;
     std::optional<ui32> RecordIndexStart;
     YDB_READONLY(ui32, RecordIndexFinish, 0);
     ui32 ChunkRecordIndexStartPosition = 0;
     ui32 ChunkIdx = 0;
-    IPortionColumnChunk::TPtr CurrentBlobChunk;
+    std::shared_ptr<IPortionDataChunk> CurrentBlobChunk;
     const TColumnRecord* CurrentColumnChunk = nullptr;
     ui32 CurrentChunkRecordsCount = 0;
     std::shared_ptr<arrow::Array> CurrentArray;
@@ -38,19 +38,18 @@ public:
 
     bool Fetch(TMergedColumn& column);
 
-    TPortionColumnCursor(const std::vector<IPortionColumnChunk::TPtr>& columnChunks, const std::vector<const TColumnRecord*>& records, const std::shared_ptr<TColumnLoader>& loader, const ui64 portionId)
+    TPortionColumnCursor(const std::vector<std::shared_ptr<IPortionDataChunk>>& columnChunks, const std::vector<const TColumnRecord*>& records, const std::shared_ptr<TColumnLoader>& loader, const ui64 portionId)
         : BlobChunks(columnChunks)
         , ColumnChunks(records)
         , ColumnLoader(loader)
-        , PortionId(portionId)
-    {
+        , PortionId(portionId) {
         AFL_VERIFY(ColumnLoader);
         Y_UNUSED(PortionId);
         Y_ABORT_UNLESS(BlobChunks.size());
         Y_ABORT_UNLESS(ColumnChunks.size() == BlobChunks.size());
         CurrentBlobChunk = BlobChunks.front();
         CurrentColumnChunk = ColumnChunks.front();
-        CurrentChunkRecordsCount = CurrentBlobChunk->GetRecordsCount();
+        CurrentChunkRecordsCount = CurrentBlobChunk->GetRecordsCountVerified();
     }
 };
 

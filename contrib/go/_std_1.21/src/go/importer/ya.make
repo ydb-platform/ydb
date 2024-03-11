@@ -1,12 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    importer.go
-)
-
-GO_TEST_SRCS(importer_test.go)
-
+IF (TRUE)
+    SRCS(
+		importer.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

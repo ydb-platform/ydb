@@ -92,6 +92,9 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("retries", "Number of retries")
         .RequiredArgument("NUM").StoreResult(&NumberOfRetries).DefaultValue(NumberOfRetries);
 
+    config.Opts->AddLongOption("use-virtual-addressing", "S3 bucket virtual addressing")
+        .RequiredArgument("BOOL").StoreResult<bool>(&UseVirtualAddressing).DefaultValue("true");
+
     AddDeprecatedJsonOption(config);
     AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
@@ -131,7 +134,11 @@ int TCommandImportFromS3::Run(TConfig& config) {
     }
 
     settings.NumberOfRetries(NumberOfRetries);
-
+#if defined(_win32_)
+    for (const auto& item : Items) {
+        settings.AppendItem({item.Source, item.Destination});
+    }
+#else
     InitAwsAPI();
     try {
         auto s3Client = CreateS3ClientWrapper(settings);
@@ -162,6 +169,7 @@ int TCommandImportFromS3::Run(TConfig& config) {
         throw;
     }
     ShutdownAwsAPI();
+#endif
 
     TImportClient client(CreateDriver(config));
     TImportFromS3Response response = client.ImportFromS3(std::move(settings)).GetValueSync();

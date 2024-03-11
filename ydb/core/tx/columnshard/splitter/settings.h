@@ -2,9 +2,44 @@
 
 #include <ydb/library/accessor/accessor.h>
 
+#include <ydb/library/actors/core/log.h>
+
 #include <util/system/types.h>
+#include <util/generic/hash.h>
+#include <util/generic/string.h>
+#include <util/generic/hash_set.h>
+#include <set>
 
 namespace NKikimr::NOlap {
+
+class TEntityGroups {
+private:
+    THashMap<TString, std::set<ui32>> GroupEntities;
+    THashSet<ui32> UsedEntityIds;
+    YDB_READONLY_DEF(TString, DefaultGroupName);
+public:
+    TEntityGroups(const TString& defaultGroupName)
+        : DefaultGroupName(defaultGroupName) {
+
+    }
+
+    bool IsEmpty() const {
+        return GroupEntities.empty();
+    }
+
+    void Add(const ui32 entityId, const TString& groupName) {
+        AFL_VERIFY(UsedEntityIds.emplace(entityId).second);
+        AFL_VERIFY(GroupEntities[groupName].emplace(entityId).second);
+    }
+
+    THashMap<TString, std::set<ui32>>::const_iterator begin() const {
+        return GroupEntities.begin();
+    }
+
+    THashMap<TString, std::set<ui32>>::const_iterator end() const {
+        return GroupEntities.end();
+    }
+};
 
 class TSplitSettings {
 private:

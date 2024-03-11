@@ -4,7 +4,7 @@
 #include "common/validation.h"
 #include "merging_sorted_input_stream.h"
 #include "permutations.h"
-#include "serializer/batch_only.h"
+#include "serializer/native.h"
 #include "serializer/abstract.h"
 #include "serializer/stream.h"
 #include "simple_arrays_cache.h"
@@ -106,7 +106,7 @@ std::shared_ptr<arrow::Schema> DeserializeSchema(const TString& str) {
 }
 
 TString SerializeBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const arrow::ipc::IpcWriteOptions& options) {
-    return NSerialization::TBatchPayloadSerializer(options).Serialize(batch);
+    return NSerialization::TNativeSerializer(options).SerializePayload(batch);
 }
 
 TString SerializeBatchNoCompression(const std::shared_ptr<arrow::RecordBatch>& batch) {
@@ -117,7 +117,7 @@ TString SerializeBatchNoCompression(const std::shared_ptr<arrow::RecordBatch>& b
 
 std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob, const std::shared_ptr<arrow::Schema>& schema)
 {
-    auto result = NSerialization::TBatchPayloadDeserializer(schema).Deserialize(blob);
+    auto result = NSerialization::TNativeSerializer().Deserialize(blob, schema);
     if (result.ok()) {
         return *result;
     } else {
@@ -363,7 +363,10 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceSortedBatches(const std::v
 }
 
 // Check if the permutation doesn't reorder anything
-bool IsNoOp(const arrow::UInt64Array& permutation) {
+bool IsTrivial(const arrow::UInt64Array& permutation, const ui64 originalLength) {
+    if ((ui64)permutation.length() != originalLength) {
+        return false;
+    }
     for (i64 i = 0; i < permutation.length(); ++i) {
         if (permutation.Value(i) != (ui64)i) {
             return false;
@@ -376,7 +379,7 @@ std::shared_ptr<arrow::RecordBatch> Reorder(const std::shared_ptr<arrow::RecordB
                                             const std::shared_ptr<arrow::UInt64Array>& permutation, const bool canRemove) {
     Y_ABORT_UNLESS(permutation->length() == batch->num_rows() || canRemove);
 
-    auto res = IsNoOp(*permutation) ? batch : arrow::compute::Take(batch, permutation);
+    auto res = IsTrivial(*permutation, batch->num_rows()) ? batch : arrow::compute::Take(batch, permutation);
     Y_ABORT_UNLESS(res.ok());
     return (*res).record_batch();
 }
@@ -972,6 +975,37 @@ std::shared_ptr<arrow::RecordBatch> MergeColumns(const std::vector<std::shared_p
     }
     auto schema = std::make_shared<arrow::Schema>(fields);
     return arrow::RecordBatch::Make(schema, *recordsCount, columns);
+}
+
+std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std::shared_ptr<arrow::Table>& t) {
+    std::set<ui32> splitPositions;
+    const ui32 numRows = t->num_rows();
+    for (auto&& i : t->columns()) {
+        ui32 pos = 0;
+        for (auto&& arr : i->chunks()) {
+            splitPositions.emplace(pos);
+            pos += arr->length();
+        }
+        AFL_VERIFY(pos == t->num_rows());
+    }
+    std::vector<std::vector<std::shared_ptr<arrow::Array>>> slicedData;
+    slicedData.resize(splitPositions.size());
+    std::vector<ui32> positions(splitPositions.begin(), splitPositions.end());
+    for (auto&& i : t->columns()) {
+        for (ui32 idx = 0; idx < positions.size(); ++idx) {
+            auto slice = i->Slice(positions[idx], ((idx + 1 == positions.size()) ? numRows : positions[idx + 1]) - positions[idx]);
+            AFL_VERIFY(slice->num_chunks() == 1);
+            slicedData[idx].emplace_back(slice->chunks().front());
+        }
+    }
+    std::vector<std::shared_ptr<arrow::RecordBatch>> result;
+    ui32 count = 0;
+    for (auto&& i : slicedData) {
+        result.emplace_back(arrow::RecordBatch::Make(t->schema(), i.front()->length(), i));
+        count += result.back()->num_rows();
+    }
+    AFL_VERIFY(count == t->num_rows())("count", count)("t", t->num_rows());
+    return result;
 }
 
 }

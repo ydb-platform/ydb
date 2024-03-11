@@ -259,9 +259,10 @@ bool httpLoadAgent::doSetHost(const TAddrList& addrs) {
         return false;
 
     if (RealHost_) {
+        size_t reqHostheaderLen = strlen(RealHost_) + 20;
         free(Hostheader);
-        Hostheader = (char*)malloc(strlen(RealHost_) + 20);
-        sprintf(Hostheader, "Host: %s\r\n", RealHost_);
+        Hostheader = (char*)malloc((HostheaderLen = reqHostheaderLen));
+        snprintf(Hostheader, HostheaderLen, "Host: %s\r\n", RealHost_);
     }
 
     if (!URL_.IsNull(THttpURL::FlagAuth)) {

@@ -211,6 +211,66 @@ DEFINE_REFCOUNTED_TYPE(TKeyPrefixFilterWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TDictionaryCompressionConfig
+    : public virtual NYTree::TYsonStruct
+{
+public:
+    bool Enable;
+
+    //! Idle period after last successful or unsuccessful building iteration.
+    TDuration RebuildPeriod;
+    TDuration BackoffPeriod;
+
+    //! Desired and maximum number of chunks in tablet to be sampled.
+    int DesiredProcessedChunkCount;
+    int MaxProcessedChunkCount;
+
+    //! Column-wise desired number and weight of samples to be used when building dictionary.
+    //! Sampling is stopped if that number of samples is encountered in all columns.
+    //! NB: Sample count excludes null values.
+    int DesiredSampleCount;
+    i64 DesiredSampledDataWeight;
+
+    //! Column-wise max number and weight of samples to be fetched.
+    //! Sampling is stopped if that number of samples is encountered in any column.
+    //! NB: Sample count includes null values.
+    int MaxProcessedSampleCount;
+    i64 MaxProcessedDataWeight;
+
+    //! Limit on total size of fetched blocks.
+    i64 MaxFetchedBlocksSize;
+
+    //! Max size of result column dictionary.
+    //! Recommended to be ~100 times less than weight of samples for that column.
+    i64 ColumnDictionarySize;
+
+    //! Level of compression algorithm.
+    //! Applied to digested compression dictionary upon its construction.
+    int CompressionLevel;
+
+    //! Subset of all dictionary building policies.
+    //! Will build and apply dictionaries only from this subset.
+    //! Upon each chunk compression will independently decide which dictionary fits best.
+    THashSet<EDictionaryCompressionPolicy> AppliedPolicies;
+
+    //! Upon each chunk compression will first accumulate samples of that weight
+    //! before deciding dictionary of which policy fits the best.
+    i64 PolicyProbationSamplesSize;
+    //! Upper limit on acceptable compression ratio. No chunk compression is performed if this limit is exceeded.
+    double MaxAcceptableCompressionRatio;
+
+    //! Upper limit on content size of a batch that can be decompressed within a single iteration.
+    i64 MaxDecompressionBlobSize;
+
+    REGISTER_YSON_STRUCT(TDictionaryCompressionConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TDictionaryCompressionConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TBatchHunkReaderConfig
     : public virtual NYTree::TYsonStruct
 {

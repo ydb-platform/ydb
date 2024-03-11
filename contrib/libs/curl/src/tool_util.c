@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -31,11 +31,7 @@
 
 #include "memdebug.h" /* keep this as LAST include */
 
-#if defined(WIN32) && !defined(MSDOS)
-
-/* set in win32_init() */
-extern LARGE_INTEGER tool_freq;
-extern bool tool_isVistaOrGreater;
+#if defined(_WIN32)
 
 /* In case of bug fix this function has a counterpart in timeval.c */
 struct timeval tvnow(void)

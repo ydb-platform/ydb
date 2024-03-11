@@ -31,12 +31,12 @@ public:
     void Update(TStreamFactory streamFactory);
     void Finish();
 
-  private:
+private:
     void Retry(const std::function<void()>& function);
 
     void TryStartAttempt();
 
-  private:
+private:
     const TParameters Parameters_;
     const IRequestRetryPolicyPtr RequestRetryPolicy_;
 

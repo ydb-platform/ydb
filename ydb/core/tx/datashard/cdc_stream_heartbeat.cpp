@@ -1,9 +1,9 @@
 #include "cdc_stream_heartbeat.h"
 #include "datashard_impl.h"
 
-#define LOG_D(stream) LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "[CdcStreamHeartbeat] " << stream)
-#define LOG_I(stream) LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "[CdcStreamHeartbeat] " << stream)
-#define LOG_W(stream) LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "[CdcStreamHeartbeat] " << stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "[CdcStreamHeartbeat] " << stream)
+#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "[CdcStreamHeartbeat] " << stream)
+#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "[CdcStreamHeartbeat] " << stream)
 
 namespace NKikimr::NDataShard {
 
@@ -32,7 +32,7 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_CDC_STREAM_EMIT_HEARTBEATS; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
         LOG_I("Emit change records"
             << ": edge# " << Edge
             << ", at tablet# " << Self->TabletID());
@@ -41,7 +41,7 @@ public:
         const auto heartbeats = Self->GetCdcStreamHeartbeatManager().EmitHeartbeats(txc.DB, Edge);
 
         for (const auto& [streamPathId, info] : heartbeats) {
-            const auto record = TChangeRecordBuilder(TChangeRecord::EKind::CdcHeartbeat)
+            auto recordPtr = TChangeRecordBuilder(TChangeRecord::EKind::CdcHeartbeat)
                 .WithOrder(Self->AllocateChangeRecordOrder(db))
                 .WithGroup(0)
                 .WithStep(info.Last.Step)
@@ -50,6 +50,9 @@ public:
                 .WithTableId(info.TablePathId)
                 .WithSchemaVersion(0) // not used
                 .Build();
+
+            const auto& record = *recordPtr->Get<TChangeRecord>();
+            Self->PersistChangeRecord(db, record);
 
             ChangeRecords.push_back(IDataShardChangeCollector::TChange{
                 .Order = record.GetOrder(),
@@ -61,23 +64,21 @@ public:
                 .TableId = record.GetTableId(),
                 .SchemaVersion = record.GetSchemaVersion(),
             });
-
-            Self->PersistChangeRecord(db, record);
         }
 
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext&) override {
         LOG_I("Enqueue " << ChangeRecords.size() << " change record(s)"
             << ": at tablet# " << Self->TabletID());
         Self->EnqueueChangeRecords(std::move(ChangeRecords));
-        Self->EmitHeartbeats(ctx);
+        Self->EmitHeartbeats();
     }
 
 }; // TTxCdcStreamEmitHeartbeats
 
-void TDataShard::EmitHeartbeats(const TActorContext& ctx) {
+void TDataShard::EmitHeartbeats() {
     LOG_D("Emit heartbeats"
         << ": at tablet# " << TabletID());
 
@@ -91,15 +92,23 @@ void TDataShard::EmitHeartbeats(const TActorContext& ctx) {
     }
 
     if (const auto& plan = TransQueue.GetPlan()) {
-        const auto version = plan.begin()->ToRowVersion();
+        const auto version = Min(plan.begin()->ToRowVersion(), VolatileTxManager.GetMinUncertainVersion());
         if (CdcStreamHeartbeatManager.ShouldEmitHeartbeat(version)) {
-            return Execute(new TTxCdcStreamEmitHeartbeats(this, version), ctx);
+            return Execute(new TTxCdcStreamEmitHeartbeats(this, version));
         }
+        return;
+    }
+
+    if (auto version = VolatileTxManager.GetMinUncertainVersion(); !version.IsMax()) {
+        if (CdcStreamHeartbeatManager.ShouldEmitHeartbeat(version)) {
+            return Execute(new TTxCdcStreamEmitHeartbeats(this, version));
+        }
+        return;
     }
 
     const TRowVersion nextWrite = GetMvccTxVersion(EMvccTxMode::ReadWrite);
     if (CdcStreamHeartbeatManager.ShouldEmitHeartbeat(nextWrite)) {
-        return Execute(new TTxCdcStreamEmitHeartbeats(this, nextWrite), ctx);
+        return Execute(new TTxCdcStreamEmitHeartbeats(this, nextWrite));
     }
 
     WaitPlanStep(lowest.Next().Step);

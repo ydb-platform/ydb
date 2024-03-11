@@ -26,6 +26,11 @@ private:
     ITerminator* PreviousTerminator;
 };
 
+struct TThrowingBindTerminator : public TBindTerminator, public ITerminator {
+    TThrowingBindTerminator();
+    void Terminate(const char* message) const final;
+};
+
 [[noreturn]] void MKQLTerminate(const char* message);
 
 }

@@ -155,6 +155,13 @@ private:
     }
 
     void Handle(TEvCheckAliveRequest::TPtr& ev) {
+        LOG_W("Lease was expired in database"
+            << ", execution id: " << ExecutionId
+            << ", saved final status: " << FinalStatusIsSaved
+            << ", wait finalization request: " << WaitFinalizationRequest
+            << ", is executing: " << IsExecuting()
+            << ", current status: " << Status);
+
         Send(ev->Sender, new TEvCheckAliveResponse());
     }
 
@@ -198,10 +205,6 @@ private:
             FinalStatusIsSaved = true;
             WaitFinalizationRequest = true;
             RunState = IsExecuting() ? ERunState::Finishing : RunState;
-
-            if (RunState == ERunState::Cancelling) {
-                Issues.AddIssue("Script execution is cancelled");
-            }
 
             auto scriptFinalizeRequest = std::make_unique<TEvScriptFinalizeRequest>(
                 GetFinalizationStatusFromRunState(), ExecutionId, Database, Status, GetExecStatusFromStatusCode(Status),

@@ -105,7 +105,7 @@ public:
             transaction = entry.Transaction;
             lease = entry.Lease;
         }
-        NConcurrency::TLeaseManager::RenewLease(lease);
+        NConcurrency::TLeaseManager::RenewLease(std::move(lease));
         YT_LOG_DEBUG("Sticky transaction lease renewed (TransactionId: %v)",
             transactionId);
         return transaction;

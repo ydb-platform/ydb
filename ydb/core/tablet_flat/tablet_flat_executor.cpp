@@ -68,6 +68,14 @@ namespace NFlatExecutorSetup {
     void ITablet::OnFollowersCountChanged() {
         // nothing by default
     }
+
+    void ITablet::OnFollowerSchemaUpdated() {
+        // nothing by default
+    }
+
+    void ITablet::OnFollowerDataUpdated() {
+        // nothing by default
+    }
 }
 
 }}

@@ -760,11 +760,10 @@ public:
     EResult ValidateKeys(TValidationInfo& validationInfo) override {
         EResult result = EResult::Ok;
 
-        std::pair<ui64, ui64> maxSnapshotTime = {0,0}; // unused for now
         for (auto& validKey : validationInfo.Keys) {
             TKeyDesc * key = validKey.Key.get();
 
-            bool valid = Settings.Host->IsValidKey(*key, maxSnapshotTime);
+            bool valid = Settings.Host->IsValidKey(*key);
 
             if (valid) {
                 auto curSchemaVersion = Settings.Host->GetTableSchemaVersion(key->TableId);
@@ -1042,7 +1041,7 @@ public:
         }
 
         if (Y_LIKELY(result == EResult::Ok)) {
-            validationInfo.Loaded = true;
+            validationInfo.SetLoaded();
         }
 
         IsProgramValidated = true;

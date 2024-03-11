@@ -40,29 +40,107 @@ bool TDbWrapper::Load(TInsertTableAccessor& insertTable,
     return NColumnShard::Schema::InsertTable_Load(db, DsGroupSelector, insertTable, loadTime);
 }
 
-void TDbWrapper::WriteColumn(ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
+void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
     NIceDb::TNiceDb db(Database);
-    NColumnShard::Schema::IndexColumns_Write(db, index, portion, row);
+    auto proto = portion.GetMeta().SerializeToProto(row.ColumnId, row.Chunk);
+    auto rowProto = row.GetMeta().SerializeToProto();
+    if (proto) {
+        *rowProto.MutablePortionMeta() = std::move(*proto);
+    }
+    using IndexColumns = NColumnShard::Schema::IndexColumns;
+    db.Table<IndexColumns>().Key(0, portion.GetDeprecatedGranuleId(), row.ColumnId,
+        portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Update(
+            NIceDb::TUpdate<IndexColumns::XPlanStep>(portion.GetRemoveSnapshot().GetPlanStep()),
+            NIceDb::TUpdate<IndexColumns::XTxId>(portion.GetRemoveSnapshot().GetTxId()),
+            NIceDb::TUpdate<IndexColumns::Blob>(portion.GetBlobId(row.GetBlobRange().GetBlobIdxVerified()).SerializeBinary()),
+            NIceDb::TUpdate<IndexColumns::Metadata>(rowProto.SerializeAsString()),
+            NIceDb::TUpdate<IndexColumns::Offset>(row.BlobRange.Offset),
+            NIceDb::TUpdate<IndexColumns::Size>(row.BlobRange.Size),
+            NIceDb::TUpdate<IndexColumns::PathId>(portion.GetPathId())
+        );
 }
 
-void TDbWrapper::EraseColumn(ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
+void TDbWrapper::EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
     NIceDb::TNiceDb db(Database);
-    NColumnShard::Schema::IndexColumns_Erase(db, index, portion, row);
+    using IndexColumns = NColumnShard::Schema::IndexColumns;
+    db.Table<IndexColumns>().Key(0, portion.GetDeprecatedGranuleId(), row.ColumnId,
+        portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Delete();
 }
 
-bool TDbWrapper::LoadColumns(ui32 index, const std::function<void(const NOlap::TPortionInfo&, const TColumnChunkLoadContext&)>& callback) {
+bool TDbWrapper::LoadColumns(const std::function<void(const NOlap::TPortionInfo&, const TColumnChunkLoadContext&)>& callback) {
     NIceDb::TNiceDb db(Database);
-    return NColumnShard::Schema::IndexColumns_Load(db, DsGroupSelector, index, callback);
+    using IndexColumns = NColumnShard::Schema::IndexColumns;
+    auto rowset = db.Table<IndexColumns>().Prefix(0).Select();
+    if (!rowset.IsReady()) {
+        return false;
+    }
+
+    while (!rowset.EndOfSet()) {
+        NOlap::TPortionInfo portion = NOlap::TPortionInfo::BuildEmpty();
+        portion.SetPathId(rowset.GetValue<IndexColumns::PathId>());
+        portion.SetMinSnapshot(rowset.GetValue<IndexColumns::PlanStep>(), rowset.GetValue<IndexColumns::TxId>());
+        portion.SetPortion(rowset.GetValue<IndexColumns::Portion>());
+        portion.SetDeprecatedGranuleId(rowset.GetValue<IndexColumns::Granule>());
+
+        NOlap::TColumnChunkLoadContext chunkLoadContext(rowset, DsGroupSelector);
+
+        portion.SetRemoveSnapshot(rowset.GetValue<IndexColumns::XPlanStep>(), rowset.GetValue<IndexColumns::XTxId>());
+
+        callback(portion, chunkLoadContext);
+
+        if (!rowset.Next()) {
+            return false;
+        }
+    }
+    return true;
 }
 
-void TDbWrapper::WriteCounter(ui32 index, ui32 counterId, ui64 value) {
+void TDbWrapper::WriteIndex(const TPortionInfo& portion, const TIndexChunk& row) {
+    AFL_VERIFY(row.GetBlobRange().IsValid());
+    using IndexIndexes = NColumnShard::Schema::IndexIndexes;
     NIceDb::TNiceDb db(Database);
-    return NColumnShard::Schema::IndexCounters_Write(db, index, counterId, value);
+    db.Table<IndexIndexes>().Key(portion.GetPathId(), portion.GetPortionId(), row.GetIndexId(), row.GetChunkIdx()).Update(
+            NIceDb::TUpdate<IndexIndexes::Blob>(portion.GetBlobId(row.GetBlobRange().GetBlobIdxVerified()).SerializeBinary()),
+            NIceDb::TUpdate<IndexIndexes::Offset>(row.GetBlobRange().Offset),
+            NIceDb::TUpdate<IndexIndexes::Size>(row.GetBlobRange().Size),
+            NIceDb::TUpdate<IndexIndexes::RecordsCount>(row.GetRecordsCount()),
+            NIceDb::TUpdate<IndexIndexes::RawBytes>(row.GetRawBytes())
+        );
 }
 
-bool TDbWrapper::LoadCounters(ui32 index, const std::function<void(ui32 id, ui64 value)>& callback) {
+void TDbWrapper::EraseIndex(const TPortionInfo& portion, const TIndexChunk& row) {
     NIceDb::TNiceDb db(Database);
-    return NColumnShard::Schema::IndexCounters_Load(db, index, callback);
+    using IndexIndexes = NColumnShard::Schema::IndexIndexes;
+    db.Table<IndexIndexes>().Key(portion.GetPathId(), portion.GetPortionId(), row.GetIndexId(), 0).Delete();
+}
+
+bool TDbWrapper::LoadIndexes(const std::function<void(const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext&)>& callback) {
+    NIceDb::TNiceDb db(Database);
+    using IndexIndexes = NColumnShard::Schema::IndexIndexes;
+    auto rowset = db.Table<IndexIndexes>().Select();
+    if (!rowset.IsReady()) {
+        return false;
+    }
+
+    while (!rowset.EndOfSet()) {
+        NOlap::TIndexChunkLoadContext chunkLoadContext(rowset, DsGroupSelector);
+        callback(rowset.GetValue<IndexIndexes::PathId>(), rowset.GetValue<IndexIndexes::PortionId>(), chunkLoadContext);
+
+        if (!rowset.Next()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void TDbWrapper::WriteCounter(ui32 counterId, ui64 value) {
+    NIceDb::TNiceDb db(Database);
+    return NColumnShard::Schema::IndexCounters_Write(db, counterId, value);
+}
+
+bool TDbWrapper::LoadCounters(const std::function<void(ui32 id, ui64 value)>& callback) {
+    NIceDb::TNiceDb db(Database);
+    return NColumnShard::Schema::IndexCounters_Load(db, callback);
 }
 
 }

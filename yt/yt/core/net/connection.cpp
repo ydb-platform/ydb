@@ -1228,7 +1228,8 @@ IConnectionReaderPtr CreateInputConnectionFromPath(
 IConnectionWriterPtr CreateOutputConnectionFromPath(
     const TString& pipePath,
     const IPollerPtr& poller,
-    const TRefCountedPtr& pipeHolder)
+    const TRefCountedPtr& pipeHolder,
+    std::optional<int> capacity)
 {
 #ifdef _unix_
     int flags = O_WRONLY | O_CLOEXEC;
@@ -1240,6 +1241,10 @@ IConnectionWriterPtr CreateOutputConnectionFromPath(
     }
 
     try {
+        if (capacity) {
+            SafeSetPipeCapacity(fd, *capacity);
+        }
+
         SafeMakeNonblocking(fd);
     } catch (...) {
         SafeClose(fd, false);

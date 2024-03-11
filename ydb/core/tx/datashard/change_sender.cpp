@@ -1,14 +1,14 @@
 #include "change_exchange.h"
 #include "change_exchange_impl.h"
-#include "change_sender_monitoring.h"
 #include "datashard_impl.h"
 
-#include <ydb/library/services/services.pb.h>
-
+#include <ydb/core/change_exchange/change_exchange.h>
+#include <ydb/core/change_exchange/change_sender_monitoring.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/mon.h>
+#include <ydb/library/services/services.pb.h>
 #include <library/cpp/monlib/service/pages/mon_page.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
@@ -19,7 +19,7 @@ namespace NKikimr::NDataShard {
 
 class TChangeSender: public TActor<TChangeSender> {
     using ESenderType = TEvChangeExchange::ESenderType;
-    using TEnqueuedRecord = TEvChangeExchange::TEvEnqueueRecords::TRecordInfo;
+    using TEnqueuedRecord = NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo;
 
     struct TSender {
         TTableId UserTableId;
@@ -67,7 +67,7 @@ class TChangeSender: public TActor<TChangeSender> {
         sender.ActorId = RegisterChangeSender(pathId, sender.UserTableId, sender.Type);
     }
 
-    void Handle(TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
+    void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
         auto& records = ev->Get()->Records;
 
@@ -92,11 +92,11 @@ class TChangeSender: public TActor<TChangeSender> {
         }
 
         for (auto& [to, records] : forward) {
-            Send(to, new TEvChangeExchange::TEvEnqueueRecords(std::move(records)));
+            Send(to, new NChangeExchange::TEvChangeExchange::TEvEnqueueRecords(std::move(records)));
         }
 
         if (remove) {
-            Send(DataShard.ActorId, new TEvChangeExchange::TEvRemoveRecords(std::move(remove)));
+            Send(DataShard.ActorId, new NChangeExchange::TEvChangeExchange::TEvRemoveRecords(std::move(remove)));
         }
     }
 
@@ -165,6 +165,8 @@ class TChangeSender: public TActor<TChangeSender> {
     }
 
     void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
+        using namespace NChangeExchange;
+
         const auto& cgi = ev->Get()->Cgi();
         if (const auto& str = cgi.Get("pathId")) {
             if (const auto& pathId = ParsePathId(str)) {
@@ -289,7 +291,7 @@ public:
 
     STFUNC(StateBase) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvChangeExchange::TEvEnqueueRecords, Handle);
+            hFunc(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords, Handle);
             hFunc(TEvChangeExchange::TEvAddSender, Handle);
             hFunc(TEvChangeExchange::TEvRemoveSender, Handle);
             HFunc(NMon::TEvRemoteHttpInfo, Handle);

@@ -31,7 +31,7 @@ struct TSubDomainKey : public std::pair<ui64, ui64> {
 
 static const TSubDomainKey InvalidSubDomainKey = TSubDomainKey();
 
-using TMaybeServerlessComputeResourcesMode = TMaybe<NKikimrSubDomains::EServerlessComputeResourcesMode, NMaybe::TPolicyUndefinedFail>;
+using TMaybeServerlessComputeResourcesMode = TMaybeFail<NKikimrSubDomains::EServerlessComputeResourcesMode>;
 }
 
 template <>

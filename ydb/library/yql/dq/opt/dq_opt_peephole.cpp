@@ -484,8 +484,8 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
                 << "(" << *leftKeyType << ") and " << rightKeys[i]->Content() << "(" << *rightKeyType << ")";
             break;
         }
-        castKeyLeft = (!IsSameAnnotation(*leftDryType, *commonType) || optKeyLeft);
-        castKeyRight = (!IsSameAnnotation(*rightDryType, *commonType) || optKeyRight);
+        castKeyLeft = castKeyLeft || (!IsSameAnnotation(*leftDryType, *commonType) || optKeyLeft);
+        castKeyRight = castKeyRight || (!IsSameAnnotation(*rightDryType, *commonType) || optKeyRight);
         keyTypeItems.emplace_back(commonType);
     }
 
@@ -511,18 +511,18 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
         rightKeySelector = BuildDictKeySelector(ctx, joinDict.Pos(), rightKeys, keyTypeItems, castKeyRight);
     }
 
-    auto streamToDict = [&ctx](const TExprBase& input, const TExprNode::TPtr& keySelector) {
+    const auto streamToDict = [&ctx](const TExprBase& input, const TExprNode::TPtr& keySelector) {
         return Build<TCoSqueezeToDict>(ctx, input.Pos())
-            .Stream(input)
+            .Stream(TCoIterator::Match(input.Raw()) ? TExprBase(ctx.RenameNode(input.Ref(), TCoToFlow::CallableName())) : input)
             .KeySelector(keySelector)
             .PayloadSelector()
                 .Args({"item"})
                 .Body("item")
                 .Build()
             .Settings()
-                .Add<TCoAtom>().Build("Hashed")
-                .Add<TCoAtom>().Build("Many")
-                .Add<TCoAtom>().Build("Compact")
+                .Add<TCoAtom>().Build("Hashed", TNodeFlags::Default)
+                .Add<TCoAtom>().Build("Many", TNodeFlags::Default)
+                .Add<TCoAtom>().Build("Compact", TNodeFlags::Default)
                 .Build()
             .Done();
     };
@@ -554,7 +554,9 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
     auto unpackData = UnpackJoinedData(leftRowType, rightRowType, leftTableLabel, rightTableLabel, join.Pos(), ctx);
 
     return Build<TCoMap>(ctx, joinDict.Pos())
-        .Input(join)
+        .Input<TCoToFlow>()
+            .Input(join)
+            .Build()
         .Lambda(unpackData)
         .Done();
 }
@@ -579,6 +581,8 @@ NNodes::TExprBase DqPeepholeRewritePureJoin(const NNodes::TExprBase& node, TExpr
                 .RightLabel(join.RightLabel())
                 .JoinType(join.JoinType())
                 .JoinKeys(join.JoinKeys())
+                .LeftJoinKeyNames(join.LeftJoinKeyNames())
+                .RightJoinKeyNames(join.RightJoinKeyNames())
                 .Build()
             .Done();
     } else {
@@ -594,6 +598,8 @@ NNodes::TExprBase DqPeepholeRewritePureJoin(const NNodes::TExprBase& node, TExpr
                 .RightLabel(join.RightLabel())
                 .JoinType(join.JoinType())
                 .JoinKeys(join.JoinKeys())
+                .LeftJoinKeyNames(join.LeftJoinKeyNames())
+                .RightJoinKeyNames(join.RightJoinKeyNames())
                 .Build()
             .Done();
     }
@@ -607,29 +613,10 @@ NNodes::TExprBase DqPeepholeRewriteReplicate(const NNodes::TExprBase& node, TExp
 
     TVector<TExprBase> branches;
     branches.reserve(dqReplicate.Args().Count() - 1);
-    const auto inputKind = dqReplicate.Arg(0).Ref().GetTypeAnn()->GetKind();
-    YQL_ENSURE(inputKind == ETypeAnnotationKind::Stream || inputKind == ETypeAnnotationKind::Flow);
-
     auto inputIndex = NDq::BuildAtomList("0", dqReplicate.Pos(), ctx);
     for (size_t i = 1; i < dqReplicate.Args().Count(); ++i) {
         branches.emplace_back(inputIndex);
-        const auto lambdaOutputKind = dqReplicate.Arg(i).Ref().GetTypeAnn()->GetKind();
-        YQL_ENSURE(lambdaOutputKind == ETypeAnnotationKind::Stream || lambdaOutputKind == ETypeAnnotationKind::Flow);
-        if (lambdaOutputKind != inputKind) {
-            branches.emplace_back(ctx.Builder(dqReplicate.Arg(i).Pos())
-                .Lambda()
-                    .Param("arg")
-                    .Callable(lambdaOutputKind == ETypeAnnotationKind::Stream ? "ToFlow" : "FromFlow")
-                        .Apply(0, dqReplicate.Arg(i).Ptr())
-                            .With(0, "arg")
-                        .Seal()
-                    .Seal()
-                .Seal()
-                .Build()
-            );
-        } else {
-            branches.emplace_back(ctx.DeepCopyLambda(dqReplicate.Arg(i).Ref()));
-        }
+        branches.emplace_back(ctx.DeepCopyLambda(dqReplicate.Arg(i).Ref()));
     }
 
     return Build<TCoSwitch>(ctx, dqReplicate.Pos())

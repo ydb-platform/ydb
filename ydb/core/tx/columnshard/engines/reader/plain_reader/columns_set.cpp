@@ -12,6 +12,9 @@ TString TColumnsSet::DebugString() const {
 }
 
 NKikimr::NOlap::NPlainReader::TColumnsSet TColumnsSet::operator-(const TColumnsSet& external) const {
+    if (external.IsEmpty() || IsEmpty()) {
+        return *this;
+    }
     TColumnsSet result = *this;
     for (auto&& i : external.ColumnIds) {
         result.ColumnIds.erase(i);
@@ -28,6 +31,12 @@ NKikimr::NOlap::NPlainReader::TColumnsSet TColumnsSet::operator-(const TColumnsS
 }
 
 NKikimr::NOlap::NPlainReader::TColumnsSet TColumnsSet::operator+(const TColumnsSet& external) const {
+    if (external.IsEmpty()) {
+        return *this;
+    }
+    if (IsEmpty()) {
+        return external;
+    }
     TColumnsSet result = *this;
     result.ColumnIds.insert(external.ColumnIds.begin(), external.ColumnIds.end());
     auto fields = result.Schema->fields();
@@ -42,7 +51,7 @@ NKikimr::NOlap::NPlainReader::TColumnsSet TColumnsSet::operator+(const TColumnsS
 }
 
 bool TColumnsSet::ColumnsOnly(const std::vector<std::string>& fieldNames) const {
-    if (fieldNames.size() != GetSize()) {
+    if (fieldNames.size() != GetColumnsCount()) {
         return false;
     }
     std::set<std::string> fieldNamesSet;
@@ -64,11 +73,7 @@ void TColumnsSet::Rebuild() {
         ColumnNamesVector.emplace_back(i);
         ColumnNames.emplace(i);
     }
-    if (ColumnIds.size()) {
-        FilteredSchema = std::make_shared<TFilteredSnapshotSchema>(FullReadSchema, ColumnIds);
-    } else {
-        FilteredSchema = FullReadSchema;
-    }
+    FilteredSchema = std::make_shared<TFilteredSnapshotSchema>(FullReadSchema, ColumnIds);
 }
 
 }

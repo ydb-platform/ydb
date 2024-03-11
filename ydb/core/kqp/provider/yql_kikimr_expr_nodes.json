@@ -131,7 +131,8 @@
                 {"Index": 10, "Name": "Changefeeds", "Type": "TCoChangefeedList"},
                 {"Index": 11, "Name": "TableType", "Type": "TCoAtom"},
                 {"Index": 12, "Name": "Temporary", "Type": "TCoAtom"},
-                {"Index": 13, "Name": "ExistingOk", "Type": "TCoAtom"}
+                {"Index": 13, "Name": "ExistingOk", "Type": "TCoAtom"},
+                {"Index": 14, "Name": "ReplaceIfExists", "Type":  "TCoAtom"}
             ]
         },
         {
@@ -254,7 +255,8 @@
                 {"Index": 2, "Name": "ObjectId", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "TypeId", "Type": "TCoAtom"},
                 {"Index": 4, "Name": "Features", "Type": "TCoNameValueTupleList"},
-                {"Index": 5, "Name": "ExistingOk", "Type": "TCoAtom"}
+                {"Index": 5, "Name": "ExistingOk", "Type": "TCoAtom"},
+                {"Index": 6, "Name": "ReplaceIfExists", "Type":  "TCoAtom"}
             ]
         },
         {
@@ -266,7 +268,8 @@
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "ObjectId", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "TypeId", "Type": "TCoAtom"},
-                {"Index": 4, "Name": "Features", "Type": "TCoNameValueTupleList"}
+                {"Index": 4, "Name": "Features", "Type": "TCoNameValueTupleList"},
+                {"Index": 5, "Name": "ResetFeatures", "Type": "TCoAtomList"}
             ]
         },
         {

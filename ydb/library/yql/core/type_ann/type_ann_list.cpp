@@ -2180,10 +2180,12 @@ namespace {
             switch (slot) {
                 case EDataSlot::Date:
                 case EDataSlot::TzDate:
+                case EDataSlot::Date32:
                     value = ctx.Expr.NewAtom(input->Pos(), "86400000000", TNodeFlags::Default);
                     break;
                 case EDataSlot::Datetime:
                 case EDataSlot::TzDatetime:
+                case EDataSlot::Datetime64:
                     value = ctx.Expr.NewAtom(input->Pos(), "1000000", TNodeFlags::Default);
                     break;
                 default:
@@ -5391,7 +5393,9 @@ namespace {
             } else {
                 const NPg::TAggregateDesc& aggDesc = *aggDescPtr;
                 const auto& finalDesc = NPg::LookupProc(aggDesc.FinalFuncId ? aggDesc.FinalFuncId : aggDesc.TransFuncId);
-                input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(finalDesc.ResultType));
+                auto resultType = finalDesc.ResultType;
+                AdjustReturnType(resultType, aggDesc.ArgTypes, argTypes);
+                input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(resultType));
             }
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
@@ -7104,6 +7108,14 @@ namespace {
     }
 
     IGraphTransformer::TStatus ListUniqWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        return OptListWrapperImpl<1U>(input, output, ctx, "Uniq");
+    }
+
+    IGraphTransformer::TStatus ListUniqStableWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        return OptListWrapperImpl<1U>(input, output, ctx, "UniqStable");
+    }
+
+    IGraphTransformer::TStatus UniqWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -7112,25 +7124,17 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (IsNull(input->Head())) {
-            output = input->HeadPtr();
-            return IGraphTransformer::TStatus::Repeat;
-        }
-
         auto type = input->Head().GetTypeAnn();
-        if (type->GetKind() == ETypeAnnotationKind::Optional) {
-            type = type->Cast<TOptionalExprType>()->GetItemType();
-        }
-
-        if (type->GetKind() != ETypeAnnotationKind::List && type->GetKind() != ETypeAnnotationKind::EmptyList) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder()
-                << "Expected (empty) list or optional of (empty) list, but got: " << *input->Head().GetTypeAnn()));
-            return IGraphTransformer::TStatus::Error;
-        }
 
         if (type->GetKind() == ETypeAnnotationKind::EmptyList) {
             output = input->HeadPtr();
             return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (type->GetKind() != ETypeAnnotationKind::List) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder()
+                << "Expected (empty) list, but got: " << *input->Head().GetTypeAnn()));
+            return IGraphTransformer::TStatus::Error;
         }
 
         auto itemType = type->Cast<TListExprType>()->GetItemType();

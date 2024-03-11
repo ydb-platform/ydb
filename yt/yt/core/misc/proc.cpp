@@ -759,14 +759,14 @@ void SetUid(int uid)
 #ifdef _linux_
     const auto* passwd = getpwuid(uid);
     int gid = (passwd && errno == 0)
-      ? passwd->pw_gid
-      : uid; // fallback value.
+        ? passwd->pw_gid
+        : uid; // fallback value.
 
     if (setresgid(gid, gid, gid) != 0) {
         THROW_ERROR_EXCEPTION("Unable to set gids")
-                << TErrorAttribute("uid", uid)
-                << TErrorAttribute("gid", gid)
-                << TError::FromSystem();
+            << TErrorAttribute("uid", uid)
+            << TErrorAttribute("gid", gid)
+            << TError::FromSystem();
     }
 
     if (setresuid(uid, uid, uid) != 0) {
@@ -914,6 +914,27 @@ void SafeMakeNonblocking(int fd)
     }
 }
 
+bool TrySetPipeCapacity(int fd, int capacity)
+{
+#ifdef _linux_
+    int res = fcntl(fd, F_SETPIPE_SZ, capacity);
+
+    return  res != -1;
+#else
+    Y_UNUSED(fd);
+    Y_UNUSED(capacity);
+    return true;
+#endif
+}
+
+void SafeSetPipeCapacity(int fd, int capacity)
+{
+    if (!TrySetPipeCapacity(fd, capacity)) {
+        THROW_ERROR_EXCEPTION("Failed to set capacity for descriptor %v", fd)
+            << TError::FromSystem();
+    }
+}
+
 bool TrySetUid(int uid)
 {
 #ifdef _linux_
@@ -970,17 +991,17 @@ bool TryClose(TFileDescriptor fd, bool ignoreBadFD)
     return false;
 }
 
-bool TryDup2(TFileDescriptor /* oldFD */, TFileDescriptor /* newFD */)
+bool TryDup2(TFileDescriptor /*oldFD*/, TFileDescriptor /*newFD*/)
 {
     YT_UNIMPLEMENTED();
 }
 
-void SafeDup2(TFileDescriptor /* oldFD */, TFileDescriptor /* newFD */)
+void SafeDup2(TFileDescriptor /*oldFD*/, TFileDescriptor /*newFD*/)
 {
     YT_UNIMPLEMENTED();
 }
 
-void SafeSetCloexec(TFileDescriptor /* fd */)
+void SafeSetCloexec(TFileDescriptor /*fd*/)
 {
     YT_UNIMPLEMENTED();
 }
@@ -990,7 +1011,7 @@ bool TryExecve(const char /* *path */, const char* /* argv[] */, const char* /* 
     YT_UNIMPLEMENTED();
 }
 
-TError StatusToError(int /* status */)
+TError StatusToError(int /*status*/)
 {
     YT_UNIMPLEMENTED();
 }
@@ -1000,47 +1021,47 @@ void CloseAllDescriptors()
     YT_UNIMPLEMENTED();
 }
 
-void SafePipe(TFileDescriptor /* fd */ [2])
+void SafePipe(TFileDescriptor /*fd*/ [2])
 {
     YT_UNIMPLEMENTED();
 }
 
-TFileDescriptor SafeDup(TFileDescriptor /* fd */)
+TFileDescriptor SafeDup(TFileDescriptor /*fd*/)
 {
     YT_UNIMPLEMENTED();
 }
 
-void SafeOpenPty(TFileDescriptor* /* masterFD */, TFileDescriptor* /* slaveFD */, int /* height */, int /* width */)
+void SafeOpenPty(TFileDescriptor* /*masterFD*/, TFileDescriptor* /*slaveFD*/, int /*height*/, int /*width*/)
 {
     YT_UNIMPLEMENTED();
 }
 
-void SafeLoginTty(TFileDescriptor /* slaveFD */)
+void SafeLoginTty(TFileDescriptor /*slaveFD*/)
 {
     YT_UNIMPLEMENTED();
 }
 
-void SafeSetTtyWindowSize(TFileDescriptor /* slaveFD */, int /* height */, int /* width */)
+void SafeSetTtyWindowSize(TFileDescriptor /*slaveFD*/, int /*height*/, int /*width*/)
 {
     YT_UNIMPLEMENTED();
 }
 
-bool TryMakeNonblocking(TFileDescriptor /* fd */)
+bool TryMakeNonblocking(TFileDescriptor /*fd*/)
 {
     YT_UNIMPLEMENTED();
 }
 
-void SafeMakeNonblocking(TFileDescriptor /* fd */)
+void SafeMakeNonblocking(TFileDescriptor /*fd*/)
 {
     YT_UNIMPLEMENTED();
 }
 
-void SafeSetUid(int /* uid */)
+void SafeSetUid(int /*uid*/)
 {
     YT_UNIMPLEMENTED();
 }
 
-TString SafeGetUsernameByUid(int /* uid */)
+TString SafeGetUsernameByUid(int /*uid*/)
 {
     YT_UNIMPLEMENTED();
 }

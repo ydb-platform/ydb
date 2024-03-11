@@ -1,5 +1,6 @@
 #include <yt/yt/core/test_framework/framework.h>
 
+#include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/error_code.h>
 
 #include <library/cpp/yt/string/format.h>
@@ -112,6 +113,30 @@ TEST(TErrorCodeRegistryTest, Basic)
     EXPECT_EQ(
         TErrorCodeRegistry::Get()->Get(-111),
         (TErrorCodeRegistry::TErrorCodeInfo{"NUnknown", "ErrorCode-111"}));
+}
+
+DEFINE_ENUM(ETestEnumOne,
+    ((VariantOne) (0))
+    ((VariantTwo) (1))
+);
+
+DEFINE_ENUM(ETestEnumTwo,
+    ((DifferentVariantOne) (0))
+    ((DifferentVariantTwo) (1))
+);
+
+template <class T, class K>
+concept EquallyComparable = requires(T a, K b)
+{
+    { static_cast<T>(0) == static_cast<K>(0) };
+};
+
+TEST(TErrorCodeTest, ImplicitCastTest)
+{
+    // assert TErrorCode is in scope
+    using NYT::TErrorCode;
+    bool equallyComparable = EquallyComparable<ETestEnumOne, ETestEnumTwo>;
+    EXPECT_FALSE(equallyComparable);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -434,23 +434,13 @@ DEALLOCATE select1;
 -- (temporarily hide query, to avoid the long CREATE TABLE stmt)
 \set ECHO none
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:3:1: Error: ERROR:  syntax error at or near "\"
-
-    	\set ECHO none
-	^
+Metacommand \set ECHO none is not supported
 <sql-statement>
 SELECT 'CREATE TABLE extra_wide_table(firstc text, '|| array_to_string(array_agg('c'||i||' bool'),',')||', lastc text);'
 FROM generate_series(1, 1100) g(i)
 \gexec
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:3:1: Error: ERROR:  syntax error at or near "\"
-
-    	\gexec
-	^
+Metacommand \gexec is not supported
 <sql-statement>
 \set ECHO all
 </sql-statement>
@@ -585,22 +575,12 @@ CREATE TABLE remember_create_subid (c int);
 <sql-statement>
 SAVEPOINT q;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: TransactionStmt: kind is not supported: 4
-    	SAVEPOINT q;
-	^
 <sql-statement>
 DROP TABLE remember_create_subid;
 </sql-statement>
 <sql-statement>
 ROLLBACK TO q;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: TransactionStmt: kind is not supported: 6
-    	ROLLBACK TO q;
-	^
 <sql-statement>
 COMMIT;
 </sql-statement>
@@ -625,22 +605,12 @@ ALTER TABLE remember_node_subid ALTER c TYPE bigint;
 <sql-statement>
 SAVEPOINT q;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: TransactionStmt: kind is not supported: 4
-    	SAVEPOINT q;
-	^
 <sql-statement>
 DROP TABLE remember_node_subid;
 </sql-statement>
 <sql-statement>
 ROLLBACK TO q;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: TransactionStmt: kind is not supported: 6
-    	ROLLBACK TO q;
-	^
 <sql-statement>
 COMMIT;
 </sql-statement>
@@ -941,10 +911,6 @@ CREATE TABLE partitioned (
 -- check relkind
 SELECT relkind FROM pg_class WHERE relname = 'partitioned';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_class
-    
 <sql-statement>
 -- prevent a function referenced in partition key from being dropped
 DROP FUNCTION plusone(int);
@@ -978,12 +944,7 @@ CREATE TABLE fail () INHERITS (partitioned2);
 -- Partition key in describe output
 \d partitioned
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:1: Error: ERROR:  syntax error at or near "\"
-
-    	\d partitioned
-	^
+Metacommand \d partitioned is not supported
 <sql-statement>
 \d+ partitioned2
 </sql-statement>
@@ -2165,10 +2126,6 @@ CREATE TABLE part_b PARTITION OF parted (
 -- conislocal should be false for any merged constraints, true otherwise
 SELECT conislocal, coninhcount FROM pg_constraint WHERE conrelid = 'part_b'::regclass ORDER BY conislocal, coninhcount;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_constraint
-    
 <sql-statement>
 -- Once check_b is added to the parent, it should be made non-local for part_b
 ALTER TABLE parted ADD CONSTRAINT check_b CHECK (b >= 0);
@@ -2181,10 +2138,6 @@ ALTER TABLE parted ADD CONSTRAINT check_b CHECK (b >= 0);
 <sql-statement>
 SELECT conislocal, coninhcount FROM pg_constraint WHERE conrelid = 'part_b'::regclass;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_constraint
-    
 <sql-statement>
 -- Neither check_a nor check_b are droppable from part_b
 ALTER TABLE part_b DROP CONSTRAINT check_a;
@@ -2216,10 +2169,6 @@ ALTER TABLE parted DROP CONSTRAINT check_a, DROP CONSTRAINT check_b;
 <sql-statement>
 SELECT conislocal, coninhcount FROM pg_constraint WHERE conrelid = 'part_b'::regclass;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_constraint
-    
 <sql-statement>
 -- specify PARTITION BY for a partition
 CREATE TABLE fail_part_col_not_found PARTITION OF parted FOR VALUES IN ('c') PARTITION BY RANGE (c);
@@ -2274,12 +2223,7 @@ insert into parted_notnull_inh_test (b) values (null);
 -- note that while b's default is overriden, a's default is preserved
 \d parted_notnull_inh_test1
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:1: Error: ERROR:  syntax error at or near "\"
-
-    	\d parted_notnull_inh_test1
-	^
+Metacommand \d parted_notnull_inh_test1 is not supported
 <sql-statement>
 drop table parted_notnull_inh_test;
 </sql-statement>
@@ -2399,32 +2343,17 @@ drop table test_part_coll_posix;
 -- Partition bound in describe output
 \d+ part_b
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:1: Error: ERROR:  syntax error at or near "\"
-
-    	\d+ part_b
-	^
+Metacommand \d+ part_b is not supported
 <sql-statement>
 -- Both partition bound and partition key in describe output
 \d+ part_c
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:1: Error: ERROR:  syntax error at or near "\"
-
-    	\d+ part_c
-	^
+Metacommand \d+ part_c is not supported
 <sql-statement>
 -- a level-2 partition's constraint will include the parent's expressions
 \d+ part_c_1_10
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:1: Error: ERROR:  syntax error at or near "\"
-
-    	\d+ part_c_1_10
-	^
+Metacommand \d+ part_c_1_10 is not supported
 <sql-statement>
 -- Show partition count in the parent's describe output
 -- Tempted to include \d+ output listing partitions with bound info but
@@ -2432,12 +2361,7 @@ drop table test_part_coll_posix;
 -- returned.
 \d parted
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:5:1: Error: ERROR:  syntax error at or near "\"
-
-    	\d parted
-	^
+Metacommand \d parted is not supported
 <sql-statement>
 \d hash_parted
 </sql-statement>

@@ -14,20 +14,26 @@ using namespace NKikimr::NMiniKQL;
 using namespace NNodes;
 using namespace NThreading;
 
-TString GetType(const NYT::TNode& attr) {
-    if (!attr.HasKey("type")) {
+TString GetTypeFromAttributes(const NYT::TNode& attributes, bool getDocumentType) {
+    if (!attributes.HasKey("type")) {
         return "unknown";
     }
-
-    return attr["type"].AsString();
+    const auto type = attributes["type"].AsString();
+    if (getDocumentType && "document" == type) {
+        if (!attributes.HasKey("_yql_type")) {
+            return "unknown";
+        }
+        return attributes["_yql_type"].AsString();
+    } else {
+        return type;
+    }
 }
 
-TString GetAttrType(const NYT::TNode& node) {
+TString GetTypeFromNode(const NYT::TNode& node, bool getDocumentType) {
     if (!node.HasAttributes()) {
         return "unknown";
     }
-
-    return GetType(node.GetAttributes());
+    return GetTypeFromAttributes(node.GetAttributes(), getDocumentType);
 }
 
 TMaybe<TVector<IYtGateway::TBatchFolderResult::TFolderItem>> MaybeGetFolderFromCache(TTransactionCache::TEntry::TPtr entry, TStringBuf cacheKey) {
@@ -83,7 +89,7 @@ IYtGateway::TBatchFolderResult::TFolderItem MakeFolderItem(const NYT::TNode& nod
         }
         item.Attributes[attr.first] = attr.second;
     }
-    item.Type = GetAttrType(node);
+    item.Type = GetTypeFromNode(node, false);
     item.Path = path.StartsWith(NYT::TConfig::Get()->Prefix)
         ? path.substr(NYT::TConfig::Get()->Prefix.size())
         : path;

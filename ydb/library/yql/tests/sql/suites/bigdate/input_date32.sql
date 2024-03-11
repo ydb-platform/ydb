@@ -1,0 +1,15 @@
+select 1, cast("-144170-12-31" as date32), cast(cast("-144170-12-31" as date32) as string);
+select 2, cast("-144169-01-01" as date32), cast(cast("-144169-01-01" as date32) as string);
+select 3, cast("-1-1-1" as date32), cast(cast("-1-1-1" as date32) as string);
+select 4, cast("0-1-1" as date32), cast(cast("0-1-1" as date32) as string);
+select 5, cast("1-1-1" as date32), cast(cast("1-1-1" as date32) as string);
+select 6, cast("1-02-29" as date32), cast(cast("1-02-29" as date32) as string);
+select 7, cast("1969-12-31" as date32), cast(cast("1969-12-31" as date32) as string);
+select 8, cast("1970-01-01" as date32), cast(cast("1970-01-01" as date32) as string);
+select 9, cast("2000-04-05" as date32), cast(cast("2000-04-05" as date32) as string);
+select 10, cast("2100-02-29" as date32), cast(cast("2100-02-29" as date32) as string);
+select 11, cast("2100-03-01" as date32), cast(cast("2100-03-01" as date32) as string);
+select 12, cast("2105-12-31" as date32), cast(cast("2105-12-31" as date32) as string);
+select 13, cast("2106-01-01" as date32), cast(cast("2106-01-01" as date32) as string);
+select 14, cast("148107-12-31" as date32), cast(cast("148107-12-31" as date32) as string);
+select 15, cast("148108-01-01" as date32), cast(cast("148108-01-01" as date32) as string);

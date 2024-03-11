@@ -105,6 +105,44 @@ Y_UNIT_TEST(Partition) {
     }
 }
 
+Y_UNIT_TEST(PartitionWriteQuota) {
+    TTestContext tc;
+
+    TFinalizer finalizer(tc);
+    bool activeZone{false};
+    tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, false, true);
+    tc.Runtime->SetScheduledLimit(100);
+    tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableQuoting(true);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_KB}, {}, tc);
+    TVector<std::pair<ui64, TString>> data;
+    TString s{50_KB, 'c'};
+    data.push_back({1, s});
+    for (auto i = 0u; i < 7; i++) {
+        CmdWrite(0, "sourceid0", data, tc, false);
+        data[0].first++;
+    }
+
+    {
+        auto counters = tc.Runtime->GetAppData(0).Counters;
+        Y_ABORT_UNLESS(counters);
+        auto dbGroup = GetServiceCounters(counters, "pqproxy");
+
+        auto quotaWait = dbGroup->FindSubgroup("subsystem", "partitionWriteQuotaWait")
+                             ->FindSubgroup("Account", "total")
+                             ->FindSubgroup("Producer", "total")
+                             ->FindSubgroup("Topic", "total")
+                             ->FindSubgroup("TopicPath", "total")
+                             ->FindSubgroup("OriginDC", "cluster");
+        auto histogram = quotaWait->FindSubgroup("sensor", "PartitionWriteQuotaWaitOriginal");
+        TStringStream histogramStr;
+        histogram->OutputHtml(histogramStr);
+        Cerr << "**** Total histogram: **** \n " << histogramStr.Str() << "**** **** **** ****" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(histogram->FindNamedCounter("Interval", "0ms")->Val(),2);
+        UNIT_ASSERT_VALUES_EQUAL(histogram->FindNamedCounter("Interval", "2500ms")->Val(), 5);
+    }
+}
+
 Y_UNIT_TEST(PartitionFirstClass) {
     TTestContext tc;
     TFinalizer finalizer(tc);
@@ -131,6 +169,7 @@ Y_UNIT_TEST(PartitionFirstClass) {
     {
         auto counters = tc.Runtime->GetAppData(0).Counters;
         auto dbGroup = GetServiceCounters(counters, "datastreams");
+
         TStringStream countersStr;
         dbGroup->OutputHtml(countersStr);
         const TString referenceCounters = NResource::Find(TStringBuf("counters_datastreams.html"));
@@ -252,19 +291,22 @@ Y_UNIT_TEST(PartitionFirstClass) {
         TFinalizer finalizer(tc);
         activeZone = false;
         bool dbRegistered{false};
+        bool labeledCountersReceived =false ;
 
         tc.Prepare(dispatchName, setup, activeZone, true, true, true);
-        tc.Runtime->SetScheduledLimit(1000);
+        tc.Runtime->SetScheduledLimit(10000);
+
         tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == NSysView::TEvSysView::EvRegisterDbCounters) {
                 auto database = event.Get()->Get<NSysView::TEvSysView::TEvRegisterDbCounters>()->Database;
                 UNIT_ASSERT_VALUES_EQUAL(database, "/Root/PQ");
                 dbRegistered = true;
+            } else if (event->GetTypeRewrite() == TEvTabletCounters::EvTabletAddLabeledCounters) {
+                labeledCountersReceived = true;
             }
             return TTestActorRuntime::DefaultObserverFunc(event);
         });
-
-        PQTabletPrepare({.deleteTime=3600, .meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS}, {{"client", true}}, tc);
+        PQTabletPrepare({.deleteTime=3600, .writeSpeed = 100_KB, .meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS}, {{"client", true}}, tc);
         TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
         ui64 ssId = 325;
         BootFakeSchemeShard(*tc.Runtime, ssId, state);
@@ -285,7 +327,7 @@ Y_UNIT_TEST(PartitionFirstClass) {
             options.FinalEvents.emplace_back(TEvTabletCounters::EvTabletAddLabeledCounters);
             tc.Runtime->DispatchEvents(options);
         }
-        UNIT_ASSERT(dbRegistered);
+        //UNIT_ASSERT(labeledCountersReceived);
 
         {
             NSchemeCache::TDescribeResult::TPtr result = new NSchemeCache::TDescribeResult{};

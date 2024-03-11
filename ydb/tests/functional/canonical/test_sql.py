@@ -460,12 +460,19 @@ class BaseCanonicalTest(object):
             pt = config.get('parameters_types', {})
             result_sets = self.script_query(query, pv, pt)
             canons['script'] = self.canonical_results(query_name, self.pretty_json(result_sets))
-            canons['script_plan'] = self.canonical_plan(query_name, self.script_explain(query))
+            plan = json.loads(self.script_explain(query))
+            if 'queries' in plan:
+                for q in plan['queries']:
+                    if 'SimplifiedPlan' in q:
+                        del q['SimplifiedPlan']
+            canons['script_plan'] = self.canonical_plan(query_name, self.pretty_json(plan))
             self.compare_tables_test(canons, config, query_name)
         elif kind == 'plan':
             plan = json.loads(self.explain(query))
             if 'Plan' in plan:
                 del plan['Plan']
+            if 'SimplifiedPlan' in plan:
+                del plan['SimplifiedPlan']
             canons['plan'] = self.canonical_plan(query_name, self.pretty_json(plan))
         elif kind == 'result_sets':
             result_sets = self.serializable_execute(query, config.get('parameters', {}))

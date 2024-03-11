@@ -55,7 +55,7 @@ public:
             case 0: {
                 const ui32 minHugeBlobSize = 65 << 10;
                 TString abcdefghkj(CreateData("abcdefghkj", minHugeBlobSize, true));
-                const TLogoBlobID logoBlobId(0, 1, 10, 0, abcdefghkj.size(), 0, 1);
+                const TLogoBlobID logoBlobId(DefaultTestTabletId, 1, 10, 0, abcdefghkj.size(), 0, 1);
                 ctx.Send(HugeKeeperId,
                          new TEvHullWriteHugeBlob(TActorId(), 0, logoBlobId, TIngress(),
                                 TRope(abcdefghkj),

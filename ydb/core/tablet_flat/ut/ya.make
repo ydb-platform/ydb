@@ -28,7 +28,8 @@ SRCS(
     flat_test_db.cpp
     flat_test_db_helpers.h
     shared_handle_ut.cpp
-    ut_btree_index.cpp
+    ut_btree_index_nodes.cpp
+    ut_btree_index_iter_charge.cpp
     ut_self.cpp
     ut_iterator.cpp
     ut_memtable.cpp

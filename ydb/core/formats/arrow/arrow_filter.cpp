@@ -323,7 +323,7 @@ bool ApplyImpl(const TColumnFilter& filter, std::shared_ptr<TData>& batch, const
     }
     if (filter.IsTotalDenyFilter()) {
         batch = batch->Slice(0, 0);
-        return false;
+        return true;
     }
     if (filter.IsTotalAllowFilter()) {
         return true;
@@ -343,11 +343,11 @@ bool ApplyImpl(const TColumnFilter& filter, std::shared_ptr<TData>& batch, const
     return false;
 }
 
-bool TColumnFilter::Apply(std::shared_ptr<arrow::Table>& batch, const std::optional<ui32> startPos, const std::optional<ui32> count) {
+bool TColumnFilter::Apply(std::shared_ptr<arrow::Table>& batch, const std::optional<ui32> startPos, const std::optional<ui32> count) const {
     return ApplyImpl<arrow::Datum::TABLE>(*this, batch, startPos, count);
 }
 
-bool TColumnFilter::Apply(std::shared_ptr<arrow::RecordBatch>& batch, const std::optional<ui32> startPos, const std::optional<ui32> count) {
+bool TColumnFilter::Apply(std::shared_ptr<arrow::RecordBatch>& batch, const std::optional<ui32> startPos, const std::optional<ui32> count) const {
     return ApplyImpl<arrow::Datum::RECORD_BATCH>(*this, batch, startPos, count);
 }
 
@@ -569,7 +569,7 @@ TColumnFilter TColumnFilter::CombineSequentialAnd(const TColumnFilter& extFilter
                 ++itExt;
             }
         }
-        Y_ABORT_UNLESS(itSelf == Filter.end() && itExt == extFilter.Filter.cend());
+        AFL_VERIFY(itSelf == Filter.end() && itExt == extFilter.Filter.cend());
         TColumnFilter result = TColumnFilter::BuildAllowFilter();
         std::swap(resultFilter, result.Filter);
         std::swap(curCurrent, result.LastValue);
@@ -609,6 +609,14 @@ std::optional<ui32> TColumnFilter::GetFilteredCount() const {
         }
     }
     return *FilteredCount;
+}
+
+void TColumnFilter::Append(const TColumnFilter& filter) {
+    bool currentVal = filter.GetStartValue();
+    for (auto&& i : filter.Filter) {
+        Add(currentVal, i);
+        currentVal = !currentVal;
+    }
 }
 
 }

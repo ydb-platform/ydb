@@ -25,6 +25,9 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_topic
     ydb/public/sdk/cpp/client/ydb_topic/impl
     ydb/public/sdk/cpp/client/ydb_topic/ut/ut_utils
+
+    ydb/core/tx/schemeshard/ut_helpers
+    ydb/core/persqueue/ut/common
 )
 
 YQL_LAST_ABI_VERSION()
@@ -34,6 +37,7 @@ SRCS(
     describe_topic_ut.cpp
     local_partition_ut.cpp
     topic_to_table_ut.cpp
+    trace_ut.cpp
 )
 
 END()

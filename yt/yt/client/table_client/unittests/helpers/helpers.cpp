@@ -136,7 +136,7 @@ void CheckResult(std::vector<TVersionedRow> expected, IVersionedReaderPtr reader
     std::vector<TVersionedRow> actual;
     actual.reserve(100);
 
-    while (auto batch = reader->Read({.MaxRowsPerRead = 100})) {
+    while (auto batch = reader->Read({.MaxRowsPerRead = 20})) {
         if (batch->IsEmpty()) {
             ASSERT_TRUE(reader->GetReadyEvent().Get().IsOK());
             continue;

@@ -25,22 +25,6 @@ TSerializableAccessControlEntry::TSerializableAccessControlEntry(
     , InheritanceMode(inheritanceMode)
 { }
 
-bool operator == (const TSerializableAccessControlEntry& lhs, const TSerializableAccessControlEntry& rhs)
-{
-    return
-        lhs.Action == rhs.Action &&
-        lhs.Subjects == rhs.Subjects &&
-        lhs.Permissions == rhs.Permissions &&
-        lhs.InheritanceMode == rhs.InheritanceMode &&
-        lhs.Columns == rhs.Columns &&
-        lhs.Vital == rhs.Vital;
-}
-
-bool operator != (const TSerializableAccessControlEntry& lhs, const TSerializableAccessControlEntry& rhs)
-{
-    return !(lhs == rhs);
-}
-
 // NB(levysotsky): We don't use TYsonStruct here
 // because we want to mirror the TAccessControlList structure,
 // and a vector of TYsonStruct-s cannot be declared (as it has no move constructor).
@@ -185,11 +169,6 @@ void TSerializableAccessControlEntry::Persist(const TStreamPersistenceContext& c
 bool operator == (const TSerializableAccessControlList& lhs, const TSerializableAccessControlList& rhs)
 {
     return lhs.Entries == rhs.Entries;
-}
-
-bool operator != (const TSerializableAccessControlList& lhs, const TSerializableAccessControlList& rhs)
-{
-    return !(lhs == rhs);
 }
 
 void Serialize(const TSerializableAccessControlList& acl, NYson::IYsonConsumer* consumer)

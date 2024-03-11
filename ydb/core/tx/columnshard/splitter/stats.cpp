@@ -7,13 +7,12 @@ std::optional<TBatchSerializationStat> TSerializationStats::GetStatsForRecordBat
     std::optional<TBatchSerializationStat> result;
     for (auto&& i : schema->fields()) {
         auto columnInfo = GetColumnInfo(i->name());
-        if (!columnInfo) {
+        if (!columnInfo || columnInfo->GetRecordsCount() == 0) {
             return {};
         } else if (!result) {
-            result = TBatchSerializationStat(*columnInfo);
-        } else {
-            result->Merge(*columnInfo);
+            result = TBatchSerializationStat();
         }
+        result->Merge(*columnInfo);
     }
     return result;
 }

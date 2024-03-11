@@ -13,27 +13,28 @@ class TLogFlushCompletionAction : public TCompletionAction {
     const ui32 EndChunkIdx;
     const ui32 EndSectorIdx;
     THolder<TLogWriter> &CommonLogger;
+    TCompletionAction* CompletionLogWrite;
 public:
     TLogFlushCompletionAction(ui32 endChunkIdx, ui32 endSectorIdx, THolder<TLogWriter> &commonLogger, TCompletionAction* completionLogWrite)
         : EndChunkIdx(endChunkIdx)
         , EndSectorIdx(endSectorIdx)
-        , CommonLogger(commonLogger) {
-            this->FlushAction = completionLogWrite;
-        }
+        , CommonLogger(commonLogger)
+        , CompletionLogWrite(completionLogWrite) { }
 
     void Exec(TActorSystem *actorSystem) override {
         CommonLogger->FirstUncommitted = TFirstUncommitted(EndChunkIdx, EndSectorIdx);
-
-        Y_DEBUG_ABORT_UNLESS(FlushAction);
-
-        // FlushAction here is a TCompletionLogWrite which will decrease owner's inflight count.
-        FlushAction->Exec(actorSystem);
+        
+        CompletionLogWrite->SetResult(Result);
+        CompletionLogWrite->SetErrorReason(ErrorReason);
+        CompletionLogWrite->Exec(actorSystem);
 
         delete this;
     }
 
     void Release(TActorSystem *actorSystem) override {
-        FlushAction->Release(actorSystem);
+        CompletionLogWrite->SetResult(Result);
+        CompletionLogWrite->SetErrorReason(ErrorReason);
+        CompletionLogWrite->Release(actorSystem);
 
         delete this;
     }
@@ -533,6 +534,8 @@ void TPDisk::ReadAndParseMainLog(const TActorId &pDiskActor) {
 
 void TPDisk::ProcessLogReadQueue() {
     for (auto& req : JointLogReads) {
+        req->SpanStack.PopOk();
+        req->SpanStack.Push(TWilson::PDiskDetailed, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
         switch (req->GetType()) {
         case ERequestType::RequestLogRead:
         {
@@ -592,7 +595,7 @@ void TPDisk::ProcessLogReadQueue() {
             TLogReadContinue *read = static_cast<TLogReadContinue*>(req);
             read->CompletionAction->CostNs = DriveModel.TimeForSizeNs(read->Size, read->Offset / Format.ChunkSize,
                     TDriveModel::OP_TYPE_READ);
-            auto traceId = read->Span.GetTraceId();
+            auto traceId = read->SpanStack.GetTraceId();
             BlockDevice->PreadAsync(read->Data, read->Size, read->Offset, read->CompletionAction,
                     read->ReqId, &traceId); // ??? TraceId
             break;
@@ -728,14 +731,16 @@ void TPDisk::ProcessLogWriteQueueAndCommits() {
     TVector<ui32> logChunksToCommit;
     for (TLogWrite *logWrite : JointLogWrites) {
         Y_DEBUG_ABORT_UNLESS(logWrite);
+        logWrite->SpanStack.PopOk();
         logOperationSizeBytes += logWrite->Data.size();
         TStringStream errorReason;
         NKikimrProto::EReplyStatus status = ValidateRequest(logWrite, errorReason);
         if (status == NKikimrProto::OK) {
+            logWrite->SpanStack.Push(TWilson::PDiskDetailed, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
             LogWrite(*logWrite, logChunksToCommit);
             logWrite->ScheduleTime = HPNow();
-            if (logWrite->Span) {
-                traceId = logWrite->Span.GetTraceId();
+            if (auto logWriteTraceId = logWrite->SpanStack.GetTraceId()) {
+                traceId = std::move(logWriteTraceId);
             }
         } else {
             PrepareLogError(logWrite, errorReason, status);
@@ -891,7 +896,7 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
     }
 
     // Write to log
-    auto evLogTraceId = evLog.Span.GetTraceId();
+    auto evLogTraceId = evLog.SpanStack.GetTraceId();
     CommonLogger->LogHeader(evLog.Owner, evLog.Signature, evLog.Lsn, payloadSize, evLog.ReqId, &evLogTraceId);
     OnNonceChange(NonceLog, evLog.ReqId, &evLogTraceId);
     if (evLog.Data.size()) {
@@ -1264,7 +1269,7 @@ void TPDisk::OnLogCommitDone(TLogCommitDone &req) {
             WriteSysLogRestorePoint(completion.Release(), req.ReqId, {}); // FIXME: wilson
         }
     }
-    TryTrimChunk(false, 0, req.Span);
+    TryTrimChunk(false, 0, req.SpanStack.PeekTopConst());
 }
 
 void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
@@ -1277,7 +1282,7 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
     }
 
     if (req.IsChunksFromLogSplice) {
-        auto *releaseReq = ReqCreator.CreateFromArgs<TReleaseChunks>(std::move(req.ChunksToRelease), req.Span.CreateChild(TWilson::PDisk, "PDisk.ReleaseChunks"));
+        auto *releaseReq = ReqCreator.CreateFromArgs<TReleaseChunks>(std::move(req.ChunksToRelease), req.SpanStack.CreateChild(TWilson::PDiskTopLevel, "PDisk.ReleaseChunks"));
 
         auto flushAction = MakeHolder<TCompletionEventSender>(this, THolder<TReleaseChunks>(releaseReq));
 
@@ -1304,7 +1309,7 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
         }
         IsLogChunksReleaseInflight = false;
 
-        TryTrimChunk(false, 0, req.Span);
+        TryTrimChunk(false, 0, req.SpanStack.PeekTopConst());
     }
 }
 

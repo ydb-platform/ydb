@@ -1,5 +1,6 @@
 #include "database_resolver.h"
 
+#include <util/string/split.h>
 #include <ydb/core/fq/libs/common/cache.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/events/events.h>
@@ -98,8 +99,6 @@ private:
     }
 
     void DieOnTtl() {
-        Success = false;
-
         auto errorMsg  = TStringBuilder() << "Could not resolve database ids: ";
         bool firstUnresolvedDbId = true;
         for (const auto& [_, params]: Requests) {
@@ -112,32 +111,52 @@ private:
         }
         errorMsg << " in " << ResolvingTtl << " seconds.";
         LOG_E("ResponseProcessor::DieOnTtl: errorMsg=" << errorMsg);
-
-        SendResolvedEndpointsAndDie(errorMsg);
+        Issues.AddIssue(errorMsg);
+        SendResolvedEndpointsAndDie();
     }
 
-    void SendResolvedEndpointsAndDie(const TString& errorMsg) {
-        NYql::TIssues issues;
-        if (errorMsg) {
-            issues.AddIssue(errorMsg);
-        }
-
+    void SendResolvedEndpointsAndDie() {
         Send(Sender,
             new TEvents::TEvEndpointResponse(
-                NYql::TDatabaseResolverResponse(std::move(DatabaseId2Description), Success, issues)));
+                NYql::TDatabaseResolverResponse(std::move(DatabaseId2Description), Issues.Empty(), Issues)));
         PassAway();
         LOG_D("ResponseProcessor::SendResolvedEndpointsAndDie: passed away");
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev)
     {
-        TString errorMessage;
         TMaybe<TDatabaseDescription> result;
         const auto requestIter = Requests.find(ev->Get()->Request);
         HandledIds++;
 
-        LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): got MDB API response: code=" << ev->Get()->Response->Status);
+        LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): got API response: code=" << ev->Get()->Response->Status);
 
+        try {
+            HandleResponse(ev, requestIter, result);
+        } catch (...) {
+            const TString msg = TStringBuilder() << "error while response processing, params "
+                << ((requestIter != Requests.end()) ? requestIter->second.ToDebugString() : TString{"unknown"})
+                << ", details: " << CurrentExceptionMessage();
+            LOG_E("ResponseProccessor::Handle(TEvHttpIncomingResponse): " << msg);
+            Issues.AddIssue(msg);
+        }
+
+        LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): progress: " 
+              << DatabaseId2Description.size() << " of " << Requests.size() << " requests are done");
+
+        if (HandledIds == Requests.size()) {
+            SendResolvedEndpointsAndDie();
+        }
+    }
+
+private:
+
+    void HandleResponse(
+        NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev,
+        const TRequestMap::const_iterator& requestIter,
+        TMaybe<TDatabaseDescription>& result)
+    {
+        TString errorMessage;
         if (ev->Get()->Error.empty() && (ev->Get()->Response && ev->Get()->Response->Status == "200")) {
             errorMessage = HandleSuccessfulResponse(ev, requestIter, result);
         } else {
@@ -145,33 +164,25 @@ private:
         }
 
         if (errorMessage) {
+            Issues.AddIssue(errorMessage);
             LOG_E("ResponseProcessor::Handle(HttpIncomingResponse): error=" << errorMessage);
-            Success = false;
         } else {
             const auto& params = requestIter->second;
             auto key = std::make_tuple(params.Id, params.DatabaseType, params.DatabaseAuth);
             if (errorMessage) {
                 LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): put value in cache"
-                      << "; params: " << params.ToDebugString()
-                      << ", error: " << errorMessage);
+                    << "; params: " << params.ToDebugString()
+                    << ", error: " << errorMessage);
                 Cache.Put(key, errorMessage);
             } else {
                 LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): put value in cache"
-                      << "; params: " << params.ToDebugString()
-                      << ", result: " << result->ToDebugString());
+                    << "; params: " << params.ToDebugString()
+                    << ", result: " << result->ToDebugString());
                 Cache.Put(key, result);
             }
         }
-
-        LOG_D("ResponseProcessor::Handle(HttpIncomingResponse): progress: " 
-              << DatabaseId2Description.size() << " of " << Requests.size() << " requests are done");
-
-        if (HandledIds == Requests.size()) {
-            SendResolvedEndpointsAndDie(errorMessage);
-        }
     }
 
-private:
     TString HandleSuccessfulResponse(
         NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev,
         const TRequestMap::const_iterator& requestIter,
@@ -179,7 +190,7 @@ private:
     ) {
         if (requestIter == Requests.end()) {
             return "unknown request";
-        } 
+        }
 
         NJson::TJsonReaderConfig jsonConfig;
         NJson::TJsonValue databaseInfo;
@@ -224,12 +235,7 @@ private:
         const auto& status = ev->Get()->Response->Status;
 
         if (status == "403") {
-            const auto second = requestIter->second;
-            auto mdbTypeStr = NYql::DatabaseTypeLowercase(second.DatabaseType);
-
-            return TStringBuilder() << "You have no permission to resolve database id into database endpoint. " <<
-                                       "Please check that your service account has role "  << 
-                                       "`managed-" << mdbTypeStr << ".viewer`.";
+            return TStringBuilder() << "You have no permission to resolve database id into database endpoint. " + DetailedPermissionsError(requestIter->second);
         }
 
         auto errorMessage = ev->Get()->Error;
@@ -245,6 +251,17 @@ private:
         return errorMessage;
     }
 
+
+    TString DetailedPermissionsError(const TResolveParams& params) const {
+ 
+        if (params.DatabaseType == EDatabaseType::ClickHouse || params.DatabaseType == EDatabaseType::PostgreSQL) {
+                auto mdbTypeStr = NYql::DatabaseTypeLowercase(params.DatabaseType);
+                return TStringBuilder() << "Please check that your service account has role "  << 
+                                       "`managed-" << mdbTypeStr << ".viewer`.";
+        }
+        return {};
+    }
+
     const TActorId Sender;
     TCache& Cache;
     const TRequestMap Requests;
@@ -252,7 +269,7 @@ private:
     const NYql::IMdbEndpointGenerator::TPtr MdbEndpointGenerator;
     TDatabaseResolverResponse::TDatabaseDescriptionMap DatabaseId2Description;
     size_t HandledIds = 0;
-    bool Success = true;
+    NYql::TIssues Issues;
     const TParsers& Parsers;
     TDuration ResolvingTtl = TDuration::Seconds(30); //TODO: Use cfg
 };
@@ -289,7 +306,12 @@ public:
             }
 
             Y_ENSURE(endpoint);
-            return TDatabaseDescription{endpoint, "", 0, database, secure};
+
+            TVector<TString> split = StringSplitter(endpoint).Split(':');
+
+            Y_ENSURE(split.size() == 2);
+
+            return TDatabaseDescription{endpoint, split[0], FromString(split[1]), database, secure};
         };
         Parsers[NYql::EDatabaseType::Ydb] = ydbParser;
         Parsers[NYql::EDatabaseType::DataStreams] = [ydbParser](
@@ -304,9 +326,11 @@ public:
             if (!isDedicatedDb && ret.Endpoint.StartsWith("ydb.")) {
                 // Replace "ydb." -> "yds."
                 ret.Endpoint[2] = 's';
+                ret.Host[2] = 's';
             }
             if (isDedicatedDb) {
                 ret.Endpoint = "u-" + ret.Endpoint;
+                ret.Host = "u-" + ret.Host;
             }
             return ret;
         };
@@ -463,6 +487,7 @@ private:
             try {
                 TString url;
                 if (IsIn({NYql::EDatabaseType::Ydb, NYql::EDatabaseType::DataStreams }, databaseType)) {
+                    YQL_ENSURE(ev->Get()->YdbMvpEndpoint.Size() > 0, "empty YDB MVP Endpoint");
                     url = TUrlBuilder(ev->Get()->YdbMvpEndpoint + "/database")
                             .AddUrlParam("databaseId", databaseId)
                             .Build();
@@ -474,7 +499,6 @@ private:
                             .AddPathComponent("hosts")
                             .Build();
                 }
-                LOG_D("ResponseProccessor::Handle(EndpointRequest): start GET request: " << url);
 
                 NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(url);
 
@@ -483,6 +507,8 @@ private:
                 if (token) {
                     httpRequest->Set("Authorization", token);
                 }
+
+                LOG_D("ResponseProccessor::Handle(EndpointRequest): start GET request: " << "url: "  << httpRequest->URL);
 
                 requests[httpRequest] = TResolveParams{databaseId, databaseType, databaseAuth};
             } catch (const std::exception& e) {

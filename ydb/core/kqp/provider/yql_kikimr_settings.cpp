@@ -1,6 +1,7 @@
 #include "yql_kikimr_settings.h"
 
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <util/generic/size_literals.h>
 
 namespace NYql {
@@ -57,10 +58,6 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, EnableLlvm);
     REGISTER_SETTING(*this, HashJoinMode).Parser([](const TString& v) { return FromString<NDq::EHashJoinMode>(v); });
 
-    REGISTER_SETTING(*this, OptDisableJoinRewrite);
-    REGISTER_SETTING(*this, OptDisableJoinTableLookup);
-    REGISTER_SETTING(*this, OptDisableJoinReverseTableLookup);
-    REGISTER_SETTING(*this, OptDisableJoinReverseTableLookupLeftSemi);
     REGISTER_SETTING(*this, OptDisableTopSort);
     REGISTER_SETTING(*this, OptDisableSqlInToJoin);
     REGISTER_SETTING(*this, OptEnableInplaceUpdate);
@@ -69,7 +66,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
-    REGISTER_SETTING(*this, OptEnableCostBasedOptimization);
+    REGISTER_SETTING(*this, CostBasedOptimizationLevel);
     REGISTER_SETTING(*this, OptEnableConstantFolding);
 
     REGISTER_SETTING(*this, MaxDPccpDPTableSize);
@@ -102,22 +99,6 @@ bool TKikimrSettings::DisableLlvmForUdfStages() const {
     return GetFlagValue(_KqpDisableLlvmForUdfStages.Get());
 }
 
-bool TKikimrSettings::HasOptDisableJoinRewrite() const {
-    return GetFlagValue(OptDisableJoinRewrite.Get());
-}
-
-bool TKikimrSettings::HasOptDisableJoinTableLookup() const {
-    return GetFlagValue(OptDisableJoinTableLookup.Get());
-}
-
-bool TKikimrSettings::HasOptDisableJoinReverseTableLookup() const {
-    return GetFlagValue(OptDisableJoinReverseTableLookup.Get());
-}
-
-bool TKikimrSettings::HasOptDisableJoinReverseTableLookupLeftSemi() const {
-    return GetFlagValue(OptDisableJoinReverseTableLookupLeftSemi.Get());
-}
-
 bool TKikimrSettings::HasOptDisableTopSort() const {
     return GetFlagValue(OptDisableTopSort.Get());
 }
@@ -140,10 +121,6 @@ bool TKikimrSettings::HasOptEnableOlapProvideComputeSharding() const {
 
 bool TKikimrSettings::HasOptUseFinalizeByKey() const {
     return GetOptionalFlagValue(OptUseFinalizeByKey.Get()) != EOptionalFlag::Disabled;
-}
-
-bool TKikimrSettings::HasOptEnableCostBasedOptimization() const {
-    return GetOptionalFlagValue(OptEnableCostBasedOptimization.Get()) == EOptionalFlag::Enabled;
 }
 
 bool TKikimrSettings::HasOptEnableConstantFolding() const {

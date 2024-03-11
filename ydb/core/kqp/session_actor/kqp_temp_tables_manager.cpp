@@ -39,9 +39,11 @@ public:
         return NKikimrServices::TActivity::KQP_SESSION_ACTOR;
     }
 
-    TKqpTempTablesManager(TKqpTempTablesState tempTablesState, const TActorId& target)
+    TKqpTempTablesManager(TKqpTempTablesState tempTablesState, const TActorId& target,
+            const TString& database)
         : TempTablesState(std::move(tempTablesState))
         , Target(target)
+        , Database(database)
     {}
 
     void Bootstrap() {
@@ -51,7 +53,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             auto& record = ev->Record;
 
-            record.SetDatabaseName(info.Database);
+            record.SetDatabaseName(Database);
             if (info.UserToken) {
                 record.SetUserToken(info.UserToken->GetSerializedToken());
             }
@@ -60,9 +62,7 @@ public:
             modifyScheme->SetWorkingDir(info.WorkingDir);
             modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
             auto* drop = modifyScheme->MutableDrop();
-            if (TempTablesState.SessionId) {
-                drop->SetName(info.Name + *TempTablesState.SessionId);
-            }
+            drop->SetName(info.Name + TempTablesState.SessionId);
 
             auto promise = NewPromise<IKqpGateway::TGenericResult>();
             IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, true);
@@ -107,14 +107,16 @@ public:
 private:
     TKqpTempTablesState TempTablesState;
     const TActorId Target;
+    const TString Database;
     ui32 ResultsCount = 0;
 };
 
 } // namespace
 
-IActor* CreateKqpTempTablesManager(TKqpTempTablesState tempTablesState, const TActorId& target)
+IActor* CreateKqpTempTablesManager(TKqpTempTablesState tempTablesState, const TActorId& target,
+        const TString& database)
 {
-    return new TKqpTempTablesManager(tempTablesState, target);
+    return new TKqpTempTablesManager(tempTablesState, target, database);
 }
 
 } // namespace NKikimr::NKqp

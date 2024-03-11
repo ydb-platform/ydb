@@ -73,32 +73,34 @@ enum class EYtSettingType: ui64 {
     ItemsCount                  = 1ull << 25 /* "itemsCount" */,
     RowFactor                   = 1ull << 26 /* "rowFactor" */,
     // Operations
-    Ordered                     = 1ull << 27 /* "ordered" */,
+    Ordered                     = 1ull << 27 /* "ordered" */,                  // hybrid supported
     KeyFilter                   = 1ull << 28 /* "keyFilter" */,
     KeyFilter2                  = 1ull << 29 /* "keyFilter2" */,
     Take                        = 1ull << 30 /* "take" */,
     Skip                        = 1ull << 31 /* "skip" */,
-    Limit                       = 1ull << 32 /* "limit" */,
-    SortLimitBy                 = 1ull << 33 /* "sortLimitBy" */,
-    SortBy                      = 1ull << 34 /* "sortBy" */,
-    ReduceBy                    = 1ull << 35 /* "reduceBy" */,
+    Limit                       = 1ull << 32 /* "limit" */,                    // hybrid supported
+    SortLimitBy                 = 1ull << 33 /* "sortLimitBy" */,              // hybrid supported
+    SortBy                      = 1ull << 34 /* "sortBy" */,                   // hybrid supported
+    ReduceBy                    = 1ull << 35 /* "reduceBy" */,                 // hybrid supported
     ReduceFilterBy              = 1ull << 36 /* "reduceFilterBy" */,
-    ForceTransform              = 1ull << 37 /* "forceTransform" */,
+    ForceTransform              = 1ull << 37 /* "forceTransform" */,           // hybrid supported
     WeakFields                  = 1ull << 38 /* "weakFields" */,
     Sharded                     = 1ull << 39 /* "sharded" */,
     CombineChunks               = 1ull << 40 /* "combineChunks" */,
-    JobCount                    = 1ull << 41 /* "jobCount" */,
-    JoinReduce                  = 1ull << 42 /* "joinReduce" */,
-    FirstAsPrimary              = 1ull << 43 /* "firstAsPrimary" */,
-    Flow                        = 1ull << 44 /* "flow" */,
-    KeepSorted                  = 1ull << 45 /* "keepSorted" */,
-    KeySwitch                   = 1ull << 46 /* "keySwitch" */,
+    JobCount                    = 1ull << 41 /* "jobCount" */,                 // hybrid supported
+    JoinReduce                  = 1ull << 42 /* "joinReduce" */,               // hybrid supported
+    FirstAsPrimary              = 1ull << 43 /* "firstAsPrimary" */,           // hybrid supported
+    Flow                        = 1ull << 44 /* "flow" */,                     // hybrid supported
+    KeepSorted                  = 1ull << 45 /* "keepSorted" */,               // hybrid supported
+    KeySwitch                   = 1ull << 46 /* "keySwitch" */,                // hybrid supported
     // Out tables
     UniqueBy                    = 1ull << 47 /* "uniqueBy" */,
     OpHash                      = 1ull << 48 /* "opHash" */,
-    MapOutputType               = 1ull << 49 /* "mapOutputType" */,
-    ReduceInputType             = 1ull << 50 /* "reduceInputType" */,
+    // Operations
+    MapOutputType               = 1ull << 49 /* "mapOutputType" */,            // hybrid supported
+    ReduceInputType             = 1ull << 50 /* "reduceInputType" */,          // hybrid supported
     NoDq                        = 1ull << 51 /* "noDq" */,
+    // Read 
     Split                       = 1ull << 52 /* "split" */,
     // Write hints
     CompressionCodec            = 1ull << 53 /* "compression_codec" "compressioncodec"*/,
@@ -110,12 +112,17 @@ enum class EYtSettingType: ui64 {
     PrimaryMedium               = 1ull << 59 /* "primary_medium", "primarymedium" */,
     KeepMeta                    = 1ull << 60 /* "keep_meta", "keepmeta" */,
     MonotonicKeys               = 1ull << 61 /* "monotonic_keys", "monotonickeys" */,
+    MutationId                  = 1ull << 62 /* "mutationid", "mutation_id" */,
 };
 
 Y_DECLARE_FLAGS(EYtSettingTypes, EYtSettingType);
 Y_DECLARE_OPERATORS_FOR_FLAGS(EYtSettingTypes);
 
 constexpr auto DqReadSupportedSettings = EYtSettingType::SysColumns | EYtSettingType::Sample | EYtSettingType::Unordered | EYtSettingType::NonUnique;
+constexpr auto DqOpSupportedSettings = EYtSettingType::Ordered | EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::SortBy |
+                                       EYtSettingType::ReduceBy | EYtSettingType::ForceTransform | EYtSettingType::JobCount | EYtSettingType::JoinReduce |
+                                       EYtSettingType::FirstAsPrimary | EYtSettingType::Flow | EYtSettingType::KeepSorted | EYtSettingType::KeySwitch |
+                                       EYtSettingType::ReduceInputType | EYtSettingType::MapOutputType;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 

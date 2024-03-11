@@ -49,8 +49,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardAllocatePQTest) {
         );
 
         {
-            auto balancerDescr = GetDescribeFromPQBalancer(runtime, 9437197);
-            TString expected = R"(TopicName: "PQGroup" Version: 2 Config { PartitionConfig { LifetimeSeconds: 10 } YdbDatabasePath: "/MyRoot" } PartitionPerTablet: 4 Partitions { Partition: 0 TabletId: 9437194 } Partitions { Partition: 1 TabletId: 9437194 } Partitions { Partition: 2 TabletId: 9437195 } Partitions { Partition: 3 TabletId: 9437194 } Partitions { Partition: 4 TabletId: 9437196 } Partitions { Partition: 5 TabletId: 9437195 } Partitions { Partition: 6 TabletId: 9437194 } Partitions { Partition: 7 TabletId: 9437195 } Partitions { Partition: 8 TabletId: 9437195 } Partitions { Partition: 9 TabletId: 9437196 } SchemeShardId: 8751008 BalancerTabletId: 9437197 SecurityObject: "\022\000")";
+            auto balancerDescr = GetDescribeFromPQBalancer(runtime, 72075186233409549);
+            TString expected = R"(TopicName: "PQGroup" Version: 2 Config { PartitionConfig { LifetimeSeconds: 10 } YdbDatabasePath: "/MyRoot" } PartitionPerTablet: 4 Partitions { Partition: 0 TabletId: 72075186233409546 } Partitions { Partition: 1 TabletId: 72075186233409546 } Partitions { Partition: 2 TabletId: 72075186233409547 } Partitions { Partition: 3 TabletId: 72075186233409546 } Partitions { Partition: 4 TabletId: 72075186233409548 } Partitions { Partition: 5 TabletId: 72075186233409547 } Partitions { Partition: 6 TabletId: 72075186233409546 } Partitions { Partition: 7 TabletId: 72075186233409547 } Partitions { Partition: 8 TabletId: 72075186233409547 } Partitions { Partition: 9 TabletId: 72075186233409548 } SchemeShardId: 72057594046678944 BalancerTabletId: 72075186233409549 SecurityObject: "\022\000")";
             UNIT_ASSERT_NO_DIFF(expected, balancerDescr.ShortUtf8DebugString());
         }
 
@@ -111,8 +111,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardAllocatePQTest) {
                            {NLs::CheckPartCount("PQGroup", 10, 4, 3, 10)});
 
         {
-            auto balancerDescr = GetDescribeFromPQBalancer(runtime, 9437197);
-            TString expected = R"(TopicName: "PQGroup" Version: 3 Config { PartitionConfig { LifetimeSeconds: 10 } YdbDatabasePath: "/MyRoot/Database" } PartitionPerTablet: 4 Partitions { Partition: 0 TabletId: 9437194 } Partitions { Partition: 1 TabletId: 9437194 } Partitions { Partition: 2 TabletId: 9437195 } Partitions { Partition: 3 TabletId: 9437194 } Partitions { Partition: 4 TabletId: 9437196 } Partitions { Partition: 5 TabletId: 9437195 } Partitions { Partition: 6 TabletId: 9437194 } Partitions { Partition: 7 TabletId: 9437195 } Partitions { Partition: 8 TabletId: 9437195 } Partitions { Partition: 9 TabletId: 9437196 } SchemeShardId: 9437198 BalancerTabletId: 9437197 SecurityObject: "\022\000")";
+            auto balancerDescr = GetDescribeFromPQBalancer(runtime, 72075186233409549);
+            TString expected = R"(TopicName: "PQGroup" Version: 3 Config { PartitionConfig { LifetimeSeconds: 10 } YdbDatabasePath: "/MyRoot/Database" } PartitionPerTablet: 4 Partitions { Partition: 0 TabletId: 72075186233409546 } Partitions { Partition: 1 TabletId: 72075186233409546 } Partitions { Partition: 2 TabletId: 72075186233409547 } Partitions { Partition: 3 TabletId: 72075186233409546 } Partitions { Partition: 4 TabletId: 72075186233409548 } Partitions { Partition: 5 TabletId: 72075186233409547 } Partitions { Partition: 6 TabletId: 72075186233409546 } Partitions { Partition: 7 TabletId: 72075186233409547 } Partitions { Partition: 8 TabletId: 72075186233409547 } Partitions { Partition: 9 TabletId: 72075186233409548 } SchemeShardId: 72075186233409550 BalancerTabletId: 72075186233409549 SecurityObject: "\022\000")";
             UNIT_ASSERT_NO_DIFF(expected, balancerDescr.ShortUtf8DebugString());
         }
 
@@ -133,6 +133,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardAllocatePQTest) {
         TestDropPQGroup(runtime, tenantSchemeShard, ++txId, "/MyRoot/Database", "PQGroup");
         env.TestWaitNotification(runtime, txId);
 
-        env.TestWaitTabletDeletion(runtime, {9437194, 9437195, 9437196, 9437197, 9437201, 9437202});
+        env.TestWaitTabletDeletion(runtime, {72075186233409546, 72075186233409547, 72075186233409548, 72075186233409549, 72075186233409553, 72075186233409554});
     }
 }

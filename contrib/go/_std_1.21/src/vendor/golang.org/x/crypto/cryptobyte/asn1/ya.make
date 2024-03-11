@@ -1,7 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    asn1.go
-)
-
+IF (TRUE)
+    SRCS(
+		asn1.go
+    )
+ENDIF()
 END()

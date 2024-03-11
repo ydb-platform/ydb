@@ -100,7 +100,7 @@ namespace NRedo {
 
             while (TAutoPtr<TEntry> entry = was->Pop()) {
                 if (entry->FilterTables(Edges)) {
-                    for (auto blobId : entry->LargeGlobId.Blobs()) {
+                    for (const auto& blobId : entry->LargeGlobId.Blobs()) {
                         LogoBlobIDFromLogoBlobID(blobId, logos->Add());
                     }
 

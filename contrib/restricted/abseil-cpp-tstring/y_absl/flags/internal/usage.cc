@@ -27,7 +27,10 @@
 #include <utility>
 #include <vector>
 
+#include "y_absl/base/attributes.h"
 #include "y_absl/base/config.h"
+#include "y_absl/base/const_init.h"
+#include "y_absl/base/thread_annotations.h"
 #include "y_absl/flags/commandlineflag.h"
 #include "y_absl/flags/flag.h"
 #include "y_absl/flags/internal/flag.h"
@@ -40,6 +43,8 @@
 #include "y_absl/strings/str_cat.h"
 #include "y_absl/strings/str_split.h"
 #include "y_absl/strings/string_view.h"
+#include "y_absl/strings/strip.h"
+#include "y_absl/synchronization/mutex.h"
 
 // Dummy global variables to prevent anyone else defining these.
 bool FLAGS_help = false;

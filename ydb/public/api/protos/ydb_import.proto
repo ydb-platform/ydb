@@ -61,6 +61,12 @@ message ImportFromS3Settings {
 
     // Region to use in requests
     string region = 9;
+
+    // disables virtual hosting style buckets aws s3 feature
+    // it changes the way bucket appended to url. e.g. https//bucket_name.example.com/ vs https://example.com/bucket_name
+    // details: https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html
+    // it is especially useful for custom s3 implementations
+    bool disable_virtual_addressing = 10;
 }
 
 message ImportFromS3Result {

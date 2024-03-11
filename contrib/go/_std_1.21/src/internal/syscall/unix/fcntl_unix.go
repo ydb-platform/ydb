@@ -9,7 +9,6 @@ package unix
 import (
 	"syscall"
 	_ "unsafe" // for go:linkname
-
 )
 
 // Implemented in the runtime package.

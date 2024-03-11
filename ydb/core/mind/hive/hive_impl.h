@@ -144,7 +144,6 @@ TString GetConditionalBoldString(const TString& str, bool condition);
 TString GetConditionalRedString(const TString& str, bool condition);
 TString GetValueWithColoredGlyph(double val, double maxVal);
 TString GetDataCenterName(ui64 dataCenterId);
-TString LongToShortTabletName(const TString& longTabletName);
 TString GetLocationString(const NActors::TNodeLocation& location);
 void MakeTabletTypeSet(std::vector<TTabletTypes::EType>& list);
 bool IsValidTabletType(TTabletTypes::EType type);
@@ -152,6 +151,9 @@ bool IsValidObjectId(const TFullObjectId& objectId);
 TString GetRunningTabletsText(ui64 runningTablets, ui64 totalTablets, bool warmUp);
 bool IsResourceDrainingState(TTabletInfo::EVolatileState state);
 bool IsAliveState(TTabletInfo::EVolatileState state);
+TString GetTabletTypeShortName(TTabletTypes::EType type);
+TTabletTypes::EType GetTabletTypeByShortName(const TString& name);
+TString GetTypesHtml(const std::set<TTabletTypes::EType>& typesToShow, const std::unordered_map<TTabletTypes::EType, NKikimrConfig::THiveTabletLimit>& tabletLimits);
 
 class THive : public TActor<THive>, public TTabletExecutedFlat, public THiveSharedSettings {
 public:
@@ -171,6 +173,7 @@ protected:
     friend class TDrainNodeWaitActor;
     friend class THiveStorageBalancer;;
     friend struct TNodeInfo;
+    friend struct TLeaderTabletInfo;
 
     friend class TTxInitScheme;
     friend class TTxDeleteBase;
@@ -206,6 +209,7 @@ protected:
     friend class TTxMonEvent_RebalanceFromScratch;
     friend class TTxMonEvent_ObjectStats;
     friend class TTxMonEvent_StorageRebalance;
+    friend class TTxMonEvent_Subactors;
     friend class TTxKillNode;
     friend class TTxLoadEverything;
     friend class TTxRestartTablet;
@@ -232,6 +236,8 @@ protected:
     friend class TTxTabletOwnersReply;
     friend class TTxRequestTabletOwners;
     friend class TTxUpdateTabletsObject;
+    friend class TTxUpdateTabletGroups;
+    friend class TTxMonEvent_TabletAvailability;
 
     friend class TDeleteTabletActor;
 
@@ -300,8 +306,6 @@ public:
 protected:
     TActorId BSControllerPipeClient;
     TActorId RootHivePipeClient;
-    ui64 HiveUid; // Hive Personal Identifier - identifies a unique individual hive
-    ui32 HiveDomain;
     TTabletId RootHiveId;
     TTabletId HiveId;
     ui64 HiveGeneration;
@@ -326,6 +330,8 @@ protected:
     ui32 DataCenters = 1;
     ui32 RegisteredDataCenters = 1;
     TObjectDistributions ObjectDistributions;
+    double StorageScatter = 0;
+    std::set<TTabletTypes::EType> SeenTabletTypes;
 
     bool AreWeRootHive() const { return RootHiveId == HiveId; }
     bool AreWeSubDomainHive() const { return RootHiveId != HiveId; }
@@ -391,6 +397,7 @@ protected:
     bool ProcessTabletBalancerPostponed = false;
     bool ProcessPendingOperationsScheduled = false;
     bool LogTabletMovesScheduled = false;
+    bool ProcessStorageBalancerScheduled = false;
     TResourceRawValues TotalRawResourceValues = {};
     TResourceNormalizedValues TotalNormalizedResourceValues = {};
     TInstant LastResourceChangeReaction;
@@ -555,6 +562,7 @@ protected:
     void Handle(TEvPrivate::TEvRefreshStorageInfo::TPtr& ev);
     void Handle(TEvPrivate::TEvLogTabletMoves::TPtr& ev);
     void Handle(TEvPrivate::TEvStartStorageBalancer::TPtr& ev);
+    void Handle(TEvPrivate::TEvProcessStorageBalancer::TPtr& ev);
     void Handle(TEvPrivate::TEvProcessIncomingEvent::TPtr& ev);
     void Handle(TEvHive::TEvUpdateDomain::TPtr& ev);
 
@@ -652,6 +660,7 @@ public:
     void PostponeProcessBootQueue(TDuration after);
     void ProcessPendingOperations();
     void ProcessTabletBalancer();
+    void ProcessStorageBalancer();
     const TVector<i64>& GetTabletTypeAllowedMetricIds(TTabletTypes::EType type) const;
     static const TVector<i64>& GetDefaultAllowedMetricIdsForType(TTabletTypes::EType type);
     static bool IsValidMetrics(const NKikimrTabletBase::TMetrics& metrics);
@@ -665,7 +674,7 @@ public:
             const NKikimrTabletBase::TMetrics& after,
             NKikimr::NHive::TResourceRawValues deltaRaw,
             NKikimr::NHive::TResourceNormalizedValues deltaNormalized);
-    static void FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo* info, const NKikimrHive::TEvRequestHiveInfo& req);
+    void FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo* info, const NKikimrHive::TEvRequestHiveInfo& req);
     void ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external);
     ui32 GetDataCenters();
     ui32 GetRegisteredDataCenters();
@@ -680,7 +689,7 @@ public:
     void StopTablet(const TActorId& local, TFullTabletId tabletId);
     void ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffects);
     void UpdateTabletFollowersNumber(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db, TSideEffects& sideEffects);
-    TDuration GetBalancerCooldown() const;
+    TDuration GetBalancerCooldown(EBalancerType balancerType) const;
     void UpdateObjectCount(const TLeaderTabletInfo& tablet, const TNodeInfo& node, i64 diff);
     ui64 GetObjectImbalance(TFullObjectId object);
 
@@ -913,7 +922,20 @@ public:
         return CurrentConfig.GetMaxChannelHistorySize();
     }
 
+    TDuration GetStorageInfoRefreshFrequency() const {
+        return TDuration::MilliSeconds(CurrentConfig.GetStorageInfoRefreshFrequency());
+    }
+
+    double GetMinStorageScatterToBalance() const {
+        return CurrentConfig.GetMinStorageScatterToBalance();
+    }
+
+    ui64 GetStorageBalancerInflight() const {
+        return CurrentConfig.GetStorageBalancerInflight();
+    }
+
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);
+    static ui64 GetRestartsPerPeriod(const google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);
     static bool IsSystemTablet(TTabletTypes::EType type);
 
 protected:
@@ -956,6 +978,7 @@ protected:
 
     THiveStats GetStats() const;
     void RemoveSubActor(ISubActor* subActor);
+    bool StopSubActor(TSubActorId subActorId);
     const NKikimrLocal::TLocalConfig &GetLocalConfig() const { return LocalConfig; }
     NKikimrTabletBase::TMetrics GetDefaultResourceValuesForObject(TFullObjectId objectId);
     NKikimrTabletBase::TMetrics GetDefaultResourceValuesForTabletType(TTabletTypes::EType type);

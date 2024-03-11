@@ -44,7 +44,7 @@ def onregister_yql_python_udf(unit, *args):
 
     path = name + '.yql_python_udf.cpp'
     libra_flag = '1' if add_libra_modules else '0'
-    unit.onpython(
+    unit.onrun_python2(
         [
             'build/scripts/gen_yql_python_udf.py',
             flavor,

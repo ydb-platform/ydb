@@ -44,7 +44,7 @@ items:
     - name: Scan queries
       href: commands/scan-query.md
   - name: Importing and exporting data
-    include: { mode: link, path: export_import/toc_p.yaml }
+    include: { mode: link, path: export-import/toc_p.yaml }
   - name: Working with topics
     items:
     - name: Commands for topics

@@ -17,7 +17,7 @@ namespace NActors {
     class TMailboxTable;
     struct TMailboxHeader;
 
-    class TExecutorThread;
+    class TGenericExecutorThread;
     class IActor;
     class ISchedulerCookie;
     class IExecutorPool;
@@ -45,11 +45,11 @@ namespace NActors {
     struct TActivationContext {
     public:
         TMailboxHeader& Mailbox;
-        TExecutorThread& ExecutorThread;
+        TGenericExecutorThread& ExecutorThread;
         const NHPTimer::STime EventStart;
 
     protected:
-        explicit TActivationContext(TMailboxHeader& mailbox, TExecutorThread& executorThread, NHPTimer::STime eventStart)
+        explicit TActivationContext(TMailboxHeader& mailbox, TGenericExecutorThread& executorThread, NHPTimer::STime eventStart)
             : Mailbox(mailbox)
             , ExecutorThread(executorThread)
             , EventStart(eventStart)
@@ -133,7 +133,7 @@ namespace NActors {
     struct TActorContext: public TActivationContext {
         const TActorId SelfID;
         using TEventFlags = IEventHandle::TEventFlags;
-        explicit TActorContext(TMailboxHeader& mailbox, TExecutorThread& executorThread, NHPTimer::STime eventStart, const TActorId& selfID)
+        explicit TActorContext(TMailboxHeader& mailbox, TGenericExecutorThread& executorThread, NHPTimer::STime eventStart, const TActorId& selfID)
             : TActivationContext(mailbox, executorThread, eventStart)
             , SelfID(selfID)
         {
@@ -350,7 +350,7 @@ namespace NActors {
         TMonotonic LastReceiveTimestamp;
         size_t StuckIndex = Max<size_t>();
         friend class TExecutorPoolBaseMailboxed;
-        friend class TExecutorThread;
+        friend class TGenericExecutorThread;
 
         IActor(const ui32 activityType)
             : SelfActorId(TActorId())
@@ -836,7 +836,7 @@ namespace NActors {
 
 
     template <ESendingType SendingType>
-    bool TExecutorThread::Send(TAutoPtr<IEventHandle> ev) {
+    bool TGenericExecutorThread::Send(TAutoPtr<IEventHandle> ev) {
 #ifdef USE_ACTOR_CALLSTACK
         do {
             (ev)->Callstack = TCallstack::GetTlsCallstack();
@@ -848,7 +848,7 @@ namespace NActors {
     }
 
     template <ESendingType SendingType>
-    TActorId TExecutorThread::RegisterActor(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId,
+    TActorId TGenericExecutorThread::RegisterActor(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId,
             TActorId parentId)
     {
         if (!parentId) {
@@ -871,7 +871,7 @@ namespace NActors {
     }
 
     template <ESendingType SendingType>
-    TActorId TExecutorThread::RegisterActor(IActor* actor, TMailboxHeader* mailbox, ui32 hint, TActorId parentId) {
+    TActorId TGenericExecutorThread::RegisterActor(IActor* actor, TMailboxHeader* mailbox, ui32 hint, TActorId parentId) {
         if (!parentId) {
             parentId = CurrentRecipient;
         }

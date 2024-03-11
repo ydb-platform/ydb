@@ -72,8 +72,8 @@ namespace {
         return hasRemaps ? ctx.Expr.ChangeChildren(*node, std::move(newChildren)) : node;
     }
 
-    void AddExpected(const TExprNode& src, const TExprNode& dst, const TOptimizeExprSettings& settings) {
-        if (!src.GetTypeAnn() || dst.GetTypeAnn() || !settings.Types) {
+    void AddExpected(const TExprNode& src, const TExprNode& dst, TExprContext& ctx, const TOptimizeExprSettings& settings) {
+        if (!src.GetTypeAnn() || !settings.Types) {
             return;
         }
 
@@ -81,11 +81,23 @@ namespace {
             return;
         }
 
-        settings.Types->ExpectedTypes.emplace(dst.UniqueId(), src.GetTypeAnn());
-        settings.Types->ExpectedConstraints.emplace(dst.UniqueId(), src.GetAllConstraints());
+        settings.Types->ExpectedTypes[dst.UniqueId()] = src.GetTypeAnn();
+        if (src.GetState() >= TExprNode::EState::ConstrComplete) {
+            settings.Types->ExpectedConstraints[dst.UniqueId()] = src.GetAllConstraints();
+        } else {
+            settings.Types->ExpectedConstraints.erase(dst.UniqueId());
+        }
         auto columnOrder = settings.Types->LookupColumnOrder(src);
         if (columnOrder) {
-            settings.Types->ExpectedColumnOrders.emplace(dst.UniqueId(), *columnOrder);
+            settings.Types->ExpectedColumnOrders[dst.UniqueId()] = *columnOrder;
+        } else {
+            settings.Types->ExpectedColumnOrders.erase(dst.UniqueId());
+        }
+
+        if (dst.GetTypeAnn()) {
+            // we should check expected types / constraints / column order immediately
+            // TODO: check constraints
+            CheckExpectedTypeAndColumnOrder(dst, ctx, *settings.Types);
         }
     }
 
@@ -148,7 +160,7 @@ namespace {
                 }
                 if (bodyChanged) {
                     ret = ctx.Expr.DeepCopyLambda(*current, std::move(newBody));
-                    AddExpected(*node, *ret, ctx.Settings);
+                    AddExpected(*node, *ret, ctx.Expr, ctx.Settings);
                 }
             }
         } else {
@@ -204,7 +216,7 @@ namespace {
                 }
             }
 
-            AddExpected(*node, *ret, ctx.Settings);
+            AddExpected(*node, *ret, ctx.Expr, ctx.Settings);
         }
 
         if (node == ret && ctx.Settings.ProcessedNodes) {

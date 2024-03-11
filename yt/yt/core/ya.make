@@ -82,7 +82,7 @@ SRCS(
     concurrency/thread_pool.cpp
     concurrency/throughput_throttler.cpp
     concurrency/two_level_fair_share_thread_pool.cpp
-    concurrency/recurring_executor_base.cpp
+    concurrency/retrying_periodic_executor.cpp
     concurrency/scheduled_executor.cpp
 
     crypto/config.cpp
@@ -94,7 +94,7 @@ SRCS(
     logging/formatter.cpp
     logging/fluent_log.cpp
     GLOBAL logging/log.cpp
-    logging/log_manager.cpp
+    GLOBAL logging/log_manager.cpp
     logging/logger_owner.cpp
     logging/serializable_logger.cpp
     logging/stream_output.cpp
@@ -107,7 +107,6 @@ SRCS(
     misc/arithmetic_formula.cpp
     GLOBAL misc/assert.cpp
     misc/backoff_strategy.cpp
-    misc/backoff_strategy_config.cpp
     misc/bitmap.cpp
     misc/bit_packed_unsigned_vector.cpp
     misc/bit_packing.cpp
@@ -129,8 +128,7 @@ SRCS(
     misc/hazard_ptr.cpp
     misc/hedging_manager.cpp
     misc/histogram.cpp
-    misc/historic_usage_aggregator.cpp
-    misc/hr_timer.cpp
+    misc/adjusted_exponential_moving_average.cpp
     misc/id_generator.cpp
     misc/linear_probe.cpp
     misc/memory_reference_tracker.cpp
@@ -252,7 +250,9 @@ SRCS(
     yson/writer.cpp
     yson/string_merger.cpp
     yson/ypath_designated_consumer.cpp
+    yson/ypath_filtering_consumer.cpp
     yson/depth_limiting_yson_consumer.cpp
+    yson/list_verb_lazy_yson_consumer.cpp
     yson/attributes_stripper.cpp
 
     ytree/attribute_consumer.cpp
@@ -280,7 +280,6 @@ SRCS(
     ytree/ypath_detail.cpp
     ytree/ypath_resolver.cpp
     ytree/ypath_service.cpp
-    ytree/yson_serializable.cpp
     ytree/yson_struct.cpp
     ytree/yson_struct_detail.cpp
 

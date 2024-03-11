@@ -67,22 +67,13 @@ static const TTableSchemaPtr BigRTConsumerTableSchema = New<TTableSchema>(std::v
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TConsumerMeta
-    : public NYTree::TYsonStructLite
+void TConsumerMeta::Register(TRegistrar registrar)
 {
-    std::optional<i64> CumulativeDataWeight;
-    std::optional<ui64> OffsetTimestamp;
-
-    REGISTER_YSON_STRUCT_LITE(TConsumerMeta);
-
-    static void Register(TRegistrar registrar)
-    {
-        registrar.Parameter("cumulative_data_weight", &TThis::CumulativeDataWeight)
-            .Optional();
-        registrar.Parameter("offset_timestamp", &TThis::OffsetTimestamp)
-            .Optional();
-    }
-};
+    registrar.Parameter("cumulative_data_weight", &TThis::CumulativeDataWeight)
+        .Default();
+    registrar.Parameter("offset_timestamp", &TThis::OffsetTimestamp)
+        .Default();
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -115,7 +106,6 @@ public:
         , OffsetColumnId_(ConsumerNameTable_->GetId(OffsetColumnName_))
         , MetaColumnId_(ConsumerNameTable_->FindId(YTConsumerMetaColumnName))
         , SubConsumerColumnFilter_{PartitionIndexColumnId_, OffsetColumnId_}
-        , RowBuffer_(New<TRowBuffer>())
         , DecrementOffset_(decrementOffset)
     {
         if (RowPrefix_.GetCount() == 0) {
@@ -232,14 +222,14 @@ public:
             rowBuilder.AddValue(MakeUnversionedUint64Value(newOffset, OffsetColumnId_));
         }
 
-        std::optional<TYsonString> metaYsonString;
+        TYsonString metaYsonString;
         if (MetaColumnId_) {
             auto metaValue = MakeUnversionedNullValue(*MetaColumnId_);
             if (QueueRef_ && QueueClusterClient_) {
                 auto meta = GetConsumerMeta(partitionIndex, newOffset);
                 if (meta) {
                     metaYsonString = ConvertToYsonString(*meta);
-                    metaValue = MakeUnversionedAnyValue(metaYsonString->AsStringBuf(), *MetaColumnId_);
+                    metaValue = MakeUnversionedAnyValue(metaYsonString.AsStringBuf(), *MetaColumnId_);
                 }
             } else {
                 YT_LOG_DEBUG("Consumer meta was not calculated due to unknown queue path or cluster client");
@@ -268,14 +258,26 @@ public:
             return MakeFuture(std::vector<TPartitionInfo>{});
         }
 
-        auto selectQuery = Format(
-            "[%v], [%v] from [%v] where ([%v] between 0 and %v) and (%v)",
+        TStringBuilder queryBuilder;
+        queryBuilder.AppendFormat("[%v], [%v]",
             PartitionIndexColumnName_,
-            OffsetColumnName_,
+            OffsetColumnName_);
+
+        bool hasMetaColumn = ConsumerTableSchema_->FindColumn(YTConsumerMetaColumnName);
+        if (hasMetaColumn) {
+            queryBuilder.AppendFormat(", [%v]", YTConsumerMetaColumnName);
+        }
+
+        queryBuilder.AppendFormat(
+            " from [%v] where ([%v] between 0 and %v) and (%v)",
+
             ConsumerPath_,
             PartitionIndexColumnName_,
             expectedPartitionCount - 1,
             RowPrefixCondition_);
+
+        auto selectQuery = queryBuilder.Flush();
+
         return BIND(
             &TGenericConsumerClient::DoCollectPartitions,
             MakeStrong(this),
@@ -366,7 +368,9 @@ public:
                     }
                 }
 
-                THROW_ERROR_EXCEPTION("Queue %v has no tablet with index %v", queuePath, partitionIndex);
+                THROW_ERROR_EXCEPTION("Queue %v has no tablet with index %v",
+                    queuePath,
+                    partitionIndex);
             }));
     }
 
@@ -389,8 +393,7 @@ private:
     const std::optional<int> MetaColumnId_;
     //! A column filter consisting of PartitionIndexColumnName_ and OffsetColumnName_.
     const TColumnFilter SubConsumerColumnFilter_;
-
-    TRowBufferPtr RowBuffer_;
+    const TRowBufferPtr RowBuffer_ = New<TRowBuffer>();
 
     // COMPAT(achulkov2): Remove this once we drop support for legacy BigRT consumers.
     //! Controls whether the offset is decremented before being written to the offset table.
@@ -417,6 +420,7 @@ private:
         auto partitionIndexRowsetColumnId =
             selectRowsResult.Rowset->GetNameTable()->FindId(PartitionIndexColumnName_);
         auto offsetRowsetColumnId = selectRowsResult.Rowset->GetNameTable()->FindId(OffsetColumnName_);
+        auto metaColumnId = selectRowsResult.Rowset->GetNameTable()->FindId(YTConsumerMetaColumnName);
 
         if (!partitionIndexRowsetColumnId || !offsetRowsetColumnId) {
             THROW_ERROR_EXCEPTION(
@@ -424,10 +428,12 @@ private:
                 PartitionIndexColumnName_,
                 OffsetColumnName_);
         }
+        int expectedColumnsCount = 2 + (metaColumnId ? 1 : 0);
 
         std::vector<ui64> partitionIndices;
+
         for (auto row : selectRowsResult.Rowset->GetRows()) {
-            YT_VERIFY(row.GetCount() == 2);
+            YT_VERIFY(static_cast<int>(row.GetCount()) == expectedColumnsCount);
 
             const auto& partitionIndexValue = row[*partitionIndexRowsetColumnId];
             if (partitionIndexValue.Type == EValueType::Null) {
@@ -453,10 +459,20 @@ private:
             }
 
             // NB: in BigRT offsets encode the last read row, while we operate with the first unread row.
-            result.emplace_back(TPartitionInfo{
+            auto partitionInfo = TPartitionInfo{
                 .PartitionIndex = FromUnversionedValue<i64>(partitionIndexValue),
                 .NextRowIndex = offset,
-            });
+            };
+
+            if (metaColumnId) {
+                const auto& metaValue = row[*metaColumnId];
+                YT_VERIFY(metaValue.Type == EValueType::Any || metaValue.Type == EValueType::Null);
+                if (metaValue.Type == EValueType::Any) {
+                    partitionInfo.ConsumerMeta = ConvertTo<TConsumerMeta>(FromUnversionedValue<TYsonString>(metaValue));
+                }
+            }
+
+            result.push_back(std::move(partitionInfo));
         }
 
         if (!withLastConsumeTime) {
@@ -612,8 +628,8 @@ class TYTConsumerClient
     : public IConsumerClient
 {
 public:
-    explicit TYTConsumerClient(const IClientPtr& consumerClusterClient, TYPath consumerPath, TTableSchemaPtr consumerTableSchema)
-        : ConsumerClusterClient_(consumerClusterClient)
+    TYTConsumerClient(IClientPtr consumerClusterClient, TYPath consumerPath, TTableSchemaPtr consumerTableSchema)
+        : ConsumerClusterClient_(std::move(consumerClusterClient))
         , ConsumerPath_(std::move(consumerPath))
         , ConsumerTableSchema_(std::move(consumerTableSchema))
     { }
@@ -650,7 +666,7 @@ public:
 private:
     const IClientPtr ConsumerClusterClient_;
     const TYPath ConsumerPath_;
-    TTableSchemaPtr ConsumerTableSchema_;
+    const TTableSchemaPtr ConsumerTableSchema_;
 
     static const TNameTablePtr ConsumerNameTable_;
     static const int QueueClusterColumnId_;

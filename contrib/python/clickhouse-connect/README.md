@@ -16,7 +16,7 @@ ClickHouse Connect currently uses the ClickHouse HTTP interface for maximum comp
 pip install clickhouse-connect
 ```
 
-ClickHouse Connect requires Python 3.7 or higher. 
+ClickHouse Connect requires Python 3.8 or higher. 
 
 
 ### Superset Connectivity

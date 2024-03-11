@@ -1,8 +1,11 @@
 from dataclasses import dataclass
 from typing import Optional, Sequence
 
+import yatest.common
+
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
+from ydb.library.yql.providers.generic.connector.tests.utils.docker_compose import EndpointDeterminer
 
 
 @dataclass
@@ -21,9 +24,12 @@ class Settings:
         cluster_name: str
         username: str
         password: str
-        host: str
-        http_port: int
-        native_port: int
+        host_external: str
+        host_internal: str
+        http_port_external: int
+        http_port_internal: int
+        native_port_external: int
+        native_port_internal: int
         protocol: str
 
     clickhouse: ClickHouse
@@ -34,33 +40,45 @@ class Settings:
         cluster_name: str
         username: str
         password: Optional[str]
-        host: str
-        port: int
+        host_external: str
+        host_internal: str
+        port_external: int
+        port_internal: int
 
     postgresql: PostgreSQL
 
     @classmethod
     def from_env(cls) -> 'Settings':
+        docker_compose_file = yatest.common.source_path(
+            'ydb/library/yql/providers/generic/connector/tests/docker-compose.yml'
+        )
+        endpoint_determiner = EndpointDeterminer(docker_compose_file)
+
         return cls(
             connector=cls.Connector(
                 grpc_host='localhost',
-                grpc_port=50051,
+                grpc_port=endpoint_determiner.get_port('fq-connector-go', 50051),
                 paging_bytes_per_page=4 * 1024 * 1024,
                 paging_prefetch_queue_capacity=2,
             ),
             clickhouse=cls.ClickHouse(
                 cluster_name='clickhouse_integration_test',
-                host='localhost',
-                http_port=18123,
-                native_port=19000,
+                host_external='localhost',
+                host_internal='clickhouse',
+                http_port_external=endpoint_determiner.get_port('clickhouse', 8123),
+                native_port_external=endpoint_determiner.get_port('clickhouse', 9000),
+                http_port_internal=8123,
+                native_port_internal=9000,
                 username='user',
                 password='password',
                 protocol='native',
             ),
             postgresql=cls.PostgreSQL(
                 cluster_name='postgresql_integration_test',
-                host='localhost',
-                port=15432,
+                host_external='localhost',
+                host_internal='postgresql',
+                port_external=endpoint_determiner.get_port('postgresql', 5432),
+                port_internal=5432,
                 dbname='db',
                 username='user',
                 password='password',

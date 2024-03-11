@@ -5,16 +5,57 @@
 #include "vdisk_events.h"
 #include "vdisk_handle_class.h"
 
+#include <library/cpp/bucket_quoter/bucket_quoter.h>
 #include <util/system/compiler.h>
+#include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/util/light.h>
 
 namespace NKikimr {
 
+class TDiskOperationCostEstimator {
+    using Coefficients = std::pair<double, double>;
+public:
+    TDiskOperationCostEstimator(Coefficients readCoefficients,
+            Coefficients writeCoefficients,
+            Coefficients hugeWriteCoefficients)
+        : ReadCoefficients(readCoefficients)
+        , WriteCoefficients(writeCoefficients)
+        , HugeWriteCoefficients(hugeWriteCoefficients)
+    {}
+
+    ui64 Read(ui64 chunkSize) const {
+        return ReadCoefficients.first + ReadCoefficients.second * chunkSize;
+    }
+
+    ui64 Write(ui64 chunkSize) const {
+        return WriteCoefficients.first + WriteCoefficients.second * chunkSize;
+    }
+
+    ui64 HugeWrite(ui64 chunkSize) const {
+        return HugeWriteCoefficients.first + HugeWriteCoefficients.second * chunkSize;
+    }
+
+private:
+    // cost = Coefficients.first + Coefficients.second * chunkSize
+    Coefficients ReadCoefficients;
+    Coefficients WriteCoefficients;
+    Coefficients HugeWriteCoefficients;
+};
+
 class TBsCostModelBase {
 public:
+    TBsCostModelBase(NPDisk::EDeviceType deviceType)
+        : DeviceType(deviceType)
+    {}
+
     virtual ~TBsCostModelBase() = default;
 
+    friend class TBsCostTracker;
+
 protected:
+    NPDisk::EDeviceType DeviceType = NPDisk::DEVICE_TYPE_UNKNOWN;
+
     // Disk Settings
     ui64 DeviceSeekTimeNs = 5'000'000;
     ui64 HugeBlobSize = 1'000'000; // depends on erasure
@@ -26,16 +67,9 @@ protected:
     ui64 DeviceWriteBlockSize = 4 * 1'000; // 4 kB
     ui64 PDiskWriteBlockSize = 4ull * 1'000'000; // 4MB
 
-    // Estimated Coefficients
-    // cost = A + B * size
-    double WriteA = 6500;
-    double WriteB = 11.1;
-
-    double ReadA = WriteA;
-    double ReadB = WriteB;
-
-    double HugeWriteA = 6.089e+06;
-    double HugeWriteB = 8.1;
+    static const TDiskOperationCostEstimator HDDEstimator;
+    static const TDiskOperationCostEstimator SSDEstimator;
+    static const TDiskOperationCostEstimator NVMEEstimator;
 
 private:
     enum class EMemoryOperationType {
@@ -68,31 +102,62 @@ protected:
     }
 
     ui64 WriteCost(ui64 chunkSize) const {
-        ui64 seekTime = 1. * chunkSize * DeviceSeekTimeNs;
-        ui64 writeTime = chunkSize * 1'000'000'000ull / DeviceWriteSpeedBps;
-        return seekTime + writeTime;
+        switch (DeviceType) {
+            case NPDisk::DEVICE_TYPE_ROT: {
+                return HDDEstimator.Write(chunkSize);
+            }
+            case NPDisk::DEVICE_TYPE_SSD: {
+                return SSDEstimator.Write(chunkSize);
+            }
+            case NPDisk::DEVICE_TYPE_NVME: {
+                return NVMEEstimator.Write(chunkSize);
+            }
+            default: {
+                ui64 seekTime = DeviceSeekTimeNs / 100u;  // assume we do one seek per 100 log records
+                ui64 writeTime = chunkSize * 1'000'000'000ull / DeviceWriteSpeedBps;
+                return seekTime + writeTime;
+            }
+        }
     }
 
     ui64 HugeWriteCost(ui64 chunkSize) const {
-        ui64 blocksNumber = (chunkSize + DeviceWriteBlockSize - 1) / DeviceWriteBlockSize;
-        ui64 seekTime = 1. * blocksNumber * DeviceSeekTimeNs;
-        ui64 writeTime = chunkSize * 1'000'000'000ull / DeviceWriteSpeedBps;
-        return seekTime + writeTime;
+        switch (DeviceType) {
+            case NPDisk::DEVICE_TYPE_ROT: {
+                return HDDEstimator.HugeWrite(chunkSize);
+            }
+            case NPDisk::DEVICE_TYPE_SSD: {
+                return SSDEstimator.HugeWrite(chunkSize);
+            }
+            case NPDisk::DEVICE_TYPE_NVME: {
+                return NVMEEstimator.HugeWrite(chunkSize);
+            }
+            default: {
+                ui64 blocksNumber = (chunkSize + DeviceWriteBlockSize - 1) / DeviceWriteBlockSize;
+                ui64 seekTime = 1. * blocksNumber * DeviceSeekTimeNs;
+                ui64 writeTime = chunkSize * 1'000'000'000ull / DeviceWriteSpeedBps;
+                return seekTime + writeTime;
+            }
+        }
     }
 
     ui64 ReadCost(ui64 chunkSize) const {
-        ui64 blocksNumber = (chunkSize + DeviceReadBlockSize - 1) / DeviceReadBlockSize;
-        ui64 seekTime = 1. * blocksNumber * DeviceSeekTimeNs;
-        ui64 readTime = chunkSize * 1'000'000'000ull / DeviceReadSpeedBps;
-        return seekTime + readTime;
-    }
-
-    ui64 EstimatedWriteCost(ui64 chunkSize) const {
-        return WriteA + WriteB * chunkSize;
-    }
-
-    ui64 EstimatedHugeWriteCost(ui64 chunkSize) const {
-        return HugeWriteA + HugeWriteB * chunkSize;
+        switch (DeviceType) {
+            case NPDisk::DEVICE_TYPE_ROT: {
+                return HDDEstimator.Read(chunkSize);
+            }
+            case NPDisk::DEVICE_TYPE_SSD: {
+                return SSDEstimator.Read(chunkSize);
+            }
+            case NPDisk::DEVICE_TYPE_NVME: {
+                return NVMEEstimator.Read(chunkSize);
+            }
+            default: {
+                ui64 blocksNumber = (chunkSize + DeviceReadBlockSize - 1) / DeviceReadBlockSize;
+                ui64 seekTime = 1. * blocksNumber * DeviceSeekTimeNs;
+                ui64 readTime = chunkSize * 1'000'000'000ull / DeviceReadSpeedBps;
+                return seekTime + readTime;
+            }
+        }
     }
 
 public:
@@ -154,11 +219,11 @@ public:
 
     /// WRITES
     ui64 GetCost(const TEvBlobStorage::TEvVBlock& ev) const {
-        return EstimatedWriteCost(ev.GetCachedByteSize());
+        return WriteCost(ev.GetCachedByteSize());
     }
 
     ui64 GetCost(const TEvBlobStorage::TEvVCollectGarbage& ev) const {
-        return EstimatedWriteCost(ev.GetCachedByteSize());
+        return WriteCost(ev.GetCachedByteSize());
     }
 
     ui64 GetCost(const TEvBlobStorage::TEvVPut& ev) const { 
@@ -168,9 +233,9 @@ public:
 
         NPriPut::EHandleType handleType = NPriPut::HandleType(HugeBlobSize, handleClass, size);
         if (handleType == NPriPut::Log) {
-            return EstimatedWriteCost(size);
+            return WriteCost(size);
         } else {
-            return EstimatedHugeWriteCost(size);
+            return HugeWriteCost(size);
         }
     }
 
@@ -183,9 +248,9 @@ public:
             const ui64 size = ev.GetBufferBytes(idx);
             NPriPut::EHandleType handleType = NPriPut::HandleType(HugeBlobSize, handleClass, size);
             if (handleType == NPriPut::Log) {
-                cost += EstimatedWriteCost(size);
+                cost += WriteCost(size);
             } else {
-                cost += EstimatedHugeWriteCost(size);
+                cost += HugeWriteCost(size);
             }
         }
         return cost;
@@ -206,13 +271,37 @@ public:
     // WRITES
     ui64 GetCost(const NPDisk::TEvChunkWrite& ev) const {
         if (ev.PriorityClass == NPriPut::Log) {
-            return EstimatedWriteCost(ev.PartsPtr->ByteSize());
+            return WriteCost(ev.PartsPtr->ByteSize());
         } else {
-            return EstimatedHugeWriteCost(ev.PartsPtr->ByteSize());
+            return HugeWriteCost(ev.PartsPtr->ByteSize());
         }
     }
 };
 
+struct TFailTimer {
+    using TTime = TInstant;
+    static TTime Now() {
+        Y_FAIL();
+    }
+};
+
+template<class TBackupTimer = TFailTimer>
+struct TAppDataTimerMs {
+    using TTime = TInstant;
+    static constexpr ui64 Resolution = 1000ull; // milliseconds
+    static TTime Now() {
+        if (NKikimr::TAppData::TimeProvider) {
+            return NKikimr::TAppData::TimeProvider->Now();
+        } else {
+            return TBackupTimer::Now();
+        }
+    }
+    static ui64 Duration(TTime from, TTime to) {
+        return (to - from).MilliSeconds();
+    }
+};
+
+using TBsCostModelErasureNone = TBsCostModelBase;
 class TBsCostModelMirror3dc;
 class TBsCostModel4Plus2Block;
 class TBsCostModelMirror3of4;
@@ -221,17 +310,27 @@ class TBsCostTracker {
 private:
     TBlobStorageGroupType GroupType;
     std::unique_ptr<TBsCostModelBase> CostModel;
-
-    const TIntrusivePtr<::NMonitoring::TDynamicCounters> CostCounters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> CostCounters;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr UserDiskCost;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompactionDiskCost;
     ::NMonitoring::TDynamicCounters::TCounterPtr ScrubDiskCost;
     ::NMonitoring::TDynamicCounters::TCounterPtr DefragDiskCost;
     ::NMonitoring::TDynamicCounters::TCounterPtr InternalDiskCost;
+    ::NMonitoring::TDynamicCounters::TCounterPtr DiskTimeAvailableCtr;
+
+    TAtomic BucketCapacity;  // 10^9 nsec
+    TAtomic DiskTimeAvailable = 1'000'000'000;
+    TBucketQuoter<i64, TSpinLock, TAppDataTimerMs<TInstantTimerMs>> Bucket;
+    TLight BurstDetector;
+    std::atomic<ui64> SeqnoBurstDetector = 0;
+    static constexpr ui32 ConcurrentHugeRequestsAllowed = 3;
+    float DiskTimeAvailableScale = 1;
 
 public:
-    TBsCostTracker(const TBlobStorageGroupType& groupType, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
+    TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::EDeviceType diskType,
+            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 burstThresholdNs,
+            float diskTimeAvailableScale);
 
     template<class TEv>
     ui64 GetCost(const TEv& ev) const {
@@ -244,9 +343,6 @@ public:
         return cost;
     }
 
-    /// SETTINGS
-    void UpdateFromVDiskSettings(NKikimrBlobStorage::TVDiskCostSettings &settings) const;
-
 public:
     void UpdateCostModel(const TCostModel& costModel) {
         if (CostModel) {
@@ -254,38 +350,65 @@ public:
         }
     }
 
+    void CountRequest(ui64 cost) {
+        Bucket.UseAndFill(cost);
+        BurstDetector.Set(!Bucket.IsAvail(), SeqnoBurstDetector.fetch_add(1));
+    }
+
+    void SetTimeAvailable(ui32 diskTimeAvailableNSec) {
+        ui64 diskTimeAvailable = diskTimeAvailableNSec * DiskTimeAvailableScale;
+        AtomicSet(DiskTimeAvailable, diskTimeAvailable);
+        *DiskTimeAvailableCtr = diskTimeAvailable;
+    }
+
 public:
     template<class TEvent>
     void CountUserRequest(const TEvent& ev) {
-        *UserDiskCost += GetCost(ev);
+        ui64 cost = GetCost(ev);
+        *UserDiskCost += cost;
+        CountRequest(cost);
     }
 
     void CountUserCost(ui64 cost) {
         *UserDiskCost += cost;
+        CountRequest(cost);
     }
 
     template<class TEvent>
     void CountCompactionRequest(const TEvent& ev) {
-        *CompactionDiskCost += GetCost(ev);
+        ui64 cost = GetCost(ev);
+        *CompactionDiskCost += cost;
+        CountRequest(cost);
     }
 
     template<class TEvent>
     void CountScrubRequest(const TEvent& ev) {
-        *UserDiskCost += GetCost(ev);
+        ui64 cost = GetCost(ev);
+        *UserDiskCost += cost;
+        CountRequest(cost);
     }
 
     template<class TEvent>
     void CountDefragRequest(const TEvent& ev) {
-        *DefragDiskCost += GetCost(ev);
+        ui64 cost = GetCost(ev);
+        *DefragDiskCost += cost;
+        CountRequest(cost);
     }
 
     template<class TEvent>
     void CountInternalRequest(const TEvent& ev) {
-        *InternalDiskCost += GetCost(ev);
+        ui64 cost = GetCost(ev);
+        *InternalDiskCost += cost;
+        CountRequest(cost);
     }
 
     void CountInternalCost(ui64 cost) {
         *InternalDiskCost += cost;
+        CountRequest(cost);
+    }
+
+    void CountPDiskResponse() {
+        BurstDetector.Set(!Bucket.IsAvail(), SeqnoBurstDetector.fetch_add(1));
     }
 };
 

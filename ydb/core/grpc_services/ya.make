@@ -95,8 +95,7 @@ PEERDIR(
     ydb/core/discovery
     ydb/core/engine
     ydb/core/formats
-    ydb/core/fq/libs/actors
-    ydb/core/fq/libs/control_plane_proxy
+    ydb/core/fq/libs/events
     ydb/core/fq/libs/control_plane_proxy/events
     ydb/core/grpc_services/base
     ydb/core/grpc_services/counters
@@ -104,7 +103,7 @@ PEERDIR(
     ydb/core/grpc_services/cancelation
     ydb/core/grpc_services/auth_processor
     ydb/core/health_check
-    ydb/core/io_formats
+    ydb/core/io_formats/ydb_dump
     ydb/core/kesus/tablet
     ydb/core/kqp/common
     ydb/core/protos
@@ -115,6 +114,7 @@ PEERDIR(
     ydb/core/tx/sharding
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/data_events
+    ydb/core/util
     ydb/core/ydb_convert
     ydb/core/security
     ydb/library/aclib

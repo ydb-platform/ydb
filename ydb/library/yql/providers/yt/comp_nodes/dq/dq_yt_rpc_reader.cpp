@@ -1,6 +1,8 @@
 #include "dq_yt_rpc_reader.h"
 #include "dq_yt_rpc_helpers.h"
 
+#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
+
 #include "yt/cpp/mapreduce/common/helpers.h"
 
 #include <yt/yt/library/auth/auth.h>
@@ -84,6 +86,13 @@ void TParallelFileInputState::Finish() {
     MkqlReader_.Finish();
 }
 
+void TParallelFileInputState::CheckError() const {
+    if (!InnerState_->Error.IsOK()) {
+        Cerr << "YT RPC Reader exception:\n";
+        InnerState_->Error.ThrowOnError();
+    }
+}
+
 bool TParallelFileInputState::RunNext() {
     while (true) {
         size_t InputIdx = 0;
@@ -120,6 +129,11 @@ bool TParallelFileInputState::RunNext() {
                 Cerr << (TStringBuilder() "Warn: request took: " << elapsed << " mcs)\n");
             }
 #endif
+
+            TFailureInjector::Reach("dq_rpc_reader_read_err_when_empty", [&res_] {
+                res_ = NYT::TErrorOr<NYT::TSharedRef>(NYT::TError("failure injected"));
+            });
+
             if (!res_.IsOK()) {
                 std::lock_guard lock(state->Lock);
                 state->Error = std::move(res_);
@@ -127,6 +141,7 @@ bool TParallelFileInputState::RunNext() {
                 state->WaitPromise.TrySet();
                 return;
             }
+
             auto block = std::move(res_.Value());
             NYT::NApi::NRpcProxy::NProto::TRowsetDescriptor descriptor;
             NYT::NApi::NRpcProxy::NProto::TRowsetStatistics statistics;
@@ -160,6 +175,7 @@ bool TParallelFileInputState::NextValue() {
 #ifdef RPC_PRINT_TIME
         print_add(-1);
 #endif
+            CheckError();
             return false;
         }
         if (MkqlReader_.IsValid()) {
@@ -186,10 +202,7 @@ bool TParallelFileInputState::NextValue() {
         TResult result;
         {
             std::lock_guard lock(InnerState_->Lock);
-            if (!InnerState_->Error.IsOK()) {
-                Cerr << "YT RPC Reader exception:\n";
-                InnerState_->Error.ThrowOnError();
-            }
+            CheckError();
             if (InnerState_->Results.empty()) {
                 continue;
             }

@@ -67,6 +67,7 @@ class TestBindings:
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    @pytest.mark.parametrize("is_replace_if_exists", [True, False])
     def test_binding_operations(self, kikimr, s3, client: FederatedQueryClient, yq_version):
 
         resource = boto3.resource(
@@ -192,6 +193,7 @@ class TestBindings:
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    @pytest.mark.parametrize("is_replace_if_exists", [True, False])
     def test_modify_connection_with_a_lot_of_bindings(self, kikimr, s3, client: FederatedQueryClient, yq_version):
 
         resource = boto3.resource(
@@ -586,3 +588,36 @@ Pear,15'''
         else:
             assert result_set.columns[0].type.type_id == ydb.Type.UINT64
             assert result_set.rows[0].items[0].uint64_value == 1
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_ast_in_failed_query_compilation(self, kikimr, s3, client):
+        resource = boto3.resource(
+            "s3",
+            endpoint_url=s3.s3_url,
+            aws_access_key_id="key",
+            aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("bindbucket")
+        bucket.create(ACL='public-read')
+        bucket.objects.all().delete()
+
+        connection_id = client.create_storage_connection("bb", "bindbucket").result.connection_id
+
+        data_column = ydb.Column(name="data", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
+        client.create_object_storage_binding(name="s3binding",
+                                             path="/",
+                                             format="raw",
+                                             connection_id=connection_id,
+                                             columns=[data_column])
+
+        sql = R'''
+            SELECT some_unknown_column FROM bindings.`s3binding`;
+        '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+
+        ast = client.describe_query(query_id).result.query.ast.data
+        assert "(\'columns \'(\'\"some_unknown_column\"))" in ast, "Invalid query ast"

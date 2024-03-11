@@ -210,7 +210,13 @@ NYql::TIssues StatusToIssues(const NYdb::TStatus& status) {
 TFuture<TIssues> StatusToIssues(const TFuture<TStatus>& future) {
     return future.Apply(
         [] (const TFuture<TStatus>& future) {
-            return StatusToIssues(future.GetValue());
+            try {
+                return StatusToIssues(future.GetValue());
+            } catch (...) {
+                TIssues issues;
+                issues.AddIssue("StatusToIssues failed with exception: " + CurrentExceptionMessage());
+                return issues;
+            }
     });
 }
 

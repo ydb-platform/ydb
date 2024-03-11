@@ -9,11 +9,13 @@ ENDIF()
 PROTO_NAMESPACE(yt)
 
 SRCS(
+    adjusted_exponential_moving_average_ut.cpp
     algorithm_helpers_ut.cpp
     arithmetic_formula_ut.cpp
     atomic_ptr_ut.cpp
     async_expiring_cache_ut.cpp
     async_slru_cache_ut.cpp
+    backoff_strategy_ut.cpp
     bit_packed_integer_vector_ut.cpp
     boolean_formula_ut.cpp
     callback_ut.cpp
@@ -37,7 +39,6 @@ SRCS(
     hazard_ptr_ut.cpp
     heap_ut.cpp
     histogram_ut.cpp
-    historic_usage_aggregator_ut.cpp
     hyperloglog_ut.cpp
     intern_registry_ut.cpp
     job_signaler_ut.cpp

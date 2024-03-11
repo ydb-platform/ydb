@@ -2,6 +2,7 @@
 #include <google/protobuf/text_format.h>
 #include <util/stream/file.h>
 #include <util/string/printf.h>
+#include <ydb/core/protos/base.pb.h>
 
 namespace NKikimr {
 namespace NDriverClient {

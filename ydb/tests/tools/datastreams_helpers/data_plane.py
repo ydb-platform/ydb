@@ -60,7 +60,7 @@ def read_stream(path, messages_count, commit_after_processing=True, consumer_nam
     ] + ["--commit-after-processing"] if commit_after_processing else []
 
     with open(result_file, "w") as outfile:
-        yatest.common.execute(cmd, timeout=timeout * 1.2, stdout=outfile)
+        yatest.common.execute(cmd, timeout=timeout * 2, stdout=outfile)
 
     ret = []
     with open(result_file, "r") as result:

@@ -405,6 +405,9 @@ public:
             case NUdf::EDataSlot::TzDate:
                 value = ToString(out.Get<ui16>());
                 break;
+            case NUdf::EDataSlot::Date32:
+                value = ToString(out.Get<i32>());
+                break;
             case NUdf::EDataSlot::Datetime:
             case NUdf::EDataSlot::TzDatetime:
                 value = ToString(out.Get<ui32>());
@@ -413,7 +416,12 @@ public:
             case NUdf::EDataSlot::TzTimestamp:
                 value = ToString(out.Get<ui64>());
                 break;
+            case NUdf::EDataSlot::Datetime64:
+            case NUdf::EDataSlot::Timestamp64:
+                value = ToString(out.Get<i64>());
+                break;
             case NUdf::EDataSlot::Interval:
+            case NUdf::EDataSlot::Interval64:
                 value = ToString(out.Get<i64>());
                 if ('T' == atom->back()) {
                     ctx.Error(Pos) << "Time prefix 'T' at end of interval constant. The designator 'T' shall be absent if all of the time components are absent.";
@@ -1225,7 +1233,8 @@ TString NormalizeTypeString(const TString& str) {
 }
 
 static const TSet<TString> AvailableDataTypes = {"Bool", "String", "Uint32", "Uint64", "Int32", "Int64", "Float", "Double", "Utf8", "Yson", "Json", "JsonDocument",
-    "Date", "Datetime", "Timestamp", "Interval", "Uint8", "Int8", "Uint16", "Int16", "TzDate", "TzDatetime", "TzTimestamp", "Uuid", "Decimal", "DyNumber"};
+    "Date", "Datetime", "Timestamp", "Interval", "Uint8", "Int8", "Uint16", "Int16", "TzDate", "TzDatetime", "TzTimestamp", "Uuid", "Decimal", "DyNumber",
+    "Date32", "Datetime64", "Timestamp64", "Interval64", };
 TNodePtr GetDataTypeStringNode(TContext& ctx, TCallNode& node, unsigned argNum, TString* outTypeStrPtr = nullptr) {
     auto errMsgFunc = [&node, argNum]() {
         static std::array<TString, 2> numToName = {{"first", "second"}};
@@ -2088,6 +2097,11 @@ private:
             }
         }
 
+        if (sessionWindow->HasState(ENodeState::Failed)) {
+            return false;
+        }
+
+        YQL_ENSURE(sessionWindow->HasState(ENodeState::Initialized));
         YQL_ENSURE(sessionWindow->GetLabel());
         Node = Y("Member", "row", BuildQuotedAtom(Pos, sessionWindow->GetLabel()));
         if (OverWindow) {
@@ -2835,7 +2849,7 @@ struct TBuiltinFuncData {
             {"in", BuildSimpleBuiltinFactoryCallback<TYqlIn>()},
 
             // List builtins
-            {"aslist", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsList", 0, -1)},
+            {"aslist", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsListMayWarn", 0, -1)},
             {"asliststrict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsListStrict", 0, -1) },
             {"listlength", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Length", 1, 1)},
             {"listhasitems", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("HasItems", 1, 1)},
@@ -2887,9 +2901,9 @@ struct TBuiltinFuncData {
             {"dicthasitems", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("HasItems", 1, 1)},
             {"dictcreate", BuildSimpleBuiltinFactoryCallback<TDictCreateBuiltin>()},
             {"setcreate", BuildSimpleBuiltinFactoryCallback<TSetCreateBuiltin>()},
-            {"asdict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsDict", 0, -1)},
+            {"asdict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsDictMayWarn", 0, -1)},
             {"asdictstrict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsDictStrict", 0, -1)},
-            {"asset", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsSet", 0, -1)},
+            {"asset", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsSetMayWarn", 0, -1)},
             {"assetstrict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsSetStrict", 0, -1)},
             {"todict", BuildNamedBuiltinFactoryCallback<TYqlToDict<false, false>>("One")},
             {"tomultidict", BuildNamedBuiltinFactoryCallback<TYqlToDict<false, false>>("Many")},
@@ -3415,7 +3429,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             const auto& label = item->GetLabel();
             if (label == "Entities") {
                 auto callNode = dynamic_cast<TCallNode*>(item.Get());
-                if (!callNode || callNode->GetOpName() != "AsList") {
+                if (!callNode || callNode->GetOpName() != "AsListMayWarn") {
                     return new TInvalidBuiltin(pos, TStringBuilder() << name << " entities must be list of strings");
                 }
 

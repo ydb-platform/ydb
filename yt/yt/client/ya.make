@@ -21,7 +21,7 @@ SRCS(
     api/query_tracker_client.cpp
     api/helpers.cpp
     api/internal_client.cpp
-    api/operation_archive_schema.cpp
+    api/operations_archive_schema.cpp
     api/public.cpp
     api/rowset.cpp
     api/skynet.cpp
@@ -30,6 +30,7 @@ SRCS(
     api/dynamic_table_transaction_mixin.cpp
     api/persistent_queue.cpp
     api/sticky_transaction_pool.cpp
+    api/options.cpp
 
     api/rpc_proxy/address_helpers.cpp
     api/rpc_proxy/public.cpp

@@ -5,6 +5,8 @@
 #include <util/generic/xrange.h>
 #include <util/string/cast.h>
 
+#include <ydb/library/mkql_proto/protos/minikql.pb.h>
+
 namespace NKikimr {
 
 IOutputStream& operator<<(IOutputStream& output, const TAggregatedStats& stats) {

@@ -32,8 +32,7 @@
             - "YDB_USE_IN_MEMORY_PDISKS=true"
             - "POSTGRES_USER=${YDB_PG_USER:-root}"
             - "POSTGRES_PASSWORD=${YDB_PG_PASSWORD:-1234}"
-            - "YDB_FEATURE_FLAGS=enable_temp_tables"
-            - "YDB_TABLE_ENABLE_PREPARED_DDL=true"
+            - "YDB_EXPERIMENTAL_PG=1"
     ```
 
     запуск:
@@ -44,7 +43,7 @@
 - Docker-команда в одну строку
 
     ```bash
-    docker run --name ydb-postgres -d --pull always -p 5432:5432 -p 8765:8765 -e POSTGRES_USER=root -e POSTGRES_PASSWORD=1234 -e YDB_FEATURE_FLAGS=enable_temp_tables -e YDB_TABLE_ENABLE_PREPARED_DDL=true -e YDB_USE_IN_MEMORY_PDISKS=true ghcr.io/ydb-platform/local-ydb:nightly
+    docker run --name ydb-postgres -d --pull always -p 5432:5432 -p 8765:8765 -e POSTGRES_USER=root -e POSTGRES_PASSWORD=1234 -e YDB_EXPERIMENTAL_PG=1 -e YDB_USE_IN_MEMORY_PDISKS=true ghcr.io/ydb-platform/local-ydb:nightly
     ```
 
 {% endlist %}

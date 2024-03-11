@@ -18,10 +18,10 @@ def make_client(s: Settings.ClickHouse) -> Client:
         attempt += 1
         try:
             client = clickhouse_connect.get_client(
-                host=s.host, port=s.http_port, username=s.username, password=s.password
+                host=s.host_external, port=s.http_port_external, username=s.username, password=s.password
             )
         except Exception as e:
-            sys.stderr.write(f"attempt #{attempt}: {e}")
+            sys.stderr.write(f"attempt #{attempt}: {e}\n")
             time.sleep(5)
             continue
 

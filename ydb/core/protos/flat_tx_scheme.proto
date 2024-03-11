@@ -106,12 +106,13 @@ message TEvDescribeSchemeResult {
     optional string Reason = 2;
     optional string Path = 3;
     optional NKikimrSchemeOp.TPathDescription PathDescription = 4;
-    optional fixed64 PathOwner = 5;
+    optional fixed64 DEPRECATED_PathOwner = 5;  // replaced by PathOwnerId
     optional fixed64 PathId = 6;
 
     optional string LastExistedPrefixPath = 7;
     optional fixed64 LastExistedPrefixPathId = 8;
     optional NKikimrSchemeOp.TPathDescription LastExistedPrefixDescription = 9;
+
     optional fixed64 PathOwnerId = 10;
 }
 
@@ -263,6 +264,7 @@ message TMigrateColumn {
     optional uint32 DefaultKind = 8;
     optional bytes DefaultValue = 9;
     optional bool NotNull = 10;
+    optional bool IsBuildInProgress = 12;
 }
 
 message TMigratePartition {
@@ -407,4 +409,7 @@ message TEvFindTabletSubDomainPathIdResult {
     optional uint64 TabletId = 2; // DataShard tablet id
     optional uint64 SchemeShardId = 3; // OwnerId of the subdomain
     optional uint64 SubDomainPathId = 4; // LocalPathId of the subdomain
+}
+
+message TEvOwnerActorAck {
 }

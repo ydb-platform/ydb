@@ -414,8 +414,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
 
-        ui32 errors = 0;
-
         vdisk.ReserveChunk();
         vdisk.CommitReservedChunks();
         UNIT_ASSERT(vdisk.Chunks[EChunkState::COMMITTED].size() == 1);
@@ -435,7 +433,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             const auto res = testCtx.Recv<NPDisk::TEvChunkReadResult>();
             //Ctest << res->ToString() << Endl;
             if (res->Status != NKikimrProto::OK) {
-                ++errors;
                 if (!printed) {
                     printed = true;
                     Ctest << res->ToString() << Endl;

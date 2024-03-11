@@ -9,7 +9,6 @@
 #include <library/cpp/lfalloc/dbg_info/dbg_info.h>
 #include <library/cpp/malloc/api/malloc.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-#include <library/cpp/ytalloc/api/ytalloc.h>
 
 #include <util/datetime/base.h>
 
@@ -91,111 +90,6 @@ namespace NKikimr {
             }
         };
 
-        class TYtAllocStats: public IAllocStats {
-            struct TTimingEventCounters {
-                TDynamicCounterPtr Count;
-                TDynamicCounterPtr Size;
-            };
-
-        private:
-            TDynamicCountersPtr CounterGroup;
-
-            NYT::TEnumIndexedVector<NYT::NYTAlloc::ETotalCounter, TDynamicCounterPtr> TotalAllocationCounters;
-            NYT::TEnumIndexedVector<NYT::NYTAlloc::ESmallCounter, TDynamicCounterPtr> SmallAllocationCounters;
-            NYT::TEnumIndexedVector<NYT::NYTAlloc::ELargeCounter, TDynamicCounterPtr> LargeAllocationCounters;
-            std::array<NYT::TEnumIndexedVector<NYT::NYTAlloc::ESmallArenaCounter, TDynamicCounterPtr>, NYT::NYTAlloc::SmallRankCount> SmallArenaAllocationCounters;
-            std::array<NYT::TEnumIndexedVector<NYT::NYTAlloc::ELargeArenaCounter, TDynamicCounterPtr>, NYT::NYTAlloc::LargeRankCount> LargeArenaAllocationCounters;
-            NYT::TEnumIndexedVector<NYT::NYTAlloc::EHugeCounter, TDynamicCounterPtr> HugeAllocationCounters;
-            NYT::TEnumIndexedVector<NYT::NYTAlloc::ESystemCounter, TDynamicCounterPtr> SystemAllocationCounters;
-            NYT::TEnumIndexedVector<NYT::NYTAlloc::EUndumpableCounter, TDynamicCounterPtr> UndumpableAllocationCounters;
-            NYT::TEnumIndexedVector<NYT::NYTAlloc::ETimingEventType, TTimingEventCounters> TimingEventCounters;
-
-        public:
-            TYtAllocStats(TDynamicCountersPtr group) {
-                CounterGroup = group->GetSubgroup("component", "ytalloc");
-
-                InitCounters(TotalAllocationCounters, CounterGroup->GetSubgroup("category", "total"));
-                InitCounters(SmallAllocationCounters, CounterGroup->GetSubgroup("category", "small"));
-                InitCounters(LargeAllocationCounters, CounterGroup->GetSubgroup("category", "large"));
-                InitCounters(SmallArenaAllocationCounters, CounterGroup->GetSubgroup("category", "small_arena"));
-                InitCounters(LargeArenaAllocationCounters, CounterGroup->GetSubgroup("category", "large_arena"));
-                InitCounters(HugeAllocationCounters, CounterGroup->GetSubgroup("category", "huge"));
-                InitCounters(SystemAllocationCounters, CounterGroup->GetSubgroup("category", "system"));
-                InitCounters(UndumpableAllocationCounters, CounterGroup->GetSubgroup("category", "undumpable"));
-                InitCounters(TimingEventCounters, CounterGroup->GetSubgroup("category", "timing_event"));
-            }
-
-            void Update() override {
-                UpdateCounters(TotalAllocationCounters, NYT::NYTAlloc::GetTotalAllocationCounters());
-                UpdateCounters(SmallAllocationCounters, NYT::NYTAlloc::GetSmallAllocationCounters());
-                UpdateCounters(LargeAllocationCounters, NYT::NYTAlloc::GetLargeAllocationCounters());
-                UpdateCounters(SmallArenaAllocationCounters, NYT::NYTAlloc::GetSmallArenaAllocationCounters());
-                UpdateCounters(LargeArenaAllocationCounters, NYT::NYTAlloc::GetLargeArenaAllocationCounters());
-                UpdateCounters(HugeAllocationCounters, NYT::NYTAlloc::GetHugeAllocationCounters());
-                UpdateCounters(SystemAllocationCounters, NYT::NYTAlloc::GetSystemAllocationCounters());
-                UpdateCounters(UndumpableAllocationCounters, NYT::NYTAlloc::GetUndumpableAllocationCounters());
-                UpdateCounters(TimingEventCounters, NYT::NYTAlloc::GetTimingEventCounters());
-            }
-
-        private:
-            template <typename E>
-            static void InitCounters(
-                NYT::TEnumIndexedVector<E, TDynamicCounterPtr>& counters,
-                TDynamicCountersPtr group) {
-                for (auto c : NYT::TEnumTraits<E>::GetDomainValues()) {
-                    counters[c] = group->GetCounter(NYT::TEnumTraits<E>::ToString(c));
-                }
-            }
-
-            template <typename E, size_t N>
-            static void InitCounters(
-                std::array<NYT::TEnumIndexedVector<E, TDynamicCounterPtr>, N>& counters,
-                TDynamicCountersPtr group) {
-                for (size_t i = 0; i < N; ++i) {
-                    InitCounters(counters[i], group->GetSubgroup("rank", ToString(i)));
-                }
-            }
-
-            template <typename E>
-            static void InitCounters(
-                NYT::TEnumIndexedVector<E, TTimingEventCounters>& counters,
-                TDynamicCountersPtr group) {
-                for (auto c : NYT::TEnumTraits<E>::GetDomainValues()) {
-                    const auto& name = NYT::TEnumTraits<E>::ToString(c);
-                    counters[c].Count = group->GetCounter(name + "_Count");
-                    counters[c].Size = group->GetCounter(name + "_Size");
-                }
-            }
-
-            template <typename E>
-            static void UpdateCounters(
-                NYT::TEnumIndexedVector<E, TDynamicCounterPtr>& counters,
-                const NYT::TEnumIndexedVector<E, ssize_t>& source) {
-                for (auto c : NYT::TEnumTraits<E>::GetDomainValues()) {
-                    *counters[c] = source[c];
-                }
-            }
-
-            template <typename E, size_t N>
-            static void UpdateCounters(
-                std::array<NYT::TEnumIndexedVector<E, TDynamicCounterPtr>, N>& counters,
-                const std::array<NYT::TEnumIndexedVector<E, ssize_t>, N>& source) {
-                for (size_t i = 0; i < N; ++i) {
-                    UpdateCounters(counters[i], source[i]);
-                }
-            }
-
-            template <typename E>
-            static void UpdateCounters(
-                NYT::TEnumIndexedVector<E, TTimingEventCounters>& counters,
-                const NYT::TEnumIndexedVector<E, NYT::NYTAlloc::TTimingEventCounters>& source) {
-                for (auto c : NYT::TEnumTraits<E>::GetDomainValues()) {
-                    *counters[c].Count = source[c].Count;
-                    *counters[c].Size = source[c].Size;
-                }
-            }
-        };
-
         struct TFakeAllocStats: public IAllocStats {
             void Update() override {
             }
@@ -208,8 +102,6 @@ namespace NKikimr {
             std::unique_ptr<IAllocStats> stats;
             if (name.StartsWith("lf")) {
                 stats = std::make_unique<TLfAllocStats>(std::move(group));
-            } else if (name.StartsWith("yt")) {
-                stats = std::make_unique<TYtAllocStats>(std::move(group));
             } else if (name.StartsWith("tc")) {
                 stats = std::move(CreateTcMallocStats(std::move(group)));
             }

@@ -421,7 +421,7 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
 
 template <bool IsMapJoin>
 const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool stream, TExprContext& ctx) {
-    if (!EnsureMinMaxArgsCount(*input, 6, 7, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 8, 9, ctx)) {
         return nullptr;
     }
 
@@ -495,7 +495,7 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
         ? join.RightLabel().Cast<TCoAtom>().Value()
         : TStringBuf("");
 
-    if (input->ChildrenSize() > 6U) {
+    if (input->ChildrenSize() > 8U) {
         for (auto i = 0U; i < input->Tail().ChildrenSize(); ++i) {
             if (const auto& flag = *input->Tail().Child(i); !flag.IsAtom({"LeftAny", "RightAny"})) {
                 ctx.AddError(TIssue(ctx.GetPosition(flag.Pos()), TStringBuilder() << "Unsupported DQ join option: " << flag.Content()));
@@ -772,10 +772,10 @@ TStatus AnnotateDqReplicate(const TExprNode::TPtr& input, TExprContext& ctx) {
         if (!lambda->GetTypeAnn()) {
             return TStatus::Repeat;
         }
-        const TTypeAnnotationNode* lambdaItemType = nullptr;
-        if (!EnsureNewSeqType<false, false>(*lambda, ctx, &lambdaItemType)) {
+        if (!EnsureFlowType(*lambda, ctx)) {
             return TStatus::Error;
         }
+        const TTypeAnnotationNode* lambdaItemType = lambda->GetTypeAnn()->Cast<TFlowExprType>()->GetItemType();
         if (!EnsurePersistableType(lambda->Pos(), *lambdaItemType, ctx)) {
             return TStatus::Error;
         }

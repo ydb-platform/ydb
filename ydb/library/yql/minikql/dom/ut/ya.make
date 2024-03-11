@@ -9,7 +9,7 @@ IF (NOT WINDOWS)
     SIZE(MEDIUM)
 
     PEERDIR(
-        ydb/library/yql/minikql/computation/llvm
+        ydb/library/yql/minikql/computation/llvm14
         ydb/library/yql/public/udf/service/exception_policy
         ydb/library/yql/sql/pg_dummy
     )

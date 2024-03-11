@@ -8,69 +8,54 @@
 
 
 namespace NActors {
-    class TExecutorThread;
+    class TGenericExecutorThread;
     class TBasicExecutorPool;
+    class TIOExecutorPool;
 
-    struct TExecutorThreadCtx {
-        enum EWaitState : ui64 {
-            WS_NONE,
-            WS_ACTIVE,
-            WS_BLOCKED,
-            WS_RUNNING
-        };
+    enum class EThreadState : ui64 {
+        None,
+        Spin,
+        Sleep,
+        Work
+    };
 
-        struct TWaitState {
-            EWaitState Flag = WS_NONE;
-            ui32 NextPool = Max<ui32>();
+    struct TGenericExecutorThreadCtx {
+        TAutoPtr<TGenericExecutorThread> Thread;
 
-            TWaitState() = default;
-
-            explicit TWaitState(ui64 state)
-                : Flag(static_cast<EWaitState>(state & 0x7))
-                , NextPool(state >> 3)
-            {}
-
-            explicit TWaitState(EWaitState flag, ui32 nextPool = Max<ui32>())
-                : Flag(flag)
-                , NextPool(nextPool)
-            {}
-
-            explicit operator ui64() {
-                return Flag | ui64(NextPool << 3);
-            }
-        };
-
-        TAutoPtr<TExecutorThread> Thread;
+    protected:
+        friend class TIOExecutorPool;
         TThreadParkPad WaitingPad;
 
     private:
-        std::atomic<ui64> WaitingFlag = WS_NONE;
+        std::atomic<ui64> WaitingFlag = static_cast<ui64>(EThreadState::None);
 
     public:
-        TBasicExecutorPool *OwnerExecutorPool = nullptr;
-        std::atomic<TBasicExecutorPool*> OtherExecutorPool = nullptr;
         ui64 StartWakingTs = 0;
-        ui32 NextPool = 0;
-        bool IsShared;
 
-        // different threads must spin/block on different cache-lines.
-        // we add some padding bytes to enforce this rule;
+        ui64 GetStateInt() {
+            return WaitingFlag.load();
+        }
 
+    protected:
+        template <typename TWaitState>
         TWaitState GetState() {
             return TWaitState(WaitingFlag.load());
         }
 
-        TWaitState ExchangeState(EWaitState flag, ui32 nextPool = Max<ui32>()) {
-            return TWaitState(WaitingFlag.exchange(static_cast<ui64>(TWaitState(flag, nextPool))));
+        template <typename TWaitState>
+        TWaitState ExchangeState(TWaitState state) {
+            return TWaitState(WaitingFlag.exchange(static_cast<ui64>(state)));
         }
 
-        bool ReplaceState(TWaitState &expected, EWaitState flag, ui32 nextPool = Max<ui32>()) {
+        template <typename TWaitState>
+        bool ReplaceState(TWaitState &expected, TWaitState state) {
             ui64 expectedInt = static_cast<ui64>(expected);
-            bool result = WaitingFlag.compare_exchange_strong(expectedInt, static_cast<ui64>(TWaitState(flag, nextPool)));
+            bool result = WaitingFlag.compare_exchange_strong(expectedInt, static_cast<ui64>(state));
             expected = TWaitState(expectedInt);
             return result;
         }
 
+        template <typename TDerived, typename TWaitState>
         void Spin(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag) {
             ui64 start = GetCycleCountFast();
             bool doSpin = true;
@@ -81,11 +66,11 @@ namespace NActors {
                         break;
                     }
                     for (ui32 i = 0; i < 12; ++i) {
-                        TWaitState state = GetState();
-                        if (state.Flag == WS_ACTIVE) {
+                        TWaitState state = GetState<TWaitState>();
+                        if (static_cast<EThreadState>(state) == EThreadState::Spin) {
                             SpinLockPause();
                         } else {
-                            NextPool = state.NextPool;
+                            static_cast<TDerived*>(this)->AfterWakeUp(state);
                             doSpin = false;
                             break;
                         }
@@ -100,10 +85,16 @@ namespace NActors {
             }
         }
 
+        template <typename TDerived, typename TWaitState>
         bool Sleep(std::atomic<bool> *stopFlag) {
             Y_DEBUG_ABORT_UNLESS(TlsThreadContext);
 
-            TWaitState state;
+            TWaitState state = TWaitState{EThreadState::Spin};
+            if (!ReplaceState<TWaitState>(state, TWaitState{EThreadState::Sleep})) {
+                static_cast<TDerived*>(this)->AfterWakeUp(state);
+                return false;
+            }
+
             do {
                 TlsThreadContext->Timers.HPNow = GetCycleCountFast();
                 TlsThreadContext->Timers.Elapsed += TlsThreadContext->Timers.HPNow - TlsThreadContext->Timers.HPStart;
@@ -111,25 +102,113 @@ namespace NActors {
                     return true;
                 TlsThreadContext->Timers.HPStart = GetCycleCountFast();
                 TlsThreadContext->Timers.Parked += TlsThreadContext->Timers.HPStart - TlsThreadContext->Timers.HPNow;
-                state = GetState();
-            } while (state.Flag == WS_BLOCKED && !stopFlag->load(std::memory_order_relaxed));
-            NextPool = state.NextPool;
+                state = GetState<TWaitState>();
+            } while (static_cast<EThreadState>(state) == EThreadState::Sleep && !stopFlag->load(std::memory_order_relaxed));
+
+            static_cast<TDerived*>(this)->AfterWakeUp(state);
             return false;
+        }
+    };
+    
+    struct TExecutorThreadCtx : public TGenericExecutorThreadCtx {
+        using TBase = TGenericExecutorThreadCtx;
+
+        TBasicExecutorPool *OwnerExecutorPool = nullptr;
+
+        void SetWork() {
+            ExchangeState(EThreadState::Work);
+        }
+
+        void UnsetWork() {
+            ExchangeState(EThreadState::None);
+        }
+
+        void Spin(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag) {
+            this->TBase::Spin<TExecutorThreadCtx, EThreadState>(spinThresholdCycles, stopFlag);
+        }
+
+        bool Sleep(std::atomic<bool> *stopFlag) {
+            return this->TBase::Sleep<TExecutorThreadCtx, EThreadState>(stopFlag);
         }
 
         bool Wait(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag); // in executor_pool_basic.cpp
 
-        bool Block(std::atomic<bool> *stopFlag) {
-            TWaitState state{WS_ACTIVE};
-            if (ReplaceState(state, WS_BLOCKED)) {
-                Y_ABORT_UNLESS(state.Flag == WS_ACTIVE, "WaitingFlag# %d", int(state.Flag));
-                return Sleep(stopFlag);
-            } else {
-                return false;
-            }
+        bool WakeUp();
+
+        void Interrupt() {
+            WaitingPad.Interrupt();
+        }
+
+        void AfterWakeUp(EThreadState /*state*/) {
         }
 
         TExecutorThreadCtx() = default;
+    };
+
+
+    constexpr ui32 MaxPoolsForSharedThreads = 2;
+
+    struct TSharedExecutorThreadCtx : public TGenericExecutorThreadCtx {
+        using TBase = TGenericExecutorThreadCtx;
+
+        struct TWaitState {
+            EThreadState Flag = EThreadState::None;
+            ui32 NextPool = Max<ui32>();
+
+            TWaitState() = default;
+
+            TWaitState(ui64 state)
+                : Flag(static_cast<EThreadState>(state & 0x7))
+                , NextPool(state >> 3)
+            {}
+
+            TWaitState(EThreadState flag, ui32 nextPool = Max<ui32>())
+                : Flag(flag)
+                , NextPool(nextPool)
+            {}
+
+            explicit operator ui64() {
+                return static_cast<ui64>(Flag) | (static_cast<ui64>(NextPool) << 3);
+            }
+
+            explicit operator EThreadState() {
+                return Flag;
+            }
+        };
+
+        std::atomic<TBasicExecutorPool*> ExecutorPools[MaxPoolsForSharedThreads];
+        std::atomic<i64> RequestsForWakeUp = 0;
+        ui32 NextPool = 0;
+
+        void SetWork() {
+            this->ExchangeState(TWaitState{EThreadState::Work});
+        }
+
+        void UnsetWork() {
+            this->ExchangeState(TWaitState{EThreadState::None});
+        }
+
+        void AfterWakeUp(TWaitState state) {
+            NextPool = state.NextPool;
+        }
+
+        void Spin(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag) {
+            this->TBase::Spin<TSharedExecutorThreadCtx, TWaitState>(spinThresholdCycles, stopFlag);
+        }
+
+        bool Sleep(std::atomic<bool> *stopFlag) {
+            return this->TBase::Sleep<TSharedExecutorThreadCtx, TWaitState>(stopFlag);
+        }
+
+        bool Wait(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag); // in executor_pool_basic.cpp
+
+        bool WakeUp();
+
+        void Interrupt() {
+            WaitingPad.Interrupt();
+        }
+
+        TSharedExecutorThreadCtx() = default;
     };
 
 }

@@ -56,7 +56,14 @@ public:
     TRBSplitLimiter(std::shared_ptr<NColumnShard::TSplitterCounters> counters,
         ISchemaDetailInfo::TPtr schemaInfo, const std::shared_ptr<arrow::RecordBatch> batch, const TSplitSettings& settings);
 
-    bool Next(std::vector<std::vector<IPortionColumnChunk::TPtr>>& portionBlobs, std::shared_ptr<arrow::RecordBatch>& batch);
+    static std::vector<TBatchSerializedSlice> BuildSimpleSlices(const std::shared_ptr<arrow::RecordBatch>& batch, const TSplitSettings& settings,
+        const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const ISchemaDetailInfo::TPtr& schemaInfo);
+
+    std::deque<TBatchSerializedSlice> ExtractSlices() {
+        return std::move(Slices);
+    }
+
+    bool Next(std::vector<std::vector<std::shared_ptr<IPortionDataChunk>>>& portionBlobs, std::shared_ptr<arrow::RecordBatch>& batch, const TEntityGroups& groups);
 };
 
 }

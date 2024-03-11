@@ -508,40 +508,30 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         CreateSampleTablesWithIndex(session);
+        auto query = Q1_(R"(
+                PRAGMA Kikimr.OptDisableSqlInToJoin = "True";
+                DECLARE $in AS List<Struct<k: Uint32, v: String>>;
+                SELECT Group AS g, Amount AS a, Comment
+                FROM `/Root/Test`
+                WHERE (Group, Name) IN (SELECT (k, v) FROM AS_TABLE($in)) -- table source
+                ORDER BY g, a
+            )");
 
-        auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) {
-            auto query = TStringBuilder()
-                << Q1_(Sprintf(R"(
-                    PRAGMA Kikimr.OptDisableSqlInToJoin = "True";
-                    PRAGMA Kikimr.OptDisableJoinReverseTableLookupLeftSemi = "%s"; -- not depends on `Kikimr.OptDisableSqlInToJoin` pragma
-                    DECLARE $in AS List<Struct<k: Uint32, v: String>>;
-                    SELECT Group AS g, Amount AS a, Comment
-                    FROM `/Root/Test`
-                    WHERE (Group, Name) IN (SELECT (k, v) FROM AS_TABLE($in)) -- table source
-                    ORDER BY g, a
-                )", disableOpt ? "True" : "False"));
+        auto params = TParamsBuilder().AddParam("$in").BeginList()
+            .AddListItem().BeginStruct().AddMember("k").Uint32(1).AddMember("v").String("Anna").EndStruct()
+            .AddListItem().BeginStruct().AddMember("k").Uint32(1).AddMember("v").String("Jack").EndStruct()
+            .AddListItem().BeginStruct().AddMember("k").Uint32(4).AddMember("v").String("Hugo").EndStruct()
+            .AddListItem().BeginStruct().AddMember("k").Uint32(9).AddMember("v").String("Harry").EndStruct()
+            .EndList().Build().Build();
 
-            auto params = TParamsBuilder().AddParam("$in").BeginList()
-                    .AddListItem().BeginStruct().AddMember("k").Uint32(1).AddMember("v").String("Anna").EndStruct()
-                    .AddListItem().BeginStruct().AddMember("k").Uint32(1).AddMember("v").String("Jack").EndStruct()
-                    .AddListItem().BeginStruct().AddMember("k").Uint32(4).AddMember("v").String("Hugo").EndStruct()
-                    .AddListItem().BeginStruct().AddMember("k").Uint32(9).AddMember("v").String("Harry").EndStruct()
-                    .EndList().Build().Build();
-
-            auto result = ExecQueryAndTestResult(session, query, params,
-                    R"([[[1u];[3500u];["None"]];
-                        [[1u];[100500u];["Just Jack"]];
-                        [[4u];[77u];["Boss"]]])");
-            assertFn(result);
-        };
-
-        test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/Test", 8);
-        });
-
-        test(EnableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/Test", 3);
-        });
+        auto result = ExecQueryAndTestResult(session, query, params,
+            R"(
+                [[[1u];[3500u];["None"]];
+                [[1u];[100500u];["Just Jack"]];
+                [[4u];[77u];["Boss"]]]
+            )");
+            
+        AssertTableReads(result, "/Root/Test", 3);
     }
 
     Y_UNIT_TEST(SelectNotAllElements) {
@@ -861,38 +851,26 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         CreateSampleTablesWithIndex(session);
+        const TString query = Q1_(R"(
+                PRAGMA Kikimr.OptDisableSqlInToJoin = "True";
+                DECLARE $in AS List<Struct<k: Int32?, v: String>>;
+                SELECT Value
+                FROM `/Root/SecondaryComplexKeys` VIEW Index
+                WHERE (Fk1, Fk2) IN (SELECT (k, v) FROM AS_TABLE($in))
+                ORDER BY Value
+            )");
 
-        auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) {
-            const TString query = Q1_(Sprintf(R"(
-                    PRAGMA Kikimr.OptDisableSqlInToJoin = "True";
-                    PRAGMA Kikimr.OptDisableJoinReverseTableLookupLeftSemi = "%s";
-                    DECLARE $in AS List<Struct<k: Int32?, v: String>>;
-                    SELECT Value
-                    FROM `/Root/SecondaryComplexKeys` VIEW Index
-                    WHERE (Fk1, Fk2) IN (SELECT (k, v) FROM AS_TABLE($in))
-                    ORDER BY Value
-                )", disableOpt ? "True" : "False"));
+        auto params = TParamsBuilder().AddParam("$in").BeginList()
+            .AddListItem().BeginStruct().AddMember("k").OptionalInt32(1).AddMember("v").String("Fk1").EndStruct()
+            .AddListItem().BeginStruct().AddMember("k").OptionalInt32(2).AddMember("v").String("Fk2").EndStruct()
+            .AddListItem().BeginStruct().AddMember("k").OptionalInt32(42).AddMember("v").String("Fk5").EndStruct()
+            .AddListItem().BeginStruct().AddMember("k").OptionalInt32(Nothing()).AddMember("v").String("FkNull").EndStruct()
+            .EndList().Build().Build();
 
-            auto params = TParamsBuilder().AddParam("$in").BeginList()
-                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(1).AddMember("v").String("Fk1").EndStruct()
-                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(2).AddMember("v").String("Fk2").EndStruct()
-                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(42).AddMember("v").String("Fk5").EndStruct()
-                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(Nothing()).AddMember("v").String("FkNull").EndStruct()
-                    .EndList().Build().Build();
-
-            auto result = ExecQueryAndTestResult(session, query, params, R"([[["Payload1"]];[["Payload2"]]])");
-            assertFn(result);
-        };
-
-        test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 5);
-            AssertTableReads(result, "/Root/SecondaryComplexKeys", 5);
-        });
-
-        test(EnableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 2);
-            AssertTableReads(result, "/Root/SecondaryComplexKeys", 2);
-        });
+        auto result = ExecQueryAndTestResult(session, query, params, R"([[["Payload1"]];[["Payload2"]]])");
+            
+        AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 2);
+        AssertTableReads(result, "/Root/SecondaryComplexKeys", 2);
     }
 
     Y_UNIT_TEST(TupleNotOnlyOfKeys) {
@@ -1038,11 +1016,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
             CompareYson(R"([[[1u];["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
 
             const Ydb::TableStats::QueryStats stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            if (serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-                UNIT_ASSERT_EQUAL_C(1, stats.query_phases_size(), stats.DebugString());
-            } else {
-                UNIT_ASSERT_EQUAL_C(2, stats.query_phases_size(), stats.DebugString());
-            }
+            UNIT_ASSERT_EQUAL_C(2, stats.query_phases_size(), stats.DebugString());
         }
 
         // complex (tuple) key
@@ -1080,11 +1054,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
             CompareYson(R"([[[3500u];["None"];[1u];["Anna"]]])", FormatResultSetYson(result.GetResultSet(0)));
 
             const Ydb::TableStats::QueryStats stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            if (serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-                UNIT_ASSERT_EQUAL_C(1, stats.query_phases_size(), stats.DebugString());
-            } else {
-                UNIT_ASSERT_EQUAL_C(2, stats.query_phases_size(), stats.DebugString());
-            }
+            UNIT_ASSERT_EQUAL_C(2, stats.query_phases_size(), stats.DebugString());
         }
     }
 }

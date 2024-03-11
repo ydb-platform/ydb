@@ -1,9 +1,10 @@
 #include "rpc.h"
-#include "options.h"
 
 #include <yt/yt_proto/yt/client/cache/proto/config.pb.h>
 
 #include <yt/yt/client/api/client.h>
+
+#include <yt/yt/client/api/options.h>
 
 #include <yt/yt/client/api/rpc_proxy/config.h>
 #include <yt/yt/client/api/rpc_proxy/connection.h>
@@ -87,6 +88,18 @@ NApi::NRpcProxy::TConnectionConfigPtr GetConnectionConfig(const TConfig& config)
         connectionConfig->RetryingChannel->RetryTimeout = TDuration::MilliSeconds(config.GetRetryTimeout());
     }
 
+    if (config.HasClusterTag()) {
+        connectionConfig->ClusterTag = NApi::TClusterTag(config.GetClusterTag());
+    }
+
+    if (config.HasClockClusterTag()) {
+        connectionConfig->ClockClusterTag = NObjectClient::TCellTag(config.GetClockClusterTag());
+    }
+
+    if (config.HasUdfRegistryPath()) {
+        connectionConfig->UdfRegistryPath = config.GetUdfRegistryPath();
+    }
+
     connectionConfig->Postprocess();
 
     return connectionConfig;
@@ -134,7 +147,7 @@ NApi::IClientPtr CreateClient(const TConfig& config, const NApi::TClientOptions&
 
 NApi::IClientPtr CreateClient(const NApi::NRpcProxy::TConnectionConfigPtr& config)
 {
-    return CreateClient(config, GetClientOpsFromEnvStatic());
+    return CreateClient(config, NApi::GetClientOpsFromEnvStatic());
 }
 
 NApi::IClientPtr CreateClient(const TConfig& config)
@@ -144,7 +157,7 @@ NApi::IClientPtr CreateClient(const TConfig& config)
 
 NApi::IClientPtr CreateClient(TStringBuf clusterUrl)
 {
-    return CreateClient(clusterUrl, GetClientOpsFromEnvStatic());
+    return CreateClient(clusterUrl, NApi::GetClientOpsFromEnvStatic());
 }
 
 NApi::IClientPtr CreateClient(TStringBuf cluster, TStringBuf proxyRole)

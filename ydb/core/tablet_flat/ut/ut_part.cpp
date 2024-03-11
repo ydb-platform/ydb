@@ -952,7 +952,7 @@ Y_UNIT_TEST_SUITE(TPart) {
             return TSerializedCellVec(key);
         };
 
-        auto slices = MakeIntrusive<TSlices>();
+        TSlices slices;
         for (size_t rowId = 0; rowId < fullRows.size();) {
             TSlice slice;
             slice.FirstInclusive = true;
@@ -963,16 +963,25 @@ Y_UNIT_TEST_SUITE(TPart) {
             slice.LastRowId = rowId + RandomNumber<ui32>(2) + 1;
             if (slice.LastRowId < fullRows.size())
                 slice.LastKey = getKey(IndexTools::GetRecord(*cutPartTmp, slice.LastRowId));
-            slices->push_back(slice);
+            slices.push_back(slice);
             rowId = slice.LastRowId;
         }
 
         Cerr << "======= SLICES =======" << Endl;
-        slices->Describe(Cerr);
+        slices.Describe(Cerr);
         Cerr << Endl;
 
-        TCheckIt cutWrap(cutCook.Finish(), { new TTouchEnv() }, slices), fullWrap(fullCook.Finish(), { new TTouchEnv() });
-        TCheckReverseIt cutWrapR(cutCookR.Finish(), { new TTouchEnv() }, slices), fullWrapR(fullCookR.Finish(), { new TTouchEnv() });
+        auto cutEggs = cutCook.Finish(), cutEggsR = cutCookR.Finish();
+        for (auto& eggs : {cutEggs, cutEggsR}) {
+            auto partSlices = (TSlices*)eggs.Lone()->Slices.Get();
+            partSlices->clear();
+            for (auto s : slices) {
+                partSlices->push_back(s);
+            }
+        }
+
+        TCheckIt cutWrap(cutEggs, { new TTouchEnv() }), fullWrap(fullCook.Finish(), { new TTouchEnv() });
+        TCheckReverseIt cutWrapR(cutEggsR, { new TTouchEnv() }), fullWrapR(fullCookR.Finish(), { new TTouchEnv() });
 
         auto cutPart = (*cutWrap).Eggs.Lone();
         auto fullPart = (*fullWrap).Eggs.Lone();
@@ -984,6 +993,8 @@ Y_UNIT_TEST_SUITE(TPart) {
         Cerr << DumpPart(*fullPart, 2) << Endl;
 
         UNIT_ASSERT_GT(fullPart->IndexesRawSize, cutPart->IndexesRawSize);
+        UNIT_ASSERT_GT(cutPart->Slices->size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fullPart->Slices->size(), 1);
         
         for (auto r : fullRows) {
             cutWrap.Has(*TSchemedCookRow(*lay).Col(r.first, r.second));

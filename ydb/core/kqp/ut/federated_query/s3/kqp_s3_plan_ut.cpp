@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
         const auto& sourceOp = stagePlan["Plans"][0]["Operators"].GetArraySafe()[0];
         UNIT_ASSERT_VALUES_EQUAL(sourceOp["ExternalDataSource"].GetStringSafe(), "external_data_source");
         UNIT_ASSERT_VALUES_EQUAL(sourceOp["Format"].GetStringSafe(), "json_each_row");
-        UNIT_ASSERT_VALUES_EQUAL(sourceOp["Name"].GetStringSafe(), "Parse from external data source");
+        UNIT_ASSERT_VALUES_EQUAL(sourceOp["Name"].GetStringSafe(), "Parse external_data_source");
         UNIT_ASSERT_VALUES_EQUAL(sourceOp["SourceType"].GetStringSafe(), "s3");
         UNIT_ASSERT(!IsIn(sourceOp.GetMap(), "RowsLimitHint"));
         UNIT_ASSERT_VALUES_EQUAL(sourceOp["ReadColumns"].GetArraySafe()[0].GetStringSafe(), "key");

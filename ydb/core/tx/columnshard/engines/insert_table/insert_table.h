@@ -21,10 +21,22 @@ protected:
         ++BlobLinks[blobId];
     }
 
-    bool RemoveBlobLink(const TUnifiedBlobId& blobId, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
+    bool RemoveBlobLinkOnExecute(const TUnifiedBlobId& blobId, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
+    bool RemoveBlobLinkOnComplete(const TUnifiedBlobId& blobId);
 public:
     const std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>>& GetPathPriorities() const {
         return Summary.GetPathPriorities();
+    }
+
+    std::optional<TSnapshot> GetMinCommittedSnapshot(const ui64 pathId) const {
+        auto* info = Summary.GetPathInfoOptional(pathId);
+        if (!info) {
+            return {};
+        } else if (info->GetCommitted().empty()) {
+            return {};
+        } else {
+            return info->GetCommitted().begin()->GetSnapshot();
+        }
     }
 
     bool AddInserted(TInsertedData&& data, const bool load) {
@@ -64,7 +76,7 @@ private:
     bool Loaded = false;
 public:
     static constexpr const TDuration WaitCommitDelay = TDuration::Minutes(10);
-    static constexpr const TDuration CleanDelay = TDuration::Minutes(10);
+    static constexpr ui64 CleanupPackageSize = 10000;
 
     bool Insert(IDbWrapper& dbTable, TInsertedData&& data);
     TInsertionSummary::TCounters Commit(IDbWrapper& dbTable, ui64 planStep, ui64 txId,
@@ -72,13 +84,15 @@ public:
     void Abort(IDbWrapper& dbTable, const THashSet<TWriteId>& writeIds);
     THashSet<TWriteId> OldWritesToAbort(const TInstant& now) const;
     THashSet<TWriteId> DropPath(IDbWrapper& dbTable, ui64 pathId);
-    void EraseCommitted(IDbWrapper& dbTable, const TInsertedData& key, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
-    void EraseAborted(IDbWrapper& dbTable, const TInsertedData& key, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
+
+    void EraseCommittedOnExecute(IDbWrapper& dbTable, const TInsertedData& key, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
+    void EraseCommittedOnComplete(const TInsertedData& key);
+
+    void EraseAbortedOnExecute(IDbWrapper& dbTable, const TInsertedData& key, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
+    void EraseAbortedOnComplete(const TInsertedData& key);
+
     std::vector<TCommittedBlob> Read(ui64 pathId, const TSnapshot& snapshot, const std::shared_ptr<arrow::Schema>& pkSchema) const;
     bool Load(IDbWrapper& dbTable, const TInstant loadTime);
-private:
-
-    mutable TInstant LastCleanup;
 };
 
 }

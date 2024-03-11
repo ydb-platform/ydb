@@ -10,6 +10,8 @@ SRCS(
     math_udf.cpp
 )
 
+USE_LLVM_BC14()
+
 LLVM_BC(
     math_ir.cpp
     lib/erfinv.cpp

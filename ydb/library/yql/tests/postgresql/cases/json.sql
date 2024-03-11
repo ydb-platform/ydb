@@ -56,9 +56,24 @@ SELECT '{
 		"one": 1,
 		"two":"two",
 		"averyveryveryveryveryveryveryveryveryverylongfieldname":}'::json;
+-- ERROR missing value for last field
+--constructors
+-- array_to_json
+SELECT array_to_json(array(select 1 as a));
+SELECT array_to_json(array_agg(x),false) from generate_series(5,10) x;
 SELECT array_to_json('{{1,5},{99,100}}'::int[]);
 BEGIN;
 COMMIT;
+-- non-numeric output
+SELECT row_to_json(q)
+FROM (SELECT 'NaN'::float8 AS "float8field") q;
+SELECT row_to_json(q)
+FROM (SELECT 'Infinity'::float8 AS "float8field") q;
+SELECT row_to_json(q)
+FROM (SELECT '-Infinity'::float8 AS "float8field") q;
+-- json input
+SELECT row_to_json(q)
+FROM (SELECT '{"a":1,"b": [2,3,4,"d","e","f"],"c":{"p":1,"q":2}}'::json AS "jsonfield") q;
 -- json extraction functions
 CREATE TEMP TABLE test_json (
        json_type text,
@@ -68,6 +83,54 @@ INSERT INTO test_json VALUES
 ('scalar','"a scalar"'),
 ('array','["zero", "one","two",null,"four","five", [1,2,3],{"f1":9}]'),
 ('object','{"field1":"val1","field2":"val2","field3":null, "field4": 4, "field5": [1,2,3], "field6": {"f1":9}}');
+SELECT test_json -> 'x'
+FROM test_json
+WHERE json_type = 'scalar';
+SELECT test_json -> 'x'
+FROM test_json
+WHERE json_type = 'array';
+SELECT test_json -> 'x'
+FROM test_json
+WHERE json_type = 'object';
+SELECT test_json->'field2'
+FROM test_json
+WHERE json_type = 'object';
+SELECT test_json->>'field2'
+FROM test_json
+WHERE json_type = 'object';
+SELECT test_json -> 2
+FROM test_json
+WHERE json_type = 'scalar';
+SELECT test_json -> 2
+FROM test_json
+WHERE json_type = 'array';
+SELECT test_json -> -1
+FROM test_json
+WHERE json_type = 'array';
+SELECT test_json -> 2
+FROM test_json
+WHERE json_type = 'object';
+SELECT test_json->>2
+FROM test_json
+WHERE json_type = 'array';
+SELECT test_json ->> 6 FROM test_json WHERE json_type = 'array';
+SELECT test_json ->> 7 FROM test_json WHERE json_type = 'array';
+SELECT test_json ->> 'field4' FROM test_json WHERE json_type = 'object';
+SELECT test_json ->> 'field5' FROM test_json WHERE json_type = 'object';
+SELECT test_json ->> 'field6' FROM test_json WHERE json_type = 'object';
+-- nulls
+select (test_json->'field3') is null as expect_false
+from test_json
+where json_type = 'object';
+select (test_json->>'field3') is null as expect_true
+from test_json
+where json_type = 'object';
+select (test_json->3) is null as expect_false
+from test_json
+where json_type = 'array';
+select (test_json->>3) is null as expect_true
+from test_json
+where json_type = 'array';
 -- corner cases
 select '{"a": [{"b": "c"}, {"b": "cc"}]}'::json -> null::text;
 select '{"a": [{"b": "c"}, {"b": "cc"}]}'::json -> null::int;
@@ -131,6 +194,7 @@ CREATE TEMP TABLE foo (serial_num int, name text, type text);
 INSERT INTO foo VALUES (847001,'t15','GE1043');
 INSERT INTO foo VALUES (847002,'t16','GE1043');
 INSERT INTO foo VALUES (847003,'sub-alpha','GESS90');
+SELECT json_object_agg(name, type) FROM foo;
 INSERT INTO foo VALUES (999999, NULL, 'bar');
 SELECT json_object_agg(name, type) FROM foo;
 -- json_object

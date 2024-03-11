@@ -648,10 +648,6 @@ bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TOldF
                 + PrintStoredAndCurrent(peer, current);
         return false;
     }
-
-    errorReason = "Peer version tag doesn't match any current compatibility rule, current version is not in accepted tags list, "
-            + PrintStoredAndCurrent(peer, current);
-    return false;
 }
 
 bool TCompatibilityInfo::CheckCompatibility(const TOldFormat& peer, TComponentId componentId, TString& errorReason) const {

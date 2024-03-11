@@ -161,8 +161,11 @@ public:
             buildInfo->BuildColumns.reserve(settings.column_build_operation().column_size());
             for(int i = 0; i < settings.column_build_operation().column_size(); i++) {
                 const auto& colInfo = settings.column_build_operation().column(i);
+                bool notNull = colInfo.HasNotNull() && colInfo.GetNotNull();
+                TString familyName = colInfo.HasFamily() ? colInfo.GetFamily() : "";
                 buildInfo->BuildColumns.push_back(
-                    TIndexBuildInfo::TColumnBuildInfo(colInfo.GetColumnName(), colInfo.default_from_literal()));
+                    TIndexBuildInfo::TColumnBuildInfo(
+                        colInfo.GetColumnName(), colInfo.default_from_literal(), notNull, familyName));
             }
         }
 

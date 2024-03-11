@@ -25,6 +25,23 @@ void TGetBundleConfigCommand::DoExecute(ICommandContextPtr context)
     context->ProduceOutputValue(ConvertToYsonString(result));
 }
 
+void TSetBundleConfigCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("bundle_name", &TThis::BundleName_);
+
+    registrar.Parameter("bundle_config", &TThis::BundleConfig_)
+        .DefaultNew();
+}
+
+void TSetBundleConfigCommand::DoExecute(ICommandContextPtr context)
+{
+    WaitFor(context->GetClient()->SetBundleConfig(
+        BundleName_,
+        BundleConfig_,
+        Options))
+        .ThrowOnError();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NDriver

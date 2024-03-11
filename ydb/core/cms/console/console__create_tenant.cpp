@@ -217,6 +217,8 @@ public:
             break;
 
         case Ydb::Cms::CreateDatabaseRequest::kServerlessResources:
+            Tenant->IsExternalStatisticsAggregator = false;
+
             if (!Tenant->IsExternalSubdomain) {
                 return Error(Ydb::StatusIds::PRECONDITION_FAILED,
                     "Cannot create serverless database unless external subdomain is enabled", ctx);

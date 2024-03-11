@@ -3,6 +3,8 @@
 #include <util/generic/ylimits.h>
 #include <util/system/compiler.h>
 
+#include <cstddef>
+
 namespace NKikimr {
 
     /**

@@ -7,7 +7,7 @@ inputs:
   build_preset:
     required: true
     default: "relwithdebinfo"
-    description: "relwithdebinfo, release-asan, release-tsan"
+    description: "debug, relwithdebinfo, release-asan, release-tsan, release, release-cmake14"
   bazel_remote_uri:
     required: false
     description: "bazel-remote endpoint"
@@ -28,13 +28,19 @@ runs:
     - name: Init
       id: init
       shell: bash
+      env:
+        build_preset: ${{ inputs.build_preset }}
       run: |
         echo "SHELLOPTS=xtrace" >> $GITHUB_ENV
         export TMP_DIR=$(pwd)/tmp_build
         echo "TMP_DIR=$TMP_DIR" >> $GITHUB_ENV
         rm -rf $TMP_DIR && mkdir $TMP_DIR
-    
+        
+        echo "BUILD_PRESET=$build_preset" >> $GITHUB_ENV
+        echo "GITHUB_TOKEN=${{ github.token }}" >> $GITHUB_ENV
+
     - name: build
+      id: build
       shell: bash
       run: |
         extra_params=()
@@ -61,6 +67,14 @@ runs:
           relwithdebinfo)
             build_type=relwithdebinfo
             ;;
+          release)
+            build_type=release
+            ;;
+          release-cmake14)
+            build_type=release
+            extra_params+=(--target-platform="CLANG14-LINUX-X86_64")
+            extra_params+=(-DLLD_VERSION=16)
+            ;;
           release-asan)
             build_type=release
             extra_params+=(--sanitize="address")
@@ -85,12 +99,18 @@ runs:
         echo "::debug::get version"
         ./ya --version
         
+        echo "Build **{platform_name}-${BUILD_PRESET}** is running..." | .github/scripts/tests/comment-pr.py
+        
+        # to be sure
+        set -o pipefail
+        
         ./ya make -k --build "${build_type}" --force-build-depends -D'BUILD_LANGUAGES=CPP PY3 PY2 GO' -T --stat -DCONSISTENT_DEBUG \
           --log-file "$TMP_DIR/ya_log.txt" --evlog-file "$TMP_DIR/ya_evlog.jsonl" \
           --cache-size 512G --link-threads "${{ inputs.link_threads }}" \
-          "${extra_params[@]}" || (
+          "${extra_params[@]}" |& tee $TMP_DIR/ya_make.log || (
               RC=$?
               echo "::debug::ya make RC=$RC"
+              echo "status=failed" >> $GITHUB_OUTPUT
           )
 
     - name: sync logs to s3
@@ -98,8 +118,21 @@ runs:
       shell: bash
       run: |
         echo "::group::s3-sync"
-        s3cmd sync --acl-private --no-progress --stats --no-check-md5 "$TMP_DIR/" "$S3_BUCKET_PATH/build_logs/"
+        s3cmd sync --acl-private --exclude="ya_make.log" --no-progress --stats --no-check-md5 "$TMP_DIR/" "$S3_BUCKET_PATH/build_logs/"
+        s3cmd sync --acl-public --no-progress --stats --no-check-md5 "$TMP_DIR/ya_make.log" "$S3_BUCKET_PATH/build_logs/"
         echo "::endgroup::"
+
+    - name: comment-build-status
+      if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+      shell: bash
+      run: |
+        log_url="$S3_URL_PREFIX/build_logs/ya_make.log"
+
+        if [ "${{ steps.build.outputs.status }}" == "failed" ]; then
+          echo "Build failed. see the [build logs]($log_url)." | .github/scripts/tests/comment-pr.py --fail
+        else
+          echo "Build successful." | .github/scripts/tests/comment-pr.py --ok
+        fi
 
     - name: show free space
       if: always()

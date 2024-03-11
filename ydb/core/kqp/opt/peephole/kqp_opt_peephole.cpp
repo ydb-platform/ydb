@@ -87,8 +87,7 @@ TStatus ReplaceNonDetFunctionsWithParams(TExprNode::TPtr& input, TExprContext& c
 class TKqpPeepholeTransformer : public TOptimizeTransformerBase {
 public:
     TKqpPeepholeTransformer(TTypeAnnotationContext& typesCtx)
-        : TOptimizeTransformerBase(nullptr, NYql::NLog::EComponent::ProviderKqp, {})
-        , TypesCtx(typesCtx)
+        : TOptimizeTransformerBase(&typesCtx, NYql::NLog::EComponent::ProviderKqp, {})
     {
 #define HNDL(name) "KqpPeephole-"#name, Hndl(&TKqpPeepholeTransformer::name)
         AddHandler(0, &TDqReplicate::Match, HNDL(RewriteReplicate));
@@ -134,13 +133,13 @@ protected:
     }
 
     TMaybeNode<TExprBase> BuildWideReadTable(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpBuildWideReadTable(node, ctx, TypesCtx);
+        TExprBase output = KqpBuildWideReadTable(node, ctx, *Types);
         DumpAppliedRule("BuildWideReadTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
     TMaybeNode<TExprBase> RewriteLength(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqPeepholeRewriteLength(node, ctx, TypesCtx);
+        TExprBase output = DqPeepholeRewriteLength(node, ctx, *Types);
         DumpAppliedRule("RewriteLength", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -150,9 +149,6 @@ protected:
         DumpAppliedRule("RewriteKqpWriteConstraint", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
-private:
-    TTypeAnnotationContext& TypesCtx;
 };
 
 struct TKqpPeepholePipelineConfigurator : IPipelineConfigurator {

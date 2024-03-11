@@ -260,7 +260,18 @@ public:
 
     const typename TBase::TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) override {
         auto& request = ev->Get()->MutableRequest();
-        request.WithStorageClass(TBase::StorageClass);
+        auto storageClass = TBase::StorageClass;
+
+        // workaround for minio.
+        // aws s3 treats NOT_SET as STANDARD
+        // but internally sdk just doesn't set corresponding header, while adds it to SignedHeaders
+        // and minio implementation treats it as error, returning to client error
+        // which literally can't be debugged e.g. "There were headers present in the request which were not signed"
+        if (storageClass == Aws::S3::Model::StorageClass::NOT_SET) {
+            storageClass = Aws::S3::Model::StorageClass::STANDARD;
+        }
+
+        request.WithStorageClass(storageClass);
         return TBase::PrepareRequest(ev);
     }
 }; // TPutInputStreamContext

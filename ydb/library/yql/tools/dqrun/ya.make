@@ -36,12 +36,13 @@ ENDIF()
         ydb/library/yql/dq/comp_nodes
         ydb/library/yql/dq/integration/transform
         ydb/library/yql/dq/transform
-        ydb/library/yql/minikql/comp_nodes/llvm
-        ydb/library/yql/minikql/invoke_builtins/llvm
+        ydb/library/yql/minikql/comp_nodes/llvm14
+        ydb/library/yql/minikql/invoke_builtins/llvm14
         ydb/library/yql/providers/clickhouse/actors
         ydb/library/yql/providers/clickhouse/provider
         ydb/library/yql/providers/common/comp_nodes
         ydb/library/yql/providers/common/proto
+        ydb/library/yql/providers/common/token_accessor/client
         ydb/library/yql/providers/common/udf_resolve
         ydb/library/yql/providers/generic/actors
         ydb/library/yql/providers/generic/provider
@@ -75,7 +76,7 @@ ENDIF()
         ydb/library/yql/providers/yt/mkql_dq
         ydb/library/yql/providers/yt/provider
         ydb/library/yql/providers/yt/codec/codegen
-        ydb/library/yql/providers/yt/comp_nodes/llvm
+        ydb/library/yql/providers/yt/comp_nodes/llvm14
         ydb/library/yql/providers/yt/lib/yt_download
         ydb/library/yql/providers/yt/lib/yt_url_lister
         ydb/library/yql/providers/yt/lib/config_clusters

@@ -1,7 +1,7 @@
 GO_LIBRARY()
-
-SRCS(
-    randutil.go
-)
-
+IF (TRUE)
+    SRCS(
+		randutil.go
+    )
+ENDIF()
 END()

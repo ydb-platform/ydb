@@ -26,7 +26,7 @@ where ss_ticket_number = sr_ticket_number
   and c_current_addr_sk = ca_address_sk
   and c_birth_country <> upper(ca_country)
   and s_zip = ca_zip
-and s_market_id=7
+and s_market_id=10
 group by c_last_name
         ,c_first_name
         ,s_store_name
@@ -42,7 +42,7 @@ select c_last_name
       ,s_store_name
       ,sum(netpaid) paid
 from ssales
-where i_color = 'orchid'
+where i_color = 'show'
 group by c_last_name
         ,c_first_name
         ,s_store_name
@@ -78,7 +78,7 @@ where ss_ticket_number = sr_ticket_number
   and c_current_addr_sk = ca_address_sk
   and c_birth_country <> upper(ca_country)
   and s_zip = ca_zip
-  and s_market_id = 7
+  and s_market_id = 10
 group by c_last_name
         ,c_first_name
         ,s_store_name

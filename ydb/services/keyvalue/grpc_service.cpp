@@ -3,6 +3,7 @@
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/service_keyvalue.h>
+#include <ydb/core/jaeger_tracing/request_discriminator.h>
 
 
 namespace NKikimr::NGRpcService {
@@ -40,7 +41,7 @@ void TKeyValueGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #error SETUP_METHOD macro collision
 #endif
 
-#define SETUP_METHOD(methodName, method, rlMode)                                                             \
+#define SETUP_METHOD(methodName, method, rlMode, requestType)                                       \
     MakeIntrusive<NGRpcService::TGRpcRequest<                                                                \
         Ydb::KeyValue::Y_CAT(methodName, Request),                                                  \
         Ydb::KeyValue::Y_CAT(methodName, Response),                                                 \
@@ -54,7 +55,10 @@ void TKeyValueGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             ActorSystem->Send(GRpcRequestProxyId, new TGrpcRequestOperationCall<                             \
                 Ydb::KeyValue::Y_CAT(methodName, Request),                                          \
                 Ydb::KeyValue::Y_CAT(methodName, Response)>(reqCtx, &method,                        \
-                    TRequestAuxSettings{rlMode, nullptr}));                                                  \
+                    TRequestAuxSettings {                                                           \
+                        .RlMode = rlMode,                                                           \
+                        .RequestType = NJaegerTracing::ERequestType::requestType,                   \
+                    }));                                                  \
         },                                                                                                   \
         &Ydb::KeyValue::V1::KeyValueService::AsyncService::Y_CAT(Request, methodName),       \
         "KeyValue/" Y_STRINGIZE(methodName),                                                          \
@@ -62,18 +66,18 @@ void TKeyValueGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         getCounterBlock("keyvalue", Y_STRINGIZE(methodName))                                             \
     )->Run()
 
-    SETUP_METHOD(CreateVolume, DoCreateVolumeKeyValue, TRateLimiterMode::Rps);
-    SETUP_METHOD(DropVolume, DoDropVolumeKeyValue, TRateLimiterMode::Rps);
-    SETUP_METHOD(AlterVolume, DoAlterVolumeKeyValue, TRateLimiterMode::Rps);
-    SETUP_METHOD(DescribeVolume, DoDescribeVolumeKeyValue, TRateLimiterMode::Rps);
-    SETUP_METHOD(ListLocalPartitions, DoListLocalPartitionsKeyValue, TRateLimiterMode::Rps);
+    SETUP_METHOD(CreateVolume, DoCreateVolumeKeyValue, TRateLimiterMode::Rps, UNSPECIFIED);
+    SETUP_METHOD(DropVolume, DoDropVolumeKeyValue, TRateLimiterMode::Rps, UNSPECIFIED);
+    SETUP_METHOD(AlterVolume, DoAlterVolumeKeyValue, TRateLimiterMode::Rps, UNSPECIFIED);
+    SETUP_METHOD(DescribeVolume, DoDescribeVolumeKeyValue, TRateLimiterMode::Rps, UNSPECIFIED);
+    SETUP_METHOD(ListLocalPartitions, DoListLocalPartitionsKeyValue, TRateLimiterMode::Rps, UNSPECIFIED);
 
-    SETUP_METHOD(AcquireLock, DoAcquireLockKeyValue, TRateLimiterMode::Rps);
-    SETUP_METHOD(ExecuteTransaction, DoExecuteTransactionKeyValue, TRateLimiterMode::Rps);
-    SETUP_METHOD(Read, DoReadKeyValue, TRateLimiterMode::Rps);
-    SETUP_METHOD(ReadRange, DoReadRangeKeyValue, TRateLimiterMode::Rps);
-    SETUP_METHOD(ListRange, DoListRangeKeyValue, TRateLimiterMode::Rps);
-    SETUP_METHOD(GetStorageChannelStatus, DoGetStorageChannelStatusKeyValue, TRateLimiterMode::Rps);
+    SETUP_METHOD(AcquireLock, DoAcquireLockKeyValue, TRateLimiterMode::Rps, KEYVALUE_ACQUIRELOCK);
+    SETUP_METHOD(ExecuteTransaction, DoExecuteTransactionKeyValue, TRateLimiterMode::Rps, KEYVALUE_EXECUTETRANSACTION);
+    SETUP_METHOD(Read, DoReadKeyValue, TRateLimiterMode::Rps, KEYVALUE_READ);
+    SETUP_METHOD(ReadRange, DoReadRangeKeyValue, TRateLimiterMode::Rps, KEYVALUE_READRANGE);
+    SETUP_METHOD(ListRange, DoListRangeKeyValue, TRateLimiterMode::Rps, KEYVALUE_LISTRANGE);
+    SETUP_METHOD(GetStorageChannelStatus, DoGetStorageChannelStatusKeyValue, TRateLimiterMode::Rps, KEYVALUE_GETSTORAGECHANNELSTATUS);
 
 #undef SETUP_METHOD
 }

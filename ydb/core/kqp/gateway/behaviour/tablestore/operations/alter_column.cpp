@@ -10,6 +10,10 @@ TConclusionStatus TAlterColumnOperation::DoDeserialize(NYql::TObjectSettingsImpl
         }
         ColumnName = *fValue;
     }
+    StorageId = features.Extract("STORAGE_ID");
+    if (StorageId && !*StorageId) {
+        return TConclusionStatus::Fail("STORAGE_ID cannot be empty string");
+    }
     {
         auto result = DictionaryEncodingDiff.DeserializeFromRequestFeatures(features);
         if (!result) {
@@ -17,9 +21,9 @@ TConclusionStatus TAlterColumnOperation::DoDeserialize(NYql::TObjectSettingsImpl
         }
     }
     {
-        auto result = CompressionDiff.DeserializeFromRequestFeatures(features);
-        if (!result) {
-            return TConclusionStatus::Fail(result.GetErrorMessage());
+        auto status = Serializer.DeserializeFromRequest(features);
+        if (!status) {
+            return status;
         }
     }
     return TConclusionStatus::Success();
@@ -28,7 +32,12 @@ TConclusionStatus TAlterColumnOperation::DoDeserialize(NYql::TObjectSettingsImpl
 void TAlterColumnOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchema& schemaData) const {
     auto* column = schemaData.AddAlterColumns();
     column->SetName(ColumnName);
-    *column->MutableCompression() = CompressionDiff.SerializeToProto();
+    if (StorageId && !!*StorageId) {
+        column->SetStorageId(*StorageId);
+    }
+    if (!!Serializer) {
+        Serializer.SerializeToProto(*column->MutableSerializer());
+    }
     *column->MutableDictionaryEncoding() = DictionaryEncodingDiff.SerializeToProto();
 }
 

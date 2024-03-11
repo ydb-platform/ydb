@@ -13,38 +13,38 @@ Y_UNIT_TEST_SUITE(JobStatistics)
     {
         const TString input = R"""(
             {
-               "data" = {
-                  "output" = {
-                      "0" = {
-                          "uncompressed_data_size" = {
-                              "$" = {
-                                  "completed" = {
-                                      "simple_sort" = {
-                                          "max" = 130;
-                                          "count" = 1;
-                                          "min" = 130;
-                                          "sum" = 130;
-                                      };
-                                      "map" = {
-                                          "max" = 42;
-                                          "count" = 1;
-                                          "min" = 42;
-                                          "sum" = 42;
-                                      };
-                                  };
-                                  "aborted" = {
-                                      "simple_sort" = {
-                                          "max" = 24;
-                                          "count" = 1;
-                                          "min" = 24;
-                                          "sum" = 24;
-                                      };
-                                  };
-                              };
-                          };
-                      };
-                  };
-              };
+                "data" = {
+                    "output" = {
+                        "0" = {
+                            "uncompressed_data_size" = {
+                                "$" = {
+                                    "completed" = {
+                                        "simple_sort" = {
+                                            "max" = 130;
+                                            "count" = 1;
+                                            "min" = 130;
+                                            "sum" = 130;
+                                        };
+                                        "map" = {
+                                            "max" = 42;
+                                            "count" = 1;
+                                            "min" = 42;
+                                            "sum" = 42;
+                                        };
+                                    };
+                                    "aborted" = {
+                                        "simple_sort" = {
+                                            "max" = 24;
+                                            "count" = 1;
+                                            "min" = 24;
+                                            "sum" = 24;
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
             })""";
 
         TJobStatistics stat(NodeFromYsonString(input));
@@ -69,20 +69,20 @@ Y_UNIT_TEST_SUITE(JobStatistics)
     {
         const TString input = R"""(
         {
-           "time" = {
-               "exec" = {
-                   "$" = {
-                       "completed" = {
-                           "map" = {
-                               "max" = 2482468;
-                               "count" = 38;
-                               "min" = 578976;
-                               "sum" = 47987270;
-                           };
-                       };
-                   };
-               };
-           };
+            "time" = {
+                "exec" = {
+                    "$" = {
+                        "completed" = {
+                            "map" = {
+                                "max" = 2482468;
+                                "count" = 38;
+                                "min" = 578976;
+                                "sum" = 47987270;
+                            };
+                        };
+                    };
+                };
+            };
         })""";
 
         TJobStatistics stat(NodeFromYsonString(input));
@@ -144,38 +144,38 @@ Y_UNIT_TEST_SUITE(JobStatistics)
     {
         const TString input = R"""(
             {
-               "data" = {
-                  "output" = {
-                      "0" = {
-                          "uncompressed_data_size" = {
-                              "$" = {
-                                  "completed" = {
-                                      "partition_map" = {
-                                          "max" = 130;
-                                          "count" = 1;
-                                          "min" = 130;
-                                          "sum" = 130;
-                                      };
-                                      "partition(0)" = {
-                                          "max" = 42;
-                                          "count" = 1;
-                                          "min" = 42;
-                                          "sum" = 42;
-                                      };
-                                  };
-                                  "aborted" = {
-                                      "simple_sort" = {
-                                          "max" = 24;
-                                          "count" = 1;
-                                          "min" = 24;
-                                          "sum" = 24;
-                                      };
-                                  };
-                              };
-                          };
-                      };
-                  };
-              };
+                "data" = {
+                    "output" = {
+                        "0" = {
+                            "uncompressed_data_size" = {
+                                "$" = {
+                                    "completed" = {
+                                        "partition_map" = {
+                                            "max" = 130;
+                                            "count" = 1;
+                                            "min" = 130;
+                                            "sum" = 130;
+                                        };
+                                        "partition(0)" = {
+                                            "max" = 42;
+                                            "count" = 1;
+                                            "min" = 42;
+                                            "sum" = 42;
+                                        };
+                                    };
+                                    "aborted" = {
+                                        "simple_sort" = {
+                                            "max" = 24;
+                                            "count" = 1;
+                                            "min" = 24;
+                                            "sum" = 24;
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
             })""";
 
         TJobStatistics stat(NodeFromYsonString(input));

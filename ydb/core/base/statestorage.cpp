@@ -136,7 +136,6 @@ ui32 TStateStorageInfo::ContentHash() const {
 void TStateStorageInfo::TSelection::MergeReply(EStatus status, EStatus *owner, ui64 targetCookie, bool resetOld) {
     ui32 unknown = 0;
     ui32 ok = 0;
-    ui32 noinfo = 0;
     ui32 outdated = 0;
 
     const ui32 majority = Sz / 2 + 1;
@@ -160,7 +159,6 @@ void TStateStorageInfo::TSelection::MergeReply(EStatus status, EStatus *owner, u
             ++ok;
             break;
         case StatusNoInfo:
-            ++noinfo;
             break;
         case StatusOutdated:
             ++outdated;
@@ -247,7 +245,7 @@ static void CopyStateStorageRingInfo(
 
 TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActorId::MaxServiceIDLength], const NKikimrConfig::TDomainsConfig::TStateStorage& config) {
     TIntrusivePtr<TStateStorageInfo> info = new TStateStorageInfo();
-    info->StateStorageGroup = config.GetSSId();
+    Y_ABORT_UNLESS(config.GetSSId() == 1);
     info->StateStorageVersion = config.GetStateStorageVersion();
     
     info->CompatibleVersions.reserve(config.CompatibleVersionsSize());
@@ -258,7 +256,8 @@ TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActor
     const size_t offset = FindIndex(namePrefix, char());
     Y_ABORT_UNLESS(offset != NPOS && (offset + sizeof(ui32)) < TActorId::MaxServiceIDLength);
 
-    memcpy(namePrefix + offset, reinterpret_cast<const char *>(&info->StateStorageGroup), sizeof(ui32));
+    const ui32 stateStorageGroup = 1;
+    memcpy(namePrefix + offset, reinterpret_cast<const char *>(&stateStorageGroup), sizeof(ui32));
     CopyStateStorageRingInfo(config.GetRing(), info.Get(), namePrefix, offset + sizeof(ui32));
 
     return info;

@@ -2,8 +2,34 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NOlap::NPlainReader {
+
+class TIndexesSet {
+private:
+    YDB_READONLY_DEF(std::vector<ui32>, IndexIds);
+    YDB_READONLY_DEF(std::set<ui32>, IndexIdsSet);
+public:
+    TIndexesSet(const std::set<ui32>& indexIds)
+        : IndexIds(indexIds.begin(), indexIds.end())
+        , IndexIdsSet(indexIds) {
+        AFL_VERIFY(IndexIds.size() == IndexIdsSet.size())("indexes", JoinSeq(",", IndexIds));
+    }
+
+    TIndexesSet(const ui32& indexId)
+        : IndexIds({indexId})
+        , IndexIdsSet({indexId}) {
+    }
+
+    ui32 GetIndexesCount() const {
+        return IndexIds.size();
+    }
+
+    TString DebugString() const {
+        return TStringBuilder() << JoinSeq(",", IndexIds);
+    }
+};
 
 class TColumnsSet {
 private:
@@ -18,12 +44,19 @@ private:
 
 public:
     TColumnsSet() = default;
+    bool IsEmpty() const {
+        return ColumnIds.empty();
+    }
+
+    bool operator!() const {
+        return IsEmpty();
+    }
 
     const std::vector<TString>& GetColumnNamesVector() const {
         return ColumnNamesVector;
     }
 
-    ui32 GetSize() const {
+    ui32 GetColumnsCount() const {
         return ColumnIds.size();
     }
 
@@ -73,6 +106,15 @@ public:
         return true;
     }
 
+    bool Cross(const TColumnsSet& columnsSet) const {
+        for (auto&& i : columnsSet.ColumnIds) {
+            if (ColumnIds.contains(i)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool IsEqual(const TColumnsSet& columnsSet) const {
         if (columnsSet.GetColumnIds().size() != ColumnIds.size()) {
             return false;
@@ -94,29 +136,6 @@ public:
     TColumnsSet operator+(const TColumnsSet& external) const;
 
     TColumnsSet operator-(const TColumnsSet& external) const;
-};
-
-class TFetchingPlan {
-private:
-    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, FilterStage);
-    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, FetchingStage);
-    bool CanUseEarlyFilterImmediatelyFlag = false;
-public:
-    TFetchingPlan(const std::shared_ptr<TColumnsSet>& filterStage, const std::shared_ptr<TColumnsSet>& fetchingStage, const bool canUseEarlyFilterImmediately)
-        : FilterStage(filterStage)
-        , FetchingStage(fetchingStage)
-        , CanUseEarlyFilterImmediatelyFlag(canUseEarlyFilterImmediately) {
-
-    }
-
-    TString DebugString() const {
-        return TStringBuilder() << "{filter=" << (FilterStage ? FilterStage->DebugString() : "NO") << ";fetching=" <<
-            (FetchingStage ? FetchingStage->DebugString() : "NO") << ";use_filter=" << CanUseEarlyFilterImmediatelyFlag << "}";
-    }
-
-    bool CanUseEarlyFilterImmediately() const {
-        return CanUseEarlyFilterImmediatelyFlag;
-    }
 };
 
 }

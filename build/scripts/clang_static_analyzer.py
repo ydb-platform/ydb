@@ -3,9 +3,9 @@ import sys
 import os
 import re
 import argparse
-import yaml
+import json
 
-CLANG_SA_CONFIG='static_analyzer.yaml'
+CLANG_SA_CONFIG='static_analyzer.json'
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -31,7 +31,7 @@ def parse_config(config_file):
     conf = None
     try:
         with open(config_file, 'r') as afile:
-            conf = yaml.safe_load(afile)
+            conf = json.load(afile)
     except:
         conf = None
     return conf
@@ -60,6 +60,10 @@ def main():
     # Try to find config file and parse them
     config_file = find_config(args.config_file)
     conf = parse_config(config_file)
+
+    # Ensure we can read config
+    if not conf:
+        raise ValueError(f"Cant parse config file, check its syntax: {config_file}")
 
     # Ensure we have at least one check
     if ('checks' not in conf) or (not conf['checks']):

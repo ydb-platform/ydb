@@ -459,7 +459,12 @@ private:
             auto pgSelect = TCoPgSelect(content);
             if (NCommon::NeedToRenamePgSelectColumns(pgSelect)) {
                 TExprNode::TPtr output;
-                bool result = NCommon::RenamePgSelectColumns(pgSelect, output, contentColumnOrder, ctx, *State_->Types);
+
+                const auto& columnOrder = (outTableInfo.RowSpec)
+                    ? outTableInfo.RowSpec->GetColumnOrder()
+                    : contentColumnOrder;
+
+                bool result = NCommon::RenamePgSelectColumns(pgSelect, output, columnOrder, ctx, *State_->Types);
                 if (!result) {
                     return TStatus::Error;
                 }
@@ -1435,6 +1440,7 @@ private:
             | EYtSettingType::PrimaryMedium
             | EYtSettingType::Expiration
             | EYtSettingType::MonotonicKeys
+            | EYtSettingType::MutationId
             , ctx))
         {
             return TStatus::Error;
@@ -1712,6 +1718,7 @@ private:
             | EYtSettingType::PrimaryMedium
             | EYtSettingType::Expiration
             | EYtSettingType::MonotonicKeys
+            | EYtSettingType::MutationId
             , ctx))
         {
             return TStatus::Error;

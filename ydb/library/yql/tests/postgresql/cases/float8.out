@@ -24,6 +24,13 @@ SELECT '-10e-400'::float8;
 ERROR:  "-10e-400" is out of range for type double precision
 LINE 1: SELECT '-10e-400'::float8;
                ^
+-- test smallest normalized input
+SELECT float8send('2.2250738585072014E-308'::float8);
+     float8send     
+--------------------
+ \x0010000000000000
+(1 row)
+
 -- bad input
 INSERT INTO FLOAT8_TBL(f1) VALUES ('');
 ERROR:  invalid input syntax for type double precision: ""
@@ -57,6 +64,37 @@ INSERT INTO FLOAT8_TBL(f1) VALUES ('123           5');
 ERROR:  invalid input syntax for type double precision: "123           5"
 LINE 1: INSERT INTO FLOAT8_TBL(f1) VALUES ('123           5');
                                            ^
+-- special inputs
+SELECT 'NaN'::float8;
+ float8 
+--------
+    NaN
+(1 row)
+
+SELECT 'nan'::float8;
+ float8 
+--------
+    NaN
+(1 row)
+
+SELECT '   NAN  '::float8;
+ float8 
+--------
+    NaN
+(1 row)
+
+SELECT 'infinity'::float8;
+  float8  
+----------
+ Infinity
+(1 row)
+
+SELECT '          -INFINiTY   '::float8;
+  float8   
+-----------
+ -Infinity
+(1 row)
+
 -- bad special inputs
 SELECT 'N A N'::float8;
 ERROR:  invalid input syntax for type double precision: "N A N"
@@ -70,10 +108,40 @@ SELECT ' INFINITY    x'::float8;
 ERROR:  invalid input syntax for type double precision: " INFINITY    x"
 LINE 1: SELECT ' INFINITY    x'::float8;
                ^
+SELECT 'Infinity'::float8 + 100.0;
+ ?column? 
+----------
+ Infinity
+(1 row)
+
+SELECT 'Infinity'::float8 / 'Infinity'::float8;
+ ?column? 
+----------
+      NaN
+(1 row)
+
 SELECT '42'::float8 / 'Infinity'::float8;
  ?column? 
 ----------
         0
+(1 row)
+
+SELECT 'nan'::float8 / 'nan'::float8;
+ ?column? 
+----------
+      NaN
+(1 row)
+
+SELECT 'nan'::float8 / '0'::float8;
+ ?column? 
+----------
+      NaN
+(1 row)
+
+SELECT 'nan'::numeric::float8;
+ float8 
+--------
+    NaN
 (1 row)
 
 SELECT * FROM FLOAT8_TBL;
@@ -155,16 +223,6 @@ SELECT f.f1, f.f1 + '-10' AS x
  1.2345678901234e-200 |                  -10
 (3 rows)
 
-SELECT f.f1, f.f1 / '-10' AS x
-   FROM FLOAT8_TBL f
-   WHERE f.f1 > '0.0';
-          f1          |           x           
-----------------------+-----------------------
-               1004.3 |   -100.42999999999999
- 1.2345678901234e+200 | -1.2345678901234e+199
- 1.2345678901234e-200 | -1.2345678901234e-201
-(3 rows)
-
 SELECT f.f1, f.f1 - '-10' AS x
    FROM FLOAT8_TBL f
    WHERE f.f1 > '0.0';
@@ -174,13 +232,6 @@ SELECT f.f1, f.f1 - '-10' AS x
  1.2345678901234e+200 | 1.2345678901234e+200
  1.2345678901234e-200 |                   10
 (3 rows)
-
-SELECT f.f1 ^ '2.0' AS square_f1
-   FROM FLOAT8_TBL f where f.f1 = '1004.3';
-     square_f1      
---------------------
- 1008618.4899999999
-(1 row)
 
 -- absolute value
 SELECT f.f1, @f.f1 AS abs_f1
@@ -233,11 +284,45 @@ SELECT |/ float8 '64' AS eight;
      8
 (1 row)
 
+SELECT f.f1, |/f.f1 AS sqrt_f1
+   FROM FLOAT8_TBL f
+   WHERE f.f1 > '0.0';
+          f1          |        sqrt_f1        
+----------------------+-----------------------
+               1004.3 |      31.6906926399535
+ 1.2345678901234e+200 | 1.11111110611109e+100
+ 1.2345678901234e-200 | 1.11111110611109e-100
+(3 rows)
+
 -- power
 SELECT power(float8 '144', float8 '0.5');
  power 
 -------
     12
+(1 row)
+
+SELECT power(float8 'NaN', float8 '0.5');
+ power 
+-------
+   NaN
+(1 row)
+
+SELECT power(float8 '144', float8 'NaN');
+ power 
+-------
+   NaN
+(1 row)
+
+SELECT power(float8 'NaN', float8 'NaN');
+ power 
+-------
+   NaN
+(1 row)
+
+SELECT power(float8 '-1', float8 'NaN');
+ power 
+-------
+   NaN
 (1 row)
 
 SELECT power(float8 '1', float8 'NaN');
@@ -308,6 +393,30 @@ SELECT power(float8 '-0.1', float8 'inf');
      0
 (1 row)
 
+SELECT power(float8 '1.1', float8 'inf');
+  power   
+----------
+ Infinity
+(1 row)
+
+SELECT power(float8 '-1.1', float8 'inf');
+  power   
+----------
+ Infinity
+(1 row)
+
+SELECT power(float8 '0.1', float8 '-inf');
+  power   
+----------
+ Infinity
+(1 row)
+
+SELECT power(float8 '-0.1', float8 '-inf');
+  power   
+----------
+ Infinity
+(1 row)
+
 SELECT power(float8 '1.1', float8 '-inf');
  power 
 -------
@@ -324,6 +433,18 @@ SELECT power(float8 'inf', float8 '-2');
  power 
 -------
      0
+(1 row)
+
+SELECT power(float8 'inf', float8 '2');
+  power   
+----------
+ Infinity
+(1 row)
+
+SELECT power(float8 'inf', float8 'inf');
+  power   
+----------
+ Infinity
 (1 row)
 
 SELECT power(float8 'inf', float8 '-inf');
@@ -346,13 +467,59 @@ SELECT power(float8 '-inf', float8 '-3');
     -0
 (1 row)
 
+SELECT power(float8 '-inf', float8 '2');
+  power   
+----------
+ Infinity
+(1 row)
+
+SELECT power(float8 '-inf', float8 '3');
+   power   
+-----------
+ -Infinity
+(1 row)
+
 SELECT power(float8 '-inf', float8 '3.5');
 ERROR:  a negative number raised to a non-integer power yields a complex result
+SELECT power(float8 '-inf', float8 'inf');
+  power   
+----------
+ Infinity
+(1 row)
+
 SELECT power(float8 '-inf', float8 '-inf');
  power 
 -------
      0
 (1 row)
+
+-- take exp of ln(f.f1)
+SELECT f.f1, exp(ln(f.f1)) AS exp_ln_f1
+   FROM FLOAT8_TBL f
+   WHERE f.f1 > '0.0';
+          f1          |       exp_ln_f1       
+----------------------+-----------------------
+               1004.3 |                1004.3
+ 1.2345678901234e+200 | 1.23456789012338e+200
+ 1.2345678901234e-200 | 1.23456789012339e-200
+(3 rows)
+
+-- cube root
+SELECT ||/ float8 '27' AS three;
+ three 
+-------
+     3
+(1 row)
+
+SELECT f.f1, ||/f.f1 AS cbrt_f1 FROM FLOAT8_TBL f;
+          f1          |       cbrt_f1        
+----------------------+----------------------
+                    0 |                    0
+               1004.3 |      10.014312837827
+               -34.84 |    -3.26607421344208
+ 1.2345678901234e+200 | 4.97933859234765e+66
+ 1.2345678901234e-200 |  2.3112042409018e-67
+(5 rows)
 
 SELECT * FROM FLOAT8_TBL;
           f1          
@@ -380,10 +547,80 @@ SELECT ln(f.f1) from FLOAT8_TBL f where f.f1 < '0.0' ;
 ERROR:  cannot take logarithm of a negative number
 SELECT f.f1 / '0.0' from FLOAT8_TBL f;
 ERROR:  division by zero
+-- hyperbolic functions
+-- we run these with extra_float_digits = 0 too, since different platforms
+-- tend to produce results that vary in the last place.
+SELECT sinh(float8 '1');
+      sinh       
+-----------------
+ 1.1752011936438
+(1 row)
+
+SELECT cosh(float8 '1');
+       cosh       
+------------------
+ 1.54308063481524
+(1 row)
+
+SELECT tanh(float8 '1');
+       tanh        
+-------------------
+ 0.761594155955765
+(1 row)
+
 SELECT asinh(float8 '1');
        asinh       
 -------------------
  0.881373587019543
+(1 row)
+
+SELECT acosh(float8 '2');
+      acosh       
+------------------
+ 1.31695789692482
+(1 row)
+
+SELECT atanh(float8 '0.5');
+       atanh       
+-------------------
+ 0.549306144334055
+(1 row)
+
+-- test Inf/NaN cases for hyperbolic functions
+SELECT sinh(float8 'infinity');
+   sinh   
+----------
+ Infinity
+(1 row)
+
+SELECT sinh(float8 '-infinity');
+   sinh    
+-----------
+ -Infinity
+(1 row)
+
+SELECT sinh(float8 'nan');
+ sinh 
+------
+  NaN
+(1 row)
+
+SELECT cosh(float8 'infinity');
+   cosh   
+----------
+ Infinity
+(1 row)
+
+SELECT cosh(float8 '-infinity');
+   cosh   
+----------
+ Infinity
+(1 row)
+
+SELECT cosh(float8 'nan');
+ cosh 
+------
+  NaN
 (1 row)
 
 SELECT tanh(float8 'infinity');
@@ -398,14 +635,50 @@ SELECT tanh(float8 '-infinity');
    -1
 (1 row)
 
+SELECT tanh(float8 'nan');
+ tanh 
+------
+  NaN
+(1 row)
+
+SELECT asinh(float8 'infinity');
+  asinh   
+----------
+ Infinity
+(1 row)
+
+SELECT asinh(float8 '-infinity');
+   asinh   
+-----------
+ -Infinity
+(1 row)
+
+SELECT asinh(float8 'nan');
+ asinh 
+-------
+   NaN
+(1 row)
+
 -- acosh(Inf) should be Inf, but some mingw versions produce NaN, so skip test
 -- SELECT acosh(float8 'infinity');
 SELECT acosh(float8 '-infinity');
 ERROR:  input is out of range
+SELECT acosh(float8 'nan');
+ acosh 
+-------
+   NaN
+(1 row)
+
 SELECT atanh(float8 'infinity');
 ERROR:  input is out of range
 SELECT atanh(float8 '-infinity');
 ERROR:  input is out of range
+SELECT atanh(float8 'nan');
+ atanh 
+-------
+   NaN
+(1 row)
+
 RESET extra_float_digits;
 -- test for over- and underflow
 INSERT INTO FLOAT8_TBL(f1) VALUES ('10e400');
@@ -478,3 +751,25 @@ SELECT '-9223372036854775808.5'::float8::int8;
 
 SELECT '-9223372036854780000'::float8::int8;
 ERROR:  bigint out of range
+SELECT x,
+       tand(x),
+       tand(x) IN ('-Infinity'::float8,-1,0,
+                   1,'Infinity'::float8) AS tand_exact,
+       cotd(x),
+       cotd(x) IN ('-Infinity'::float8,-1,0,
+                   1,'Infinity'::float8) AS cotd_exact
+FROM (VALUES (0), (45), (90), (135), (180),
+      (225), (270), (315), (360)) AS t(x);
+  x  |   tand    | tand_exact |   cotd    | cotd_exact 
+-----+-----------+------------+-----------+------------
+   0 |         0 | t          |  Infinity | t
+  45 |         1 | t          |         1 | t
+  90 |  Infinity | t          |         0 | t
+ 135 |        -1 | t          |        -1 | t
+ 180 |         0 | t          | -Infinity | t
+ 225 |         1 | t          |         1 | t
+ 270 | -Infinity | t          |         0 | t
+ 315 |        -1 | t          |        -1 | t
+ 360 |         0 | t          |  Infinity | t
+(9 rows)
+

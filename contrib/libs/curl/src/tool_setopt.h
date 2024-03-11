@@ -7,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -106,9 +106,6 @@ CURLcode tool_setopt(CURL *curl, bool str, struct GlobalConfig *global,
 #define my_setopt_enum(x,y,z) \
   SETOPT_CHECK(tool_setopt_enum(x, global, #y, y, setopt_nv_ ## y, z), y)
 
-#define my_setopt_flags(x,y,z) \
-  SETOPT_CHECK(tool_setopt_flags(x, global, #y, y, setopt_nv_ ## y, z), y)
-
 #define my_setopt_bitmask(x,y,z) \
   SETOPT_CHECK(tool_setopt_bitmask(x, global, #y, y, setopt_nv_ ## y, z), y)
 
@@ -133,9 +130,6 @@ CURLcode tool_setopt(CURL *curl, bool str, struct GlobalConfig *global,
   SETOPT_CHECK(curl_easy_setopt(x, y, z), y)
 
 #define my_setopt_enum(x,y,z) \
-  SETOPT_CHECK(curl_easy_setopt(x, y, z), y)
-
-#define my_setopt_flags(x,y,z) \
   SETOPT_CHECK(curl_easy_setopt(x, y, z), y)
 
 #define my_setopt_bitmask(x,y,z) \

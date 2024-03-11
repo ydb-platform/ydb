@@ -109,6 +109,7 @@ public:
     }
 
     inline void UnsafeAdvance(size_t count) {
+        Y_DEBUG_ABORT_UNLESS(count + Length() <= Buffer->capacity() / sizeof(T));
         Len += count;
     }
 

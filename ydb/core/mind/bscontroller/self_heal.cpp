@@ -971,6 +971,11 @@ namespace NKikimr::NBsController {
             }
             if (const auto it = StaticVSlots.find(vslotId); it != StaticVSlots.end() && it->second.VDiskId == vdiskId) {
                 it->second.VDiskStatus = m.GetStatus();
+                if (it->second.VDiskStatus == NKikimrBlobStorage::EVDiskStatus::READY) {
+                    it->second.ReadySince = Min(it->second.ReadySince, mono + ReadyStablePeriod);
+                } else {
+                    it->second.ReadySince = TMonotonic::Max();
+                }
             }
         }
 

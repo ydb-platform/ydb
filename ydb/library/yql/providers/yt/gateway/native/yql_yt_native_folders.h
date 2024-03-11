@@ -4,9 +4,9 @@
 
 namespace NYql::NNative {
 
-TString GetType(const NYT::TNode& attr);
+TString GetTypeFromAttributes(const NYT::TNode& attr, bool getDocumentType);
 
-TString GetAttrType(const NYT::TNode& node);
+TString GetTypeFromNode(const NYT::TNode& node, bool getDocumentType);
 
 TMaybe<TVector<IYtGateway::TBatchFolderResult::TFolderItem>> MaybeGetFolderFromCache(TTransactionCache::TEntry::TPtr entry, TStringBuf cacheKey);
 

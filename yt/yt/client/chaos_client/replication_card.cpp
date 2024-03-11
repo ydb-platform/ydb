@@ -33,7 +33,7 @@ void FormatProgressWithProjection(
     segments.end(),
     replicationProgressProjection.From,
     [] (const auto& lhs, const auto& rhs) {
-            return CompareRows(lhs, rhs.LowerKey) <= 0;
+        return CompareRows(lhs, rhs.LowerKey) <= 0;
     });
 
     bool comma = false;
@@ -60,7 +60,6 @@ void FormatProgressWithProjection(
 }
 
 } // namespace NDetail
-
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -209,6 +208,11 @@ void TReplicaHistoryItem::Persist(const TStreamPersistenceContext& context)
     Persist(context, State);
 }
 
+bool TReplicaHistoryItem::IsSync() const
+{
+    return Mode == ETableReplicaMode::Sync && State == ETableReplicaState::Enabled;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 int TReplicaInfo::FindHistoryItemIndex(TTimestamp timestamp) const
@@ -244,9 +248,11 @@ TReplicaInfo* TReplicationCard::GetReplicaOrThrow(TReplicaId replicaId, TReplica
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool IsReplicaSync(ETableReplicaMode mode)
+bool IsReplicaSync(ETableReplicaMode mode, const TReplicaHistoryItem& lastReplicaHistoryItem)
 {
-    return mode == ETableReplicaMode::Sync || mode == ETableReplicaMode::SyncToAsync;
+    // Check actual replica state to avoid merging transition states (e.g. AsyncToSync -> SyncToAsync)
+    return mode == ETableReplicaMode::Sync ||
+        (mode == ETableReplicaMode::SyncToAsync && lastReplicaHistoryItem.IsSync());
 }
 
 bool IsReplicaAsync(ETableReplicaMode mode)
@@ -264,9 +270,12 @@ bool IsReplicaDisabled(ETableReplicaState state)
     return state == ETableReplicaState::Disabled || state == ETableReplicaState::Enabling;
 }
 
-bool IsReplicaReallySync(ETableReplicaMode mode, ETableReplicaState state)
+bool IsReplicaReallySync(
+    ETableReplicaMode mode,
+    ETableReplicaState state,
+    const TReplicaHistoryItem& lastReplicaHistoryItem)
 {
-    return IsReplicaSync(mode) && IsReplicaEnabled(state);
+    return IsReplicaSync(mode, lastReplicaHistoryItem) && IsReplicaEnabled(state);
 }
 
 ETableReplicaMode GetTargetReplicaMode(ETableReplicaMode mode)

@@ -670,9 +670,10 @@ SIMPLE_STRICT_UDF(TSerializePretty, TYson(TAutoMap<TNodeResource>)) {
 
 constexpr char SkipMapEntity[] = "SkipMapEntity";
 constexpr char EncodeUtf8[] = "EncodeUtf8";
+constexpr char WriteNanAsString[] = "WriteNanAsString";
 
-SIMPLE_UDF_WITH_OPTIONAL_ARGS(TSerializeJson, TOptional<TJson>(TAutoMap<TNodeResource>, TOptional<TOptionsResource>, TNamedArg<bool, SkipMapEntity>, TNamedArg<bool, EncodeUtf8>), 3) try {
-    return valueBuilder->NewString(SerializeJsonDom(args[0], args[2].GetOrDefault(false), args[3].GetOrDefault(false)));
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TSerializeJson, TOptional<TJson>(TAutoMap<TNodeResource>, TOptional<TOptionsResource>, TNamedArg<bool, SkipMapEntity>, TNamedArg<bool, EncodeUtf8>, TNamedArg<bool, WriteNanAsString>), 4) try {
+    return valueBuilder->NewString(SerializeJsonDom(args[0], args[2].GetOrDefault(false), args[3].GetOrDefault(false), args[4].GetOrDefault(false)));
 } catch (const std::exception& e) {
     if (ParseOptions(args[1]).Strict) {
         UdfTerminate((::TStringBuilder() << valueBuilder->WithCalleePosition(GetPos()) << " " << e.what()).data());
@@ -682,11 +683,15 @@ SIMPLE_UDF_WITH_OPTIONAL_ARGS(TSerializeJson, TOptional<TJson>(TAutoMap<TNodeRes
 
 SIMPLE_STRICT_UDF(TWithAttributes, TOptional<TNodeResource>(TAutoMap<TNodeResource>, TAutoMap<TNodeResource>)) {
     Y_UNUSED(valueBuilder);
-    auto x = args[0];
+    TUnboxedValue x = args[0];
     auto y = args[1];
 
     if (!IsNodeType<ENodeType::Dict>(y)) {
         return {};
+    }
+
+    if (IsNodeType<ENodeType::Attr>(x)) {
+        x = x.GetVariantItem();
     }
 
     if (y.IsEmbedded()) {

@@ -5,7 +5,6 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
-#include <ydb/public/api/grpc/draft/ydb_long_tx_v1.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/wilson/wilson_profile_span.h>
 

@@ -30,16 +30,16 @@ struct NavigateEntryResult {
     std::optional<TString> QueryName;
 };
 
-NavigateEntryResult CreateNavigateEntry(const TString& cluster, const TString& path,
-        const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings, TKqpTempTablesState::TConstPtr tempTablesState = nullptr) {
+NavigateEntryResult CreateNavigateEntry(const TString& path,
+    const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings, TKqpTempTablesState::TConstPtr tempTablesState = nullptr) {
     TNavigate::TEntry entry;
     TString currentPath = path;
     std::optional<TString> queryName = std::nullopt;
     if (tempTablesState) {
-        auto tempTablesIt = tempTablesState->TempTables.find(std::make_pair(cluster, currentPath));
-        if (tempTablesState->SessionId && tempTablesIt != tempTablesState->TempTables.end()) {
+        auto tempTablesInfoIt = tempTablesState->FindInfo(currentPath, false);
+        if (tempTablesInfoIt != tempTablesState->TempTables.end()) {
             queryName = currentPath;
-            currentPath = currentPath + *tempTablesState->SessionId;
+            currentPath = currentPath + tempTablesState->SessionId;
         }
     }
     entry.Path = SplitPath(currentPath);
@@ -50,10 +50,8 @@ NavigateEntryResult CreateNavigateEntry(const TString& cluster, const TString& p
     return {entry, currentPath, queryName};
 }
 
-NavigateEntryResult CreateNavigateEntry(const TString& cluster,
-        const std::pair<TIndexId, TString>& pair,
+NavigateEntryResult CreateNavigateEntry(const std::pair<TIndexId, TString>& pair,
         const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings, TKqpTempTablesState::TConstPtr tempTablesState = nullptr) {
-    Y_UNUSED(cluster);
     Y_UNUSED(tempTablesState);
 
     TNavigate::TEntry entry;
@@ -194,7 +192,8 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
                 columnDesc.Name, columnDesc.Id, typeName, notNull, columnDesc.PType, columnDesc.PTypeMod,
                 columnDesc.DefaultFromSequence,
                 defaultKind,
-                columnDesc.DefaultFromLiteral
+                columnDesc.DefaultFromLiteral,
+                columnDesc.IsBuildInProgress
             )
         );
         if (columnDesc.KeyOrder >= 0) {
@@ -229,6 +228,7 @@ TTableMetadataResult GetExternalTableMetadataResult(const NSchemeCache::TSchemeC
     tableMeta->PathId = NYql::TKikimrPathId(description.GetPathId().GetOwnerId(), description.GetPathId().GetLocalId());
     tableMeta->SchemaVersion = description.GetVersion();
     tableMeta->Kind = NYql::EKikimrTableKind::External;
+    tableMeta->TableType = NYql::ETableType::ExternalTable;
 
     tableMeta->Attributes = entry.Attributes;
 
@@ -255,7 +255,7 @@ TTableMetadataResult GetExternalTableMetadataResult(const NSchemeCache::TSchemeC
 }
 
 TTableMetadataResult GetExternalDataSourceMetadataResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
-        const TString& cluster, const TString& tableName) {
+        const TString& cluster, const TString& mainCluster, const TString& tableName) {
     const auto& description = entry.ExternalDataSourceInfo->Description;
     TTableMetadataResult result;
     result.SetSuccess();
@@ -265,6 +265,11 @@ TTableMetadataResult GetExternalDataSourceMetadataResult(const NSchemeCache::TSc
     tableMeta->PathId = NYql::TKikimrPathId(description.GetPathId().GetOwnerId(), description.GetPathId().GetLocalId());
     tableMeta->SchemaVersion = description.GetVersion();
     tableMeta->Kind = NYql::EKikimrTableKind::External;
+    if (cluster == mainCluster) { // resolved external data source itself
+        tableMeta->TableType = NYql::ETableType::Unknown;
+    } else {
+        tableMeta->TableType = NYql::ETableType::Table; // wanted to resolve table in external data source
+    }
 
     tableMeta->Attributes = entry.Attributes;
 
@@ -278,8 +283,31 @@ TTableMetadataResult GetExternalDataSourceMetadataResult(const NSchemeCache::TSc
     return result;
 }
 
+TTableMetadataResult GetViewMetadataResult(
+    const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
+    const TString& cluster,
+    const TString& viewName
+) {
+  const auto& description = schemeEntry.ViewInfo->Description;
+
+  TTableMetadataResult builtResult;
+  builtResult.SetSuccess();
+
+  builtResult.Metadata = new NYql::TKikimrTableMetadata(cluster, viewName);
+  auto metadata = builtResult.Metadata;
+  metadata->DoesExist = true;
+  metadata->PathId = NYql::TKikimrPathId(description.GetPathId().GetOwnerId(),
+                                         description.GetPathId().GetLocalId());
+  metadata->SchemaVersion = description.GetVersion();
+  metadata->Kind = NYql::EKikimrTableKind::View;
+  metadata->Attributes = schemeEntry.Attributes;
+  metadata->ViewPersistedData = {description.GetQueryText()};
+
+  return builtResult;
+}
+
 TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
-        const TString& cluster, const TString& tableName, std::optional<TString> queryName = std::nullopt) {
+        const TString& cluster, const TString& mainCluster, const TString& tableName, std::optional<TString> queryName = std::nullopt) {
     using TResult = NYql::IKikimrGateway::TTableMetadataResult;
     using EStatus = NSchemeCache::TSchemeCacheNavigate::EStatus;
     using EKind = NSchemeCache::TSchemeCacheNavigate::EKind;
@@ -306,7 +334,11 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
             return ResultFromError<TResult>(ToString(entry.Status));
     }
 
-    YQL_ENSURE(entry.Kind == EKind::KindTable || entry.Kind == EKind::KindColumnTable || entry.Kind == EKind::KindExternalTable || entry.Kind == EKind::KindExternalDataSource);
+    YQL_ENSURE(IsIn({EKind::KindTable,
+                     EKind::KindColumnTable,
+                     EKind::KindExternalTable,
+                     EKind::KindExternalDataSource,
+                     EKind::KindView}, entry.Kind));
 
     TTableMetadataResult result;
     switch (entry.Kind) {
@@ -314,7 +346,10 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
             result = GetExternalTableMetadataResult(entry, cluster, tableName);
             break;
         case EKind::KindExternalDataSource:
-            result = GetExternalDataSourceMetadataResult(entry, cluster, tableName);
+            result = GetExternalDataSourceMetadataResult(entry, cluster, mainCluster, tableName);
+            break;
+        case EKind::KindView:
+            result = GetViewMetadataResult(entry, cluster, tableName);
             break;
         default:
             result = GetTableMetadataResult(entry, cluster, tableName, queryName);
@@ -669,16 +704,30 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
     using EStatus = NSchemeCache::TSchemeCacheNavigate::EStatus;
     using EKind = NSchemeCache::TSchemeCacheNavigate::EKind;
 
-    const auto externalEntryItem = CreateNavigateExternalEntry(id, settings.WithExternalDatasources_);
-    Y_ABORT_UNLESS(!settings.WithExternalDatasources_ || externalEntryItem, "External data source must be resolved using path only");
-    auto resNavigate = settings.WithExternalDatasources_ ? *externalEntryItem : CreateNavigateEntry(cluster,
-        id, settings, TempTablesState);
+    // In the case of reading from an external data source,
+    // we have a construction of the form: `/Root/external_data_source`.`/path_in_external_system` WITH (...)
+    // In this syntax, information about path_in_external_system is already known and we only need information about external_data_source.
+    // To do this, we go to the DefaultCluster and get information about external_data_source from scheme shard
+    const bool resolveEntityInsideDataSource = (cluster != Cluster);
+    TPath entityName = id;
+    if constexpr (std::is_same_v<TPath, TString>) {
+        if (resolveEntityInsideDataSource) {
+            entityName = cluster;
+        }
+    } else {
+        Y_ENSURE(!resolveEntityInsideDataSource);
+    }
+
+    const auto externalEntryItem = CreateNavigateExternalEntry(entityName, resolveEntityInsideDataSource);
+    Y_ABORT_UNLESS(!resolveEntityInsideDataSource || externalEntryItem, "External data source must be resolved using path only");
+    auto resNavigate = resolveEntityInsideDataSource ? *externalEntryItem : CreateNavigateEntry(entityName,
+        settings, TempTablesState);
     const auto entry = resNavigate.Entry;
     const auto queryName = resNavigate.QueryName;
-    const auto externalEntry = settings.WithExternalDatasources_ ? std::optional<NavigateEntryResult>{} : externalEntryItem;
-    const ui64 expectedSchemaVersion = GetExpectedVersion(id);
+    const auto externalEntry = resolveEntityInsideDataSource ? std::optional<NavigateEntryResult>{} : externalEntryItem;
+    const ui64 expectedSchemaVersion = GetExpectedVersion(entityName);
 
-    LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Load table metadata from cache by path, request" << GetDebugString(id));
+    LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Load table metadata from cache by path, request" << GetDebugString(entityName));
 
     auto navigate = MakeHolder<TNavigate>();
     navigate->ResultSet.emplace_back(entry);
@@ -700,7 +749,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
         ActorSystem,
         schemeCacheId,
         ev.Release(),
-        [userToken, database, cluster, table, settings, expectedSchemaVersion, this, queryName]
+        [userToken, database, cluster, mainCluster = Cluster, table, settings, expectedSchemaVersion, this, queryName]
             (TPromise<TResult> promise, TResponse&& response) mutable
         {
             try {
@@ -711,11 +760,13 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                 auto& entry = InferEntry(navigate.ResultSet);
 
                 if (entry.Status != EStatus::Ok) {
-                    promise.SetValue(GetLoadTableMetadataResult(entry, cluster, table));
+                    promise.SetValue(GetLoadTableMetadataResult(entry, cluster, mainCluster, table));
                     return;
                 }
 
-                if (!IsIn({EKind::KindExternalDataSource, EKind::KindExternalTable}, entry.Kind) && expectedSchemaVersion && entry.TableId.SchemaVersion) {
+                if (!IsIn({EKind::KindExternalDataSource,
+                           EKind::KindExternalTable,
+                           EKind::KindView}, entry.Kind) && expectedSchemaVersion && entry.TableId.SchemaVersion) {
                     if (entry.TableId.SchemaVersion != expectedSchemaVersion) {
                         const auto message = TStringBuilder()
                             << "schema version mismatch during metadata loading for: "
@@ -729,9 +780,15 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                     }
                 }
 
+                const bool resolveEntityInsideDataSource = (cluster != Cluster);
+                // resolveEntityInsideDataSource => entry.Kind == EKind::KindExternalDataSource
+                if (resolveEntityInsideDataSource && entry.Kind != EKind::KindExternalDataSource) {
+                    throw yexception() << "\"" << CombinePath(entry.Path.begin(), entry.Path.end()) << "\" is expected to be external data source";
+                }
+
                 switch (entry.Kind) {
                     case EKind::KindExternalDataSource: {
-                        auto externalDataSourceMetadata = GetLoadTableMetadataResult(entry, cluster, table);
+                        auto externalDataSourceMetadata = GetLoadTableMetadataResult(entry, cluster, mainCluster, table);
                         if (!externalDataSourceMetadata.Success()) {
                             promise.SetValue(externalDataSourceMetadata);
                             return;
@@ -742,12 +799,12 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             UpdateExternalDataSourceSecretsValue(externalDataSourceMetadata, result.GetValue());
                             promise.SetValue(externalDataSourceMetadata);
                         });
+                        break;
                     }
-                    break;
                     case EKind::KindExternalTable: {
                         YQL_ENSURE(entry.ExternalTableInfo, "expected external table info");
                         const auto& dataSourcePath = entry.ExternalTableInfo->Description.GetDataSourcePath();
-                        auto externalTableMetadata = GetLoadTableMetadataResult(entry, cluster, table);
+                        auto externalTableMetadata = GetLoadTableMetadataResult(entry, cluster, mainCluster, table);
                         if (!externalTableMetadata.Success()) {
                             promise.SetValue(externalTableMetadata);
                             return;
@@ -759,8 +816,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             auto externalDataSourceMetadata = result.GetValue();
                             promise.SetValue(EnrichExternalTable(externalTableMetadata, externalDataSourceMetadata));
                         });
+                        break;
                     }
-                    break;
                     case EKind::KindIndex: {
                         Y_ENSURE(entry.ListNodeEntry, "expected children list");
                         Y_ENSURE(entry.ListNodeEntry->Children.size() == 1, "expected one child");
@@ -775,10 +832,10 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                         {
                             promise.SetValue(result.GetValue());
                         });
+                        break;
                     }
-                    break;
                     default: {
-                        promise.SetValue(GetLoadTableMetadataResult(entry, cluster, table, queryName));
+                        promise.SetValue(GetLoadTableMetadataResult(entry, cluster, mainCluster, table, queryName));
                     }
                 }
             }

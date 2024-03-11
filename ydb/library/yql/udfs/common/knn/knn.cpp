@@ -184,6 +184,17 @@ std::optional<float> CosineSimilarity(const TUnboxedValuePod vector1, const TUnb
     return cosine;
 }
 
+std::optional<float> EuclideanDistance(const TUnboxedValuePod vector1, const TUnboxedValuePod vector2) {
+    float ret = 0;
+
+    if (!EnumerateVectors(vector1, vector2, [&ret](float el1, float el2) { ret += (el1 - el2) * (el1 - el2);}))
+        return {};
+
+    ret = sqrtf(ret);
+
+    return ret;
+}
+
 SIMPLE_STRICT_UDF(TInnerProductSimilarity, TOptional<float>(TAutoMap<TListType<float>>, TAutoMap<TListType<float>>)) {
     Y_UNUSED(valueBuilder);
 
@@ -214,12 +225,23 @@ SIMPLE_STRICT_UDF(TCosineDistance, TOptional<float>(TAutoMap<TListType<float>>, 
     return TUnboxedValuePod{1 - cosine.value()};
 }
 
+SIMPLE_STRICT_UDF(TEuclideanDistance, TOptional<float>(TAutoMap<TListType<float>>, TAutoMap<TListType<float>>)) {
+    Y_UNUSED(valueBuilder);
+
+    auto distance = EuclideanDistance(args[0], args[1]);
+    if (!distance)
+        return {};
+
+    return TUnboxedValuePod{distance.value()};
+}
+
 SIMPLE_MODULE(TKnnModule,
     TFromBinaryString, 
     TToBinaryString,
     TInnerProductSimilarity,
     TCosineSimilarity,
-    TCosineDistance
+    TCosineDistance,
+    TEuclideanDistance
     )
 
 REGISTER_MODULES(TKnnModule)

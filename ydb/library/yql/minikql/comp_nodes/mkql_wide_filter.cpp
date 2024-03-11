@@ -206,7 +206,7 @@ public:
         } else if (fetchRes.Get() == EFetchResult::One) {
             const bool predicate = Predicate->GetValue(ctx).Get<bool>();
             if (!predicate) {
-                stop = NUdf::TUnboxedValuePod(false);
+                stop = NUdf::TUnboxedValuePod(true);
             }
             if (Inclusive || predicate) {
                 FillOutputs(ctx, output);

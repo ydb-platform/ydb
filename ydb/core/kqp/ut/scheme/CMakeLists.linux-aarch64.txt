@@ -23,6 +23,7 @@ target_link_libraries(ydb-core-kqp-ut-scheme PUBLIC
   cpp-threading-local_executor
   kqp-ut-common
   yql-sql-pg_dummy
+  columnshard-hooks-testing
 )
 target_link_options(ydb-core-kqp-ut-scheme PRIVATE
   -ldl

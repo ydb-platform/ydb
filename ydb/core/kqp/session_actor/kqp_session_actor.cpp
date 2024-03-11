@@ -1144,6 +1144,9 @@ public:
 
             }
 
+            // TODO: fix column shard
+            //request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
+
             request.TopicOperations = std::move(txCtx.TopicOperations);
         } else if (QueryState->ShouldAcquireLocks()) {
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();

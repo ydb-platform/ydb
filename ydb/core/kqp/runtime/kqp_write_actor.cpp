@@ -308,7 +308,7 @@ private:
         if (Finished) {
             for (auto& [shardId, shardInfo] : ShardsInfo.GetShards()) {
                 // Add fake empty batch for commit evwrite.
-                shardInfo.PushBatch(TString());
+                // shardInfo.PushBatch(TString());
                 shardInfo.Close();
             }
         }
@@ -409,6 +409,10 @@ private:
         lock.SetCounter(1);
         ShardsInfo.GetShard(ev->Get()->Record.GetOrigin()).AddAndCheckLock(lock);
         ProcessBatches();
+
+        if (ShardsInfo.IsFinished()) {
+            Callbacks->OnAsyncOutputFinished(GetOutputIndex());
+        }
     }
 
     void ProcessWritePreparedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
@@ -488,7 +492,7 @@ private:
             return;
         }
 
-        const bool isLastBatch = shard.Size() == 1 && Finished;
+        const bool isLastBatch = shard.Size() == 1 && Finished && false;
         if (isLastBatch && inFlightBatch.SendAttempts != 0) {
             RuntimeError(
                 TStringBuilder() << "ShardId=" << shardId << " for table '" << Settings.GetTable().GetPath() << "': last batch can't be retried",
@@ -522,9 +526,9 @@ private:
             evWrite->Record.MutableLocks()->AddLocks();
             evWrite->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
             // TODO: tmp for columnshard
-            evWrite->SetLockId(Settings.GetLockTxId(), Settings.GetLockNodeId());
+            evWrite->SetLockId(/*Settings.GetLockTxId()*/ 42, Settings.GetLockNodeId());
         } else {
-            evWrite->SetLockId(Settings.GetLockTxId(), Settings.GetLockNodeId());
+            evWrite->SetLockId(/*Settings.GetLockTxId()*/ 42, Settings.GetLockNodeId());
         }
 
         CA_LOG_D("Send EvWrite to ShardID=" << shardId << ", TxId=" << std::get<ui64>(TxId)

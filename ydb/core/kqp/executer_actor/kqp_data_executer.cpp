@@ -185,6 +185,7 @@ public:
             !ImmediateTx &&
             !HasPersistentChannels &&
             !HasOlapTable &&
+            EvWriteTxs.empty() &&
             (!Database.empty() || AppData()->EnableMvccSnapshotWithLegacyDomainRoot)
         );
 
@@ -358,6 +359,7 @@ private:
                 hFunc(TEvDataShard::TEvProposeTransactionRestart, HandleExecute);
                 hFunc(TEvDataShard::TEvProposeTransactionAttachResult, HandlePrepare);
                 hFunc(TEvPersQueue::TEvProposeTransactionResult, HandlePrepare);
+                hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandlePrepare);
                 hFunc(TEvPrivate::TEvReattachToShard, HandleExecute);
                 hFunc(TEvDqCompute::TEvState, HandlePrepare); // from CA
                 hFunc(TEvDqCompute::TEvChannelData, HandleChannelData); // from CA
@@ -472,6 +474,33 @@ private:
                 CancelProposal(shardId);
                 return ShardError(res->Record);
             }
+        }
+    }
+
+    void HandlePrepare(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+        const auto* res = ev->Get();
+
+        const ui64 shardId = res->Record.GetOrigin();
+        TShardState* shardState = ShardStates.FindPtr(shardId);
+        YQL_ENSURE(shardState, "Unexpected propose result from unknown tabletId " << shardId);
+
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(res->Record.GetIssues(), issues);
+        LOG_D("Got evWrite result, shard: " << shardId << ", status: "
+            << NKikimrDataEvents::TEvWriteResult::EStatus_Name(res->Record.GetStatus())
+            << ", error: " << issues.ToString());
+
+        switch (ev->Get()->GetStatus()) {
+            case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED: {
+                if (!ShardPrepared(*shardState, res->Record)) {
+                    return CancelProposal(shardId);
+                }
+                return CheckPrepareCompleted();
+            }
+            // TODO: process errors
+            default:
+                YQL_ENSURE(false);
+                break;
         }
     }
 
@@ -612,6 +641,7 @@ private:
 
     template<class E>
     bool ShardPreparedImpl(TShardState& state, const E& result) {
+        Cerr << "SHARD PREPARED" << Endl;
         YQL_ENSURE(state.State == TShardState::EState::Preparing);
         state.State = TShardState::EState::Prepared;
 
@@ -661,6 +691,10 @@ private:
     }
 
     bool ShardPrepared(TShardState& state, const NKikimrPQ::TEvProposeTransactionResult& result) {
+        return ShardPreparedImpl(state, result);
+    }
+
+    bool ShardPrepared(TShardState& state, const NKikimrDataEvents::TEvWriteResult& result) {
         return ShardPreparedImpl(state, result);
     }
 
@@ -864,6 +898,8 @@ private:
     void ExecutePlanned() {
         YQL_ENSURE(TxCoordinator);
 
+        Cerr << "Execute Planned" << Endl;
+
         auto ev = MakeHolder<TEvTxProxy::TEvProposeTransaction>();
         ev->Record.SetCoordinatorID(TxCoordinator);
 
@@ -945,6 +981,7 @@ private:
                 hFunc(TEvDataShard::TEvProposeTransactionRestart, HandleExecute);
                 hFunc(TEvDataShard::TEvProposeTransactionAttachResult, HandleExecute);
                 hFunc(TEvPersQueue::TEvProposeTransactionResult, HandleExecute);
+                hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandleExecute);
                 hFunc(TEvPrivate::TEvReattachToShard, HandleExecute);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandleExecute);
                 hFunc(TEvents::TEvUndelivered, HandleUndelivered);
@@ -1056,6 +1093,38 @@ private:
             {
                 return ShardError(res->Record);
             }
+        }
+    }
+
+    void HandleExecute(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+        const auto* res = ev->Get();
+        const ui64 shardId = res->Record.GetOrigin();
+        LastShard = shardId;
+
+        TShardState* shardState = ShardStates.FindPtr(shardId);
+        YQL_ENSURE(shardState);
+
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(res->Record.GetIssues(), issues);
+        LOG_D("Got evWrite result, shard: " << shardId << ", status: "
+            << NKikimrDataEvents::TEvWriteResult::EStatus_Name(res->Record.GetStatus())
+            << ", error: " << issues.ToString());
+
+        switch (ev->Get()->GetStatus()) {
+            case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED: {
+                YQL_ENSURE(shardState->State == TShardState::EState::Executing);
+                shardState->State = TShardState::EState::Finished;
+
+                Counters->TxProxyMon->ResultsReceivedCount->Inc();
+                // TODO: locks check
+                Counters->TxProxyMon->TxResultComplete->Inc();
+
+                CheckExecutionComplete();
+                return;
+            }
+            default:
+                // TODO: errors
+                YQL_ENSURE(false);
         }
     }
 
@@ -1528,18 +1597,15 @@ private:
 
         std::unique_ptr<IEventBase> ev;
         if (isOlap) {
-            if (UseEvWrite) {
-                YQL_ENSURE(false);
-            } else {
-                const ui32 flags =
-                    (ImmediateTx ? NKikimrTxColumnShard::ETransactionFlag::TX_FLAG_IMMEDIATE: 0);
-                ev.reset(new TEvColumnShard::TEvProposeTransaction(
-                    NKikimrTxColumnShard::TX_KIND_DATA,
-                    SelfId(),
-                    TxId,
-                    dataTransaction.SerializeAsString(),
-                    flags));
-            }
+            YQL_ENSURE(!UseEvWrite);
+            const ui32 flags =
+                (ImmediateTx ? NKikimrTxColumnShard::ETransactionFlag::TX_FLAG_IMMEDIATE: 0);
+            ev.reset(new TEvColumnShard::TEvProposeTransaction(
+                NKikimrTxColumnShard::TX_KIND_DATA,
+                SelfId(),
+                TxId,
+                dataTransaction.SerializeAsString(),
+                flags));
         } else {
             const ui32 flags =
                 (ImmediateTx ? NTxDataShard::TTxFlags::Immediate : 0) |
@@ -1571,6 +1637,49 @@ private:
         LOG_D("ExecuteDatashardTransaction traceId.verbosity: " << std::to_string(traceId.GetVerbosity()));
 
         Send(MakePipePeNodeCacheID(GetUseFollowers()), new TEvPipeCache::TEvForward(ev.release(), shardId, true), 0, 0, std::move(traceId));
+
+        auto result = ShardStates.emplace(shardId, std::move(shardState));
+        YQL_ENSURE(result.second);
+    }
+
+    void ExecuteEvWriteTransaction(ui64 shardId, NKikimrDataEvents::TEvWrite& evWrite) {
+        Cerr << "ImmediateTx" << ImmediateTx << Endl;
+        YQL_ENSURE(!ImmediateTx);
+        TShardState shardState;
+        shardState.State = TShardState::EState::Preparing;
+        shardState.DatashardState.ConstructInPlace();
+
+        // TODO: if (Deadline)??? (CancelAt) {???
+
+        auto evWriteTransaction = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>();
+        evWriteTransaction->Record = evWrite;
+        evWriteTransaction->Record.SetTxMode(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+        evWriteTransaction->Record.SetTxId(TxId);
+        
+        //auto& lockTxId = TasksGraph.GetMeta().LockTxId;
+        //if (lockTxId) {
+        //    Cerr << "Set lock TxID" << Endl;
+        // TODO: fix columnshard
+        //evWriteTransaction->Record.MutableLocks()->MutableLocks()->Clear();
+        //evWriteTransaction->Record.MutableLocks()->AddLocks();
+        evWriteTransaction->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+        evWriteTransaction->Record.SetLockTxId(42);
+        evWriteTransaction->Record.SetLockNodeId(SelfId().NodeId());
+        //}
+
+        auto locksCount = evWriteTransaction->Record.GetLocks().LocksSize();
+        shardState.DatashardState->ShardReadLocks = locksCount > 0;
+
+        LOG_D("State: " << CurrentStateFuncName()
+            << ", Executing EvWrite (PREPARE) on shard: " << shardId
+            << ", lockTxId: " << TxId //lockTxId
+            << ", locks: " << evWriteTransaction->Record.GetLocks().ShortDebugString());
+
+        auto traceId = ExecuterSpan.GetTraceId();
+
+        LOG_D("ExecuteEvWriteTransaction traceId.verbosity: " << std::to_string(traceId.GetVerbosity()));
+
+        Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(evWriteTransaction.release(), shardId, true), 0, 0, std::move(traceId));
 
         auto result = ShardStates.emplace(shardId, std::move(shardState));
         YQL_ENSURE(result.second);
@@ -1839,7 +1948,9 @@ private:
         BuildDatashardTxs(datashardTasks, datashardTxs, evWriteTxs, topicTxs);
 
         // Single-shard transactions are always immediate
-        ImmediateTx = (datashardTxs.size() + Request.TopicOperations.GetSize() + sourceScanPartitionsCount) <= 1 && !UnknownAffectedShardCount;
+        ImmediateTx = (datashardTxs.size() + evWriteTxs.size() + Request.TopicOperations.GetSize() + sourceScanPartitionsCount) <= 1
+                    && !UnknownAffectedShardCount
+                    && evWriteTxs.empty();
 
         switch (Request.IsolationLevel) {
             // OnlineRO with AllowInconsistentReads = true
@@ -1866,9 +1977,12 @@ private:
             ImmediateTx = true;
         }
 
+        Cerr << "TEST: IMM: " << ImmediateTx << Endl;
+
         ComputeTasks = std::move(computeTasks);
         TopicTxs = std::move(topicTxs);
         DatashardTxs = std::move(datashardTxs);
+        EvWriteTxs = std::move(evWriteTxs);
         RemoteComputeTasks = std::move(remoteComputeTasks);
 
         TasksGraph.GetMeta().UseFollowers = GetUseFollowers();
@@ -2008,6 +2122,7 @@ private:
 
         SetSnapshot(record.GetSnapshotStep(), record.GetSnapshotTxId());
         ImmediateTx = true;
+        Cerr << "Set Immediate!" << Endl;
 
         ContinueExecute();
     }
@@ -2233,7 +2348,7 @@ private:
             }
         }
 
-        LWTRACK(KqpDataExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, ComputeTasks.size(), DatashardTxs.size());
+        LWTRACK(KqpDataExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, ComputeTasks.size(), DatashardTxs.size() + EvWriteTxs.size());
 
         for (auto& [shardId, tasks] : RemoteComputeTasks) {
             auto it = ShardIdToNodeId.find(shardId);
@@ -2244,9 +2359,9 @@ private:
             }
         }
 
-        const bool singlePartitionOptAllowed = !HasOlapTable && !UnknownAffectedShardCount && !HasExternalSources && (DatashardTxs.size() == 0);
-        const bool useDataQueryPool = !(HasExternalSources && DatashardTxs.size() == 0);
-        const bool localComputeTasks = !((HasExternalSources || HasOlapTable || HasDatashardSourceScan) && DatashardTxs.size() == 0);
+        const bool singlePartitionOptAllowed = !HasOlapTable && !UnknownAffectedShardCount && !HasExternalSources && DatashardTxs.empty() && EvWriteTxs.empty();
+        const bool useDataQueryPool = !(HasExternalSources && DatashardTxs.empty() && EvWriteTxs.empty());
+        const bool localComputeTasks = !((HasExternalSources || HasOlapTable || HasDatashardSourceScan) && DatashardTxs.empty());
 
         Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), GetSnapshot(),
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, false, Nothing(),
@@ -2312,11 +2427,16 @@ private:
             ExecuteDatashardTransaction(shardId, *shardTx, isOlap.value_or(false));
         }
 
+        for (auto& [shardId, shardTx] : EvWriteTxs) {
+            ExecuteEvWriteTransaction(shardId, *shardTx);
+        }
+
         ExecuteTopicTabletTransactions(TopicTxs);
 
         LOG_I("Total tasks: " << TasksGraph.GetTasks().size()
             << ", readonly: " << ReadOnlyTx
             << ", datashardTxs: " << DatashardTxs.size()
+            << ", evWriteTxs: " << EvWriteTxs.size()
             << ", topicTxs: " << Request.TopicOperations.GetSize()
             << ", volatile: " << VolatileTx
             << ", immediate: " << ImmediateTx
@@ -2478,6 +2598,7 @@ private:
 
     TVector<ui64> ComputeTasks;
     TDatashardTxs DatashardTxs;
+    TEvWriteTxs EvWriteTxs;
     TTopicTabletTxs TopicTxs;
 
     // Lock handle for a newly acquired lock

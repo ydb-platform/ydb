@@ -177,6 +177,12 @@ private:
     void OnAdditiveSummaryChange() const;
     YDB_READONLY(TMonotonic, LastCompactionInstant, TMonotonic::Zero());
 public:
+    void RefreshTiering(const std::optional<TTiering>& /*tiering*/) {
+    }
+
+    void StartActualizationIndex() {
+    }
+
     NJson::TJsonValue OptimizerSerializeToJson() const {
         return OptimizerPlanner->SerializeToJsonVisual();
     }

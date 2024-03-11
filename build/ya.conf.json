@@ -1534,8 +1534,7 @@
                 "use_bundle": true,
                 "use_clang": true,
                 "version": "2019",
-                "werror_mode": "all",
-                "wine": "yes"
+                "werror_mode": "all"
             },
             "platforms": [
                 {

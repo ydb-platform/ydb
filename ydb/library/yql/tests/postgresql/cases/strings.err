@@ -994,31 +994,9 @@ SELECT 'indio' NOT LIKE 'in_o' AS "true";
 <sql-statement>
 SELECT 'abc'::name LIKE '_b_' AS "true";
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT 'abc'::name LIKE '_b_' AS "true";
-	^
-        -stdin-:<main>:1:20: Error: At function: PgLike
-        	SELECT 'abc'::name LIKE '_b_' AS "true";
-	                   ^
-            -stdin-:<main>:1:20: Error: Expected pg text, but got name
-            	SELECT 'abc'::name LIKE '_b_' AS "true";
-	                   ^
 <sql-statement>
 SELECT 'abc'::name NOT LIKE '_b_' AS "false";
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT 'abc'::name NOT LIKE '_b_' AS "false";
-	^
-        -stdin-:<main>:1:20: Error: At function: PgNot, At function: PgLike
-        	SELECT 'abc'::name NOT LIKE '_b_' AS "false";
-	                   ^
-            -stdin-:<main>:1:20: Error: Expected pg text, but got name
-            	SELECT 'abc'::name NOT LIKE '_b_' AS "false";
-	                   ^
 <sql-statement>
 SELECT 'abc'::bytea LIKE '_b_'::bytea AS "true";
 </sql-statement>
@@ -1200,31 +1178,9 @@ SELECT 'Hawkeye' NOT ILIKE 'h%' AS "false";
 <sql-statement>
 SELECT 'ABC'::name ILIKE '_b_' AS "true";
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT 'ABC'::name ILIKE '_b_' AS "true";
-	^
-        -stdin-:<main>:1:20: Error: At function: PgILike
-        	SELECT 'ABC'::name ILIKE '_b_' AS "true";
-	                   ^
-            -stdin-:<main>:1:20: Error: Expected pg text, but got name
-            	SELECT 'ABC'::name ILIKE '_b_' AS "true";
-	                   ^
 <sql-statement>
 SELECT 'ABC'::name NOT ILIKE '_b_' AS "false";
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT 'ABC'::name NOT ILIKE '_b_' AS "false";
-	^
-        -stdin-:<main>:1:20: Error: At function: PgNot, At function: PgILike
-        	SELECT 'ABC'::name NOT ILIKE '_b_' AS "false";
-	                   ^
-            -stdin-:<main>:1:20: Error: Expected pg text, but got name
-            	SELECT 'ABC'::name NOT ILIKE '_b_' AS "false";
-	                   ^
 <sql-statement>
 --
 -- test %/_ combination cases, cf bugs #4821 and #5478

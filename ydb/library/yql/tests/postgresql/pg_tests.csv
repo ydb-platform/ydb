@@ -40,7 +40,7 @@ select_distinct_on,4,1,25.0
 select_having,23,19,82.61
 select_implicit,44,28,63.64
 select_into,67,3,4.48
-strings,390,296,75.9
+strings,390,300,76.92
 subselect,234,107,45.73
 text,76,16,21.05
 time,39,29,74.36

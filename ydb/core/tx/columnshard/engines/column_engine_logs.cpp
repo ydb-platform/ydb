@@ -591,6 +591,7 @@ void TColumnEngineForLogs::OnTieringModified(const std::shared_ptr<NColumnShard:
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnTieringModified")
         ("new_count_tierings", tierings.size())
         ("new_count_ttls", ttl.PathsCount());
+    EvictionsController.RefreshTierings(std::move(tierings), ttl);
     if (pathId) {
         auto itGranule = Tables.find(*pathId);
         AFL_VERIFY(itGranule != Tables.end());
@@ -614,6 +615,27 @@ void TColumnEngineForLogs::OnTieringModified(const std::shared_ptr<NColumnShard:
 
 void TColumnEngineForLogs::DoRegisterTable(const ui64 pathId) {
     AFL_VERIFY(Tables.emplace(pathId, std::make_shared<TGranuleMeta>(pathId, GranulesStorage, SignalCounters.RegisterGranuleDataCounters(), VersionedIndex)).second);
+}
+
+TColumnEngineForLogs::TTieringProcessContext::TTieringProcessContext(const ui64 memoryUsageLimit,
+    std::shared_ptr<TTTLColumnEngineChanges> changes, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::shared_ptr<TColumnEngineChanges::IMemoryPredictor>& memoryPredictor)
+    : MemoryUsageLimit(memoryUsageLimit)
+    , MemoryPredictor(memoryPredictor)
+    , Now(TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now())
+    , Changes(changes)
+    , DataLocksManager(dataLocksManager)
+{
+
+}
+
+void TEvictionsController::RefreshTierings(std::optional<THashMap<ui64, TTiering>>&& tierings, const NColumnShard::TTtl& ttl) {
+    if (tierings) {
+        OriginalTierings = std::move(*tierings);
+    }
+    auto copy = OriginalTierings;
+    ttl.AddTtls(copy);
+    NextCheckInstantForTierings = BuildNextInstantCheckers(std::move(copy));
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "RefreshTierings")("count", NextCheckInstantForTierings.size());
 }
 
 } // namespace NKikimr::NOlap

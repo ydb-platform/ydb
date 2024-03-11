@@ -393,7 +393,7 @@ public:
 private:
     void SplitStateIntoBuckets() {
 
-       while (const auto keyAndState = InMemoryProcessingState.Extract()) {
+       while (const auto keyAndState = static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Extract())) {
             auto hash = Hasher(keyAndState); //Hasher uses only key for hashing
             auto bucketId = hash % SpilledBucketCount;
             auto& bucket = SpilledBuckets[bucketId];
@@ -402,12 +402,12 @@ private:
 
             for (size_t i = 0; i != KeyWidth; ++i) {
                 //jumping into unsafe world, refusing ownership
-                static_cast<NUdf::TUnboxedValue&>(processingState.Tongue[i]) = (keyAndState[i]);
+                static_cast<NUdf::TUnboxedValue&>(processingState.Tongue[i]) = std::move(keyAndState[i]);
             }
             processingState.TasteIt();
             for (size_t i = KeyWidth; i != KeyAndStateType->GetElementsCount(); ++i) {
                 //jumping into unsafe world, refusing ownership
-                static_cast<NUdf::TUnboxedValue&>(processingState.Throat[i - KeyWidth]) = (keyAndState[i]);
+                static_cast<NUdf::TUnboxedValue&>(processingState.Throat[i - KeyWidth]) = std::move(keyAndState[i]);
             }
 
             for (size_t i = 0; i != KeyAndStateType->GetElementsCount(); ++i) {

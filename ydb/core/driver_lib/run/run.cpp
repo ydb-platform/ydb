@@ -832,8 +832,10 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasYandexQuery) {
             server.AddService(new NGRpcService::TGRpcFederatedQueryService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
             server.AddService(new NGRpcService::TGRpcFqPrivateTaskService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
-            if (!hasTableService) {
-                server.AddService(new NGRpcService::TGRpcYdbOverFqService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
+
+            if (!hasTableService && !hasSchemeService) {
+                server.AddService(new NGRpcService::TGrpcTableOverFqService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
+                server.AddService(new NGRpcService::TGrpcSchemeOverFqService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
             }
         }   /* REMOVE */ else /* THIS else as well and separate ifs */ if (hasYandexQueryPrivate) {
             server.AddService(new NGRpcService::TGRpcFqPrivateTaskService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));

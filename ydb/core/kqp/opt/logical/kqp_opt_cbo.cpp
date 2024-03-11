@@ -14,25 +14,6 @@ using namespace NYql::NNodes;
 
 namespace {
 
-TMaybeNode<TKqlKeyInc> GetRightTableKeyPrefix(const TKqlKeyRange& range) {
-    if (!range.From().Maybe<TKqlKeyInc>() || !range.To().Maybe<TKqlKeyInc>()) {
-        return {};
-    }
-    auto rangeFrom = range.From().Cast<TKqlKeyInc>();
-    auto rangeTo = range.To().Cast<TKqlKeyInc>();
-
-    if (rangeFrom.ArgCount() != rangeTo.ArgCount()) {
-        return {};
-    }
-    for (ui32 i = 0; i < rangeFrom.ArgCount(); ++i) {
-        if (rangeFrom.Arg(i).Raw() != rangeTo.Arg(i).Raw()) {
-            return {};
-        }
-    }
-
-    return rangeFrom;
-}
-
 /**
  * KQP specific rule to check if a LookupJoin is applicable
 */

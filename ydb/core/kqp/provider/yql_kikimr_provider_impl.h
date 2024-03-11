@@ -214,9 +214,6 @@ NNodes::TCoAtomList BuildColumnsList(const TKikimrTableDescription& table, TPosi
 const TTypeAnnotationNode* GetReadTableRowType(TExprContext& ctx, const TKikimrTablesData& tablesData,
     const TString& cluster, const TString& table, NNodes::TCoAtomList select, bool withSystemColumns = false);
 
-const TTypeAnnotationNode* GetReadTableRowType(TExprContext& ctx, const TKikimrTablesData& tablesData,
-    const TString& cluster, const TString& table, TPositionHandle pos, bool withSystemColumns);
-
 TYdbOperation GetTableOp(const NNodes::TKiWriteTable& write);
 TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const NNodes::TCoNameValueTupleList& operations,
     TExprContext& ctx);

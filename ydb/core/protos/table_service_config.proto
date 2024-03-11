@@ -276,8 +276,6 @@ message TTableServiceConfig {
     optional bool EnableOlapSink = 55 [default = false];
 
     optional bool EnablePerStatementQueryExecution = 56 [default = false];
-    optional bool EnableCreateTableAs = 57 [default = false];
 
-    optional uint64 IdxLookupJoinPointsLimit = 58 [default = 1];
-    optional bool OldLookupJoinBehaviour = 59 [default = true]; 
+    optional bool EnableCreateTableAs = 57 [default = false];
 };

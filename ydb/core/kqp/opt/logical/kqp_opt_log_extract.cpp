@@ -121,8 +121,6 @@ TExprBase KqpApplyExtractMembersToReadTableRanges(TExprBase node, TExprContext& 
             .ExplainPrompt(read.ExplainPrompt())
             .Index(index.Index().Cast())
             .PrefixPointsExpr(index.PrefixPointsExpr())
-            .PredicateExpr(index.PredicateExpr())
-            .PredicateUsedColumns(index.PredicateUsedColumns())
             .Done();
     }
 
@@ -134,8 +132,6 @@ TExprBase KqpApplyExtractMembersToReadTableRanges(TExprBase node, TExprContext& 
             .Settings(read.Settings())
             .ExplainPrompt(read.ExplainPrompt())
             .PrefixPointsExpr(readRange.PrefixPointsExpr())
-            .PredicateExpr(readRange.PredicateExpr())
-            .PredicateUsedColumns(readRange.PredicateUsedColumns())
             .Done();
     }
 

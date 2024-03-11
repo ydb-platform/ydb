@@ -393,7 +393,7 @@ public:
 private:
     void SplitStateIntoBuckets() {
 
-        while (const auto keyAndState = InMemoryProcessingState.Extract()) {
+       while (const auto keyAndState = InMemoryProcessingState.Extract()) {
             auto hash = Hasher(keyAndState); //Hasher uses only key for hashing
             auto bucketId = hash % SpilledBucketCount;
             auto& bucket = SpilledBuckets[bucketId];
@@ -402,16 +402,12 @@ private:
 
             for (size_t i = 0; i != KeyWidth; ++i) {
                 //jumping into unsafe world, refusing ownership
-                static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Tongue[i]) = std::move(keyAndState[i]);
+                static_cast<NUdf::TUnboxedValue&>(processingState.Tongue[i]) = (keyAndState[i]);
             }
-
-            // processingState.Tongue = keyAndState;
-            
             processingState.TasteIt();
-
             for (size_t i = KeyWidth; i != KeyAndStateType->GetElementsCount(); ++i) {
-                    //jumping into unsafe world, refusing ownership
-                static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Throat[i - KeyWidth]) = std::move(keyAndState[i]);
+                //jumping into unsafe world, refusing ownership
+                static_cast<NUdf::TUnboxedValue&>(processingState.Throat[i - KeyWidth]) = (keyAndState[i]);
             }
 
             for (size_t i = 0; i != KeyAndStateType->GetElementsCount(); ++i) {
@@ -468,11 +464,12 @@ private:
         }
 
         while (const auto keyAndState = bucket.InMemoryProcessingState->Extract()) {
+            // std::cerr << "MISHA Spill more" << std::endl;
             bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
-            /* for (size_t i = 0; i != KeyAndStateType->GetElementsCount(); ++i) {
+            for (size_t i = 0; i != KeyAndStateType->GetElementsCount(); ++i) {
                 //releasing values stored in unsafe TUnboxedValue buffer
                 keyAndState[i].UnRef();
-            }*/ 
+            }
             if (bucket.AsyncWriteOperation) return;
         }
 
@@ -562,6 +559,7 @@ private:
                             static_cast<NUdf::TUnboxedValue *>(bucket.InMemoryProcessingState->Throat)
                         );
                     } else {
+                        BufferForKeyAnsState.resize(0);
                         MKQL_ENSURE(BufferForUsedInputItems.empty(), "Internal logic error");
                         for (size_t i = 0; i != Nodes.ItemNodes.size(); ++i) {
                             if (fields[i]) {
@@ -614,9 +612,11 @@ private:
             AsyncReadOperation = std::nullopt;
         }
         while(!SpilledBuckets.empty()){
+            
             auto& bucket = SpilledBuckets.front();
             //recover spilled state
             while(!bucket.SpilledState->Empty()) {
+                // std::cerr << "MISHArecover state" << std::endl;
                 RecoverState = true;
                 BufferForKeyAnsState.resize(KeyAndStateType->GetElementsCount());
                 AsyncReadOperation = bucket.SpilledState->ExtractWideItem(BufferForKeyAnsState);
@@ -626,13 +626,13 @@ private:
                 }
                 for (size_t i = 0; i != KeyWidth; ++i) {
                     //jumping into unsafe world, refusing ownership
-                    static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Tongue[i]) = std::move(BufferForKeyAnsState[i]);
+                    static_cast<NUdf::TUnboxedValue&>(InMemoryProcessingState.Tongue[i]) = std::move(BufferForKeyAnsState[i]);
                 }
-                auto isNew = bucket.InMemoryProcessingState->TasteIt();
+                auto isNew = InMemoryProcessingState.TasteIt();
                 MKQL_ENSURE(isNew, "Internal logic error");
                 for (size_t i = KeyWidth; i != KeyAndStateType->GetElementsCount(); ++i) {
                     //jumping into unsafe world, refusing ownership
-                    static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Throat[i - KeyWidth]) = std::move(BufferForKeyAnsState[i]);
+                    static_cast<NUdf::TUnboxedValue&>(InMemoryProcessingState.Throat[i - KeyWidth]) = std::move(BufferForKeyAnsState[i]);
                 }
                 BufferForKeyAnsState.resize(0);
             }
@@ -647,25 +647,27 @@ private:
                 auto **fields = ctx.WideFields.data() + WideFieldsIndex;
                 for (size_t i = 0, j = 0; i != Nodes.ItemNodes.size(); ++i) {
                     if (Nodes.IsInputItemNodeUsed(i)) {
-                        *fields[i] = std::move(BufferForUsedInputItems[j++]);
+                        fields[i] = &(BufferForUsedInputItems[j++]);
                     } else {
                         fields[i] = nullptr;
                     }
                 }
-                Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue *>(bucket.InMemoryProcessingState->Tongue));
-                const bool isNew = bucket.InMemoryProcessingState->TasteIt();
+                Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Tongue));
+                const bool isNew = InMemoryProcessingState.TasteIt();
                 Nodes.ProcessItem(
                     ctx,
-                    isNew ? nullptr : static_cast<NUdf::TUnboxedValue *>(bucket.InMemoryProcessingState->Tongue),
-                    static_cast<NUdf::TUnboxedValue *>(bucket.InMemoryProcessingState->Throat)
+                    isNew ? nullptr : static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Tongue),
+                    static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Throat)
                 );
-                BufferForUsedInputItems.resize(0);
+                // BufferForUsedInputItems.resize(0);
             }
-            if (const auto values = static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Extract())) {
+            
+            if (const auto values = static_cast<NUdf::TUnboxedValue*>(InMemoryProcessingState.Extract())) {
                 Nodes.FinishItem(ctx, values, output);
+
                 return EFetchResult::One;
             }
-            // bucket.InMemoryProcessingState->ReadMore<false>();
+            InMemoryProcessingState.ReadMore<false>();
             SpilledBuckets.pop_front();
         }
         return EFetchResult::Finish;
@@ -694,6 +696,7 @@ private:
             case EOperatingMode::ProcessSpilled:
                 MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
+                std::cerr << "MISHA NextSpilledBucket: [" << NextBucketToSpill << "]" << std::endl;
                 break;
 
         }
@@ -706,7 +709,7 @@ private:
 
     bool IsSwitchToSpillingModeCondition() const {
         //TODO implement me
-        return true;
+        return !HasMemoryForProcessing();
     }
 
 private:

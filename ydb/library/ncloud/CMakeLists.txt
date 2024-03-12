@@ -6,6 +6,5 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(nc_private)
-add_subdirectory(yc_private)
-add_subdirectory(yc_public)
+add_subdirectory(api)
+add_subdirectory(impl)

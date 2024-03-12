@@ -6,6 +6,17 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(nc_private)
-add_subdirectory(yc_private)
-add_subdirectory(yc_public)
+
+add_library(library-ncloud-api INTERFACE)
+target_link_libraries(library-ncloud-api INTERFACE
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  client-nc_private-accessservice
+  library-actors-core
+  library-grpc-client
+  ydb-core-base
+)
+target_sources(library-ncloud-api INTERFACE
+  ${PROJECT_SOURCE_DIR}/ydb/library/ncloud/api/access_service.h
+)

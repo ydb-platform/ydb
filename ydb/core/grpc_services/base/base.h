@@ -375,7 +375,7 @@ public:
 
     // tracing
     virtual void StartTracing(NWilson::TSpan&& span) = 0;
-    virtual void LegacyFinishSpan() = 0;
+    virtual void FinishSpan() = 0;
 
     // Used for per-type sampling
     virtual NJaegerTracing::TRequestDiscriminator GetRequestDiscriminator() const {
@@ -501,7 +501,7 @@ public:
     }
 
     void StartTracing(NWilson::TSpan&& /*span*/) override {}
-    void LegacyFinishSpan() override {}
+    void FinishSpan() override {}
 
     void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) override {
         State_.State = state;
@@ -886,7 +886,7 @@ public:
         Span_ = std::move(span);
     }
 
-    void LegacyFinishSpan() override {
+    void FinishSpan() override {
         Span_.End();
     }
 
@@ -1300,7 +1300,7 @@ public:
         Span_ = std::move(span);
     }
 
-    void LegacyFinishSpan() override {
+    void FinishSpan() override {
         Span_.End();
     }
 

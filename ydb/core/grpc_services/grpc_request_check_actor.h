@@ -30,7 +30,7 @@ bool TGRpcRequestProxyHandleMethods::ValidateAndReplyOnError(TCtx* ctx) {
         const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_API_VALIDATION_ERROR, validationError);
         ctx->RaiseIssue(issue);
         ctx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
-        ctx->LegacyFinishSpan();
+        ctx->FinishSpan();
         return false;
     } else {
         return true;
@@ -239,7 +239,7 @@ public:
     }
 
     void HandlePoison(TEvents::TEvPoisonPill::TPtr&) {
-        GrpcRequestBaseCtx_->LegacyFinishSpan();
+        GrpcRequestBaseCtx_->FinishSpan();
         TBase::PassAway();
     }
 
@@ -389,34 +389,34 @@ private:
     void ReplyUnauthorizedAndDie(const NYql::TIssue& issue) {
         GrpcRequestBaseCtx_->RaiseIssue(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::UNAUTHORIZED);
-        GrpcRequestBaseCtx_->LegacyFinishSpan();
+        GrpcRequestBaseCtx_->FinishSpan();
         TBase::PassAway();
     }
 
     void ReplyUnavailableAndDie(const NYql::TIssue& issue) {
         GrpcRequestBaseCtx_->RaiseIssue(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-        GrpcRequestBaseCtx_->LegacyFinishSpan();
+        GrpcRequestBaseCtx_->FinishSpan();
         TBase::PassAway();
     }
 
     void ReplyUnavailableAndDie(const NYql::TIssues& issue) {
         GrpcRequestBaseCtx_->RaiseIssues(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-        GrpcRequestBaseCtx_->LegacyFinishSpan();
+        GrpcRequestBaseCtx_->FinishSpan();
         TBase::PassAway();
     }
 
     void ReplyUnauthenticatedAndDie() {
         GrpcRequestBaseCtx_->ReplyUnauthenticated("Unknown database");
-        GrpcRequestBaseCtx_->LegacyFinishSpan();
+        GrpcRequestBaseCtx_->FinishSpan();
         TBase::PassAway();
     }
 
     void ReplyOverloadedAndDie(const NYql::TIssue& issue) {
         GrpcRequestBaseCtx_->RaiseIssue(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::OVERLOADED);
-        GrpcRequestBaseCtx_->LegacyFinishSpan();
+        GrpcRequestBaseCtx_->FinishSpan();
         TBase::PassAway();
     }
 
@@ -433,7 +433,7 @@ private:
         // and authorization check against the database
         AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID());
 
-        GrpcRequestBaseCtx_->LegacyFinishSpan();
+        GrpcRequestBaseCtx_->FinishSpan();
         event->Release().Release()->Pass(*this);
         TBase::PassAway();
     }
@@ -449,13 +449,13 @@ private:
 
     template <typename T>
     void HandleAndDie(T& event) {
-        GrpcRequestBaseCtx_->LegacyFinishSpan();
+        GrpcRequestBaseCtx_->FinishSpan();
         TGRpcRequestProxyHandleMethods::Handle(event, TlsActivationContext->AsActorContext());
         TBase::PassAway();
     }
 
     void ReplyBackAndDie() {
-        GrpcRequestBaseCtx_->LegacyFinishSpan();
+        GrpcRequestBaseCtx_->FinishSpan();
         TlsActivationContext->Send(Request_->Forward(Owner_));
         TBase::PassAway();
     }

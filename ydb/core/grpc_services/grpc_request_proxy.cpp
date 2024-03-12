@@ -88,7 +88,7 @@ private:
     void Handle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (ValidateAndReplyOnError(requestBaseCtx)) {
-            requestBaseCtx->LegacyFinishSpan();
+            requestBaseCtx->FinishSpan();
             TGRpcRequestProxyHandleMethods::Handle(event, ctx);
         }
     }
@@ -96,7 +96,7 @@ private:
     void Handle(TEvListEndpointsRequest::TPtr& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (ValidateAndReplyOnError(requestBaseCtx)) {
-            requestBaseCtx->LegacyFinishSpan();
+            requestBaseCtx->FinishSpan();
             TGRpcRequestProxy::Handle(event, ctx);
         }
     }
@@ -104,7 +104,7 @@ private:
     void Handle(TEvProxyRuntimeEvent::TPtr& event, const TActorContext&) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (ValidateAndReplyOnError(requestBaseCtx)) {
-            requestBaseCtx->LegacyFinishSpan();
+            requestBaseCtx->FinishSpan();
             event->Release().Release()->Pass(*this);
         }
     }
@@ -196,7 +196,7 @@ private:
             }
             if (databaseName.empty()) {
                 Counters->IncDatabaseUnavailableCounter();
-                requestBaseCtx->LegacyFinishSpan();
+                requestBaseCtx->FinishSpan();
                 requestBaseCtx->ReplyUnauthenticated("Empty database name");
                 return true;
             }
@@ -277,7 +277,7 @@ private:
         LogRequest(event);
 
         if (PreHandleImpl(event, ctx)) {
-            event->Get()->LegacyFinishSpan();
+            event->Get()->FinishSpan();
         }
     }
 
@@ -299,7 +299,7 @@ private:
         for (auto& [_, queue] : DeferredEvents) {
             for (TEventReqHolder& req : queue) {
                 req.Ctx->ReplyUnavaliable();
-                req.Ctx->LegacyFinishSpan();
+                req.Ctx->FinishSpan();
             }
         }
         IsHandlingDeferred = prevIsHandlingDeferred;
@@ -502,7 +502,7 @@ void TGRpcRequestProxyImpl::ForgetDatabase(const TString& database) {
         while (!queue.empty()) {
             Counters->IncDatabaseUnavailableCounter();
             queue.front().Ctx->ReplyUnauthenticated("Unknown database");
-            queue.front().Ctx->LegacyFinishSpan();
+            queue.front().Ctx->FinishSpan();
             queue.pop_front();
         }
         DeferredEvents.erase(itDeferredEvents);

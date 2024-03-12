@@ -6,7 +6,8 @@
 using namespace NYql;
 using namespace NYql::NUdf;
 
-void EnumerateVector(const TUnboxedValuePod vector, std::function<void(float)> callback) {
+template <typename TCallback>
+void EnumerateVector(const TUnboxedValuePod vector, TCallback&& callback) {
     const auto elements = vector.GetElements();
     if (elements) {
         const auto size = vector.GetListLength();
@@ -23,8 +24,8 @@ void EnumerateVector(const TUnboxedValuePod vector, std::function<void(float)> c
     }
 }
 
-
-bool EnumerateVectors(const TUnboxedValuePod vector1, const TUnboxedValuePod vector2, std::function<void(float, float)> callback) {
+template <typename TCallback>
+bool EnumerateVectors(const TUnboxedValuePod vector1, const TUnboxedValuePod vector2, TCallback&& callback) {
     
     auto enumerateBothSized = [&callback] (const TUnboxedValuePod vector1, const TUnboxedValue* elements1, const TUnboxedValuePod vector2, const TUnboxedValue* elements2) {
         const auto size1 = vector1.GetListLength();

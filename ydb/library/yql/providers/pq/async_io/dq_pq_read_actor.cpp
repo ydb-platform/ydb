@@ -165,9 +165,8 @@ public:
         data->SetVersion(StateVersion);
         data->SetBlob(stateBlob);
 
-        DeferredCommits.emplace(checkpoint.GetId(), std::make_pair(std::move(CurrentDeferredCommit), CurrentDeferredCommitOffset));
+        DeferredCommits.emplace(checkpoint.GetId(), std::move(CurrentDeferredCommit));
         CurrentDeferredCommit = NYdb::NTopic::TDeferredCommit();
-        CurrentDeferredCommitOffset.Clear();
     }
 
     void LoadState(const NDqProto::TSourceState& state) override {
@@ -211,14 +210,8 @@ public:
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
         const auto checkpointId = checkpoint.GetId();
         while (!DeferredCommits.empty() && DeferredCommits.front().first <= checkpointId) {
-            auto& valuePair = DeferredCommits.front().second;
-            const auto& offsets = valuePair.second;
-            if (offsets.Empty()) {
-                SRC_LOG_D("Commit offset: [ empty ]");
-            } else {
-                SRC_LOG_D("Commit offset: [" << offsets->first << ", " << offsets->second << "]");
-            }
-            valuePair.first.Commit();
+            auto& deferredCommit = DeferredCommits.front().second;
+            deferredCommit.Commit();
             DeferredCommits.pop();
         }
     }
@@ -428,12 +421,6 @@ private:
         for (const auto& [PartitionSession, ranges] : readyBatch.OffsetRanges) {
             for (const auto& [start, end] : ranges) {
                 CurrentDeferredCommit.Add(PartitionSession, start, end);
-                if (!CurrentDeferredCommitOffset) {
-                    CurrentDeferredCommitOffset = std::make_pair(start, end);
-                } else {
-                    CurrentDeferredCommitOffset->first = std::min(CurrentDeferredCommitOffset->first, start);
-                    CurrentDeferredCommitOffset->second = std::max(CurrentDeferredCommitOffset->second, end);
-                }
             }
             PartitionToOffset[MakePartitionKey(PartitionSession)] = ranges.back().second;
         }
@@ -588,9 +575,8 @@ private:
     THashMap<TPartitionKey, ui64> PartitionToOffset; // {cluster, partition} -> offset of next event.
     TInstant StartingMessageTimestamp;
     const NActors::TActorId ComputeActorId;
-    std::queue<std::pair<ui64, std::pair<NYdb::NTopic::TDeferredCommit, TDebugOffsets>>> DeferredCommits;
+    std::queue<std::pair<ui64, NYdb::NTopic::TDeferredCommit>> DeferredCommits;
     NYdb::NTopic::TDeferredCommit CurrentDeferredCommit;
-    TDebugOffsets CurrentDeferredCommitOffset;
     bool SubscribedOnEvent = false;
     std::vector<std::tuple<TString, TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
     std::queue<TReadyBatch> ReadyBuffer;

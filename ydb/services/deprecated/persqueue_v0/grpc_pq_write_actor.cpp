@@ -310,7 +310,10 @@ void TWriteSessionActor::SetupCounters(const TString& cloudId, const TString& db
 
 
 void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
-    Y_ABORT_UNLESS(State == ES_WAIT_SCHEME || State == ES_INITED);
+    if (State != ES_WAIT_SCHEME && State != ES_INITED) {
+        return;
+    }
+
     auto& res = ev->Get()->Result;
     Y_ABORT_UNLESS(res->ResultSet.size() == 1);
 

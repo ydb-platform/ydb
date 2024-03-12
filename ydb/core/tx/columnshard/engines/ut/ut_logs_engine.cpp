@@ -97,7 +97,11 @@ public:
             Y_ABORT_UNLESS(portion.GetPathId() == it->second.GetPathId() && portion.GetPortion() == it->second.GetPortion());
         }
         it->second.SetMinSnapshot(portion.GetMinSnapshot());
-        it->second.SetRemoveSnapshot(portion.GetRemoveSnapshot());
+        if (portion.HasRemoveSnapshot()) {
+            it->second.SetRemoveSnapshot(portion.GetRemoveSnapshotVerified());
+        } else {
+            AFL_VERIFY(!it->second.HasRemoveSnapshot());
+        }
 
         bool replaced = false;
         for (auto& rec : it->second.Records) {

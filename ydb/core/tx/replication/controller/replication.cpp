@@ -28,6 +28,10 @@ class TReplication::TImpl {
     }
 
     void DiscoverTargets(const TActorContext& ctx) {
+        if (TargetDiscoverer) {
+            return;
+        }
+
         switch (Config.GetTargetCase()) {
             case NKikimrReplication::TReplicationConfig::kEverything:
                 return ErrorState("Not implemented");

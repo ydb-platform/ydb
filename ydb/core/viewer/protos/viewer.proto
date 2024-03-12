@@ -574,3 +574,59 @@ message TEvDescribeSchemeInfo {
     optional fixed64 PathOwnerId = 10;
     optional ESource Source = 11;
 }
+
+message TQueryAutocomplete {
+    message TDatabasesResult {
+        message TDatabase {
+            string Name = 1;
+        }
+        repeated TDatabase Entities = 1;
+    }
+
+    message TTablesResult {
+        message TTable {
+            string Name = 1;
+            string Type = 2;
+        }
+        repeated TTable Entities = 1;
+    }
+
+    message TSchemaResult {
+        message TSchema {
+            string Name = 1;
+            string Type = 2;
+            string TableName = 3;
+        }
+        repeated TSchemaResult Entities = 1;
+    }
+
+    message TFunctionsResult {
+        message TFunction {
+            enum EType {
+                Global = 0;
+                Table = 1;
+                Udf = 2;
+            }
+            string Name = 1;
+            TFunctionsResult Type = 2;
+        }
+        repeated TFunction Entities = 1;
+    }
+
+    message TResult {
+        uint32 Total = 1;
+        oneof Entities {
+            TDatabasesResult DatabasesResult = 11;
+            TTablesResult TablesResult = 12;
+            TSchemaResult SchemaResult = 13;
+            TFunctionsResult FunctionsResult = 14;
+            bytes Reserved15 = 15;
+            bytes Reserved16 = 16;
+            bytes Reserved17 = 17;
+        }
+    }
+
+    bool Success = 1;
+    TResult Result = 2;
+    repeated string Error = 3;
+}

@@ -482,6 +482,12 @@ public:
                     }
                 }
 
+                if (LastProc.VariadicType) {
+                    Y_ENSURE(LastProc.ArgTypes.size() > inputArgsCount);
+                    LastProc.VariadicArgType = LastProc.ArgTypes[inputArgsCount];
+                    Y_ENSURE(LastProc.VariadicArgType);
+                }
+
                 LastProc.ArgTypes.resize(inputArgsCount);
             }
         }
@@ -2123,6 +2129,10 @@ ui64 CalcUnaryOperatorScore(const TOperDesc& oper, ui32 argTypeId, const TCatalo
 
 bool IsExactMatch(const TVector<ui32>& procArgTypes, ui32 procVariadicType, const TVector<ui32>& argTypeIds) {
     if (argTypeIds.size() < procArgTypes.size()) {
+        return false;
+    }
+
+    if (!procVariadicType && argTypeIds.size() > procArgTypes.size()) {
         return false;
     }
 

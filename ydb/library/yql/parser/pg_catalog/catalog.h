@@ -67,6 +67,7 @@ struct TProcDesc {
     TVector<ui32> OutputArgTypes;
     ui32 Lang = LangInternal;
     ui32 VariadicType = 0;
+    ui32 VariadicArgType = 0;
     TString VariadicArgName;
 };
 

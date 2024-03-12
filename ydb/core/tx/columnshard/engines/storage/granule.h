@@ -238,6 +238,10 @@ public:
         return OptimizerPlanner->GetUsefulMetric();
     }
 
+    bool IsLockedOptimizer(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
+        return OptimizerPlanner->IsLocked(dataLocksManager);
+    }
+
     void ActualizeOptimizer(const TInstant currentInstant) const {
         if (currentInstant - OptimizerPlanner->GetActualizationInstant() > TDuration::Seconds(1)) {
             OptimizerPlanner->Actualize(currentInstant);

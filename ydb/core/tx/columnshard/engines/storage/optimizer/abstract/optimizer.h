@@ -67,7 +67,8 @@ protected:
     virtual NJson::TJsonValue DoSerializeToJsonVisual() const {
         return NJson::JSON_NULL;
     }
-    
+    virtual bool DoIsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
+
 public:
     using TFactory = NObjectFactory::TObjectFactory<IOptimizerPlanner, TString>;
     IOptimizerPlanner(const ui64 pathId)
@@ -105,6 +106,7 @@ public:
         {
         }
         ~TModificationGuard() {
+            TMemoryProfileGuard mGuard("Optimizer");
             Owner.ModifyPortions(AddPortions, RemovePortions);
         }
     };
@@ -119,6 +121,9 @@ public:
     }
 
     virtual std::vector<NIndexedReader::TSortableBatchPosition> GetBucketPositions() const = 0;
+    bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
+        return DoIsLocked(dataLocksManager);
+    }
 
     NJson::TJsonValue SerializeToJsonVisual() const {
         return DoSerializeToJsonVisual();

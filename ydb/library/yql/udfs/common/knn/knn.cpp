@@ -153,15 +153,6 @@ SIMPLE_STRICT_UDF(TFromBinaryString, TOptional<TListType<float>>(const char*)) {
     }
 }
 
-float CalcLength(const TUnboxedValuePod vector) {
-    float ret = 0;
-
-    EnumerateVector(vector, [&ret](float el) { ret += el * el;});
-
-    ret = sqrt(ret);
-
-    return ret;
-}
 
 std::optional<float> InnerProductSimilarity(const TUnboxedValuePod vector1, const TUnboxedValuePod vector2) {
     float ret = 0;
@@ -173,14 +164,21 @@ std::optional<float> InnerProductSimilarity(const TUnboxedValuePod vector1, cons
 }
 
 std::optional<float> CosineSimilarity(const TUnboxedValuePod vector1, const TUnboxedValuePod vector2) {
-    auto innerProduct = InnerProductSimilarity(vector1, vector2);
-    if (!innerProduct)
+    float len1 = 0;
+    float len2 = 0;
+    float innerProduct = 0;
+
+    if (!EnumerateVectors(vector1, vector2, [&](float el1, float el2) { 
+        innerProduct += el1 * el2;
+        len1 += el1 * el1;
+        len2 += el2 * el2;
+        }))
         return {};
 
-    float len0 = CalcLength(vector1);
-    float len1 = CalcLength(vector2);
+    len1 = sqrt(len1);
+    len2 = sqrt(len2);
 
-    float cosine = innerProduct.value() / len0 / len1;
+    float cosine = innerProduct / len1 / len2;
 
     return cosine;
 }

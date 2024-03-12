@@ -12,7 +12,7 @@
 namespace NKikimr {
 namespace NDriverClient {
 
-class TConsoleClientCommand : public TClientCommandConsoleConfig {
+class TConsoleClientCommand : public TClientCommandBase {
 public:
     TString Domain;
     ui32 Retries;
@@ -21,7 +21,7 @@ public:
     TConsoleClientCommand(const TString &name,
                          const std::initializer_list<TString> &aliases,
                          const TString &description)
-        : TClientCommandConsoleConfig(name, aliases, description)
+        : TClientCommandBase(name, aliases, description)
         , Retries(0)
     {
     }
@@ -348,11 +348,11 @@ public:
     }
 };
 
-class TClientCommandConvertToYaml: public TClientCommandConsoleConfig {
+class TClientCommandConvertToYaml: public TClientCommandBase {
     NKikimrConsole::TConfigureRequest Request;
 public:
     TClientCommandConvertToYaml()
-        : TClientCommandConsoleConfig("convert-to-yaml", {}, "Convert config-item to yaml format")
+        : TClientCommandBase("convert-to-yaml", {}, "Convert config-item to yaml format")
     {
     }
 
@@ -418,12 +418,12 @@ public:
     }
 };
 
-class TClientCommandConvertFromYaml: public TClientCommandConsoleConfig {
+class TClientCommandConvertFromYaml: public TClientCommandBase {
     TString Request;
     TString Domain;
 public:
     TClientCommandConvertFromYaml()
-        : TClientCommandConsoleConfig("convert-from-yaml", {}, "Convert config-item from yaml format")
+        : TClientCommandBase("convert-from-yaml", {}, "Convert config-item from yaml format")
     {
     }
 

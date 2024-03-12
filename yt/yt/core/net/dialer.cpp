@@ -87,7 +87,7 @@ public:
 
     TFuture<IConnectionPtr> Dial(
         const TNetworkAddress& remote,
-        TRemoteContextPtr /*context*/) override
+        TDialerContextPtr /*context*/) override
     {
         auto session = New<TDialSession>(
             remote,

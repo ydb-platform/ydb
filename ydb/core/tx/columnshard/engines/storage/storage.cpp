@@ -16,10 +16,10 @@ std::shared_ptr<NKikimr::NOlap::TGranuleMeta> TGranulesStorage::GetGranuleForCom
     std::shared_ptr<TGranuleMeta> granule;
     for (auto&& i : granules) {
         i.second->ActualizeOptimizer(now);
-        if (dataLocksManager->IsLocked(*i.second)) {
-            continue;
-        }
         if (!priority || *priority < i.second->GetCompactionPriority()) {
+            if (i.second->IsLockedOptimizer(dataLocksManager)) {
+                continue;
+            }
             priority = i.second->GetCompactionPriority();
             granule = i.second;
         }

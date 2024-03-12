@@ -116,10 +116,10 @@ public:
     }
 };
 
-class TClientCommandSchemaExec : public TClientCommandConfig {
+class TClientCommandSchemaExec : public TClientCommandConsoleConfig {
 public:
     TClientCommandSchemaExec()
-        : TClientCommandConfig("execute", { "exec" }, "Execute schema protobuf")
+        : TClientCommandConsoleConfig("execute", { "exec" }, "Execute schema protobuf")
     {}
 
     bool ReturnTxId;
@@ -1265,10 +1265,10 @@ public:
     }
 };
 
-class TClientCommandDbExec : public TClientCommandConfig {
+class TClientCommandDbExec : public TClientCommandConsoleConfig {
 public:
     TClientCommandDbExec()
-        : TClientCommandConfig("minikql", { "execute", "exec", "mkql" }, "Execute Mini-KQL query")
+        : TClientCommandConsoleConfig("minikql", { "execute", "exec", "mkql" }, "Execute Mini-KQL query")
     {}
 
     TString MiniKQL;

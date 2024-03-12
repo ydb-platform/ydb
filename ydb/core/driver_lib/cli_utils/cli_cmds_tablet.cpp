@@ -6,10 +6,10 @@
 namespace NKikimr {
 namespace NDriverClient {
 
-class TClientCommandKeyValueRequest : public TClientCommandConfig {
+class TClientCommandKeyValueRequest : public TClientCommandConsoleConfig {
 public:
     TClientCommandKeyValueRequest()
-        : TClientCommandConfig("request", { "req" }, "Request to KV tablet")
+        : TClientCommandConsoleConfig("request", { "req" }, "Request to KV tablet")
     {}
 
     TString ProtoBuf;
@@ -83,10 +83,10 @@ public:
     }
 };
 
-class TClientCommandTabletExec : public TClientCommandConfig {
+class TClientCommandTabletExec : public TClientCommandConsoleConfig {
 public:
     TClientCommandTabletExec()
-        : TClientCommandConfig("execute", { "exec" })
+        : TClientCommandConsoleConfig("execute", { "exec" })
     {
     }
 

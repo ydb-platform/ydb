@@ -10,9 +10,9 @@ namespace NDriverClient {
 
 using namespace NYdb::NConsoleClient;
 
-class TClientCommandConfig : public TClientCommand {
+class TClientCommandConsoleConfig : public TClientCommand {
 public:
-    TClientCommandConfig(
+    TClientCommandConsoleConfig(
         const TString& name,
         const std::initializer_list<TString>& aliases = std::initializer_list<TString>(),
         const TString& description = TString()

@@ -12,7 +12,7 @@
 namespace NKikimr {
 namespace NDriverClient {
 
-class TConsoleClientCommand : public TClientCommandConfig {
+class TConsoleClientCommand : public TClientCommandConsoleConfig {
 public:
     TString Domain;
     ui32 Retries;
@@ -21,7 +21,7 @@ public:
     TConsoleClientCommand(const TString &name,
                          const std::initializer_list<TString> &aliases,
                          const TString &description)
-        : TClientCommandConfig(name, aliases, description)
+        : TClientCommandConsoleConfig(name, aliases, description)
         , Retries(0)
     {
     }
@@ -348,11 +348,11 @@ public:
     }
 };
 
-class TClientCommandConvertToYaml: public TClientCommandConfig {
+class TClientCommandConvertToYaml: public TClientCommandConsoleConfig {
     NKikimrConsole::TConfigureRequest Request;
 public:
     TClientCommandConvertToYaml()
-        : TClientCommandConfig("convert-to-yaml", {}, "Convert config-item to yaml format")
+        : TClientCommandConsoleConfig("convert-to-yaml", {}, "Convert config-item to yaml format")
     {
     }
 
@@ -418,12 +418,12 @@ public:
     }
 };
 
-class TClientCommandConvertFromYaml: public TClientCommandConfig {
+class TClientCommandConvertFromYaml: public TClientCommandConsoleConfig {
     TString Request;
     TString Domain;
 public:
     TClientCommandConvertFromYaml()
-        : TClientCommandConfig("convert-from-yaml", {}, "Convert config-item from yaml format")
+        : TClientCommandConsoleConfig("convert-from-yaml", {}, "Convert config-item from yaml format")
     {
     }
 
@@ -558,9 +558,9 @@ public:
     }
 };
 
-class TClientCommandConsoleConfig : public TClientCommandTree {
+class TClientCommandConsoleConfigTree : public TClientCommandTree {
 public:
-    TClientCommandConsoleConfig()
+    TClientCommandConsoleConfigTree()
         : TClientCommandTree("config", {}, "")
     {
         AddCommand(std::make_unique<TClientCommandConsoleConfigGet>());
@@ -677,7 +677,7 @@ public:
 TClientCommandConsole::TClientCommandConsole()
     : TClientCommandTree("console", {}, "Console commands")
 {
-    AddCommand(std::make_unique<TClientCommandConsoleConfig>());
+    AddCommand(std::make_unique<TClientCommandConsoleConfigTree>());
     AddCommand(std::make_unique<TClientCommandConsoleConfigs>());
     AddCommand(std::make_unique<TClientCommandConsoleExecute>());
     AddCommand(std::make_unique<TClientCommandConsoleValidator>());

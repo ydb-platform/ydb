@@ -10,7 +10,7 @@
 namespace NKikimr {
 namespace NDriverClient {
 
-class TCmsClientCommand : public TClientCommandConfig {
+class TCmsClientCommand : public TClientCommandConsoleConfig {
 public:
     TString Domain;
     NKikimrClient::TCmsRequest Request;
@@ -18,7 +18,7 @@ public:
     TCmsClientCommand(const TString &name,
                       const std::initializer_list<TString> &aliases,
                       const TString &description)
-        : TClientCommandConfig(name, aliases, description)
+        : TClientCommandConsoleConfig(name, aliases, description)
     {
     }
 

@@ -17,6 +17,7 @@ RECURSE(
     logger
     mkql_proto
     naming_conventions
+    ncloud
     pdisk_io
     persqueue
     pretty_types_print

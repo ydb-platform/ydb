@@ -76,6 +76,7 @@ public:
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
         const auto loopFetch = BasicBlock::Create(context, "loop_fetch", ctx.Func);
+        const auto loopCalc = BasicBlock::Create(context, "loop_calc", ctx.Func);
         const auto loopTail = BasicBlock::Create(context, "loop_tail", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
         const auto entryPos = &ctx.Func->getEntryBlock().back();
@@ -90,6 +91,7 @@ public:
         const auto i32Type = Type::getInt32Ty(context);
         const auto valueNullptrVal = ConstantPointerNull::get(valuePtrType);
         const auto valuePtrNullptrVal = ConstantPointerNull::get(valuePtrsPtrType);
+        const auto oneVal = ConstantInt::get(i32Type, static_cast<i32>(EFetchResult::One));
         const auto maybeResType = Type::getInt64Ty(context);
         const auto noneVal = ConstantInt::get(maybeResType, TMaybeFetchResult::None().RawU64());
 
@@ -124,10 +126,16 @@ public:
         const auto skipFetchCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, inputPtrsVal, valuePtrNullptrVal, "skip_fetch", block);
         BranchInst::Create(loopTail, loopFetch, skipFetchCond, block);
 
-        block = loopFetch; // loop fetch chunk: (calculate needed values in the row)
+        block = loopFetch; // loop fetch chunk:
 
         const auto [fetchResVal, getters] = GetNodeValues(SourceFlow, ctx, block);
         const auto fetchResExtVal = new ZExtInst(fetchResVal, maybeResType, "res_ext", block);
+        const auto skipCalcCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, fetchResVal, oneVal, "skip_calc", block);
+        const auto fetchSourceBlock = block;
+        BranchInst::Create(loopTail, loopCalc, skipCalcCond, block);
+
+        block = loopCalc; // loop calc chunk: (calculate needed values in the row)
+
         for (ui32 pos = 0; pos < InWidth; pos++) {
             const auto stor = BasicBlock::Create(context, "stor", ctx.Func);
             const auto cont = BasicBlock::Create(context, "cont", ctx.Func);
@@ -151,14 +159,15 @@ public:
 
             block = innerBlock; // <<< end of inner chunk
         }
-        const auto fetchSourceBlock = block;
+        const auto calcSourceBlock = block;
         BranchInst::Create(loopTail, block);
 
         block = loopTail; // loop tail block: (process row)
 
         const auto maybeFetchResVal = PHINode::Create(maybeResType, 2, "fetch_res", block);
-        maybeFetchResVal->addIncoming(fetchResExtVal, fetchSourceBlock);
         maybeFetchResVal->addIncoming(noneVal, loop);
+        maybeFetchResVal->addIncoming(fetchResExtVal, fetchSourceBlock);
+        maybeFetchResVal->addIncoming(fetchResExtVal, calcSourceBlock);
         const auto processFuncType = FunctionType::get(maybeResType, {thisType, statePtrType, ctxType, maybeResType, valuePtrsPtrType}, false);
         const auto processFuncRawVal = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TDerived::DoProcess));
         const auto processFuncVal = CastInst::Create(Instruction::IntToPtr, processFuncRawVal, PointerType::getUnqual(processFuncType), "process_func", block);

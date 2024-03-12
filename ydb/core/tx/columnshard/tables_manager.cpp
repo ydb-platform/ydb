@@ -292,7 +292,7 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
         } else {
             Ttl.DropPathTtl(pathId);
         }
-        if (PrimaryIndex) {
+        if (PrimaryIndex && manager->IsReady()) {
             PrimaryIndex->OnTieringModified(manager, Ttl, pathId);
         }
     }

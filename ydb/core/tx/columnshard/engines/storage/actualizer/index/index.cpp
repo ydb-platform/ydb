@@ -104,10 +104,10 @@ TGranuleActualizationIndex::TActualizationInfo TGranuleActualizationIndex::Build
             targetTierName = tieringInfo.GetNextTierNameVerified();
         }
         if (d) {
-            if (currentTierName == "deploy_logs_s3" && targetTierName == IStoragesManager::DefaultStorageId) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("tiering_info", tieringInfo.DebugString())("max", max->ToString())("now", now.ToString())("d", *d)("tiering", Tiering->GetDebugString())("pathId", PathId);
-                AFL_VERIFY(false)("tiering_info", tieringInfo.DebugString())("max", max->ToString())("now", now.ToString())("d", *d)("tiering", Tiering->GetDebugString())("pathId", PathId);
-            }
+//            if (currentTierName == "deploy_logs_s3" && targetTierName == IStoragesManager::DefaultStorageId) {
+//                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("tiering_info", tieringInfo.DebugString())("max", max->ToString())("now", now.ToString())("d", *d)("tiering", Tiering->GetDebugString())("pathId", PathId);
+//                AFL_VERIFY(false)("tiering_info", tieringInfo.DebugString())("max", max->ToString())("now", now.ToString())("d", *d)("tiering", Tiering->GetDebugString())("pathId", PathId);
+//            }
             auto storagesWrite = targetSchema->GetIndexInfo().GetUsedStorageIds(targetTierName);
             auto storagesRead = portionSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
             TRWAddress address(std::move(storagesRead), std::move(storagesWrite));
@@ -117,10 +117,10 @@ TGranuleActualizationIndex::TActualizationInfo TGranuleActualizationIndex::Build
             }
         }
     } else if (currentTierName != IStoragesManager::DefaultStorageId) {
-        if (currentTierName == "deploy_logs_s3") {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("pathId", PathId);
-            AFL_VERIFY(false)("pathId", PathId);
-        }
+//        if (currentTierName == "deploy_logs_s3") {
+//            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("pathId", PathId);
+//            AFL_VERIFY(false)("pathId", PathId);
+//        }
         auto storagesWrite = targetSchema->GetIndexInfo().GetUsedStorageIds(IStoragesManager::DefaultStorageId);
         auto storagesRead = portionSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
         TRWAddress address(std::move(storagesRead), std::move(storagesWrite));

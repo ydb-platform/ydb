@@ -39,6 +39,7 @@ public:
     }
 
     TCountMinSketch() = delete;
+    TCountMinSketch(const TCountMinSketch&) = delete;
 
     size_t GetSize() const {
         return StaticSize(Width, Depth);
@@ -56,7 +57,9 @@ public:
         return ElementCount;
     }
 
-    TStringBuf AsStringBuf() const { return TStringBuf((char*)this, GetSize()); }
+    TStringBuf AsStringBuf() const {
+        return TStringBuf(reinterpret_cast<const char*>(this), GetSize());
+    }
 
     void Count(const char* data, size_t size);
 

@@ -267,22 +267,27 @@ private:
     using TFields = std::vector<NUdf::TUnboxedValue*, TMKQLAllocator<NUdf::TUnboxedValue*, EMemorySubPool::Temporary>>;
     using TPointers = std::vector<NUdf::TUnboxedValuePod*, TMKQLAllocator<NUdf::TUnboxedValuePod*, EMemorySubPool::Temporary>>;
 
+    enum class EOperatingMode {
+        InMemory,
+        Spilling,
+        ProcessSpilled
+    };
+
     size_t GetStorageSize() const {
         return std::max<size_t>(Count << 2ULL, 1ULL << 8ULL);
     }
 
     void ResetFields() {
         NUdf::TUnboxedValuePod* ptr;
-        if constexpr (HasCount) {
-            ptr = Tongue = Free.back();
-        } else {
+        if constexpr (!HasCount) {
             auto pos = Storage.size();
             Storage.insert(Storage.end(), Indexes.size(), {});
-            ptr = Tongue = Storage.data() + pos;
+            ptr = Storage.data() + pos;
         }
 
         std::for_each(Indexes.cbegin(), Indexes.cend(), [&](ui32 index) { Fields[index] = static_cast<NUdf::TUnboxedValue*>(ptr++); });
     }
+
 public:
     TSpillingSupportState(TMemoryUsageInfo* memInfo, ui64 count, const bool* directons, size_t keyWidth, const TCompareFunc& compare, const std::vector<ui32>& indexes, IComputationWideFlowNode *const flow)
         : TBase(memInfo)
@@ -300,11 +305,18 @@ public:
         throw yexception() << "Spilling doesn't support TopSort.";
     }
 
-    virtual EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) override {
+    EFetchResult DoCalculateInMemory(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
         while (EFetchResult::Finish != InputStatus) {
             switch (InputStatus = Flow->FetchValues(ctx, GetFields())) {
                 case EFetchResult::One:
-                    Put();
+                    if (Put()) {
+                        if (!HasMemoryForProcessing()) {
+                            SwitchMode(EOperatingMode::Spilling, ctx);
+                            return EFetchResult::Yield;
+                        }
+                        // Add place for new part of data
+                        ResetFields();
+                    }
                     continue;
                 case EFetchResult::Yield:
                     return EFetchResult::Yield;
@@ -326,13 +338,46 @@ public:
         return EFetchResult::Finish;
     }
 
+    EFetchResult DoCalculateWithSpilling(TComputationContext& ctx) {
+        return EFetchResult::Finish;
+    }
+
+    EFetchResult ProcessSpilledData(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
+        return EFetchResult::Finish;
+    }
+
+    virtual EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) override {
+        while (true) {
+            switch(GetMode()) {
+                case EOperatingMode::InMemory: {
+                    auto r = DoCalculateInMemory(ctx, output);
+                    if (GetMode() == TSpillingSupportState::EOperatingMode::InMemory) {
+                        return r;
+                    }
+                    break;
+                }
+                case EOperatingMode::Spilling: {
+                    DoCalculateWithSpilling(ctx);
+                    if (GetMode() == EOperatingMode::Spilling) {
+                        return EFetchResult::Yield;
+                    }
+                    break;
+                }
+                case EOperatingMode::ProcessSpilled: {
+                    return ProcessSpilledData(ctx, output);
+                }
+
+            }
+        }
+        Y_UNREACHABLE();
+    }
+
     NUdf::TUnboxedValue*const* GetFields() const {
         return Fields.data();
     }
 
     bool Put() {
         if constexpr (!HasCount) {
-            ResetFields();
             return true;
         }
 
@@ -364,10 +409,28 @@ public:
         return static_cast<NUdf::TUnboxedValue*>(ptr);
     }
 
+    EOperatingMode GetMode() const { return Mode; }
+
     EFetchResult InputStatus = EFetchResult::One;
-    NUdf::TUnboxedValuePod* Tongue = nullptr;
-    NUdf::TUnboxedValuePod* Throat = nullptr;
 private:
+    bool HasMemoryForProcessing() const {
+        return !TlsAllocState->IsMemoryYellowZoneEnabled();
+    }
+
+    void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
+        switch(mode) {
+            case EOperatingMode::InMemory:
+                MKQL_ENSURE(false, "Internal logic error");
+                break;
+            case EOperatingMode::Spilling:
+                ctx.SpillerFactory->CreateSpiller();
+               break;
+            case EOperatingMode::ProcessSpilled:
+                break;
+        }
+        Mode = mode;
+    }
+
     const ui64 Count;
     const std::vector<ui32> Indexes;
     const std::vector<bool> Directions;
@@ -375,6 +438,7 @@ private:
     TStorage Storage;
     TPointers Free, Full;
     TFields Fields;
+    EOperatingMode Mode;
 };
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -665,10 +729,12 @@ private:
 
     void MakeSpillingSupportState(TComputationContext& ctx, NUdf::TUnboxedValue& state, ui64 count, const bool* directions) const {
 #ifdef MKQL_DISABLE_CODEGEN
-        state = ctx.HolderFactory<TSpillingSupportState<Sort, HasCount>>(count, directions, Directions.size(), TMyValueCompare(Keys), Indexes, Flow);
-#else
-        state = ctx.HolderFactory.Create<TState<Sort, HasCount>>(count, directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes, Flow);
+        if (Sort && !HasCount) {
+            state = ctx.HolderFactory<TSpillingSupportState<Sort>>(count, directions, Directions.size(), TMyValueCompare(Keys), Indexes, Flow);
+            return;
+        }
 #endif
+        state = ctx.HolderFactory.Create<TState<Sort, HasCount>>(count, directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes, Flow);
     }
 
     void RegisterDependencies() const final {

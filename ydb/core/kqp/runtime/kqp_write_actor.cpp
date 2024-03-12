@@ -8,6 +8,7 @@
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
@@ -18,7 +19,7 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
-#include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 
 namespace {
@@ -303,7 +304,6 @@ private:
         NKikimrKqp::TEvKqpOutputActorResultInfo resultInfo;
         for (const auto& [_, shardInfo] : ShardsInfo.GetShards()) {
             if (const auto& lock = shardInfo.GetLock(); lock) {
-                // TODO: add evwrite flag????
                 resultInfo.AddLocks()->CopyFrom(*lock);
             }
         }
@@ -404,16 +404,77 @@ private:
 
     void Handle(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         switch (ev->Get()->GetStatus()) {
-        case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED:
-            YQL_ENSURE(false);
-            break;
         case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED:
             ProcessWriteCompletedShard(ev);
-            break;
-        // TODO: process errors
+            return;
+        case NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED: {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
+            RuntimeError(
+                TStringBuilder() << "Got ABORTED for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`.",
+                NYql::NDqProto::StatusIds::ABORTED,
+                issues);
+            return;
+        }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR: {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
+            RuntimeError(
+                TStringBuilder() << "Got INTERNAL ERROR for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`.",
+                NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+                issues);
+            return;
+        }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
+            CA_LOG_D("Got OVERLOADED for table `"
+                << SchemeEntry->TableId.PathId.ToString() << "`. "
+                << "Ignored this error.");
+            return;
+        }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED: {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
+            RuntimeError(
+                TStringBuilder() << "Got CANCELLED for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`.",
+                NYql::NDqProto::StatusIds::CANCELLED,
+                issues);
+            return;
+        }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST: {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
+            RuntimeError(
+                TStringBuilder() << "Got BAD REQUEST for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`.",
+                NYql::NDqProto::StatusIds::BAD_REQUEST,
+                issues);
+            return;
+        }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED: {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
+            RuntimeError(
+                TStringBuilder() << "Got SCHEME CHANGED for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`.",
+                NYql::NDqProto::StatusIds::SCHEME_ERROR,
+                issues);
+            return;
+        }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN: {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
+            RuntimeError(
+                TStringBuilder() << "Got LOCKS BROKEN for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`.",
+                NYql::NDqProto::StatusIds::ABORTED,
+                issues);
+            return;
+        }
         default:
             YQL_ENSURE(false);
-            break;
         }
     }
 
@@ -428,15 +489,7 @@ private:
         for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
             ShardsInfo.GetShard(ev->Get()->Record.GetOrigin()).AddAndCheckLock(lock);
         }
-        // TODO: remove when columnshards support locks
-        NKikimrDataEvents::TLock lock;
-        lock.SetLockId(1);
-        lock.SetDataShard(ev->Get()->Record.GetOrigin());
-        lock.SetSchemeShard(1);
-        lock.SetPathId(1);
-        lock.SetGeneration(1);
-        lock.SetCounter(1);
-        ShardsInfo.GetShard(ev->Get()->Record.GetOrigin()).AddAndCheckLock(lock);
+
         ProcessBatches();
 
         if (ShardsInfo.IsFinished()) {
@@ -481,7 +534,7 @@ private:
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(
             std::get<ui64>(TxId),
-            NKikimrDataEvents::TEvWrite::MODE_PREPARE); // TODO: MODE_IMMEDIATE
+            NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
 
         YQL_ENSURE(!inFlightBatch.Data.empty());
         const ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite)

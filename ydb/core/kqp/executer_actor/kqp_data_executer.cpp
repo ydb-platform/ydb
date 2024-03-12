@@ -1649,30 +1649,19 @@ private:
         shardState.State = TShardState::EState::Preparing;
         shardState.DatashardState.ConstructInPlace();
 
-        // TODO: if (Deadline)??? (CancelAt) {???
-
         auto evWriteTransaction = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>();
         evWriteTransaction->Record = evWrite;
         evWriteTransaction->Record.SetTxMode(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
         evWriteTransaction->Record.SetTxId(TxId);
-        
-        //auto& lockTxId = TasksGraph.GetMeta().LockTxId;
-        //if (lockTxId) {
-        //    Cerr << "Set lock TxID" << Endl;
-        // TODO: fix columnshard
-        //evWriteTransaction->Record.MutableLocks()->MutableLocks()->Clear();
-        //evWriteTransaction->Record.MutableLocks()->AddLocks();
+
         evWriteTransaction->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-        evWriteTransaction->Record.SetLockTxId(42);
-        evWriteTransaction->Record.SetLockNodeId(SelfId().NodeId());
-        //}
 
         auto locksCount = evWriteTransaction->Record.GetLocks().LocksSize();
         shardState.DatashardState->ShardReadLocks = locksCount > 0;
 
         LOG_D("State: " << CurrentStateFuncName()
             << ", Executing EvWrite (PREPARE) on shard: " << shardId
-            << ", lockTxId: " << TxId //lockTxId
+            << ", TxId: " << TxId
             << ", locks: " << evWriteTransaction->Record.GetLocks().ShortDebugString());
 
         auto traceId = ExecuterSpan.GetTraceId();

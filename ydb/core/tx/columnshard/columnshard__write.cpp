@@ -227,7 +227,8 @@ public:
     using TPtr = std::shared_ptr<TCommitOperation>;
 
     bool Parse(const NEvents::TDataEvents::TEvWrite& evWrite) {
-        LockId = evWrite.Record.GetLockTxId();
+        YQL_ENSURE(evWrite.Record.GetLocks().GetLocks().size() == 1);
+        LockId = evWrite.Record.GetLocks().GetLocks()[0].GetLockId();
         TxId = evWrite.Record.GetTxId();
         KqpLocks = evWrite.Record.GetLocks();
         return !!LockId && !!TxId && KqpLocks.GetOp() == NKikimrDataEvents::TKqpLocks::Commit;
@@ -294,7 +295,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     const auto behaviour = TOperationsManager::GetBehaviour(*ev->Get());
 
     if (behaviour == EOperationBehaviour::Undefined) {
-        Cerr << "UNDEFINED" << Endl;
         IncCounter(COUNTER_WRITE_FAIL);
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "invalid write event");
         ctx.Send(source, result.release(), 0, cookie);
@@ -302,7 +302,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     }
 
     if (behaviour == EOperationBehaviour::CommitWriteLock) {
-        Cerr << "COMMIT WRITE LOCK" << Endl;
         auto commitOperation = std::make_shared<TCommitOperation>();
         if (!commitOperation->Parse(*ev->Get())) {
             IncCounter(COUNTER_WRITE_FAIL);
@@ -312,8 +311,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         Execute(new TProposeWriteTransaction(this, commitOperation, source, cookie), ctx);
         return;
     }
-
-    Cerr << "PASS" << Endl;
 
     const ui64 lockId = (behaviour == EOperationBehaviour::InTxWrite) ? record.GetTxId() : record.GetLockTxId();
 

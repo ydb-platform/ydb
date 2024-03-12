@@ -311,6 +311,7 @@ public:
     }
 
     const TSnapshot& GetRemoveSnapshot() const {
+        AFL_VERIFY(HasRemoveSnapshot());
         return RemoveSnapshot;
     }
 

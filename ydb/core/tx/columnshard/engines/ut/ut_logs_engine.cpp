@@ -367,8 +367,9 @@ bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, u
 
 bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db,
          const THashMap<ui64, NOlap::TTiering>& pathEviction, ui32 expectedToDrop) {
-    std::shared_ptr<TTTLColumnEngineChanges> changes = engine.StartTtl(pathEviction, EmptyDataLocksManager, 512 * 1024 * 1024);
-    UNIT_ASSERT(changes);
+    std::vector<std::shared_ptr<TTTLColumnEngineChanges>> vChanges = engine.StartTtl(pathEviction, EmptyDataLocksManager, 512 * 1024 * 1024);
+    AFL_VERIFY(vChanges.size() == 1)("count", vChanges.size());
+    auto changes = vChanges.front();
     UNIT_ASSERT_VALUES_EQUAL(changes->PortionsToRemove.size(), expectedToDrop);
 
 

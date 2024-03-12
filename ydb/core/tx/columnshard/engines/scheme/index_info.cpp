@@ -479,4 +479,16 @@ void TIndexInfo::InitializeCaches(const std::shared_ptr<IStoragesManager>& opera
     }
 }
 
+std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TIndexInfo::MakeEmptyChunks(const ui32 columnId, const std::vector<ui32>& pages, const std::shared_ptr<ISnapshotSchema>& schema, const TSaverContext& saverContext) const {
+    std::vector<std::shared_ptr<IPortionDataChunk>> result;
+    auto columnArrowSchema = GetColumnSchema(columnId);
+    TColumnSaver saver = GetColumnSaver(columnId, saverContext);
+    for (auto p : pages) {
+        auto arr = NArrow::MakeEmptyBatch(columnArrowSchema, p);
+        AFL_VERIFY(arr->num_columns() == 1)("count", arr->num_columns());
+        result.emplace_back(std::make_shared<NCompaction::TChunkPreparation>(saver.Apply(arr), arr->column(0), columnId, schema));
+    }
+    return result;
+}
+
 } // namespace NKikimr::NOlap

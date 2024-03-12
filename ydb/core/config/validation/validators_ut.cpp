@@ -201,9 +201,9 @@ Y_UNIT_TEST_SUITE(ConfigValidation) {
     Y_UNIT_TEST(SameStaticGroup) {
         auto [cur, proposed] = PrepareStaticStorageTest();
 
-        TString err;
+        std::vector<TString> err;
         auto res = ValidateStaticGroup(cur, proposed, err);
-        UNIT_ASSERT_VALUES_EQUAL(err, "");
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 0);
         UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
     }
 
@@ -212,13 +212,14 @@ Y_UNIT_TEST_SUITE(ConfigValidation) {
             auto [cur, proposed] = PrepareStaticStorageTest();
 
             WITH(auto& groups = *proposed.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups()) {
-                groups.erase(groups.begin());
+                groups.erase(--groups.end());
             }
 
-            TString err;
+            std::vector<TString> err;
             auto res = ValidateStaticGroup(cur, proposed, err);
-            UNIT_ASSERT_VALUES_EQUAL(err, "Group sizes must be the same");
-            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+            UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(err[0], "Group either added or removed");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Warn);
         }
 
         {
@@ -230,9 +231,10 @@ Y_UNIT_TEST_SUITE(ConfigValidation) {
                 }
             }
 
-            TString err;
+            std::vector<TString> err;
             auto res = ValidateStaticGroup(cur, proposed, err);
-            UNIT_ASSERT_VALUES_EQUAL(err, "Ring sizes must be the same");
+            UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(err[0], "Ring sizes must be the same");
             UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
 
         }
@@ -248,9 +250,10 @@ Y_UNIT_TEST_SUITE(ConfigValidation) {
                 }
             }
 
-            TString err;
+            std::vector<TString> err;
             auto res = ValidateStaticGroup(cur, proposed, err);
-            UNIT_ASSERT_VALUES_EQUAL(err, "FailDomain sizes must be the same");
+            UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(err[0], "FailDomain sizes must be the same");
             UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
 
         }
@@ -268,9 +271,10 @@ Y_UNIT_TEST_SUITE(ConfigValidation) {
                 }
             }
 
-            TString err;
+            std::vector<TString> err;
             auto res = ValidateStaticGroup(cur, proposed, err);
-            UNIT_ASSERT_VALUES_EQUAL(err, "VDiskLocation sizes must be the same");
+            UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(err[0], "VDiskLocation sizes must be the same");
             UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
         }
     }
@@ -280,13 +284,14 @@ Y_UNIT_TEST_SUITE(ConfigValidation) {
             auto [cur, proposed] = PrepareStaticStorageTest();
 
             WITH(auto& groups = *cur.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups()) {
-                groups.erase(groups.begin());
+                groups.erase(--groups.end());
             }
 
-            TString err;
+            std::vector<TString> err;
             auto res = ValidateStaticGroup(cur, proposed, err);
-            UNIT_ASSERT_VALUES_EQUAL(err, "Group sizes must be the same");
-            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+            UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(err[0], "Group either added or removed");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Warn);
         }
 
         {
@@ -298,9 +303,10 @@ Y_UNIT_TEST_SUITE(ConfigValidation) {
                 }
             }
 
-            TString err;
+            std::vector<TString> err;
             auto res = ValidateStaticGroup(cur, proposed, err);
-            UNIT_ASSERT_VALUES_EQUAL(err, "Ring sizes must be the same");
+            UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(err[0], "Ring sizes must be the same");
             UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
 
         }
@@ -316,9 +322,10 @@ Y_UNIT_TEST_SUITE(ConfigValidation) {
                 }
             }
 
-            TString err;
+            std::vector<TString> err;
             auto res = ValidateStaticGroup(cur, proposed, err);
-            UNIT_ASSERT_VALUES_EQUAL(err, "FailDomain sizes must be the same");
+            UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(err[0], "FailDomain sizes must be the same");
             UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
 
         }
@@ -336,9 +343,10 @@ Y_UNIT_TEST_SUITE(ConfigValidation) {
                 }
             }
 
-            TString err;
+            std::vector<TString> err;
             auto res = ValidateStaticGroup(cur, proposed, err);
-            UNIT_ASSERT_VALUES_EQUAL(err, "VDiskLocation sizes must be the same");
+            UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(err[0], "VDiskLocation sizes must be the same");
             UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
         }
     }
@@ -359,9 +367,10 @@ Y_UNIT_TEST_SUITE(ConfigValidation) {
             }
         }
 
-        TString err;
+        std::vector<TString> err;
         auto res = ValidateStaticGroup(cur, proposed, err);
-        UNIT_ASSERT_VALUES_EQUAL(err, "VDiskLocation changed");
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(err[0], "VDiskLocation changed");
         UNIT_ASSERT_EQUAL(res, EValidationResult::Warn);
     }
 
@@ -387,9 +396,10 @@ Y_UNIT_TEST_SUITE(ConfigValidation) {
             }
         }
 
-        TString err;
+        std::vector<TString> err;
         auto res = ValidateStaticGroup(cur, proposed, err);
-        UNIT_ASSERT_VALUES_EQUAL(err, "Too many VDiskLocation changes");
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(err[0], "Too many VDiskLocation changes");
         UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
     }
 }

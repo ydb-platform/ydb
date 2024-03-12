@@ -6,17 +6,17 @@
 
 #include <map>
 #include <set>
+#include <vector>
 
 namespace NKikimr::NConfig {
 
 #define CHECK_ERR(x, err) if (!(x)) { \
-    msg = err; \
-    return EValidationResult::Error; \
+    msg = std::vector<TString>{err};      \
+    return EValidationResult::Error;  \
 } Y_SEMICOLON_GUARD
 
-#define CHECK_WARN(x, err) if (!(x)) { \
-    msg = err; \
-    return EValidationResult::Warn; \
+#define CHECK_WARN(x, warn) if (!(x)) { \
+    msg.push_back(warn); \
 } Y_SEMICOLON_GUARD
 
 enum class EValidationResult {
@@ -45,6 +45,7 @@ bool IsSame(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& lhs, const 
 bool IsSame(const NKikimrBlobStorage::TVDiskID& lhs, const NKikimrBlobStorage::TVDiskID& rhs) {
     return
         lhs.GetGroupID() == rhs.GetGroupID() &&
+        lhs.GetGroupGeneration() == rhs.GetGroupGeneration() &&
         lhs.GetRing() == rhs.GetRing() &&
         lhs.GetDomain() == rhs.GetDomain() &&
         lhs.GetVDisk() == rhs.GetVDisk();
@@ -70,7 +71,7 @@ struct TVDiskKey {
     auto operator<=>(const TVDiskKey&) const = default;
 };
 
-EValidationResult ValidateStaticGroup(const NKikimrConfig::TAppConfig& current, const NKikimrConfig::TAppConfig& proposed, TString& msg) {
+EValidationResult ValidateStaticGroup(const NKikimrConfig::TAppConfig& current, const NKikimrConfig::TAppConfig& proposed, std::vector<TString>& msg) {
     const auto& currentBsConfig = current.GetBlobStorageConfig();
     const auto& proposedBsConfig = proposed.GetBlobStorageConfig();
 
@@ -108,8 +109,12 @@ EValidationResult ValidateStaticGroup(const NKikimrConfig::TAppConfig& current, 
     std::set<TPDiskKey> proposedSGPDisks;
     std::set<TVDiskKey> proposedSGVDisks;
 
-    CHECK_ERR(currentServiceSet.GroupsSize() == proposedServiceSet.GroupsSize(), "Group sizes must be the same");
-    for (size_t i = 0; i < currentServiceSet.GroupsSize(); ++i) {
+    // currently we support adding or removing only static groups at the end
+    // more complex cases are ignored intentionally
+    // as far as we don't use even these cases now
+    // for other complex cases this validation should be improved or ignored.
+    CHECK_WARN(currentServiceSet.GroupsSize() == proposedServiceSet.GroupsSize(), "Group either added or removed");
+    for (size_t i = 0; i < currentServiceSet.GroupsSize() && i < proposedServiceSet.GroupsSize(); ++i) {
         const auto& curGroup = currentServiceSet.GetGroups(i);
         const auto& proposedGroup = proposedServiceSet.GetGroups(i);
 
@@ -170,6 +175,10 @@ EValidationResult ValidateStaticGroup(const NKikimrConfig::TAppConfig& current, 
             // but in such cases it is better to validate trice, to check we won't corrupt anything
             CHECK_ERR(IsSame(curVDiskIt->second, proposedVDiskIt->second), "VDisk changed");
         }
+    }
+
+    if (msg.size() > 0) {
+        return EValidationResult::Warn;
     }
 
     return EValidationResult::Ok;

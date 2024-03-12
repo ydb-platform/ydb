@@ -178,8 +178,7 @@ Uploader – локальный для узла компонент, как сл
 | `Off` | Отсутствие трассировки |
 | `TopLevel` | Самая низкая детализация, не более 2 спанов на каждый запрос к компоненту |
 | `Basic` | Спаны главных операций компонента |
-| `Detailed` | Более подробная детализация компонента |
-| `Full` | Самая высокая детализация, применимая для диагностирования проблем в production |
+| `Detailed` | Самая высокая детализация, применимая для диагностирования проблем в production |
 | `Diagnostic` | Детальная отладочная информация для разработчиков |
 | `Trace` | Очень детальная отладочная информация |
 
@@ -192,15 +191,15 @@ Uploader – локальный для узла компонент, как сл
 |  2 | `TopLevel` | `TopLevel` | **`TopLevel`** | `Off` | `Off` |
 |  3 | `TopLevel` | `TopLevel` | `TopLevel` | **`TopLevel`** | `Off` |
 |  4 | `TopLevel` | `TopLevel` | `TopLevel` | `TopLevel` | **`TopLevel`** |
-|  5 | **`Basic`** | **`Basic`** | `TopLevel` | `TopLevel` | `TopLevel` |
-|  6 | `Basic` | `Basic` | **`Basic`** | `TopLevel` | `TopLevel` |
-|  7 | `Basic` | `Basic` | `Basic` | **`Basic`** | `TopLevel` |
-|  8 | `Basic` | `Basic` | `Basic` | `Basic` | **`Basic`** |
-|  9 | **`Detailed`** | **`Detailed`** | `Basic` | `Basic` | `Basic` |
-| 10 | `Detailed` | `Detailed` | **`Detailed`** | `Basic` | `Basic` |
-| 11 | `Detailed` | `Detailed` | `Detailed` | **`Detailed`** | `Basic` |
-| 12 | `Detailed` | `Detailed` | `Detailed` | `Detailed` | **`Detailed`** |
-| 13 | **`Full`** | **`Full`** | **`Full`** | **`Full`** | **`Full`** |
+|  5 | **`Basic`** | `TopLevel` | `TopLevel` | `TopLevel` | `TopLevel` |
+|  6 | `Basic` | **`Basic`** | `TopLevel` | `TopLevel` | `TopLevel` |
+|  7 | `Basic` | `Basic` | **`Basic`** | `TopLevel` | `TopLevel` |
+|  8 | `Basic` | `Basic` | `Basic` | **`Basic`** | `TopLevel` |
+|  9 | `Basic` | `Basic` | `Basic` | `Basic` | **`Basic`** |
+| 10 | **`Detailed`** | **`Detailed`** | `Basic` | `Basic` | `Basic` |
+| 11 | `Detailed` | `Detailed` | **`Detailed`** | `Basic` | `Basic` |
+| 12 | `Detailed` | `Detailed` | `Detailed` | **`Detailed`** | `Basic` |
+| 13 | `Detailed` | `Detailed` | `Detailed` | `Detailed` | **`Detailed`** |
 | 14 | **`Diagnostic`** | **`Diagnostic`** | **`Diagnostic`** | **`Diagnostic`** | **`Diagnostic`** |
 | 15 | **`Trace`** | **`Trace`** | **`Trace`** | **`Trace`** | **`Trace`** |
 

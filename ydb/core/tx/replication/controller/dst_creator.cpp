@@ -114,7 +114,12 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         // TODO: support indexed tables
         TxBody.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
-        TxBody.MutableCreateTable()->SetName(ToString(ExtractBase(DstPath)));
+        auto& desc = *TxBody.MutableCreateTable();
+        desc.SetName(ToString(ExtractBase(DstPath)));
+        // TODO: support other modes
+        auto& replicationConfig = *desc.MutableReplicationConfig();
+        replicationConfig.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        replicationConfig.SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK);
 
         AllocateTxId();
     }
@@ -249,6 +254,30 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     bool CheckTableScheme(const NKikimrSchemeOp::TTableDescription& got, TString& error) const {
+        if (!got.HasReplicationConfig()) {
+            error = "Empty replication config";
+            return false;
+        }
+
+        const auto& replicationConfig = got.GetReplicationConfig();
+
+        switch (replicationConfig.GetMode()) {
+        case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY:
+            break;
+        default:
+            error = "Unsupported replication mode";
+            return false;
+        }
+
+        switch (replicationConfig.GetConsistency()) {
+        case NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK:
+            break;
+        default:
+            error = TStringBuilder() << "Unsupported replication consistency"
+                << ": " << static_cast<int>(replicationConfig.GetConsistency());
+            return false;
+        }
+
         const auto& expected = TxBody.GetCreateTable();
 
         // check key

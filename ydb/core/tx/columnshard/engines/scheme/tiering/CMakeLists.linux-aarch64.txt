@@ -6,14 +6,15 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(abstract)
-add_subdirectory(lbuckets)
 
-add_library(engines-storage-optimizer INTERFACE)
-target_link_libraries(engines-storage-optimizer INTERFACE
+add_library(engines-scheme-tiering)
+target_link_libraries(engines-scheme-tiering PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  storage-optimizer-abstract
-  storage-optimizer-lbuckets
+  formats-arrow-serializer
+)
+target_sources(engines-scheme-tiering PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/tiering/tier_info.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/tiering/common.cpp
 )

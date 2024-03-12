@@ -47,102 +47,110 @@ namespace {
         return delay;
     }
 
-    class TShardInfo {
-    public:
-        TShardInfo() = default;
-        TShardInfo(const TShardInfo&) = delete;
-        TShardInfo(TShardInfo&&) = default;
-        TShardInfo& operator=(const TShardInfo&) = delete;
-        TShardInfo& operator=(TShardInfo&&) = default;
-
-        struct TInFlightBatch {
-            TString Data;
-            ui32 SendAttempts = 0;
-            ui64 Cookie = 0;
-        };
-
-        size_t Size() const {
-            return Batches.size();
-        }
-
-        bool IsEmpty() const {
-            return Batches.empty();
-        }
-
-        bool IsClosed() const {
-            return Closed;
-        }
-
-        bool IsFinished() const {
-            return IsClosed() && IsEmpty();
-        }
-
-        void Close() {
-            Closed = true;
-        }
-
-        TInFlightBatch& CurrentBatch() {
-            YQL_ENSURE(!IsEmpty());
-            return Batches.front();
-        }
-
-        const TInFlightBatch& CurrentBatch() const {
-            YQL_ENSURE(!IsEmpty());
-            return Batches.front();
-        }
-
-        const TInFlightBatch& LastBatch() const {
-            YQL_ENSURE(!IsEmpty());
-            return Batches.back();
-        }
-
-        std::optional<TInFlightBatch> PopBatch(const ui64 Cookie) {
-            if (!IsEmpty() && Cookie == CurrentBatch().Cookie) {
-                auto batch = std::move(Batches.front());
-                Batches.pop_front();
-                return std::move(batch);
-            }
-            return std::nullopt;
-        }
-
-        void PushBatch(TString&& data) {
-            YQL_ENSURE(!IsClosed());
-            Batches.push_back(TInFlightBatch{
-                .Data = std::move(data),
-                .SendAttempts = 0,
-                .Cookie = ++NextCookie,
-            });
-        }
-
-        bool AddAndCheckLock(const NKikimrDataEvents::TLock& lock) {
-            if (!Lock) {
-                Lock = lock;
-                return true;
-            } else {
-                return lock.GetLockId() == Lock->GetLockId()
-                    && lock.GetDataShard() == Lock->GetDataShard()
-                    && lock.GetSchemeShard() == Lock->GetSchemeShard()
-                    && lock.GetPathId() == Lock->GetPathId()
-                    && lock.GetGeneration() == Lock->GetGeneration()
-                    && lock.GetCounter() == Lock->GetCounter();
-            }
-        }
-
-        const std::optional<NKikimrDataEvents::TLock>& GetLock() const {
-            return Lock;
-        }
-
-    private:
-        std::deque<TInFlightBatch> Batches;
-        ui64 NextCookie = 0;
-        bool Closed = false;
-        std::optional<NKikimrDataEvents::TLock> Lock;
-    };
-
     class TShardsInfo {
     public:
+        class TShardInfo {
+            friend class TShardsInfo;
+            TShardInfo(i64& memory)
+                : Memory(memory) {
+            }
+
+        public:
+            struct TInFlightBatch {
+                TString Data;
+                ui32 SendAttempts = 0;
+                ui64 Cookie = 0;
+            };
+
+            size_t Size() const {
+                return Batches.size();
+            }
+
+            bool IsEmpty() const {
+                return Batches.empty();
+            }
+
+            bool IsClosed() const {
+                return Closed;
+            }
+
+            bool IsFinished() const {
+                return IsClosed() && IsEmpty();
+            }
+
+            void Close() {
+                Closed = true;
+            }
+
+            TInFlightBatch& CurrentBatch() {
+                YQL_ENSURE(!IsEmpty());
+                return Batches.front();
+            }
+
+            const TInFlightBatch& CurrentBatch() const {
+                YQL_ENSURE(!IsEmpty());
+                return Batches.front();
+            }
+
+            const TInFlightBatch& LastBatch() const {
+                YQL_ENSURE(!IsEmpty());
+                return Batches.back();
+            }
+
+            std::optional<TInFlightBatch> PopBatch(const ui64 Cookie) {
+                if (!IsEmpty() && Cookie == CurrentBatch().Cookie) {
+                    auto batch = std::move(Batches.front());
+                    Batches.pop_front();
+                    Memory -= batch.Data.size();
+                    return std::move(batch);
+                }
+                return std::nullopt;
+            }
+
+            void PushBatch(TString&& data) {
+                YQL_ENSURE(!IsClosed());
+                Batches.push_back(TInFlightBatch{
+                    .Data = std::move(data),
+                    .SendAttempts = 0,
+                    .Cookie = ++NextCookie,
+                });
+                Memory += Batches.back().Data.size();
+            }
+
+            bool AddAndCheckLock(const NKikimrDataEvents::TLock& lock) {
+                if (!Lock) {
+                    Lock = lock;
+                    return true;
+                } else {
+                    return lock.GetLockId() == Lock->GetLockId()
+                        && lock.GetDataShard() == Lock->GetDataShard()
+                        && lock.GetSchemeShard() == Lock->GetSchemeShard()
+                        && lock.GetPathId() == Lock->GetPathId()
+                        && lock.GetGeneration() == Lock->GetGeneration()
+                        && lock.GetCounter() == Lock->GetCounter();
+                }
+            }
+
+            const std::optional<NKikimrDataEvents::TLock>& GetLock() const {
+                return Lock;
+            }
+
+        private:
+            std::deque<TInFlightBatch> Batches;
+            ui64 NextCookie = 0;
+            bool Closed = false;
+            std::optional<NKikimrDataEvents::TLock> Lock;
+            i64& Memory;
+        };
+
         TShardInfo& GetShard(const ui64 shard) {
-            return ShardsInfo[shard];
+            auto it = ShardsInfo.find(shard);
+            if (it != std::end(ShardsInfo)) {
+                return it->second;
+            }
+
+            auto [insertIt, _] = ShardsInfo.emplace(shard, TShardInfo(Memory));
+            return insertIt->second;
         }
 
         TVector<ui64> GetPendingShards() {
@@ -181,11 +189,16 @@ namespace {
             return ShardsInfo;
         }
 
+        i64 GetMemory() const {
+            return Memory;
+        }
+
     private:
         THashMap<ui64, TShardInfo> ShardsInfo;
+        i64 Memory = 0;
     };
 
-    constexpr i64 kInFlightMemoryLimitPerActor = 1_GB;
+    constexpr i64 kInFlightMemoryLimitPerActor = 100_MB;
 }
 
 
@@ -197,12 +210,26 @@ class TKqpWriteActor : public TActorBootstrapped<TKqpWriteActor>, public NYql::N
 
     class TResumeNotificationManager {
     public:
-    // if (needToResume && GetFreeSpace() > 0) {
-    //      Callbacks->ResumeExecution();
-    //  }
-    //
+        TResumeNotificationManager(TKqpWriteActor& writer)
+            : Writer(writer) {
+            CheckMemory();
+        }
+
+        void CheckMemory() {
+            const auto freeSpace = Writer.GetFreeSpace();
+            if (NeedToResume && freeSpace > 0) {
+                Writer.Callbacks->ResumeExecution();
+            } else if (!NeedToResume && freeSpace <= 0) {
+                NeedToResume = true;
+            }
+        }
+
     private:
+        TKqpWriteActor& Writer;
+        bool NeedToResume = false;
     };
+
+    friend class TResumeNotificationManager;
 
     struct TEvPrivate {
         enum EEv {
@@ -268,7 +295,7 @@ private:
 
     i64 GetFreeSpace() const final {
         return Serializer
-            ? MemoryLimit - Serializer->GetMemory()
+            ? MemoryLimit - Serializer->GetMemory() - ShardsInfo.GetMemory()
             : std::numeric_limits<i64>::min(); // Can't use zero here because compute can use overcommit!
     }
 
@@ -300,11 +327,13 @@ private:
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR);
         }
 
+        TResumeNotificationManager resumeNotificator(*this);
         for (auto& [shardId, batches] : Serializer->FlushBatches()) {
             for (auto& batch : batches) {
                 ShardsInfo.GetShard(shardId).PushBatch(std::move(batch));
             }
         }
+        resumeNotificator.CheckMemory();
         YQL_ENSURE(!Finished || Serializer->IsFinished());
 
         if (Finished) {
@@ -395,6 +424,7 @@ private:
             << ", LocksCount=" << ev->Get()->Record.GetTxLocks().size());
 
         PopShardBatch(ev->Get()->Record.GetOrigin(), ev->Cookie);
+
         for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
             ShardsInfo.GetShard(ev->Get()->Record.GetOrigin()).AddAndCheckLock(lock);
         }
@@ -415,6 +445,7 @@ private:
     }
 
     void PopShardBatch(ui64 shardId, ui64 cookie) {
+        TResumeNotificationManager resumeNotificator(*this);
         auto& shardInfo = ShardsInfo.GetShard(shardId);
         if (const auto batch = shardInfo.PopBatch(cookie); batch) {
             EgressStats.Bytes += batch->Data.size();
@@ -422,6 +453,7 @@ private:
             EgressStats.Splits++;
             EgressStats.Resume();
         }
+        resumeNotificator.CheckMemory();
     }
 
     void ProcessBatches() {

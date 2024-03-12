@@ -12,8 +12,6 @@
 #include "yql_generic_cluster_config.h"
 
 namespace NYql {
-    using namespace NConnector;
-    using namespace NConnector::NApi;
     using namespace fmt::literals;
 
     void ParseLogin(
@@ -404,11 +402,15 @@ namespace NYql {
             return ValidationError(clusterConfig, context, "empty field 'Name'");
         }
 
-        if (clusterConfig.GetKind() == EDataSourceKind::DATA_SOURCE_KIND_UNSPECIFIED) {
+        if (clusterConfig.GetKind() == NConnector::NApi::EDataSourceKind::DATA_SOURCE_KIND_UNSPECIFIED) {
             return ValidationError(clusterConfig, context, "empty field 'Kind'");
         }
 
         // TODO: validate Credentials.basic.password after ClickHouse recipe fix
         // TODO: validate DatabaseName field during https://st.yandex-team.ru/YQ-2494
+
+        if (clusterConfig.GetProtocol() == NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED) {
+            return ValidationError(clusterConfig, context, "empty field 'Protocol'");
+        }
     }
 }

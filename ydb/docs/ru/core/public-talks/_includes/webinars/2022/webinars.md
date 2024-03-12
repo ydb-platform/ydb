@@ -12,6 +12,9 @@
 @[YouTube](https://www.youtube.com/watch?v=BG6pPfQ0IHE)
 
 ### Управляемый сервис YDB: настройка, применение, мониторинг {#2022-webinar-ydb-managment}
+
+{% include notitle [practice_tag](../../tags.md#practice) %}
+
 Применение {{ ydb-name }} как управляемого сервиса позволяет разработчикам и архитекторам сосредоточиться на бизнес-задачах, а команда Yandex Cloud возьмёт на себя заботы о надёжности, производительности и ресурсной эффективности баз данных. 
 
 В вебинаре [ {{ team.zinal.name }} ]( {{ team.zinal.profile }} ) ( {{ team.zinal.position }} ) показал:

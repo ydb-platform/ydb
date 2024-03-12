@@ -1,6 +1,6 @@
 ###  Три доклада о {{ ydb-short-name }} с about:cloud {#2018-conf-about-cloud}
 
-<div style="display:flex; flex-direction: row; justify-content: space-around; flex-wrap: wrap; justify-content: space-around;">
+<div style="display:flex; flex-direction: row; justify-content: flex-start; flex-wrap: wrap; column-gap: 10px;">
 
 {% include notitle [overview_tag](../../tags.md#overview) %}
 

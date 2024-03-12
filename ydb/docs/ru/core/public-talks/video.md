@@ -1,6 +1,22 @@
 # Видеозаписи
 
-Видеозаписи выступлений спикеров команды YDB с конференций и вебинаров.
+Видеозаписи выступлений спикеров команды YDB с конференций и вебинаров. Материалы разделены по категориям и размечены тегами:
+
+<div style="display:flex; flex-direction:row">
+
+<span style="background-color:#56CBF9; color: white; border-radius: 5px; padding: 4px"> Overview </span>
+
+<p> – обзорные материалы, знакомящие с {{ ydb-short-name }} и технологиями, которые применяются в ней.</p>
+
+</div>
+
+<div style="display:flex; flex-direction:row">
+
+<span style="background-color:#81F4E1; color: white; border-radius: 5px; padding: 4px"> Use cases </span>
+
+<p> – кейсы использования {{ ydb-short-name }}.</p>
+
+</div>
 
 {% list tabs %}
 

@@ -11,6 +11,9 @@
 [Слайды](https://presentations.ydb.tech/2019/ru/yandex_scale_nosql_alternative/presentation.pdf)
 
 ### {{ ydb-name }} at Scale: опыт применения в высоконагруженных сервисах Яндекса {#2019-conf-yascale-ydb-at-scale}
+
+{% include notitle [use_cases_tag](../../tags.md#use_cases) %}
+
 Представители [Auto.ru](https://auto.ru), [Яндекс.Репетитора](https://yandex.ru/tutor/), [Алисы](https://yandex.ru/alice) и [Condé Nast](https://www.condenast.ru/) рассказали, почему они выбрали {{ ydb-name }} и как эта СУБД помогает развивать их продукты.
 
 @[YouTube](https://youtu.be/kubFwIKJjBY)

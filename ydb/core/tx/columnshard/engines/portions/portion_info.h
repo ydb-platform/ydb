@@ -83,6 +83,7 @@ public:
     }
 
     const TString& GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const;
+    const TString& GetEntityStorageId(const ui32 entityId, const TIndexInfo& indexInfo) const;
 
     ui64 GetTxVolume() const; // fake-correct method for determ volume on rewrite this portion in transaction progress
 
@@ -233,6 +234,34 @@ public:
             }
         }
         return nullptr;
+    }
+
+    std::optional<TEntityChunk> GetEntityRecord(const TChunkAddress& address) const {
+        for (auto&& c : GetRecords()) {
+            if (c.GetAddress() == address) {
+                return TEntityChunk(c.GetAddress(), c.GetMeta().GetNumRowsVerified(), c.GetMeta().GetRawBytesVerified(), c.GetBlobRange());
+            }
+        }
+        for (auto&& c : GetIndexes()) {
+            if (c.GetAddress() == address) {
+                return TEntityChunk(c.GetAddress(), c.GetRecordsCount(), c.GetRawBytes(), c.GetBlobRange());
+            }
+        }
+        return {};
+    }
+
+    bool HasEntityAddress(const TChunkAddress& address) const {
+        for (auto&& c : GetRecords()) {
+            if (c.GetAddress() == address) {
+                return true;
+            }
+        }
+        for (auto&& c : GetIndexes()) {
+            if (c.GetAddress() == address) {
+                return true;
+            }
+        }
+        return false;
     }
 
     bool Empty() const { return Records.empty(); }

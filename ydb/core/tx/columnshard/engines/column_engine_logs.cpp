@@ -497,6 +497,11 @@ void TColumnEngineForLogs::OnTieringModified(const std::shared_ptr<NColumnShard:
 
 void TColumnEngineForLogs::DoRegisterTable(const ui64 pathId) {
     AFL_VERIFY(Tables.emplace(pathId, std::make_shared<TGranuleMeta>(pathId, GranulesStorage, SignalCounters.RegisterGranuleDataCounters(), VersionedIndex)).second);
+    if (TiersInitialized) {
+        auto it = Tables.find(pathId);
+        AFL_VERIFY(it != Tables.end());
+        it->second->StartActualizationIndex();
+    }
 }
 
 } // namespace NKikimr::NOlap

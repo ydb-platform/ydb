@@ -31,15 +31,6 @@ namespace NKikimr::NColumnShard {
 
         virtual bool Complete(TColumnShard& owner, const TActorContext& ctx) override {
             auto result = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(owner.TabletID(), GetTxId());
-            if (LockId) {
-                auto* lock = result->Record.AddTxLocks();
-                lock->SetLockId(LockId);
-                lock->SetDataShard(owner.TabletID());
-                lock->SetSchemeShard(1);
-                lock->SetPathId(1);
-                lock->SetGeneration(1);
-                lock->SetCounter(1);
-            }
             ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
             return true;
         }

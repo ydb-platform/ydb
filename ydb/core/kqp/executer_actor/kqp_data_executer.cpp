@@ -145,7 +145,6 @@ public:
         }
 
         ReadOnlyTx = IsReadOnlyTx();
-        Cerr << "TEST: READONLY: " << ReadOnlyTx << Endl;
     }
 
     void CheckExecutionComplete() {
@@ -651,7 +650,6 @@ private:
 
     template<class E>
     bool ShardPreparedImpl(TShardState& state, const E& result) {
-        Cerr << "SHARD PREPARED" << Endl;
         YQL_ENSURE(state.State == TShardState::EState::Preparing);
         state.State = TShardState::EState::Prepared;
 
@@ -941,9 +939,6 @@ private:
 
     void ExecutePlanned() {
         YQL_ENSURE(TxCoordinator);
-
-        Cerr << "Execute Planned" << Endl;
-
         auto ev = MakeHolder<TEvTxProxy::TEvProposeTransaction>();
         ev->Record.SetCoordinatorID(TxCoordinator);
 
@@ -1697,7 +1692,6 @@ private:
     }
 
     void ExecuteEvWriteTransaction(ui64 shardId, NKikimrDataEvents::TEvWrite& evWrite) {
-        Cerr << "ImmediateTx" << ImmediateTx << Endl;
         YQL_ENSURE(!ImmediateTx);
         TShardState shardState;
         shardState.State = TShardState::EState::Preparing;
@@ -2164,7 +2158,6 @@ private:
 
         SetSnapshot(record.GetSnapshotStep(), record.GetSnapshotTxId());
         ImmediateTx = true;
-        Cerr << "Set Immediate!" << Endl;
 
         ContinueExecute();
     }

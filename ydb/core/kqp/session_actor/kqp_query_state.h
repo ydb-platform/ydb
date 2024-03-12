@@ -284,9 +284,6 @@ public:
     bool ShouldCommitWithCurrentTx(const TKqpPhyTxHolder::TConstPtr& tx) {
         const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
 
-        Cerr << "COMMIT??? " << Commit <<  " " << CurrentTx << " " << phyQuery.TransactionsSize() << " "
-            << (bool)tx << " " << TxCtx->TxHasEffects() << Endl;
-
         if (!Commit) {
             return false;
         }
@@ -298,7 +295,6 @@ public:
 
         if (!tx) {
             // no physical transactions left, perform commit
-            Cerr << "NO PHYSICAL TX -> COMMIT" << Endl;
             return true;
         }
 
@@ -358,7 +354,6 @@ public:
     TKqpPhyTxHolder::TConstPtr GetCurrentPhyTx() {
         const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
         auto tx = PreparedQuery->GetPhyTxOrEmpty(CurrentTx);
-        Cerr << "TEST>>> " << CurrentTx << " " << phyQuery.TransactionsSize() << Endl;
 
         if (TxCtx->CanDeferEffects()) {
             while (tx && tx->GetHasEffects()) {

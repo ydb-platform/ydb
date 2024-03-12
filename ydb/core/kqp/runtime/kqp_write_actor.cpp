@@ -553,6 +553,7 @@ private:
         evWrite->SetLockId(Settings.GetLockTxId(), Settings.GetLockNodeId());
 
         CA_LOG_D("Send EvWrite to ShardID=" << shardId << ", TxId=" << std::get<ui64>(TxId)
+            << ", LockTxId=" << Settings.GetLockTxId() << ", LockNodeId=" << Settings.GetLockNodeId()
             << ", Size=" << inFlightBatch.Data.size() << ", Cookie=" << inFlightBatch.Cookie);
         Send(
             PipeCacheId,

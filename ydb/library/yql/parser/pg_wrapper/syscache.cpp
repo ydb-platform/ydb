@@ -285,7 +285,7 @@ struct TSysCache {
                 std::unique_ptr<Oid[]> allOids(new Oid[1 + desc.ArgTypes.size()]);
                 std::copy(desc.ArgTypes.begin(), desc.ArgTypes.end(), allOids.get());
                 allOids[desc.ArgTypes.size()] = desc.VariadicArgType;
-                auto arr = buildoidvector(desc.ArgTypes.data(), (int)(1 + desc.ArgTypes.size()));
+                auto arr = buildoidvector(allOids.get(), (int)(1 + desc.ArgTypes.size()));
                 FillDatum(Natts_pg_proc, values, nulls, Anum_pg_proc_proargtypes, (Datum)arr);
             }
 

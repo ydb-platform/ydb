@@ -1307,6 +1307,7 @@ public:
         if (!QueryState->PreparedQuery) {
             return;
         }
+
         auto tx = QueryState->PreparedQuery->GetPhyTxOrEmpty(QueryState->CurrentTx - 1);
         if (!tx) {
             return;

@@ -470,16 +470,21 @@ private:
     }
 
     struct TTopicEventProcessor {
+        static TString ToString(const TPartitionKey& key) {
+            return TStringBuilder{} << "[" << key.first << ", " << key.second << "]";
+        }
+
         void operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
             const auto partitionKey = MakePartitionKey(event.GetPartitionSession());
+            const auto partitionKeyStr = ToString(partitionKey);
             for (const auto& message : event.GetMessages()) {
                 const TString& data = message.GetData();
                 Self.IngressStats.Bytes += data.size();
                 LWPROBE(PqReadDataReceived, TString(TStringBuilder() << Self.TxId), Self.SourceParams.GetTopicPath(), data);
-                SRC_LOG_T("SessionId: " << Self.GetSessionId() << " Key: " << partitionKey << " Data received: " << message.DebugString(true));
+                SRC_LOG_T("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " Data received: " << message.DebugString(true));
 
                 if (message.GetWriteTime() < Self.StartingMessageTimestamp) {
-                    SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Key: " << partitionKey << " Skip data. StartingMessageTimestamp: " << Self.StartingMessageTimestamp << ". Write time: " << message.GetWriteTime());
+                    SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " Skip data. StartingMessageTimestamp: " << Self.StartingMessageTimestamp << ". Write time: " << message.GetWriteTime());
                     continue;
                 }
 

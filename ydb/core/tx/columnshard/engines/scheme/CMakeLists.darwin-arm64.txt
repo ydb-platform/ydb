@@ -25,8 +25,8 @@ target_link_libraries(columnshard-engines-scheme PUBLIC
   engines-scheme-indexes
   engines-scheme-statistics
   engines-scheme-abstract
-  engines-scheme-tiering
   engines-scheme-versions
+  engines-scheme-tiering
   columnshard-blobs_action-abstract
 )
 target_sources(columnshard-engines-scheme PRIVATE

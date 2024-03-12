@@ -2,21 +2,70 @@
 
 Видеозаписи выступлений спикеров команды YDB с конференций и вебинаров. Материалы разделены по категориям и размечены тегами:
 
-<div style="display:flex; flex-direction:row">
+<div style="display:flex; flex-direction:row; column-gap: 10px;">
 
-<span style="background-color:#56CBF9; color: white; border-radius: 5px; padding: 4px"> Overview </span>
+{% include notitle [overview_tag](../../tags.md#overview) %}
 
 <p> – обзорные материалы, знакомящие с {{ ydb-short-name }} и технологиями, которые применяются в ней.</p>
 
 </div>
 
-<div style="display:flex; flex-direction:row">
+{% cut "Список видеоматериалов категории Overview"%}
 
-<span style="background-color:#81F4E1; color: white; border-radius: 5px; padding: 4px"> Use cases </span>
+* [Три доклада о {{ ydb-short-name }} с about:cloud](#2018-conf-about-cloud})
+* [{{ ydb-name }} — эффективная альтернатива традиционным noSQL-решениям](#2019-conf-yascale-ydb-nosql-alt)
+* [Serverless: публичный запуск {{ ydb-name }}](#2021-conf-yandex-scale)
+* [Большой таблеточный взрыв](#2021-conf-yatalks-big-tablet-exp)
+* [Q&A про Open Source {{ ydb-short-name }} и планы на будущее](#2022-conf-hl-qa)
+* [Интервью с Андреем Фомичевым](#2022-conf-hydra-interview)
+* [Open Source трибуна. {{ ydb-short-name }} в Open Source — что это такое?](#2022-conf-yatalks-open-source)
+
+{% endcut %}
+
+<div style="display:flex; flex-direction:row; column-gap: 10px;">
+
+{% include notitle [use_cases_tag](../../tags.md#use_cases) %}
 
 <p> – кейсы использования {{ ydb-short-name }}.</p>
 
 </div>
+
+<div style="display:flex; flex-direction:row; column-gap: 10px;">
+
+{% include notitle [practice_tag](../../tags.md#practice) %}
+
+<p> – практика использования {{ ydb-short-name }}.</p>
+
+</div>
+
+<div style="display:flex; flex-direction:row; column-gap: 10px;">
+
+{% include notitle [database_internals_tag](../../tags.md#database_internals) %}
+
+<p> – подробный разбор внутренней реализации {{ ydb-short-name }} или её отдельных частей и механизмов.</p>
+
+</div>
+
+<div style="display:flex; flex-direction:row; column-gap: 10px;">
+
+{% include notitle [releases_tag](../../tags.md#releases) %}
+
+<p> – обзор новых возможностей, вышедших релизов {{ ydb-short-name }}.</p>
+
+</div>
+
+
+</div>
+
+<div style="display:flex; flex-direction:row; column-gap: 10px;">
+
+{% include notitle [testing_tag](../../tags.md#testing) %}
+
+<p> – кейсы тестирования производительности {{ ydb-short-name }} и сравнения с другими одноклассовыми СУБД.</p>
+
+</div>
+
+
 
 {% list tabs %}
 

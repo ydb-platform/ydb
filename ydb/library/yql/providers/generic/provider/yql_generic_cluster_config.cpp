@@ -320,8 +320,7 @@ namespace NYql {
     static const TSet<NConnector::NApi::EDataSourceKind> managedDatabaseKinds{
         NConnector::NApi::EDataSourceKind::POSTGRESQL,
         NConnector::NApi::EDataSourceKind::CLICKHOUSE,
-        NConnector::NApi::EDataSourceKind::YDB
-    };
+        NConnector::NApi::EDataSourceKind::YDB};
 
     void ValidateGenericClusterConfig(
         const NYql::TGenericClusterConfig& clusterConfig,
@@ -356,7 +355,7 @@ namespace NYql {
                 "you must set either ('ServiceAccountId', 'ServiceAccountIdSignature') fields or 'Token' field or none of them");
         }
 
-        // All managed databases: 
+        // All managed databases:
         // * set endpoint when working with on-prem instances
         // * set database id when working with managed instances
         if (managedDatabaseKinds.contains(clusterConfig.GetKind())) {
@@ -378,7 +377,7 @@ namespace NYql {
             }
         }
 
-        // YDB: 
+        // YDB:
         // * set database name when working with on-prem YDB instance;
         // * but set database ID when working with managed YDB.
         if (clusterConfig.GetKind() == NConnector::NApi::YDB) {

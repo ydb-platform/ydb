@@ -166,6 +166,9 @@ class TDefaultNodeBrokerClient
                 if (node.NodeId == result.GetNodeId()) {
                     auto &nodeInfo = *dnConfig.MutableNodeInfo();
                     nodeInfo.SetNodeId(node.NodeId);
+                    if (node.SlotId.has_value()) {
+                        nodeInfo.SetSlotId(node.SlotId.value());
+                    }
                     nodeInfo.SetHost(node.Host);
                     nodeInfo.SetPort(node.Port);
                     nodeInfo.SetResolveHost(node.ResolveHost);

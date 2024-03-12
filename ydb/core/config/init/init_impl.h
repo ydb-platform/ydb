@@ -593,8 +593,20 @@ struct TCommonAppOptions {
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::TenantPoolConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (TenantName && InterconnectPort != DefaultInterconnectPort) {
-            appConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostAndICPort(env));
+        if (TenantName) {
+            if (appConfig.GetDynamicNodeConfig().GetNodeInfo().HasSlotId()) {
+                const ui32 slotId = appConfig.GetDynamicNodeConfig().GetNodeInfo().GetSlotId();
+                const TString slotLabel = TStringBuilder() << "slot-" << slotId;
+                appConfig.MutableMonitoringConfig()->SetHostLabelOverride(slotLabel);
+                ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+            } else if (InterconnectPort != DefaultInterconnectPort) {
+                appConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostAndICPort(env));
+                ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+            }
+        }
+
+        if (TenantName) {
+            appConfig.MutableMonitoringConfig()->SetProcessLocation(HostAndICPort(env));
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 

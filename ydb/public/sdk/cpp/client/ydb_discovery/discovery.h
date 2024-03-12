@@ -96,6 +96,7 @@ struct TNodeInfo {
     TString Address;
     TNodeLocation Location;
     ui64 Expire;
+    std::optional<ui32> SlotId;
 };
 
 class TNodeRegistrationResult : public TStatus {
@@ -109,6 +110,8 @@ public:
     bool HasScopeTabletId() const;
     const ui64& GetScopePathId() const;
     bool HasScopePathId() const;
+    const ui32& GetSlotId() const;
+    bool HasSlotId() const;
     const TVector<TNodeInfo>& GetNodes() const;
 
 private:
@@ -117,6 +120,7 @@ private:
     ui64 Expire_;
     std::optional<ui64> ScopeTableId_;
     std::optional<ui64> ScopePathId_;
+    std::optional<ui32> SlotId_;
     TVector<TNodeInfo> Nodes_;
 };
 

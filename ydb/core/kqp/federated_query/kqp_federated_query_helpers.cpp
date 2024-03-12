@@ -124,7 +124,7 @@ namespace NKikimr::NKqp {
             result.DatabaseAsyncResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
                 actorSystem,
                 DatabaseResolverActorId.value(),
-                "", // TODO: use YDB Gateway endpoint?
+                GenericGatewaysConfig.GetYdbMvpEndpoint(),
                 GenericGatewaysConfig.GetMdbGateway(),
                 MdbEndpointGenerator);
         }

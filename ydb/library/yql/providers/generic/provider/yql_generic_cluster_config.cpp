@@ -1,4 +1,5 @@
 #include <fmt/format.h>
+#include <util/generic/set.h>
 
 #include <util/generic/serialized_enum.h>
 #include <util/string/builder.h>
@@ -20,7 +21,8 @@ namespace NYql {
         NYql::TGenericClusterConfig& clusterConfig) {
         auto it = properties.find("login");
         if (it == properties.cend()) {
-            ythrow yexception() << "missing 'LOGIN' value";
+            // It's OK not to have credentials for base auth
+            return;
         }
 
         if (!it->second) {
@@ -35,7 +37,8 @@ namespace NYql {
         NYql::TGenericClusterConfig& clusterConfig) {
         auto it = properties.find("password");
         if (it == properties.cend()) {
-            ythrow yexception() << "missing 'PASSWORD' value";
+            // It's OK not to have credentials for base auth
+            return;
         }
 
         clusterConfig.MutableCredentials()->Mutablebasic()->Setpassword(it->second);
@@ -157,6 +160,25 @@ namespace NYql {
         clusterConfig.SetDatabaseId(it->second);
     }
 
+    void ParseDatabaseId(const THashMap<TString, TString>& properties,
+                         NYql::TGenericClusterConfig& clusterConfig) {
+        auto it = properties.find("database_id");
+        if (it == properties.cend()) {
+            return;
+        }
+
+        if (!it->second) {
+            // DATABASE_ID is an optional field
+            return;
+        }
+
+        if (!it->second) {
+            ythrow yexception() << "invalid 'DATABASE_ID' value: '" << it->second << "'";
+        }
+
+        clusterConfig.SetDatabaseId(it->second);
+    }
+
     void ParseSourceType(const THashMap<TString, TString>& properties,
                          NYql::TGenericClusterConfig& clusterConfig) {
         auto it = properties.find("source_type");
@@ -240,20 +262,6 @@ namespace NYql {
     }
 
     TGenericClusterConfig GenericClusterConfigFromProperties(const TString& clusterName, const THashMap<TString, TString>& properties) {
-        // some cross-parameter validations
-        auto location = KeyIsSet(properties, "location");
-        auto mdbClusterId = KeyIsSet(properties, "mdb_cluster_id");
-
-        if ((location && mdbClusterId) || (!location and !mdbClusterId)) {
-            ythrow yexception() << "you must provide either 'LOCATION' or 'MDB_CLUSTER_ID' parameter";
-        }
-
-        auto serviceAccountId = KeyIsSet(properties, "serviceAccountId");
-        auto serviceAccountIdSignature = KeyIsSet(properties, "serviceAccountIdSignature");
-        if ((serviceAccountId && !serviceAccountIdSignature) || (!serviceAccountId && serviceAccountIdSignature)) {
-            ythrow yexception() << "you must provide either both 'SERVICE_ACCOUNT_ID' and 'SERVICE_ACCOUNT_ID_SIGNATURE' parameters or none of them";
-        }
-
         NYql::TGenericClusterConfig clusterConfig;
         clusterConfig.set_name(clusterName);
         ParseLogin(properties, clusterConfig);
@@ -263,6 +271,7 @@ namespace NYql {
         ParseDatabaseName(properties, clusterConfig);
         ParseSchema(properties, clusterConfig);
         ParseMdbClusterId(properties, clusterConfig);
+        ParseDatabaseId(properties, clusterConfig);
         ParseSourceType(properties, clusterConfig);
         ParseProtocol(properties, clusterConfig);
         ParseServiceAccountId(properties, clusterConfig);
@@ -310,27 +319,17 @@ namespace NYql {
             "protocol"_a = NConnector::NApi::EProtocol_Name(clusterConfig.GetProtocol()));
     }
 
+    static const TSet<NConnector::NApi::EDataSourceKind> managedDatabaseKinds{
+        NConnector::NApi::EDataSourceKind::POSTGRESQL,
+        NConnector::NApi::EDataSourceKind::CLICKHOUSE,
+        NConnector::NApi::EDataSourceKind::YDB
+    };
+
     void ValidateGenericClusterConfig(
         const NYql::TGenericClusterConfig& clusterConfig,
         const TString& context) {
-        // cross-parameter validations for optional fields
-        auto hasEndpoint = clusterConfig.HasEndpoint();
-        auto databaseId = clusterConfig.GetDatabaseId();
-
-        if (hasEndpoint && databaseId) {
-            return ValidationError(
-                clusterConfig,
-                context,
-                "both 'Endpoint' and 'DatabaseId' fields are set; you must set only one of them");
-        }
-
-        if (!hasEndpoint and !databaseId) {
-            return ValidationError(
-                clusterConfig,
-                context,
-                "none of 'Endpoint' and 'DatabaseId' fields are set; you must set one of them");
-        }
-
+        // Service account ID and service account ID signature are tightly coupled:
+        // if one is set, another one must be set too.
         auto serviceAccountId = clusterConfig.GetServiceAccountId();
         auto serviceAccountIdSignature = clusterConfig.GetServiceAccountIdSignature();
         if (serviceAccountId && !serviceAccountIdSignature) {
@@ -349,6 +348,8 @@ namespace NYql {
                 "you must set either both 'ServiceAccountId' and 'ServiceAccountIdSignature' fields or none of them");
         }
 
+        // Service account credentials and raw tokens are mutually exclusive:
+        // no need to specify service account parameters if one already has a token.
         auto token = clusterConfig.GetToken();
         if ((serviceAccountId && serviceAccountIdSignature) && token) {
             return ValidationError(
@@ -357,6 +358,31 @@ namespace NYql {
                 "you must set either ('ServiceAccountId', 'ServiceAccountIdSignature') fields or 'Token' field or none of them");
         }
 
+        // All managed databases: 
+        // * set endpoint when working with on-prem instances
+        // * set database id when working with managed instances
+        if (managedDatabaseKinds.contains(clusterConfig.GetKind())) {
+            auto hasEndpoint = clusterConfig.HasEndpoint();
+            auto hasDatabaseId = clusterConfig.HasDatabaseId();
+
+            if (hasEndpoint && hasDatabaseId) {
+                return ValidationError(
+                    clusterConfig,
+                    context,
+                    "both 'Endpoint' and 'DatabaseId' fields are set; you must set only one of them");
+            }
+
+            if (!hasEndpoint and !hasDatabaseId) {
+                return ValidationError(
+                    clusterConfig,
+                    context,
+                    "none of 'Endpoint' and 'DatabaseId' fields are set; you must set one of them");
+            }
+        }
+
+        // YDB: 
+        // * set database name when working with on-prem YDB instance;
+        // * but set database ID when working with managed YDB.
         if (clusterConfig.GetKind() == NConnector::NApi::YDB) {
             if (clusterConfig.HasDatabaseName() && clusterConfig.HasDatabaseId()) {
                 return ValidationError(
@@ -384,9 +410,5 @@ namespace NYql {
 
         // TODO: validate Credentials.basic.password after ClickHouse recipe fix
         // TODO: validate DatabaseName field during https://st.yandex-team.ru/YQ-2494
-
-        if (clusterConfig.GetProtocol() == EProtocol::PROTOCOL_UNSPECIFIED) {
-            return ValidationError(clusterConfig, context, "empty field 'Protocol'");
-        }
     }
 }

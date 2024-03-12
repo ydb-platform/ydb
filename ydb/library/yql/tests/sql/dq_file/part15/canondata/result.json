@@ -1014,9 +1014,9 @@
     ],
     "test.test[join-grace_join1-map-Debug]": [
         {
-            "checksum": "364edabe894457a73f9365d8004e0ca9",
-            "size": 3137,
-            "uri": "https://{canondata_backend}/1600758/aad142702907f13e911494c1a7b312bad34f692a/resource.tar.gz#test.test_join-grace_join1-map-Debug_/opt.yql_patched"
+            "checksum": "a018259a357438a707d7886ec5eebd11",
+            "size": 3145,
+            "uri": "https://{canondata_backend}/1936947/f37a1b295bca7eb2be1a3d7ccbeec933b661fb3c/resource.tar.gz#test.test_join-grace_join1-map-Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-grace_join1-map-Plan]": [

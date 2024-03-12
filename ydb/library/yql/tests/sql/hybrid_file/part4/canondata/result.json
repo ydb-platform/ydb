@@ -1233,9 +1233,9 @@
     ],
     "test.test[join-mapjoin_opt_vs_2xopt--Debug]": [
         {
-            "checksum": "e15276ed2ed2f69efb1cade40aa54216",
-            "size": 4250,
-            "uri": "https://{canondata_backend}/1937367/5f1c05a434c7181753fab354e3806860905138af/resource.tar.gz#test.test_join-mapjoin_opt_vs_2xopt--Debug_/opt.yql_patched"
+            "checksum": "b76569e40929132a856bfaaeb12c1c89",
+            "size": 4280,
+            "uri": "https://{canondata_backend}/1936947/9df851a3cc689f975db52aa6e783e8317bcdc97e/resource.tar.gz#test.test_join-mapjoin_opt_vs_2xopt--Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-mapjoin_opt_vs_2xopt--Plan]": [

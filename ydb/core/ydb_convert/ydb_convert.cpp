@@ -1323,9 +1323,13 @@ void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeI
     case EPrimitiveType::Json:
         vb.Json(getString());
         break;
-    case EPrimitiveType::Uuid:
-        vb.Uuid(getString());
+    case EPrimitiveType::Uuid: {
+        ui64 hi;
+        ui64 lo;
+        NUuid::UuidBytesToHalfs(cell.AsBuf().Data(), 16, hi, lo);
+        vb.Uuid(TUuidValue(lo, hi));
         break;
+    }
     case EPrimitiveType::JsonDocument:
         vb.JsonDocument(NBinaryJson::SerializeToJson(getString()));
         break;

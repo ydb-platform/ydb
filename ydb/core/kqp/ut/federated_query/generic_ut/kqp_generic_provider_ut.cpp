@@ -74,6 +74,22 @@ namespace NKikimr::NKqp {
         return settings;
     }
 
+    std::shared_ptr<TDatabaseAsyncResolverMock> MakeDatabaseAsyncResolver(EProviderType providerType) {
+        std::shared_ptr<TDatabaseAsyncResolverMock> databaseAsyncResolverMock;
+
+        switch (providerType) {
+            case EProviderType::ClickHouse:
+                // We test access to managed databases only on the example of ClickHouse
+                databaseAsyncResolverMock = std::make_shared<TDatabaseAsyncResolverMock>();
+                databaseAsyncResolverMock->AddClickHouseCluster();
+                break;
+            default:
+                break;
+        }
+
+        return databaseAsyncResolverMock;
+    }
+
     Y_UNIT_TEST_SUITE(GenericFederatedQuery) {
         void TestSelectAllFields(EProviderType providerType) {
             // prepare mock
@@ -124,11 +140,7 @@ namespace NKikimr::NKqp {
             // clang-format on
 
             // prepare database resolver mock
-            std::shared_ptr<TDatabaseAsyncResolverMock> databaseAsyncResolverMock;
-            if (providerType == EProviderType::ClickHouse) {
-                databaseAsyncResolverMock = std::make_shared<TDatabaseAsyncResolverMock>();
-                databaseAsyncResolverMock->AddClickHouseCluster();
-            }
+            auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(providerType);
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
@@ -161,15 +173,15 @@ namespace NKikimr::NKqp {
             MATCH_RESULT_WITH_INPUT(colData, resultSet, GetUint16);
         }
 
-        Y_UNIT_TEST(PostgreSQLLocal) {
+        Y_UNIT_TEST(PostgreSQLOnPremSelectAll) {
             TestSelectAllFields(EProviderType::PostgreSQL);
         }
 
-        Y_UNIT_TEST(ClickHouseManaged) {
+        Y_UNIT_TEST(ClickHouseManagedSelectAll) {
             TestSelectAllFields(EProviderType::ClickHouse);
         }
 
-        Y_UNIT_TEST(YdbManaged) {
+        Y_UNIT_TEST(YdbManagedSelectAll) {
             TestSelectAllFields(EProviderType::Ydb);
         }
 
@@ -220,11 +232,7 @@ namespace NKikimr::NKqp {
             // clang-format on
 
             // prepare database resolver mock
-            std::shared_ptr<TDatabaseAsyncResolverMock> databaseAsyncResolverMock;
-            if (providerType == EProviderType::ClickHouse) {
-                databaseAsyncResolverMock = std::make_shared<TDatabaseAsyncResolverMock>();
-                databaseAsyncResolverMock->AddClickHouseCluster();
-            }
+            auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(providerType);
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
@@ -256,7 +264,7 @@ namespace NKikimr::NKqp {
             }
         }
 
-        Y_UNIT_TEST(PostgreSQLSelectConstant) {
+        Y_UNIT_TEST(PostgreSQLOnPremSelectConstant) {
             TestSelectConstant(EProviderType::PostgreSQL);
         }
 
@@ -315,11 +323,7 @@ namespace NKikimr::NKqp {
             // clang-format on
 
             // prepare database resolver mock
-            std::shared_ptr<TDatabaseAsyncResolverMock> databaseAsyncResolverMock;
-            if (providerType == EProviderType::ClickHouse) {
-                databaseAsyncResolverMock = std::make_shared<TDatabaseAsyncResolverMock>();
-                databaseAsyncResolverMock->AddClickHouseCluster();
-            }
+            auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(providerType);
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
@@ -422,11 +426,7 @@ namespace NKikimr::NKqp {
             // clang-format on
 
             // prepare database resolver mock
-            std::shared_ptr<TDatabaseAsyncResolverMock> databaseAsyncResolverMock;
-            if (providerType == EProviderType::ClickHouse) {
-                databaseAsyncResolverMock = std::make_shared<TDatabaseAsyncResolverMock>();
-                databaseAsyncResolverMock->AddClickHouseCluster();
-            }
+            auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(providerType);
 
             // run test
             auto appConfig = CreateDefaultAppConfig();

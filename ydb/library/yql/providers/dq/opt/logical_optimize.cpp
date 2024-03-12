@@ -180,7 +180,7 @@ protected:
             hasDqConnections |= !!list.Maybe<TDqConnection>();
         }
 
-        return hasDqConnections ? DqRewriteEquiJoin(node, Config->HashJoinMode.Get().GetOrElse(EHashJoinMode::Off), ctx) : node;
+        return hasDqConnections ? DqRewriteEquiJoin(node, Config->HashJoinMode.Get().GetOrElse(EHashJoinMode::Off), false, ctx) : node;
     }
 
     TMaybeNode<TExprBase> ExpandWindowFunctions(TExprBase node, TExprContext& ctx) {

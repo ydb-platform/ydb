@@ -114,7 +114,15 @@ protected:
 
 public:
 
-    std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> GetPortionChunks() const {
+    THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> GetPortionChunksToHash() const {
+        THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> result;
+        for (auto&& i : Data) {
+            AFL_VERIFY(result.emplace(i.GetEntityId(), i.GetChunks()).second);
+        }
+        return result;
+    }
+
+    std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> GetPortionChunksToMap() const {
         std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> result;
         for (auto&& i : Data) {
             AFL_VERIFY(result.emplace(i.GetEntityId(), i.GetChunks()).second);
@@ -153,7 +161,7 @@ public:
             MergeSlice(std::move(objects[i]));
         }
     }
-    TGeneralSerializedSlice(const std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings);
+    TGeneralSerializedSlice(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings);
     TGeneralSerializedSlice(const ui32 recordsCount, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings);
 
     void MergeSlice(TGeneralSerializedSlice&& slice);

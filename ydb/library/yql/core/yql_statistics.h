@@ -24,6 +24,7 @@ struct TOptimizerStatistics {
     EStatisticsType Type = BaseTable;
     double Nrows = 0;
     int Ncols = 0;
+    double ByteSize = 0;
     double Cost = 0;
     double Selectivity = 1.0;
     const TVector<TString>& KeyColumns;
@@ -32,7 +33,9 @@ struct TOptimizerStatistics {
     TOptimizerStatistics(double nrows, int ncols): Nrows(nrows), Ncols(ncols), KeyColumns(EmptyColumns) {}
     TOptimizerStatistics(double nrows, int ncols, double cost): Nrows(nrows), Ncols(ncols), Cost(cost), KeyColumns(EmptyColumns) {}
     TOptimizerStatistics(EStatisticsType type, double nrows, int ncols, double cost): Type(type), Nrows(nrows), Ncols(ncols), Cost(cost), KeyColumns(EmptyColumns) {}
+    TOptimizerStatistics(EStatisticsType type, double nrows, int ncols, double byteSize, double cost): Type(type), Nrows(nrows), Ncols(ncols), ByteSize(byteSize), Cost(cost), KeyColumns(EmptyColumns) {}
     TOptimizerStatistics(EStatisticsType type, double nrows, int ncols, double cost, const TVector<TString>& keyColumns): Type(type), Nrows(nrows), Ncols(ncols), Cost(cost), KeyColumns(keyColumns) {}
+    TOptimizerStatistics(EStatisticsType type, double nrows, int ncols, double byteSize, double cost, const TVector<TString>& keyColumns): Type(type), Nrows(nrows), Ncols(ncols), ByteSize(byteSize), Cost(cost), KeyColumns(keyColumns) {}
 
     TOptimizerStatistics& operator+=(const TOptimizerStatistics& other);
     bool Empty() const;

@@ -1,14 +1,15 @@
 #pragma once
 
 #include "test_store.h"
+#include <ydb/core/tablet_flat/flat_fwd_blobs.h>
+#include <ydb/core/tablet_flat/flat_fwd_cache.h>
+#include <ydb/core/tablet_flat/flat_part_iface.h>
+#include <ydb/core/tablet_flat/flat_part_index_iter.h>
+#include <ydb/core/tablet_flat/flat_part_laid.h>
+#include <ydb/core/tablet_flat/flat_row_scheme.h>
 #include <ydb/core/tablet_flat/flat_table_misc.h>
 #include <ydb/core/tablet_flat/flat_table_part.h>
 #include <ydb/core/tablet_flat/flat_table_subset.h>
-#include <ydb/core/tablet_flat/flat_part_laid.h>
-#include <ydb/core/tablet_flat/flat_part_iface.h>
-#include <ydb/core/tablet_flat/flat_fwd_cache.h>
-#include <ydb/core/tablet_flat/flat_fwd_blobs.h>
-#include <ydb/core/tablet_flat/flat_row_scheme.h>
 #include <ydb/core/tablet_flat/util_fmt_abort.h>
 
 #include <util/generic/cast.h>

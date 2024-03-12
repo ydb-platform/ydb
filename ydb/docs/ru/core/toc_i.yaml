@@ -8,6 +8,8 @@ items:
     href: getting_started/quickstart.md
   - name: Kubernetes
     href: getting_started/kubernetes.md
+  - name: Ansible
+    href: getting_started/ansible.md
 
 # Main
 - { name: Концепции,                               include: { mode: link, path: concepts/toc_p.yaml } }

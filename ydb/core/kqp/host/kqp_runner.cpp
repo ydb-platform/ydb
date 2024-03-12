@@ -273,7 +273,7 @@ private:
             .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
             .Add(CreateKqpLogOptTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "LogicalOptimize")
             .Add(CreateLogicalDataProposalsInspector(*typesCtx), "ProvidersLogicalOptimize")
-            .Add(CreateKqpPhyOptTransformer(OptimizeCtx, *typesCtx), "KqpPhysicalOptimize")
+            .Add(CreateKqpPhyOptTransformer(OptimizeCtx, *typesCtx, Config), "KqpPhysicalOptimize")
             .Add(CreatePhysicalDataProposalsInspector(*typesCtx), "ProvidersPhysicalOptimize")
             .Add(CreateKqpFinalizingOptTransformer(OptimizeCtx), "FinalizingOptimize")
             .Add(CreateKqpQueryPhasesTransformer(), "QueryPhases")

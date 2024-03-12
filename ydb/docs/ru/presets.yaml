@@ -1,8 +1,7 @@
 default:
   lang: ru
   # link-console-main: https://console.cloud.yandex.ru
-  tag:
-    overview: <span style="color:white, background:blue"> Overview </span>
+  
   team:
     babich:
       name: Михаил Бабич

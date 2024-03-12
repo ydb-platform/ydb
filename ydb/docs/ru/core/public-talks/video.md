@@ -10,18 +10,6 @@
 
 </div>
 
-{% cut "Список видеоматериалов категории Overview"%}
-
-* [Три доклада о {{ ydb-short-name }} с about:cloud](#2018-conf-about-cloud})
-* [{{ ydb-name }} — эффективная альтернатива традиционным noSQL-решениям](#2019-conf-yascale-ydb-nosql-alt)
-* [Serverless: публичный запуск {{ ydb-name }}](#2021-conf-yandex-scale)
-* [Большой таблеточный взрыв](#2021-conf-yatalks-big-tablet-exp)
-* [Q&A про Open Source {{ ydb-short-name }} и планы на будущее](#2022-conf-hl-qa)
-* [Интервью с Андреем Фомичевым](#2022-conf-hydra-interview)
-* [Open Source трибуна. {{ ydb-short-name }} в Open Source — что это такое?](#2022-conf-yatalks-open-source)
-
-{% endcut %}
-
 <div style="display:flex; flex-direction:row; column-gap: 10px;">
 
 {% include notitle [use_cases_tag](./_includes/tags.md#use_cases) %}

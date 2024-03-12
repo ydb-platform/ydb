@@ -71,13 +71,14 @@ struct TEvYdbCompute {
 
     // Events
     struct TEvExecuteScriptRequest : public NActors::TEventLocal<TEvExecuteScriptRequest, EvExecuteScriptRequest> {
-        TEvExecuteScriptRequest(TString sql, TString idempotencyKey, const TDuration& resultTtl, const TDuration& operationTimeout, Ydb::Query::Syntax syntax, Ydb::Query::ExecMode execMode, const TString& traceId)
+        TEvExecuteScriptRequest(TString sql, TString idempotencyKey, const TDuration& resultTtl, const TDuration& operationTimeout, Ydb::Query::Syntax syntax, Ydb::Query::ExecMode execMode, Ydb::Query::StatsMode statsMode, const TString& traceId)
             : Sql(std::move(sql))
             , IdempotencyKey(std::move(idempotencyKey))
             , ResultTtl(resultTtl)
             , OperationTimeout(operationTimeout)
             , Syntax(syntax)
             , ExecMode(execMode)
+            , StatsMode(statsMode)
             , TraceId(traceId)
         {}
 
@@ -87,6 +88,7 @@ struct TEvYdbCompute {
         TDuration OperationTimeout;
         Ydb::Query::Syntax Syntax = Ydb::Query::SYNTAX_YQL_V1;
         Ydb::Query::ExecMode ExecMode = Ydb::Query::EXEC_MODE_EXECUTE;
+        Ydb::Query::StatsMode StatsMode = Ydb::Query::StatsMode::STATS_MODE_FULL;
         TString TraceId;
     };
 

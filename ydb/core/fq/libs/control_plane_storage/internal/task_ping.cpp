@@ -256,7 +256,8 @@ TPingTaskParams ConstructHardPingTask(
             internal.clear_statistics();
             PackStatisticsToProtobuf(*internal.mutable_statistics(), statistics);
 
-            if (!dumpRawStatistics) {
+            // global dumpRawStatistics will be removed with YQv1
+            if (!dumpRawStatistics && !request.dump_raw_statistics()) {
                 try {
                     statistics = GetPrettyStatistics(statistics);
                 } catch (const std::exception&) {

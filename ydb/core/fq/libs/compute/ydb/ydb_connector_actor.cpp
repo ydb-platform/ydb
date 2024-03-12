@@ -24,12 +24,7 @@ public:
         : YqSharedResources(params.YqSharedResources)
         , CredentialsProviderFactory(params.CredentialsProviderFactory)
         , ComputeConnection(params.ComputeConnection)
-    {
-        StatsMode = params.Config.GetControlPlaneStorage().GetStatsMode();
-        if (StatsMode == Ydb::Query::StatsMode::STATS_MODE_UNSPECIFIED) {
-            StatsMode = Ydb::Query::StatsMode::STATS_MODE_FULL;
-        }
-    }
+    {}
 
     void Bootstrap() {
         auto querySettings = NFq::GetClientSettings<NYdb::NQuery::TClientSettings>(ComputeConnection, CredentialsProviderFactory);
@@ -55,7 +50,7 @@ public:
         settings.OperationTimeout(event.OperationTimeout);
         settings.Syntax(event.Syntax);
         settings.ExecMode(event.ExecMode);
-        settings.StatsMode(StatsMode);
+        settings.StatsMode(event.StatsMode);
         settings.TraceId(event.TraceId);
         QueryClient
             ->ExecuteScript(event.Sql, settings)
@@ -222,7 +217,6 @@ private:
     NConfig::TYdbStorageConfig ComputeConnection;
     std::unique_ptr<NYdb::NQuery::TQueryClient> QueryClient;
     std::unique_ptr<NYdb::NOperation::TOperationClient> OperationClient;
-    Ydb::Query::StatsMode StatsMode;
 };
 
 std::unique_ptr<NActors::IActor> CreateConnectorActor(const TRunActorParams& params) {

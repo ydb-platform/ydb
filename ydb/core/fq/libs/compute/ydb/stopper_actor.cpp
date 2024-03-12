@@ -1,10 +1,12 @@
-#include "base_status_updater_actor.h"
-#include "resources_cleaner_actor.h"
+#include "base_compute_actor.h"
+#include "stopper_actor.h"
 
+#include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/fq/libs/compute/common/metrics.h>
 #include <ydb/core/fq/libs/compute/common/retry_actor.h>
 #include <ydb/core/fq/libs/compute/common/run_actor_params.h>
+#include <ydb/core/fq/libs/compute/common/utils.h>
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/library/services/services.pb.h>
@@ -32,8 +34,11 @@ namespace NFq {
 using namespace NActors;
 using namespace NFq;
 
-class TStopperActor : public TBaseStatusUpdaterActor<TStopperActor> {
+class TStopperActor : public TBaseComputeActor<TStopperActor> {
 public:
+
+    using TBase = TBaseComputeActor<TStopperActor>;
+
     enum ERequestType {
         RT_CANCEL_OPERATION,
         RT_GET_OPERATION,
@@ -64,17 +69,16 @@ public:
         }
     };
 
-    TStopperActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector, const TActorId& pinger, const NYdb::TOperation::TOperationId& operationId, const ::NYql::NCommon::TServiceCounters& queryCounters)
-        : TBaseStatusUpdaterActor(params.Config.GetCommon(), queryCounters, "Stopper")
+    TStopperActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector, const TActorId& pinger, const NYdb::TOperation::TOperationId& operationId, std::unique_ptr<IPlanStatProcessor>&& processor, const ::NYql::NCommon::TServiceCounters& queryCounters)
+        : TBase(queryCounters, "Stopper")
         , Params(params)
         , Parent(parent)
         , Connector(connector)
         , Pinger(pinger)
         , OperationId(operationId)
+        , Builder(params.Config.GetCommon(), std::move(processor))
         , Counters(GetStepCountersSubgroup())
-    {
-        SetPingCounters(Counters.GetCounters(ERequestType::RT_PING));
-    }
+    {}
 
     static constexpr char ActorName[] = "FQ_STOPPER_ACTOR";
 
@@ -125,20 +129,29 @@ public:
         auto statusCode = NYql::NDq::YdbStatusToDqStatus(response.StatusCode);
         LOG_I("Operation successfully fetched, Status: " << response.Status << ", StatusCode: " << NYql::NDqProto::StatusIds::StatusCode_Name(statusCode) << " Issues: " << response.Issues.ToOneLineString());
 
-        OnPingRequestStart();
-        Fq::Private::PingTaskRequest pingTaskRequest = GetPingTaskRequest(FederatedQuery::QueryMeta::ABORTING_BY_USER, statusCode, response.Issues, response.QueryStats);
+        StartTime = TInstant::Now();
+        auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
+        pingCounters->InFly->Inc();
+
+        Fq::Private::PingTaskRequest pingTaskRequest = Builder.Build(response.QueryStats, response.Issues, FederatedQuery::QueryMeta::ABORTING_BY_USER, statusCode);
+        if (Builder.Issues) {
+            LOG_W(Builder.Issues.ToOneLineString());
+        }
         Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest));
     }
 
     void Handle(const TEvents::TEvForwardPingResponse::TPtr& ev) {
-        OnPingRequestFinish(ev.Get()->Get()->Success);
+        auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
+        pingCounters->InFly->Dec();
+        pingCounters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
 
         if (ev.Get()->Get()->Success) {
+            pingCounters->Ok->Inc();
             LOG_I("Information about the status of operation is updated");
         } else {
+            pingCounters->Error->Inc();
             LOG_E("Error updating information about the status of operation");
         }
-
         Complete();
     }
 
@@ -158,7 +171,9 @@ private:
     TActorId Connector;
     TActorId Pinger;
     NYdb::TOperation::TOperationId OperationId;
+    PingTaskRequestBuilder Builder;
     TCounters Counters;
+    TInstant StartTime;
 };
 
 std::unique_ptr<NActors::IActor> CreateStopperActor(const TRunActorParams& params,
@@ -166,8 +181,9 @@ std::unique_ptr<NActors::IActor> CreateStopperActor(const TRunActorParams& param
                                                     const TActorId& connector,
                                                     const TActorId& pinger,
                                                     const NYdb::TOperation::TOperationId& operationId,
+                                                    std::unique_ptr<IPlanStatProcessor>&& processor,
                                                     const ::NYql::NCommon::TServiceCounters& queryCounters) {
-    return std::make_unique<TStopperActor>(params, parent, connector, pinger, operationId, queryCounters);
+    return std::make_unique<TStopperActor>(params, parent, connector, pinger, operationId, std::move(processor), queryCounters);
 }
 
 }

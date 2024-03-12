@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/abstract/abstract.h>
-#include <ydb/core/tx/columnshard/engines/storage/actualizer/common/counters.h>
+#include <ydb/core/tx/columnshard/engines/storage/actualizer/counters/counters.h>
 
 namespace NKikimr::NOlap {
 class TVersionedIndex;

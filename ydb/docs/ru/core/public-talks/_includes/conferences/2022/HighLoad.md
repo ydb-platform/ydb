@@ -1,4 +1,7 @@
 ### Эволюция акторной системы {#2022-conf-hl-actor-sys}
+
+{% include notitle [database_internals_tag](../../tags.md#database_internals) %}
+
 Существует несколько подходов к созданию эффективных многопоточных приложений на С++. В {{ ydb-short-name }} была выбрана модель акторов и с нуля создана собственная акторная система. С тех пор прошло более 7 лет, и сегодня акторная система исполняется на десятках тысяч серверов. Чтобы пройти путь к созданию сложных модульных распределенных систем с помощью модели акторов команде {{ ydb-short-name }} пришлось решить множество проблем. 
 
 В докладе [ {{ team.stankevichus.name }} ]( {{ team.stankevichus.profile }} ) ( {{ team.stankevichus.position }} ) рассказал о некоторых из них:
@@ -14,6 +17,9 @@
 [Слайды](https://presentations.ydb.tech/2022/ru/highload_foundation_actor_system/presentation.pdf)
 
 ### Считаем число просмотров видео для десятков миллионов пользователей в день {#2022-conf-hl-count-video-view}
+
+{% include notitle [use_cases_tag](../../tags.md#use_cases) %}
+
 Обычные продуктовые фичи могут стать нетривиальной задачей на больших масштабах.  {{ team.sokolov.name }}  ( {{ team.sokolov.position }} ) рассказал, как они спроектировали две системы подсчёта пользователей: общее число просмотров видео и количество текущих зрителей лайв-трансляций.
 
 В докладе Иван рассказывает о решении следующих задач:
@@ -28,6 +34,9 @@
 [Слайды](https://presentations.ydb.tech/2022/ru/highload_foundation_dzen/presentation.pdf)
 
 ### Миллион RPS в {{ ydb-short-name }}: история одного переезда Метрики {#2022-conf-hl-mil-rps}
+
+{% include notitle [use_cases_tag](../../tags.md#use_cases) %}
+
 В Яндекс Метрике существует сборка визитов пользователей на сайте, для этого необходимо хранить историю всех событий и склеивать их друг с другом на лету. Для этого использовалась конвейерная распределенная система, со своим самописным локальным хранилищем и своей логикой репликации и шардирования. По мере роста нагрузки команда, в которой работает [ {{ team.prudaev.name }} ]( {{ team.prudaev.profile }} ) (  {{ team.prudaev.position }} ), уперлась в производительность отдельного шарда, при этом продолжать наращивать их количество без принципиальной перестройки архитектуры было крайне болезненно.
 
 Александр в рамках доклада рассказал:
@@ -42,6 +51,9 @@
 [Слайды](https://presentations.ydb.tech/2022/ru/highload_foundation_million_rps_metrika/presentation.pdf)
 
 ### {{ ydb-short-name }}: мультиверсионность в распределенной базе {#2022-conf-hl-ydb-multiver}
+
+{% include notitle [database_internals_tag](../../tags.md#database_internals) %}
+
 [ {{ team.fomichev.name }} ]( {{ team.fomichev.profile }} ) ( {{ team.fomichev.position }} ) рассказал про особенности выполнения распределенных транзакций, что нужно делать, чтобы их поведение было привычным для пользователя и раскрыл особенности реализации `MVCC` в {{ ydb-short-name }}:
 * `MVCC` поверх LSM-деревьев.
 * Как удалось сделать `MVCC` с консистентными снапшотами в распределенной базе данных.
@@ -54,6 +66,9 @@
 [Слайды](https://presentations.ydb.tech/2022/ru/highload_foundation_mvcc/presentation.pdf)
 
 ### Q&A про Open Source {{ ydb-short-name }} и планы на будущее {#2022-conf-hl-qa}
+
+{% include notitle [overview_tag](../../tags.md#overview) %}
+
 [ {{ team.fomichev.name }} ]( {{ team.fomichev.profile }} ) ( {{ team.fomichev.position }} ), [ {{ team.bondar.name }} ]( {{ team.bondar.profile }} ) ( {{ team.bondar.position }} ) и [ {{ team.puchin.name }} ]( {{ team.puchin.profile }} ) ( {{ team.puchin.position }} ) выступили на Q&A-сессии, поделились планами на будущие и ответили на вопросы слушателей.
 
 @[YouTube](https://youtu.be/qRE2ROtd74g)

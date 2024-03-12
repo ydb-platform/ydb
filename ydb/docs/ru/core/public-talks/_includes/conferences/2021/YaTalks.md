@@ -4,6 +4,11 @@
 @[YouTube](https://www.youtube.com/watch?v=Ay6_ffxK4us&t=7076s)
 
 ### Миграция приложения с PostgreSQL на Yandex {{ ydb-name }} Serverless. Производительность, стоимость, риски. {#2021-conf-yatalks-cloud-o-serverless}
+
+{% include notitle [use_cases_tag](../../tags.md#use_cases) %}
+
+{% include notitle [practice_tag](../../tags.md#practice) %}
+
 В исследовании, которое провела команда Yandex {{ ydb-name }}, рассмотрены аспекты миграции Е-commerce приложения, изначально разработанного для PostgreSQL, на Yandex {{ ydb-name }}. Основная тема исследования — сравнение производительности и стоимости решений на PostgreSQL и {{ ydb-short-name }}.
 
 В докладе показано:

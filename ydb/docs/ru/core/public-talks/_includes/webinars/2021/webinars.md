@@ -1,4 +1,7 @@
 ### Практический пример использования serverless: интеграция сервисов Yandex Cloud с голосовыми технологиями компании Voximplant {#2021-webinar-voximplant}
+
+{% include notitle [use_cases_tag](../../tags.md#use_cases) %}
+
 В докладе показано, как интегрировать сервисы Yandex Cloud с голосовыми технологиями компании Voximplant. 
 
 В докладе подробно описаны следующие шаги:

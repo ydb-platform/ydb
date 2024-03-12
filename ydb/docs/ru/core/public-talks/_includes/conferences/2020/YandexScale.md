@@ -1,4 +1,7 @@
 ### Serverless: публичный запуск {{ ydb-name }} {#2021-conf-yandex-scale}
+
+{% include notitle [overview_tag](../../tags.md#overview) %}
+
 Сервис {{ ydb-name }} вышел в общий доступ. Теперь можно выбрать режим работы с выделенными серверами или бессерверный режим. 
 
 В докладе:

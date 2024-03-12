@@ -1,4 +1,7 @@
 ### Опыт использования {{ ydb-name }} на примере продуктов Яндекса {#2019-webinar-ydb-exp}
+
+{% include notitle [use_cases_tag](../../tags.md#use_cases) %}
+
 [ {{ team.bondar.name }} ]( {{ team.bondar.profile }} ) ( {{ team.bondar.position }} ) поделился опытом использования {{ ydb-name }} на примере продуктов Яндекса.
 
 В вебинаре:

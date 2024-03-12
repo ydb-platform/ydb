@@ -1,4 +1,7 @@
 ### Новости {{ ydb-name }} — обзор новых возможностей {#2020-webinar-ydb-news}
+
+{% include notitle [overview_tag](../../tags.md#overview) %}
+
 [ {{ team.kovalenko.name }} ]( {{ team.kovalenko.profile }} ) ( {{ team.kovalenko.position }} ) сделал обзор новых возможностей БД: работа с JSON, системные таблицы и nodeJS SDK. Раньше пользователи Яндекс.Облака могли работать с Yandex Database только из виртуальных машин на платформе. Теперь это возможно через интернет.
 
 Из вебинара вы узнаете про:

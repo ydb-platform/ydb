@@ -90,6 +90,7 @@ DEFINE_ENUM(EAccessControlObject,
     (ResurrectChunkLocations)
     (BuildSnapshot)
     (BuildMasterSnapshot)
+    (GetMasterConsistentState)
     (ExitReadOnly)
     (MasterExitReadOnly)
     (DiscombobulateNonvotingPeers)

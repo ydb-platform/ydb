@@ -352,6 +352,8 @@ DECLARE_REFCOUNTED_CLASS(TDictionaryCompressionConfig)
 
 DECLARE_REFCOUNTED_CLASS(TBatchHunkReaderConfig)
 
+DECLARE_REFCOUNTED_CLASS(TDictionaryCompressionSessionConfig)
+
 DECLARE_REFCOUNTED_CLASS(TTableReaderConfig)
 DECLARE_REFCOUNTED_CLASS(TTableWriterConfig)
 

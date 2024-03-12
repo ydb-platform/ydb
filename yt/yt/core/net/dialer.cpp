@@ -240,8 +240,10 @@ private:
         Poller_->Unarm(Socket_, Pollable_);
 
         YT_VERIFY(Pollable_);
-        YT_UNUSED_FUTURE(Poller_->Unregister(Pollable_));
-        Pollable_.Reset();
+        auto pollable = std::move(Pollable_);
+        SpinLock_.Release();
+        YT_UNUSED_FUTURE(Poller_->Unregister(pollable));
+        SpinLock_.Acquire();
     }
 
     void Connect(TGuard<NThreading::TSpinLock>& guard)

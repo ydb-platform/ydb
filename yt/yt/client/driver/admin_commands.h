@@ -34,6 +34,20 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TGetMasterConsistentStateCommand
+    : public TTypedCommand<NApi::TGetMasterConsistentStateOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetMasterConsistentStateCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TExitReadOnlyCommand
     : public TTypedCommand<NApi::TExitReadOnlyOptions>
 {

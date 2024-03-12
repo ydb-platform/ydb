@@ -3,3 +3,5 @@ items:
   href: fluent-bit.md
 - name: goose
   href: goose.md
+- name: Диалект Hibernate
+  href: hibernate.md

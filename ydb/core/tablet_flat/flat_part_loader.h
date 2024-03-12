@@ -4,7 +4,6 @@
 #include "flat_sausagecache.h"
 #include "shared_cache_events.h"
 #include "util_fmt_abort.h"
-#include "util_basics.h"
 #include <ydb/core/tablet_flat/protos/flat_table_part.pb.h>
 #include <ydb/core/util/pb.h>
 #include <util/generic/hash.h>

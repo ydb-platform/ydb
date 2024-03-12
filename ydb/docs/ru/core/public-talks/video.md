@@ -4,10 +4,6 @@
 
 {% list tabs %}
 
-- Конференции
-  
-  {% list tabs %}
-
   - 2023
 
     {% include [HighLoad](./_includes/conferences/2023/HighLoad.md) %}
@@ -18,6 +14,8 @@
 
     {% include [Fossasia](./_includes/conferences/2023/Fossasia.md) %}
 
+    {% include [Webinars](./_includes/webinars/2023/webinars.md) %}
+
   - 2022
 
     {% include [HighLoad](./_includes/conferences/2022/HighLoad.md) %}
@@ -25,6 +23,8 @@
     {% include [YaTalks](./_includes/conferences/2022/YaTalks.md) %}
 
     {% include [Hydra](./_includes/conferences/2022/Hydra.md) %}
+
+    {% include [Webinars](./_includes/webinars/2022/webinars.md) %}
 
   - 2021
 
@@ -34,9 +34,13 @@
 
     {% include [DevOpsConf](./_includes/conferences/2021/DevOpsConf.md) %}
 
+    {% include [Webinars](./_includes/webinars/2021/webinars.md) %}
+
   - 2020
 
     {% include [YandexScale](./_includes/conferences/2020/YandexScale.md) %}
+
+    {% include [Webinars](./_includes/webinars/2020/webinars.md) %}
 
   - 2019
 
@@ -50,6 +54,8 @@
 
     {% include [Hydra](./_includes/conferences/2019/Hydra.md) %}
 
+    {% include [Webinars](./_includes/webinars/2019/webinars.md) %}
+
   - 2018
 
     {% include [AboutCloud](./_includes/conferences/2018/about_cloud.md) %}
@@ -59,31 +65,3 @@
     {% include [Heisenbug](./_includes/conferences/2017/Heisenbug.md) %}
 
   {% endlist %}
-
-- Вебинары
-
-  {% list tabs %}
-
-  - 2023
-
-    {% include [Webinars](./_includes/webinars/2023/webinars.md) %}
-
-  - 2022
-
-    {% include [Webinars](./_includes/webinars/2022/webinars.md) %}
-
-  - 2021
-    
-    {% include [Webinars](./_includes/webinars/2021/webinars.md) %}
-
-  - 2020
-
-    {% include [Webinars](./_includes/webinars/2020/webinars.md) %}
-
-  - 2019
-
-    {% include [Webinars](./_includes/webinars/2019/webinars.md) %}
-  
-  {% endlist %}
-
-{% endlist %}

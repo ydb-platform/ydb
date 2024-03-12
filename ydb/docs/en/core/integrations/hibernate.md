@@ -1,4 +1,4 @@
-## Hibernate dialect ##
+## YDB dialect for Hibernate ##
 
 ### Overview ###
 
@@ -33,8 +33,7 @@ If you use Hibernate version 5, you need `<artifactId>hibernate-ydb-dialect-v5</
 
 ### Configuration
 
-Configure Hibernate to use the custom YDB dialect
-by updating your hibernate.cfg.xml:
+Configure Hibernate to use the custom YDB dialect by updating your hibernate.cfg.xml:
 
 ```xml
 <property name="hibernate.dialect">tech.ydb.hibernate.dialect.YdbDialect</property>
@@ -52,14 +51,11 @@ public static Configuration basedConfiguration() {
 
 ## Usage
 
-Use this custom dialect just like any other Hibernate dialect.
-Map your entity classes to database tables and use Hibernate's
-session factory to perform database operations.
+Use this custom dialect just like any other Hibernate dialect. Map your entity classes to database tables and use Hibernate's session factory to perform database operations.
 
 ## Integration with Spring Data JPA
 
-Configure Spring Data JPA with Hibernate to use custom YDB dialect
-by updating your application.properties:
+Configure Spring Data JPA with Hibernate to use custom YDB dialect by updating your application.properties:
 
 ```properties
 spring.jpa.properties.hibernate.dialect=tech.ydb.hibernate.dialect.YdbDialect
@@ -68,8 +64,7 @@ spring.datasource.driver-class-name=tech.ydb.jdbc.YdbDriver
 spring.datasource.url=jdbc:ydb:grpc://localhost:2136/local
 ```
 
-An example of a simple Spring Data JPA repository can be found at the following
-[link](https://github.com/ydb-platform/ydb-java-examples/tree/master/jdbc/spring-data-jpa).
+An example of a simple Spring Data JPA repository can be found at the following [link](https://github.com/ydb-platform/ydb-java-examples/tree/master/jdbc/spring-data-jpa).
 
 ## Support and Contact
 

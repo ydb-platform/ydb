@@ -51,6 +51,10 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
             UNIT_ASSERT(FindIfPtr(tableDesc.Columns, pred));
         }
+
+        const auto& replCfg = replicatedDesc.GetReplicationConfig();
+        UNIT_ASSERT_VALUES_EQUAL(replCfg.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        UNIT_ASSERT_VALUES_EQUAL(replCfg.GetConsistency(), NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK);
     }
 
     Y_UNIT_TEST(NonExistentSrc) {
@@ -183,6 +187,57 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         };
 
         ExistingDst(NKikimrScheme::StatusSchemeError, "Column type mismatch", changeColumnType, TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Utf8"},
+            },
+        });
+    }
+
+    Y_UNIT_TEST(EmptyReplicationConfig) {
+        auto clearConfig = [](const TTestTableDescription& desc) {
+            auto copy = desc;
+            copy.ReplicationConfig.Clear();
+            return copy;
+        };
+
+        ExistingDst(NKikimrScheme::StatusSchemeError, "Empty replication config", clearConfig, TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Utf8"},
+            },
+        });
+    }
+
+    Y_UNIT_TEST(UnsupportedReplicationMode) {
+        auto clearMode = [](const TTestTableDescription& desc) {
+            auto copy = desc;
+            copy.ReplicationConfig->Mode = TTestTableDescription::TReplicationConfig::MODE_NONE;
+            return copy;
+        };
+
+        ExistingDst(NKikimrScheme::StatusSchemeError, "Unsupported replication mode", clearMode, TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Utf8"},
+            },
+        });
+    }
+
+    Y_UNIT_TEST(UnsupportedReplicationConsistency) {
+        auto changeConsistency = [](const TTestTableDescription& desc) {
+            auto copy = desc;
+            copy.ReplicationConfig->Consistency = TTestTableDescription::TReplicationConfig::CONSISTENCY_STRONG;
+            return copy;
+        };
+
+        ExistingDst(NKikimrScheme::StatusSchemeError, "Unsupported replication consistency", changeConsistency, TTestTableDescription{
             .Name = "Table",
             .KeyColumns = {"key"},
             .Columns = {

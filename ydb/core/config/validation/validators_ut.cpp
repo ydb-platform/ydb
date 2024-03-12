@@ -1,5 +1,8 @@
 #include "validators.h"
 
+#include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/blobstorage_disk.pb.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NKikimr::NConfig;

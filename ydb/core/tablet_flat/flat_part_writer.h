@@ -647,8 +647,9 @@ namespace NTable {
 
             if (auto *lay = proto.MutableLayout()) {
                 lay->SetScheme(Current.Scheme);
-                lay->SetIndex(Current.Index);
 
+                if (Current.Index != Max<TPageId>())
+                    lay->SetIndex(Current.Index);
                 if (Current.Globs != Max<TPageId>())
                     lay->SetGlobs(Current.Globs);
                 if (Current.Large != Max<TPageId>())

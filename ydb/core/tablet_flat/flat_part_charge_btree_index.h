@@ -71,7 +71,7 @@ public:
 
         bool ready = true, overshot = true, hasValidRowsRange = Groups || IncludeHistory;
         const TRowId sliceBeginRowId = beginRowId, sliceEndRowId = endRowId;
-        const auto& meta = Part->IndexPages.BTreeGroups[0];
+        const auto& meta = Part->IndexPages.GetBTree({});
         Y_ABORT_UNLESS(beginRowId < endRowId);
         Y_ABORT_UNLESS(endRowId <= meta.RowCount);
 
@@ -221,7 +221,7 @@ public:
         
         bool ready = true, overshot = true, hasValidRowsRange = Groups || IncludeHistory;
         const TRowId sliceBeginRowId = beginRowId, sliceEndRowId = endRowId;
-        const auto& meta = Part->IndexPages.BTreeGroups[0];
+        const auto& meta = Part->IndexPages.GetBTree({});
         Y_ABORT_UNLESS(beginRowId < endRowId);
         Y_ABORT_UNLESS(endRowId <= meta.RowCount);
 
@@ -444,7 +444,7 @@ private:
 private:
     bool DoGroup(TGroupId groupId, TRowId beginRowId, TRowId endRowId, TRowId firstChildBeginRowId, ui64 bytesLimit) const noexcept {
         bool ready = true;
-        const auto& meta = groupId.IsHistoric() ? Part->IndexPages.BTreeHistoric[groupId.Index] : Part->IndexPages.BTreeGroups[groupId.Index];
+        const auto& meta = Part->IndexPages.GetBTree(groupId);
 
         TVector<TNodeState> level, nextLevel(::Reserve(3));
         ui64 firstChildPrevBytes = bytesLimit ? GetPrevBytes(meta, firstChildBeginRowId) : 0;
@@ -500,7 +500,7 @@ private:
 
     bool DoGroupReverse(TGroupId groupId, TRowId beginRowId, TRowId endRowId, TRowId lastChildEndRowId, ui64 bytesLimit) const noexcept {
         bool ready = true;
-        const auto& meta = groupId.IsHistoric() ? Part->IndexPages.BTreeHistoric[groupId.Index] : Part->IndexPages.BTreeGroups[groupId.Index];
+        const auto& meta = Part->IndexPages.GetBTree(groupId);
 
         // level's nodes is in reverse order
         TVector<TNodeState> level, nextLevel(::Reserve(3));

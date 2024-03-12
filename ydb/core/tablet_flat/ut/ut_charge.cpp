@@ -322,10 +322,10 @@ namespace {
             auto &pages = Eggs.Lone()->IndexPages;
             TGroupId mainGroupId{};
             
-            for (auto x : pages.Groups) {
+            for (auto x : pages.FlatGroups) {
                 result.insert({mainGroupId, x});
             }
-            for (auto x : pages.Historic) {
+            for (auto x : pages.FlatHistoric) {
                 result.insert({mainGroupId, x});
             }
 
@@ -988,17 +988,17 @@ Y_UNIT_TEST_SUITE(Charge) {
 
             // no index => touch index
             me.To(100).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
-                {TGroupId{0}, {pages.Groups[0]}},
+                {TGroupId{0}, {pages.FlatGroups[0]}},
             }, TSet<TPageId> {
 
             });
 
             // index => touch pages + index
             me.To(101).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
-                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.Groups[0]}}
+                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.FlatGroups[0]}}
             },
             TSet<TPageId> {
-                pages.Groups[0]
+                pages.FlatGroups[0]
             });
         }
 
@@ -1008,7 +1008,7 @@ Y_UNIT_TEST_SUITE(Charge) {
 
             // no index => touch index
             me.To(200).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
-                {TGroupId{0}, {pages.Groups[0]}},
+                {TGroupId{0}, {pages.FlatGroups[0]}},
                 {TGroupId{0, true}, {}}
             }, TSet<TPageId> {
 
@@ -1016,20 +1016,20 @@ Y_UNIT_TEST_SUITE(Charge) {
 
             // no history index => touch main pages + index + history index
             me.To(201).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
-                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.Groups[0], pages.Historic[0]}},
+                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.FlatGroups[0], pages.FlatHistoric[0]}},
                 {TGroupId{0, true}, {}}
             },
             TSet<TPageId> {
-                pages.Groups[0]
+                pages.FlatGroups[0]
             });
 
             // history index => touch main pages + history pages + index + history index
             me.To(202).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
-                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.Groups[0], pages.Historic[0]}},
+                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.FlatGroups[0], pages.FlatHistoric[0]}},
                 {TGroupId{0, true}, {1, 2, 3, 4}}
             },
             TSet<TPageId> {
-                pages.Groups[0], pages.Historic[0]
+                pages.FlatGroups[0], pages.FlatHistoric[0]
             });
         }
         
@@ -1039,7 +1039,7 @@ Y_UNIT_TEST_SUITE(Charge) {
 
             // no index => touch index
             me.To(300).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
-                {TGroupId{0}, {pages.Groups[0]}},
+                {TGroupId{0}, {pages.FlatGroups[0]}},
                 {TGroupId{1}, {}}
             }, TSet<TPageId> {
 
@@ -1047,20 +1047,20 @@ Y_UNIT_TEST_SUITE(Charge) {
 
             // no groups index => touch main pages + index + all groups indexes
             me.To(301).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
-                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.Groups[0], pages.Groups[1], pages.Groups[2], pages.Groups[3]}},
+                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.FlatGroups[0], pages.FlatGroups[1], pages.FlatGroups[2], pages.FlatGroups[3]}},
                 {TGroupId{1}, {}}
             },
             TSet<TPageId> {
-                pages.Groups[0]
+                pages.FlatGroups[0]
             });
 
             // groups index => touch all pages + index + all groups indexes
             me.To(302).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
-                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.Groups[0], pages.Groups[1], pages.Groups[2], pages.Groups[3]}},
+                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.FlatGroups[0], pages.FlatGroups[1], pages.FlatGroups[2], pages.FlatGroups[3]}},
                 {TGroupId{1}, {3, 4, 5, 6, 7}}
             },
             TSet<TPageId> {
-                pages.Groups[0], pages.Groups[1]
+                pages.FlatGroups[0], pages.FlatGroups[1]
             });
         }
 
@@ -1070,7 +1070,7 @@ Y_UNIT_TEST_SUITE(Charge) {
 
             // no index => touch index
             me.To(400).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
-                {TGroupId{0}, {pages.Groups[0]}},
+                {TGroupId{0}, {pages.FlatGroups[0]}},
                 {TGroupId{0, true}, {}},
                 {TGroupId{1}, {}},
                 {TGroupId{1, true}, {}},
@@ -1082,7 +1082,7 @@ Y_UNIT_TEST_SUITE(Charge) {
 
             // only index => touch main pages + index + all groups indexes + history index
             me.To(401).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
-                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.Groups[0], pages.Historic[0], pages.Groups[1], pages.Groups[2], pages.Groups[3]}},
+                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.FlatGroups[0], pages.FlatHistoric[0], pages.FlatGroups[1], pages.FlatGroups[2], pages.FlatGroups[3]}},
                 {TGroupId{0, true}, {}},
                 {TGroupId{1}, {}},
                 {TGroupId{1, true}, {}},
@@ -1090,13 +1090,13 @@ Y_UNIT_TEST_SUITE(Charge) {
                 {TGroupId{2, true}, {}}
             },
             TSet<TPageId> {
-                pages.Groups[0]
+                pages.FlatGroups[0]
             });
 
             // history index => touch main pages + index + all groups indexes + main history pages
             me.To(402).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
-                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.Groups[0], 
-                    pages.Historic[0], pages.Historic[1], pages.Historic[2], pages.Historic[3], pages.Groups[1], pages.Groups[2], pages.Groups[3]}},
+                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.FlatGroups[0], 
+                    pages.FlatHistoric[0], pages.FlatHistoric[1], pages.FlatHistoric[2], pages.FlatHistoric[3], pages.FlatGroups[1], pages.FlatGroups[2], pages.FlatGroups[3]}},
                 {TGroupId{0, true}, {1, 2, 3, 4}},
                 {TGroupId{1}, {}},
                 {TGroupId{1, true}, {}},
@@ -1104,13 +1104,13 @@ Y_UNIT_TEST_SUITE(Charge) {
                 {TGroupId{2, true}, {}}
             },
             TSet<TPageId> {
-                pages.Groups[0], pages.Historic[0]
+                pages.FlatGroups[0], pages.FlatHistoric[0]
             });
 
             // main history and history => touch main pages + index + all groups indexes + history pages + history groups pages
             me.To(403).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
-                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.Groups[0], 
-                    pages.Historic[0], pages.Historic[1], pages.Historic[2], pages.Historic[3], pages.Groups[1], pages.Groups[2], pages.Groups[3]}},
+                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.FlatGroups[0], 
+                    pages.FlatHistoric[0], pages.FlatHistoric[1], pages.FlatHistoric[2], pages.FlatHistoric[3], pages.FlatGroups[1], pages.FlatGroups[2], pages.FlatGroups[3]}},
                 {TGroupId{0, true}, {1, 2, 3, 4}},
                 {TGroupId{1}, {}},
                 {TGroupId{1, true}, {3, 4, 5}},
@@ -1118,13 +1118,13 @@ Y_UNIT_TEST_SUITE(Charge) {
                 {TGroupId{2, true}, {}}
             },
             TSet<TPageId> {
-                pages.Groups[0], pages.Historic[0], pages.Historic[1] 
+                pages.FlatGroups[0], pages.FlatHistoric[0], pages.FlatHistoric[1] 
             });
 
             // groups index => touch main pages + index + history index + all groups indexes + groups pages
             me.To(404).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
-                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.Groups[0], 
-                    pages.Historic[0], pages.Groups[1], pages.Groups[2], pages.Groups[3]}},
+                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.FlatGroups[0], 
+                    pages.FlatHistoric[0], pages.FlatGroups[1], pages.FlatGroups[2], pages.FlatGroups[3]}},
                 {TGroupId{0, true}, {}},
                 {TGroupId{1}, {3, 4, 5, 6, 7}},
                 {TGroupId{1, true}, {}},
@@ -1132,13 +1132,13 @@ Y_UNIT_TEST_SUITE(Charge) {
                 {TGroupId{2, true}, {}}
             },
             TSet<TPageId> {
-                pages.Groups[0], pages.Groups[1]
+                pages.FlatGroups[0], pages.FlatGroups[1]
             });
 
             // main history and groups => touch main pages + index + all groups indexes + groups pages + history main pages
             me.To(405).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
-                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.Groups[0], 
-                    pages.Historic[0], pages.Historic[1], pages.Historic[2], pages.Historic[3], pages.Groups[1], pages.Groups[2], pages.Groups[3]}},
+                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.FlatGroups[0], 
+                    pages.FlatHistoric[0], pages.FlatHistoric[1], pages.FlatHistoric[2], pages.FlatHistoric[3], pages.FlatGroups[1], pages.FlatGroups[2], pages.FlatGroups[3]}},
                 {TGroupId{0, true}, {1, 2, 3, 4}},
                 {TGroupId{1}, {3, 4, 5, 6, 7}},
                 {TGroupId{1, true}, {}},
@@ -1146,13 +1146,13 @@ Y_UNIT_TEST_SUITE(Charge) {
                 {TGroupId{2, true}, {}}
             },
             TSet<TPageId> {
-                pages.Groups[0], pages.Historic[0], pages.Groups[1]
+                pages.FlatGroups[0], pages.FlatHistoric[0], pages.FlatGroups[1]
             });
 
             // all indexes
             me.To(406).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
-                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.Groups[0], 
-                    pages.Historic[0], pages.Historic[1], pages.Historic[2], pages.Historic[3], pages.Groups[1], pages.Groups[2], pages.Groups[3]}},
+                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.FlatGroups[0], 
+                    pages.FlatHistoric[0], pages.FlatHistoric[1], pages.FlatHistoric[2], pages.FlatHistoric[3], pages.FlatGroups[1], pages.FlatGroups[2], pages.FlatGroups[3]}},
                 {TGroupId{0, true}, {1, 2, 3, 4}},
                 {TGroupId{1}, {3, 4, 5, 6, 7}},
                 {TGroupId{1, true}, {3, 4, 5}},
@@ -1160,7 +1160,7 @@ Y_UNIT_TEST_SUITE(Charge) {
                 {TGroupId{2, true}, {}}
             },
             TSet<TPageId> {
-                pages.Groups[0], pages.Historic[0], pages.Historic[1], pages.Groups[1]
+                pages.FlatGroups[0], pages.FlatHistoric[0], pages.FlatHistoric[1], pages.FlatGroups[1]
             });
         }
     }

@@ -136,7 +136,8 @@ namespace NTable {
     private:
         bool HasBasics() const noexcept
         {
-            return SchemeId != Max<TPageId>() && IndexId != Max<TPageId>();
+            return SchemeId != Max<TPageId>() && 
+                (FlatGroupIndexes || BTreeGroupIndexes);
         }
 
         const TSharedData* GetPage(TPageId page) noexcept
@@ -171,15 +172,14 @@ namespace NTable {
         EStage Stage = EStage::Meta;
         bool Rooted = false; /* Has full topology metablob */
         TPageId SchemeId = Max<TPageId>();
-        TPageId IndexId = Max<TPageId>();
         TPageId GlobsId = Max<TPageId>();
         TPageId LargeId = Max<TPageId>();
         TPageId SmallId = Max<TPageId>();
         TPageId ByKeyId = Max<TPageId>();
         TPageId GarbageStatsId = Max<TPageId>();
         TPageId TxIdStatsId = Max<TPageId>();
-        TVector<TPageId> GroupIndexesIds;
-        TVector<TPageId> HistoricIndexesIds;
+        TVector<TPageId> FlatGroupIndexes;
+        TVector<TPageId> FlatHistoricIndexes;
         TVector<NPage::TBtreeIndexMeta> BTreeGroupIndexes;
         TVector<NPage::TBtreeIndexMeta> BTreeHistoricIndexes;
         TRowVersion MinRowVersion;

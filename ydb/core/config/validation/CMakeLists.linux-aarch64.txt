@@ -6,9 +6,16 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(init)
-add_subdirectory(protos)
-add_subdirectory(tools)
 add_subdirectory(ut)
-add_subdirectory(utils)
-add_subdirectory(validation)
+
+add_library(core-config-validation)
+target_link_libraries(core-config-validation PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  ydb-core-protos
+)
+target_sources(core-config-validation PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/config/validation/validators.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/config/validation/validators.cpp
+)

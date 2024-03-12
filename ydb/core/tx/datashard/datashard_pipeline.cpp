@@ -1783,7 +1783,7 @@ EExecutionStatus TPipeline::RunExecutionPlan(TOperation::TPtr op,
             return EExecutionStatus::Reschedule;
         }
 
-        NWilson::TSpan unitSpan(TWilsonTablet::TabletFull, txc.TransactionExecutionSpan.GetTraceId(), "Datashard.Unit");
+        NWilson::TSpan unitSpan(TWilsonTablet::TabletDetailed, txc.TransactionExecutionSpan.GetTraceId(), "Datashard.Unit");
         
         NCpuTime::TCpuTimer timer;
         auto status = unit.Execute(op, txc, ctx);

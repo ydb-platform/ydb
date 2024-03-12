@@ -698,8 +698,13 @@ class Build(object):
             emit('IBTOOL_PATH', self.params['params']['ibtool'])
             self._configure_runtime_versions()
         elif type_ == 'system_cxx':
+            c_compiler = self.params['params'].get('c_compiler')
+            cxx_compiler = self.params['params'].get('cxx_compiler')
+            if is_positive('USE_CLANG_CL'):
+                c_compiler = 'clang-cl.exe' if c_compiler == 'cl.exe' else c_compiler
+                cxx_compiler = 'clang-cl.exe' if cxx_compiler == 'cl.exe' else cxx_compiler
             detector = CompilerDetector()
-            detector.detect(self.params['params'].get('c_compiler'), self.params['params'].get('cxx_compiler'))
+            detector.detect(c_compiler, cxx_compiler)
             type_ = detector.type
         else:
             detector = None
@@ -1801,6 +1806,8 @@ class MSVCToolchainOptions(ToolchainOptions):
             self.kit_libs = os.path.join(sdk_dir, 'Lib', self.sdk_version)
 
         elif detector:
+            self.use_clang = is_positive('USE_CLANG_CL')
+
             self.masm_compiler = which('ml64.exe')
             self.link = which('link.exe')
             self.lib = which('lib.exe')

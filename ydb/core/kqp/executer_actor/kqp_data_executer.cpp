@@ -478,7 +478,7 @@ private:
     }
 
     void HandlePrepare(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
-        const auto* res = ev->Get();
+        auto* res = ev->Get();
 
         const ui64 shardId = res->Record.GetOrigin();
         TShardState* shardState = ShardStates.FindPtr(shardId);
@@ -490,13 +490,16 @@ private:
             << NKikimrDataEvents::TEvWriteResult::EStatus_Name(res->Record.GetStatus())
             << ", error: " << issues.ToString());
 
+        if (Stats) {
+            Stats->AddDatashardPrepareStats(std::move(*res->Record.MutableTxStats()));
+        }
+
         switch (ev->Get()->GetStatus()) {
             case NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED: {
                 YQL_ENSURE(false);
             }
             case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED: {
                 if (!ShardPrepared(*shardState, res->Record)) {
-                    // TODO: Cancel tx???
                     return;
                 }
                 return CheckPrepareCompleted();
@@ -506,7 +509,6 @@ private:
             }
             default:
             {
-                // TODO: Cancel tx???
                 return ShardError(res->Record);
             }
         }
@@ -1139,7 +1141,7 @@ private:
     }
 
     void HandleExecute(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
-        const auto* res = ev->Get();
+        auto* res = ev->Get();
         const ui64 shardId = res->Record.GetOrigin();
         LastShard = shardId;
 
@@ -1151,6 +1153,10 @@ private:
         LOG_D("Got evWrite result, shard: " << shardId << ", status: "
             << NKikimrDataEvents::TEvWriteResult::EStatus_Name(res->Record.GetStatus())
             << ", error: " << issues.ToString());
+
+        if (Stats) {
+            Stats->AddDatashardStats(std::move(*res->Record.MutableTxStats()));
+        }
 
         switch (ev->Get()->GetStatus()) {
             case NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED: {

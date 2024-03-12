@@ -604,6 +604,24 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
     }
 }
 
+void TQueryExecutionStats::AddDatashardStats(NKikimrQueryStats::TTxStats&& txStats) {
+    ui64 datashardCpuTimeUs = 0;
+    for (const auto& perShard : txStats.GetPerShardStats()) {
+        AffectedShards.emplace(perShard.GetShardId());
+
+        datashardCpuTimeUs += perShard.GetCpuTimeUsec();
+        UpdateAggr(ExtraStats.MutableShardsCpuTimeUs(), perShard.GetCpuTimeUsec());
+    }
+
+    Result->SetCpuTimeUs(Result->GetCpuTimeUs() + datashardCpuTimeUs);
+
+    if (CollectFullStats(StatsMode)) {
+        DatashardStats.emplace_back(std::move(txStats));
+    } else {
+        DatashardStats.emplace_back(std::move(txStats));
+    }
+}
+
 void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats) {
     Y_ASSERT(stats.GetTasks().size() == 1);
     const NYql::NDqProto::TDqTaskStats& taskStats = stats.GetTasks(0);

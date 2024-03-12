@@ -279,7 +279,7 @@ const TOperDesc& LookupOper(const TString& name, const TVector<ui32>& argTypeIds
 const TOperDesc& LookupOper(ui32 operId, const TVector<ui32>& argTypeIds);
 const TOperDesc& LookupOper(ui32 operId);
 
-bool HasAggregation(const TString& name);
+bool HasAggregation(const TString& name, EAggKind kind);
 const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>& argTypeIds);
 const TAggregateDesc& LookupAggregation(const TString& name, ui32 stateType, ui32 resultType);
 void EnumAggregation(std::function<void(ui32, const TAggregateDesc&)> f);

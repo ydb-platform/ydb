@@ -73,13 +73,13 @@ bool IsCompatibleTo(ui32 actualTypeId, ui32 expectedTypeId, const TTypes& types)
     if (expectedTypeId == AnyArrayOid) {
         const auto& actualDescPtr = types.FindPtr(actualTypeId);
         Y_ENSURE(actualDescPtr);
-        return actualDescPtr->ArrayTypeId == actualDescPtr->TypeId;
+        return actualDescPtr->ArrayTypeId && actualDescPtr->ArrayTypeId == actualDescPtr->TypeId;
     }
 
     if (expectedTypeId == AnyNonArrayOid) {
         const auto& actualDescPtr = types.FindPtr(actualTypeId);
         Y_ENSURE(actualDescPtr);
-        return actualDescPtr->ArrayTypeId != actualDescPtr->TypeId;
+        return actualDescPtr->ArrayTypeId && actualDescPtr->ArrayTypeId != actualDescPtr->TypeId;
     }
 
     return false;
@@ -2730,9 +2730,22 @@ const TOperDesc& LookupOper(ui32 operId) {
     return *operPtr;
 }
 
-bool HasAggregation(const TString& name) {
+bool HasAggregation(const TString& name, EAggKind kind) {
     const auto& catalog = TCatalog::Instance();
-    return catalog.AggregationsByName.contains(to_lower(name));
+    auto aggIdPtr = catalog.AggregationsByName.FindPtr(to_lower(name));
+    if (!aggIdPtr) {
+        return false;
+    }
+
+    for (const auto& id : *aggIdPtr) {
+        const auto& d = catalog.Aggregations.FindPtr(id);
+        Y_ENSURE(d);
+        if (d->Kind == kind) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool ValidateAggregateArgs(const TAggregateDesc& d, const TVector<ui32>& argTypeIds) {

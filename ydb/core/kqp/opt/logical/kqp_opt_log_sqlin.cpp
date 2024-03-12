@@ -76,87 +76,26 @@ TExprBase KqpRewriteSqlInToEquiJoin(const TExprBase& node, TExprContext& ctx, co
 
     const NYql::TKikimrTableDescription* tableDesc;
 
-    auto readMatch = MatchRead<TKqlReadTableBase>(flatMap.Input());
-    auto rangesMatch = MatchRead<TKqlReadTableRangesBase>(flatMap.Input());
-    ui64 fixedPrefixLen;
-    if (readMatch) {
-        TString lookupTable;
+    auto readMatch = MatchRead(flatMap.Input(), [](TExprBase node) {
+            return node.Maybe<TKqlReadTableBase>() || node.Maybe<TKqlReadTableRangesBase>();
+        });
 
-        if (readMatch->FlatMap) {
-            return node;
-        }
-
-        auto readTable = readMatch->Read.Cast<TKqlReadTableBase>();
-
-        static const std::set<TStringBuf> supportedReads {
-            TKqlReadTable::CallableName(),
-            TKqlReadTableIndex::CallableName(),
-        };
-
-        if (!supportedReads.contains(readTable.CallableName())) {
-            return node;
-        }
-
-        if (!readTable.Table().SysView().Value().empty()) {
-            return node;
-        }
-
-        if (auto indexRead = readTable.Maybe<TKqlReadTableIndex>()) {
-            lookupTable = GetIndexMetadata(indexRead.Cast(), *kqpCtx.Tables, kqpCtx.Cluster)->Name;
-        } else if (!lookupTable) {
-            lookupTable = readTable.Table().Path().StringValue();
-        }
-
-        tableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, lookupTable);
-        const auto& rangeFrom = readTable.Range().From();
-        const auto& rangeTo = readTable.Range().To();
-
-        if (!rangeFrom.Maybe<TKqlKeyInc>() || !rangeTo.Maybe<TKqlKeyInc>()) {
-            return node;
-        }
-        if (rangeFrom.Raw() != rangeTo.Raw()) {
-            // not point selection
-            return node;
-        }
-
-        fixedPrefixLen = rangeFrom.ArgCount();
-    } else if (rangesMatch) {
-        if (rangesMatch->FlatMap) {
-            return node;
-        }
-
-        auto read = rangesMatch->Read.template Cast<TKqlReadTableRangesBase>();
-
-        if (!read.Table().SysView().Value().empty()) {
-            return node;
-        }
-
-        auto prompt = TKqpReadTableExplainPrompt::Parse(read);
-        if (prompt.PointPrefixLen != prompt.UsedKeyColumns.size()) {
-            return node;
-        }
-
-        if (!TCoVoid::Match(read.Ranges().Raw()) && prompt.ExpectedMaxRanges != TMaybe<ui64>(1)) {
-            return node;
-        }
-
-        TString lookupTable;
-        TString indexName;
-        if (auto indexRead = read.template Maybe<TKqlReadTableIndexRanges>()) {
-            const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
-            const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(indexRead.Index().Cast().StringValue());
-            lookupTable = indexMeta->Name;
-            indexName = indexRead.Cast().Index().StringValue();
-        } else {
-            lookupTable = read.Table().Path().StringValue();
-        }
-
-        tableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, lookupTable);
-
-        fixedPrefixLen = prompt.PointPrefixLen;
-    } else {
+    if (!readMatch) {
         return node;
     }
+
+    ui64 fixedPrefixLen;
+    auto pointSelection = RewriteReadToPrefixLookup(readMatch->Read, ctx, kqpCtx, kqpCtx.Config->IdxLookupJoinsPrefixPointLimit);
+    if (!pointSelection) {
+        return node;
+    }
+
+    if ((!kqpCtx.Config->PredicateExtract20 || kqpCtx.Config->OldLookupJoinBehaviour) && pointSelection->Filter.IsValid()) {
+        return node;
+    }
+
+    fixedPrefixLen = pointSelection->PrefixSize;
+    tableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, pointSelection->LookupTableName);
 
     i64 keySuffixLen = (i64) tableDesc->Metadata->KeyColumnNames.size() - (i64) fixedPrefixLen;
     if (keySuffixLen <= 0) {

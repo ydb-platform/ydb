@@ -1303,6 +1303,177 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         UNIT_ASSERT(explain.GetAst().Contains("GraceJoinCore"));
     }
 
+    Y_UNIT_TEST(FullOuterJoinNotNullJoinKey) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {  // init tables
+            AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+
+                CREATE TABLE left
+                (
+                    Key Int64 NOT NULL,
+                    Value Int64,
+                    PRIMARY KEY (Key)
+                );
+
+                CREATE TABLE right
+                (
+                    Key Int64 NOT NULL,
+                    Value Int64,
+                    PRIMARY KEY (Key)
+                );
+            )").GetValueSync());
+
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                REPLACE INTO left (Key, Value) VALUES 
+                    (1, 10),
+                    (2, 20),
+                    (3, 30);
+
+                REPLACE INTO right (Key, Value) VALUES 
+                    (1, 10),
+                    (2, 200),
+                    (3, 300),
+                    (4, 40);
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+        
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT l.Key, l.Value, r.Key, r.Value FROM left as l FULL JOIN right as r
+                    ON (l.Value = r.Value AND l.Key = r.Key)
+                    ORDER BY l.Key, r.Key;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [#;#;[2];[200]];
+                [#;#;[3];[300]];
+                [#;#;[4];[40]];
+                [[1];[10];[1];[10]];
+                [[2];[20];#;#];
+                [[3];[30];#;#]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(AllowJoinsForComplexPredicates, StreamLookup) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
+        appConfig.MutableTableServiceConfig()->SetOldLookupJoinBehaviour(false);
+        appConfig.MutableTableServiceConfig()->SetIdxLookupJoinPointsLimit(10);
+        //appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
+
+        auto appsettings = TKikimrSettings().SetAppConfig(appConfig);
+
+        TKikimrRunner kikimr(appsettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        NYdb::NTable::TExecDataQuerySettings settings;
+        settings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT l.Fk21, l.Fk22, r.Key1, r.Key2, r.Name  FROM Join1 as l JOIN Join2 as r
+                    ON (l.Fk21 = r.Key1 AND l.Fk22 = r.Key2)
+                WHERE r.Key1 > 0 and r.Name > ""
+                    ORDER BY l.Fk21 ASC, l.Fk22 ASC
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[101u];["One"];[101u];["One"];["Name1"]];
+                [[101u];["Two"];[101u];["Two"];["Name1"]];
+                [[103u];["One"];[103u];["One"];["Name1"]];
+                [[105u];["One"];[105u];["One"];["Name2"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            AssertTableReads(result, "/Root/Join2", 5);
+            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT l.Fk21, l.Fk22, r.Key1, r.Key2, r.Name  FROM Join1 as l JOIN Join2 as r
+                    ON (l.Fk21 = r.Key1 AND l.Fk22 = r.Key2)
+                WHERE r.Key1 = 101u and r.Key2 >= "One" and r.Key2 <= "Two"
+                    ORDER BY l.Fk21 ASC, l.Fk22 ASC
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[101u];["One"];[101u];["One"];["Name1"]];
+                [[101u];["Two"];[101u];["Two"];["Name1"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            AssertTableReads(result, "/Root/Join2", 2);
+            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT l.Fk21, l.Fk22, r.Key1, r.Key2, r.Name  FROM Join1 as l JOIN Join2 as r
+                    ON (l.Fk21 = r.Key1 AND l.Fk22 = r.Key2)
+                WHERE r.Key1 >= 101u and r.Key1 <= 103u and r.Key2 >= "One" and r.Key2 <= "Two"
+                    ORDER BY l.Fk21 ASC, l.Fk22 ASC
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[101u];["One"];[101u];["One"];["Name1"]];
+                [[101u];["Two"];[101u];["Two"];["Name1"]];
+                [[103u];["One"];[103u];["One"];["Name1"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            AssertTableReads(result, "/Root/Join2", 3);
+            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT l.Fk21, l.Fk22, r.Key1, r.Key2, r.Name  FROM Join1 as l JOIN Join2 as r
+                    ON (l.Fk21 = r.Key1 AND l.Fk22 = r.Key2)
+                WHERE r.Key1 = 101u or r.Key1 = 105u
+                    ORDER BY l.Fk21 ASC, l.Fk22 ASC
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[101u];["One"];[101u];["One"];["Name1"]];
+                [[101u];["Two"];[101u];["Two"];["Name1"]];
+                [[105u];["One"];[105u];["One"];["Name2"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            AssertTableReads(result, "/Root/Join2", 3);
+            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT l.Fk21, l.Fk22, r.Key1, r.Key2, r.Name  FROM Join1 as l JOIN Join2 as r
+                    ON (l.Fk21 = r.Key1 AND l.Fk22 = r.Key2)
+                WHERE (r.Key1 = 101u  AND r.Key2 = "One") OR r.Key1 = 105u
+                    ORDER BY l.Fk21 ASC, l.Fk22 ASC
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[101u];["One"];[101u];["One"];["Name1"]];
+                [[105u];["One"];[105u];["One"];["Name2"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            AssertTableReads(result, "/Root/Join2", 2);
+            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
+        }
+    }
 }
 
 } // namespace NKqp

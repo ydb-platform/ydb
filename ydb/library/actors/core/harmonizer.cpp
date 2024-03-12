@@ -166,6 +166,8 @@ struct TThreadInfo {
 
 struct TPoolInfo {
     std::vector<TThreadInfo> ThreadInfo;
+    TThreadInfo SharedInfo;
+    TSharedExecutorPool* Shared = nullptr;
     IExecutorPool* Pool = nullptr;
     TBasicExecutorPool* BasicPool = nullptr;
     i16 DefaultThreadCount = 0;
@@ -200,9 +202,13 @@ struct TPoolInfo {
     std::unique_ptr<TWaitingStats<double>> MovingWaitingStats;
 
     double GetBooked(i16 threadIdx);
-    double GetlastSecondPoolBooked(i16 threadIdx);
+    double GetSharedBooked();
+    double GetLastSecondBooked(i16 threadIdx);
+    double GetLastSecondSharedBooked();
     double GetConsumed(i16 threadIdx);
-    double GetlastSecondPoolConsumed(i16 threadIdx);
+    double GetSharedConsumed();
+    double GetLastSecondConsumed(i16 threadIdx);
+    double GetLastSecondSharedConsumed();
     TCpuConsumption PullStats(ui64 ts);
     i16 GetThreadCount();
     void SetThreadCount(i16 threadCount);
@@ -216,11 +222,19 @@ double TPoolInfo::GetBooked(i16 threadIdx) {
     return 0.0;
 }
 
-double TPoolInfo::GetlastSecondPoolBooked(i16 threadIdx) {
+double TPoolInfo::GetSharedBooked() {
+    return SharedInfo.Booked.GetAvgPart();
+}
+
+double TPoolInfo::GetLastSecondBooked(i16 threadIdx) {
     if ((size_t)threadIdx < ThreadInfo.size()) {
         return ThreadInfo[threadIdx].Booked.GetAvgPartForLastSeconds(1);
     }
     return 0.0;
+}
+
+double TPoolInfo::GetLastSecondSharedBooked() {
+    return SharedInfo.Booked.GetAvgPartForLastSeconds(1);
 }
 
 double TPoolInfo::GetConsumed(i16 threadIdx) {
@@ -230,11 +244,19 @@ double TPoolInfo::GetConsumed(i16 threadIdx) {
     return 0.0;
 }
 
-double TPoolInfo::GetlastSecondPoolConsumed(i16 threadIdx) {
+double TPoolInfo::GetSharedConsumed() {
+    return SharedInfo.Consumed.GetAvgPart();
+}
+
+double TPoolInfo::GetLastSecondConsumed(i16 threadIdx) {
     if ((size_t)threadIdx < ThreadInfo.size()) {
         return ThreadInfo[threadIdx].Consumed.GetAvgPartForLastSeconds(1);
     }
     return 0.0;
+}
+
+double TPoolInfo::GetLastSecondSharedConsumed() {
+    return SharedInfo.Consumed.GetAvgPartForLastSeconds(1);
 }
 
 #define UNROLL_HISTORY(history) (history)[0], (history)[1], (history)[2], (history)[3], (history)[4], (history)[5], (history)[6], (history)[7]
@@ -249,6 +271,25 @@ TCpuConsumption TPoolInfo::PullStats(ui64 ts) {
         threadInfo.Booked.Register(ts, cpuConsumption.BookedUs);
         LWPROBE(SavedValues, Pool->PoolId, Pool->GetName(), "booked", UNROLL_HISTORY(threadInfo.Booked.History));
     }
+    TVector<TExecutorThreadStats> sharedStats;
+    if (Shared) {
+        Shared->GetSharedStats(Pool->PoolId, sharedStats);
+    }
+    TExecutorThreadStats aggregated;
+    for (auto &stat : sharedStats) {
+        aggregated.Aggregate(stat);
+    }
+    TCpuConsumption sharedConsumption{
+        Ts2Us(aggregated.SafeElapsedTicks),
+        static_cast<double>(aggregated.CpuUs),
+        aggregated.NotEnoughCpuExecutions
+    };
+    acc.Add(sharedConsumption);
+    SharedInfo.Consumed.Register(ts, sharedConsumption.ConsumedUs);
+    LWPROBE(SavedValues, Pool->PoolId, Pool->GetName(), "shared_consumed", UNROLL_HISTORY(SharedInfo.Consumed.History));
+    SharedInfo.Booked.Register(ts, sharedConsumption.BookedUs);
+    LWPROBE(SavedValues, Pool->PoolId, Pool->GetName(), "shared_booked", UNROLL_HISTORY(SharedInfo.Booked.History));
+
     Consumed.Register(ts, acc.ConsumedUs);
     RelaxedStore(&MaxConsumedCpu, Consumed.GetMaxInt());
     RelaxedStore(&MinConsumedCpu, Consumed.GetMinInt());
@@ -425,6 +466,7 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
     std::vector<bool> hasSharedThread(Pools.size());
     std::vector<bool> hasSharedThreadWhichWasNotBorrowed(Pools.size());
     std::vector<bool> hasBorrowedSharedThread(Pools.size());
+    std::vector<i16> freeHalfThread;
     if (Shared) {
         auto sharedState = Shared->GetState();
         for (ui32 poolIdx = 0; poolIdx < Pools.size(); ++poolIdx) {
@@ -456,10 +498,20 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
         beingStopped += pool.Pool->GetBlockingThreadCount();
         for (i16 threadIdx = 0; threadIdx < pool.MaxThreadCount; ++threadIdx) {
             poolBooked += Rescale(pool.GetBooked(threadIdx));
-            lastSecondPoolBooked += Rescale(pool.GetlastSecondPoolBooked(threadIdx));
+            lastSecondPoolBooked += Rescale(pool.GetLastSecondBooked(threadIdx));
             poolConsumed += Rescale(pool.GetConsumed(threadIdx));
-            lastSecondPoolConsumed += Rescale(pool.GetlastSecondPoolConsumed(threadIdx));
+            lastSecondPoolConsumed += Rescale(pool.GetLastSecondConsumed(threadIdx));
         }
+
+        poolBooked += Rescale(pool.GetSharedBooked());
+        lastSecondPoolBooked += Rescale(pool.GetLastSecondSharedBooked());
+        poolConsumed += Rescale(pool.GetSharedConsumed());
+        lastSecondPoolConsumed += Rescale(pool.GetLastSecondSharedConsumed());
+
+        //Cerr << (TStringBuilder() << "PoolId# " << poolIdx << " Booked# "
+        //        << poolBooked << " Consumed# " << poolConsumed << " HasShared# " << (hasSharedThread[poolIdx] ? "yes": "none")
+        //        << " HasBorrowedSharedThread# " << (hasBorrowedSharedThread[poolIdx] ? "yes": "none") << Endl);
+
         bool isStarved = IsStarved(poolConsumed, poolBooked) || IsStarved(lastSecondPoolConsumed, lastSecondPoolBooked);
         if (isStarved) {
             isStarvedPresent = true;
@@ -472,6 +524,11 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
                 isNeedy = false;
             } else {
                 pool.LastUpdateTs = ts;
+            }
+        }
+        if (currentThreadCount - poolBooked > 0.5) {
+            if (hasBorrowedSharedThread[poolIdx] || hasSharedThreadWhichWasNotBorrowed[poolIdx]) {
+                freeHalfThread.push_back(poolIdx);
             }
         }
         isNeedyByPool.push_back(isNeedy);
@@ -501,6 +558,15 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
 
     if (needyPools.size()) {
         Sort(needyPools.begin(), needyPools.end(), [&] (i16 lhs, i16 rhs) {
+            if (Pools[lhs].Priority != Pools[rhs].Priority)  {
+                return Pools[lhs].Priority > Pools[rhs].Priority;
+            }
+            return Pools[lhs].Pool->PoolId < Pools[rhs].Pool->PoolId;
+        });
+    }
+
+    if (freeHalfThread.size()) {
+        Sort(freeHalfThread.begin(), freeHalfThread.end(), [&] (i16 lhs, i16 rhs) {
             if (Pools[lhs].Priority != Pools[rhs].Priority)  {
                 return Pools[lhs].Priority > Pools[rhs].Priority;
             }
@@ -550,6 +616,11 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
                     budget -= 1.0;
                     LWPROBE(HarmonizeOperation, needyPoolIdx, pool.Pool->GetName(), "increase by needs", threadCount + 1, pool.DefaultThreadCount, pool.MaxThreadCount);
                 }
+            } else if (Shared && budget >= 0.5 && !hasBorrowedSharedThread[needyPoolIdx] && freeHalfThread.size()) {
+                Shared->GiveHalfThread(freeHalfThread.back(), needyPoolIdx);
+                freeHalfThread.pop_back();
+                isNeedyByPool[needyPoolIdx] = false;
+                budget -= 0.5;
             }
             if constexpr (NFeatures::IsLocalQueues()) {
                 bool needToExpandLocalQueue = budget < 1.0 || threadCount >= pool.MaxThreadCount;
@@ -671,6 +742,7 @@ void THarmonizer::AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo) {
     TGuard<TSpinLock> guard(Lock);
     TPoolInfo poolInfo;
     poolInfo.Pool = pool;
+    poolInfo.Shared = Shared;
     poolInfo.BasicPool = dynamic_cast<TBasicExecutorPool*>(pool);
     poolInfo.DefaultThreadCount = pool->GetDefaultThreadCount();
     poolInfo.MinThreadCount = pool->GetMinThreadCount();

@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         TAtomic actorsAlive = 0;
         THPTimer Timer;
 
-        ui64 eventsPerPair = 1000;
+        ui64 eventsPerPair = 100000000;
 
         Timer.Reset();
         ui32 followerPoolId = 0;
@@ -60,7 +60,76 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         auto elapsedTime = Timer.Passed() /  (TSettings::TotalEventsAmountPerThread * 4);
         actorSystem.Stop();
 
+        TExecutorThreadStats aggregated;
+        TVector<TExecutorThreadStats> stats;
+        TVector<TExecutorThreadStats> sharedStats;
+        TExecutorPoolStats poolStats;
+        actorSystem.GetPoolStats(0, poolStats, stats, sharedStats);
+        // Sum all per-thread counters into the 0th element
+        for (auto &stat : stats) {
+            aggregated.Aggregate(stat);
+        }
+        for (auto &stat : sharedStats) {
+            aggregated.Aggregate(stat);
+        }
+
         Cerr << "Completed " << 1e9 * elapsedTime << Endl;
+        Cerr << "Elapsed " << Ts2Us(aggregated.ElapsedTicks) << "us" << Endl;
+    }
+
+
+    Y_UNIT_TEST(WithOnlyOneNotSharedExecutors) {
+        THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
+        TActorBenchmark::AddBasicPool(setup, 1, 1, false);
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        TThreadParkPad pad;
+        TAtomic actorsAlive = 0;
+        THPTimer Timer;
+
+        //ui64 eventsPerPair = 1000;
+        ui64 eventsPerPair = 100000000;
+
+        Timer.Reset();
+        ui32 followerPoolId = 0;
+        ui32 leaderPoolId = 0;
+        TActorId followerId = actorSystem.Register(
+            new TActorBenchmark::TSendReceiveActor(
+                TSendReceiveActorParams{.OtherEvents=eventsPerPair / 2, .Allocation=true}
+            ),
+            TMailboxType::HTSwap,
+            followerPoolId
+        );
+        THolder<IActor> leader{
+            new TTestEndDecorator(THolder(new TActorBenchmark::TSendReceiveActor(
+                TSendReceiveActorParams{.OwnEvents=eventsPerPair / 2, .Receivers={followerId}, .Allocation=true}
+            )),
+            &pad,
+            &actorsAlive)
+        };
+        actorSystem.Register(leader.Release(), TMailboxType::HTSwap, leaderPoolId);
+
+        pad.Park();
+        auto elapsedTime = Timer.Passed() /  (TSettings::TotalEventsAmountPerThread * 4);
+        actorSystem.Stop();
+
+        TExecutorThreadStats aggregated;
+        TVector<TExecutorThreadStats> stats;
+        TVector<TExecutorThreadStats> sharedStats;
+        TExecutorPoolStats poolStats;
+        actorSystem.GetPoolStats(0, poolStats, stats, sharedStats);
+        // Sum all per-thread counters into the 0th element
+        for (auto &stat : stats) {
+            aggregated.Aggregate(stat);
+        }
+        for (auto &stat : sharedStats) {
+            aggregated.Aggregate(stat);
+        }
+
+        Cerr << "Completed " << 1e9 * elapsedTime << Endl;
+        Cerr << "Elapsed " << Ts2Us(aggregated.ElapsedTicks) << "us" << Endl;
     }
 
     Y_UNIT_TEST(WithOnlyOneSharedAndOneCommonExecutors) {
@@ -116,7 +185,8 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         TAtomic actorsAlive = 0;
         THPTimer Timer;
 
-        ui64 eventsPerPair = TSettings::TotalEventsAmountPerThread * 4 / 60;
+        ui64 eventsPerPair = 100000000 * 4 / 60;
+        //ui64 eventsPerPair = TSettings::TotalEventsAmountPerThread * 4 / 60;
 
         Timer.Reset();
         for (ui32 i = 0; i < 50; ++i) {
@@ -166,13 +236,27 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         auto elapsedTime = Timer.Passed() /  (4 * TSettings::TotalEventsAmountPerThread);
         actorSystem.Stop();
 
+        TExecutorThreadStats aggregated;
+        TVector<TExecutorThreadStats> stats;
+        TVector<TExecutorThreadStats> sharedStats;
+        TExecutorPoolStats poolStats;
+        actorSystem.GetPoolStats(0, poolStats, stats, sharedStats);
+        // Sum all per-thread counters into the 0th element
+        for (auto &stat : stats) {
+            aggregated.Aggregate(stat);
+        }
+        for (auto &stat : sharedStats) {
+            aggregated.Aggregate(stat);
+        }
+
         Cerr << "Completed " << 1e9 * elapsedTime << Endl;
+        Cerr << "Elapsed " << Ts2Us(aggregated.ElapsedTicks) << "us" << Endl;
     }
 
     Y_UNIT_TEST(WithoutSharedExecutors) {
         THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
-         TActorBenchmark::AddBasicPool(setup, 2, 1, 0);
-         TActorBenchmark::AddBasicPool(setup, 2, 1, 0);
+        TActorBenchmark::AddBasicPool(setup, 2, 1, 0);
+        TActorBenchmark::AddBasicPool(setup, 2, 1, 0);
 
         TActorSystem actorSystem(setup);
         actorSystem.Start();
@@ -181,7 +265,8 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         TAtomic actorsAlive = 0;
         THPTimer Timer;
 
-        ui64 eventsPerPair = TSettings::TotalEventsAmountPerThread * 4 / 60;
+        ui64 eventsPerPair = 100000000 * 4 / 60;
+        //ui64 eventsPerPair = TSettings::TotalEventsAmountPerThread * 4 / 60;
 
         Timer.Reset();
         for (ui32 i = 0; i < 50; ++i) {
@@ -231,7 +316,21 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         auto elapsedTime = Timer.Passed() /  (4 * TSettings::TotalEventsAmountPerThread);
         actorSystem.Stop();
 
+        TExecutorThreadStats aggregated;
+        TVector<TExecutorThreadStats> stats;
+        TVector<TExecutorThreadStats> sharedStats;
+        TExecutorPoolStats poolStats;
+        actorSystem.GetPoolStats(0, poolStats, stats, sharedStats);
+        // Sum all per-thread counters into the 0th element
+        for (auto &stat : stats) {
+            aggregated.Aggregate(stat);
+        }
+        for (auto &stat : sharedStats) {
+            aggregated.Aggregate(stat);
+        }
+
         Cerr << "Completed " << 1e9 * elapsedTime << Endl;
+        Cerr << "Elapsed " << Ts2Us(aggregated.ElapsedTicks) << "us" << Endl;
     }
 
     Y_UNIT_TEST(SendReceive1Pool1ThreadAlloc) {

@@ -40,6 +40,8 @@ namespace NActors {
             }
         }
 
+        void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy, TVector<TExecutorThreadStats>& sharedStatsCopy) const;
+
         THarmonizerStats GetHarmonizerStats() const {
             if (Harmonizer) {
                 return Harmonizer->GetStats();

@@ -73,7 +73,7 @@ namespace NActors {
         double SpinningTimeUs = 0;
         double SpinThresholdUs = 0;
         i16 WrongWakenedThreadCount = 0;
-        i16 CurrentThreadCount = 0;
+        double CurrentThreadCount = 0;
         i16 PotentialMaxThreadCount = 0;
         i16 DefaultThreadCount = 0;
         i16 MaxThreadCount = 0;

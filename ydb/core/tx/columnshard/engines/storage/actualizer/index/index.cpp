@@ -143,7 +143,6 @@ void TGranuleActualizationIndex::AddPortion(const std::shared_ptr<TPortionInfo>&
     if (portion->HasRemoveSnapshot()) {
         return;
     }
-    TMemoryProfileGuard mGuard("ActualizationIndex");
     auto actualizationInfo = BuildActualizationInfo(portion, now);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("actualization_info", actualizationInfo.DebugString());
     TPortionIndexInfo result;

@@ -504,7 +504,7 @@ class Options(object):
         self.toolchain_params = self.options.toolchain_params
 
         self.presets = parse_presets(self.options.presets)
-        userify_presets(self.presets, ('CFLAGS', 'CXXFLAGS', 'CONLYFLAGS', 'LDFLAGS', 'GO_COMPILE_FLAGS', 'GO_LINK_FLAGS'))
+        userify_presets(self.presets, ('CFLAGS', 'CXXFLAGS', 'CONLYFLAGS', 'LDFLAGS', 'GO_COMPILE_FLAGS', 'GO_LINK_FLAGS', 'STD_CXX_VERSION'))
 
     Instance = None
 
@@ -931,16 +931,16 @@ class CompilerDetector(object):
         gcc_version = version(gcc_vars)
         msvc_version = version(msvc_vars)
 
-        if clang_version:
+        if msvc_version:
+            logger.debug('Detected MSVC version %s', msvc_version)
+            self.type = 'msvc'
+        elif clang_version:
             logger.debug('Detected Clang version %s', clang_version)
             self.type = 'clang'
         elif gcc_version:
             logger.debug('Detected GCC version %s', gcc_version)
             # TODO(somov): Переименовать в gcc.
             self.type = 'gnu'
-        elif msvc_version:
-            logger.debug('Detected MSVC version %s', msvc_version)
-            self.type = 'msvc'
         else:
             raise ConfigureError('Could not determine custom compiler type: {}'.format(c_compiler))
 
@@ -1588,7 +1588,7 @@ class GnuCompiler(Compiler):
         emit('WERROR_MODE', self.tc.werror_mode)
         emit('_C_FLAGS', self.c_flags)
         emit('_C_FOPTIONS', self.c_foptions)
-        emit('_CXX_STD', '-std={}'.format(self.tc.cxx_std))
+        emit('_STD_CXX_VERSION', preset('USER_STD_CXX_VERSION') or self.tc.cxx_std)
         append('C_DEFINES', self.c_defines)
         append('C_WARNING_OPTS', self.c_warnings)
         append('CXX_WARNING_OPTS', self.cxx_warnings)
@@ -2026,10 +2026,12 @@ class MSVCCompiler(MSVC, Compiler):
         cxx_warnings = []
 
         if self.tc.use_clang:
+            if not self.tc.is_system_cxx:
+                flags += [
+                    # Allow <windows.h> to be included via <Windows.h> in case-sensitive file-systems.
+                    '-fcase-insensitive-paths',
+                ]
             flags += [
-                # Allow <windows.h> to be included via <Windows.h> in case-sensitive file-systems.
-                '-fcase-insensitive-paths',
-
                 # At the time clang-cl identifies itself as MSVC 19.11:
                 # (actual value can be found in clang/lib/Driver/ToolChains/MSVC.cpp, the syntax would be like
                 # ```
@@ -2109,7 +2111,7 @@ class MSVCCompiler(MSVC, Compiler):
         if self.build.is_ide:
             emit('CFLAGS_PER_TYPE', '@[debug|$CFLAGS_DEBUG]@[release|$CFLAGS_RELEASE]')
 
-        emit('_STD_CXX', '/std:{}'.format(self.tc.cxx_std))
+        emit('_STD_CXX_VERSION', preset('USER_STD_CXX_VERSION') or self.tc.cxx_std)
 
         emit('_MSVC_FLAGS', flags)
 

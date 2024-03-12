@@ -1059,11 +1059,19 @@ message TReqAddMaintenance
     required string address = 2;
     required EMaintenanceType type = 3;
     required string comment = 4;
+
+    // COMPAT(kvk1920): For compatibility with pre-24.2 RPC clients.
+    optional bool supports_per_target_response = 5 [default = false];
 }
 
 message TRspAddMaintenance
 {
-    required NYT.NProto.TGuid id = 1; // TMaintenanceId
+    // COMPAT(kvk1920): For compatibility with pre-24.2 RPC clients.
+    optional NYT.NProto.TGuid id = 1; // TMaintenanceId
+
+    // Key: component address
+    // Value: TMaintenanceId
+    map<string, NYT.NProto.TGuid> id_per_target = 2;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1076,22 +1084,35 @@ message TReqRemoveMaintenance
     optional EMaintenanceType type = 4;
     optional string user = 5;
     optional bool mine = 6 [default = false];
+
+    // COMPAT(kvk1920): Compatibility with pre-24.2 RPC clients.
+    optional bool supports_per_target_response = 7 [default = false];
 }
 
 message TRspRemoveMaintenance
 {
-    // COMPAT(kvk1920): Can be removed after all clients, proxies and masters will be updated.
+    // COMPAT(kvk1920): For compatibility with pre-23.2.
     optional int32 ban = 1;
     optional int32 decommission = 2;
     optional int32 disable_scheduler_jobs = 3;
     optional int32 disable_write_sessions = 4;
     optional int32 disable_tablet_cells = 5;
-
-    // COMPAT(kvk1920)
+    optional int32 pending_restart = 8;
     optional bool use_map_instead_of_fields = 6 [default = false];
+
+    // COMPAT(kvk1920): For compatibility with pre-24.2 RPC clients.
     map<int32, int32> removed_maintenance_counts = 7; // Key: EMaintenanceType
 
-    optional int32 pending_restart = 8;
+    // COMPAT(kvk1920): For compatibility with pre-24.2 RPC proxies.
+    optional bool supports_per_target_response = 9 [default = false];
+
+    message TMaintenanceCounts
+    {
+        map<int32, int32> counts = 1; // Key: EMaintenanceType
+    }
+
+    // Key: component address
+    map<string, TMaintenanceCounts> removed_maintenance_counts_per_target = 10;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -17,6 +17,7 @@ SRCS(
     coroutines_ut.cpp
     count_down_latch_ut.cpp
     delayed_executor_ut.cpp
+    fair_share_action_queue_ut.cpp
     fair_share_invoker_pool_ut.cpp
     fair_share_thread_pool_ut.cpp
     fair_throttler_ut.cpp
@@ -26,6 +27,7 @@ SRCS(
     nonblocking_batcher_ut.cpp
     nonblocking_queue_ut.cpp
     periodic_ut.cpp
+    profiled_fair_share_invoker_pool_ut.cpp
     propagating_storage_ut.cpp
     quantized_executor_ut.cpp
     scheduled_executor_ut.cpp

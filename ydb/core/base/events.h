@@ -174,6 +174,7 @@ struct TKikimrEvents : TEvents {
         ES_REPLICATION_SERVICE,
         ES_CHANGE_EXCHANGE,
         ES_S3_FILE_QUEUE,
+        ES_NEBIUS_ACCESS_SERVICE,
     };
 };
 

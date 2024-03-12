@@ -89,10 +89,10 @@ public:
         , Request_(std::move(request))
         , Counters_(counters)
         , SecurityObject_(std::move(securityObject))
+        , GrpcRequestBaseCtx_(Request_->Get())
         , SkipCheckConnectRigths_(skipCheckConnectRigths)
         , FacilityProvider_(facilityProvider)
     {
-        GrpcRequestBaseCtx_ = Request_->Get();
         TMaybe<TString> authToken = GrpcRequestBaseCtx_->GetYdbToken();
         if (authToken) {
             TString peerName = GrpcRequestBaseCtx_->GetPeerName();
@@ -225,6 +225,7 @@ public:
     }
 
     void HandlePoison(TEvents::TEvPoisonPill::TPtr&) {
+        GrpcRequestBaseCtx_->FinishSpan();
         TBase::PassAway();
     }
 
@@ -374,29 +375,34 @@ private:
     void ReplyUnauthorizedAndDie(const NYql::TIssue& issue) {
         GrpcRequestBaseCtx_->RaiseIssue(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::UNAUTHORIZED);
+        GrpcRequestBaseCtx_->FinishSpan();
         TBase::PassAway();
     }
 
     void ReplyUnavailableAndDie(const NYql::TIssue& issue) {
         GrpcRequestBaseCtx_->RaiseIssue(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+        GrpcRequestBaseCtx_->FinishSpan();
         TBase::PassAway();
     }
 
     void ReplyUnavailableAndDie(const NYql::TIssues& issue) {
         GrpcRequestBaseCtx_->RaiseIssues(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+        GrpcRequestBaseCtx_->FinishSpan();
         TBase::PassAway();
     }
 
     void ReplyUnauthenticatedAndDie() {
         GrpcRequestBaseCtx_->ReplyUnauthenticated("Unknown database");
+        GrpcRequestBaseCtx_->FinishSpan();
         TBase::PassAway();
     }
 
     void ReplyOverloadedAndDie(const NYql::TIssue& issue) {
         GrpcRequestBaseCtx_->RaiseIssue(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::OVERLOADED);
+        GrpcRequestBaseCtx_->FinishSpan();
         TBase::PassAway();
     }
 
@@ -413,6 +419,7 @@ private:
         // and authorization check against the database
         AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID());
 
+        GrpcRequestBaseCtx_->FinishSpan();
         event->Release().Release()->Pass(*this);
         TBase::PassAway();
     }
@@ -428,12 +435,13 @@ private:
 
     template <typename T>
     void HandleAndDie(T& event) {
-        GrpcRequestBaseCtx_->LegacyFinishSpan();
+        GrpcRequestBaseCtx_->FinishSpan();
         TGRpcRequestProxyHandleMethods::Handle(event, TlsActivationContext->AsActorContext());
         TBase::PassAway();
     }
 
     void ReplyBackAndDie() {
+        GrpcRequestBaseCtx_->FinishSpan();
         TlsActivationContext->Send(Request_->Forward(Owner_));
         TBase::PassAway();
     }

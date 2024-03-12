@@ -662,6 +662,13 @@ public:
         }
 
         LazyInfos[LastType.TypeId] = LastLazyTypeInfo;
+        if (LastType.ArrayTypeId) {
+            LastLazyTypeInfo.OutFunc = "array_out";
+            LastLazyTypeInfo.InFunc = "array_in";
+            LastLazyTypeInfo.SendFunc = "array_send";
+            LastLazyTypeInfo.ReceiveFunc = "array_recv";
+            LazyInfos[LastType.ArrayTypeId] = LastLazyTypeInfo;
+        }
 
         LastType = TTypeDesc();
         LastLazyTypeInfo = TLazyTypeInfo();

@@ -403,28 +403,42 @@ private:
     }
 
     void Handle(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
-        switch (ev->Get()->GetStatus()) {
-        case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED:
-            ProcessWriteCompletedShard(ev);
-            return;
-        case NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED: {
+        auto getIssues = [&ev]() {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
+            return issues;
+        };
+
+        switch (ev->Get()->GetStatus()) {
+        case NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED: {
+            RuntimeError(
+                TStringBuilder() << "Got UNSPECIFIED for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`.",
+                NYql::NDqProto::StatusIds::UNSPECIFIED,
+                getIssues());
+            return;
+        }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED: {
+            YQL_ENSURE(false);
+        }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED: {
+            ProcessWriteCompletedShard(ev);
+            return;
+        }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED: {
             RuntimeError(
                 TStringBuilder() << "Got ABORTED for table `"
                     << SchemeEntry->TableId.PathId.ToString() << "`.",
                 NYql::NDqProto::StatusIds::ABORTED,
-                issues);
+                getIssues());
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR: {
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
             RuntimeError(
                 TStringBuilder() << "Got INTERNAL ERROR for table `"
                     << SchemeEntry->TableId.PathId.ToString() << "`.",
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR,
-                issues);
+                getIssues());
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
@@ -434,47 +448,37 @@ private:
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED: {
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
             RuntimeError(
                 TStringBuilder() << "Got CANCELLED for table `"
                     << SchemeEntry->TableId.PathId.ToString() << "`.",
                 NYql::NDqProto::StatusIds::CANCELLED,
-                issues);
+                getIssues());
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST: {
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
             RuntimeError(
                 TStringBuilder() << "Got BAD REQUEST for table `"
                     << SchemeEntry->TableId.PathId.ToString() << "`.",
                 NYql::NDqProto::StatusIds::BAD_REQUEST,
-                issues);
+                getIssues());
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED: {
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
             RuntimeError(
                 TStringBuilder() << "Got SCHEME CHANGED for table `"
                     << SchemeEntry->TableId.PathId.ToString() << "`.",
                 NYql::NDqProto::StatusIds::SCHEME_ERROR,
-                issues);
+                getIssues());
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN: {
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
             RuntimeError(
                 TStringBuilder() << "Got LOCKS BROKEN for table `"
                     << SchemeEntry->TableId.PathId.ToString() << "`.",
                 NYql::NDqProto::StatusIds::ABORTED,
-                issues);
+                getIssues());
             return;
         }
-        default:
-            YQL_ENSURE(false);
         }
     }
 

@@ -491,16 +491,24 @@ private:
             << ", error: " << issues.ToString());
 
         switch (ev->Get()->GetStatus()) {
+            case NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED: {
+                YQL_ENSURE(false);
+            }
             case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED: {
                 if (!ShardPrepared(*shardState, res->Record)) {
-                    return CancelProposal(shardId);
+                    // TODO: Cancel tx???
+                    return;
                 }
                 return CheckPrepareCompleted();
             }
-            // TODO: process errors
-            default:
+            case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED: {
                 YQL_ENSURE(false);
-                break;
+            }
+            default:
+            {
+                // TODO: Cancel tx???
+                return ShardError(res->Record);
+            }
         }
     }
 
@@ -844,6 +852,40 @@ private:
         }
     }
 
+    void ShardError(const NKikimrDataEvents::TEvWriteResult& result) {
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(result.GetIssues(), issues);
+
+        switch (result.GetStatus()) {
+            case NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED:
+            case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED:
+            case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED: {
+                YQL_ENSURE(false);
+            }
+            case NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED: {
+                return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, issues);
+            }
+            case NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR: {
+                return ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, issues);
+            }
+            case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
+                return ReplyErrorAndDie(Ydb::StatusIds::OVERLOADED, issues);
+            }
+            case NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED: {
+                return ReplyErrorAndDie(Ydb::StatusIds::CANCELLED, issues);
+            }
+            case NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST: {
+                return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, issues);
+            }
+            case NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED: {
+                return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, issues);
+            }
+            case NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN: {
+                return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, issues);
+            }
+        }
+    }
+
     void PQTabletError(const NKikimrPQ::TEvProposeTransactionResult& result) {
         NYql::TIssuesIds::EIssueCode issueCode;
         Ydb::StatusIds::StatusCode statusCode;
@@ -1111,20 +1153,26 @@ private:
             << ", error: " << issues.ToString());
 
         switch (ev->Get()->GetStatus()) {
+            case NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED: {
+                YQL_ENSURE(false);
+            }
+            case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED: {
+                YQL_ENSURE(false);
+            }
             case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED: {
                 YQL_ENSURE(shardState->State == TShardState::EState::Executing);
                 shardState->State = TShardState::EState::Finished;
 
                 Counters->TxProxyMon->ResultsReceivedCount->Inc();
-                // TODO: locks check
                 Counters->TxProxyMon->TxResultComplete->Inc();
 
                 CheckExecutionComplete();
                 return;
             }
             default:
-                // TODO: errors
-                YQL_ENSURE(false);
+            {
+                return ShardError(res->Record);
+            }
         }
     }
 

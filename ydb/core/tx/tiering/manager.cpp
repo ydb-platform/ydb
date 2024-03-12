@@ -205,7 +205,7 @@ THashMap<ui64, NKikimr::NOlap::TTiering> TTiersManager::GetTiering() const {
             result.emplace(i.first, tiering->BuildOlapTiers());
             for (auto& [pathId, pathTiering] : result) {
                 for (auto& [name, tier] : pathTiering.GetTierByName()) {
-                    AFL_VERIFY(name != NOlap::TTierInfo::GetTtlTierName());
+                    AFL_VERIFY(name != NOlap::NTiering::NCommon::DeleteTierName);
                     auto it = tierConfigs.find(name);
                     if (it != tierConfigs.end()) {
                         tier->SetSerializer(NTiers::ConvertCompression(it->second.GetCompression()));

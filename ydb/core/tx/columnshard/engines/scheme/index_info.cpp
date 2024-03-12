@@ -7,6 +7,7 @@
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/formats/arrow/transformer/dictionary.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/tx/columnshard/engines/changes/compaction/column_portion_chunk.h>
 
 namespace NKikimr::NOlap {
 
@@ -282,14 +283,6 @@ std::shared_ptr<NArrow::TSortDescription> TIndexInfo::SortReplaceDescription() c
         return description;
     }
     return {};
-}
-
-bool TIndexInfo::AllowTtlOverColumn(const TString& name) const {
-    auto it = ColumnNames.find(name);
-    if (it == ColumnNames.end()) {
-        return false;
-    }
-    return MinMaxIdxColumnsIds.contains(it->second);
 }
 
 TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId, const TSaverContext& context) const {

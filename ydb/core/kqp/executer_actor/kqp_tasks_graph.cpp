@@ -1044,26 +1044,6 @@ void FillOutputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskOutpu
         auto& channelDesc = *outputDesc.AddChannels();
         FillChannelDesc(tasksGraph, channelDesc, tasksGraph.GetChannel(channel), tasksGraph.GetMeta().ChannelTransportVersion, enableSpilling);
     }
-
-    /* TODO:
-    if (input.Transform) {
-        auto* transformProto = inputDesc.MutableTransform();
-        transformProto->SetType(input.Transform->Type);
-        transformProto->SetInputType(input.Transform->InputType);
-        transformProto->SetOutputType(input.Transform->OutputType);
-        if (input.Meta.StreamLookupSettings) {
-            YQL_ENSURE(input.Meta.StreamLookupSettings);
-            YQL_ENSURE(snapshot.IsValid(), "stream lookup cannot be performed without the snapshot.");
-            input.Meta.StreamLookupSettings->MutableSnapshot()->SetStep(snapshot.Step);
-            input.Meta.StreamLookupSettings->MutableSnapshot()->SetTxId(snapshot.TxId);
-            if (lockTxId) {
-                input.Meta.StreamLookupSettings->SetLockTxId(*lockTxId);
-            }
-            transformProto->MutableSettings()->PackFrom(*input.Meta.StreamLookupSettings);
-        } else if (input.Meta.SequencerSettings) {
-            transformProto->MutableSettings()->PackFrom(*input.Meta.SequencerSettings);
-        }
-    }*/
 }
 
 void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput& inputDesc, const TTaskInput& input, bool serializeAsyncIoSettings) {

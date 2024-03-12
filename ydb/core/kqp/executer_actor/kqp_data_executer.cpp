@@ -1989,6 +1989,7 @@ private:
         TDatashardTxs datashardTxs;
         TEvWriteTxs evWriteTxs;
         BuildDatashardTxs(datashardTasks, datashardTxs, evWriteTxs, topicTxs);
+        YQL_ENSURE(evWriteTxs.empty() || datashardTxs.empty());
 
         // Single-shard transactions are always immediate
         ImmediateTx = (datashardTxs.size() + evWriteTxs.size() + Request.TopicOperations.GetSize() + sourceScanPartitionsCount) <= 1
@@ -2019,8 +2020,6 @@ private:
             YQL_ENSURE(!VolatileTx);
             ImmediateTx = true;
         }
-
-        Cerr << "TEST: IMM: " << ImmediateTx << Endl;
 
         ComputeTasks = std::move(computeTasks);
         TopicTxs = std::move(topicTxs);

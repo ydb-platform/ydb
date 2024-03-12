@@ -265,10 +265,6 @@ public:
     {
         YQL_ENSURE(std::holds_alternative<ui64>(TxId));
         EgressStats.Level = args.StatsLevel;
-
-        // TMP
-        Settings.SetLockTxId(42 /*std::get<ui64>(TxId)*/);
-        Settings.SetLockNodeId(0);
     }
 
     void Bootstrap() {
@@ -554,7 +550,7 @@ private:
             payloadIndex,
             Serializer->GetDataFormat());
 
-        evWrite->SetLockId(/*Settings.GetLockTxId()*/ 42, Settings.GetLockNodeId());
+        evWrite->SetLockId(Settings.GetLockTxId(), Settings.GetLockNodeId());
 
         CA_LOG_D("Send EvWrite to ShardID=" << shardId << ", TxId=" << std::get<ui64>(TxId)
             << ", Size=" << inFlightBatch.Data.size() << ", Cookie=" << inFlightBatch.Cookie);
@@ -643,7 +639,7 @@ private:
     NActors::TActorId PipeCacheId = NKikimr::MakePipePeNodeCacheID(false);
 
     TString LogPrefix;
-    /*const*/ NKikimrKqp::TKqpTableSinkSettings Settings;
+    const NKikimrKqp::TKqpTableSinkSettings Settings;
     const ui64 OutputIndex;
     NYql::NDq::TDqAsyncStats EgressStats;
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks * Callbacks = nullptr;

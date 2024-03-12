@@ -64,4 +64,4 @@
 
     {% include [Heisenbug](./_includes/conferences/2017/Heisenbug.md) %}
 
-  {% endlist %}
+{% endlist %}

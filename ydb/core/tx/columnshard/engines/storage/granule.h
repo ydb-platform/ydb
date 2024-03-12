@@ -1,9 +1,12 @@
 #pragma once
-#include <ydb/core/base/appdata.h>
+#include "optimizer/abstract/optimizer.h"
+#include "actualizer/index/index.h"
+
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/portion_info.h>
-#include "optimizer/abstract/optimizer.h"
+
+#include <ydb/core/base/appdata.h>
 
 namespace NKikimr::NOlap {
 
@@ -170,6 +173,7 @@ private:
     const NColumnShard::TGranuleDataCounters Counters;
     NColumnShard::TEngineLogsCounters::TPortionsInfoGuard PortionInfoGuard;
     std::shared_ptr<NStorageOptimizer::IOptimizerPlanner> OptimizerPlanner;
+    std::shared_ptr<NActualizer::TGranuleActualizationIndex> ActualizationIndex;
     std::map<NArrow::TReplaceKey, THashMap<ui64, std::shared_ptr<TPortionInfo>>> PortionsByPK;
 
     void OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore);
@@ -177,10 +181,14 @@ private:
     void OnAdditiveSummaryChange() const;
     YDB_READONLY(TMonotonic, LastCompactionInstant, TMonotonic::Zero());
 public:
-    void RefreshTiering(const std::optional<TTiering>& /*tiering*/) {
+    void RefreshTiering(const std::optional<TTiering>& tiering) {
+        if (ActualizationIndex->RefreshTiering(tiering)) {
+            ActualizationIndex->Rebuild(Portions);
+        }
     }
 
     void StartActualizationIndex() {
+        ActualizationIndex->Start();
     }
 
     NJson::TJsonValue OptimizerSerializeToJson() const {
@@ -193,6 +201,10 @@ public:
 
     void OnStartCompaction() {
         LastCompactionInstant = TMonotonic::Now();
+    }
+
+    void BuildActualizationTasks(NActualizer::TTieringProcessContext& context) const {
+        ActualizationIndex->BuildActualizationTasks(context, Portions);
     }
 
     std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {

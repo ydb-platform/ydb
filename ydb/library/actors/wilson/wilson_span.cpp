@@ -1,5 +1,6 @@
 #include "wilson_span.h"
 #include "wilson_uploader.h"
+#include <util/system/backtrace.h>
 #include <google/protobuf/text_format.h>
 
 namespace NWilson {
@@ -60,6 +61,19 @@ namespace NWilson {
             Data->ActorSystem->Send(new IEventHandle(MakeWilsonUploaderId(), {}, new TEvWilson(&Data->Span)));
         }
         Data->Sent = true;
+    }
+
+    TSpan& TSpan::operator=(TSpan&& other) {
+        if (this != &other) {
+            if (Y_UNLIKELY(*this)) {
+                TStringStream err;
+                err << "TSpan instance incorrectly overwritten at:\n";
+                FormatBackTrace(&err);
+                EndError(std::move(err.Str()));
+            }
+            Data = std::exchange(other.Data, nullptr);
+        }
+        return *this;
     }
 
     const TSpan TSpan::Empty;

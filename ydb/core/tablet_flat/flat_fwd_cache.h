@@ -58,7 +58,8 @@ namespace NFwd {
             DoStart,
             Valid,
             DoNext,
-            DoBinarySearch
+            DoBinarySearch,
+            Exhausted
         };
         struct TBinarySearchState {
             TPageId PageId;
@@ -109,10 +110,7 @@ namespace NFwd {
                 AddToQueue(head, pageId);
             }
 
-            if (IndexState != DoNext) {
-                Y_ABORT_UNLESS(IndexState == Valid, "Forward index state is invalid");
-                grow &= Index->IsValid() && Index->GetRowId() < EndRowId;
-            }
+            grow &= IndexState != Exhausted;
 
             return {Pages.at(Offset).Touch(pageId, Stat), grow, true};
         }
@@ -120,22 +118,20 @@ namespace NFwd {
         void Forward(IPageLoadingQueue *head, ui64 upper) noexcept override
         {
             if (IndexState == DoNext) {
-                if (auto ready = Index->Next(); ready == EReady::Page) {
+                if (!IndexDoNext()) {
                     return;
                 }
-                IndexState = Valid;
             }
 
-            Y_ABORT_UNLESS(IndexState == Valid, "Forward index state is invalid");
+            Y_DEBUG_ABORT_UNLESS(IndexState == Valid, "Index state is invalid");
 
             // Note: not an effective implementation, each Index->Next() page fault stops Forward
             // and it continues only with a new Handle call that return Grow = true
             // some index forward loading mechanism is needed here
 
-            while (OnHold + OnFetch < upper && Index->IsValid() && Index->GetRowId() < EndRowId) {
+            while (IndexState == Valid && OnHold + OnFetch < upper) {
                 AddToQueue(head, Index->GetPageId());
-                if (auto ready = Index->Next(); ready == EReady::Page) {
-                    IndexState = DoNext;
+                if (IndexState = DoNext; !IndexDoNext()) {
                     return;
                 }
             }
@@ -199,40 +195,39 @@ namespace NFwd {
             }
         }
 
+        void AddToQueue(IPageLoadingQueue *head, TPageId pageId) noexcept
+        {
+            auto size = head->AddToQueue(pageId, EPage::DataPage);
+
+            Stat.Fetch += size;
+            OnFetch += size;
+
+            Y_ABORT_UNLESS(!Pages || Pages.back().PageId < pageId);
+            Pages.emplace_back(pageId, size, 0, Max<TPageId>());
+            Pages.back().Fetch = EFetch::Wait;
+        }
+
         bool SyncIndex(TPageId pageId) noexcept
         {
             if (IndexState == DoStart) {
-                if (EndRowId == Max<TRowId>()) { // may happen with flat group indexes
-                    if (auto ready = Index->SeekLast(); ready != EReady::Data) {
-                        Y_ABORT_UNLESS(ready == EReady::Page, "Slices are invalid");
-                        return false;
-                    }
-                    EndRowId = Index->GetRowId() + 1; // not real but appropriate for a binary search 
-                }
-                if (auto ready = Index->Seek(BeginRowId); ready != EReady::Data) {
-                    Y_ABORT_UNLESS(ready == EReady::Page, "Slices are invalid");
+                if (!IndexDoStart()) {
                     return false;
                 }
-                Y_ABORT_UNLESS(Index->GetPageId() <= pageId, "Requested page is outside of slices");
-                IndexState = Valid;
             }
 
-            if (IndexState == Valid && Index->IsValid() && Index->GetPageId() < pageId) {
+            if (IndexState == Valid && Index->GetPageId() < pageId) {
                 IndexState = DoNext;
             }
 
             if (IndexState == DoNext) {
-                if (auto ready = Index->Next(); ready != EReady::Data) {
-                    Y_ABORT_UNLESS(ready == EReady::Page, "Requested page doesn't belong to the part");
+                if (!IndexDoNext()) {
                     return false;
                 }
-                
-                Y_ABORT_UNLESS(Index->GetPageId() <= pageId, "Index is out of sync");
-                Y_DEBUG_ABORT_UNLESS(Index->GetRowId() < EndRowId, "Requested page is outside of slices");
 
-                if (Index->GetPageId() == pageId) {
-                    IndexState = Valid;
-                } else {
+                Y_ABORT_UNLESS(IndexState == Valid, "Requested page is outside of slices");
+                Y_ABORT_UNLESS(Index->GetPageId() <= pageId, "Index is out of sync");
+
+                if (Index->GetPageId() < pageId) {
                     IndexState = DoBinarySearch;
                     BinarySearchState = {pageId, Index->GetNextRowId(), EndRowId};
                 }
@@ -244,46 +239,84 @@ namespace NFwd {
                     BinarySearchState = {pageId, BinarySearchState.BeginRowId, EndRowId};
                 }
 
-                while (BinarySearchState.BeginRowId < BinarySearchState.EndRowId) {
-                    auto middleRowId = (BinarySearchState.BeginRowId + BinarySearchState.EndRowId) / 2;
-                    if (auto ready = Index->Seek(middleRowId); ready != EReady::Data) {
-                        Y_ABORT_UNLESS(ready == EReady::Page);
-                        return false;
-                    }
-                    if (Index->GetPageId() == pageId) {
-                        IndexState = Valid;
-                        break;
-                    } else if (Index->GetPageId() > pageId) {
-                        BinarySearchState.EndRowId = middleRowId;
-                    } else {
-                        BinarySearchState.BeginRowId = middleRowId;
-                    }
+                if (!IndexDoBinarySearch()) {
+                    return false;
                 }
             }
 
-            Y_ABORT_UNLESS(IndexState == Valid, "Index is invalid");
-            Y_ABORT_UNLESS(Index->IsValid(), "Requested page doesn't belong to the part");
+            Y_ABORT_UNLESS(IndexState == Valid);
             Y_ABORT_UNLESS(Index->GetPageId() == pageId, "Index is out of sync");
-            Y_DEBUG_ABORT_UNLESS(Index->GetRowId() < EndRowId, "Requested page is outside of slices");
             
-            // point to the next page
-            if (auto ready = Index->Next(); ready == EReady::Page) {
-                IndexState = DoNext;
-            }
+            IndexState = DoNext; // point to the next page
+            IndexDoNext(); // ignore result
             
             return true;
         }
 
-        void AddToQueue(IPageLoadingQueue *head, TPageId pageId) noexcept
+        // IndexState: DoStart -> DoStart (returns false) | Valid (returns true)
+        bool IndexDoStart() noexcept
         {
-            auto size = head->AddToQueue(pageId, EPage::DataPage);
+            Y_ABORT_UNLESS(IndexState == DoStart);
 
-            Stat.Fetch += size;
-            OnFetch += size;
+            if (EndRowId == Max<TRowId>()) { // may happen with flat group indexes
+                if (auto ready = Index->SeekLast(); ready != EReady::Data) {
+                    Y_ABORT_UNLESS(ready == EReady::Page, "Slices are invalid");
+                    return false;
+                }
+                EndRowId = Index->GetRowId() + 1; // not real but appropriate for a binary search 
+            }
 
-            Y_ABORT_UNLESS(!Pages || Pages.back().PageId < pageId);
-            Pages.emplace_back(pageId, size, 0, Max<TPageId>());
-            Pages.back().Fetch = EFetch::Wait;
+            if (auto ready = Index->Seek(BeginRowId); ready != EReady::Data) {
+                Y_ABORT_UNLESS(ready == EReady::Page, "Slices are invalid");
+                return false;
+            }
+
+            IndexState = Valid;
+            return true;
+        }
+
+        // IndexState: DoNext -> DoNext (returns false) | Valid (returns true) | Exhausted (returns true)
+        bool IndexDoNext() noexcept
+        {
+            Y_ABORT_UNLESS(IndexState == DoNext);
+
+            auto ready = Index->Next();
+
+            if (ready == EReady::Page) {
+                return false;
+            }
+
+            if (ready == EReady::Data && Index->GetRowId() < EndRowId) {
+                IndexState = Valid;
+                return true;
+            }
+
+            IndexState = Exhausted;
+            return true;
+        }
+
+        // IndexState: DoBinarySearch -> DoBinarySearch (returns false) | Valid (returns true)
+        bool IndexDoBinarySearch() noexcept
+        {
+            Y_ABORT_UNLESS(IndexState == DoBinarySearch);
+
+            while (BinarySearchState.BeginRowId < BinarySearchState.EndRowId) {
+                auto middleRowId = (BinarySearchState.BeginRowId + BinarySearchState.EndRowId) / 2;
+                if (auto ready = Index->Seek(middleRowId); ready != EReady::Data) {
+                    Y_ABORT_UNLESS(ready == EReady::Page);
+                    return false;
+                }
+                if (Index->GetPageId() == BinarySearchState.PageId) {
+                    IndexState = Valid;
+                    return true;
+                } else if (Index->GetPageId() > BinarySearchState.PageId) {
+                    BinarySearchState.EndRowId = middleRowId;
+                } else { // Index->GetPageId() < BinarySearchState.PageId
+                    BinarySearchState.BeginRowId = middleRowId + 1;
+                }
+            }
+
+            Y_ABORT("Index is out of sync");
         }
 
     private:

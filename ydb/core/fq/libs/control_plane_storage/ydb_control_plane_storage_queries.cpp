@@ -28,7 +28,7 @@ FederatedQuery::IamAuth::IdentityCase GetIamAuth(const FederatedQuery::Connectio
     const auto& setting = connection.content().setting();
     switch (setting.connection_case()) {
         case FederatedQuery::ConnectionSetting::kYdbDatabase:
-            return setting.data_streams().auth().identity_case();
+            return setting.ydb_database().auth().identity_case();
         case FederatedQuery::ConnectionSetting::kClickhouseCluster:
             return setting.clickhouse_cluster().auth().identity_case();
         case FederatedQuery::ConnectionSetting::kObjectStorage:

@@ -1527,7 +1527,7 @@ private:
             TypesCtx.Get(),
             FuncRegistry,
             FederatedQuerySetup->DatabaseAsyncResolver,
-            nullptr,
+            FederatedQuerySetup->CredentialsFactory,
             FederatedQuerySetup->ConnectorClient,
             FederatedQuerySetup->GenericGatewayConfig
         );

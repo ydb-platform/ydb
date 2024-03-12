@@ -165,7 +165,7 @@ namespace {
         }
 
         TPagesWrap(TIntrusiveConstPtr<TPartStore> part, ui64 aLo, ui64 aHi)
-            : TPagesWrap(std::move(part), TSlices::All(), aLo, aHi)
+            : TPagesWrap(std::move(part), nullptr, aLo, aHi)
         {
         }
 
@@ -903,6 +903,41 @@ Y_UNIT_TEST_SUITE(NFwd) {
 
         wrap.To(10).Fill({9, 10, 11},
             {6, 6, 2, 2, 0});
+    }
+
+    Y_UNIT_TEST(Pages_PageFaults_SyncIndex_Jump)
+    {
+        // 20 pages, 50 bytes each
+        const auto eggs = CookPart();
+
+        TPagesWrap wrap(eggs.Lone(), 1000, 1000);
+        wrap.UseFaultyEnv();
+        
+        // Seek(0):
+        for (ui32 attempt : xrange(3)) { // 3-leveled B-Tree
+            wrap.To(attempt).Get(0, false, false, true, 
+                {0, 0, 0, 0, 0});
+            wrap.LoadTouched();
+        }
+
+        wrap.To(3).Get(3, false, false, true, 
+            {1, 0, 1, 0, 0});
+        wrap.LoadTouched();
+
+        wrap.To(4).Get(7, false, false, true, 
+            {1, 0, 1, 0, 0});
+        wrap.LoadTouched();
+
+        for (ui32 attempt : xrange(3)) {
+            wrap.To(5 + attempt).Get(16, false, false, true, 
+                {1, 0, 1, 0, 0});
+            wrap.LoadTouched();
+        }
+
+        wrap.To(100).Get(16, false, true, true, 
+                {1, 0, 1, 0, 0});
+        wrap.To(101).Fill({16, 17, 18, 19},
+            {3, 3, 1, 0, 0});
     }
 
     Y_UNIT_TEST(Pages_PageFaults_Fill)

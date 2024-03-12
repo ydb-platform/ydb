@@ -49,7 +49,7 @@ jobs:
           echo "Merge did not bring any changes, exiting"
           exit
         fi
-        echo ${mainsha} > ydb/ci/rightlib.txt
+        echo ${libsha} > ydb/ci/rightlib.txt
         git add .
         git commit -m "Import libraries ${{ steps.date.outputs.dtm }}"
         git push --set-upstream origin mergelibs-${{ steps.date.outputs.dtm }}

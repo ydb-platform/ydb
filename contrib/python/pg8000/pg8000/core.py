@@ -28,7 +28,7 @@ def pack_funcs(fmt):
 
 
 i_pack, i_unpack = pack_funcs("i")
-h_pack, h_unpack = pack_funcs("h")
+H_pack, H_unpack = pack_funcs("H")
 ii_pack, ii_unpack = pack_funcs("ii")
 ihihih_pack, ihihih_unpack = pack_funcs("ihihih")
 ci_pack, ci_unpack = pack_funcs("ci")
@@ -623,7 +623,7 @@ class CoreConnection:
         self._backend_key_data = data
 
     def handle_ROW_DESCRIPTION(self, data, context):
-        count = h_unpack(data)[0]
+        count = H_unpack(data)[0]
         idx = 2
         columns = []
         input_funcs = []
@@ -656,7 +656,7 @@ class CoreConnection:
     def send_PARSE(self, statement_name_bin, statement, oids=()):
         val = bytearray(statement_name_bin)
         val.extend(statement.encode(self._client_encoding) + NULL_BYTE)
-        val.extend(h_pack(len(oids)))
+        val.extend(H_pack(len(oids)))
         for oid in oids:
             val.extend(i_pack(0 if oid == -1 else oid))
 
@@ -762,7 +762,7 @@ class CoreConnection:
         """https://www.postgresql.org/docs/current/protocol-message-formats.html"""
 
         retval = bytearray(
-            NULL_BYTE + statement_name_bin + h_pack(0) + h_pack(len(params))
+            NULL_BYTE + statement_name_bin + H_pack(0) + H_pack(len(params))
         )
 
         for value in params:
@@ -772,7 +772,7 @@ class CoreConnection:
                 val = value.encode(self._client_encoding)
                 retval.extend(i_pack(len(val)))
                 retval.extend(val)
-        retval.extend(h_pack(0))
+        retval.extend(H_pack(0))
 
         self._send_message(BIND, retval)
         _write(self._sock, FLUSH_MSG)

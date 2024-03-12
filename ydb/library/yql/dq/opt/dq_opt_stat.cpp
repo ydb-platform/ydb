@@ -359,6 +359,16 @@ void InferStatisticsForAggregateMergeFinalize(const TExprNode::TPtr& input, TTyp
     typeCtx->SetStats( input.Get(), inputStats );
 }
 
+void InferStatisticsForAsList(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    double nRows = input->ChildrenSize();
+    int nAttrs = 5;
+    if (input->ChildrenSize() && input->Child(0)->IsCallable("AsStruct")) {
+        nAttrs = input->Child(0)->ChildrenSize();
+    }
+    auto outputStats = TOptimizerStatistics(EStatisticsType::BaseTable, nRows, nAttrs, nRows*nAttrs, 0.0);
+    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats));
+}
+
 /***
  * For callables that include lambdas, we want to propagate the statistics from lambda's input to its argument, so
  * that the operators inside lambda receive the correct statistics

@@ -5,7 +5,8 @@
 #include <yt/yt/core/yson/public.h>
 #include <yt/yt/core/ypath/public.h>
 #include <yt/yt/core/ytree/public.h>
-#include <yt/yt/core/misc/optional.h>
+
+#include <library/cpp/yt/misc/optional.h>
 
 namespace NYT::NYTree {
 

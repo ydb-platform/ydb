@@ -127,13 +127,14 @@ class TInvokerQueue
 public:
     TInvokerQueue(
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
-        const NProfiling::TTagSet& counterTagSet);
+        const NProfiling::TTagSet& counterTagSet,
+        NProfiling::IRegistryImplPtr registry = nullptr);
 
     TInvokerQueue(
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
         const std::vector<NProfiling::TTagSet>& counterTagSets,
         const std::vector<NYTProf::TProfilerTagPtr>& profilerTags,
-        const NProfiling::TTagSet& cumulativeCounterTagSet);
+        NProfiling::IRegistryImplPtr registry = nullptr);
 
     void SetThreadId(NThreading::TThreadId threadId);
 
@@ -204,14 +205,13 @@ private:
     using TCountersPtr = std::unique_ptr<TCounters>;
 
     std::vector<TCountersPtr> Counters_;
-    TCountersPtr CumulativeCounters_;
 
     std::vector<IInvokerPtr> ProfilingTagSettingInvokers_;
 
     std::atomic<bool> IsWaitTimeObserverSet_;
     TWaitTimeObserver WaitTimeObserver_;
 
-    TCountersPtr CreateCounters(const NProfiling::TTagSet& tagSet);
+    TCountersPtr CreateCounters(const NProfiling::TTagSet& tagSet, NProfiling::IRegistryImplPtr registry);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

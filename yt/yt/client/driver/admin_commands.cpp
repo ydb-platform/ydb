@@ -17,6 +17,10 @@ using namespace NObjectClient;
 
 using NApi::TMaintenanceId;
 using NApi::TMaintenanceFilter;
+using NApi::EMaintenanceType;
+using NApi::TMaintenanceCounts;
+using NApi::TMaintenanceCountsPerTarget;
+using NApi::TMaintenanceIdPerTarget;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -345,11 +349,15 @@ void TAddMaintenanceCommand::Register(TRegistrar registrar)
     registrar.Parameter("address", &TThis::Address_);
     registrar.Parameter("type", &TThis::Type_);
     registrar.Parameter("comment", &TThis::Comment_);
+
+    // COMPAT(kvk1920): For compatibility with pre-24.2 HTTP clients.
+    registrar.Parameter("supports_per_target_response", &TThis::SupportsPerTargetResponse_)
+        .Default(false);
 }
 
 void TAddMaintenanceCommand::DoExecute(ICommandContextPtr context)
 {
-    auto id = WaitFor(context->GetClient()->AddMaintenance(
+    auto response = WaitFor(context->GetClient()->AddMaintenance(
         Component_,
         Address_,
         Type_,
@@ -357,7 +365,23 @@ void TAddMaintenanceCommand::DoExecute(ICommandContextPtr context)
         Options))
         .ValueOrThrow();
 
-    ProduceSingleOutputValue(context, "id", id);
+    // COMPAT(kvk1920): Compatibility with pre-24.2 HTTP clients.
+    if (!SupportsPerTargetResponse_) {
+        ProduceSingleOutputValue(
+            context,
+            "id",
+            response.size() == 1 ? response.begin()->second : TMaintenanceId{});
+        return;
+    }
+
+    ProduceOutput(context, [&] (NYson::IYsonConsumer* consumer) {
+        BuildYsonFluently(consumer)
+            .BeginMap()
+                .DoFor(response, [] (auto fluent, const std::pair<TString, TMaintenanceId>& targetAndId) {
+                    fluent.Item(targetAndId.first).Value(targetAndId.second);
+                })
+            .EndMap();
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -384,6 +408,9 @@ void TRemoveMaintenanceCommand::Register(TRegistrar registrar)
     registrar.Parameter("all", &TThis::All_)
         .Optional();
 
+    registrar.Parameter("supports_per_target_response", &TThis::SupportsPerTargetResponse_)
+        .Default(false);
+
     registrar.Postprocessor([&] (TThis* config) {
         THROW_ERROR_EXCEPTION_IF(config->Id_ && config->Ids_,
             "At most one of {\"id\", \"ids\"} can be specified at the same time");
@@ -401,30 +428,6 @@ void TRemoveMaintenanceCommand::Register(TRegistrar registrar)
             "\"all\" cannot be used with other options");
     });
 }
-
-namespace {
-
-TStringBuf MaintenanceTypeToString(NApi::EMaintenanceType type)
-{
-    switch (type) {
-        case NApi::EMaintenanceType::Ban:
-            return "ban";
-        case NApi::EMaintenanceType::Decommission:
-            return "decommission";
-        case NApi::EMaintenanceType::DisableSchedulerJobs:
-            return "disable_scheduler_jobs";
-        case NApi::EMaintenanceType::DisableWriteSessions:
-            return "disable_write_sessions";
-        case NApi::EMaintenanceType::DisableTabletCells:
-            return "disable_tablet_cells";
-        case NApi::EMaintenanceType::PendingRestart:
-            return "pending_restart";
-        default:
-            YT_ABORT();
-    }
-}
-
-} // namespace
 
 void TRemoveMaintenanceCommand::DoExecute(ICommandContextPtr context)
 {
@@ -448,22 +451,49 @@ void TRemoveMaintenanceCommand::DoExecute(ICommandContextPtr context)
         filter.Type = *Type_;
     }
 
-    auto removedMaintenanceCounts = WaitFor(context->GetClient()->RemoveMaintenance(
+    auto response = WaitFor(context->GetClient()->RemoveMaintenance(
         Component_,
         Address_,
         filter,
         Options))
         .ValueOrThrow();
 
-    ProduceOutput(context, [&] (NYson::IYsonConsumer* consumer) {
-        auto fluent = BuildYsonFluently(consumer)
-            .BeginMap();
-        for (auto type : TEnumTraits<NApi::EMaintenanceType>::GetDomainValues()) {
-            if (removedMaintenanceCounts[type] > 0) {
-                fluent = fluent.Item(MaintenanceTypeToString(type)).Value(removedMaintenanceCounts[type]);
+    auto produceCounts = [] (auto fluent, const TMaintenanceCounts& counts) {
+        fluent
+            .BeginMap()
+                .DoFor(
+                    TEnumTraits<NApi::EMaintenanceType>::GetDomainValues(),
+                    [&] (auto fluent, EMaintenanceType type) {
+                        if (counts[type] > 0) {
+                            fluent.Item(Format("%lv", type)).Value(counts[type]);
+                        }
+                    })
+            .EndMap();
+    };
+
+    // COMPAT(kvk1920): Compatibility with pre-24.2 HTTP clients.
+    if (!SupportsPerTargetResponse_) {
+        TMaintenanceCounts totalCounts;
+        for (const auto& [target, counts] : response) {
+            for (auto type : TEnumTraits<EMaintenanceType>::GetDomainValues()) {
+                totalCounts[type] += counts[type];
             }
         }
-        fluent.EndMap();
+        ProduceOutput(context, [&] (NYson::IYsonConsumer* consumer) {
+            produceCounts(BuildYsonFluently(consumer), totalCounts);
+        });
+        return;
+    }
+
+    ProduceOutput(context, [&] (NYson::IYsonConsumer* consumer) {
+        BuildYsonFluently(consumer)
+            .BeginMap()
+                .DoFor(
+                    response,
+                    [&] (auto fluent, const std::pair<TString, TMaintenanceCounts>& targetWithCounts) {
+                        produceCounts(fluent.Item(targetWithCounts.first), targetWithCounts.second);
+                    })
+            .EndMap();
     });
 }
 

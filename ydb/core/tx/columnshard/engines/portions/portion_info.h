@@ -295,14 +295,18 @@ public:
     }
 
     bool IsRemovedFor(const TSnapshot& snapshot) const {
-        return CheckForCleanup(snapshot);
+        if (!HasRemoveSnapshot()) {
+            return false;
+        } else {
+            return GetRemoveSnapshotVerified() <= snapshot;
+        }
     }
 
     bool CheckForCleanup(const TSnapshot& snapshot) const {
         if (!HasRemoveSnapshot()) {
             return false;
         } else {
-            return GetRemoveSnapshotVerified() < snapshot;
+            return GetRemoveSnapshotVerified() <= snapshot;
         }
     }
 

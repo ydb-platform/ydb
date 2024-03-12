@@ -949,9 +949,9 @@
     ],
     "test.test[join-mapjoin_dup_key--Debug]": [
         {
-            "checksum": "56b68742c193bbfac9c78e138f8e01be",
-            "size": 2342,
-            "uri": "https://{canondata_backend}/1903885/357a4fea0449e98db159f5a087a2bdeb6fb084ab/resource.tar.gz#test.test_join-mapjoin_dup_key--Debug_/opt.yql"
+            "checksum": "99e428fed9c7ca49c91fc852b52a7244",
+            "size": 2435,
+            "uri": "https://{canondata_backend}/1937027/3190d2f517ce1b8b71b3fae5159fb120dc137870/resource.tar.gz#test.test_join-mapjoin_dup_key--Debug_/opt.yql"
         }
     ],
     "test.test[join-mapjoin_dup_key--Plan]": [

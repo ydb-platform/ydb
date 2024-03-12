@@ -1275,9 +1275,9 @@
     ],
     "test.test[join-mapjoin_with_anonymous--Debug]": [
         {
-            "checksum": "d7506459dac18f6b52e8c5d54c2ddd6f",
-            "size": 3151,
-            "uri": "https://{canondata_backend}/1942100/8fb0a7a6c71d8992f7b5d0fc7d2d03c809f0254b/resource.tar.gz#test.test_join-mapjoin_with_anonymous--Debug_/opt.yql_patched"
+            "checksum": "a61ce187aba53d78d40e1ab35afc624d",
+            "size": 3181,
+            "uri": "https://{canondata_backend}/1880306/78e8dc2de09e00e723c5ee882673373bf1f94680/resource.tar.gz#test.test_join-mapjoin_with_anonymous--Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-mapjoin_with_anonymous--Plan]": [

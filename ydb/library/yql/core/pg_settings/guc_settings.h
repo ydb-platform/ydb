@@ -5,6 +5,8 @@
 #include <optional>
 #include <memory>
 
+#include <util/generic/hash.h>
+
 class TGUCSettings {
 public:
     using TPtr = std::shared_ptr<TGUCSettings>;
@@ -13,9 +15,14 @@ public:
     void Set(const std::string&, const std::string&, bool isLocal = false);
     void Commit();
     void RollBack();
-    std::unordered_map<std::string, std::string> GetSettings() const;
-    std::unordered_map<std::string, std::string> GetRollbackSettings() const;
-    std::unordered_map<std::string, std::string> GetSessionSettings() const;
+
+    size_t GetHash() const noexcept {
+        auto tuple = std::make_tuple(
+            Settings_.size(),
+            RollbackSettings_.size(),
+            SessionSettings_.size());
+        return THash<decltype(tuple)>()(tuple);
+    }
 
     bool operator==(const TGUCSettings& other) const;
 private:

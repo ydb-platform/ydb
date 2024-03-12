@@ -41,9 +41,7 @@ public:
     size_t GetHash() const noexcept {
         auto tuple = std::make_tuple(Cluster, Database, UserSid, Text, Settings,
             QueryParameterTypes ? QueryParameterTypes->size() : 0u,
-            GUCSettings.GetSettings().size(),
-            GUCSettings.GetRollbackSettings().size(),
-            GUCSettings.GetSessionSettings().size());
+            GUCSettings.GetHash());
         return THash<decltype(tuple)>()(tuple);
     }
 };

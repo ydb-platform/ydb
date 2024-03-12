@@ -265,12 +265,16 @@ public:
         return RemoveSnapshot.Valid();
     }
 
+    bool IsRemovedFor(const TSnapshot& snapshot) const {
+        return CheckForCleanup(snapshot);
+    }
+
     bool CheckForCleanup(const TSnapshot& snapshot) const {
         if (!HasRemoveSnapshot()) {
             return false;
+        } else {
+            return GetRemoveSnapshotVerified() < snapshot;
         }
-
-        return GetRemoveSnapshot() < snapshot;
     }
 
     bool CheckForCleanup() const {
@@ -310,9 +314,17 @@ public:
         return MinSnapshot;
     }
 
-    const TSnapshot& GetRemoveSnapshot() const {
+    const TSnapshot& GetRemoveSnapshotVerified() const {
         AFL_VERIFY(HasRemoveSnapshot());
         return RemoveSnapshot;
+    }
+
+    std::optional<TSnapshot> GetRemoveSnapshotOptional() const {
+        if (RemoveSnapshot.Valid()) {
+            return RemoveSnapshot;
+        } else {
+            return {};
+        }
     }
 
     void SetMinSnapshot(const TSnapshot& snap) {

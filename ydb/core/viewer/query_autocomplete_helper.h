@@ -75,7 +75,6 @@ public:
             queue.pop();
         }
 
-        std::reverse(results.begin(), results.end());
         return results;
     }
 };

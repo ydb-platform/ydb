@@ -97,13 +97,13 @@ enum EFormat : unsigned char {
     FloatVector = 1
 };
 
-TString SerializeFloatVector(const TUnboxedValuePod x) {
+TUnboxedValue SerializeFloatVector(const IValueBuilder* valueBuilder, const TUnboxedValuePod x) {
     const EFormat format = EFormat::FloatVector;
     
     TString str;
     TStringOutput outStr(str);
 
-    if (const auto elements = x.GetElements()) {
+    if (x.HasFastListLength()) {
         const auto size = x.GetListLength();
         outStr.Reserve(1 + size * sizeof(float));
     }
@@ -111,10 +111,10 @@ TString SerializeFloatVector(const TUnboxedValuePod x) {
 
     EnumerateVector(x,  [&outStr] (float element) { outStr.Write(&element, sizeof(float)); });
 
-    return str;
+    return valueBuilder->NewString(str);
 }
 
-NYql::NUdf::TUnboxedValue DeserializeFloatVector(const IValueBuilder *valueBuilder, TStringRef str) {
+TUnboxedValue DeserializeFloatVector(const IValueBuilder *valueBuilder, TStringRef str) {
     if (str.Size() % sizeof(float) != 0)    
         return {};
     
@@ -135,7 +135,7 @@ NYql::NUdf::TUnboxedValue DeserializeFloatVector(const IValueBuilder *valueBuild
 }
 
 SIMPLE_STRICT_UDF(TToBinaryString, char*(TAutoMap<TListType<float>>)) {
-    return valueBuilder->NewString(SerializeFloatVector(args[0]));
+    return SerializeFloatVector(valueBuilder, args[0]);
 }
 
 SIMPLE_STRICT_UDF(TFromBinaryString, TOptional<TListType<float>>(const char*)) {
@@ -143,9 +143,9 @@ SIMPLE_STRICT_UDF(TFromBinaryString, TOptional<TListType<float>>(const char*)) {
     if (str.Size() == 0)
         return {};
 
-    const EFormat format = static_cast<EFormat>(str.Data()[0]);
+    char formatByte = str.Data()[0];
     str = TStringRef{str.Data() + 1, str.Size() -1};
-    switch (format) {
+    switch (formatByte) {
         case EFormat::FloatVector: 
             return DeserializeFloatVector(valueBuilder, str);
         default:

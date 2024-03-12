@@ -115,6 +115,7 @@ namespace NFwd {
             return {Pages.at(Offset).Touch(pageId, Stat), grow, true};
         }
 
+        // IndexState: {DoNext, Valid} -> {DoNext, Valid, Exhausted}
         void Forward(IPageLoadingQueue *head, ui64 upper) noexcept override
         {
             if (IndexState == DoNext) {
@@ -207,6 +208,7 @@ namespace NFwd {
             Pages.back().Fetch = EFetch::Wait;
         }
 
+        // IndexState: {DoStart, Valid, DoNext, DoBinarySearch} -> {DoStart, DoNext, DoBinarySearch} (returns false) | {Valid, DoNext} (returns true)
         bool SyncIndex(TPageId pageId) noexcept
         {
             if (IndexState == DoStart) {
@@ -303,7 +305,7 @@ namespace NFwd {
             while (BinarySearchState.BeginRowId < BinarySearchState.EndRowId) {
                 auto middleRowId = (BinarySearchState.BeginRowId + BinarySearchState.EndRowId) / 2;
                 if (auto ready = Index->Seek(middleRowId); ready != EReady::Data) {
-                    Y_ABORT_UNLESS(ready == EReady::Page);
+                    Y_ABORT_UNLESS(ready == EReady::Page, "Slices are invalid");
                     return false;
                 }
                 if (Index->GetPageId() == BinarySearchState.PageId) {

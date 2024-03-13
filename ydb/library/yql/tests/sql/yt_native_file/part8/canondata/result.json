@@ -1500,9 +1500,9 @@
     ],
     "test.test[join-mapjoin_left_null_column--Debug]": [
         {
-            "checksum": "d5d1f8254d9624f59025bbc7abaa35b8",
-            "size": 3224,
-            "uri": "https://{canondata_backend}/1773845/c865fc3a6f63b56097b2e5205cf04a3ce881c52d/resource.tar.gz#test.test_join-mapjoin_left_null_column--Debug_/opt.yql"
+            "checksum": "f580c04e36e88206b489eb8dfd615b46",
+            "size": 3252,
+            "uri": "https://{canondata_backend}/1936947/37919730ebf18199295eb5140ec2269a684eb3d0/resource.tar.gz#test.test_join-mapjoin_left_null_column--Debug_/opt.yql"
         }
     ],
     "test.test[join-mapjoin_left_null_column--Plan]": [

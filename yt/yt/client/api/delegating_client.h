@@ -647,7 +647,7 @@ public:
         const TResumeTabletCellsOptions& options),
         (cellIds, options))
 
-    DELEGATE_METHOD(TFuture<TMaintenanceId>, AddMaintenance, (
+    DELEGATE_METHOD(TFuture<TMaintenanceIdPerTarget>, AddMaintenance, (
         EMaintenanceComponent component,
         const TString& address,
         EMaintenanceType type,
@@ -655,7 +655,7 @@ public:
         const TAddMaintenanceOptions& options),
         (component, address, type, comment, options))
 
-    DELEGATE_METHOD(TFuture<TMaintenanceCounts>, RemoveMaintenance, (
+    DELEGATE_METHOD(TFuture<TMaintenanceCountsPerTarget>, RemoveMaintenance, (
         EMaintenanceComponent component,
         const TString& address,
         const TMaintenanceFilter& filter,

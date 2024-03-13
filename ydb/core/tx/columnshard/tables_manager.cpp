@@ -214,9 +214,6 @@ void TTablesManager::DropTable(const ui64 pathId, const NOlap::TSnapshot& versio
     table.SetDropVersion(version);
     PathsToDrop.insert(pathId);
     Ttl.DropPathTtl(pathId);
-    if (PrimaryIndex) {
-        PrimaryIndex->OnTieringModified(nullptr, Ttl);
-    }
     Schema::SaveTableDropVersion(db, pathId, version.GetPlanStep(), version.GetTxId());
 }
 
@@ -269,7 +266,7 @@ void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapsho
     }
 }
 
-void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& version, const TTableInfo::TTableVersionInfo& versionInfo, NIceDb::TNiceDb& db) {
+void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& version, const TTableInfo::TTableVersionInfo& versionInfo, NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager>& manager) {
     auto it = Tables.find(pathId);
     AFL_VERIFY(it != Tables.end());
     auto& table = it->second;
@@ -295,8 +292,8 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
         } else {
             Ttl.DropPathTtl(pathId);
         }
-        if (PrimaryIndex) {
-            PrimaryIndex->OnTieringModified(nullptr, Ttl);
+        if (PrimaryIndex && manager->IsReady()) {
+            PrimaryIndex->OnTieringModified(manager, Ttl, pathId);
         }
     }
     Schema::SaveTableVersionInfo(db, pathId, version, versionInfo);
@@ -318,7 +315,6 @@ void TTablesManager::IndexSchemaVersion(const NOlap::TSnapshot& snapshot, const 
             PrimaryIndex->RegisterTable(i.first);
         }
     }
-    PrimaryIndex->OnTieringModified(nullptr, Ttl);
 }
 
 TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId)

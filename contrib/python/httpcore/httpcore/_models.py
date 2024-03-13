@@ -353,6 +353,14 @@ class Request:
         )
         self.extensions = {} if extensions is None else extensions
 
+        if "target" in self.extensions:
+            self.url = URL(
+                scheme=self.url.scheme,
+                host=self.url.host,
+                port=self.url.port,
+                target=self.extensions["target"],
+            )
+
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} [{self.method!r}]>"
 

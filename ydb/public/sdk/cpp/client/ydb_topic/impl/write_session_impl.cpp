@@ -345,17 +345,35 @@ TString GenerateProducerId() {
 
 void TWriteSessionImpl::InitWriter() { // No Lock, very initial start - no race yet as well.
     if (!Settings.DeduplicationEnabled_.Defined()) {
-        Settings.DeduplicationEnabled_ = !(Settings.ProducerId_.empty());
-    }
-    else if (Settings.DeduplicationEnabled_.GetRef()) {
+        // Deduplication settings not provided - will enable deduplication if ProducerId or MessageGroupId is provided.
+        Settings.DeduplicationEnabled_ = !Settings.ProducerId_.empty() || !Settings.MessageGroupId_.empty();
+    } else if (Settings.DeduplicationEnabled_.GetRef()) {
+        // Deduplication explicitly enabled.
+
+        // If both are provided, will validate they are equal in the check below.
         if (Settings.ProducerId_.empty()) {
-            Settings.ProducerId(GenerateProducerId());
+            if (Settings.MessageGroupId_.empty()) {
+                // Both ProducerId and MessageGroupId are empty, will generate random string and use it
+                Settings.MessageGroupId(GenerateProducerId());
+            }
+            // MessageGroupId is non-empty (either provided by user of generated above) and ProducerId is empty, copy value there.
+            Settings.ProducerId(Settings.MessageGroupId_);
+        } else if (Settings.MessageGroupId_.empty()) {
+            // MessageGroupId is empty, copy ProducerId value.
+            Settings.MessageGroupId(Settings.ProducerId_);
         }
     } else {
-        if (!Settings.ProducerId_.empty()) {
-            LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "ProducerId is not empty when deduplication is switched off");
-            ThrowFatalError("Cannot disable deduplication when non-empty ProducerId is provided");
+        // Deduplication explicitly disabled, ProducerId & MessageGroupId must be empty.
+        if (!Settings.ProducerId_.empty() || !Settings.MessageGroupId_.empty()) {
+            LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix()
+                     << "ProducerId or MessageGroupId is not empty when deduplication is switched off");
+            ThrowFatalError("Explicitly disabled deduplication conflicts with non-empty ProducerId or MessageGroupId");
         }
+    }
+    if (!Settings.ProducerId_.empty() && !Settings.MessageGroupId_.empty() && Settings.ProducerId_ != Settings.MessageGroupId_) {
+            LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix()
+                     << "ProducerId and MessageGroupId mismatch");
+            ThrowFatalError("ProducerId != MessageGroupId scenario is currently not supported");
     }
     CompressionExecutor = Settings.CompressionExecutor_;
     IExecutor::TPtr executor;

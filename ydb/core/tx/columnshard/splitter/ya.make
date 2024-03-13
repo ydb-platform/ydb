@@ -15,8 +15,8 @@ SRCS(
 
 PEERDIR(
     contrib/libs/apache/arrow
-    ydb/core/tx/columnshard/engines/storage
     ydb/core/tx/columnshard/splitter/abstract
+    ydb/core/tx/columnshard/engines/scheme
 )
 
 END()

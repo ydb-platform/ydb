@@ -387,6 +387,10 @@ const TString& TPortionInfo::GetColumnStorageId(const ui32 columnId, const TInde
     return indexInfo.GetColumnStorageId(columnId, GetMeta().GetTierName());
 }
 
+const TString& TPortionInfo::GetEntityStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const {
+    return indexInfo.GetEntityStorageId(columnId, GetMeta().GetTierName());
+}
+
 void TPortionInfo::FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TIndexInfo& indexInfo) const {
     for (auto&& i : Records) {
         const TString& storageId = GetColumnStorageId(i.GetColumnId(), indexInfo);
@@ -437,6 +441,23 @@ TBlobRangeLink16::TLinkId TPortionInfo::RegisterBlobId(const TUnifiedBlobId& blo
     }
     BlobIds.emplace_back(blobId);
     return idx;
+}
+
+THashMap<TString, THashMap<NKikimr::NOlap::TUnifiedBlobId, std::vector<NKikimr::NOlap::TEntityChunk>>> TPortionInfo::GetEntityChunks(const TIndexInfo& indexInfo) const {
+    THashMap<TString, THashMap<TUnifiedBlobId, std::vector<TEntityChunk>>> result;
+    for (auto&& c : GetRecords()) {
+        const TString& storageId = GetColumnStorageId(c.GetColumnId(), indexInfo);
+        auto& storageRecords = result[storageId];
+        auto& blobRecords = storageRecords[GetBlobId(c.GetBlobRange().GetBlobIdxVerified())];
+        blobRecords.emplace_back(TEntityChunk(c.GetAddress(), c.GetMeta().GetNumRowsVerified(), c.GetMeta().GetRawBytesVerified(), c.GetBlobRange()));
+    }
+    for (auto&& c : GetIndexes()) {
+        const TString& storageId = indexInfo.GetIndexStorageId(c.GetIndexId());
+        auto& storageRecords = result[storageId];
+        auto& blobRecords = storageRecords[GetBlobId(c.GetBlobRange().GetBlobIdxVerified())];
+        blobRecords.emplace_back(TEntityChunk(c.GetAddress(), c.GetRecordsCount(), c.GetRawBytes(), c.GetBlobRange()));
+    }
+    return result;
 }
 
 std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() const {

@@ -33,6 +33,7 @@ namespace NKikimr::NOlap {
 class TPortionInfoWithBlobs;
 struct TInsertedData;
 class TSnapshotColumnInfo;
+class ISnapshotSchema;
 using TNameTypeInfo = std::pair<TString, NScheme::TTypeInfo>;
 
 /// Column engine index description in terms of tablet's local table.
@@ -50,6 +51,20 @@ private:
     void BuildArrowSchema();
     void InitializeCaches(const std::shared_ptr<IStoragesManager>& operators);
 public:
+    std::set<TString> GetUsedStorageIds(const TString& portionTierName) const {
+        std::set<TString> result;
+        if (portionTierName && portionTierName != IStoragesManager::DefaultStorageId) {
+            result.emplace(portionTierName);
+        } else {
+            for (auto&& i : ColumnFeatures) {
+                result.emplace(i.second.GetOperator()->GetStorageId());
+            }
+        }
+        return result;
+    }
+
+    std::vector<std::shared_ptr<IPortionDataChunk>> MakeEmptyChunks(const ui32 columnId, const std::vector<ui32>& pages, const std::shared_ptr<ISnapshotSchema>& schema, const TSaverContext& saverContext) const;
+
     const std::map<NStatistics::TIdentifier, NStatistics::TOperatorContainer>& GetStatistics() const {
         return Statistics;
     }
@@ -146,6 +161,14 @@ public:
         return result;
     }
 
+    bool HasColumnId(const ui32 columnId) const {
+        return ColumnFeatures.contains(columnId);
+    }
+
+    bool HasIndexId(const ui32 indexId) const {
+        return Indexes.contains(indexId);
+    }
+
     std::shared_ptr<arrow::Field> GetColumnFieldOptional(const ui32 columnId) const;
     std::shared_ptr<arrow::Field> GetColumnFieldVerified(const ui32 columnId) const;
     std::shared_ptr<arrow::Schema> GetColumnSchema(const ui32 columnId) const;
@@ -176,11 +199,18 @@ public:
         return meta->GetIndexName();
     }
 
-    void AppendIndexes(std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData) const {
+    void AppendIndexes(THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData) const {
         for (auto&& i : Indexes) {
             std::shared_ptr<IPortionDataChunk> chunk = i.second->BuildIndex(i.first, originalData, *this);
             AFL_VERIFY(originalData.emplace(i.first, std::vector<std::shared_ptr<IPortionDataChunk>>({chunk})).second);
         }
+    }
+
+    void AppendIndex(THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData, const ui32 indexId) const {
+        auto it = Indexes.find(indexId);
+        AFL_VERIFY(it != Indexes.end());
+        std::shared_ptr<IPortionDataChunk> chunk = it->second->BuildIndex(indexId, originalData, *this);
+        AFL_VERIFY(originalData.emplace(indexId, std::vector<std::shared_ptr<IPortionDataChunk>>({chunk})).second);
     }
 
     /// Returns an id of the column located by name. The name should exists in the schema.

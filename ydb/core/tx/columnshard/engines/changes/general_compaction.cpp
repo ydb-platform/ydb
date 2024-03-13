@@ -181,7 +181,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
         std::shared_ptr<TDefaultSchemaDetails> schemaDetails(new TDefaultSchemaDetails(resultSchema, SaverContext, stats));
 
         for (ui32 i = 0; i < columnChunks.begin()->second.size(); ++i) {
-            std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> portionColumns;
+            THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> portionColumns;
             for (auto&& p : columnChunks) {
                 portionColumns.emplace(p.first, p.second[i].GetChunks());
             }

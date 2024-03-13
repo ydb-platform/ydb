@@ -292,7 +292,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         result = session.ExecuteQuery("UPDATE TwoShard SET Value2 = 1 WHERE Key = 1",
             TTxControl::Tx(transaction->GetId()).CommitTx()).ExtractValueSync();;
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        UNIT_ASSERT(!result.GetTransaction()->IsActive());
+        UNIT_ASSERT(!result.GetTransaction());
 
         checkResult(R"([[[1u];["One"];[1]];[[2u];["Two"];[0]];[[3u];["Three"];[0]];[[4000000001u];["BigOne"];[0]];[[4000000002u];["BigTwo"];[0]];[[4000000003u];["BigThree"];[0]]])");
     }
@@ -309,12 +309,17 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     Y_UNIT_TEST(ExecuteRetryQuery) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
-
         const TString query = "SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0 ORDER BY Key";
         auto queryFunc = [&query](TSession session) -> TAsyncExecuteQueryResult {
             return session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx());
         };
+
         auto resultRetryFunc = db.RetryQuery(std::move(queryFunc)).GetValueSync();
+        int attempt = 10;
+        while (attempt-- && db.GetActiveSessionCount() > 0) {
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(db.GetActiveSessionCount(), 0);
         CheckQueryResult(resultRetryFunc);
     }
 

@@ -6,12 +6,15 @@
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/columnshard_ttl.h>
-#include "scheme/tier_info.h"
-#include "storage/granule.h"
-#include "storage/storage.h"
+
+#include "changes/actualization/controller/controller.h"
 #include "changes/indexation.h"
 #include "changes/ttl.h"
 #include "changes/with_appended.h"
+
+#include "scheme/tier_info.h"
+#include "storage/granule.h"
+#include "storage/storage.h"
 
 namespace NKikimr::NArrow {
 struct TSortDescription;
@@ -28,50 +31,6 @@ class TGranulesTable;
 class TColumnsTable;
 class TCountersTable;
 
-class TEvictionsController {
-public:
-    class TTieringWithPathId {
-    private:
-        const ui64 PathId;
-        TTiering TieringInfo;
-    public:
-        TTieringWithPathId(const ui64 pathId, TTiering&& tieringInfo)
-            : PathId(pathId)
-            , TieringInfo(std::move(tieringInfo))
-        {
-
-        }
-
-        ui64 GetPathId() const {
-            return PathId;
-        }
-
-        const TTiering& GetTieringInfo() const {
-            return TieringInfo;
-        }
-    };
-private:
-    THashMap<ui64, TTiering> OriginalTierings;
-    std::map<TMonotonic, std::vector<TTieringWithPathId>> NextCheckInstantForTierings;
-
-    std::map<TMonotonic, std::vector<TTieringWithPathId>> BuildNextInstantCheckers(THashMap<ui64, TTiering>&& info) {
-        std::map<TMonotonic, std::vector<TTieringWithPathId>> result;
-        std::vector<TTieringWithPathId> newTasks;
-        for (auto&& i : info) {
-            newTasks.emplace_back(i.first, std::move(i.second));
-        }
-        result.emplace(TMonotonic::Zero(), std::move(newTasks));
-        return result;
-    }
-public:
-    std::map<TMonotonic, std::vector<TTieringWithPathId>>& MutableNextCheckInstantForTierings() {
-        return NextCheckInstantForTierings;
-    }
-
-    void RefreshTierings(std::optional<THashMap<ui64, TTiering>>&& tierings, const NColumnShard::TTtl& ttl);
-};
-
-
 /// Engine with 2 tables:
 /// - Granules: PK -> granules (use part of PK)
 /// - Columns: granule -> blobs
@@ -85,46 +44,18 @@ class TColumnEngineForLogs : public IColumnEngine {
     friend class TCleanupColumnEngineChanges;
     friend class NDataSharing::TDestinationSession;
 private:
+    bool TiersInitialized = false;
     const NColumnShard::TEngineLogsCounters SignalCounters;
     std::shared_ptr<TGranulesStorage> GranulesStorage;
     std::shared_ptr<IStoragesManager> StoragesManager;
-    TEvictionsController EvictionsController;
-    class TTieringProcessContext {
-    private:
-        const ui64 MemoryUsageLimit;
-        ui64 MemoryUsage = 0;
-        ui64 TxWriteVolume = 0;
-        std::shared_ptr<TColumnEngineChanges::IMemoryPredictor> MemoryPredictor;
-    public:
-        const TInstant Now;
-        std::shared_ptr<TTTLColumnEngineChanges> Changes;
-        std::map<ui64, TDuration> DurationsForced;
-        const std::shared_ptr<NDataLocks::TManager> DataLocksManager;
 
-        void AppPortionForEvictionChecker(const TPortionInfo& info) {
-            MemoryUsage = MemoryPredictor->AddPortion(info);
-            TxWriteVolume += info.GetTxVolume();
-        }
+    std::shared_ptr<NActualizer::TController> ActualizationController;
 
-        void AppPortionForTtlChecker(const TPortionInfo& info) {
-            TxWriteVolume += info.GetTxVolume();
-        }
-
-        bool HasLimitsForEviction() const {
-            return MemoryUsage < MemoryUsageLimit && TxWriteVolume < TGlobalLimits::TxWriteLimitBytes;
-        }
-
-        bool HasLimitsForTtl() const {
-            return TxWriteVolume < TGlobalLimits::TxWriteLimitBytes;
-        }
-
-        TTieringProcessContext(const ui64 memoryUsageLimit, std::shared_ptr<TTTLColumnEngineChanges> changes,
-            const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::shared_ptr<TColumnEngineChanges::IMemoryPredictor>& memoryPredictor);
-    };
-
-    TDuration ProcessTiering(const ui64 pathId, const TTiering& tiering, TTieringProcessContext& context) const;
-    bool DrainEvictionQueue(std::map<TMonotonic, std::vector<TEvictionsController::TTieringWithPathId>>& evictionsQueue, TTieringProcessContext& context) const;
 public:
+    const std::shared_ptr<NActualizer::TController>& GetActualizationController() const {
+        return ActualizationController;
+    }
+
     ui64* GetLastPortionPointer() {
         return &LastPortion;
     }
@@ -148,7 +79,11 @@ public:
 
     TColumnEngineForLogs(ui64 tabletId, const TCompactionLimits& limits, const std::shared_ptr<IStoragesManager>& storagesManager);
 
-    virtual void OnTieringModified(std::shared_ptr<NColumnShard::TTiersManager> manager, const NColumnShard::TTtl& ttl) override;
+    virtual void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) override;
+
+    virtual std::shared_ptr<TVersionedIndex> CopyVersionedIndexPtr() const override {
+        return std::make_shared<TVersionedIndex>(VersionedIndex);
+    }
 
     const TVersionedIndex& GetVersionedIndex() const override {
         return VersionedIndex;
@@ -166,7 +101,7 @@ public:
     std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept override;
     std::shared_ptr<TColumnEngineChanges> StartCompaction(const TCompactionLimits& limits, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
     std::shared_ptr<TCleanupColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, THashSet<ui64>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
-    std::shared_ptr<TTTLColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
+    std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
         const std::shared_ptr<NDataLocks::TManager>& locksManager, const ui64 memoryUsageLimit) noexcept override;
 
     bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges,

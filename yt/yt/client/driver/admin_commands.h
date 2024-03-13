@@ -254,6 +254,8 @@ private:
     TString Address_;
     NApi::EMaintenanceType Type_;
     TString Comment_;
+    // COMPAT(kvk1920): Compatibility with pre-24.2 HTTP clients.
+    bool SupportsPerTargetResponse_;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -277,6 +279,8 @@ private:
     std::optional<NApi::TMaintenanceId> Id_;
     std::optional<std::vector<NApi::TMaintenanceId>> Ids_;
     std::optional<NApi::EMaintenanceType> Type_;
+    // COMPAT(kvk1920): Compatibility with pre-24.2 HTTP clients.
+    bool SupportsPerTargetResponse_;
 
     void DoExecute(ICommandContextPtr context) override;
 };

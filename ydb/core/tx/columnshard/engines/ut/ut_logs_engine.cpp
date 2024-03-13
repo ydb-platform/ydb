@@ -97,7 +97,11 @@ public:
             Y_ABORT_UNLESS(portion.GetPathId() == it->second.GetPathId() && portion.GetPortion() == it->second.GetPortion());
         }
         it->second.SetMinSnapshot(portion.GetMinSnapshot());
-        it->second.SetRemoveSnapshot(portion.GetRemoveSnapshot());
+        if (portion.HasRemoveSnapshot()) {
+            it->second.SetRemoveSnapshot(portion.GetRemoveSnapshotVerified());
+        } else {
+            AFL_VERIFY(!it->second.HasRemoveSnapshot());
+        }
 
         bool replaced = false;
         for (auto& rec : it->second.Records) {
@@ -367,8 +371,9 @@ bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, u
 
 bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db,
          const THashMap<ui64, NOlap::TTiering>& pathEviction, ui32 expectedToDrop) {
-    std::shared_ptr<TTTLColumnEngineChanges> changes = engine.StartTtl(pathEviction, EmptyDataLocksManager, 512 * 1024 * 1024);
-    UNIT_ASSERT(changes);
+    std::vector<std::shared_ptr<TTTLColumnEngineChanges>> vChanges = engine.StartTtl(pathEviction, EmptyDataLocksManager, 512 * 1024 * 1024);
+    AFL_VERIFY(vChanges.size() == 1)("count", vChanges.size());
+    auto changes = vChanges.front();
     UNIT_ASSERT_VALUES_EQUAL(changes->PortionsToRemove.size(), expectedToDrop);
 
 
@@ -749,7 +754,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             std::shared_ptr<arrow::DataType> ttlColType = arrow::timestamp(arrow::TimeUnit::MICRO);
             THashMap<ui64, NOlap::TTiering> pathTtls;
             NOlap::TTiering tiering;
-            tiering.Add(NOlap::TTierInfo::MakeTtl(TDuration::MicroSeconds(TInstant::Now().MicroSeconds() - 10000), "timestamp"));
+            AFL_VERIFY(tiering.Add(NOlap::TTierInfo::MakeTtl(TDuration::MicroSeconds(TInstant::Now().MicroSeconds() - 10000), "timestamp")));
             pathTtls.emplace(pathId, std::move(tiering));
             Ttl(engine, db, pathTtls, 10);
 

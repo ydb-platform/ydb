@@ -857,11 +857,11 @@ namespace Tests {
                 );
 
                 std::shared_ptr<NFq::TDatabaseAsyncResolverImpl> databaseAsyncResolver;
-                if (queryServiceConfig.GetGeneric().HasMdbGateway() && queryServiceConfig.HasMdbTransformHost()) {
+                if (queryServiceConfig.GetGeneric().HasMdbGateway() || queryServiceConfig.GetGeneric().HasYdbMvpEndpoint()) {
                     databaseAsyncResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
                         Runtime->GetActorSystem(nodeIdx),
                         databaseResolverActorId,
-                        "",
+                        queryServiceConfig.GetGeneric().GetYdbMvpEndpoint(),
                         queryServiceConfig.GetGeneric().GetMdbGateway(),
                         NFq::MakeMdbEndpointGeneratorGeneric(queryServiceConfig.GetMdbTransformHost())
                     );
@@ -924,7 +924,7 @@ namespace Tests {
                 TActorId proxyId = Runtime->Register(proxy, nodeIdx, Runtime->GetAppData(nodeIdx).SystemPoolId, TMailboxType::Revolving, 0);
                 Runtime->RegisterService(NMsgBusProxy::CreateMsgBusProxyId(), proxyId, nodeIdx);
 
-                Cerr << "NMsgBusProxy registered on Port " << Settings->Port << " GrpsPort " << Settings->GrpcPort << Endl;
+                Cerr << "NMsgBusProxy registered on Port " << Settings->Port << " GrpcPort " << Settings->GrpcPort << Endl;
             }
         }
         {

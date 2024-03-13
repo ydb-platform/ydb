@@ -285,7 +285,7 @@ void TDictionaryCompressionConfig::Register(TRegistrar registrar)
         .Default(12_MB);
     registrar.Parameter("max_acceptable_compression_ratio", &TThis::MaxAcceptableCompressionRatio)
         .Default(0.7)
-        .InRange(0, 1);
+        .GreaterThanOrEqual(0.);
     registrar.Parameter("max_decompression_blob_size", &TThis::MaxDecompressionBlobSize)
         .GreaterThan(0)
         .Default(64_MB);

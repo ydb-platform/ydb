@@ -102,14 +102,14 @@ TTxController::TProposeResult TTxProposeTransaction::ProposeTtlDeprecated(const 
         const TInstant now = TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now();
         for (ui64 pathId : ttlBody.GetPathIds()) {
             NOlap::TTiering tiering;
-            tiering.Add(NOlap::TTierInfo::MakeTtl(now - unixTime, columnName));
+            AFL_VERIFY(tiering.Add(NOlap::TTierInfo::MakeTtl(now - unixTime, columnName)));
             pathTtls.emplace(pathId, std::move(tiering));
         }
     }
     if (!Self->SetupTtl(pathTtls)) {
         return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL not started");
     }
-    Self->TablesManager.MutablePrimaryIndex().OnTieringModified(Self->Tiers, Self->TablesManager.GetTtl());
+    Self->TablesManager.MutablePrimaryIndex().OnTieringModified(Self->Tiers, Self->TablesManager.GetTtl(), {});
 
     return TTxController::TProposeResult();
 }

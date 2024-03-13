@@ -2577,7 +2577,6 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
                         }
                     }
                 } else {
-                    // after proof of concept move outside loop
                     if (Parent->DoDecompress
                         && static_cast<Ydb::Topic::Codec>(batch.codec()) != Ydb::Topic::CODEC_RAW
                         && static_cast<Ydb::Topic::Codec>(batch.codec()) != Ydb::Topic::CODEC_UNSPECIFIED

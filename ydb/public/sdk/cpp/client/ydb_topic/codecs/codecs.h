@@ -9,6 +9,8 @@
 #include <util/stream/zlib.h>
 #include <util/stream/output.h>
 
+#define CODECS_ALREADY_DEFINED
+
 namespace NYdb::NTopic {
 
 class ICodec {

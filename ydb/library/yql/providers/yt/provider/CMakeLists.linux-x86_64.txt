@@ -53,6 +53,7 @@ target_link_libraries(providers-yt-provider PUBLIC
   providers-common-activation
   providers-common-provider
   common-schema-expr
+  providers-common-structured_token
   providers-common-transform
   providers-dq-common
   providers-dq-expr_nodes

@@ -72,7 +72,6 @@ namespace NKikimr {
         // the record unchanged.
         template <class TIterator>
         void BuildMap(
-                const TActorContext& /*ctx*/,
                 const TLevelIndexSnapshot& /*levelSnap*/,
                 const TIterator& /*i*/)
         {
@@ -81,7 +80,7 @@ namespace NKikimr {
 
         // Transforms record according to the built handoff map. It returns item we need to write, pointer is
         // valid until next call. Nullptr indicates that item is to be removed completely.
-        const TTransformedItem *Transform(const TActorContext& /*ctx*/, const TKey& key, const TMemRec* memRec,
+        const TTransformedItem *Transform(const TKey& key, const TMemRec* memRec,
                                           const TDataMerger* dataMerger, bool /*keepData*/) {
             // do nothing by default, all work is done in template specialization for logo blobs
             Counter++;
@@ -163,7 +162,6 @@ namespace NKikimr {
     template <>
     inline const THandoffMap<TKeyLogoBlob, TMemRecLogoBlob>::TTransformedItem *
         THandoffMap<TKeyLogoBlob, TMemRecLogoBlob>::Transform(
-            const TActorContext& /*ctx*/,
             const TKeyLogoBlob& key,
             const TMemRecLogoBlob* memRec,
             const TDataMerger* dataMerger,
@@ -251,7 +249,6 @@ namespace NKikimr {
     template <>
     template <class TIterator>
     inline void THandoffMap<TKeyLogoBlob, TMemRecLogoBlob>::BuildMap(
-            const TActorContext& ctx,
             const TLevelIndexSnapshot& levelSnap,
             const TIterator& i)
     {
@@ -291,7 +288,7 @@ namespace NKikimr {
                                                                               newItem, doMerge, crash);
         }
 
-        LOG_INFO(ctx, NKikimrServices::BS_HANDOFF,
+        LOG_INFO(*TlsActivationContext, NKikimrServices::BS_HANDOFF,
                  VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                     "THandoffMap: map build: %s", Stat.ToStringBuildPlanStat().data()));
     }

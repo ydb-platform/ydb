@@ -119,7 +119,7 @@ namespace NKikimr {
             BarriersSnap.Destroy();
 
             // build handoff map (use LevelSnap by ref)
-            Hmp->BuildMap(ctx, LevelSnap, It);
+            Hmp->BuildMap(LevelSnap, It);
 
             // build gc map (use LevelSnap by ref)
             Gcmp->BuildMap(ctx, brs, LevelSnap, It);
@@ -140,7 +140,7 @@ namespace NKikimr {
             // there are events, we send them to yard; worker internally controls all in flight limits and does not
             // generate more events than allowed; this function returns boolean status indicating whether compaction job
             // is finished or not
-            const bool done = Worker.MainCycle(MsgsForYard, ctx);
+            const bool done = Worker.MainCycle(MsgsForYard);
             // check if there are messages we have for yard
             for (std::unique_ptr<IEventBase>& msg : MsgsForYard) {
                 ctx.Send(PDiskCtx->PDiskId, msg.release());

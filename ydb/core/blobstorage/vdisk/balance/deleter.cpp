@@ -41,7 +41,7 @@ namespace {
             , ExpectedResponses(0)
         {}
 
-        EState DoJobQuant(const TActorContext &ctx) {
+        EState DoJobQuant(const TActorId& selfId) {
             if (ExpectedResponses != 0) {
                 return WAITING_RESPONSES;
             }
@@ -67,7 +67,7 @@ namespace {
                 );
                 TReplQuoter::QuoteMessage(
                     Quoter,
-                    std::make_unique<IEventHandle>(QueueActorMapPtr->at(TVDiskIdShort(vDiskId)), ctx.SelfID, ev.release()),
+                    std::make_unique<IEventHandle>(QueueActorMapPtr->at(TVDiskIdShort(vDiskId)), selfId, ev.release()),
                     0
                 );
                 ++ExpectedResponses;
@@ -114,51 +114,49 @@ namespace {
         };
         TStats Stats;
 
-        void DoJobQuant(const TActorContext &ctx) {
-            auto status = PartsRequester.DoJobQuant(ctx);
+        void DoJobQuant() {
+            auto status = PartsRequester.DoJobQuant(SelfId());
             if (auto batch = PartsRequester.TryGetResults()) {
                 Stats.PartsRequested += batch->size();
                 for (auto& part: *batch) {
                     if (part.HasOnMain) {
                         ++Stats.PartsDecidedToDelete;
-                        DeleteLocal(ctx, part.Key, part.Ingress);
+                        DeleteLocal(part.Key, part.Ingress);
                     }
                 }
             }
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BALANCING,
-                        Ctx->VCtx->VDiskLogPrefix << "PartsRequester status " << ": " << (ui32)status << " " << Stats.PartsDecidedToDelete);
+            BLOG_D(Ctx->VCtx->VDiskLogPrefix << "PartsRequester status " << ": " << (ui32)status << " " << Stats.PartsDecidedToDelete);
             if (status == TPartsRequester::EState::FINISHED && Stats.PartsDecidedToDelete == Stats.PartsMarkedDeleted) {
-                Send(SelfId(), new NActors::TEvents::TEvPoison);
+                PassAway();
             }
         }
 
-        void DeleteLocal(const TActorContext &ctx, const TLogoBlobID& key, const TIngress& ingress) {
+        void DeleteLocal(const TLogoBlobID& key, const TIngress& ingress) {
             TLogoBlobID keyWithoutPartId(key, 0);
 
             TIngress patchedIngress = ingress.CopyWithoutLocal(Ctx->GInfo->GetTopology().GType);
             patchedIngress.DeleteHandoff(&Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, key);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BALANCING,
-                Ctx->VCtx->VDiskLogPrefix 
-                 << "Deleting local: " << keyWithoutPartId.ToString() << " " << patchedIngress.ToString(&Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, keyWithoutPartId));
+            BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Deleting local: " << keyWithoutPartId.ToString() << " "
+                    << patchedIngress.ToString(&Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, keyWithoutPartId));
 
-            ctx.Send(Ctx->SkeletonId, new TEvDelLogoBlobDataSyncLog(keyWithoutPartId, patchedIngress, OrderId++));
+            Send(Ctx->SkeletonId, new TEvDelLogoBlobDataSyncLog(keyWithoutPartId, patchedIngress, OrderId++));
         }
 
         void Handle(TEvDelLogoBlobDataSyncLogResult::TPtr ev) {
             Y_VERIFY(ev->Get()->OrderId == Stats.PartsMarkedDeleted++);
         }
 
-        void Die(const TActorContext &ctx) override {
+        void PassAway() override {
             Send(NotifyId, new NActors::TEvents::TEvCompleted(DELETER_ID));
-            TActorBootstrapped::Die(ctx);
+            TActorBootstrapped::PassAway();
         }
 
         STRICT_STFUNC(StateFunc,
-            CFunc(NActors::TEvents::TEvWakeup::EventType, DoJobQuant)
+            cFunc(NActors::TEvents::TEvWakeup::EventType, DoJobQuant)
             hFunc(TEvBlobStorage::TEvVGetResult, PartsRequester.Handle)
             hFunc(TEvDelLogoBlobDataSyncLogResult, Handle)
-            CFunc(NActors::TEvents::TEvPoison::EventType, Die)
+            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
         );
 
     public:

@@ -36,7 +36,7 @@ namespace {
             , ExpectedResponses(0)
         {}
 
-        EReaderState DoJobQuant(const TActorContext &ctx) {
+        EReaderState DoJobQuant(const TActorId& selfId) {
             if (ExpectedResponses != 0) {
                 return WAITING_PDISK_RESPONSES;
             }
@@ -69,7 +69,7 @@ namespace {
 
                     TReplQuoter::QuoteMessage(
                         Quoter,
-                        std::make_unique<IEventHandle>(PDiskCtx->PDiskId, ctx.SelfID, ev.release()),
+                        std::make_unique<IEventHandle>(PDiskCtx->PDiskId, selfId, ev.release()),
                         diskPart.Size
                     );
                 }
@@ -114,29 +114,26 @@ namespace {
         };
         TStats Stats;
 
-        void DoJobQuant(const TActorContext &ctx) {
-            auto status = Reader.DoJobQuant(ctx);
+        void DoJobQuant() {
+            auto status = Reader.DoJobQuant(SelfId());
             if (auto batch = Reader.TryGetResults()) {
                 Stats.PartsRead += batch->size();
-                SendParts(*batch, ctx);
+                SendParts(*batch);
             }
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BALANCING,
-                        Ctx->VCtx->VDiskLogPrefix << "Reader status "
-                        << ": " << (ui32)status << " " << Stats.PartsRead << " " << Stats.PartsSent);
+            BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Reader status "
+                    << ": " << (ui32)status << " " << Stats.PartsRead << " " << Stats.PartsSent);
             if (status == TReader::EReaderState::FINISHED && Stats.PartsRead == Stats.PartsSent) {
-                Send(SelfId(), new NActors::TEvents::TEvPoison);
+                PassAway();
             }
         }
 
-        void SendParts(const TVector<TPart>& batch, const TActorContext &ctx) {
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BALANCING,
-                        Ctx->VCtx->VDiskLogPrefix << "Sending parts " << batch.size());
+        void SendParts(const TVector<TPart>& batch) {
+            BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Sending parts " << batch.size());
             for (const auto& part: batch) {
                 auto vDiskId = GetVDiskId(*Ctx->GInfo, part.Key);
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BALANCING,
-                            Ctx->VCtx->VDiskLogPrefix << "Sending " << part.Key.ToString()
-                            << " to " << Ctx->GInfo->GetTopology().GetOrderNumber(TVDiskIdShort(vDiskId))
-                            << "; Data size = " << part.PartData.size());
+                BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Sending " << part.Key.ToString()
+                        << " to " << Ctx->GInfo->GetTopology().GetOrderNumber(TVDiskIdShort(vDiskId))
+                        << "; Data size = " << part.PartData.size());
                 auto& queue = (*QueueActorMapPtr)[TVDiskIdShort(vDiskId)];
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(
                     part.Key, part.PartData, vDiskId,
@@ -151,22 +148,21 @@ namespace {
             }
         }
 
-        void Handle(TEvBlobStorage::TEvVPutResult::TPtr ev, const TActorContext &ctx) {
+        void Handle(TEvBlobStorage::TEvVPutResult::TPtr ev) {
             Stats.PartsSent += 1;
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BALANCING,
-                        Ctx->VCtx->VDiskLogPrefix << "Put result: " << ev->Get()->ToString());
+            BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Put result: " << ev->Get()->ToString());
         }
 
-        void Die(const TActorContext &ctx) override {
+        void PassAway() override {
             Send(NotifyId, new NActors::TEvents::TEvCompleted(SENDER_ID));
-            TActorBootstrapped::Die(ctx);
+            TActorBootstrapped::PassAway();
         }
 
         STRICT_STFUNC(StateFunc,
-            CFunc(NActors::TEvents::TEvWakeup::EventType, DoJobQuant)
+            cFunc(NActors::TEvents::TEvWakeup::EventType, DoJobQuant)
             hFunc(NPDisk::TEvChunkReadResult, Reader.Handle)
-            HFunc(TEvBlobStorage::TEvVPutResult, Handle)
-            CFunc(NActors::TEvents::TEvPoison::EventType, Die)
+            hFunc(TEvBlobStorage::TEvVPutResult, Handle)
+            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
         );
 
     public:

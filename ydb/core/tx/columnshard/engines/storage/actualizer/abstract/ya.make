@@ -1,7 +1,8 @@
 LIBRARY()
 
 SRCS(
-    index.cpp
+    abstract.cpp
+    context.cpp
 )
 
 PEERDIR(

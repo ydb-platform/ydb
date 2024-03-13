@@ -26,6 +26,7 @@ public:
 
 class TTieringProcessContext {
 private:
+    THashSet<TPortionAddress> UsedPortions;
     const ui64 MemoryUsageLimit;
     TSaverContext SaverContext;
     THashMap<TRWAddress, std::vector<TTaskConstructor>> Tasks;
@@ -43,7 +44,7 @@ public:
         return Tasks;
     }
 
-    bool AddPortion(const TPortionInfo& info, TPortionEvictionFeatures&& features, const std::optional<TDuration> dWait, const TInstant now);
+    bool AddPortion(const TPortionInfo& info, TPortionEvictionFeatures&& features, const std::optional<TDuration> dWait);
 
     bool IsRWAddressAvailable(const TRWAddress& address) const {
         auto it = Tasks.find(address);

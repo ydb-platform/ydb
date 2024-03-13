@@ -182,9 +182,8 @@ private:
     YDB_READONLY(TMonotonic, LastCompactionInstant, TMonotonic::Zero());
 public:
     void RefreshTiering(const std::optional<TTiering>& tiering) {
-        if (ActualizationIndex->RefreshTiering(tiering)) {
-            ActualizationIndex->Rebuild(Portions);
-        }
+        NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
+        ActualizationIndex->RefreshTiering(tiering, context);
     }
 
     void StartActualizationIndex() {
@@ -204,7 +203,8 @@ public:
     }
 
     void BuildActualizationTasks(NActualizer::TTieringProcessContext& context) const {
-        ActualizationIndex->BuildActualizationTasks(context, Portions);
+        NActualizer::TExternalTasksContext extTasks(Portions);
+        ActualizationIndex->BuildActualizationTasks(context, extTasks);
     }
 
     std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {

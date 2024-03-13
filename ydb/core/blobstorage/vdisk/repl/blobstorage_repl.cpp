@@ -173,6 +173,8 @@ namespace NKikimr {
         TInstant ReplicationEndTime;
         bool UnrecoveredNonphantomBlobs = false;
 
+        TWatchdogTimer<TEvReplCheckProgress> ReplProgressWatchdog;
+
         friend class TActorBootstrapped<TReplScheduler>;
 
         const char *StateToStr(EState state) {
@@ -346,6 +348,10 @@ namespace NKikimr {
             UnrecoveredNonphantomBlobs |= info->UnrecoveredNonphantomBlobs;
             UnreplicatedBlobRecords = std::move(info->UnreplicatedBlobRecords);
 
+            if (info->ItemsRecovered > 0) {
+                ReplProgress();
+            }
+
             bool finished = false;
 
             if (info->Eof) { // when it is the last quantum for some donor, rotate the blob sets
@@ -494,6 +500,15 @@ namespace NKikimr {
             return TDuration::Seconds(workAtEnd / workPerSecond);
         }
 
+        void ReplProgress() {
+            ReplProgressWatchdog.Rearm(SelfId());
+            ReplCtx->MonGroup.ReplMadeNoProgress() = 0;
+        }
+
+        void ReplStuck() {
+            ReplCtx->MonGroup.ReplMadeNoProgress() = 1;
+        }
+
         void Handle(NMon::TEvHttpInfo::TPtr &ev) {
             Y_DEBUG_ABORT_UNLESS(ev->Get()->SubRequestId == TDbMon::ReplId);
 
@@ -627,6 +642,7 @@ namespace NKikimr {
             hFunc(TEvents::TEvActorDied, Handle)
             cFunc(TEvBlobStorage::EvCommenceRepl, Ignore)
             hFunc(TEvReplInvoke, Handle)
+            hFunc(TEvReplCheckProgress, ReplProgressWatchdog)
         )
 
     public:
@@ -639,6 +655,10 @@ namespace NKikimr {
             , ReplCtx(replCtx)
             , History(HistorySize)
             , State(Relaxation)
+            , ReplProgressWatchdog(
+                ReplCtx->VDiskCfg->ReplMaxTimeToMakeProgress,
+                std::bind(&TThis::ReplStuck, this)
+            )
         {}
     };
 

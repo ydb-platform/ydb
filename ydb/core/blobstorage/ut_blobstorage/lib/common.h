@@ -38,3 +38,19 @@ inline TTestInfo InitTest(TEnvironmentSetup& env) {
         const TActorId& edge = runtime->AllocateEdgeActor(1);
         return {runtime, edge, info};
 }
+
+// calculate mapping orderNumber->pdiskId
+std::vector<ui32> MakePDiskLayout(const NKikimrBlobStorage::TBaseConfig& base, ui32 groupId) {
+    std::vector<ui32> pdiskLayout.resize(groupSize);
+    for (const auto& vslot : base.GetVSlot()) {
+        const auto& vslotId = vslot.GetVSlotId();
+        ui32 orderNumber = topology.GetOrderNumber(TVDiskIdShort(vslot.GetFailRealmIdx(), vslot.GetFailDomainIdx(), vslot.GetVDiskIdx()));
+        if (vslot.GetGroupId() == groupId) {
+            if (orderNumber > pdiskLayout.size()) {
+                pdiskLayout.resize(orderNumber);
+            }
+            pdiskLayout[orderNumber] = vslotId.GetPDiskId();
+        }
+    }
+    return pdiskLayout;
+}

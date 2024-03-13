@@ -166,15 +166,13 @@ class TDefaultNodeBrokerClient
                 if (node.NodeId == result.GetNodeId()) {
                     auto &nodeInfo = *dnConfig.MutableNodeInfo();
                     nodeInfo.SetNodeId(node.NodeId);
-                    if (node.SlotId.has_value()) {
-                        nodeInfo.SetSlotId(node.SlotId.value());
-                    }
                     nodeInfo.SetHost(node.Host);
                     nodeInfo.SetPort(node.Port);
                     nodeInfo.SetResolveHost(node.ResolveHost);
                     nodeInfo.SetAddress(node.Address);
                     nodeInfo.SetExpire(node.Expire);
                     NConfig::CopyNodeLocation(nodeInfo.MutableLocation(), node.Location);
+                    nodeInfo.SetSlotName(node.SlotName);
                 } else {
                     auto &info = *nsConfig.AddNode();
                     info.SetNodeId(node.NodeId);

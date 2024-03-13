@@ -594,10 +594,9 @@ struct TCommonAppOptions {
         }
 
         if (TenantName) {
-            if (appConfig.GetDynamicNodeConfig().GetNodeInfo().HasSlotId()) {
-                const ui32 slotId = appConfig.GetDynamicNodeConfig().GetNodeInfo().GetSlotId();
-                const TString slotLabel = TStringBuilder() << "slot-" << slotId;
-                appConfig.MutableMonitoringConfig()->SetHostLabelOverride(slotLabel);
+            if (appConfig.GetDynamicNodeConfig().GetNodeInfo().HasSlotName()) {
+                const TString& slotName = appConfig.GetDynamicNodeConfig().GetNodeInfo().GetSlotName();
+                appConfig.MutableMonitoringConfig()->SetHostLabelOverride(slotName);
                 ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
             } else if (InterconnectPort != DefaultInterconnectPort) {
                 appConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostAndICPort(env));
@@ -606,7 +605,11 @@ struct TCommonAppOptions {
         }
 
         if (TenantName) {
-            appConfig.MutableMonitoringConfig()->SetProcessLocation(HostAndICPort(env));
+            if (InterconnectPort == DefaultInterconnectPort) {
+                appConfig.MutableMonitoringConfig()->SetProcessLocation(Host(env));
+            } else {
+                appConfig.MutableMonitoringConfig()->SetProcessLocation(HostAndICPort(env));
+            }
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
@@ -694,10 +697,17 @@ struct TCommonAppOptions {
     }
 
     TString HostAndICPort(IEnv& env) const {
+        auto hostname = Host(env);
+        if (!hostname) {
+            return "";
+        }
+        return TStringBuilder() << hostname << ":" << InterconnectPort;
+    }
+
+    TString Host(IEnv& env) const {
         try {
             auto hostname = to_lower(env.HostName());
-            hostname = hostname.substr(0, hostname.find('.'));
-            return TStringBuilder() << hostname << ":" << InterconnectPort;
+            return hostname.substr(0, hostname.find('.'));
         } catch (TSystemError& error) {
             return "";
         }

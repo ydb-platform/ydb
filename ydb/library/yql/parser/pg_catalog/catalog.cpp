@@ -2166,6 +2166,9 @@ bool IsExactMatch(const TVector<ui32>& procArgTypes, ui32 procVariadicType, cons
 
 ui64 CalcProcScore(const TVector<ui32>& procArgTypes, ui32 procVariadicType, const TVector<ui32>& argTypeIds, const TCatalog& catalog) {
     ui64 result = 0UL;
+    if (!procVariadicType) {
+        ++result;
+    }
 
     if (argTypeIds.size() < procArgTypes.size()) {
         return ArgTypeMismatch;
@@ -2277,7 +2280,11 @@ TVector<const C*> TryResolveUnknownsByCategory(const TVector<const C*>& candidat
         bool isPreferred = false;
 
         std::function<ui32(const C *)> typeGetter = [i] (const auto* candidate) {
-            return candidate->ArgTypes[i];
+            if constexpr (std::is_same_v<C, TProcDesc>) {
+                return i < candidate->ArgTypes.size() ? candidate->ArgTypes[i] : candidate->VariadicType;
+            } else {
+                return candidate->ArgTypes[i];
+            }
         };
 
         if (InvalidCategory != (category = NPrivate::FindCommonCategory<C>(candidates, typeGetter, catalog, isPreferred))) {
@@ -2294,7 +2301,12 @@ TVector<const C*> TryResolveUnknownsByCategory(const TVector<const C*>& candidat
         auto keepIt = true;
 
         for (const auto& category : argCommonCategory) {
-            const auto argTypeId = candidate->ArgTypes[category.Position];
+            ui32 argTypeId;
+            if constexpr (std::is_same_v<C, TProcDesc>) {
+                argTypeId = category.Position < candidate->ArgTypes.size() ? candidate->ArgTypes[category.Position] : candidate->VariadicType;
+            } else {
+                argTypeId = candidate->ArgTypes[category.Position];
+            }
 
             const auto& argTypePtr = catalog.Types.FindPtr(argTypeId);
             Y_ENSURE(argTypePtr);
@@ -2428,7 +2440,6 @@ std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TStri
 
         // https://www.postgresql.org/docs/14/typeconv-func.html, steps 4.a, 4.c, 4.d
         auto score = NPrivate::CalcProcScore(d->ArgTypes, d->VariadicType, argTypeIds, catalog);
-
         if (bestScore < score) {
             bestScore = score;
 

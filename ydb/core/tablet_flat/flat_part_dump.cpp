@@ -105,7 +105,7 @@ namespace {
 
         TVector<TCell> key(Reserve(part.Scheme->Groups[0].KeyTypes.size()));
 
-        auto indexPageId = part.IndexPages.FlatGroups[0];
+        auto indexPageId = part.IndexPages.GetFlat({});
         auto indexPage = Env->TryGetPage(&part, indexPageId);
 
         if (!indexPage) {

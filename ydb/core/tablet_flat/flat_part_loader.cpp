@@ -65,36 +65,40 @@ void TLoader::StageParseMeta() noexcept
         GarbageStatsId = layout.HasGarbageStats() ? layout.GetGarbageStats() : GarbageStatsId;
         TxIdStatsId = layout.HasTxIdStats() ? layout.GetTxIdStats() : TxIdStatsId;
 
+        FlatGroupIndexes.clear();
+        FlatHistoricIndexes.clear();
+        if (layout.HasIndex() && layout.GetIndex() != Max<TPageId>()) {
+            FlatGroupIndexes.push_back(layout.GetIndex());
+        }
+        for (ui32 id : layout.GetGroupIndexes()) {
+            FlatGroupIndexes.push_back(id);
+        }
+        for (ui32 id : layout.GetHistoricIndexes()) {
+            FlatHistoricIndexes.push_back(id);
+        }
+
         BTreeGroupIndexes.clear();
         BTreeHistoricIndexes.clear();
-        if (AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex() || !layout.HasIndex() || layout.GetIndex() == Max<TPageId>()) {
-            for (bool history : {false, true}) {
-                for (const auto &meta : history ? layout.GetBTreeHistoricIndexes() : layout.GetBTreeGroupIndexes()) {
-                    NPage::TBtreeIndexMeta converted{{
-                        meta.GetRootPageId(), 
-                        meta.GetRowCount(), 
-                        meta.GetDataSize(), 
-                        meta.GetErasedRowCount()}, 
-                        meta.GetLevelCount(), 
-                        meta.GetIndexSize()};
-                    (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(converted);
-                }
+        for (bool history : {false, true}) {
+            for (const auto &meta : history ? layout.GetBTreeHistoricIndexes() : layout.GetBTreeGroupIndexes()) {
+                NPage::TBtreeIndexMeta converted{{
+                    meta.GetRootPageId(), 
+                    meta.GetRowCount(), 
+                    meta.GetDataSize(), 
+                    meta.GetErasedRowCount()}, 
+                    meta.GetLevelCount(), 
+                    meta.GetIndexSize()};
+                (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(converted);
             }
         }
 
-        FlatGroupIndexes.clear();
-        FlatHistoricIndexes.clear();
-        if (AppData()->FeatureFlags.GetEnableLocalDBFlatIndex() || !BTreeGroupIndexes) {
-            if (layout.HasIndex() && layout.GetIndex() != Max<TPageId>()) {
-                FlatGroupIndexes.push_back(layout.GetIndex());
-            }
-            for (ui32 id : layout.GetGroupIndexes()) {
-                FlatGroupIndexes.push_back(id);
-            }
-
-            for (ui32 id : layout.GetHistoricIndexes()) {
-                FlatHistoricIndexes.push_back(id);
-            }
+        if (!AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex() && FlatGroupIndexes) {
+            BTreeGroupIndexes.clear();
+            BTreeHistoricIndexes.clear();
+        }
+        if (!AppData()->FeatureFlags.GetEnableLocalDBFlatIndex() && BTreeGroupIndexes) {
+            FlatGroupIndexes.clear();
+            FlatHistoricIndexes.clear();
         }
 
     } else { /* legacy page collection w/o layout data, (Evolution < 14) */

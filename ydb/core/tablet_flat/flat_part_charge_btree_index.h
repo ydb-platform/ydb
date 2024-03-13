@@ -584,7 +584,7 @@ private:
         const TKeyCellDefaults* keyDefaults = Part->Scheme->HistoryKeys.Get();
 
         const TGroupId groupId(0, true);
-        const auto& meta = Part->IndexPages.BTreeHistoric[0];
+        const auto& meta = Part->IndexPages.GetBTree(TGroupId{0, true});
         TRowId beginRowId = 0, endRowId = meta.RowCount;
         
         TVector<TNodeState> level, nextLevel(::Reserve(3));

@@ -57,7 +57,7 @@ class Settings:
         return cls(
             connector=cls.Connector(
                 grpc_host='localhost',
-                grpc_port=endpoint_determiner.get_port('fq-connector-go', 50051),
+                grpc_port=endpoint_determiner.get_port('fq-connector-go', 2130),
                 paging_bytes_per_page=4 * 1024 * 1024,
                 paging_prefetch_queue_capacity=2,
             ),

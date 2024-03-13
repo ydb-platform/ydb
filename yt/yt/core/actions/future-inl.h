@@ -1580,12 +1580,26 @@ struct TAsyncViaHelper<R(TArgs...)>
         TArgs... args)
     {
         auto promise = NewPromise<TUnderlying>();
+        auto makeOnSuccess = [&] <size_t... Indeces> (std::index_sequence<Indeces...>) {
+            return
+                [
+                    promise,
+                    this_ = std::move(this_),
+                    tuple = std::tuple(std::forward<TArgs>(args)...)
+                ] {
+                    if constexpr (sizeof...(TArgs) == 0) {
+                        Y_UNUSED(tuple);
+                    }
+                    Inner(std::move(this_), promise, std::forward<TArgs>(std::get<Indeces>(tuple))...);
+                };
+        };
+
         GuardedInvoke(
             invoker,
-            BIND_NO_PROPAGATE(&Inner, std::move(this_), promise, WrapToPassed(std::forward<TArgs>(args))...),
-            BIND_NO_PROPAGATE([promise, cancellationError = std::move(cancellationError)] {
+            makeOnSuccess(std::make_index_sequence<sizeof...(TArgs)>()),
+            [promise, cancellationError = std::move(cancellationError)] {
                 promise.Set(std::move(cancellationError));
-            }));
+            });
         return promise;
     }
 

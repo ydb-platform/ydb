@@ -101,6 +101,26 @@ void TBuildMasterSnapshotsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TGetMasterConsistentStateCommand::Register(TRegistrar /*registrar*/)
+{ }
+
+void TGetMasterConsistentStateCommand::DoExecute(ICommandContextPtr context)
+{
+    auto cellIdToSequenceNumber = WaitFor(context->GetClient()->GetMasterConsistentState(Options))
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(BuildYsonStringFluently()
+        .DoListFor(cellIdToSequenceNumber, [=] (TFluentList fluent, const auto& pair) {
+            fluent
+                .Item().BeginMap()
+                    .Item("cell_id").Value(pair.first)
+                    .Item("sequence_number").Value(pair.second)
+                .EndMap();
+        }));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TExitReadOnlyCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("cell_id", &TThis::CellId_);

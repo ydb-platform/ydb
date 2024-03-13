@@ -110,6 +110,8 @@ message TRspNotRegistered
 
 message TReqSlowCall
 {
+    optional int32 request_codec = 1;
+    optional string message = 2;
 }
 
 message TRspSlowCall

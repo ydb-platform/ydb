@@ -2084,21 +2084,21 @@ void WriteYsonValueInTableFormat(TOutputBuf& buf, TType* type, ui64 nativeYtType
             if (nativeYtTypeFlags & NTCF_DECIMAL){
                 auto const params = static_cast<TDataDecimalType*>(type)->GetParams();
                 const NDecimal::TInt128 data128 = value.GetInt128();
-                char tmpBuf[16];
+                char tmpBuf[NYT::NDecimal::TDecimal::MaxBinarySize];
                 if (params.first < 10) {
-                    TStringBuf resBuf = NYT::NDecimal::TDecimal::WriteBinary32(params.first, data128, tmpBuf, 16);
-                    buf.WriteVarI32(4);
+                    TStringBuf resBuf = NYT::NDecimal::TDecimal::WriteBinary32(params.first, data128, tmpBuf, NYT::NDecimal::TDecimal::MaxBinarySize);
+                    buf.WriteVarI32(resBuf.size());
                     buf.WriteMany(resBuf.data(), resBuf.size());
                 } else if (params.first < 19) {
-                    TStringBuf resBuf = NYT::NDecimal::TDecimal::WriteBinary64(params.first, data128, tmpBuf, 16);
-                    buf.WriteVarI32(8);
+                    TStringBuf resBuf = NYT::NDecimal::TDecimal::WriteBinary64(params.first, data128, tmpBuf, NYT::NDecimal::TDecimal::MaxBinarySize);
+                    buf.WriteVarI32(resBuf.size());
                     buf.WriteMany(resBuf.data(), resBuf.size());
                 } else {
                     YQL_ENSURE(params.first < 36);
                     NYT::NDecimal::TDecimal::TValue128 val;
-                    memcpy(&val, &data128, 16);
-                    auto resBuf = NYT::NDecimal::TDecimal::WriteBinary128(params.first, val, tmpBuf, 16);
-                    buf.WriteVarI32(16);
+                    memcpy(&val, &data128, sizeof(val));
+                    auto resBuf = NYT::NDecimal::TDecimal::WriteBinary128(params.first, val, tmpBuf, NYT::NDecimal::TDecimal::MaxBinarySize);
+                    buf.WriteVarI32(resBuf.size());
                     buf.WriteMany(resBuf.data(), resBuf.size());
                 }
             } else {

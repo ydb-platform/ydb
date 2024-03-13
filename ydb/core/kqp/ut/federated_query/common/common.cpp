@@ -38,6 +38,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             appConfig->GetQueryServiceConfig().GetS3(),
             appConfig->GetQueryServiceConfig().GetGeneric(),
             appConfig->GetQueryServiceConfig().GetYt(),
+            nullptr,
             nullptr);
 
         auto settings = TKikimrSettings()

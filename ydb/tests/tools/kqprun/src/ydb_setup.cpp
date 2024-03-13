@@ -121,6 +121,8 @@ private:
         serverSettings.SetFeatureFlags(Settings_.AppConfig.GetFeatureFlags());
 
         serverSettings.SetCredentialsFactory(std::make_shared<TStaticSecuredCredentialsFactory>(Settings_.YqlToken));
+        serverSettings.SetComputationFactory(Settings_.ComputationFactory);
+        serverSettings.SetYtGateway(Settings_.YtGateway);
         serverSettings.SetInitializeFederatedQuerySetupFactory(true);
 
         SetLoggerSettings(serverSettings);

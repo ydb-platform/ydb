@@ -17,22 +17,21 @@ namespace NKikimr::NBsController {
                 , State(state)
             {}
 
-            void Execute(std::deque<std::unique_ptr<IEventHandle>>& outbox) {
+            void Execute() {
                 ApplyUpdates();
 
                 for (auto &pair : Services) {
                     const TNodeId &nodeId = pair.first;
 
-                    if (TNodeInfo *node = Self->FindNode(nodeId); node && node->ConnectedCount) {
-                        auto event = MakeHolder<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
+                    if (TNodeInfo *node = Self->FindNode(nodeId); node && node->ConnectedServerId) {
+                        auto event = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
                         auto& record = event->Record;
                         pair.second.Swap(&record);
                         record.SetStatus(NKikimrProto::OK);
                         record.SetNodeID(nodeId);
                         record.SetInstanceId(Self->InstanceId);
                         record.SetAvailDomain(AppData()->DomainsInfo->GetDomain()->DomainUid);
-                        outbox.push_back(std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(nodeId),
-                            Self->SelfId(), event.Release()));
+                        State.Outbox.emplace_back(nodeId, std::move(event), 0);
                     }
                 }
             }
@@ -448,7 +447,7 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            TNodeWardenUpdateNotifier(this, state).Execute(state.Outbox);
+            TNodeWardenUpdateNotifier(this, state).Execute();
 
             state.CheckConsistency();
             state.Commit();
@@ -460,7 +459,7 @@ namespace NKikimr::NBsController {
         }
 
         void TBlobStorageController::CommitSelfHealUpdates(TConfigState& state) {
-            auto ev = MakeHolder<TEvControllerNotifyGroupChange>();
+            auto ev = std::make_unique<TEvControllerNotifyGroupChange>();
             auto sh = MakeHolder<TEvControllerUpdateSelfHealInfo>();
 
             for (auto&& [base, overlay] : state.Groups.Diff()) {
@@ -500,7 +499,7 @@ namespace NKikimr::NBsController {
             }
 
             if (ev->Created || ev->Deleted) {
-                state.Outbox.push_back(std::make_unique<IEventHandle>(StatProcessorActorId, SelfId(), ev.Release()));
+                state.StatProcessorOutbox.push_back(std::move(ev));
             }
             if (sh->GroupsToUpdate) {
                 FillInSelfHealGroups(*sh, &state);
@@ -590,8 +589,11 @@ namespace NKikimr::NBsController {
         }
 
         ui64 TBlobStorageController::TConfigState::ApplyConfigUpdates() {
-            for (auto& msg : Outbox) {
-                TActivationContext::Send(msg.release());
+            for (auto& [nodeId, ev, cookie] : Outbox) {
+                Self.SendToWarden(nodeId, std::move(ev), cookie);
+            }
+            for (auto& ev : StatProcessorOutbox) {
+                Self.SelfId().Send(Self.StatProcessorActorId, ev.release());
             }
 
             if (UpdateSelfHealInfoMsg) {

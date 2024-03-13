@@ -764,17 +764,20 @@ struct TEnvironmentSetup {
         Sim(TDuration::Seconds(15));
     }
 
-    void Wipe(ui32 nodeId, ui32 pdiskId, ui32 vslotId) {
-        const TActorId self = Runtime->AllocateEdgeActor(Settings.ControllerNodeId, __FILE__, __LINE__);
-        auto ev = std::make_unique<TEvBlobStorage::TEvControllerGroupReconfigureWipe>();
-        auto& record = ev->Record;
-        auto *vslot = record.MutableVSlotId();
+    void Wipe(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId) {
+        NKikimrBlobStorage::TConfigRequest request;
+        request.SetIgnoreGroupFailModelChecks(true);
+        request.SetIgnoreDegradedGroupsChecks(true);
+        request.SetIgnoreDisintegratedGroupsChecks(true);
+        auto *cmd = request.AddCommand();
+        auto *wipe = cmd->MutableWipeVDisk();
+        auto *vslot = wipe->MutableVSlotId();
         vslot->SetNodeId(nodeId);
         vslot->SetPDiskId(pdiskId);
         vslot->SetVSlotId(vslotId);
-        Runtime->SendToPipe(TabletId, self, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
-        auto response = WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerGroupReconfigureWipeResult>(self);
-        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), NKikimrProto::OK);
+        VDiskIDFromVDiskID(vdiskId, wipe->MutableVDiskId());
+        auto response = Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
     }
 
     void WaitForVDiskToGetRunning(const TVDiskID& vdiskId, TActorId actorId) {

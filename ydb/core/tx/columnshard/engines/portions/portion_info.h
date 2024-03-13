@@ -61,7 +61,17 @@ private:
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
 public:
 
-    THashMap<TString, THashMap<TUnifiedBlobId, std::vector<TEntityChunk>>> GetEntityChunks(const TIndexInfo& info) const;
+    bool HasIndexes(const std::set<ui32>& ids) const {
+        auto idsCopy = ids;
+        for (auto&& i : Indexes) {
+            idsCopy.erase(i.GetIndexId());
+            if (idsCopy.empty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 
     const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
         return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
@@ -486,7 +496,7 @@ public:
         return result;
     }
 
-    ui64 GetIndexBytes(const std::set<ui32>& columnIds) const;
+    ui64 GetIndexRawBytes(const std::set<ui32>& columnIds) const;
 
     ui64 GetRawBytes(const std::vector<ui32>& columnIds) const;
     ui64 GetRawBytes(const std::set<ui32>& columnIds) const;

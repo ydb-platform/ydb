@@ -57,6 +57,8 @@ protected:
 public:
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const = 0;
 
+    virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
+
     const NArrow::TReplaceKey& GetStartReplaceKey() const {
         return StartReplaceKey;
     }
@@ -109,7 +111,7 @@ public:
     }
 
     virtual ui64 GetRawBytes(const std::set<ui32>& columnIds) const = 0;
-    virtual ui64 GetIndexBytes(const std::set<ui32>& indexIds) const = 0;
+    virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const = 0;
 
     bool IsMergingStarted() const {
         return MergingStartedFlag;
@@ -208,6 +210,10 @@ private:
 
     virtual void DoAbort() override;
 public:
+    virtual bool HasIndexes(const std::set<ui32>& indexIds) const override {
+        return Portion->HasIndexes(indexIds);
+    }
+
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const override {
         return Portion->DecodeBlobAddresses(std::move(blobsOriginal), Schema->GetIndexInfo());
     }
@@ -216,8 +222,8 @@ public:
         return Portion->GetRawBytes(columnIds);
     }
 
-    virtual ui64 GetIndexBytes(const std::set<ui32>& columnIds) const override {
-        return Portion->GetIndexBytes(columnIds);
+    virtual ui64 GetIndexRawBytes(const std::set<ui32>& columnIds) const override {
+        return Portion->GetIndexRawBytes(columnIds);
     }
 
     const TPortionInfo& GetPortionInfo() const {
@@ -273,11 +279,15 @@ public:
         return result;
     }
 
+    virtual bool HasIndexes(const std::set<ui32>& /*indexIds*/) const override {
+        return false;
+    }
+
     virtual ui64 GetRawBytes(const std::set<ui32>& /*columnIds*/) const override {
         return CommittedBlob.GetBlobRange().Size;
     }
 
-    virtual ui64 GetIndexBytes(const std::set<ui32>& /*columnIds*/) const override {
+    virtual ui64 GetIndexRawBytes(const std::set<ui32>& /*columnIds*/) const override {
         return 0;
     }
 

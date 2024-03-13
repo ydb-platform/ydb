@@ -382,7 +382,8 @@ void PrintSpeeds(TStringBuilder& builder, const StatsValuesList& stats, std::str
         if (!IsIngressStat(statName)) {
             continue;
         }
-        auto speed = (value * 1'000'000.) / std::max(execTime.MicroSeconds(), ui64{1});
+        // getting bytes/second = 1'000'000 * bytes/microsecond
+        auto speed = (value * 1000000.) / std::max(execTime.MicroSeconds(), ui64{1});
         builder << ", \"" << statName << postfix << "\": " << speed;
     }
 }

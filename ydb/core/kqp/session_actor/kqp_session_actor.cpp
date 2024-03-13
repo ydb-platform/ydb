@@ -953,8 +953,6 @@ public:
             return false;
         }
 
-        // TODO: Add check for sinks
-
         return true;
     }
 

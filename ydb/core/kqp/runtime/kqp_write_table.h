@@ -10,8 +10,6 @@
 namespace NKikimr {
 namespace NKqp {
 
-// TODO: batching policy
-
 class IPayloadSerializer : public TThrRefBase {
 public:
     virtual void AddData(NMiniKQL::TUnboxedValueBatch&& data, bool close) = 0;
@@ -36,8 +34,6 @@ IPayloadSerializerPtr CreateColumnShardPayloadSerializer(
     const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
     const NMiniKQL::TTypeEnvironment& typeEnv);
-
-//IPayloadSerializerPtr CreateDataShardPayloadSerializer();
 
 }
 }

@@ -59,8 +59,6 @@ namespace NKikimr {
             TEvBlobStorage::EvControllerSelectGroupsResult,
             TEvBlobStorage::EvRequestControllerInfo,
             TEvBlobStorage::EvResponseControllerInfo,
-            TEvBlobStorage::EvControllerGroupReconfigureWipe,
-            TEvBlobStorage::EvControllerGroupReconfigureWipeResult,
             TEvBlobStorage::EvControllerNodeReport,
         };
 

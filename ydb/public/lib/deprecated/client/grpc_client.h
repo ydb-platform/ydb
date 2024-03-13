@@ -65,7 +65,6 @@ namespace NKikimr {
             // ADMIN INTERNAL INTERFACE
             /////////////////////////////////////////////////////////////////////////////////////////////////
             void SchemeInitRoot(const NKikimrClient::TSchemeInitRoot& request, TResponseCallback callback);
-            void BSAdm(const NKikimrClient::TBSAdm& request, TResponseCallback callback);
             void BlobStorageConfig(const NKikimrClient::TBlobStorageConfigRequest& request, TResponseCallback callback);
 
             void ResolveNode(const NKikimrClient::TResolveNodeRequest& request, TResponseCallback callback);

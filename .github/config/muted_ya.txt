@@ -65,6 +65,7 @@ ydb/services/persqueue_v1/ut TPersQueueTest.DisableWrongSettings
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync*
 ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestActiveSessionCountAfterBadSession
 ydb/services/ydb/sdk_sessions_ut [6/10]*
+ydb/services/ydb/table_split_ut YdbTableSplit.SplitByLoadWithReadsMultipleSplitsWithData
 ydb/services/ydb/table_split_ut [5/7]*
 ydb/services/ydb/ut YdbOlapStore.LogPagingAfter-NotNull
 ydb/services/ydb/ut YdbQueryService.TestCreateAndAttachSession

@@ -21,6 +21,7 @@ target_link_libraries(ydb-core-fq-libs-compute-common-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   libs-compute-common
+  udf-service-stub
 )
 target_link_options(ydb-core-fq-libs-compute-common-ut PRIVATE
   -ldl

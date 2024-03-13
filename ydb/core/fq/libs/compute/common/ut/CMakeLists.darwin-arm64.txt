@@ -19,6 +19,7 @@ target_link_libraries(ydb-core-fq-libs-compute-common-ut PUBLIC
   yutil
   cpp-testing-unittest_main
   libs-compute-common
+  udf-service-stub
 )
 target_link_options(ydb-core-fq-libs-compute-common-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0

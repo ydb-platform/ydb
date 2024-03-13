@@ -56,6 +56,8 @@ target_link_libraries(ydb_query_replay PUBLIC
   core-tx-tx_proxy
   core-services-mounts
   minikql-comp_nodes-llvm14
+  yt-codec-codegen
+  yt-comp_nodes-llvm14
   udf-service-exception_policy
   api-protos
   public-lib-base

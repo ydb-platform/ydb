@@ -17,6 +17,7 @@ target_link_libraries(libs-compute-common PUBLIC
   yutil
   cpp-json-yson
   libs-config-protos
+  libs-control_plane_storage-internal
   fq-libs-db_id_async_resolver_impl
   fq-libs-grpc
   fq-libs-shared_resources

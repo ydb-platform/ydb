@@ -4,7 +4,6 @@
 #include "defs.h"
 
 #include <ydb/core/base/events.h>
-#include <ydb/core/protos/backup_events.pb.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>

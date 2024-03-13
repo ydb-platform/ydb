@@ -95,7 +95,7 @@ namespace NYql::NDq {
             };
         };
 
-        template<typename T>
+        template <typename T>
         T ExtractFromConstFuture(const NThreading::TFuture<T>& f) {
             //We want to avoid making a copy of data stored in a future.
             //But there is no direct way to extract data from a const future

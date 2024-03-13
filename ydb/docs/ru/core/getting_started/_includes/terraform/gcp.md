@@ -1,5 +1,5 @@
 1. Зарегистрируйтесь в Google Cloud console и [создайте](https://console.cloud.google.com/projectselector2/home) проект.
-3. Активируйте [платежный аккаунт](https://console.cloud.google.com/billing/manage) и пополните его средствами для запуска девяти ВМ. Рассчитать стоимость можно в [калькуляторе](https://cloud.google.com/products/calculator?hl=en&dl=CiQ2N2I0OThlMS04NmQ1LTRhMzUtOTI0NS04YmVmZTVkMWQ2ODUQCBokRjJGMjBFOTgtQkY0MC00QTcyLUFFNjktODYxMDU2QUIyRDBD). 
+3. Активируйте [платежный аккаунт](https://console.cloud.google.com/billing/manage) и пополните его средствами для запуска девяти ВМ. Рассчитать стоимость можно в [калькуляторе](https://cloud.google.com/products/calculator). 
 4. Актируйте [Compute Engine API](https://console.cloud.google.com/apis/api/compute.googleapis.com/metrics) и [Cloud DNS API](https://console.cloud.google.com/apis/api/dns.googleapis.com/metrics).
 5. Скачайте и установите GCP CLI, следуя [этой](https://cloud.google.com/sdk/docs/install) инструкции.
 6. Перейдите в поддиректорию `.../google-cloud-sdk/bin` и выполните команду `./gcloud compute regions list` для получения списка доступных регионов.

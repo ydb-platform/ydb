@@ -148,6 +148,8 @@ namespace Tests {
         TString AwsRegion;
         NKqp::IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+        NMiniKQL::TComputationNodeFactory ComputationFactory;
+        NYql::IYtGateway::TPtr YtGateway;
         bool InitializeFederatedQuerySetupFactory = false;
 
         std::function<IActor*(const NKikimrProto::TAuthConfig&)> CreateTicketParser = NKikimr::CreateTicketParser;
@@ -193,6 +195,8 @@ namespace Tests {
         TServerSettings& SetAwsRegion(const TString& value) { AwsRegion = value; return *this; }
         TServerSettings& SetFederatedQuerySetupFactory(NKqp::IKqpFederatedQuerySetupFactory::TPtr value) { FederatedQuerySetupFactory = value; return *this; }
         TServerSettings& SetCredentialsFactory(NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) { CredentialsFactory = std::move(credentialsFactory); return *this; }
+        TServerSettings& SetComputationFactory(NMiniKQL::TComputationNodeFactory computationFactory) { ComputationFactory = std::move(computationFactory); return *this; }
+        TServerSettings& SetYtGateway(NYql::IYtGateway::TPtr ytGateway) { YtGateway = std::move(ytGateway); return *this; }
         TServerSettings& SetInitializeFederatedQuerySetupFactory(bool value) { InitializeFederatedQuerySetupFactory = value; return *this; }
         TServerSettings& SetPersQueueGetReadSessionsInfoWorkerFactory(
             std::shared_ptr<NKikimr::NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> factory

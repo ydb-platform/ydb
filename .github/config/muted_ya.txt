@@ -45,6 +45,7 @@ ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/with_offset_ranges_mode_ut Retry
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/with_offset_ranges_mode_ut RetryPolicy.TWriteSession_TestBrokenPolicy
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.ConflictingWrites
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.WriteRead
+ydb/public/sdk/cpp/client/ydb_topic/ut TSettingsValidation.TestDifferentDedupParams
 ydb/public/sdk/cpp/client/ydb_topic/ut [0/10]*
 ydb/public/sdk/cpp/client/ydb_topic/ut [6/10]*
 ydb/services/datastreams/ut DataStreams.TestGetRecordsStreamWithSingleShard

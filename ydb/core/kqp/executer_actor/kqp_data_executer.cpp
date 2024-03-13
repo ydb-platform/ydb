@@ -1680,7 +1680,6 @@ private:
             ResponseEv->Orbit.Fork(evData->Orbit);
             ev = std::move(evData);
         }
-        YQL_ENSURE(false);
         auto traceId = ExecuterSpan.GetTraceId();
 
         LOG_D("ExecuteDatashardTransaction traceId.verbosity: " << std::to_string(traceId.GetVerbosity()));

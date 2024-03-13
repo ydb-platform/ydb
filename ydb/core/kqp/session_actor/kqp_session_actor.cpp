@@ -1063,7 +1063,7 @@ public:
         bool literal = tx && tx->IsLiteralTx();
 
         if (commit) {
-            if (txCtx.TxHasEffects() || txCtx.Locks.HasLocks() || txCtx.TopicOperations.HasOperations() /*|| TODO: sinks */) {
+            if (txCtx.TxHasEffects() || txCtx.Locks.HasLocks() || txCtx.TopicOperations.HasOperations()) {
                 // Cannot perform commit in literal execution
                 literal = false;
             } else if (!tx) {

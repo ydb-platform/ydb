@@ -491,10 +491,6 @@ private:
         }
 
         ProcessBatches();
-
-        if (ShardsInfo.IsFinished()) {
-            Callbacks->OnAsyncOutputFinished(GetOutputIndex());
-        }
     }
 
     void PopShardBatch(ui64 shardId, ui64 cookie) {
@@ -511,6 +507,10 @@ private:
 
     void ProcessBatches() {
         SendBatchesToShards();
+        if (ShardsInfo.IsFinished()) {
+            CA_LOG_D("Write actor finished");
+            Callbacks->OnAsyncOutputFinished(GetOutputIndex());
+        }
     }
 
     void SendBatchesToShards() {

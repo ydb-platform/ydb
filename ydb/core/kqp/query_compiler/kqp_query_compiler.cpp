@@ -802,7 +802,9 @@ private:
         for (const auto& stage : tx.Stages()) {
             auto* protoStage = txProto.AddStages();
             CompileStage(stage, *protoStage, ctx, stagesMap, rPredictor, tablesMap);
+            protoStage->SetIsEffectsStage(protoStage->GetIsEffectsStage() || !protoStage->GetSinks().empty());
             hasEffectStage |= protoStage->GetIsEffectsStage();
+            hasEffectStage |= !protoStage->GetSinks().empty();
             stagesMap[stage.Ref().UniqueId()] = txProto.StagesSize() - 1;
         }
         for (auto&& i : *txProto.MutableStages()) {

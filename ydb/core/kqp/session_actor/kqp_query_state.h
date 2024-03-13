@@ -298,6 +298,11 @@ public:
             return true;
         }
 
+        if (HasSinkInTx(tx)) {
+            // At current time sinks require separate tnx with commit.
+            return false;
+        }
+
         if (TxCtx->HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
             YQL_ENSURE(TxCtx->EnableImmediateEffects);
 
@@ -311,8 +316,7 @@ public:
         }
 
         // we can merge commit with last tx only for read-only transactions
-        //return !TxCtx->TxHasEffects();
-        return false;
+        return !TxCtx->TxHasEffects();
     }
 
     bool ShouldAcquireLocks() {
@@ -356,7 +360,8 @@ public:
         auto tx = PreparedQuery->GetPhyTxOrEmpty(CurrentTx);
 
         if (TxCtx->CanDeferEffects()) {
-            while (tx && tx->GetHasEffects()) {
+            // At current time sinks require separate tnx with commit.
+            while (tx && tx->GetHasEffects() && !HasSinkInTx(tx)) {
                 QueryData->CreateKqpValueMap(tx);
                 bool success = TxCtx->AddDeferredEffect(tx, QueryData);
                 YQL_ENSURE(success);
@@ -368,8 +373,18 @@ public:
                 }
             }
         }
+        TxCtx->HasImmediateEffects |= tx && tx->GetHasEffects();
 
         return tx;
+    }
+
+    bool HasSinkInTx(const TKqpPhyTxHolder::TConstPtr& tx) const {
+        for (const auto& stage : tx->GetStages()) {
+            if (!stage.GetSinks().empty()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     bool HasTxControl() const {

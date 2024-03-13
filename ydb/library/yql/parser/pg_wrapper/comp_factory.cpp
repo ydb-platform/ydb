@@ -4415,7 +4415,7 @@ public:
     {
         if (TypeId == ArrayTypeId) {
             const auto& typeDesc = NYql::NPg::LookupType(ElementTypeId);
-            YdbTypeName = TString("_pg") + typeDesc.Name;
+            YdbTypeName = TString("_pg") + desc.Name.substr(1);
             if (typeDesc.CompareProcId) {
                 CompareProcId = NYql::NPg::LookupProc("btarraycmp", { 0, 0 }).ProcId;
             }
@@ -4936,9 +4936,10 @@ public:
 
 private:
     void InitType(ui32 pgTypeId, const NYql::NPg::TTypeDesc& type) {
+        Y_ENSURE(pgTypeId);
         auto desc = TPgTypeDescriptor(type);
-        ByName[desc.YdbTypeName] = pgTypeId;
-        PgTypeDescriptors.emplace(pgTypeId, desc);
+        Y_ENSURE(ByName.emplace(desc.YdbTypeName, pgTypeId).second);
+        Y_ENSURE(PgTypeDescriptors.emplace(pgTypeId, desc).second);
     }
 
 private:

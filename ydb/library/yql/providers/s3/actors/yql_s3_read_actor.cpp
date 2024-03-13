@@ -2165,7 +2165,10 @@ public:
         hFunc(TEvPrivate::TEvContinue, Handle);
         hFunc(TEvPrivate::TEvReadResult2, Handle);
         hFunc(NActors::TEvents::TEvPoison, Handle);
-        , catch (const std::exception& e) {
+        , catch (const TS3ReadAbort& e) {
+            // Poison handler
+            throw e;
+        } catch (const std::exception& e) {
             TIssues issues{TIssue{TStringBuilder() << "An unknown exception has occurred: '" << e.what() << "'"}};
             Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::INTERNAL_ERROR));
         }

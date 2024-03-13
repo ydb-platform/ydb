@@ -518,6 +518,9 @@ public:
         result->SetPathId(dstPath->PathId.LocalPathId);
         context.SS->TabletCounters->Simple()[COUNTER_SEQUENCE_COUNT].Add(1);
 
+        srcPath.Base()->PathState = TPathElement::EPathState::EPathStateCopying;
+        srcPath.Base()->LastTxId = OperationId.GetTxId();
+
         TPathId pathId = dstPath->PathId;
         dstPath->CreateTxId = OperationId.GetTxId();
         dstPath->LastTxId = OperationId.GetTxId();

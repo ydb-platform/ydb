@@ -89,6 +89,7 @@ namespace NKikimr {
         enum {
             RequestProxy = TComponentTracingLevels::TGrpcProxy::TopLevel,
             RequestActor = TComponentTracingLevels::TGrpcProxy::TopLevel,
+            RequestCheckActor = TComponentTracingLevels::TGrpcProxy::Basic,
         };
     };
 

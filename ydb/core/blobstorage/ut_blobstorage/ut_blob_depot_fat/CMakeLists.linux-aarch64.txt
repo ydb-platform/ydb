@@ -27,6 +27,7 @@ target_link_options(blobstorage-ut_blobstorage-ut_blob_depot_fat PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(blobstorage-ut_blobstorage-ut_blob_depot_fat PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/blob_depot_fat.cpp

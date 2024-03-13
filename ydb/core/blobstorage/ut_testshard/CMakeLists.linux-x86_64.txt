@@ -45,6 +45,7 @@ target_link_options(ydb-core-blobstorage-ut_testshard PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 target_sources(ydb-core-blobstorage-ut_testshard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_testshard/main.cpp

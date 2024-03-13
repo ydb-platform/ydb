@@ -42,6 +42,7 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   core-io_formats-ydb_dump
   core-kesus-tablet
   core-kqp-common
+  core-kqp-federated_query
   ydb-core-protos
   ydb-core-scheme
   ydb-core-sys_view

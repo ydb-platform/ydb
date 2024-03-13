@@ -17,6 +17,7 @@ target_link_libraries(kqprun PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-getopt
+  yt-gateway-file
   tools-kqprun-src
   datetime2_udf
   string_udf

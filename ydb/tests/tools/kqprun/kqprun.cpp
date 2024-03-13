@@ -46,6 +46,10 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
             if (!runner.ExecuteScript(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.ScriptTraceId)) {
                 ythrow yexception() << "Script execution failed";
             }
+            Cout << colors.Yellow() << "Fetching script results..." << colors.Default() << Endl;
+            if (!runner.FetchScriptResults()) {
+                ythrow yexception() << "Fetch script results failed";
+            }
         } else {
             if (!runner.ExecuteQuery(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.ScriptTraceId)) {
                 ythrow yexception() << "Query execution failed";
@@ -59,6 +63,8 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
             ythrow yexception() << "Writing script results failed";
         }
     }
+
+    Cout << colors.Yellow() << "Finalization of kqp runner..." << colors.Default() << Endl;
 }
 
 

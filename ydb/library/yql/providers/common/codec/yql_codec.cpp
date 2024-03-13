@@ -1399,7 +1399,7 @@ TMaybe<NUdf::TUnboxedValue> ParseYsonNode(const THolderFactory& holderFactory,
 
 TMaybe<NUdf::TUnboxedValue> ParseYsonNodeInResultFormat(const THolderFactory& holderFactory,
     const NYT::TNode& node, TType* type, IOutputStream* err) {
-    return ParseYsonValue(holderFactory, NYT::NodeToYsonString(node, NYson::EYsonFormat::Binary), type, false, err, false);
+    return ParseYsonValue(holderFactory, NYT::NodeToYsonString(node, NYson::EYsonFormat::Binary), type, 0, err, false);
 }
 
 extern "C" void ReadYsonContainerValue(TType* type, ui64 nativeYtTypeFlags, const NKikimr::NMiniKQL::THolderFactory& holderFactory,

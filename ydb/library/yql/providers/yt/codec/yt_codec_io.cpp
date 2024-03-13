@@ -1360,7 +1360,7 @@ protected:
             // parse binary yson...
             YQL_ENSURE(size > 0);
             char cmd = Buf_.Read();
-            auto value = ReadYsonValue(uwrappedType, SpecsCache_.GetSpecs().Inputs[TableIndex_]->NativeYtTypeFlags, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
+            auto value = ReadYsonValue(uwrappedType, 0, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
             return isOptional ? value.Release().MakeOptional() : value;
         }
     }
@@ -1872,7 +1872,7 @@ protected:
         } else if (!wasOptional && type->IsPg()) {
             NCommon::WriteSkiffPg(static_cast<TPgType*>(type), value, Buf_);
         } else {
-            WriteYsonContainerValue(type, NativeYtTypeFlags_, value, Buf_);
+            WriteYsonContainerValue(type, 0, value, Buf_);
         }
     }
 

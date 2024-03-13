@@ -343,4 +343,7 @@ runs:
     - name: show free space
       if: always()
       shell: bash
-      run: df -h
+      run: |
+        df -h
+        cd ~
+        du -a | sort -rn | head -n 50

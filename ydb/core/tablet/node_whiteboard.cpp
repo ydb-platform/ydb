@@ -60,6 +60,12 @@ public:
             SystemStateInfo.SetMemoryLimit(ProcessStats.CGroupMemLim);
         }
         ctx.Send(ctx.SelfID, new TEvPrivate::TEvUpdateRuntimeStats());
+
+        auto group = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils")
+            ->GetSubgroup("subsystem", "whiteboard");
+        MaxClockSkewWithPeerUsCounter = group->GetCounter("MaxClockSkewWithPeerUs");
+        MaxClockSkewPeerIdCounter = group->GetCounter("MaxClockSkewPeerId");
+
         ctx.Schedule(TDuration::Seconds(60), new TEvPrivate::TEvCleanupDeadTablets());
         ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateClockSkew());
         Become(&TNodeWhiteboardService::StateFunc);
@@ -76,6 +82,9 @@ protected:
     NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
     THolder<NTracing::ITraceCollection> TabletIntrospectionData;
     TProcStat ProcessStats;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewWithPeerUsCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewPeerIdCounter;
 
     template <typename PropertyType>
     static ui64 GetDifference(PropertyType a, PropertyType b) {
@@ -969,10 +978,8 @@ protected:
     }
 
     void Handle(TEvPrivate::TEvUpdateClockSkew::TPtr &, const TActorContext &ctx) {
-        auto group = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils")
-            ->GetSubgroup("subsystem", "whiteboard");
-        group->GetCounter("MaxClockSkewWithPeerUs")->Set(abs(MaxClockSkewWithPeerUs));
-        group->GetCounter("MaxClockSkewPeerId")->Set(MaxClockSkewPeerId);
+        MaxClockSkewWithPeerUsCounter->Set(abs(MaxClockSkewWithPeerUs));
+        MaxClockSkewPeerIdCounter->Set(MaxClockSkewPeerId);
 
         SystemStateInfo.SetMaxClockSkewWithPeerUs(MaxClockSkewWithPeerUs);
         SystemStateInfo.SetMaxClockSkewPeerId(MaxClockSkewPeerId);

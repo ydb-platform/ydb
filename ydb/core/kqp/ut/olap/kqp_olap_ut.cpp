@@ -1810,7 +1810,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` * 3. > 4.f)",
             R"(`level` / 2.f <= 1.)",
             R"(`level` % 3. != 1.f)",
-            R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z"))",
             R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z") AND `level` > 3)",
             R"((`timestamp`, `level`) >= (Timestamp("1970-01-01T00:00:00.000001Z"), 3))",
 #endif

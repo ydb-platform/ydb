@@ -619,7 +619,7 @@ private:
     void CompileStage(const TDqPhyStage& stage, NKqpProto::TKqpPhyStage& stageProto, TExprContext& ctx,
         const TMap<ui64, ui32>& stagesMap, TRequestPredictor& rPredictor, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
     {
-        stageProto.SetIsEffectsStage(NOpt::IsKqpEffectsStage(stage));
+        const bool hasEffects = NOpt::IsKqpEffectsStage(stage);
 
         TStagePredictor& stagePredictor = rPredictor.BuildForStage(stage, ctx);
         stagePredictor.Scan(stage.Program().Ptr());
@@ -667,7 +667,7 @@ private:
                 auto upsertRows = maybeUpsertRows.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, upsertRows.Table().Path()).Metadata;
                 YQL_ENSURE(tableMeta);
-                YQL_ENSURE(stageProto.GetIsEffectsStage());
+                YQL_ENSURE(hasEffects);
 
                 auto settings = TKqpUpsertRowsSettings::Parse(upsertRows);
 
@@ -680,8 +680,7 @@ private:
                 auto deleteRows = maybeDeleteRows.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, deleteRows.Table().Path()).Metadata;
                 YQL_ENSURE(tableMeta);
-
-                YQL_ENSURE(stageProto.GetIsEffectsStage());
+                YQL_ENSURE(hasEffects);
 
                 auto& tableOp = *stageProto.AddTableOps();
                 FillTablesMap(deleteRows.Table(), tablesMap);
@@ -753,6 +752,7 @@ private:
         stageProto.SetOutputsCount(outputsCount);
 
         // Dq sinks
+        bool hasSink = false;
         if (auto maybeOutputsNode = stage.Outputs()) {
             auto outputsNode = maybeOutputsNode.Cast();
             for (size_t i = 0; i < outputsNode.Size(); ++i) {
@@ -763,8 +763,11 @@ private:
                 auto* sinkProto = stageProto.AddSinks();
                 FillSink(sinkNode, sinkProto, ctx);
                 sinkProto->SetOutputIndex(FromString(TStringBuf(sinkNode.Index())));
+                hasSink = true;
             }
         }
+
+        stageProto.SetIsEffectsStage(hasEffects || hasSink);
 
         auto paramsType = CollectParameters(stage, ctx);
         auto programBytecode = NDq::BuildProgram(stage.Program(), *paramsType, *KqlCompiler, TypeEnv, FuncRegistry,
@@ -802,9 +805,7 @@ private:
         for (const auto& stage : tx.Stages()) {
             auto* protoStage = txProto.AddStages();
             CompileStage(stage, *protoStage, ctx, stagesMap, rPredictor, tablesMap);
-            protoStage->SetIsEffectsStage(protoStage->GetIsEffectsStage() || !protoStage->GetSinks().empty());
             hasEffectStage |= protoStage->GetIsEffectsStage();
-            hasEffectStage |= !protoStage->GetSinks().empty();
             stagesMap[stage.Ref().UniqueId()] = txProto.StagesSize() - 1;
         }
         for (auto&& i : *txProto.MutableStages()) {

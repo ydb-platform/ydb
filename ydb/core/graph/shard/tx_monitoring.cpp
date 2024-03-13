@@ -83,11 +83,26 @@ public:
         html << "<tr><td>CurrentTimestamp</td><td>" << Self->MetricsData.Timestamp.ToStringUpToSeconds() << "</td></tr>";
 
         html << "<tr><td style='vertical-align:top'>CurrentMetricsData</td><td>";
-        for (bool wasLine = false; const auto& [name, value] : Self->MetricsData.Values) {
+        bool wasLine = false;
+        for (const auto& [name, value] : Self->MetricsData.Values) {
             if (wasLine) {
                 html << "<br>";
             }
             html << name << "=" << value;
+            wasLine = true;
+        }
+        for (const auto& [name, value] : Self->MetricsData.HistogramValues) {
+            if (wasLine) {
+                html << "<br>";
+            }
+            html << "histogram " << name << " " << value.size() << " points";
+            wasLine = true;
+        }
+        for (const auto& [name, value] : Self->MetricsData.ArithmeticValues) {
+            if (wasLine) {
+                html << "<br>";
+            }
+            html << "arithmethic " << name << " " << value.ValueA << " " << value.Op << " " << value.ValueB; 
             wasLine = true;
         }
         html << "</td></tr>";

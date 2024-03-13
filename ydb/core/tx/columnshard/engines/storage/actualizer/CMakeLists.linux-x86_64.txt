@@ -6,8 +6,12 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(abstract)
 add_subdirectory(common)
+add_subdirectory(counters)
 add_subdirectory(index)
+add_subdirectory(scheme)
+add_subdirectory(tiering)
 
 add_library(engines-storage-actualizer INTERFACE)
 target_link_libraries(engines-storage-actualizer INTERFACE
@@ -16,4 +20,8 @@ target_link_libraries(engines-storage-actualizer INTERFACE
   yutil
   storage-actualizer-index
   storage-actualizer-common
+  storage-actualizer-abstract
+  storage-actualizer-scheme
+  storage-actualizer-tiering
+  storage-actualizer-counters
 )

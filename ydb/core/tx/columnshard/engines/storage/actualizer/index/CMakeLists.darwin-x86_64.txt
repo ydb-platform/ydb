@@ -15,5 +15,4 @@ target_link_libraries(storage-actualizer-index PUBLIC
 )
 target_sources(storage-actualizer-index PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/actualizer/index/index.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/actualizer/index/counters.cpp
 )

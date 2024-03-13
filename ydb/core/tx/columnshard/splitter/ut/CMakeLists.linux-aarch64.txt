@@ -27,6 +27,7 @@ target_link_libraries(ydb-core-tx-columnshard-splitter-ut PUBLIC
   tx-columnshard-counters
   columnshard-engines-portions
   tx-columnshard-common
+  tx-columnshard-blobs_action
   tx-columnshard-data_sharing
   core-kqp-common
   yql-parser-pg_wrapper

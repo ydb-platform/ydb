@@ -6,22 +6,14 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(abstract)
-add_subdirectory(common)
-add_subdirectory(counters)
-add_subdirectory(index)
-add_subdirectory(scheme)
-add_subdirectory(tiering)
 
-add_library(engines-storage-actualizer INTERFACE)
-target_link_libraries(engines-storage-actualizer INTERFACE
+add_library(storage-actualizer-scheme)
+target_link_libraries(storage-actualizer-scheme PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  storage-actualizer-index
-  storage-actualizer-common
-  storage-actualizer-abstract
-  storage-actualizer-scheme
-  storage-actualizer-tiering
-  storage-actualizer-counters
+  engines-scheme-versions
+)
+target_sources(storage-actualizer-scheme PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/actualizer/scheme/scheme.cpp
 )

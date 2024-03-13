@@ -14,8 +14,8 @@ target_link_libraries(tx-columnshard-splitter PUBLIC
   contrib-libs-cxxsupp
   yutil
   libs-apache-arrow
-  columnshard-engines-storage
   columnshard-splitter-abstract
+  columnshard-engines-scheme
 )
 target_sources(tx-columnshard-splitter PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/batch_slice.cpp

@@ -7,13 +7,12 @@
 
 
 
-add_library(storage-actualizer-index)
-target_link_libraries(storage-actualizer-index PUBLIC
-  contrib-libs-linux-headers
+add_library(storage-actualizer-tiering)
+target_link_libraries(storage-actualizer-tiering PUBLIC
   contrib-libs-cxxsupp
   yutil
   engines-scheme-versions
 )
-target_sources(storage-actualizer-index PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/actualizer/index/index.cpp
+target_sources(storage-actualizer-tiering PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/actualizer/tiering/tiering.cpp
 )

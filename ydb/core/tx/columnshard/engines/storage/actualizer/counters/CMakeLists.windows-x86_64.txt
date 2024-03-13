@@ -7,13 +7,14 @@
 
 
 
-add_library(storage-actualizer-index)
-target_link_libraries(storage-actualizer-index PUBLIC
-  contrib-libs-linux-headers
+add_library(storage-actualizer-counters)
+target_link_libraries(storage-actualizer-counters PUBLIC
   contrib-libs-cxxsupp
   yutil
-  engines-scheme-versions
+  library-actors-core
+  columnshard-engines-portions
+  columnshard-counters-common
 )
-target_sources(storage-actualizer-index PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/actualizer/index/index.cpp
+target_sources(storage-actualizer-counters PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/actualizer/counters/counters.cpp
 )

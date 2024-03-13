@@ -303,11 +303,7 @@ public:
     }
 
     bool CheckForCleanup(const TSnapshot& snapshot) const {
-        if (!HasRemoveSnapshot()) {
-            return false;
-        } else {
-            return GetRemoveSnapshotVerified() <= snapshot;
-        }
+        return IsRemovedFor(snapshot);
     }
 
     bool CheckForCleanup() const {

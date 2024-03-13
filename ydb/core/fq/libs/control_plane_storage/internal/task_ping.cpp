@@ -254,7 +254,7 @@ TPingTaskParams ConstructHardPingTask(
         if (request.statistics()) {
             TString statistics = request.statistics();
             internal.clear_statistics();
-            PackStatisticsToProtobuf(*internal.mutable_statistics(), statistics);
+            PackStatisticsToProtobuf(*internal.mutable_statistics(), statistics, TInstant::Now() - NProtoInterop::CastFromProto(job.meta().created_at()));
 
             if (!dumpRawStatistics) {
                 try {

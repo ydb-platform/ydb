@@ -1,3 +1,4 @@
+#include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NKikimr::NSchemeShard;
@@ -362,6 +363,9 @@ Y_UNIT_TEST_SUITE(TSequence) {
         env.TestWaitNotification(runtime, txId);
 
         TestCopyTable(runtime, ++txId, "/MyRoot", "copy", "/MyRoot/Table");
+
+        TestLs(runtime, "/MyRoot/copy/myseq", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+
         env.TestWaitNotification(runtime, txId);
     }
 

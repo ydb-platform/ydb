@@ -584,6 +584,8 @@ ISubOperation::TPtr CreateNewSequence(TOperationId id, const TTxTransaction& tx)
 ISubOperation::TPtr CreateNewSequence(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateDropSequence(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropSequence(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateCopySequence(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateCopySequence(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateNewReplication(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateNewReplication(TOperationId id, TTxState::ETxState state);

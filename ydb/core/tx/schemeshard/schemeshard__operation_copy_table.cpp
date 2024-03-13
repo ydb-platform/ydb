@@ -779,9 +779,10 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
         scheme.SetFailOnExist(tx.GetFailOnExist());
 
+        sequenceDescription.SetCopyFromSequence(copying.GetCopyFromTable() + "/" + sequenceDescription.GetName());
         *scheme.MutableSequence() = std::move(sequenceDescription);
 
-        result.push_back(CreateNewSequence(NextPartId(nextId, result), scheme));
+        result.push_back(CreateCopySequence(NextPartId(nextId, result), scheme));
     }
     return result;
 }

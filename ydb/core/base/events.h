@@ -173,7 +173,7 @@ struct TKikimrEvents : TEvents {
         ES_GRAPH,
         ES_REPLICATION_SERVICE,
         ES_CHANGE_EXCHANGE,
-        ES_S3_FILE_QUEUE
+        ES_S3_FILE_QUEUE,
     };
 };
 

@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    index.cpp
+    tiering.cpp
 )
 
 PEERDIR(

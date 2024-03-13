@@ -1,6 +1,7 @@
 #include "context.h"
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 
 namespace NKikimr::NOlap::NActualizer {
 
@@ -16,14 +17,12 @@ TTieringProcessContext::TTieringProcessContext(const ui64 memoryUsageLimit, cons
 
 }
 
-bool TTieringProcessContext::AddPortion(const TPortionInfo& info, TPortionEvictionFeatures&& features, const std::optional<TDuration> dWait, const TInstant now) {
-    const TInstant maxChangePortionInstant = info.RecordSnapshotMax().GetPlanInstant();
-    if (features.GetTargetTierName() != IStoragesManager::DefaultStorageId && info.GetTierNameDef(IStoragesManager::DefaultStorageId) == IStoragesManager::DefaultStorageId) {
-        if (now - maxChangePortionInstant < NYDBTest::TControllers::GetColumnShardController()->GetLagForCompactionBeforeTierings(TDuration::Minutes(60))) {
-            Counters.OnActualizationSkipTooFreshPortion(now - maxChangePortionInstant);
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_portion_to_evict")("reason", "too_fresh")("delta", now - maxChangePortionInstant);
-            return true;
-        }
+bool TTieringProcessContext::AddPortion(const TPortionInfo& info, TPortionEvictionFeatures&& features, const std::optional<TDuration> dWait) {
+    if (!UsedPortions.emplace(info.GetAddress()).second) {
+        return true;
+    }
+    if (DataLocksManager->IsLocked(info)) {
+        return true;
     }
 
     const auto buildNewTask = [&]() {

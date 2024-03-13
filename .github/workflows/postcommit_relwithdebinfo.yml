@@ -4,6 +4,7 @@ on:
     branches:
       - 'main'
       - 'stable-*'
+      - 'stream-nb-*'
     paths-ignore:
       - 'ydb/docs/**'
       - '.github/**'

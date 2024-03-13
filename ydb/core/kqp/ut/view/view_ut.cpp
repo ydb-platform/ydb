@@ -316,6 +316,24 @@ Y_UNIT_TEST_SUITE(TKQPViewTest) {
             UNIT_ASSERT(dropResult.GetIssues().ToString().Contains("Error: Path does not exist"));
         }
     }
+
+    Y_UNIT_TEST(ContextPollution) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        EnableViewsFeatureFlag(kikimr);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        ExecuteDataDefinitionQuery(session, R"(
+            CREATE VIEW InnerView WITH (security_invoker = TRUE) AS SELECT 1;
+        )");
+        ExecuteDataDefinitionQuery(session, R"(
+            CREATE VIEW OuterView WITH (security_invoker = TRUE) AS SELECT * FROM InnerView;
+        )");
+        
+        ExecuteDataDefinitionQuery(session, R"(
+            DROP VIEW OuterView;
+            CREATE VIEW OuterView WITH (security_invoker = TRUE) AS SELECT * FROM InnerView;
+        )");
+    }
 }
 
 Y_UNIT_TEST_SUITE(TSelectFromViewTest) {

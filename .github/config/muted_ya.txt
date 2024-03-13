@@ -23,6 +23,7 @@ ydb/core/kqp/ut/service KqpQueryService.QueryOnClosedSession
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/service [38/50]*
 ydb/core/persqueue/ut TPQTest.*DirectRead*
+ydb/core/persqueue/ut PQCountersSimple.PartitionWriteQuota
 ydb/core/tx/columnshard/ut_schema TColumnShardTestSchema.ForgetAfterFail
 ydb/core/tx/columnshard/ut_schema TColumnShardTestSchema.RebootForgetAfterFail
 ydb/core/tx/columnshard/engines/ut *
@@ -44,7 +45,9 @@ ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/with_offset_ranges_mode_ut Retry
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/with_offset_ranges_mode_ut RetryPolicy.TWriteSession_TestBrokenPolicy
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.ConflictingWrites
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.WriteRead
+ydb/public/sdk/cpp/client/ydb_topic/ut TSettingsValidation.TestDifferentDedupParams
 ydb/public/sdk/cpp/client/ydb_topic/ut [0/10]*
+ydb/public/sdk/cpp/client/ydb_topic/ut [6/10]*
 ydb/services/datastreams/ut DataStreams.TestGetRecordsStreamWithSingleShard
 ydb/services/datastreams/ut DataStreams.TestPutRecordsWithRead
 ydb/services/datastreams/ut DataStreams.TestReservedConsumersMetering

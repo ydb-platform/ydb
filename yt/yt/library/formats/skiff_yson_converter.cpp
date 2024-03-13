@@ -1420,7 +1420,6 @@ TSkiffToYsonConverter CreateSimpleSkiffToYsonConverter(
             case ESimpleLogicalValueType::Interval64:
                 CheckWireType(wireType, {EWireType::Int32, EWireType::Int64, EWireType::String32});
                 return CreatePrimitiveTypeSkiffToYsonConverter(wireType);
-
         }
         YT_ABORT();
     } catch (const std::exception& ex) {

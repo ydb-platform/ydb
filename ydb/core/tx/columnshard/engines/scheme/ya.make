@@ -20,6 +20,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/scheme/versions
     ydb/core/tx/columnshard/engines/scheme/tiering
     ydb/core/tx/columnshard/blobs_action/abstract
+    ydb/core/tx/columnshard/engines/changes/compaction
 )
 
 YQL_LAST_ABI_VERSION()

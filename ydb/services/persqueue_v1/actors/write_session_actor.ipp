@@ -724,6 +724,10 @@ void TWriteSessionActor<UseMigrationProtocol>::DestroyPartitionWriterCache(const
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::CloseSession(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx) {
+    if (SessionClosed) {
+        return;
+    }
+    SessionClosed = true;
 
     if (errorCode != PersQueue::ErrorCode::OK) {
 

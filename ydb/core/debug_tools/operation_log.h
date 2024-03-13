@@ -37,9 +37,6 @@ public:
         }
     };
 
-    TOperationLog(const TOperationLog& other) = delete;
-    TOperationLog& operator=(const TOperationLog& other) = delete;
-
     TOperationLog(TOperationLog&& other) = default;
     TOperationLog& operator=(TOperationLog&& other) = default;
 
@@ -49,9 +46,9 @@ public:
         }
     }
 
-    bool InitializeRecords(TString value = "Race occured, try again") {
+    void InitializeRecords(TString value = "Race occured, try again") {
         for (auto& record : Records) {
-            record.store(new TString(value))
+            record.store(new TString(value));
         }
     }
 

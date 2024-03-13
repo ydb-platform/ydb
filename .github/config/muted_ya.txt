@@ -45,6 +45,7 @@ ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/with_offset_ranges_mode_ut Retry
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.ConflictingWrites
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.WriteRead
 ydb/public/sdk/cpp/client/ydb_topic/ut [0/10]*
+ydb/public/sdk/cpp/client/ydb_topic/ut *
 ydb/services/datastreams/ut DataStreams.TestGetRecordsStreamWithSingleShard
 ydb/services/datastreams/ut DataStreams.TestPutRecordsWithRead
 ydb/services/datastreams/ut DataStreams.TestReservedConsumersMetering

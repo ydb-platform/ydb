@@ -304,7 +304,6 @@ public:
     }
 
     EFetchResult InputStatus = EFetchResult::One;
-    bool IsReading = false;
     NUdf::TUnboxedValuePod* Tongue = nullptr;
     NUdf::TUnboxedValuePod* Throat = nullptr;
 
@@ -784,15 +783,15 @@ public:
 #endif
 
 template <bool TrackRss, bool SkipYields>
-class TWideCombinerWrapper: public TSimpleStatefulWideFlowCodegeneratorNode<TWideCombinerWrapper<TrackRss, SkipYields>, TState, EValueRepresentation::Boxed>
+class TWideCombinerWrapper: public TStatefulWideFlowCodegeneratorNode<TWideCombinerWrapper<TrackRss, SkipYields>>
 #ifndef MKQL_DISABLE_CODEGEN
     , public ICodegeneratorRootNode
 #endif
 {
-using TBaseComputation = TSimpleStatefulWideFlowCodegeneratorNode<TWideCombinerWrapper<TrackRss, SkipYields>, TState, EValueRepresentation::Boxed>;
+using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideCombinerWrapper<TrackRss, SkipYields>>;
 public:
     TWideCombinerWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TCombinerNodes&& nodes, TKeyTypes&& keyTypes, ui64 memLimit)
-        : TBaseComputation(mutables, flow, nodes.ItemNodes.size(), nodes.FinishNodes.size())
+        : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
         , Flow(flow)
         , Nodes(std::move(nodes))
         , KeyTypes(std::move(keyTypes))
@@ -800,7 +799,354 @@ public:
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Nodes.ItemNodes.size()))
     {}
 
-    void InitState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+        if (!state.HasValue()) {
+            MakeState(ctx, state);
+        }
+
+        while (const auto ptr = static_cast<TState*>(state.AsBoxed().Get())) {
+            if (ptr->ReadMore<SkipYields>()) {
+                switch (ptr->InputStatus) {
+                    case EFetchResult::One:
+                        break;
+                    case EFetchResult::Yield:
+                        ptr->InputStatus = EFetchResult::One;
+                        if constexpr (SkipYields)
+                            break;
+                        else
+                            return EFetchResult::Yield;
+                    case EFetchResult::Finish:
+                        return EFetchResult::Finish;
+                }
+
+                const auto initUsage = MemLimit ? ctx.HolderFactory.GetMemoryUsed() : 0ULL;
+
+                auto **fields = ctx.WideFields.data() + WideFieldsIndex;
+
+                do {
+                    for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i)
+                        if (Nodes.ItemNodes[i]->GetDependencesCount() > 0U || Nodes.PasstroughtItems[i])
+                            fields[i] = &Nodes.ItemNodes[i]->RefValue(ctx);
+
+                    ptr->InputStatus = Flow->FetchValues(ctx, fields);
+                    if constexpr (SkipYields) {
+                        if (EFetchResult::Yield == ptr->InputStatus) {
+                            return EFetchResult::Yield;
+                        } else if (EFetchResult::Finish == ptr->InputStatus) {
+                            break;
+                        }
+                    } else {
+                        if (EFetchResult::One != ptr->InputStatus) {
+                            break;
+                        }
+                    }
+
+                    Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
+                    Nodes.ProcessItem(ctx, ptr->TasteIt() ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
+                } while (!ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage));
+
+                ptr->PushStat(ctx.Stats);
+            }
+
+            if (const auto values = static_cast<NUdf::TUnboxedValue*>(ptr->Extract())) {
+                Nodes.FinishItem(ctx, values, output);
+                return EFetchResult::One;
+            }
+        }
+        Y_UNREACHABLE();
+    }
+#ifndef MKQL_DISABLE_CODEGEN
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+        auto& context = ctx.Codegen.GetContext();
+
+        const auto valueType = Type::getInt128Ty(context);
+        const auto ptrValueType = PointerType::getUnqual(valueType);
+        const auto statusType = Type::getInt32Ty(context);
+
+        TLLVMFieldsStructureState stateFields(context);
+        const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
+
+        const auto statePtrType = PointerType::getUnqual(stateType);
+
+        const auto make = BasicBlock::Create(context, "make", ctx.Func);
+        const auto main = BasicBlock::Create(context, "main", ctx.Func);
+        const auto more = BasicBlock::Create(context, "more", ctx.Func);
+
+        BranchInst::Create(main, make, HasValue(statePtr, block), block);
+        block = make;
+
+        const auto ptrType = PointerType::getUnqual(StructType::get(context));
+        const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWideCombinerWrapper::MakeState));
+        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
+        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
+        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        BranchInst::Create(main, block);
+
+        block = main;
+
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
+        const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
+        const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
+        BranchInst::Create(more, block);
+
+        block = more;
+
+        const auto over = BasicBlock::Create(context, "over", ctx.Func);
+        const auto result = PHINode::Create(statusType, 3U, "result", over);
+
+        const auto readMoreFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::ReadMore<SkipYields>));
+        const auto readMoreFuncType = FunctionType::get(Type::getInt1Ty(context), { statePtrType }, false);
+        const auto readMoreFuncPtr = CastInst::Create(Instruction::IntToPtr, readMoreFunc, PointerType::getUnqual(readMoreFuncType), "read_more_func", block);
+        const auto readMore = CallInst::Create(readMoreFuncType, readMoreFuncPtr, { stateArg }, "read_more", block);
+
+        const auto next = BasicBlock::Create(context, "next", ctx.Func);
+        const auto full = BasicBlock::Create(context, "full", ctx.Func);
+
+        BranchInst::Create(next, full, readMore, block);
+
+        {
+            block = next;
+
+            const auto rest = BasicBlock::Create(context, "rest", ctx.Func);
+            const auto pull = BasicBlock::Create(context, "pull", ctx.Func);
+            const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
+            const auto good = BasicBlock::Create(context, "good", ctx.Func);
+            const auto done = BasicBlock::Create(context, "done", ctx.Func);
+
+            const auto statusPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetStatus() }, "last", block);
+
+            const auto last = new LoadInst(statusType, statusPtr, "last", block);
+
+            result->addIncoming(last, block);
+
+            const auto choise = SwitchInst::Create(last, pull, 2U, block);
+            choise->addCase(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), rest);
+            choise->addCase(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), over);
+
+            block = rest;
+            new StoreInst(ConstantInt::get(last->getType(), static_cast<i32>(EFetchResult::One)), statusPtr, block);
+
+            if constexpr (SkipYields) {
+                new StoreInst(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::One)), statusPtr, block);
+
+                BranchInst::Create(pull, block);
+            } else {
+                result->addIncoming(last, block);
+
+                BranchInst::Create(over, block);
+            }
+
+            block = pull;
+
+            const auto used = GetMemoryUsed(MemLimit, ctx, block);
+
+            BranchInst::Create(loop, block);
+
+            block = loop;
+
+            const auto getres = GetNodeValues(Flow, ctx, block);
+
+            if constexpr (SkipYields) {
+                const auto save = BasicBlock::Create(context, "save", ctx.Func);
+
+                const auto way = SwitchInst::Create(getres.first, good, 2U, block);
+                way->addCase(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), save);
+                way->addCase(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), done);
+
+                block = save;
+
+                new StoreInst(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), statusPtr, block);
+                result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
+                BranchInst::Create(over, block);
+            } else {
+                const auto special = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLE, getres.first, ConstantInt::get(getres.first->getType(), static_cast<i32>(EFetchResult::Yield)), "special", block);
+                BranchInst::Create(done, good, special, block);
+            }
+
+            block = good;
+
+            std::vector<Value*> items(Nodes.ItemNodes.size(), nullptr);
+            for (ui32 i = 0U; i < items.size(); ++i) {
+                if (Nodes.ItemNodes[i]->GetDependencesCount() > 0U)
+                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.ItemNodes[i])->CreateSetValue(ctx, block, items[i] = getres.second[i](ctx, block));
+                else if (Nodes.PasstroughtItems[i])
+                    items[i] = getres.second[i](ctx, block);
+            }
+
+            const auto tonguePtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetTongue() }, "tongue_ptr", block);
+            const auto tongue = new LoadInst(ptrValueType, tonguePtr, "tongue", block);
+
+            std::vector<Value*> keyPointers(Nodes.KeyResultNodes.size(), nullptr), keys(Nodes.KeyResultNodes.size(), nullptr);
+            for (ui32 i = 0U; i < Nodes.KeyResultNodes.size(); ++i) {
+                auto& key = keys[i];
+                const auto keyPtr = keyPointers[i] = GetElementPtrInst::CreateInBounds(valueType, tongue, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("key_") += ToString(i)).c_str(), block);
+                if (const auto map = Nodes.KeysOnItems[i]) {
+                    auto& it = items[*map];
+                    if (!it)
+                        it = getres.second[*map](ctx, block);
+                    key = it;
+                } else {
+                    key = GetNodeValue(Nodes.KeyResultNodes[i], ctx, block);
+                }
+
+                if (Nodes.KeyNodes[i]->GetDependencesCount() > 0U)
+                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.KeyNodes[i])->CreateSetValue(ctx, block, key);
+
+                new StoreInst(key, keyPtr, block);
+            }
+
+            const auto atFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::TasteIt));
+            const auto atType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType()}, false);
+            const auto atPtr = CastInst::Create(Instruction::IntToPtr, atFunc, PointerType::getUnqual(atType), "function", block);
+            const auto newKey = CallInst::Create(atType, atPtr, {stateArg}, "new_key", block);
+
+            const auto init = BasicBlock::Create(context, "init", ctx.Func);
+            const auto next = BasicBlock::Create(context, "next", ctx.Func);
+            const auto test = BasicBlock::Create(context, "test", ctx.Func);
+
+            const auto throatPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetThroat() }, "throat_ptr", block);
+            const auto throat = new LoadInst(ptrValueType, throatPtr, "throat", block);
+
+            std::vector<Value*> pointers;
+            pointers.reserve(Nodes.StateNodes.size());
+            for (ui32 i = 0U; i < Nodes.StateNodes.size(); ++i) {
+                pointers.emplace_back(GetElementPtrInst::CreateInBounds(valueType, throat, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("state_") += ToString(i)).c_str(), block));
+            }
+
+            BranchInst::Create(init, next, newKey, block);
+
+            block = init;
+
+            for (ui32 i = 0U; i < Nodes.KeyResultNodes.size(); ++i) {
+                ValueAddRef(Nodes.KeyResultNodes[i]->GetRepresentation(), keyPointers[i], ctx, block);
+            }
+
+            for (ui32 i = 0U; i < Nodes.InitResultNodes.size(); ++i) {
+                if (const auto map = Nodes.InitOnItems[i]) {
+                    auto& it = items[*map];
+                    if (!it)
+                        it = getres.second[*map](ctx, block);
+                    new StoreInst(it, pointers[i], block);
+                    ValueAddRef(Nodes.InitResultNodes[i]->GetRepresentation(), it, ctx, block);
+                }  else if (const auto map = Nodes.InitOnKeys[i]) {
+                    const auto key = keys[*map];
+                    new StoreInst(key, pointers[i], block);
+                    ValueAddRef(Nodes.InitResultNodes[i]->GetRepresentation(), key, ctx, block);
+                } else {
+                    GetNodeValue(pointers[i], Nodes.InitResultNodes[i], ctx, block);
+                }
+            }
+
+            BranchInst::Create(test, block);
+
+            block = next;
+
+            for (ui32 i = 0U; i < Nodes.KeyResultNodes.size(); ++i) {
+                if (Nodes.KeysOnItems[i] || Nodes.KeyResultNodes[i]->IsTemporaryValue())
+                    ValueCleanup(Nodes.KeyResultNodes[i]->GetRepresentation(), keyPointers[i], ctx, block);
+            }
+
+            std::vector<Value*> stored(Nodes.StateNodes.size(), nullptr);
+            for (ui32 i = 0U; i < stored.size(); ++i) {
+                const bool hasDependency = Nodes.StateNodes[i]->GetDependencesCount() > 0U;
+                if (const auto map = Nodes.StateOnUpdate[i]) {
+                    if (hasDependency || i != *map) {
+                        stored[i] = new LoadInst(valueType, pointers[i], (TString("state_") += ToString(i)).c_str(), block);
+                        if (hasDependency)
+                            EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.StateNodes[i])->CreateSetValue(ctx, block, stored[i]);
+                    }
+                } else if (hasDependency) {
+                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.StateNodes[i])->CreateSetValue(ctx, block, pointers[i]);
+                } else {
+                    ValueUnRef(Nodes.StateNodes[i]->GetRepresentation(), pointers[i], ctx, block);
+                }
+            }
+
+            for (ui32 i = 0U; i < Nodes.UpdateResultNodes.size(); ++i) {
+                if (const auto map = Nodes.UpdateOnState[i]) {
+                    if (const auto j = *map; i != j) {
+                        auto& it = stored[j];
+                        if (!it)
+                            it = new LoadInst(valueType, pointers[j], (TString("state_") += ToString(j)).c_str(), block);
+                        new StoreInst(it, pointers[i], block);
+                        if (i != *Nodes.StateOnUpdate[j])
+                            ValueAddRef(Nodes.UpdateResultNodes[i]->GetRepresentation(), it, ctx, block);
+                    }
+                } else if (const auto map = Nodes.UpdateOnItems[i]) {
+                    auto& it = items[*map];
+                    if (!it)
+                        it = getres.second[*map](ctx, block);
+                    new StoreInst(it, pointers[i], block);
+                    ValueAddRef(Nodes.UpdateResultNodes[i]->GetRepresentation(), it, ctx, block);
+                }  else if (const auto map = Nodes.UpdateOnKeys[i]) {
+                    const auto key = keys[*map];
+                    new StoreInst(key, pointers[i], block);
+                    ValueAddRef(Nodes.UpdateResultNodes[i]->GetRepresentation(), key, ctx, block);
+                } else {
+                    GetNodeValue(pointers[i], Nodes.UpdateResultNodes[i], ctx, block);
+                }
+            }
+
+            BranchInst::Create(test, block);
+
+            block = test;
+
+            const auto check = CheckAdjustedMemLimit<TrackRss>(MemLimit, used, ctx, block);
+            BranchInst::Create(done, loop, check, block);
+
+            block = done;
+
+            new StoreInst(getres.first, statusPtr, block);
+
+            const auto stat = ctx.GetStat();
+            const auto statFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::PushStat));
+            const auto statType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), stat->getType()}, false);
+            const auto statPtr = CastInst::Create(Instruction::IntToPtr, statFunc, PointerType::getUnqual(statType), "stat", block);
+            CallInst::Create(statType, statPtr, {stateArg, stat}, "", block);
+
+            BranchInst::Create(full, block);
+        }
+
+        {
+            block = full;
+
+            const auto good = BasicBlock::Create(context, "good", ctx.Func);
+
+            const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Extract));
+            const auto extractType = FunctionType::get(ptrValueType, {stateArg->getType()}, false);
+            const auto extractPtr = CastInst::Create(Instruction::IntToPtr, extractFunc, PointerType::getUnqual(extractType), "extract", block);
+            const auto out = CallInst::Create(extractType, extractPtr, {stateArg}, "out", block);
+            const auto has = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, out, ConstantPointerNull::get(ptrValueType), "has", block);
+
+            BranchInst::Create(good, more, has, block);
+
+            block = good;
+
+            for (ui32 i = 0U; i < Nodes.FinishNodes.size(); ++i) {
+                const auto ptr = GetElementPtrInst::CreateInBounds(valueType, out, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("out_key_") += ToString(i)).c_str(), block);
+                if (Nodes.FinishNodes[i]->GetDependencesCount() > 0 || Nodes.ItemsOnResult[i])
+                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.FinishNodes[i])->CreateSetValue(ctx, block, ptr);
+                else
+                    ValueUnRef(Nodes.FinishNodes[i]->GetRepresentation(), ptr, ctx, block);
+            }
+
+            result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::One)), block);
+            BranchInst::Create(over, block);
+        }
+
+        block = over;
+
+        ICodegeneratorInlineWideNode::TGettersList getters;
+        getters.reserve(Nodes.FinishResultNodes.size());
+        std::transform(Nodes.FinishResultNodes.cbegin(), Nodes.FinishResultNodes.cend(), std::back_inserter(getters), [&](IComputationNode* node) {
+            return [node](const TCodegenContext& ctx, BasicBlock*& block){ return GetNodeValue(node, ctx, block); };
+        });
+        return {result, std::move(getters)};
+    }
+#endif
+private:
+    void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
 #ifdef MKQL_DISABLE_CODEGEN
         state = ctx.HolderFactory.Create<TState>(Nodes.KeyNodes.size(), Nodes.StateNodes.size(), TMyValueHasher(KeyTypes), TMyValueEqual(KeyTypes));
 #else
@@ -811,73 +1157,6 @@ public:
 #endif
     }
 
-    NUdf::TUnboxedValue*const* PrepareInput(NUdf::TUnboxedValue& stateUnboxed, TComputationContext& ctx, NUdf::TUnboxedValue*const*) const {
-        auto state = static_cast<TState*>(stateUnboxed.AsBoxed().Get());
-        if (state->IsReading || state->ReadMore<SkipYields>()) {
-            if (!state->IsReading) {
-                switch (state->InputStatus) {
-                    case EFetchResult::One: break;
-                    case EFetchResult::Yield: {
-                        if constexpr (SkipYields) break;
-                        else return nullptr;
-                    }
-                    case EFetchResult::Finish: return nullptr;
-                }
-            }
-            auto **fields = ctx.WideFields.data() + WideFieldsIndex;
-            for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i) {
-                if (Nodes.ItemNodes[i]->GetDependencesCount() > 0U || Nodes.PasstroughtItems[i]) {
-                    fields[i] = &Nodes.ItemNodes[i]->RefValue(ctx);
-                }
-            }
-            if (!fields) return FieldsStub;
-            return fields;
-        }
-        return nullptr;
-    }
-
-    TMaybeFetchResult DoProcess(NUdf::TUnboxedValue& stateUnboxed, TComputationContext& ctx, TMaybeFetchResult fetchRes, NUdf::TUnboxedValue*const* output) const {
-        auto state = static_cast<TState*>(stateUnboxed.AsBoxed().Get());
-        if (state->IsReading || state->ReadMore<SkipYields>()) {
-            if (!state->IsReading) {
-                switch (state->InputStatus) {
-                    case EFetchResult::One:
-                        break;
-                    case EFetchResult::Yield:
-                        state->InputStatus = EFetchResult::One;
-                        if constexpr (SkipYields) break;
-                        else return EFetchResult::Yield;
-                    case EFetchResult::Finish:
-                        return EFetchResult::Finish;
-                }
-            }
-            auto **fields = ctx.WideFields.data() + WideFieldsIndex;
-            state->InputStatus = fetchRes.Get();
-            state->IsReading = false;
-            if constexpr (SkipYields) {
-                if (fetchRes.Get() == EFetchResult::Yield) {
-                    return EFetchResult::Yield;
-                } else if (fetchRes.Get() == EFetchResult::Finish) {
-                    return TMaybeFetchResult::None();
-                }
-            } else {
-                if (fetchRes.Get() != EFetchResult::One) {
-                    return TMaybeFetchResult::None();
-                }
-            }
-            state->IsReading = true;
-            Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(state->Tongue));
-            Nodes.ProcessItem(ctx, state->TasteIt() ? nullptr : static_cast<NUdf::TUnboxedValue*>(state->Tongue), static_cast<NUdf::TUnboxedValue*>(state->Throat));
-            return TMaybeFetchResult::None();
-        }
-        if (const auto values = static_cast<NUdf::TUnboxedValue*>(state->Extract())) {
-            Nodes.FinishItem(ctx, values, output);
-            return EFetchResult::One;
-        }
-        return TMaybeFetchResult::None();
-    }
-
-private:
     void RegisterDependencies() const final {
         if (const auto flow = this->FlowDependsOn(Flow)) {
             Nodes.RegisterDependencies(
@@ -893,8 +1172,6 @@ private:
     const ui64 MemLimit;
 
     const ui32 WideFieldsIndex;
-    constexpr static NUdf::TUnboxedValue*const StubFieldPtr = nullptr;
-    NUdf::TUnboxedValue*const* FieldsStub = &StubFieldPtr;
 
 #ifndef MKQL_DISABLE_CODEGEN
     TEqualsPtr Equals = nullptr;

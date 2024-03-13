@@ -16,14 +16,7 @@ public:
     void Commit();
     void RollBack();
 
-    size_t GetHash() const noexcept {
-        auto tuple = std::make_tuple(
-            Settings_.size(),
-            RollbackSettings_.size(),
-            SessionSettings_.size());
-        return THash<decltype(tuple)>()(tuple);
-    }
-
+    size_t GetHash() const noexcept;
     bool operator==(const TGUCSettings& other) const;
 private:
     std::unordered_map<std::string, std::string> Settings_;

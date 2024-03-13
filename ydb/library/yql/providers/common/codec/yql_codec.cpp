@@ -929,7 +929,8 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type, ui64 nativeYtTypeFlags,
                         YQL_ENSURE(params.first < 36);
                         NYT::NDecimal::TDecimal::TValue128 tmpRes = NYT::NDecimal::TDecimal::ParseBinary128(params.first, nextString);
                         NDecimal::TInt128 res;
-                        memcpy(&res, &tmpRes, 16);
+                        static_assert(sizeof(NDecimal::TInt128) == sizeof(NYT::NDecimal::TDecimal::TValue128));
+                        memcpy(&res, &tmpRes, sizeof(NDecimal::TInt128));
                         YQL_ENSURE(!NDecimal::IsError(res));
                         return NUdf::TUnboxedValuePod(res);
                     }
@@ -2084,7 +2085,6 @@ void WriteYsonValueInTableFormat(TOutputBuf& buf, TType* type, ui64 nativeYtType
                 auto const params = static_cast<TDataDecimalType*>(type)->GetParams();
                 const NDecimal::TInt128 data128 = value.GetInt128();
                 char tmpBuf[16];
-                memcpy(tmpBuf, &data128, 16);
                 if (params.first < 10) {
                     TStringBuf resBuf = NYT::NDecimal::TDecimal::WriteBinary32(params.first, data128, tmpBuf, 16);
                     buf.WriteVarI32(4);

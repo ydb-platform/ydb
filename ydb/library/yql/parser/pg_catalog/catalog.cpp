@@ -667,6 +667,7 @@ public:
             LastLazyTypeInfo.InFunc = "array_in";
             LastLazyTypeInfo.SendFunc = "array_send";
             LastLazyTypeInfo.ReceiveFunc = "array_recv";
+            LastLazyTypeInfo.ElementType = "";
             LazyInfos[LastType.ArrayTypeId] = LastLazyTypeInfo;
         }
 

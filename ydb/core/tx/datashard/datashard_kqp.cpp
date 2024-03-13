@@ -986,6 +986,10 @@ public:
     NDq::IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */, bool /* withSpilling */, TActorSystem* /* actorSystem */, bool /*isConcurrent*/) const override {
         return {};
     }
+
+    std::function<void()> GetWakeupCallback() const override {
+        return {};
+    }
 };
 
 }  // anonymous namespace

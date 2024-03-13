@@ -102,7 +102,7 @@ public:
             if (wasLine) {
                 html << "<br>";
             }
-            html << "arithmethic " << name << " " << value.ValueA << " " << value.Op << " " << value.ValueB; 
+            html << "arithmetic " << name << " " << value.ValueA << " " << value.Op << " " << value.ValueB; 
             wasLine = true;
         }
         html << "</td></tr>";

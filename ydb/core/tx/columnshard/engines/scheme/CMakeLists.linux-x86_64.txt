@@ -29,6 +29,7 @@ target_link_libraries(columnshard-engines-scheme PUBLIC
   engines-scheme-versions
   engines-scheme-tiering
   columnshard-blobs_action-abstract
+  engines-changes-compaction
 )
 target_sources(columnshard-engines-scheme PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/abstract_scheme.cpp

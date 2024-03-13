@@ -54,12 +54,6 @@ namespace NKikimr {
             TEvBlobStorage::EvControllerUpdateDiskStatus,
             TEvBlobStorage::EvControllerConfigRequest,
             TEvBlobStorage::EvControllerConfigResponse,
-            TEvBlobStorage::EvControllerVDiskStatusSubscribeRequest,
-            TEvBlobStorage::EvControllerVDiskStatusReport,
-            TEvBlobStorage::EvControllerGroupStatusRequest,
-            TEvBlobStorage::EvControllerGroupStatusResponse,
-            TEvBlobStorage::EvControllerUpdateGroup,
-            TEvBlobStorage::EvControllerUpdateFaultyDisks,
             TEvBlobStorage::EvControllerUpdateGroupStat,
 
             TEvBlobStorage::EvControllerSelectGroupsResult,

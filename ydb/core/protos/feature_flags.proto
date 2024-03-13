@@ -121,7 +121,7 @@ message TFeatureFlags {
     optional bool EnableStatistics = 106 [default = false];
     optional bool EnableUuidAsPrimaryKey = 107 [default = false];
     optional bool EnableTablePgTypes = 108 [default = false];
-    optional bool EnableLocalDBBtreeIndex = 109 [default = false];
+    optional bool EnableLocalDBBtreeIndex = 109 [default = true];
     optional bool EnablePDiskHighHDDInFlight = 110 [default = false];
     optional bool UseVDisksBalancing = 111 [default = false];
     optional bool EnableViews = 112 [default = false];
@@ -131,5 +131,5 @@ message TFeatureFlags {
     optional bool EnableReplaceIfExistsForExternalEntities = 116 [ default = false];
     optional bool EnableCMSRequestPriorities = 117 [default = false];
     optional bool EnableKeyvalueLogBatching = 118 [default = false];
-    optional bool EnableLocalDBFlatIndex = 119 [default = true];
+    optional bool EnableLocalDBFlatIndex = 119 [default = false];
 }

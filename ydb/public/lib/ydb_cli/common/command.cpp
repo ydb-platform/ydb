@@ -87,12 +87,17 @@ namespace {
     }
 }
 
-TClientCommand::TClientCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)
-    : Name(name)
-    , Aliases(aliases)
-    , Description(description)
-    , Parent(nullptr)
-    , Opts(NLastGetopt::TOpts::Default())
+TClientCommand::TClientCommand(
+    const TString& name,
+    const std::initializer_list<TString>& aliases,
+    const TString& description,
+    bool visible)
+        : Name(name)
+        , Aliases(aliases)
+        , Description(description)
+        , Visible(visible)
+        , Parent(nullptr)
+        , Opts(NLastGetopt::TOpts::Default())
 {
     HideOption("svnrevision");
     Opts.AddHelpOption('h');
@@ -398,9 +403,17 @@ void TClientCommandTree::RenderCommandsDescription(
     const NColorizer::TColors& colors
 ) {
     TClientCommand::RenderOneCommandDescription(stream, colors, BEGIN);
-    for (auto it = SubCommands.begin(); it != SubCommands.end(); ++it) {
-        bool lastCommand = (std::next(it) == SubCommands.end());
-        it->second->RenderOneCommandDescription(stream, colors, lastCommand ? END : MIDDLE);
+
+    TVector<TClientCommand*> VisibleSubCommands;
+    for (auto& [_, command] : SubCommands) {
+        if (command->Visible) {
+            VisibleSubCommands.push_back(command.get());
+        }
+    }
+
+    for (auto it = VisibleSubCommands.begin(); it != VisibleSubCommands.end(); ++it) {
+        bool lastCommand = (std::next(it) == VisibleSubCommands.end());
+        (*it)->RenderOneCommandDescription(stream, colors, lastCommand ? END : MIDDLE);
     }
 }
 

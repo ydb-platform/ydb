@@ -144,6 +144,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         case EDM_CMS:
         case EDM_DISCOVERY:
         case EDM_WHOAMI:
+        case EDM_CONFIG:
             return NDriverClient::NewClient(argc + freeArgsPos, argv - freeArgsPos, factories);
         case EDM_FORMAT_INFO:
             return MainFormatInfo(cmdConf, argc, argv);

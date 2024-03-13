@@ -12,6 +12,7 @@ SRCS(
     cli_cmds_cms.cpp
     cli_cmds_config.cpp
     cli_cmds_console.cpp
+    cli_cmds_validate_config.cpp
     cli_cmds_debug.cpp
     cli_cmds_disk.cpp
     cli_cmds_genconfig.cpp
@@ -43,6 +44,7 @@ PEERDIR(
     ydb/core/client/minikql_compile
     ydb/core/client/scheme_cache_lib
     ydb/core/config/init
+    ydb/core/config/validation
     ydb/core/driver_lib/cli_base
     ydb/core/engine
     ydb/core/erasure

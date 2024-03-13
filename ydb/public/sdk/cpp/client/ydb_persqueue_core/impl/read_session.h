@@ -1041,7 +1041,7 @@ public:
         return Log;
     }
 
-    const NTopic::ICodec* TryGetCodecImpl(ECodecAlias<UseMigrationProtocol> codecId) const {
+    const NTopic::ICodec* GetCodecImplOrThrow(ECodecAlias<UseMigrationProtocol> codecId) const {
         if (!Codecs->contains(codecId)) {
             throw yexception() << "codec with id " << ui32(codecId) << " not provided";
         }

@@ -121,7 +121,7 @@ public:
         }
     }
 
-    const NTopic::ICodec* TryGetCodecImpl(ECodec codecId) const {
+    const NTopic::ICodec* GetCodecImplOrThrow(ECodec codecId) const {
         with_lock(Lock) {
             if (!ProvidedCodecs->contains(codecId)) {
                 throw yexception() << "codec with id " << ui32(codecId) << " not provided";

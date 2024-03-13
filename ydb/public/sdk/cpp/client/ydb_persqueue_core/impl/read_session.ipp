@@ -2570,7 +2570,7 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
                         && data.codec() != Ydb::PersQueue::V1::CODEC_UNSPECIFIED
                     ) {
                         if (auto session = Parent->CbContext->LockShared()) {
-                            const NYdb::NTopic::ICodec* codecImpl = session->TryGetCodecImpl(static_cast<ECodec>(data.codec()));
+                            const NYdb::NTopic::ICodec* codecImpl = session->GetCodecImplOrThrow(static_cast<ECodec>(data.codec()));
                             TString decompressed = codecImpl->Decompress(data.data());
                             data.set_data(decompressed);
                             data.set_codec(Ydb::PersQueue::V1::CODEC_RAW);
@@ -2582,7 +2582,7 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
                         && static_cast<Ydb::Topic::Codec>(batch.codec()) != Ydb::Topic::CODEC_UNSPECIFIED
                     ) {
                         if (auto session = Parent->CbContext->LockShared()) {
-                            const NYdb::NTopic::ICodec* codecImpl = session->TryGetCodecImpl(static_cast<NTopic::ECodec>(batch.codec()));
+                            const NYdb::NTopic::ICodec* codecImpl = session->GetCodecImplOrThrow(static_cast<NTopic::ECodec>(batch.codec()));
                             TString decompressed = codecImpl->Decompress(data.data());
                             data.set_data(decompressed);
                         }

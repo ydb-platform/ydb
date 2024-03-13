@@ -121,7 +121,7 @@ public:
         }
     }
 
-    const ICodec* TryGetCodecImpl(ECodec codecId) const {
+    const ICodec* GetCodecImplOrThrow(ECodec codecId) const {
         with_lock(Lock) {
             if (!ProvidedCodecs->contains(codecId)) {
                 throw yexception() << "codec with id " << ui32(codecId) << " not provided";
@@ -131,7 +131,15 @@ public:
     }
 
     std::shared_ptr<std::unordered_map<ECodec, THolder<ICodec>>> GetProvidedCodecs() const {
-        return ProvidedCodecs;
+        with_lock(Lock) {
+            return ProvidedCodecs;
+        }
+    }
+
+    void SetProvidedCodecs(std::shared_ptr<std::unordered_map<ECodec, THolder<ICodec>>> codecs) {
+        with_lock(Lock) {
+            ProvidedCodecs = std::move(codecs);
+        }
     }
 
     TAsyncStatus CreateTopic(const TString& path, const TCreateTopicSettings& settings) {

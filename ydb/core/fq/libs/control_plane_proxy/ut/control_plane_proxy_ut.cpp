@@ -382,10 +382,15 @@ private:
     {
         TRuntimePtr runtime(new TTestBasicRuntime());
         runtime->SetLogPriority(NKikimrServices::STREAMS_CONTROL_PLANE_SERVICE, NLog::PRI_DEBUG);
+
+        TComputeMappingHolder::TPtr computeMappingHolder = std::make_shared<TComputeMappingHolder>();
+        computeMappingHolder->SetMapping(std::make_shared<TFixedComputeMapping>(ComputeConfig));
+
         auto controlPlaneProxy = CreateControlPlaneProxyActor(
             Config,
             StorageConfig,
             ComputeConfig,
+            computeMappingHolder,
             CommonConfig,
             S3Config,
             nullptr,
@@ -404,7 +409,7 @@ private:
             0
         );
 
-        auto configService = CreateControlPlaneConfigActor(NFq::TYqSharedResources::TPtr{}, NKikimr::TYdbCredentialsProviderFactory(nullptr),
+        auto configService = CreateControlPlaneConfigActor(NFq::TYqSharedResources::TPtr{}, computeMappingHolder, NKikimr::TYdbCredentialsProviderFactory(nullptr),
             NConfig::TControlPlaneStorageConfig{}, NConfig::TComputeConfig{}, MakeIntrusive<::NMonitoring::TDynamicCounters>());
         runtime->AddLocalService(
             NFq::ControlPlaneConfigActorId(),

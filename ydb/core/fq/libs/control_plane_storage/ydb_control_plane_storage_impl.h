@@ -728,6 +728,7 @@ public:
     void CreateTenantAcksTable();
     void CreateMappingsTable();
     void CreateComputeDatabasesTable();
+    void CreateComputeTenantsTable();
 
     void RunCreateTableActor(const TString& path, NYdb::NTable::TTableDescription desc);
     void AfterTablesCreated();

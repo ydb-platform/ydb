@@ -1,5 +1,7 @@
 #pragma once
 
+#include "control_plane_mapping.h"
+
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/config/protos/control_plane_storage.pb.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
@@ -23,10 +25,13 @@ namespace NFq {
 
 NActors::TActorId ControlPlaneConfigActorId();
 
-NActors::IActor* CreateControlPlaneConfigActor(const ::NFq::TYqSharedResources::TPtr& yqSharedResources,
-                                               const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
-                                               const NConfig::TControlPlaneStorageConfig& config,
-                                               const NConfig::TComputeConfig& computeConfig,
-                                               const ::NMonitoring::TDynamicCounterPtr& counters);
+NActors::IActor* CreateControlPlaneConfigActor(
+    const ::NFq::TYqSharedResources::TPtr& yqSharedResources,
+    const TComputeMappingHolder::TPtr& computeMappingHolder,
+    const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
+    const NConfig::TControlPlaneStorageConfig& config,
+    const NConfig::TComputeConfig& computeConfig,
+    const ::NMonitoring::TDynamicCounterPtr& counters
+);
 
 } // namespace NFq

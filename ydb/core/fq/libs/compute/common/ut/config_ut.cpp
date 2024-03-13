@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(Config) {
                 }
             }
         )", &proto));
-        NFq::TComputeConfig config(proto);
+        NFq::TComputeConfig config(proto, nullptr);
         UNIT_ASSERT(config.YdbComputeControlPlaneEnabled("oss://test1"));
         UNIT_ASSERT(!config.YdbComputeControlPlaneEnabled("oss://test2"));
     }
@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(Config) {
                 }
             }
         )", &proto));
-        NFq::TComputeConfig config(proto);
+        NFq::TComputeConfig config(proto, nullptr);
         UNIT_ASSERT(!config.YdbComputeControlPlaneEnabled("oss://test1"));
         UNIT_ASSERT(config.YdbComputeControlPlaneEnabled("oss://test2"));
     }

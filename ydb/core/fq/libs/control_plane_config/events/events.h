@@ -33,10 +33,8 @@ struct TTenantInfo {
     TInstant StateTime;
     NFq::TComputeConfig ComputeConfig;
 
-    TTenantInfo() = default;
-
-    TTenantInfo(const NFq::NConfig::TComputeConfig& computeConfig)
-        : ComputeConfig(computeConfig)
+    TTenantInfo(const NFq::NConfig::TComputeConfig& computeConfig, const TComputeMappingHolder::TPtr& computeMappingHolder)
+        : ComputeConfig(computeConfig, computeMappingHolder)
     {}
 
     // this method must be thread safe

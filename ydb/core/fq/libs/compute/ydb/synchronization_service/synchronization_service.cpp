@@ -40,6 +40,7 @@ public:
                            const TString& scope,
                            const NConfig::TCommonConfig& commonConfig,
                            const NConfig::TComputeConfig& computeConfig,
+                           const TComputeMappingHolder::TPtr& computeMappingHolder,
                            const NFq::NConfig::TYdbStorageConfig& connectionConfig,
                            const TSigner::TPtr& signer,
                            const TYqSharedResources::TPtr& yqSharedResources,
@@ -49,7 +50,7 @@ public:
         , CloudId(cloudId)
         , Scope(scope)
         , CommonConfig(commonConfig)
-        , ComputeConfig(computeConfig)
+        , ComputeConfig(computeConfig, computeMappingHolder)
         , ConnectionConfig(connectionConfig)
         , Signer(signer)
         , YqSharedResources(yqSharedResources)
@@ -580,7 +581,7 @@ private:
     NYql::TIssues Issues;
 };
 
-class TSynchronizatinServiceActor : public NActors::TActorBootstrapped<TSynchronizatinServiceActor> {
+class TSynchronizationServiceActor : public NActors::TActorBootstrapped<TSynchronizationServiceActor> {
     enum class EScopeStatus {
         IN_PROGRESS = 0,
         SYNCHRONIZED = 1
@@ -637,14 +638,16 @@ class TSynchronizatinServiceActor : public NActors::TActorBootstrapped<TSynchron
     };
 
 public:
-    TSynchronizatinServiceActor(const NConfig::TCommonConfig& commonConfig,
+    TSynchronizationServiceActor(const NConfig::TCommonConfig& commonConfig,
                                 const NConfig::TComputeConfig& computeConfig,
+                                const TComputeMappingHolder::TPtr& computeMappingHolder,
                                 const TSigner::TPtr& signer,
                                 const TYqSharedResources::TPtr& yqSharedResources,
                                 const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
                                 const ::NMonitoring::TDynamicCounterPtr& counters)
         : CommonConfig(commonConfig)
         , ComputeConfig(computeConfig)
+        , ComputeMappingHolder(computeMappingHolder)
         , Signer(signer)
         , YqSharedResources(yqSharedResources)
         , CredentialsProviderFactory(credentialsProviderFactory)
@@ -654,7 +657,7 @@ public:
     static constexpr char ActorName[] = "FQ_SYNCHRONIZATION_SERVICE_ACTOR";
 
     void Bootstrap() {
-        Become(&TSynchronizatinServiceActor::StateFunc);
+        Become(&TSynchronizationServiceActor::StateFunc);
     }
 
     STRICT_STFUNC(StateFunc,
@@ -677,7 +680,7 @@ public:
             auto& item = Cache[scope];
             item.Status = EScopeStatus::IN_PROGRESS;
             item.Requests.push_back(ev);
-            Register(new TSynchronizeScopeActor{SelfId(), cloudId, scope, CommonConfig, ComputeConfig, connectionConfig, Signer, YqSharedResources, CredentialsProviderFactory,  Counters.Counters});
+            Register(new TSynchronizeScopeActor{SelfId(), cloudId, scope, CommonConfig, ComputeConfig, ComputeMappingHolder, connectionConfig, Signer, YqSharedResources, CredentialsProviderFactory,  Counters.Counters});
             return;
         }
 
@@ -749,19 +752,31 @@ private:
     TMap<TString, TScopeState> Cache;
     NConfig::TCommonConfig CommonConfig;
     NConfig::TComputeConfig ComputeConfig;
+    TComputeMappingHolder::TPtr ComputeMappingHolder;
     TSigner::TPtr Signer;
     TYqSharedResources::TPtr YqSharedResources;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     TSynchtonizationCounters Counters;
 };
 
-std::unique_ptr<NActors::IActor> CreateSynchronizationServiceActor(const NConfig::TCommonConfig& commonConfig,
-                                                                   const NConfig::TComputeConfig& computeConfig,
-                                                                   const TSigner::TPtr& signer,
-                                                                   const TYqSharedResources::TPtr& yqSharedResources,
-                                                                   const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-                                                                   const ::NMonitoring::TDynamicCounterPtr& counters) {
-    return std::make_unique<TSynchronizatinServiceActor>(commonConfig, computeConfig, signer, yqSharedResources, credentialsProviderFactory, counters);
+std::unique_ptr<NActors::IActor> CreateSynchronizationServiceActor(
+    const NConfig::TCommonConfig& commonConfig,
+    const NConfig::TComputeConfig& computeConfig,
+    const TComputeMappingHolder::TPtr& computeMappingHolder,
+    const TSigner::TPtr& signer,
+    const TYqSharedResources::TPtr& yqSharedResources,
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+    const ::NMonitoring::TDynamicCounterPtr& counters
+    ) {
+    return std::make_unique<TSynchronizationServiceActor>(
+        commonConfig,
+        computeConfig,
+        computeMappingHolder,
+        signer,
+        yqSharedResources,
+        credentialsProviderFactory,
+        counters
+    );
 }
 
 }

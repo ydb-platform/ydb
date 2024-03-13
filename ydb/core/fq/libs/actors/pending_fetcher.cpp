@@ -112,6 +112,7 @@ public:
         const NFq::TYqSharedResources::TPtr& yqSharedResources,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const ::NFq::NConfig::TConfig& config,
+        const TComputeMappingHolder::TPtr& computeMappingHolder,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         TIntrusivePtr<ITimeProvider> timeProvider,
         TIntrusivePtr<IRandomProvider> randomProvider,
@@ -142,7 +143,7 @@ public:
         , TenantName(tenantName)
         , InternalServiceId(MakeInternalServiceActorId())
         , Monitoring(monitoring)
-        , ComputeConfig(config.GetCompute())
+        , ComputeConfig(config.GetCompute(), computeMappingHolder)
     {
         Y_ENSURE(GetYqlDefaultModuleResolverWithContext(ModuleResolver));
     }
@@ -479,6 +480,7 @@ NActors::IActor* CreatePendingFetcher(
     const NFq::TYqSharedResources::TPtr& yqSharedResources,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const ::NFq::NConfig::TConfig& config,
+    const TComputeMappingHolder::TPtr& computeMappingHolder,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
@@ -496,6 +498,7 @@ NActors::IActor* CreatePendingFetcher(
         yqSharedResources,
         credentialsProviderFactory,
         config,
+        computeMappingHolder,
         functionRegistry,
         timeProvider,
         randomProvider,

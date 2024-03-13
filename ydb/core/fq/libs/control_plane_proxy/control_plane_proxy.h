@@ -3,6 +3,7 @@
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/config/protos/compute.pb.h>
 #include <ydb/core/fq/libs/config/protos/control_plane_proxy.pb.h>
+#include <ydb/core/fq/libs/control_plane_config/control_plane_mapping.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/signer/signer.h>
 
@@ -31,6 +32,7 @@ NActors::IActor* CreateControlPlaneProxyActor(
     const NConfig::TControlPlaneProxyConfig& config,
     const NConfig::TControlPlaneStorageConfig& storageConfig,
     const NConfig::TComputeConfig& computeConfig,
+    const TComputeMappingHolder::TPtr& computeMappingHolder,
     const NConfig::TCommonConfig& commonConfig,
     const NYql::TS3GatewayConfig& s3Config,
     const ::NFq::TSigner::TPtr& signer,

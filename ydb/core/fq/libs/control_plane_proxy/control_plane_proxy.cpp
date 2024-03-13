@@ -495,6 +495,7 @@ public:
         const NConfig::TControlPlaneProxyConfig& config,
         const NConfig::TControlPlaneStorageConfig& storageConfig,
         const NConfig::TComputeConfig& computeConfig,
+        const TComputeMappingHolder::TPtr& computeMappingHolder,
         const NConfig::TCommonConfig& commonConfig,
         const NYql::TS3GatewayConfig& s3Config,
         const ::NFq::TSigner::TPtr& signer,
@@ -503,7 +504,7 @@ public:
         const ::NMonitoring::TDynamicCounterPtr& counters,
         bool quotaManagerEnabled)
         : Counters(counters)
-        , Config(config, storageConfig, computeConfig, commonConfig, s3Config)
+        , Config(config, storageConfig, computeConfig, computeMappingHolder, commonConfig, s3Config)
         , YqSharedResources(yqSharedResources)
         , CredentialsProviderFactory(credentialsProviderFactory)
         , QuotaManagerEnabled(quotaManagerEnabled)
@@ -2505,6 +2506,7 @@ IActor* CreateControlPlaneProxyActor(
     const NConfig::TControlPlaneProxyConfig& config,
     const NConfig::TControlPlaneStorageConfig& storageConfig,
     const NConfig::TComputeConfig& computeConfig,
+    const TComputeMappingHolder::TPtr& computeMappingHolder,
     const NConfig::TCommonConfig& commonConfig,
     const NYql::TS3GatewayConfig& s3Config,
     const ::NFq::TSigner::TPtr& signer,
@@ -2516,6 +2518,7 @@ IActor* CreateControlPlaneProxyActor(
         config,
         storageConfig,
         computeConfig,
+        computeMappingHolder,
         commonConfig,
         s3Config,
         signer,

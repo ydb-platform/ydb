@@ -4,6 +4,7 @@
 
 #include <ydb/core/fq/libs/compute/common/run_actor_params.h>
 #include <ydb/core/fq/libs/config/protos/pinger.pb.h>
+#include <ydb/core/fq/libs/control_plane_config/control_plane_mapping.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/private_client/private_client.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
@@ -40,6 +41,7 @@ NActors::IActor* CreatePendingFetcher(
     const NFq::TYqSharedResources::TPtr& yqSharedResources,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const ::NFq::NConfig::TConfig& config,
+    const TComputeMappingHolder::TPtr& computeMappingHolder,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,

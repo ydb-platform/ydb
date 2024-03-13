@@ -27,11 +27,12 @@ TControlPlaneProxyConfig::TControlPlaneProxyConfig(
     const NConfig::TControlPlaneProxyConfig& config,
     const NConfig::TControlPlaneStorageConfig& storageConfig,
     const NConfig::TComputeConfig& computeConfig,
+    const TComputeMappingHolder::TPtr& computeMappingHolder,
     const NConfig::TCommonConfig& commonConfig,
     const NYql::TS3GatewayConfig& s3Config)
     : Proto(FillDefaultParameters(config))
     , StorageConfig(TControlPlaneStorageConfig(storageConfig, s3Config, commonConfig, {}))
-    , ComputeConfig(computeConfig)
+    , ComputeConfig(computeConfig, computeMappingHolder)
     , CommonConfig(commonConfig)
     , RequestTimeout(GetDuration(Proto.GetRequestTimeout(), TDuration::Seconds(30)))
     , MetricsTtl(GetDuration(Proto.GetMetricsTtl(), TDuration::Days(1)))

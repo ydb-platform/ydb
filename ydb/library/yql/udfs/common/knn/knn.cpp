@@ -15,18 +15,7 @@ SIMPLE_STRICT_UDF(TToBinaryString, char*(TAutoMap<TListType<float>>)) {
 
     const EFormat format = EFormat::FloatVector; // will be taken from args in future
     
-    const ISerializer& serializer = TSerializerFacade::Get(format);
-
-    TString str;
-    TStringOutput outStr(str);
-
-    ui32 size = serializer.CalcSerializedSize(x);
-    if (size)
-        outStr.Reserve(1 + size);
-    
-    outStr.Write(&format, sizeof(unsigned char));
-
-    return serializer.Serialize(valueBuilder, x, str);
+    return TSerializerFacade::Get(format).Serialize(valueBuilder, x);
 }
 
 SIMPLE_STRICT_UDF(TFromBinaryString, TOptional<TListType<float>>(const char*)) {
@@ -35,11 +24,8 @@ SIMPLE_STRICT_UDF(TFromBinaryString, TOptional<TListType<float>>(const char*)) {
         return {};
 
     ui8 formatByte = str.Data()[0];
-    str = TStringRef{str.Data() + 1, str.Size() -1};
-
-    const ISerializer& serializer = TSerializerFacade::Get(formatByte);
-
-    return serializer.Deserialize(valueBuilder, str);
+    
+    return TSerializerFacade::Get(formatByte).Deserialize(valueBuilder, str);
 }
 
 

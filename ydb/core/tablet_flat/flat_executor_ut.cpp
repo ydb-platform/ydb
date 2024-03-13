@@ -5614,6 +5614,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
 
         auto &appData = env->GetAppData();
         appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+        appData.FeatureFlags.SetEnableLocalDBFlatIndex(true);
         auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
         int readRows = 0, failedAttempts = 0;
 

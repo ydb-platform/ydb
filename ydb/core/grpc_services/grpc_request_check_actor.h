@@ -17,6 +17,7 @@
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/security/secure_request.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 #include <util/string/split.h>
 
@@ -92,6 +93,7 @@ public:
         , GrpcRequestBaseCtx_(Request_->Get())
         , SkipCheckConnectRigths_(skipCheckConnectRigths)
         , FacilityProvider_(facilityProvider)
+        , Span_(TWilsonGrpc::RequestCheckActor, GrpcRequestBaseCtx_->GetWilsonTraceId(), "RequestCheckActor")
     {
         TMaybe<TString> authToken = GrpcRequestBaseCtx_->GetYdbToken();
         if (authToken) {
@@ -226,7 +228,7 @@ public:
 
     void HandlePoison(TEvents::TEvPoisonPill::TPtr&) {
         GrpcRequestBaseCtx_->FinishSpan();
-        TBase::PassAway();
+        PassAway();
     }
 
     ui64 GetChannelBufferSize() const override {
@@ -237,6 +239,11 @@ public:
         // CheckActor will die after creation rpc_ actor
         // so we can use same mailbox
         return this->RegisterWithSameMailbox(actor);
+    }
+
+    void PassAway() override {
+        Span_.EndOk();
+        TBase::PassAway();
     }
 
 private:
@@ -376,39 +383,39 @@ private:
         GrpcRequestBaseCtx_->RaiseIssue(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::UNAUTHORIZED);
         GrpcRequestBaseCtx_->FinishSpan();
-        TBase::PassAway();
+        PassAway();
     }
 
     void ReplyUnavailableAndDie(const NYql::TIssue& issue) {
         GrpcRequestBaseCtx_->RaiseIssue(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
         GrpcRequestBaseCtx_->FinishSpan();
-        TBase::PassAway();
+        PassAway();
     }
 
     void ReplyUnavailableAndDie(const NYql::TIssues& issue) {
         GrpcRequestBaseCtx_->RaiseIssues(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
         GrpcRequestBaseCtx_->FinishSpan();
-        TBase::PassAway();
+        PassAway();
     }
 
     void ReplyUnauthenticatedAndDie() {
         GrpcRequestBaseCtx_->ReplyUnauthenticated("Unknown database");
         GrpcRequestBaseCtx_->FinishSpan();
-        TBase::PassAway();
+        PassAway();
     }
 
     void ReplyOverloadedAndDie(const NYql::TIssue& issue) {
         GrpcRequestBaseCtx_->RaiseIssue(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::OVERLOADED);
         GrpcRequestBaseCtx_->FinishSpan();
-        TBase::PassAway();
+        PassAway();
     }
 
     void Continue() {
         if (!ValidateAndReplyOnError(GrpcRequestBaseCtx_)) {
-            TBase::PassAway();
+            PassAway();
             return;
         }
         HandleAndDie(Request_);
@@ -421,7 +428,7 @@ private:
 
         GrpcRequestBaseCtx_->FinishSpan();
         event->Release().Release()->Pass(*this);
-        TBase::PassAway();
+        PassAway();
     }
 
     void HandleAndDie(TAutoPtr<TEventHandle<TEvListEndpointsRequest>>&) {
@@ -437,13 +444,13 @@ private:
     void HandleAndDie(T& event) {
         GrpcRequestBaseCtx_->FinishSpan();
         TGRpcRequestProxyHandleMethods::Handle(event, TlsActivationContext->AsActorContext());
-        TBase::PassAway();
+        PassAway();
     }
 
     void ReplyBackAndDie() {
         GrpcRequestBaseCtx_->FinishSpan();
         TlsActivationContext->Send(Request_->Forward(Owner_));
-        TBase::PassAway();
+        PassAway();
     }
 
     std::pair<bool, std::optional<NYql::TIssue>> CheckConnectRight() {
@@ -520,6 +527,7 @@ private:
     const IFacilityProvider* FacilityProvider_;
     bool DmlAuditEnabled_ = false;
     std::unordered_set<TString> DmlAuditExpectedSubjects_;
+    NWilson::TSpan Span_;
 };
 
 // default behavior - attributes in schema

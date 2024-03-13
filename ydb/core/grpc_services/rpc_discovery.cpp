@@ -29,6 +29,8 @@ class TListEndpointsRPC : public TActorBootstrapped<TListEndpointsRPC> {
     THolder<TEvDiscovery::TEvDiscoveryData> LookupResponse;
     THolder<TEvInterconnect::TEvNodeInfo> NameserviceResponse;
 
+    NWilson::TSpan Span;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::GRPC_REQ;
@@ -37,6 +39,7 @@ public:
     TListEndpointsRPC(TEvListEndpointsRequest::TPtr &msg, TActorId cacheId)
         : Request(msg->Release().Release())
         , CacheId(cacheId)
+        , Span(TWilsonGrpc::RequestActor, Request->GetWilsonTraceId(), "ListEndpointsRpc")
     {}
 
     void Bootstrap() {
@@ -54,6 +57,7 @@ public:
         if (Discoverer) {
             Send(Discoverer, new TEvents::TEvPoisonPill());
         }
+        Span.EndOk();
 
         TActorBootstrapped<TListEndpointsRPC>::PassAway();
     }

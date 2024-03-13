@@ -113,53 +113,6 @@ int ValidateConfigs(const std::vector<TString>& argsCurrent, const std::vector<T
     return 0;
 }
 
-class TClientCommandAdvancedValidateConfig : public TClientCommand {
-public:
-    TClientCommandAdvancedValidateConfig()
-        : TClientCommand(
-            "advanced-validate",
-            {},
-            "Config validation utils",
-            // this command will be used only in very specific cases
-            // so, it is hidden and won't be documented
-            // we should remove this command after getting rid of `--*-file prototxt` args
-            false)
-    {}
-
-    void Config(TConfig& config) override {
-        TClientCommand::Config(config);
-
-        config.Opts->ArgPermutation_ = NLastGetopt::REQUIRE_ORDER;
-    }
-
-    int Run(TConfig& config) override {
-        const auto& args = config.ParseResult->GetFreeArgs();
-
-        int separatorsCount = std::count_if(args.begin(), args.end(), [](const TString& arg) { return arg == "--"; });
-        if (separatorsCount != 1) {
-            throw TMisuseException() << "command must have exactly two \"--\" separators";
-        }
-
-        auto separatorIt = std::find_if(args.begin(), args.end(), [](const TString& arg) { return arg == "--"; });
-
-        std::vector<TString> argsCurrent;
-        argsCurrent.push_back("server");
-
-        for (auto it = args.begin(); it != separatorIt; ++it) {
-            argsCurrent.push_back(*it);
-        }
-
-        std::vector<TString> argsCandidate;
-        argsCandidate.push_back("server");
-
-        for (auto it = std::next(separatorIt); it != args.end(); ++it) {
-            argsCandidate.push_back(*it);
-        }
-
-        return ValidateConfigs(argsCurrent, argsCandidate);
-    }
-};
-
 class TClientCommandValidateConfig : public TClientCommand {
 public:
     TClientCommandValidateConfig()
@@ -202,7 +155,6 @@ TClientCommandConfig::TClientCommandConfig()
     : TClientCommandTree("config", {}, "config utils")
 {
     AddCommand(std::make_unique<TClientCommandValidateConfig>());
-    AddCommand(std::make_unique<TClientCommandAdvancedValidateConfig>());
 }
 
 } // NKikimr::NDriverClient

@@ -106,6 +106,34 @@ public:
         return request;
     }
 
+    void ProvideCodec(ECodec codecId, THolder<NTopic::ICodec>&& codecImpl) {
+        with_lock(Lock) {
+            if (ProvidedCodecs->contains(codecId)) {
+                throw yexception() << "codec with id " << ui32(codecId) << " already provided";
+            }
+            (*ProvidedCodecs)[codecId] = std::move(codecImpl);
+        }
+    }
+
+    void OverrideCodec(ECodec codecId, THolder<NTopic::ICodec>&& codecImpl) {
+        with_lock(Lock) {
+            (*ProvidedCodecs)[codecId] = std::move(codecImpl);
+        }
+    }
+
+    const NTopic::ICodec* GetCodecImplOrThrow(ECodec codecId) const {
+        with_lock(Lock) {
+            if (!ProvidedCodecs->contains(codecId)) {
+                throw yexception() << "codec with id " << ui32(codecId) << " not provided";
+            }
+            return ProvidedCodecs->at(codecId).Get();
+        }
+    }
+
+    std::shared_ptr<std::unordered_map<ECodec, THolder<NTopic::ICodec>>> GetProvidedCodecs() const {
+        return ProvidedCodecs;
+    }
+
     TAsyncStatus CreateTopic(const TString& path, const TCreateTopicSettings& settings) {
         auto request = MakePropsCreateOrAlterRequest<Ydb::PersQueue::V1::CreateTopicRequest>(path,
             settings.PartitionsPerTablet_ ? settings : TCreateTopicSettings(settings).PartitionsPerTablet(2));
@@ -211,6 +239,7 @@ private:
     const TPersQueueClientSettings Settings;
     const TString CustomEndpoint;
     TAdaptiveLock Lock;
+    std::shared_ptr<std::unordered_map<ECodec, THolder<NTopic::ICodec>>> ProvidedCodecs = std::make_shared<std::unordered_map<ECodec, THolder<NTopic::ICodec>>>();
     THashMap<TString, std::shared_ptr<TImpl>> Subclients; // Endpoint -> Subclient.
 };
 

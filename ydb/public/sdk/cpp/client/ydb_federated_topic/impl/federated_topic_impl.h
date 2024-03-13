@@ -32,6 +32,34 @@ public:
         }
     }
 
+    void ProvideCodec(NTopic::ECodec codecId, THolder<NTopic::ICodec>&& codecImpl) {
+        with_lock(Lock) {
+            if (ProvidedCodecs->contains(codecId)) {
+                throw yexception() << "codec with id " << ui32(codecId) << " already provided";
+            }
+            (*ProvidedCodecs)[codecId] = std::move(codecImpl);
+        }
+    }
+
+    void OverrideCodec(NTopic::ECodec codecId, THolder<NTopic::ICodec>&& codecImpl) {
+        with_lock(Lock) {
+            (*ProvidedCodecs)[codecId] = std::move(codecImpl);
+        }
+    }
+
+    const NTopic::ICodec* GetCodecImplOrThrow(NTopic::ECodec codecId) const {
+        with_lock(Lock) {
+            if (!ProvidedCodecs->contains(codecId)) {
+                throw yexception() << "codec with id " << ui32(codecId) << " not provided";
+            }
+            return ProvidedCodecs->at(codecId).Get();
+        }
+    }
+
+    std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> GetProvidedCodecs() const {
+        return ProvidedCodecs;
+    }
+
     // Runtime API.
     std::shared_ptr<IFederatedReadSession> CreateReadSession(const TFederatedReadSessionSettings& settings);
 
@@ -50,6 +78,8 @@ private:
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
     const TFederatedTopicClientSettings ClientSettings;
     std::shared_ptr<TFederatedDbObserver> Observer;
+    std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> ProvidedCodecs =
+        std::make_shared<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>>();
     TAdaptiveLock Lock;
 };
 

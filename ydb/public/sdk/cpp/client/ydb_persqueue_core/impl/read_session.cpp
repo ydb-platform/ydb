@@ -218,7 +218,8 @@ void TReadSession::CreateClusterSessionsImpl(TDeferredActions<true>& deferred) {
             EventsQueue,
             context,
             partitionStreamIdStart++,
-            clusterSessionsCount
+            clusterSessionsCount,
+            Client->GetProvidedCodecs()
         ));
 
         clusterSessionInfo.Session = CbContexts.back()->TryGet();

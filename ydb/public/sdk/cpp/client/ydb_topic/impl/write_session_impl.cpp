@@ -23,10 +23,6 @@ const TDuration UPDATE_TOKEN_PERIOD = TDuration::Hours(1);
 // Error code from file ydb/public/api/protos/persqueue_error_codes_v1.proto
 const ui64 WRITE_ERROR_PARTITION_INACTIVE = 500029;
 
-namespace NCompressionDetails {
-    THolder<IOutputStream> CreateCoder(ECodec codec, TBuffer& result, int quality);
-}
-
 #define HISTOGRAM_SETUP ::NMonitoring::ExplicitHistogram({0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100})
 TWriterCounters::TWriterCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
     Errors = counters->GetCounter("errors", true);
@@ -1057,9 +1053,9 @@ TMemoryUsageChange TWriteSessionImpl::OnMemoryUsageChangedImpl(i64 diff) {
     return {wasOk, nowOk};
 }
 
-TBuffer CompressBuffer(TVector<TStringBuf>& data, ECodec codec, i32 level) {
+TBuffer CompressBuffer(std::shared_ptr<TTopicClient::TImpl> client, TVector<TStringBuf>& data, ECodec codec, i32 level) {
     TBuffer result;
-    THolder<IOutputStream> coder = NCompressionDetails::CreateCoder(codec, result, level);
+    THolder<IOutputStream> coder = client->GetCodecImplOrThrow(codec)->CreateCoder(result, level);
     for (auto& buffer : data) {
         coder->Write(buffer.data(), buffer.size());
     }
@@ -1082,11 +1078,12 @@ void TWriteSessionImpl::CompressImpl(TBlock&& block_) {
                    codec = Settings.Codec_,
                    level = Settings.CompressionLevel_,
                    isSyncCompression = !CompressionExecutor->IsAsync(),
-                   blockPtr]() mutable {
+                   blockPtr,
+                   client = Client]() mutable {
         Y_ABORT_UNLESS(!blockPtr->Compressed);
 
         auto compressedData = CompressBuffer(
-                blockPtr->OriginalDataRefs, codec, level
+            std::move(client), blockPtr->OriginalDataRefs, codec, level
         );
         Y_ABORT_UNLESS(!compressedData.Empty());
         blockPtr->Data = std::move(compressedData);

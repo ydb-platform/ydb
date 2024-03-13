@@ -96,7 +96,6 @@ struct TNodeInfo {
     TString Address;
     TNodeLocation Location;
     ui64 Expire;
-    TString SlotName;
 };
 
 class TNodeRegistrationResult : public TStatus {

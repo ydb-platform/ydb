@@ -77,7 +77,6 @@ TNodeInfo::TNodeInfo(const Ydb::Discovery::NodeInfo& info)
     , Address(info.address())
     , Location(info.location())
     , Expire(info.expire())
-    , SlotName(info.slot_name())
     {}
 
 TNodeRegistrationResult::TNodeRegistrationResult(TStatus&& status, const Ydb::Discovery::NodeRegistrationResult& proto)

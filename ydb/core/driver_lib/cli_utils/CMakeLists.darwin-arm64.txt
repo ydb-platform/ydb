@@ -23,6 +23,7 @@ target_link_libraries(cli_utils PUBLIC
   core-client-minikql_compile
   core-client-scheme_cache_lib
   core-config-init
+  core-config-validation
   cli_base
   ydb-core-engine
   ydb-core-erasure
@@ -52,6 +53,7 @@ target_sources(cli_utils PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_cms.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_config.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_console.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_validate_config.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_debug.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_disk.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_genconfig.cpp

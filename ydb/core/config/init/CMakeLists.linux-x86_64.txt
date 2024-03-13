@@ -32,5 +32,6 @@ target_sources(core-config-init PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/config/init/init.h
   ${PROJECT_SOURCE_DIR}/ydb/core/config/init/dummy.h
   ${PROJECT_SOURCE_DIR}/ydb/core/config/init/init.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/config/init/init_noop.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/config/init/dummy.cpp
 )

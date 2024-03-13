@@ -30,10 +30,12 @@ inline std::shared_ptr<NYdb::NTable::TTableClient> CreateNewTableClient(const TS
 
 TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage = nullptr);
 TString GetV1StatFromV2PlanV2(const TString& plan);
+TString GetPrettyStatistics(const TString& statistics);
 
 TString FormatDurationMs(ui64 durationMs);
 TString FormatDurationUs(ui64 durationUs);
 TString FormatInstant(TInstant instant);
+TDuration ParseDuration(TStringBuf str);
 
 struct TPublicStat {
     std::optional<int> MemoryUsageBytes = 0;

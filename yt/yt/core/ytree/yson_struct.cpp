@@ -98,7 +98,7 @@ void TYsonStructBase::Save(IOutputStream* output) const
 
 void TYsonStructBase::Postprocess(const TYPath& path)
 {
-    Meta_->Postprocess(this, path);
+    Meta_->PostprocessStruct(this, path);
 }
 
 void TYsonStructBase::SetDefaults()

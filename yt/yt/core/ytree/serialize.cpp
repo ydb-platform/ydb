@@ -16,6 +16,33 @@ using namespace google::protobuf::io;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Unversioned values use microsecond precision for TInstant values,
+// while YSON deserializes values with millisecond precision.
+// It can lead to unexpected results when converting TInstant -> TUnversionedValue -> INodePtr -> TInstant.
+// These boundaries allow to correctly deserialize microsecond values back to TInstant.
+//
+// log2(timeEpoch("2100-01-01") * 10**3) < 42.
+// log2(timeEpoch("1970-03-01") * 10**6) > 42.
+// log2(timeEpoch("2100-01-01") * 10**6) < 52.
+static constexpr ui64 MicrosecondLowerWidthBoundary = 42;
+static constexpr ui64 MicrosecondUpperWidthBoundary = 52;
+static constexpr ui64 UnixTimeMicrosecondLowerBoundary = 1ull << MicrosecondLowerWidthBoundary;
+static constexpr ui64 UnixTimeMicrosecondUpperBoundary = 1ull << MicrosecondUpperWidthBoundary;
+
+TInstant ConvertRawValueToUnixTime(ui64 value)
+{
+    if (value < UnixTimeMicrosecondLowerBoundary) {
+        return TInstant::MilliSeconds(value);
+    } else if (value < UnixTimeMicrosecondUpperBoundary) {
+        return TInstant::MicroSeconds(value);
+    } else {
+        THROW_ERROR_EXCEPTION("Value %Qv does not represent valid UNIX time",
+            value);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 EYsonType GetYsonType(const TYsonString& yson)
 {
     return yson.GetType();
@@ -272,17 +299,16 @@ void Deserialize(TInstant& value, INodePtr node)
 {
     switch (node->GetType()) {
         case ENodeType::Int64: {
-            auto ms = node->AsInt64()->GetValue();
-            if (ms < 0) {
-                THROW_ERROR_EXCEPTION("Instant cannot be negative");
-            }
-            value = TInstant::MilliSeconds(ms);
+            auto ms = CheckedIntegralCast<ui64>(node->AsInt64()->GetValue());
+            value = ConvertRawValueToUnixTime(ms);
             break;
         }
 
-        case ENodeType::Uint64:
-            value = TInstant::MilliSeconds(node->AsUint64()->GetValue());
+        case ENodeType::Uint64: {
+            auto ms = node->AsUint64()->GetValue();
+            value = ConvertRawValueToUnixTime(ms);
             break;
+        }
 
         case ENodeType::Double: {
             auto ms = node->AsDouble()->GetValue();

@@ -1505,7 +1505,10 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvents::TEvWakeup::TPtr& 
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::RecheckACL(const TActorContext& ctx) {
-    Y_ABORT_UNLESS(State == ES_INITED);
+    if (State != ES_INITED) {
+        LOG_ERROR_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "WriteSessionActor state is wrong. Actual state '" << (int)State << "'");
+        return CloseSession("erroneous internal state", PersQueue::ErrorCode::ERROR, ctx);
+    }
 
     auto now = ctx.Now();
 

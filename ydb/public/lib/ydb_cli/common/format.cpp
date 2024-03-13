@@ -423,7 +423,7 @@ TString formatPrettyTableDouble(double value) {
     std::strstream stream;
 
     if (1e-3 < value && value < 1e8 || value == 0) {
-        stream << std::round(value) << '\0';
+        stream << static_cast<int64_t>(std::round(value)) << '\0';
         return ToString(stream.str());
     }
 

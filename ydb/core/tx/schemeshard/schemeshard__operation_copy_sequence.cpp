@@ -16,6 +16,7 @@ class TConfigureParts : public TSubOperationState {
 private:
     TOperationId OperationId;
     ui32 RestoredSequences = 0;
+    NKikimrTxSequenceShard::TEvFreezeSequenceResult FreezeSequenceResult;
 
     TString DebugHint() const override {
         return TStringBuilder()
@@ -94,7 +95,8 @@ public:
             TShardIdx shardIdx = FromProto(shardIdxProto);
             auto currentTabletId = context.SS->ShardInfos.at(shardIdx).TabletID;
 
-            auto event = MakeHolder<NSequenceShard::TEvSequenceShard::TEvRestoreSequence>(txState->SourcePathId);
+            auto event = MakeHolder<NSequenceShard::TEvSequenceShard::TEvRestoreSequence>(
+                txState->SourcePathId, FreezeSequenceResult);
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.SetTxPartId(OperationId.GetSubTxId());
 
@@ -158,6 +160,8 @@ public:
             return false;
         }
 
+        FreezeSequenceResult = ev->Get()->Record;
+
         for (auto shard : txState->Shards) {
             auto shardIdx = shard.Idx;
             auto currentTabletId = context.SS->ShardInfos.at(shardIdx).TabletID;
@@ -175,7 +179,7 @@ public:
             }
 
             auto event = MakeHolder<NSequenceShard::TEvSequenceShard::TEvRestoreSequence>(
-                txState->TargetPathId, ev->Get()->Record);
+                txState->TargetPathId, FreezeSequenceResult);
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.SetTxPartId(OperationId.GetSubTxId());
 

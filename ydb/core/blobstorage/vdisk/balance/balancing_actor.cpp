@@ -48,7 +48,7 @@ namespace NBalancing {
             THPTimer timer;
 
             for (ui32 cnt = 0; It.Valid(); It.Next(), ++cnt) {
-                if (cnt % 1000 == 0 && TDuration::Seconds(timer.Passed()) > JOB_GRANULARITY) {
+                if (cnt % 1000 == 999 && TDuration::Seconds(timer.Passed()) > JOB_GRANULARITY) {
                     BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Collected " << cnt << " keys");
                     Send(SelfId(), new NActors::TEvents::TEvWakeup());
                     return;
@@ -57,23 +57,23 @@ namespace NBalancing {
                 TPartsCollectorMerger merger(Ctx->GInfo->GetTopology().GType);
                 It.PutToMerger(&merger);
 
-                for (ui8 partIdx: PartsToSendOnMain(Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, It.GetCurKey().LogoBlobID(), merger.Ingress)) {
-                    if (!merger.Parts[partIdx - 1].has_value()) {
-                        BLOG_W(Ctx->VCtx->VDiskLogPrefix << "not found part " << (ui32)partIdx << " for " << It.GetCurKey().LogoBlobID().ToString());
+                for (ui8 partId: PartIdsToSendOnMain(Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, It.GetCurKey().LogoBlobID(), merger.Ingress)) {
+                    if (!merger.Parts[partId - 1].has_value()) {
+                        BLOG_W(Ctx->VCtx->VDiskLogPrefix << "not found part " << (ui32)partId << " for " << It.GetCurKey().LogoBlobID().ToString());
                         continue;  // something strange
                     }
                     SendOnMainParts.push(TPartInfo{
-                        .Key=TLogoBlobID(It.GetCurKey().LogoBlobID(), partIdx),
+                        .Key=TLogoBlobID(It.GetCurKey().LogoBlobID(), partId),
                         .Ingress=merger.Ingress,
-                        .PartData=*merger.Parts[partIdx - 1]
+                        .PartData=*merger.Parts[partId - 1]
                     });
                     BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Send on main: " << SendOnMainParts.back().Key.ToString() << " "
                         << SendOnMainParts.back().Ingress.ToString(&Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, SendOnMainParts.back().Key));
                 }
 
-                for (ui8 partIdx: PartsToDelete(Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, It.GetCurKey().LogoBlobID(), merger.Ingress)) {
+                for (ui8 partId: PartIdsToDelete(Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, It.GetCurKey().LogoBlobID(), merger.Ingress)) {
                     TryDeleteParts.push(TPartInfo{
-                        .Key=TLogoBlobID(It.GetCurKey().LogoBlobID(), partIdx),
+                        .Key=TLogoBlobID(It.GetCurKey().LogoBlobID(), partId),
                         .Ingress=merger.Ingress,
                     });
                     BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Delete: " << TryDeleteParts.back().Key.ToString()
@@ -100,7 +100,12 @@ namespace NBalancing {
 
         void StartBalancing() {
             BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Ask repl token");
-            if (!Send(MakeBlobStorageReplBrokerID(), new TEvQueryReplToken(Ctx->VDiskCfg->BaseInfo.PDiskId))) {
+            Send(MakeBlobStorageReplBrokerID(), new TEvQueryReplToken(Ctx->VDiskCfg->BaseInfo.PDiskId), NActors::IEventHandle::FlagTrackDelivery);
+        }
+
+        void Handle(NActors::TEvents::TEvUndelivered::TPtr ev) {
+            if (ev.Get()->Type == TEvReplToken::EventType) {
+                BLOG_W(Ctx->VCtx->VDiskLogPrefix << "Repl token not delivered");
                 HandleReplToken();
             }
         }
@@ -114,14 +119,12 @@ namespace NBalancing {
 
         void Handle(NActors::TEvents::TEvCompleted::TPtr ev) {
             switch (ev->Get()->Id) {
-                case SENDER_ID: {
+                case SENDER_ID:
                     Stats.SendCompleted = true;
                     break;
-                }
-                case DELETER_ID: {
+                case DELETER_ID:
                     Stats.DeleteCompleted = true;
                     break;
-                }
                 default:
                     Y_ABORT("Unexpected id");
             }
@@ -176,6 +179,7 @@ namespace NBalancing {
 
         STRICT_STFUNC(StateFunc,
             cFunc(NActors::TEvents::TEvWakeup::EventType, StartBalancing)
+            hFunc(NActors::TEvents::TEvUndelivered, Handle)
             cFunc(TEvReplToken::EventType, HandleReplToken)
             hFunc(NActors::TEvents::TEvCompleted, Handle)
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)

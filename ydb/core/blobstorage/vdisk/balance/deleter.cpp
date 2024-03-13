@@ -59,16 +59,17 @@ namespace {
                     .HasOnMain=false
                 };
 
-                auto vDiskId = GetVDiskId(*GInfo, item.Key);
+                auto vDiskId = GetMainReplicaVDiskId(*GInfo, item.Key);
                 auto ev = TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(
                     vDiskId, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::AsyncRead,
                     TEvBlobStorage::TEvVGet::EFlags::None, i,
                     {{item.Key.FullID(), 0, 0}}
                 );
+                ui32 msgSize = ev->CalculateSerializedSize();
                 TReplQuoter::QuoteMessage(
                     Quoter,
                     std::make_unique<IEventHandle>(QueueActorMapPtr->at(TVDiskIdShort(vDiskId)), selfId, ev.release()),
-                    0
+                    msgSize
                 );
                 ++ExpectedResponses;
             }
@@ -92,8 +93,8 @@ namespace {
             }
             ui64 i = msg.GetCookie();
             auto res = msg.GetResult().at(0);
-            for (ui32 partIdx: res.GetParts()) {
-                if (partIdx == Result[i].Key.PartId()) {
+            for (ui32 partId: res.GetParts()) {
+                if (partId == Result[i].Key.PartId()) {
                     Result[i].HasOnMain = true;
                 }
             }
@@ -121,7 +122,7 @@ namespace {
                 for (auto& part: *batch) {
                     if (part.HasOnMain) {
                         ++Stats.PartsDecidedToDelete;
-                        DeleteLocal(part.Key, part.Ingress);
+                        DeleteLocal(part.Key);
                     }
                 }
             }
@@ -131,16 +132,16 @@ namespace {
             }
         }
 
-        void DeleteLocal(const TLogoBlobID& key, const TIngress& ingress) {
+        void DeleteLocal(const TLogoBlobID& key) {
             TLogoBlobID keyWithoutPartId(key, 0);
 
-            TIngress patchedIngress = ingress.CopyWithoutLocal(Ctx->GInfo->GetTopology().GType);
-            patchedIngress.DeleteHandoff(&Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, key);
+            TIngress ingress;
+            ingress.DeleteHandoff(&Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, key);
 
-            BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Deleting local: " << keyWithoutPartId.ToString() << " "
-                    << patchedIngress.ToString(&Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, keyWithoutPartId));
+            BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Deleting local: " << key.ToString() << " "
+                    << ingress.ToString(&Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, keyWithoutPartId));
 
-            Send(Ctx->SkeletonId, new TEvDelLogoBlobDataSyncLog(keyWithoutPartId, patchedIngress, OrderId++));
+            Send(Ctx->SkeletonId, new TEvDelLogoBlobDataSyncLog(keyWithoutPartId, ingress, OrderId++));
         }
 
         void Handle(TEvDelLogoBlobDataSyncLogResult::TPtr ev) {

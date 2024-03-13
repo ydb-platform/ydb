@@ -52,37 +52,39 @@ namespace {
                     .Key=item.Key,
                     .Ingress=item.Ingress
                 };
-                if (std::holds_alternative<TRope>(item.PartData)) {
-                    Result[i].PartData = std::get<TRope>(item.PartData);
-                    ++Responses;
-                } else {
-                    TDiskPart diskPart = std::get<TDiskPart>(item.PartData);
-                    auto ev = std::make_unique<NPDisk::TEvChunkRead>(
-                        PDiskCtx->Dsk->Owner,
-                        PDiskCtx->Dsk->OwnerRound,
-                        diskPart.ChunkIdx,
-                        diskPart.Offset,
-                        diskPart.Size,
-                        NPriRead::HullLow,
-                        reinterpret_cast<void*>(i)
-                    );
+                std::visit(TOverloaded{
+                    [&](const TRope& data) {
+                        Result[i].PartData = data;
+                        ++Responses;
+                    },
+                    [&](const TDiskPart& diskPart) {
+                        auto ev = std::make_unique<NPDisk::TEvChunkRead>(
+                            PDiskCtx->Dsk->Owner,
+                            PDiskCtx->Dsk->OwnerRound,
+                            diskPart.ChunkIdx,
+                            diskPart.Offset,
+                            diskPart.Size,
+                            NPriRead::HullLow,
+                            reinterpret_cast<void*>(i)
+                        );
 
-                    TReplQuoter::QuoteMessage(
-                        Quoter,
-                        std::make_unique<IEventHandle>(PDiskCtx->PDiskId, selfId, ev.release()),
-                        diskPart.Size
-                    );
-                }
+                        TReplQuoter::QuoteMessage(
+                            Quoter,
+                            std::make_unique<IEventHandle>(PDiskCtx->PDiskId, selfId, ev.release()),
+                            diskPart.Size
+                        );
+                    }
+                }, item.PartData);
                 ++ExpectedResponses;
             }
-            return WAITING_PDISK_RESPONSES;
+            return Responses != ExpectedResponses ? WAITING_PDISK_RESPONSES : FINISHED;
         }
 
         std::optional<TVector<TPart>> TryGetResults() {
             if (ExpectedResponses != 0 && ExpectedResponses == Responses) {
                 ExpectedResponses = 0;
                 Responses = 0;
-                return Result;
+                return std::move(Result);
             }
             return std::nullopt;
         }
@@ -111,6 +113,7 @@ namespace {
         struct TStats {
             ui32 PartsRead = 0;
             ui32 PartsSent = 0;
+            ui32 PartsSentUnsuccsesfull = 0;
         };
         TStats Stats;
 
@@ -130,7 +133,7 @@ namespace {
         void SendParts(const TVector<TPart>& batch) {
             BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Sending parts " << batch.size());
             for (const auto& part: batch) {
-                auto vDiskId = GetVDiskId(*Ctx->GInfo, part.Key);
+                auto vDiskId = GetMainReplicaVDiskId(*Ctx->GInfo, part.Key);
                 BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Sending " << part.Key.ToString()
                         << " to " << Ctx->GInfo->GetTopology().GetOrderNumber(TVDiskIdShort(vDiskId))
                         << "; Data size = " << part.PartData.size());
@@ -149,7 +152,12 @@ namespace {
         }
 
         void Handle(TEvBlobStorage::TEvVPutResult::TPtr ev) {
-            Stats.PartsSent += 1;
+            ++Stats.PartsSent;
+            if (ev->Get()->Record.GetStatus() != NKikimrProto::OK) {
+                ++Stats.PartsSentUnsuccsesfull;
+                BLOG_W(Ctx->VCtx->VDiskLogPrefix << "Put failed: " << ev->Get()->ToString());
+                return;
+            }
             BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Put result: " << ev->Get()->ToString());
         }
 

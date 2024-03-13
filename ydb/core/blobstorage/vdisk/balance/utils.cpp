@@ -4,7 +4,7 @@
 namespace NKikimr {
 namespace NBalancing {
 
-    TVector<ui8> GetRequiredParts(NMatrix::TVectorType vec, NMatrix::TVectorType mask) {
+    TVector<ui8> GetRequiredPartIds(NMatrix::TVectorType vec, NMatrix::TVectorType mask) {
         auto parts = vec & mask;
         TVector<ui8> res(Reserve(parts.CountBits()));
         for (ui8 i = parts.FirstPosition(); i != parts.GetSize(); i = parts.NextPosition(i)) {
@@ -13,34 +13,30 @@ namespace NBalancing {
         return res;
     }
 
-    TVector<ui8> PartsToSendOnMain(
+    TVector<ui8> PartIdsToSendOnMain(
         const TBlobStorageGroupInfo::TTopology& top,
         const TVDiskIdShort &vdisk,
         const TLogoBlobID &key,
         const TIngress& ingress
     ) {
         auto [moveMask, _] = ingress.HandoffParts(&top, vdisk, key);
-        return GetRequiredParts(ingress.LocalParts(top.GType), moveMask);
+        return GetRequiredPartIds(ingress.LocalParts(top.GType), moveMask);
     }
 
-    TVector<ui8> PartsToDelete(
+    TVector<ui8> PartIdsToDelete(
         const TBlobStorageGroupInfo::TTopology& top,
         const TVDiskIdShort &vdisk,
         const TLogoBlobID &key,
         const TIngress& ingress
     ) {
         auto [_, delMask] = ingress.HandoffParts(&top, vdisk, key);
-        return GetRequiredParts(ingress.LocalParts(top.GType), delMask);
+        return GetRequiredPartIds(ingress.LocalParts(top.GType), delMask);
     }
 
-    TVDiskID GetVDiskId(const TBlobStorageGroupInfo& gInfo, const TLogoBlobID& key) {
+    TVDiskID GetMainReplicaVDiskId(const TBlobStorageGroupInfo& gInfo, const TLogoBlobID& key) {
         TBlobStorageGroupInfo::TOrderNums orderNums;
-        TBlobStorageGroupInfo::TVDiskIds vdisks;
         gInfo.GetTopology().PickSubgroup(key.Hash(), orderNums);
-        for (const auto &x : orderNums) {
-            vdisks.push_back(gInfo.GetVDiskId(x));
-        }
-        return vdisks[key.PartId() - 1];
+        return gInfo.GetVDiskId(orderNums[key.PartId() - 1]);
     }
 
 

@@ -890,9 +890,9 @@ TMemoryUsageChange TWriteSessionImpl::OnMemoryUsageChangedImpl(i64 diff) {
     return {wasOk, nowOk};
 }
 
-TBuffer CompressBuffer(TVector<TStringBuf>& data, ECodec codec, i32 level) {
+TBuffer CompressBuffer(std::shared_ptr<TPersQueueClient::TImpl> client, TVector<TStringBuf>& data, ECodec codec, i32 level) {
     TBuffer result;
-    THolder<IOutputStream> coder = NCompressionDetails::CreateCoder(codec, result, level);
+    THolder<IOutputStream> coder = client->GetCodecImplOrThrow(codec)->CreateCoder(result, level);
     for (auto& buffer : data) {
         coder->Write(buffer.data(), buffer.size());
     }
@@ -915,11 +915,12 @@ void TWriteSessionImpl::CompressImpl(TBlock&& block_) {
                    codec = Settings.Codec_,
                    level = Settings.CompressionLevel_,
                    isSyncCompression = !CompressionExecutor->IsAsync(),
-                   blockPtr]() mutable {
+                   blockPtr,
+                   client = Client]() mutable {
         Y_ABORT_UNLESS(!blockPtr->Compressed);
 
         auto compressedData = CompressBuffer(
-                blockPtr->OriginalDataRefs, codec, level
+            std::move(client), blockPtr->OriginalDataRefs, codec, level
         );
         Y_ABORT_UNLESS(!compressedData.Empty());
         blockPtr->Data = std::move(compressedData);

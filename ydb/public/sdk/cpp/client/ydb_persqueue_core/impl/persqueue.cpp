@@ -142,9 +142,18 @@ TDescribeTopicResult::TTopicSettings::TRemoteMirrorRule::TRemoteMirrorRule(const
 TPersQueueClient::TPersQueueClient(const TDriver& driver, const TPersQueueClientSettings& settings)
     : Impl_(std::make_shared<TImpl>(CreateInternalInterface(driver), settings))
 {
+    ProvideCodec(ECodec::GZIP, MakeHolder<NTopic::TGzipCodec>());
+    ProvideCodec(ECodec::LZOP, MakeHolder<NTopic::TUnsupportedCodec>());
+    ProvideCodec(ECodec::ZSTD, MakeHolder<NTopic::TZstdCodec>());
 }
 
+void TPersQueueClient::ProvideCodec(ECodec codecId, THolder<NTopic::ICodec>&& codecImpl) {
+    return Impl_->ProvideCodec(codecId, std::move(codecImpl));
+}
 
+void TPersQueueClient::OverrideCodec(ECodec codecId, THolder<NTopic::ICodec>&& codecImpl) {
+    return Impl_->OverrideCodec(codecId, std::move(codecImpl));
+}
 
 TAsyncStatus TPersQueueClient::CreateTopic(const TString& path, const TCreateTopicSettings& settings) {
     return Impl_->CreateTopic(path, settings);

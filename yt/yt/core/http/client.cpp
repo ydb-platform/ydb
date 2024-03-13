@@ -128,7 +128,7 @@ private:
 
     std::pair<THttpOutputPtr, THttpInputPtr> OpenHttp(const TUrlRef& urlRef)
     {
-        auto context = New<TRemoteContext>();
+        auto context = New<TDialerContext>();
         context->Host = urlRef.Host;
         auto address = GetAddress(urlRef);
 

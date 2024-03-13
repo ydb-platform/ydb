@@ -496,12 +496,17 @@ public:
     // executors from settings are passed to subclients
     TFederatedTopicClient(const TDriver& driver, const TFederatedTopicClientSettings& settings = {});
 
+    void ProvideCodec(NTopic::ECodec codecId, THolder<NTopic::ICodec>&& codecImpl);
+
     //! Create read session.
     std::shared_ptr<IFederatedReadSession> CreateReadSession(const TFederatedReadSessionSettings& settings);
 
     //! Create write session.
     // std::shared_ptr<NTopic::ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TFederatedWriteSessionSettings& settings);
     std::shared_ptr<NTopic::IWriteSession> CreateWriteSession(const TFederatedWriteSessionSettings& settings);
+
+protected:
+    void OverrideCodec(NTopic::ECodec codecId, THolder<NTopic::ICodec>&& codecImpl);
 
 private:
     std::shared_ptr<TImpl> Impl_;

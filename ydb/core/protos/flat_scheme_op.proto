@@ -1863,6 +1863,10 @@ message TBasic {
     optional string PasswordSecretName = 2;
 }
 
+message TToken {
+    optional string TokenSecretName = 2;
+}
+
 message TAuth {
     oneof identity {
         TNoneAuth None = 3;
@@ -1870,6 +1874,7 @@ message TAuth {
         TBasic Basic = 5;
         TMdbBasic MdbBasic = 6;
         TAws Aws = 7;
+        TToken Token = 8;
     }
 }
 

@@ -9,6 +9,8 @@
 
 namespace NKqpRun {
 
+constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
+
 struct TYdbSetupSettings {
     TString DomainName = "Root";
 

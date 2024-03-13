@@ -238,6 +238,10 @@ public:
         const TBuildMasterSnapshotsOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<TCellIdToSequenceNumberMap>, GetMasterConsistentState, (
+        const TGetMasterConsistentStateOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<void>, ExitReadOnly, (
         NHydra::TCellId cellId,
         const TExitReadOnlyOptions& options),

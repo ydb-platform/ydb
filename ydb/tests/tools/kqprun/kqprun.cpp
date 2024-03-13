@@ -21,7 +21,7 @@ struct TExecutionOptions {
     bool ClearExecution = false;
     NKikimrKqp::EQueryAction ScriptQueryAction = NKikimrKqp::QUERY_ACTION_EXECUTE;
 
-    TString ScriptTraceId = "kqprun";
+    TString TraceId = "kqprun";
 
     bool HasResults() const {
         return ScriptQuery && ScriptQueryAction == NKikimrKqp::QUERY_ACTION_EXECUTE;
@@ -37,7 +37,7 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
 
     if (executionOptions.SchemeQuery) {
         Cout << colors.Yellow() << "Executing scheme query..." << colors.Default() << Endl;
-        if (!runner.ExecuteSchemeQuery(executionOptions.SchemeQuery)) {
+        if (!runner.ExecuteSchemeQuery(executionOptions.SchemeQuery, executionOptions.TraceId)) {
             ythrow yexception() << "Scheme query execution failed";
         }
     }
@@ -45,14 +45,15 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
     if (executionOptions.ScriptQuery) {
         Cout << colors.Yellow() << "Executing script..." << colors.Default() << Endl;
         if (!executionOptions.ClearExecution) {
-            if (!runner.ExecuteScript(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.ScriptTraceId)) {
+            if (!runner.ExecuteScript(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
                 ythrow yexception() << "Script execution failed";
             }
+            Cout << colors.Yellow() << "Fetching script results..." << colors.Default() << Endl;
             if (!runner.FetchScriptResults()) {
                 ythrow yexception() << "Fetch script results failed";
             }
         } else {
-            if (!runner.ExecuteQuery(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.ScriptTraceId)) {
+            if (!runner.ExecuteQuery(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
                 ythrow yexception() << "Query execution failed";
             }
         }
@@ -61,6 +62,8 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
     if (executionOptions.HasResults()) {
         runner.PrintScriptResults();
     }
+
+    Cout << colors.Yellow() << "Finalization of kqp runner..." << colors.Default() << Endl;
 }
 
 
@@ -73,6 +76,15 @@ THolder<TFileOutput> SetupDefaultFileOutput(const TString& filePath, IOutputStre
         stream = fileHolder.Get();
     }
     return fileHolder;
+}
+
+
+void ReplaceTemplate(const TString& variableName, const TString& variableValue, TString& query) {
+    TString variableTemplate = TStringBuilder() << "${" << variableName << "}";
+    for (size_t position = query.find(variableTemplate); position != TString::npos; position = query.find(variableTemplate, position)) {
+        query.replace(position, variableTemplate.size(), variableValue);
+        position += variableValue.size();
+    }
 }
 
 
@@ -190,6 +202,10 @@ void RunMain(int argc, const char* argv[]) {
 
     NLastGetopt::TOptsParseResult parsedOptions(&options, argc, argv);
 
+    // Environment variables
+
+    const TString& yqlToken = GetEnv(NKqpRun::YQL_TOKEN_VARIABLE);
+
     // Execution options
 
     if (!schemeQueryFile && !scriptQueryFile) {
@@ -197,6 +213,7 @@ void RunMain(int argc, const char* argv[]) {
     }
     if (schemeQueryFile) {
         executionOptions.SchemeQuery = TFileInput(schemeQueryFile).ReadAll();
+        ReplaceTemplate(NKqpRun::YQL_TOKEN_VARIABLE, yqlToken, executionOptions.SchemeQuery);
     }
     if (scriptQueryFile) {
         executionOptions.ScriptQuery = TFileInput(scriptQueryFile).ReadAll();
@@ -240,7 +257,7 @@ void RunMain(int argc, const char* argv[]) {
         std::remove(logFile.c_str());
     }
 
-    runnerOptions.YdbSettings.YqlToken = GetEnv("YQL_TOKEN");
+    runnerOptions.YdbSettings.YqlToken = yqlToken;
     runnerOptions.YdbSettings.FunctionRegistry = CreateFunctionRegistry(udfsDirectory, udfsPaths).Get();
 
     TString appConfigData = TFileInput(appConfigFile).ReadAll();

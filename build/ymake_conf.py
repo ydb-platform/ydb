@@ -698,8 +698,13 @@ class Build(object):
             emit('IBTOOL_PATH', self.params['params']['ibtool'])
             self._configure_runtime_versions()
         elif type_ == 'system_cxx':
+            c_compiler = self.params['params'].get('c_compiler')
+            cxx_compiler = self.params['params'].get('cxx_compiler')
+            if is_positive('USE_CLANG_CL'):
+                c_compiler = 'clang-cl.exe' if c_compiler == 'cl.exe' else c_compiler
+                cxx_compiler = 'clang-cl.exe' if cxx_compiler == 'cl.exe' else cxx_compiler
             detector = CompilerDetector()
-            detector.detect(self.params['params'].get('c_compiler'), self.params['params'].get('cxx_compiler'))
+            detector.detect(c_compiler, cxx_compiler)
             type_ = detector.type
         else:
             detector = None
@@ -1775,16 +1780,14 @@ class MSVCToolchainOptions(ToolchainOptions):
         # C:\Program Files (x86)\Windows Kits\10\Lib\10.0.14393.0
         self.kit_libs = None
 
-        self.under_wine = 'wine' in self.params
-        self.system_msvc = 'system_msvc' in self.params
-        self.ide_msvs = 'ide_msvs' in self.params
+        self.under_wine_compiler = self.params.get('wine', False)
+        self.under_wine_tools = not build.host.is_windows
+        self.system_msvc = self.params.get('system_msvc', False)
+        self.ide_msvs = self.params.get('ide_msvs', False)
         self.use_clang = self.params.get('use_clang', False)
         self.use_arcadia_toolchain = self.params.get('use_arcadia_toolchain', False)
 
         self.sdk_version = None
-
-        if build.host.is_windows:
-            self.under_wine = False
 
         if self.ide_msvs:
             bindir = '$(VC_ExecutablePath_x64_x64)\\'
@@ -1803,6 +1806,8 @@ class MSVCToolchainOptions(ToolchainOptions):
             self.kit_libs = os.path.join(sdk_dir, 'Lib', self.sdk_version)
 
         elif detector:
+            self.use_clang = is_positive('USE_CLANG_CL')
+
             self.masm_compiler = which('ml64.exe')
             self.link = which('link.exe')
             self.lib = which('lib.exe')
@@ -1810,10 +1815,6 @@ class MSVCToolchainOptions(ToolchainOptions):
             sdk_dir = os.environ.get('WindowsSdkDir')
             self.sdk_version = os.environ.get('WindowsSDKVersion').replace('\\', '')
             vc_install_dir = os.environ.get('VCToolsInstallDir')
-            # fix for cxx_std detection problem introduced in r7740071 when running in native VS toolkit commandline:
-            # in that case ya make gets 'system_cxx' configuration name and cxx_std is obviously missing in that config
-            # so default 'c++20' is substituted and we need to hotfix it here
-            self.cxx_std = 'c++latest'
 
             if any([x is None for x in (sdk_dir, self.sdk_version, vc_install_dir)]):
                 raise ConfigureError('No %WindowsSdkDir%, %WindowsSDKVersion% or %VCINSTALLDIR% present. Please, run vcvars64.bat to setup preferred environment.')
@@ -1827,12 +1828,11 @@ class MSVCToolchainOptions(ToolchainOptions):
         else:
             if self.version_at_least(2019):
                 self.sdk_version = '10.0.18362.0'
-                sdk_dir = '$(WINDOWS_KITS-sbr:1939557911)'
                 if is_positive('MSVC20'):  # XXX: temporary flag, remove after DTCC-123 is completed
                     self.cxx_std = 'c++latest'
             else:
                 self.sdk_version = '10.0.16299.0'
-                sdk_dir = '$(WINDOWS_KITS-sbr:1379398385)'
+            sdk_dir = '$WINDOWS_KITS_RESOURCE_GLOBAL'
 
             self.vc_root = self.name_marker if not self.use_clang else '$MSVC_FOR_CLANG_RESOURCE_GLOBAL'
             self.kit_includes = os.path.join(sdk_dir, 'Include', self.sdk_version)
@@ -1852,19 +1852,9 @@ class MSVCToolchainOptions(ToolchainOptions):
                 (build.target.is_armv7, 'armasm.exe'),
             ])
 
-            def prefix(_type, _path):
-                if not self.under_wine:
-                    return _path
-                return '{wine} {type} $WINE_ENV ${{ARCADIA_ROOT}} ${{ARCADIA_BUILD_ROOT}} {path}'.format(
-                    wine='${YMAKE_PYTHON} ${input:\"build/scripts/run_msvc_wine.py\"} $(WINE_TOOL-sbr:1093314933)/bin/wine64 -v140 ' +
-                         '${input;hide:\"build/scripts/process_command_files.py\"} ${input;hide:\"build/scripts/process_whole_archive_option.py\"}',
-                    type=_type,
-                    path=_path
-                )
-
-            self.masm_compiler = prefix('masm', os.path.join(bindir, tools_name, asm_name))
-            self.link = prefix('link', os.path.join(bindir, tools_name, 'link.exe'))
-            self.lib = prefix('lib', os.path.join(bindir, tools_name, 'lib.exe'))
+            self.masm_compiler = os.path.join(bindir, tools_name, asm_name)
+            self.link = os.path.join(bindir, tools_name, 'link.exe')
+            self.lib = os.path.join(bindir, tools_name, 'lib.exe')
 
 
 class MSVC(object):
@@ -1891,7 +1881,7 @@ class MSVCToolchain(MSVC, Toolchain):
 
         if self.tc.from_arcadia and not self.tc.ide_msvs:
             self.platform_projects.append('build/internal/platform/msvc')
-            if tc.under_wine:
+            if tc.under_wine_compiler or tc.under_wine_tools:
                 self.platform_projects.append('build/platform/wine')
 
     def print_toolchain(self):
@@ -1902,8 +1892,10 @@ class MSVCToolchain(MSVC, Toolchain):
         if self.tc.sdk_version:
             emit('WINDOWS_KITS_VERSION', self.tc.sdk_version)
 
-        if self.tc.under_wine:
-            emit('_UNDER_WINE', 'yes')
+        if self.tc.under_wine_tools:
+            emit('_UNDER_WINE_TOOLS', 'yes')
+        if self.tc.under_wine_compiler:
+            emit('_UNDER_WINE_COMPILER', 'yes')
         if self.tc.use_clang:
             emit('CLANG_CL', 'yes')
         if self.tc.ide_msvs:
@@ -2096,9 +2088,9 @@ class MSVCCompiler(MSVC, Compiler):
         if self.tc.use_arcadia_toolchain:
             emit('USE_ARCADIA_TOOLCHAIN', 'yes')
 
-        emit('CXX_COMPILER', self.tc.cxx_compiler)
-        emit('C_COMPILER', self.tc.c_compiler)
-        emit('MASM_COMPILER', self.tc.masm_compiler)
+        emit('CXX_COMPILER_UNQUOTED', self.tc.cxx_compiler)
+        emit('C_COMPILER_UNQUOTED', self.tc.c_compiler)
+        emit('MASM_COMPILER_UNQUOTED', self.tc.masm_compiler)
         append('C_DEFINES', defines)
         append('C_WARNING_OPTS', c_warnings)
         emit('_CXX_DEFINES', cxx_defines)
@@ -2139,8 +2131,8 @@ class MSVCLinker(MSVC, Linker):
         linker = self.tc.link
         linker_lib = self.tc.lib
 
-        emit('LINK_LIB_CMD', linker_lib)
-        emit('LINK_EXE_CMD', linker)
+        emit('_MSVC_LIB_UNQUOTED', linker_lib)
+        emit('_MSVC_LINK_UNQUOTED', linker)
 
         if self.build.is_release:
             emit('LINK_EXE_FLAGS_PER_TYPE', '$LINK_EXE_FLAGS_RELEASE')
@@ -2397,13 +2389,10 @@ class Cuda(object):
             if not self.cuda_version.from_user:
                 return False
 
-        if self.cuda_version.value in ('8.0', '9.0', '9.1', '9.2', '10.0', '10.1'):
-            raise ConfigureError('CUDA versions 8.x, 9.x and 10.x are no longer supported.\nSee DEVTOOLS-7108 and DTCC-2118.')
-
-        if self.cuda_version.value in ('11.0', '11.1', '11.3', '11.4', '11.8', '12.1'):
+        if self.cuda_version.value in ('11.4', '11.8', '12.1'):
             return True
-
-        return False
+        else:
+            raise ConfigureError('CUDA version {} is not supported in Arcadia'.format(self.cuda_version.value))
 
     def auto_have_cuda(self):
         if is_positive('MUSL'):
@@ -2430,10 +2419,8 @@ class Cuda(object):
         return match.group(1)
 
     def convert_major_version(self, value):
-        if value == '10':
-            return '10.1'
-        elif value == '11':
-            return '11.3'
+        if value == '11':
+            return '11.4'
         else:
             return value
 

@@ -21,26 +21,16 @@ public:
     TQuantizedExecutor(
         TString name,
         ICallbackProviderPtr callbackProvider,
-        int workerCount)
+        const TQuantizedExecutorOptions& options)
         : Name_(std::move(name))
+        , CallbackProvider_(std::move(callbackProvider))
+        , Options_(options)
         , Logger(ConcurrencyLogger.WithTag("Executor: %v", Name_))
         , ControlQueue_(New<TActionQueue>(Format("%vCtl", Name_)))
         , ControlInvoker_(ControlQueue_->GetInvoker())
-        , CallbackProvider_(std::move(callbackProvider))
-        , DesiredWorkerCount_(workerCount)
+        , DesiredWorkerCount_(options.WorkerCount)
     {
         VERIFY_INVOKER_THREAD_AFFINITY(ControlInvoker_, ControlThread);
-    }
-
-    void Initialize(TCallback<void()> workerInitializer) override
-    {
-        WorkerInitializer_ = std::move(workerInitializer);
-
-        BIND(&TQuantizedExecutor::DoReconfigure, MakeStrong(this))
-            .AsyncVia(ControlInvoker_)
-            .Run()
-            .Get()
-            .ThrowOnError();
     }
 
     TFuture<void> Run(TDuration timeout) override
@@ -56,11 +46,13 @@ public:
     {
         VERIFY_THREAD_AFFINITY_ANY();
 
-        DesiredWorkerCount_ = workerCount;
+        DesiredWorkerCount_.store(workerCount);
     }
 
 private:
     const TString Name_;
+    const ICallbackProviderPtr CallbackProvider_;
+    const TQuantizedExecutorOptions Options_;
 
     const TLogger Logger;
 
@@ -68,9 +60,6 @@ private:
     const IInvokerPtr ControlInvoker_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, CallbackProviderLock_);
-    ICallbackProviderPtr CallbackProvider_;
-
-    TCallback<void()> WorkerInitializer_;
 
     std::vector<ISuspendableActionQueuePtr> Workers_;
     std::vector<IInvokerPtr> Invokers_;
@@ -106,21 +95,17 @@ private:
             Workers_.reserve(desiredWorkerCount);
             Invokers_.reserve(desiredWorkerCount);
             for (int index = currentWorkerCount; index < desiredWorkerCount; ++index) {
-                auto worker = CreateSuspendableActionQueue(Format("%v:%v", Name_, index));
+                auto worker = CreateSuspendableActionQueue(
+                    /*threadName*/ Format("%v:%v", Name_, index),
+                    {.ThreadInitializer = Options_.ThreadInitializer});
 
                 // NB: #GetInvoker initializes queue.
                 Invokers_.push_back(worker->GetInvoker());
 
-                if (WorkerInitializer_) {
-                    BIND(WorkerInitializer_)
-                        .AsyncVia(Invokers_.back())
-                        .Run()
-                        .Get();
-                }
                 worker->Suspend(/*immediately*/ true)
                     .Get()
                     .ThrowOnError();
-                Workers_.emplace_back(std::move(worker));
+                Workers_.push_back(std::move(worker));
             }
         }
 
@@ -274,12 +259,12 @@ private:
 IQuantizedExecutorPtr CreateQuantizedExecutor(
     TString name,
     ICallbackProviderPtr callbackProvider,
-    int workerCount)
+    TQuantizedExecutorOptions options)
 {
     return New<TQuantizedExecutor>(
         std::move(name),
         std::move(callbackProvider),
-        workerCount);
+        std::move(options));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

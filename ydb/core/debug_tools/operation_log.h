@@ -27,11 +27,15 @@ public:
 private:
     constexpr static ui32 Capacity = S;
     std::array<std::atomic<TString*>, S> Records;
-    // RecordIdx is shifted to prevent underflow on decrement
+    // RecordPosition is shifted to prevent underflow on decrement
     std::atomic<ui64> NextRecordPosition = Capacity;
 
 public:
-    TOperationLog() = default;
+    TOperationLog(bool initializeRecords = true, TString defaultValue = "Race occured, try again") {
+        if (initializeRecords) {
+            InitializeRecords(defaultValue);
+        }
+    };
 
     TOperationLog(const TOperationLog& other) = delete;
     TOperationLog& operator=(const TOperationLog& other) = delete;
@@ -42,6 +46,12 @@ public:
     ~TOperationLog() {
         for (auto& record : Records) {
             delete record.load();
+        }
+    }
+
+    bool InitializeRecords(TString value = "Race occured, try again") {
+        for (auto& record : Records) {
+            record.store(new TString(value))
         }
     }
 

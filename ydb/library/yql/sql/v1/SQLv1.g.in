@@ -555,7 +555,7 @@ join_constraint:
   | USING pure_column_or_named_list
 ;
 
-returning_columns_list: RETURNING VALUES (ASTERISK | an_id (COMMA an_id)*);
+returning_columns_list: RETURNING (ASTERISK | an_id (COMMA an_id)*);
 
 into_table_stmt: (INSERT | INSERT OR ABORT | INSERT OR REVERT | INSERT OR IGNORE | UPSERT | REPLACE) INTO into_simple_table_ref into_values_source returning_columns_list?;
 
@@ -1352,6 +1352,7 @@ keyword_compat: (
   | RESPECT
   | RESTRICT
   | RESULT
+//  | RETURNING
   | REVERT
   | REVOKE
   | RIGHT

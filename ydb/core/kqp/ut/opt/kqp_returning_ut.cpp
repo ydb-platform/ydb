@@ -42,7 +42,7 @@ Y_UNIT_TEST(ReturningSerial) {
     {
         const auto query = Q_(R"(
             --!syntax_v1
-            INSERT INTO ReturningTable (value) VALUES(2) RETURNING VALUES key;
+            INSERT INTO ReturningTable (value) VALUES(2) RETURNING key;
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
@@ -54,8 +54,8 @@ Y_UNIT_TEST(ReturningSerial) {
     {
         const auto query = Q_(R"(
             --!syntax_v1
-            INSERT INTO ReturningTable (value) VALUES(2) RETURNING VALUES key, value;
-            INSERT INTO ReturningTableExtraValue (value) VALUES(3) RETURNING VALUES key, value;
+            INSERT INTO ReturningTable (value) VALUES(2) RETURNING key, value;
+            INSERT INTO ReturningTableExtraValue (value) VALUES(3) RETURNING key, value;
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
@@ -67,8 +67,8 @@ Y_UNIT_TEST(ReturningSerial) {
     {
         const auto query = Q_(R"(
             --!syntax_v1
-            INSERT INTO ReturningTable (value) VALUES(2) RETURNING VALUES *;
-            INSERT INTO ReturningTableExtraValue (value) VALUES(4) RETURNING VALUES *;
+            INSERT INTO ReturningTable (value) VALUES(2) RETURNING *;
+            INSERT INTO ReturningTableExtraValue (value) VALUES(4) RETURNING *;
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
@@ -80,7 +80,7 @@ Y_UNIT_TEST(ReturningSerial) {
     {
         const auto query = Q_(R"(
             --!syntax_v1
-            INSERT INTO ReturningTable (value) VALUES(2) RETURNING VALUES fake;
+            INSERT INTO ReturningTable (value) VALUES(2) RETURNING fake;
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
@@ -92,7 +92,7 @@ Y_UNIT_TEST(ReturningSerial) {
     {
         const auto query = Q_(R"(
             --!syntax_v1
-            UPDATE ReturningTable SET  value = 3 where key = 1 RETURNING VALUES *;
+            UPDATE ReturningTable SET  value = 3 where key = 1 RETURNING *;
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
@@ -103,7 +103,7 @@ Y_UNIT_TEST(ReturningSerial) {
     {
         const auto query = Q_(R"(
             --!syntax_v1
-            UPDATE ReturningTableExtraValue SET  value2 = 3 where key = 2 RETURNING VALUES *;
+            UPDATE ReturningTableExtraValue SET  value2 = 3 where key = 2 RETURNING *;
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
@@ -114,7 +114,7 @@ Y_UNIT_TEST(ReturningSerial) {
     {
         const auto query = Q_(R"(
             --!syntax_v1
-            DELETE FROM ReturningTableExtraValue WHERE key = 2 RETURNING VALUES key, value, value2;
+            DELETE FROM ReturningTableExtraValue WHERE key = 2 RETURNING key, value, value2;
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
@@ -125,7 +125,7 @@ Y_UNIT_TEST(ReturningSerial) {
     {
         const auto query = Q_(R"(
             --!syntax_v1
-            DELETE FROM ReturningTable WHERE key <= 3 RETURNING VALUES key, value;
+            DELETE FROM ReturningTable WHERE key <= 3 RETURNING key, value;
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();

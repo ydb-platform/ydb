@@ -4603,11 +4603,11 @@ private:
 TNodePtr TSqlTranslation::ReturningList(const ::NSQLv1Generated::TRule_returning_columns_list& columns) {
     auto result = MakeHolder<TReturningListColumns>(Ctx.Pos());
 
-    if (columns.GetBlock3().Alt_case() == TRule_returning_columns_list_TBlock3::AltCase::kAlt1) {
+    if (columns.GetBlock2().Alt_case() == TRule_returning_columns_list_TBlock2::AltCase::kAlt1) {
         result->SetStar();
-    } else if (columns.GetBlock3().Alt_case() == TRule_returning_columns_list_TBlock3::AltCase::kAlt2) {
-        result->AddColumn(columns.GetBlock3().alt2().GetRule_an_id1(), *this);
-        for (auto& block : columns.GetBlock3().alt2().GetBlock2()) {
+    } else if (columns.GetBlock2().Alt_case() == TRule_returning_columns_list_TBlock2::AltCase::kAlt2) {
+        result->AddColumn(columns.GetBlock2().alt2().GetRule_an_id1(), *this);
+        for (auto& block : columns.GetBlock2().alt2().GetBlock2()) {
             result->AddColumn(block.GetRule_an_id2(), *this);
         }
     }

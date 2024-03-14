@@ -102,9 +102,8 @@ private:
         // 3. Those clients will use scope instead of database, it will cause error in ListEndpoints
         // 4. Substitute the same database here as we do in metadata
         if (AllowYdbRequestsWithoutDatabase && !Databases.contains(requestBaseCtx->GetDatabaseName().GetOrElse(""))) {
-            // TODO: get rid of MY_MARKER logs
-            LOG_INFO_S(ctx, NKikimrServices::GRPC_SERVER,
-                "MY_MARKER substituting " << event->Get()->GetRequestName() << ", meta database: " << event->Get()->GetDatabaseName() <<
+            LOG_DEBUG_S(ctx, NKikimrServices::GRPC_SERVER,
+                "substituting " << event->Get()->GetRequestName() << ", meta database: " << event->Get()->GetDatabaseName() <<
                 ", request database: " << RootDatabase);
             event->Get()->GetProtoRequestMut(event->Get())->set_database(RootDatabase);
         }
@@ -167,8 +166,6 @@ private:
         }
 
         if (IsAuthStateOK(*requestBaseCtx)) {
-            LOG_INFO_S(ctx, NKikimrServices::GRPC_SERVER,
-                "MY_MARKER auth state OK for " << event->Get()->GetRequestName() << ", database: " << event->Get()->GetDatabaseName());
             Handle(event, ctx);
             return false;
         }
@@ -176,13 +173,11 @@ private:
         auto state = requestBaseCtx->GetAuthState();
 
         if (state.State == NYdbGrpc::TAuthState::AS_FAIL) {
-            LOG_INFO_S(ctx, NKikimrServices::GRPC_SERVER, "MY_MARKER auth state AS_FAIL " << event->Get()->GetRequestName());
             requestBaseCtx->ReplyUnauthenticated();
             return true;
         }
 
         if (state.State == NYdbGrpc::TAuthState::AS_UNAVAILABLE) {
-            LOG_INFO_S(ctx, NKikimrServices::GRPC_SERVER, "MY_MARKER auth state AS_UNAVAILABLE " << event->Get()->GetRequestName());
             Counters->IncDatabaseUnavailableCounter();
             const TString error = "Unable to resolve token";
             const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_AUTH_UNAVAILABLE, error);
@@ -199,26 +194,25 @@ private:
         bool skipCheckConnectRigths = false;
 
         if (state.State == NYdbGrpc::TAuthState::AS_NOT_PERFORMED) {
-            LOG_INFO_S(ctx, NKikimrServices::GRPC_SERVER, "MY_MARKER auth state AS_NOT_PERFORMED " << event->Get()->GetRequestName());
             const auto& maybeDatabaseName = requestBaseCtx->GetDatabaseName();
             if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
-                LOG_INFO_S(ctx, NKikimrServices::GRPC_SERVER, "MY_MARKER has database, will canonize: '"
-                    << maybeDatabaseName.GetRef() << "' " << event->Get()->GetRequestName());
                 databaseName = CanonizePath(maybeDatabaseName.GetRef());
             } else {
                 if (!AllowYdbRequestsWithoutDatabase && DynamicNode) {
+<<<<<<< HEAD
                     LOG_INFO_S(ctx, NKikimrServices::GRPC_SERVER, "MY_MARKER has no database, should have " << event->Get()->GetRequestName());
                     requestBaseCtx->ReplyUnauthenticated("Requests without specified database is not allowed");
                     return true;
+=======
+                    return;
+>>>>>>> Adjust to comments
                 } else {
-                    LOG_INFO_S(ctx, NKikimrServices::GRPC_SERVER, "MY_MARKER has no database, ok " << event->Get()->GetRequestName());
                     databaseName = RootDatabase;
                     skipResourceCheck = true;
                     skipCheckConnectRigths = true;
                 }
             }
             if (databaseName.empty()) {
-                LOG_INFO_S(ctx, NKikimrServices::GRPC_SERVER, "MY_MARKER has empty database, bad " << event->Get()->GetRequestName());
                 Counters->IncDatabaseUnavailableCounter();
                 requestBaseCtx->FinishSpan();
                 requestBaseCtx->ReplyUnauthenticated("Empty database name");
@@ -229,20 +223,15 @@ private:
             // 2. FQ requests have scope in their metadata
             // 3. Let's put scope instead of database into FQ requests and replace it with database where needed
             if (!Databases.contains(databaseName) && (AllowYdbRequestsWithoutDatabase || !DynamicNode)) {
-                LOG_INFO_S(ctx, NKikimrServices::GRPC_SERVER,
-                    "MY_MARKER bad database '" << databaseName << "', but I'll allow it " << event->Get()->GetRequestName());
                 databaseName = RootDatabase;
                 skipResourceCheck = true;
             }
 
             auto it = Databases.find(databaseName);
             if (it != Databases.end() && it->second.IsDatabaseReady()) {
-                LOG_INFO_S(ctx, NKikimrServices::GRPC_SERVER,
-                    "MY_MARKER database '" << databaseName << "' exists " << event->Get()->GetRequestName());
                 database = &it->second;
             } else {
                 // No given database found, start update if possible
-                LOG_INFO_S(ctx, NKikimrServices::GRPC_SERVER, "MY_MARKER database '" << databaseName << "' does not exist, bad " << event->Get()->GetRequestName());
                 if (!DeferAndStartUpdate(databaseName, event, requestBaseCtx)) {
                     Counters->IncDatabaseUnavailableCounter();
                     const TString error = "Grpc proxy is not ready to accept request, database unknown";
@@ -257,7 +246,6 @@ private:
         }
 
         if (database) {
-            LOG_INFO_S(ctx, NKikimrServices::GRPC_SERVER, "MY_MARKER found database for " << event->Get()->GetRequestName());
             if (database->SchemeBoardResult) {
                 const auto& domain = database->SchemeBoardResult->DescribeSchemeResult.GetPathDescription().GetDomainDescription();
                 if (domain.HasResourcesDomainKey() && !skipResourceCheck && DynamicNode) {
@@ -294,7 +282,6 @@ private:
                 return true;
             }
 
-            LOG_INFO_S(ctx, NKikimrServices::GRPC_SERVER, "MY_MARKER creating check actor for request " << event->Get()->GetRequestName());
             Register(CreateGrpcRequestCheckActor<TEvent>(SelfId(),
                 database->SchemeBoardResult->DescribeSchemeResult,
                 database->SecurityObject,

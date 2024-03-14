@@ -8,7 +8,7 @@ namespace NKikimr::NGRpcService::NYdbOverFq {
 class ListDirectoryRPC
     : public TRpcOperationRequestActor<
         ListDirectoryRPC, TGrpcRequestOperationCall<Ydb::Scheme::ListDirectoryRequest, Ydb::Scheme::ListDirectoryResponse>>
-    , public TLocalGrpcCaller {
+    , public NLocalGrpc::TCaller {
 public:
     using TBase = TRpcOperationRequestActor<
         ListDirectoryRPC,
@@ -21,7 +21,7 @@ public:
 
     ListDirectoryRPC(IRequestOpCtx* request, TActorId grpcProxyId)
         : TBase{request}
-        , TLocalGrpcCaller{std::move(grpcProxyId)}
+        , TCaller{std::move(grpcProxyId)}
     {}
 
     void Bootstrap(const TActorContext& ctx) {
@@ -31,12 +31,12 @@ public:
 
 private:
     STRICT_STFUNC(ListBindingsState,
-        HFunc(TEvListBindingsResponse, HandleListBindings);
+        HFunc(TEvFqListBindingsResponse, HandleListBindings);
     )
 
     void ListBindings(const TActorContext& ctx, TString continuationToken) {
         FederatedQuery::ListBindingsRequest req;
-        constexpr i32 Limit = 33;
+        constexpr i32 Limit = 100;
 
         req.set_limit(Limit);
         req.set_page_token(std::move(continuationToken));
@@ -47,7 +47,7 @@ private:
         MakeLocalCall(std::move(req), Request_, ctx);
     }
 
-    void HandleListBindings(typename TEvListBindingsResponse::TPtr& ev, const TActorContext& ctx) {
+    void HandleListBindings(typename TEvFqListBindingsResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& resp = ev->Get()->Message;
         if (HandleFailure(resp.operation(), "ListBindings", ctx)) [[unlikely]] {
             return;

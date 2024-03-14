@@ -1,9 +1,8 @@
 #include "fq_local_grpc_events.h"
-#include "local_grpc_context.h"
 #include "service.h"
 
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
-#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/grpc_services/local_grpc/local_grpc.h>
 #include <ydb/core/grpc_services/service_fq.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 
@@ -14,7 +13,7 @@ namespace NYdbOverFq {
 class ExecuteDataQueryRPC
     : public TRpcOperationRequestActor<
         ExecuteDataQueryRPC, TGrpcRequestOperationCall<Ydb::Table::ExecuteDataQueryRequest, Ydb::Table::ExecuteDataQueryResponse>>
-    , TLocalGrpcCaller {
+    , public NLocalGrpc::TCaller {
 public:
     using TBase = TRpcOperationRequestActor<
         ExecuteDataQueryRPC,
@@ -34,7 +33,7 @@ public:
 
     ExecuteDataQueryRPC(IRequestOpCtx* request, TActorId grpcProxyId)
         : TBase{request}
-        , TLocalGrpcCaller{std::move(grpcProxyId)}
+        , TCaller{std::move(grpcProxyId)}
     {}
 
 private:
@@ -43,7 +42,7 @@ private:
     // CreateQueryImpl
 
     STRICT_STFUNC(CreateQueryState,
-        HFunc(TEvCreateQueryResponse, HandleCreatedQuery);
+        HFunc(TEvFqCreateQueryResponse, HandleCreatedQuery);
     )
 
     void CreateQuery(const TActorContext& ctx) {
@@ -105,7 +104,7 @@ private:
         ReplyWithResult(Ydb::StatusIds_StatusCode_SUCCESS, result, ctx);
     }
 
-    void HandleCreatedQuery(typename TEvCreateQueryResponse::TPtr& ev, const TActorContext& ctx) {
+    void HandleCreatedQuery(typename TEvFqCreateQueryResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& resp = ev->Get()->Message;
         if (HandleFailure(resp.operation(), "CreateQuery", ctx)) [[unlikely]] {
             return;
@@ -123,21 +122,29 @@ private:
     // WaitForExecutionImpl
 
     STRICT_STFUNC(WaitForExecutionState,
-        HFunc(TEvGetQueryStatusRequest, HandleStatusRequest);
-        HFunc(TEvGetQueryStatusResponse, HandleStatusResponse);
+        HFunc(TEvFqGetQueryStatusRequest, HandleStatusRequest);
+        HFunc(TEvFqGetQueryStatusResponse, HandleStatusResponse);
     )
 
-    TEvGetQueryStatusRequest* CreateStatusRequest() {
-        FederatedQuery::GetQueryStatusRequest req;
-        req.set_query_id(QueryId_);
-        return new TEvGetQueryStatusRequest(std::move(req));
+    using WaitRetryPolicy = IRetryPolicy<FederatedQuery::QueryMeta::ComputeStatus>;
+
+    static WaitRetryPolicy::IRetryState::TPtr CreateRetryState() {
+        return WaitRetryPolicy::GetExponentialBackoffPolicy([](FederatedQuery::QueryMeta::ComputeStatus status) {
+            return NFq::IsTerminalStatus(status) ? ERetryErrorClass::NoRetry : ERetryErrorClass::ShortRetry;
+        }, TDuration::Seconds(1), TDuration::Seconds(5), TDuration::Seconds(30))->CreateRetryState();
     }
 
-    void HandleStatusRequest(typename TEvGetQueryStatusRequest::TPtr& ev, const TActorContext& ctx) {
+    TEvFqGetQueryStatusRequest* CreateStatusRequest() {
+        FederatedQuery::GetQueryStatusRequest req;
+        req.set_query_id(QueryId_);
+        return new TEvFqGetQueryStatusRequest(std::move(req));
+    }
+
+    void HandleStatusRequest(typename TEvFqGetQueryStatusRequest::TPtr& ev, const TActorContext& ctx) {
         MakeLocalCall(std::move(ev->Get()->Message), Request_, ctx);
     }
 
-    void HandleStatusResponse(typename TEvGetQueryStatusResponse::TPtr& ev, const TActorContext& ctx) {
+    void HandleStatusResponse(typename TEvFqGetQueryStatusResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& resp = ev->Get()->Message;
         if (HandleFailure(resp.operation(), "GetQueryStatus", ctx)) [[unlikely]] {
             return;
@@ -150,7 +157,14 @@ private:
             LOG_TRACE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
                 "pseudo ExecuteDataQuery actorId: " << SelfId().ToString() << ", still waiting for query: " << QueryId_ <<
                 ", current status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(result.status()));
-            ctx.Schedule(TDuration::Seconds(3), CreateStatusRequest());
+            auto delay = WaitRetryState_->GetNextRetryDelay(result.status());
+            if (!delay) [[unlikely]] {
+                Reply(Ydb::StatusIds_StatusCode_INTERNAL_ERROR,
+                    TStringBuilder{} << "Created query " << QueryId_ << ", couldn't wait for finish, final status: " <<
+                    FederatedQuery::QueryMeta::ComputeStatus_Name(result.status()), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+                return;
+            }
+            ctx.Schedule(*delay, CreateStatusRequest());
             return;
         }
 
@@ -159,8 +173,8 @@ private:
                 "pseudo ExecuteDataQuery actorId: " << SelfId().ToString() << ", queryId: " << QueryId_ <<
                 ", finished with bad status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(result.status()));
             Reply(Ydb::StatusIds_StatusCode_INTERNAL_ERROR,
-                TString{TStringBuilder{} << "Created query " << QueryId_ << " finished with non-success status: " <<
-                    FederatedQuery::QueryMeta::ComputeStatus_Name(result.status())}, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+                TStringBuilder{} << "Created query " << QueryId_ << " finished with non-success status: " <<
+                    FederatedQuery::QueryMeta::ComputeStatus_Name(result.status()), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             return;
         }
 
@@ -174,10 +188,10 @@ private:
     // GatherResultSetSizesImpl
 
     STRICT_STFUNC(GatherResultSetSizesState,
-        HFunc(TEvDescribeQueryResponse, HandleDescribeResponse);
+        HFunc(TEvFqDescribeQueryResponse, HandleDescribeResponse);
     )
 
-    void HandleDescribeResponse(typename TEvDescribeQueryResponse::TPtr& ev, const TActorContext& ctx) {
+    void HandleDescribeResponse(typename TEvFqDescribeQueryResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& resp = ev->Get()->Message;
         if (HandleFailure(resp.operation(), "DescribeQuery", ctx)) [[unlikely]] {
             return;
@@ -197,15 +211,15 @@ private:
     // GatherResultSetsImpl
 
     STRICT_STFUNC(GatherResultSetsState,
-        HFunc(TEvGetResultDataRequest, HandleResultSetRequest);
-        HFunc(TEvGetResultDataResponse, HandleResultSetPart);
+        HFunc(TEvFqGetResultDataRequest, HandleResultSetRequest);
+        HFunc(TEvFqGetResultDataResponse, HandleResultSetPart);
     )
 
-    TEvGetResultDataRequest* CreateResultSetRequest(i32 index, i64 offset) {
-        auto req = new TEvGetResultDataRequest();
+    TEvFqGetResultDataRequest* CreateResultSetRequest(i32 index, i64 offset) {
+        auto req = new TEvFqGetResultDataRequest();
         auto& msg = req->Message;
 
-        constexpr i64 RowsLimit = 333;
+        constexpr i64 RowsLimit = 1000;
 
         msg.set_query_id(QueryId_);
         msg.set_result_set_index(index);
@@ -214,11 +228,11 @@ private:
         return req;
     }
 
-    void HandleResultSetRequest(typename TEvGetResultDataRequest::TPtr& ev, const TActorContext& ctx) {
+    void HandleResultSetRequest(typename TEvFqGetResultDataRequest::TPtr& ev, const TActorContext& ctx) {
         MakeLocalCall(std::move(ev->Get()->Message), Request_, ctx);
     }
 
-    void HandleResultSetPart(typename TEvGetResultDataResponse::TPtr& ev, const TActorContext& ctx) {
+    void HandleResultSetPart(typename TEvFqGetResultDataResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& resp = ev->Get()->Message;
         if (HandleFailure(resp.operation(), "GetResultData", ctx)) [[unlikely]] {
             return;
@@ -274,7 +288,7 @@ private:
     std::vector<i64> ResultSetSizes_;
     i32 CurrentResultSet_ = 0;
     std::vector<Ydb::ResultSet> ResultSets_;
-    TActorId GrpcProxyId_;
+    WaitRetryPolicy::IRetryState::TPtr WaitRetryState_ = CreateRetryState();
 };
 
 std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> GetExecuteDataQueryExecutor(NActors::TActorId grpcProxyId) {

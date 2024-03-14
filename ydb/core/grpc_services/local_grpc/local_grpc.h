@@ -3,13 +3,12 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/library/grpc/server/grpc_request_base.h>
 
-namespace NKikimr::NGRpcService {
+namespace NKikimr::NGRpcService::NLocalGrpc {
 
-class TLocalGrpcContextBase : public NYdbGrpc::IRequestContextBase {
+class TContextBase : public NYdbGrpc::IRequestContextBase {
 public:
-    TLocalGrpcContextBase(std::shared_ptr<IRequestCtx> baseRequest)
-        : Scope_{"yandexcloud:/" + baseRequest->GetDatabaseName().GetOrElse("/")}
-        , BaseRequest_{std::move(baseRequest)}
+    TContextBase(std::shared_ptr<IRequestCtx> baseRequest)
+        : BaseRequest_{std::move(baseRequest)}
         , AuthState_{/*needAuth*/true}
     {}
 
@@ -40,9 +39,6 @@ public:
     }
 
     TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const override {
-        if (key == "x-ydb-fq-project") {
-            return {Scope_};
-        }
         auto value = BaseRequest_->GetPeerMetaValues(TString{key});
         if (value) {
             return {std::move(*value)};
@@ -86,14 +82,17 @@ public:
         return IssueManager_.GetIssues();
     }
 
+protected:
+    const IRequestCtx& GetBaseRequest() const noexcept {
+        return *BaseRequest_;
+    }
+
 private:
     void RaiseIssue(const NYql::TIssue& issue) {
         IssueManager_.RaiseIssue(issue);
     }
 
 private:
-    TString Scope_;
-
     std::shared_ptr<IRequestCtx> BaseRequest_;
     NYdbGrpc::TAuthState AuthState_;
 
@@ -102,14 +101,14 @@ private:
 };
 
 template<typename TReq, typename TResp>
-class TLocalGrpcContext
-    : public TLocalGrpcContextBase {
+class TContext
+    : public TContextBase {
 public:
     using TRequest = TReq;
     using TResponse = TResp;
-    using TBase = TLocalGrpcContextBase;
+    using TBase = TContextBase;
 
-    TLocalGrpcContext(
+    TContext(
         TReq&& request, std::shared_ptr<IRequestCtx> baseRequest,
         std::function<void(const TResponse&)> replyCallback)
         : TBase{std::move(baseRequest)}
@@ -152,7 +151,7 @@ private:
 // Usage facade
 
 template <typename TReq, typename TResp>
-struct TLocalGrpcCallBase {
+struct TCallBase {
     using TRequest = TReq;
     using TResponse = TResp;
 
@@ -160,7 +159,7 @@ struct TLocalGrpcCallBase {
         TReq&& request,
         std::shared_ptr<IRequestCtx>&& baseRequest,
         std::function<void(const TResp&)>&& replyCallback) {
-        return new TLocalGrpcContext<TReq, TResp>{
+        return new TContext<TReq, TResp>{
             std::move(request), std::move(baseRequest), std::move(replyCallback)
         };
     }
@@ -168,9 +167,8 @@ struct TLocalGrpcCallBase {
 
 /// Specializations are expected to derive from TLocalGrpcCallBase<TReq, TResp> and implement
 ///   static std::unique_ptr<TEvProxyRuntimeEvent> MakeRequest(TReq&&, std::shared_ptr<IRequestCtx>&&, std::function<void(const TResp&)>&&)
-/// Partial go
 template <typename TReq>
-struct TLocalGrpcCall;
+struct TCall;
 
 template <typename TMsg, ui32 EMsgType>
 class TEventBase : public TEventLocal<TEventBase<TMsg, EMsgType>, EMsgType> {
@@ -188,24 +186,24 @@ public:
 template <typename TMsg>
 class TEvent;
 
-class TLocalGrpcCaller {
+class TCaller {
 public:
-    TLocalGrpcCaller(TActorId grpcProxyId)
-        : GrpcProxyId_{std::move(grpcProxyId)}
+    TCaller(TActorId grpcProxyId)
+        : GRpcRequestProxyId_{std::move(grpcProxyId)}
     {}
 
     /// Caller has to handle TEvent<TResponse> of corresponding request
     template <typename TRequest>
     void MakeLocalCall(TRequest&& request, std::shared_ptr<IRequestCtx> baseRequest, const TActorContext& ctx) {
-        using TGrpcCall = TLocalGrpcCall<std::decay_t<TRequest>>;
+        using TGrpcCall = TCall<std::decay_t<TRequest>>;
         using TResponse = typename TGrpcCall::TResponse;
 
         auto localRequest = TGrpcCall::MakeRequest(std::move(request), std::move(baseRequest), [as = ctx.ActorSystem(), selfId = ctx.SelfID](const TResponse& resp) {
             as->Send(selfId, new TEvent<TResponse>(resp));
         });
-        ctx.Send(GrpcProxyId_, localRequest.release());
+        ctx.Send(GRpcRequestProxyId_, localRequest.release());
     }
 private:
-    TActorId GrpcProxyId_;
+    TActorId GRpcRequestProxyId_;
 };
-}
+} // namespace NKikimr::NGRpcService::NLocalGrpc

@@ -11,7 +11,6 @@ namespace NGRpcService {
 class TGRpcYdbTableService
     : public TGrpcServiceBase<Ydb::Table::V1::TableService>
 {
-    using TBase = TGrpcServiceBase<Ydb::Table::V1::TableService>;
 public:
     using TGrpcServiceBase<Ydb::Table::V1::TableService>::TGrpcServiceBase;
 

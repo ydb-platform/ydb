@@ -1,13 +1,35 @@
 #pragma once
 
-#include "local_grpc_context.h"
-
 #include <ydb/core/fq/libs/events/event_subspace.h>
+#include <ydb/core/grpc_services/local_grpc/local_grpc.h>
 #include <ydb/core/grpc_services/service_fq.h>
 
 namespace NKikimr::NGRpcService {
 
 namespace NYdbOverFq {
+
+template <typename TReq, typename TResp>
+class TLocalGrpcFqContext : public NLocalGrpc::TContext<TReq, TResp> {
+public:
+    using TBase = NLocalGrpc::TContext<TReq, TResp>;
+
+    TLocalGrpcFqContext(
+        TReq&& request, std::shared_ptr<IRequestCtx> baseRequest,
+        std::function<void(const TResp&)> replyCallback)
+        : TBase{std::move(request), std::move(baseRequest), std::move(replyCallback)}
+        , Scope_{"yandexcloud:/" + TBase::GetBaseRequest().GetDatabaseName().GetOrElse("/")}
+    {}
+
+    TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const override {
+        if (key == "x-ydb-fq-project") {
+            return {Scope_};
+        }
+
+        return TBase::GetPeerMetaValues(key);
+    }
+private:
+    TString Scope_;
+};
 
 enum EEventTypes {
     EvCreateQueryRequest = NFq::YqEventSubspaceBegin(NFq::TYqEventSubspace::TableOverFq),
@@ -23,37 +45,35 @@ enum EEventTypes {
     EvDescribeBindingRequest,
     EvDescribeBindingResponse,
 };
-
-}
+} // namespace NYdbOverFq
 
 #define DEFINE_LOCAL_GRPC_CALL_IMPL(Req, Resp, Ctor) \
 template <> \
-struct TLocalGrpcCall<Req> \
-    : public TLocalGrpcCallBase<Req, Resp> { \
+struct NLocalGrpc::TCall<Req> \
+    : public TCallBase<Req, Resp> { \
     \
-    using TBase = TLocalGrpcCallBase<Req, Resp>; \
+    using TBase = TCallBase<Req, Resp>; \
     \
     static std::unique_ptr<TEvProxyRuntimeEvent> MakeRequest( \
         TRequest&& request, \
         std::shared_ptr<IRequestCtx>&& baseRequest, \
         std::function<void(const TResponse&)>&& replyCallback) { \
-        return Ctor(TBase::MakeContext(std::move(request), std::move(baseRequest), std::move(replyCallback))); \
+        return Ctor(new NYdbOverFq::TLocalGrpcFqContext(std::move(request), std::move(baseRequest), std::move(replyCallback))); \
     } \
 };
 
 #define DEFINE_EVENT(Event) \
 template <> \
-class TEvent<FederatedQuery::Event> : public TEventBase<FederatedQuery::Event, NYdbOverFq::Ev##Event> { \
+class NLocalGrpc::TEvent<FederatedQuery::Event> : public TEventBase<FederatedQuery::Event, NYdbOverFq::Ev##Event> { \
     using TBase = TEventBase<FederatedQuery::Event, NYdbOverFq::Ev##Event>; \
-    using TProto = FederatedQuery::Event; \
     \
     using TBase::TBase; \
 }; \
-using TEv##Event = TEvent<FederatedQuery::Event>;
+using TEvFq##Event = NLocalGrpc::TEvent<FederatedQuery::Event>;
 
 #define DEFINE_LOCAL_GRPC_CALL(Method) \
     DEFINE_LOCAL_GRPC_CALL_IMPL(FederatedQuery::Method##Request, FederatedQuery::Method##Response, CreateFederatedQuery##Method##RequestOperationCall) \
-    using TLocalGrpc##Method##Call = TLocalGrpcCall<FederatedQuery::Method##Request>; \
+    using TFq##Method##Call = NLocalGrpc::TCall<FederatedQuery::Method##Request>; \
     DEFINE_EVENT(Method##Request) \
     DEFINE_EVENT(Method##Response)
 
@@ -68,4 +88,4 @@ DEFINE_LOCAL_GRPC_CALL(DescribeBinding)
 #undef DEFINE_LOCAL_GRPC_CALL
 #undef DEFINE_LOCAL_GRPC_CALL_IMPL
 
-}
+} // namespace NKikimr::NGRpcService

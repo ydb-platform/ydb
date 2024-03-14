@@ -60,10 +60,6 @@ public:
         return InternalToken;
     }
 
-    void SetInternalToken(const TIntrusiveConstPtr<NACLib::TUserToken>& newToken) {
-        InternalToken = newToken;
-    }
-
     const TString& GetSerializedToken() const override {
         if (InternalToken) {
             return InternalToken->GetSerializedToken();
@@ -175,8 +171,7 @@ public:
     void SetRuHeader(ui64) override {}
 
     // Unimplemented methods
-    void ReplyWithRpcStatus(grpc::StatusCode code, const TString& msg = "", const TString& details = "") override {
-        RaiseIssue(NYql::TIssue(TStringBuilder() << "grpc code: " << code << ", msg: " << msg << " (" << details << ")"));
+    void ReplyWithRpcStatus(grpc::StatusCode, const TString&, const TString&) override {
         ReplyWithYdbStatus(Ydb::StatusIds::GENERIC_ERROR);
     }
 
@@ -272,29 +267,21 @@ void SetRequestSyncOperationMode(TRequest&) {
     // nothing
 }
 
-template<typename TRpc, typename TLocalRpcCtor /*(TRpc::TRequest&&, TPromiseWrapper<TRpc::Response>&&) -> IRequestOpCtx* */>
-NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, TActorSystem* actorSystem, TLocalRpcCtor&& ctor) {
-    auto promise = NThreading::NewPromise<typename TRpc::TResponse>();
-
-    SetRequestSyncOperationMode(proto);
-
-    using TCbWrapper = TPromiseWrapper<typename TRpc::TResponse>;
-    NGRpcService::IRequestOpCtx* req = ctor(std::move(proto), TCbWrapper(promise));
-    auto actor = TRpc::CreateRpcActor(req);
-    actorSystem->Register(actor, TMailboxType::HTSwap, actorSystem->AppData<TAppData>()->UserPoolId);
-
-    return promise.GetFuture();
-}
-
 template<typename TRpc>
 NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, const TString& database,
         const TMaybe<TString>& token, const TMaybe<TString>& requestType,
         TActorSystem* actorSystem, bool internalCall = false)
 {
+    auto promise = NThreading::NewPromise<typename TRpc::TResponse>();
+
+    SetRequestSyncOperationMode(proto);
+
     using TCbWrapper = TPromiseWrapper<typename TRpc::TResponse>;
-    return DoLocalRpc<TRpc>(std::move(proto), actorSystem, [&](typename TRpc::TRequest&& proto, TCbWrapper&& wrapper) {
-        return new TLocalRpcCtx<TRpc, TCbWrapper>(std::move(proto), wrapper, database, token, requestType, internalCall);
-    });
+    auto req = new TLocalRpcCtx<TRpc, TCbWrapper>(std::move(proto), TCbWrapper(promise), database, token, requestType, internalCall);
+    auto actor = TRpc::CreateRpcActor(req);
+    actorSystem->Register(actor, TMailboxType::HTSwap, actorSystem->AppData<TAppData>()->UserPoolId);
+
+    return promise.GetFuture();
 }
 
 template<typename TRpc>

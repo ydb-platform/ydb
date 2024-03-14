@@ -1,6 +1,7 @@
 #include "executor_pool_shared.h"
 
 #include "actorsystem.h"
+#include "config.h"
 #include "executor_pool_basic.h"
 #include "executor_thread.h"
 #include "executor_thread_ctx.h"

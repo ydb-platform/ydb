@@ -1,7 +1,6 @@
 LIBRARY()
 
 PEERDIR(
-    ydb/apps/version
     ydb/library/actors/core
     ydb/library/actors/interconnect
     library/cpp/monlib/service/pages

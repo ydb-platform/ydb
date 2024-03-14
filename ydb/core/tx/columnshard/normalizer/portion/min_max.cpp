@@ -162,7 +162,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizer::Init(const 
                 (*schemas)[portion.GetPortionId()] = currentSchema;
                 it = portions.emplace(portion.GetPortion(), std::make_shared<TPortionInfo>(portion)).first;
             }
-            TColumnRecord rec(it->second->RegisterBlobId(loadContext.GetBlobRange().GetBlobId()), loadContext, currentSchema->GetIndexInfo());
+            TColumnRecord rec(it->second->RegisterBlobId(loadContext.GetBlobRange().GetBlobId()), loadContext, currentSchema->GetIndexInfo().GetColumnFeaturesVerified(loadContext.GetAddress().GetColumnId()));
             AFL_VERIFY(it->second->IsEqualWithSnapshots(portion))("self", it->second->DebugString())("item", portion.DebugString());
             it->second->AddRecord(currentSchema->GetIndexInfo(), rec, portionMeta);
         };

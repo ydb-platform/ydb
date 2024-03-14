@@ -54,7 +54,7 @@ bool TGranuleMeta::ErasePortion(const ui64 portion) {
 
 void TGranuleMeta::AddColumnRecordOnLoad(const TIndexInfo& indexInfo, const TPortionInfo& portion, const TColumnChunkLoadContext& rec, const NKikimrTxColumnShard::TIndexPortionMeta* portionMeta) {
     std::shared_ptr<TPortionInfo> pInfo = UpsertPortionOnLoad(portion);
-    TColumnRecord cRecord(pInfo->RegisterBlobId(rec.GetBlobRange().GetBlobId()), rec, indexInfo);
+    TColumnRecord cRecord(pInfo->RegisterBlobId(rec.GetBlobRange().GetBlobId()), rec, indexInfo.GetColumnFeaturesVerified(rec.GetAddress().GetColumnId()));
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "AddColumnRecordOnLoad")("portion_info", portion.DebugString())("record", cRecord.DebugString());
     pInfo->AddRecord(indexInfo, cRecord, portionMeta);
 }

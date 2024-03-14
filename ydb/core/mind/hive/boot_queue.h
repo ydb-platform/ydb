@@ -10,6 +10,7 @@ struct TBootQueue {
     struct TBootQueueRecord {
         TFullTabletId TabletId;
         double Priority;
+        TNodeId SuggestedNodeId;
 
         static double GetBootPriority(const TTabletInfo& tablet) {
             double priority = 0;
@@ -45,9 +46,10 @@ struct TBootQueue {
             return Priority < o.Priority;
         }
 
-        TBootQueueRecord(const TTabletInfo& tablet)
+        TBootQueueRecord(const TTabletInfo& tablet, TNodeId suggestedNodeId = 0)
             : TabletId(tablet.GetFullTabletId())
             , Priority(GetBootPriority(tablet))
+            , SuggestedNodeId(suggestedNodeId)
         {
         }
     };
@@ -59,6 +61,11 @@ struct TBootQueue {
     TBootQueueRecord PopFromBootQueue();
     void AddToWaitQueue(TBootQueueRecord record);
     void MoveFromWaitQueueToBootQueue();
+
+    template<typename... Args>
+    void EmplaceToBootQueue(Args&&... args) {
+        BootQueue.emplace(args...);
+    }
 };
 
 }

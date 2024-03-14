@@ -6754,7 +6754,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             }
             UNIT_ASSERT(writeStream1->Read(&resp));
             Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
-            UNIT_ASSERT(resp.status() == Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT(resp.status() == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamWriteMessage::FromServer::kInitResponse);
+
         }
         {
             grpc::ClientContext rcontext1;

@@ -23,7 +23,6 @@ ydb/core/kqp/ut/service KqpQueryService.QueryOnClosedSession
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/service [38/50]*
 ydb/core/persqueue/ut TPQTest.*DirectRead*
-ydb/core/persqueue/ut PQCountersSimple.PartitionWriteQuota
 ydb/core/tx/columnshard/ut_schema TColumnShardTestSchema.ForgetAfterFail
 ydb/core/tx/columnshard/ut_schema TColumnShardTestSchema.RebootForgetAfterFail
 ydb/core/tx/columnshard/engines/ut *
@@ -57,12 +56,10 @@ ydb/services/keyvalue/ut KeyValueGRPCService.SimpleWriteRead
 ydb/services/keyvalue/ut sole*
 ydb/services/persqueue_v1/ut/describes_ut TTopicApiDescribes.DescribeTopic
 ydb/services/persqueue_v1/ut TPersQueueTest.CheckACLForGrpcWrite
-ydb/services/persqueue_v1/ut TPersQueueTest.DirectRead*
 ydb/services/persqueue_v1/ut TPersQueueTest.SetupLockSession
 ydb/services/persqueue_v1/ut TPersQueueTest.TopicServiceCommitOffsetBadOffsets
 ydb/services/persqueue_v1/ut TPQCompatTest.BadTopics
 ydb/services/persqueue_v1/ut [3/10]*
-ydb/services/persqueue_v1/ut TPersQueueTest.DisableWrongSettings
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync*
 ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestActiveSessionCountAfterBadSession
 ydb/services/ydb/sdk_sessions_ut [6/10]*

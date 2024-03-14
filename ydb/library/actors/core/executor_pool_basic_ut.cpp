@@ -600,8 +600,6 @@ Y_UNIT_TEST_SUITE(ChangingThreadsCountInBasicExecutorPool) {
         TTestCtx<TCheckingInFlightState> ctx(size, msgCount);
         ctx.ActorSystem.Start();
 
-        TVector<TExecutorThreadStats> statsCopy[testCount];
-
         TTestActors testActors = ctx.RegisterCheckActors(size);
 
         const size_t N = 6;

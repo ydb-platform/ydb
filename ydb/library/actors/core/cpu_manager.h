@@ -1,5 +1,6 @@
 #pragma once
 
+#include "config.h"
 #include "harmonizer.h"
 #include "executor_pool.h"
 #include "executor_pool_shared.h"
@@ -39,6 +40,8 @@ namespace NActors {
                 Executors[poolId]->GetCurrentStats(poolStats, statsCopy);
             }
         }
+
+        void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy, TVector<TExecutorThreadStats>& sharedStatsCopy) const;
 
         THarmonizerStats GetHarmonizerStats() const {
             if (Harmonizer) {

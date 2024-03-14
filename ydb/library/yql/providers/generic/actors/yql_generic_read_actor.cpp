@@ -95,6 +95,16 @@ namespace NYql::NDq {
             };
         };
 
+        template <typename T>
+        T ExtractFromConstFuture(const NThreading::TFuture<T>& f) {
+            //We want to avoid making a copy of data stored in a future.
+            //But there is no direct way to extract data from a const future
+            //So, we make a copy of the future, that is cheap. Then, extract the value from this copy.
+            //It destructs the value in the original future, but this trick is legal and documented here:
+            //https://docs.yandex-team.ru/arcadia-cpp/cookbook/concurrency
+            return NThreading::TFuture<T>(f).ExtractValueSync();
+        }
+
     } // namespace
 
     class TGenericReadActor: public TActorBootstrapped<TGenericReadActor>, public IDqComputeActorAsyncInput {
@@ -321,10 +331,8 @@ namespace NYql::NDq {
             YQL_ENSURE(iterator, "iterator was not initialized");
 
             iterator->ReadNext().Subscribe(
-                [actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](
-                    const typename TIterator::TResult& f1) {
-                    typename TIterator::TResult f2(f1);
-                    auto result = f2.ExtractValueSync();
+                [actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](const typename TIterator::TResult& asyncResult) {
+                    auto result = ExtractFromConstFuture(asyncResult);
                     if (result.Status.Ok()) {
                         YQL_ENSURE(result.Response, "empty response");
                         auto ev = new TEventPart(std::move(*result.Response));
@@ -337,9 +345,8 @@ namespace NYql::NDq {
         }
 
         template <typename TAsyncResult, typename TIteratorEvent>
-        static void AwaitIterator(TActorSystem* actorSystem, TActorId selfId, TActorId computeActorId, ui64 inputIndex, const TAsyncResult& f1) {
-            TAsyncResult f2(f1);
-            auto result = f2.ExtractValueSync();
+        static void AwaitIterator(TActorSystem* actorSystem, TActorId selfId, TActorId computeActorId, ui64 inputIndex, const TAsyncResult& asyncResult) {
+            auto result = ExtractFromConstFuture(asyncResult);
             if (result.Status.Ok()) {
                 YQL_ENSURE(result.Iterator, "uninitialized iterator");
                 auto ev = new TIteratorEvent(std::move(result.Iterator));

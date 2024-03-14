@@ -46,6 +46,8 @@ public:
 #endif
 };
 
+using TResultCodegenerator = std::function<ICodegeneratorInlineWideNode::TGenerateResult(const TCodegenContext&, BasicBlock*&)>;
+
 template<typename TDerived, typename TState, EValueRepresentation StateKind = EValueRepresentation::Embedded>
 class TSimpleStatefulWideFlowCodegeneratorNode
         : public TStatefulWideFlowCodegeneratorNode<TSimpleStatefulWideFlowCodegeneratorNode<TDerived, TState, StateKind>> {
@@ -55,8 +57,6 @@ protected:
     TSimpleStatefulWideFlowCodegeneratorNode(TComputationMutables& mutables, IComputationWideFlowNode* source, ui32 inWidth, ui32 outWidth)
             : TBase(mutables, source, StateKind), SourceFlow(source), InWidth(inWidth), OutWidth(outWidth)
     {}
-
-    using TFetcher = std::function<ICodegeneratorInlineWideNode::TGenerateResult(const TCodegenContext&, BasicBlock*&)>;
 
 private:
     void InitStateWrapper(NUdf::TUnboxedValue &state, TComputationContext &ctx) const {

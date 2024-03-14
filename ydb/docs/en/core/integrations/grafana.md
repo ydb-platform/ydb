@@ -46,11 +46,11 @@ datasources:
     jsonData:
       authKind: "UserPassword"
       endpoint: 'grpcs://<hostname>:2135'
-      dbLocation: '/eu-central1/b1g/db-location'
+      dbLocation: '/location/to/db'
       user: '<username>'
     secureJsonData:
       password: '<userpassword>'
-      certificate: 'content of *.pem file'
+      certificate: '<content of *.pem file>'
 ```
 
 Here are fields that are supported in connection configuration:
@@ -69,12 +69,14 @@ Here are fields that are supported in connection configuration:
 ## Building queries
 
 {{ ydb-short-name }} is queried with a SQL dialect named [YQL](../yql/reference/index.md).
-Queries can contain macros which simplify syntax and allow for dynamic parts. It may be two kind of macro - [grafana-level](#macros) and ydb-level. Plugin will parse query text and, before sending it to YDB, substitute variables and grafana-level macroses with particular values. After that ydb-level macroses will be treated by ydb. 
-The query editor allows you to get data in different representation: time series, table or logs.
+Queries can contain macros which simplify syntax and allow for dynamic parts. There are two kinds of macros - [Grafana-level](#macros) and {{ ydb-short-name }}-level. The plugin will parse query text and, before sending it to {{ ydb-short-name }}, substitute variables and Grafana-level macros with particular values. After that {{ ydb-short-name }}-level macroses will be treated by {{ ydb-short-name }} server-side. 
+The query editor allows to get data in different representations: time series, table or logs.
 
-### Time series (../_assets/grafana/time-series.png)
+### Time series { #time-series }
 
-Time series visualization options are selectable if the query returns at least one field with `Date`, `Datetime`, or `Timestamp` type type and at least one field with `int`, `uint`, `double` or `float` type. Then you can select time series visualization options. Grafana interprets timestamp rows without explicit time zone as UTC. Any other column is treated as a value column.
+Time series visualization options are selectable if the query returns at least one field with `Date`, `Datetime`, or `Timestamp` type and at least one field with `Int64`, `Int32`, `Int16`, `Int8`, `Uint64`, `Uint32`, `Uint16`, `Uint8`, `Double` or `Float` type. Then you can select time series visualization options. Grafana interprets timestamp rows without an explicit time zone as UTC. Any other column is treated as a value column.
+
+![Time-series](../_assets/grafana/time-series.png)
 
 #### Multi-line time series
 
@@ -93,15 +95,20 @@ GROUP BY `requestTime`, `timestamp`
 ORDER BY `timestamp`
 ```
 
-### Tables (../_assets/grafana/table.png)
+### Tables { #tables }
 
-Table visualizations will always be available for any valid {{ ydb-short-name }} query (multi result sets are not supported).
+Table visualizations will always be available for any valid {{ ydb-short-name }} query (multiple result sets are not supported).
 
-### Visualizing logs with the Logs Panel (../_assets/grafana/logs.png)
+
+![Table](../_assets/grafana/table.png)
+
+### Visualizing logs with the Logs Panel { #visual-logs }
 
 To use the Logs panel your query must return a `Date`, `Datetime` or `Timestamp` and `String` values. You can select logs visualizations using the visualization options.
 
 By default, only the first text field will be represented as log line. This can be customized using the query builder.
+
+![Logs](../_assets/grafana/logs.png)
 
 ### Macros
 
@@ -117,10 +124,10 @@ WHERE $__timeFilter(`timeCol`)
 
 | Macro                                        | Description                                                                                                                      | Output example                                                                                  |
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| _$\_\_timeFilter(columnName)_                | Replaced by a conditional that filters the data (using the provided column) based on the time range of the panel in microseconds | `foo >= CAST(1636717526371000 AS TIMESTAMP) AND foo <=  CAST(1668253526371000 AS TIMESTAMP)' )` |
-| _$\_\_fromTimestamp_                         | Replaced by the starting time of the range of the panel casted to Timestamp                                                      | `CAST(1636717526371000 AS TIMESTAMP)`                                                           |
-| _$\_\_toTimestamp_                           | Replaced by the ending time of the range of the panel casted to Timestamp                                                        | `CAST(1636717526371000 AS TIMESTAMP)`                                                           |
-| _$\_\_varFallback(condition, \$templateVar)_ | Replaced by the first parameter when the template variable in the second parameter is not provided.                              | _$\_\_varFallback('foo', \$bar)_ `foo` if variable `bar` is not provided, or `bar`'s value                                                               |
+| `$__timeFilter(columnName)`                | Replaced by a conditional that filters the data (using the provided column) based on the time range of the panel in microseconds | `foo >= CAST(1636717526371000 AS TIMESTAMP) AND foo <=  CAST(1668253526371000 AS TIMESTAMP)' )` |
+| `$__fromTimestamp`                         | Replaced by the starting time of the range of the panel casted to Timestamp                                                      | `CAST(1636717526371000 AS TIMESTAMP)`                                                           |
+| `$__toTimestamp`                           | Replaced by the ending time of the range of the panel casted to Timestamp                                                        | `CAST(1636717526371000 AS TIMESTAMP)`                                                           |
+| `$__varFallback(condition, $templateVar)` | Replaced by the first parameter when the template variable in the second parameter is not provided.                              | `$__varFallback('foo', $bar)` `foo` if variable `bar` is not provided, or `bar`'s value                                                               |
 
 ### Templates and variables
 

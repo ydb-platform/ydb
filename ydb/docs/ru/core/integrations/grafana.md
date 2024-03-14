@@ -21,11 +21,11 @@ datasources:
     jsonData:
       authKind: "UserPassword"
       endpoint: 'grpcs://<hostname>:2135'
-      dbLocation: '/eu-central1/b1g/db-location'
+      dbLocation: '/location/to/db'
       user: '<username>'
     secureJsonData:
       password: '<userpassword>'
-      certificate: 'content of *.pem file'
+      certificate: '<content of *.pem file>'
 ```
 
 Поддерживаемые поля для создания соединения:
@@ -56,7 +56,7 @@ datasources:
 
 ### Временные серии { #time-series }
 
-Визуализировать данные как временные серии возможно при условии наличия в результатах запроса одного поля с типами `Date`, `Datetime` или `Timestamp` и как минимум одного поля с типом `int`, `uint`, `double` или `float`. Визуализацию в виде временных серий можно выбрать с помощью настроек. Grafana интерпретирует `timestamp` строки без временной зоны как UTC. Все остальные колонки интерпретируются как значения.
+Визуализировать данные как временные серии возможно при условии наличия в результатах запроса одного поля с типами `Date`, `Datetime` или `Timestamp` и как минимум одного поля с типом `Int64`, `Int32`, `Int16`, `Int8`, `Uint64`, `Uint32`, `Uint16`, `Uint8`, `Double` или `Float`. Визуализацию в виде временных серий можно выбрать с помощью настроек. Grafana интерпретирует `timestamp` строки без временной зоны как UTC. Все остальные колонки интерпретируются как значения.
 
 ![Time-series](../_assets/grafana/time-series.png)
 
@@ -100,10 +100,10 @@ WHERE $__timeFilter(`timeCol`)
 
 | Макрос | Описание | Пример вывода |
 | ------ | ---------| -------------|
-| _$\_\_timeFilter(columnName)_ | Заменяется условием, которое фильтрует данные в указанной колонке на основании временного диапазона, заданного на панели в микросекундах  | `foo >= CAST(1636717526371000 AS TIMESTAMP) AND foo <=  CAST(1668253526371000 AS TIMESTAMP)' )` |
-| _$\_\_fromTimestamp_ | Заменяется временем начала диапазона, заданного на панели в формате Timestamp | `CAST(1636717526371000 AS TIMESTAMP)` |
-| _$\_\_toTimestamp_ | Заменяется временем окончания диапазона, заданного на панели в формате Timestamp | `CAST(1636717526371000 AS TIMESTAMP)` |
-| _$\_\_varFallback(condition, \$templateVar)_ | Заменяется первым параметром в том случае, если второй параметр не определен. | _$\_\_varFallback('foo', \$bar)_ `foo` если переменная `bar` не определена, или значение переменной `bar`  |
+| `$__timeFilter(columnName)`  | Заменяется условием, которое фильтрует данные в указанной колонке на основании временного диапазона, заданного на панели в микросекундах  | `foo >= CAST(1636717526371000 AS TIMESTAMP) AND foo <=  CAST(1668253526371000 AS TIMESTAMP)' )` |
+| `$__fromTimestamp` | Заменяется временем начала диапазона, заданного на панели в формате Timestamp | `CAST(1636717526371000 AS TIMESTAMP)` |
+| `$__toTimestamp` | Заменяется временем окончания диапазона, заданного на панели в формате Timestamp | `CAST(1636717526371000 AS TIMESTAMP)` |
+| `$__varFallback(condition, $templateVar)` | Заменяется первым параметром в том случае, если второй параметр не определен. | `$__varFallback('foo', $bar)` `foo` если переменная `bar` не определена, или значение переменной `bar`  |
 
 ### Шаблоны и переменные Templates and variables { #templates-and-variables }
 

@@ -47,7 +47,6 @@ std::optional<TPortionInfoWithBlobs> TTTLColumnEngineChanges::UpdateEvictedPorti
     portionWithBlobs.GetPortionInfo().MutableMeta().SetTierName(evictFeatures.GetTargetTierName());
     auto resultSchema = context.SchemaVersions.GetLastSchema();
     TSaverContext saverContext(SaverContext.GetStoragesManager());
-    saverContext.SetExternalSerializer(evictFeatures.GetCustomTierSerializer());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("portion_for_eviction", portionInfo.DebugString());
     return portionWithBlobs.ChangeSaver(resultSchema, saverContext);
 }

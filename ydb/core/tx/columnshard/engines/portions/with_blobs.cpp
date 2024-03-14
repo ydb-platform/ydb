@@ -139,16 +139,6 @@ std::optional<NKikimr::NOlap::TPortionInfoWithBlobs> TPortionInfoWithBlobs::Chan
         const TString blobOriginal = GetBlobByRangeVerified(rec.ColumnId, rec.Chunk);
         {
             TString newBlob = blobOriginal;
-            if (!!saverContext.GetExternalSerializer()) {
-                auto rb = NArrow::TStatusValidator::GetValid(currentSchema->GetColumnLoaderVerified(rec.ColumnId)->Apply(blobOriginal));
-                Y_ABORT_UNLESS(rb);
-                Y_ABORT_UNLESS(rb->num_columns() == 1);
-                auto columnSaver = currentSchema->GetColumnSaver(rec.ColumnId, saverContext);
-                newBlob = columnSaver.Apply(rb);
-                if (newBlob.size() >= TPortionInfo::BLOB_BYTES_LIMIT) {
-                    return {};
-                }
-            }
             const TString& storageId = index.GetColumnStorageId(rec.GetColumnId(), PortionInfo.GetMeta().GetTierName());
             auto itBuilder = bBuilderByStorage.find(storageId);
             if (itBuilder == bBuilderByStorage.end()) {

@@ -42,6 +42,9 @@ protected:
     virtual bool DoStop() {
         return true;
     }
+    virtual const TSplitSettings& DoGetBlobSplitSettings() const {
+        return Default<TSplitSettings>();
+    }
 
     virtual void DoOnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& tiers) = 0;
     virtual TString DoDebugString() const {
@@ -63,6 +66,10 @@ public:
     }
 
     void Stop();
+
+    const TSplitSettings& GetBlobSplitSettings() const {
+        return DoGetBlobSplitSettings();
+    }
 
     virtual TTabletsByBlob GetBlobsToDelete() const = 0;
     virtual std::shared_ptr<IBlobInUseTracker> GetBlobsTracker() const = 0;

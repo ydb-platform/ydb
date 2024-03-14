@@ -1,7 +1,6 @@
 #include "mkql_take.h"
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen_impl.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 
 namespace NKikimr {
@@ -96,30 +95,84 @@ private:
     IComputationNode* const Count;
 };
 
-class TWideTakeWrapper : public TSimpleStatefulWideFlowCodegeneratorNode<TWideTakeWrapper, ui64> {
-using TBaseComputation = TSimpleStatefulWideFlowCodegeneratorNode<TWideTakeWrapper, ui64>;
+class TWideTakeWrapper : public TStatefulWideFlowCodegeneratorNode<TWideTakeWrapper> {
+using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideTakeWrapper>;
 public:
-     TWideTakeWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, ui32 size)
-        : TBaseComputation(mutables, flow, size, size), Flow(flow), Count(count)
+     TWideTakeWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count)
+        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded), Flow(flow), Count(count)
     {}
 
-    void InitState(NUdf::TUnboxedValue& cntToTake, TComputationContext& ctx) const {
-        cntToTake = Count->GetValue(ctx);
-    }
-
-    NUdf::TUnboxedValue*const* PrepareInput(NUdf::TUnboxedValue& cntToTake, TComputationContext&, NUdf::TUnboxedValue*const* output) const {
-        return cntToTake.Get<ui64>() ? output : nullptr;
-    }
-
-    TMaybeFetchResult DoProcess(NUdf::TUnboxedValue& cntToTake, TComputationContext& , TMaybeFetchResult fetchRes, NUdf::TUnboxedValue*const*) const {
-        if (fetchRes.Empty()) {
-            return EFetchResult::Finish;
-        } else if (fetchRes.Get() == EFetchResult::One) {
-            cntToTake = NUdf::TUnboxedValuePod(cntToTake.Get<ui64>() - 1);
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+        if (state.IsInvalid()) {
+            state = Count->GetValue(ctx);
         }
-        return fetchRes;
-    }
 
+        if (auto count = state.Get<ui64>()) {
+            if (const auto result = Flow->FetchValues(ctx, output); EFetchResult::One == result) {
+                state = NUdf::TUnboxedValuePod(--count);
+                return EFetchResult::One;
+            } else {
+                return result;
+            }
+        }
+
+        return EFetchResult::Finish;
+    }
+#ifndef MKQL_DISABLE_CODEGEN
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+        auto& context = ctx.Codegen.GetContext();
+
+        const auto valueType = Type::getInt128Ty(context);
+
+        const auto init = BasicBlock::Create(context, "init", ctx.Func);
+        const auto main = BasicBlock::Create(context, "main", ctx.Func);
+
+        const auto load = new LoadInst(valueType, statePtr, "load", block);
+        const auto state = PHINode::Create(load->getType(), 2U, "state", main);
+        state->addIncoming(load, block);
+
+        BranchInst::Create(init, main, IsInvalid(load, block), block);
+
+        block = init;
+
+        GetNodeValue(statePtr, Count, ctx, block);
+        const auto save = new LoadInst(valueType, statePtr, "save", block);
+        state->addIncoming(save, block);
+        BranchInst::Create(main, block);
+
+        block = main;
+
+        const auto work = BasicBlock::Create(context, "work", ctx.Func);
+        const auto good = BasicBlock::Create(context, "good", ctx.Func);
+        const auto done = BasicBlock::Create(context, "done", ctx.Func);
+
+        const auto resultType = Type::getInt32Ty(context);
+        const auto result = PHINode::Create(resultType, 3U, "result", done);
+        result->addIncoming(ConstantInt::get(resultType, static_cast<i32>(EFetchResult::Finish)), block);
+
+        const auto trunc = GetterFor<ui64>(state, context, block);
+
+        const auto plus = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGT, trunc, ConstantInt::get(trunc->getType(), 0ULL), "plus", block);
+
+        BranchInst::Create(work, done, plus, block);
+
+        block = work;
+        const auto getres = GetNodeValues(Flow, ctx, block);
+        const auto special = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLE, getres.first, ConstantInt::get(getres.first->getType(), 0), "special", block);
+        result->addIncoming(getres.first, block);
+        BranchInst::Create(done, good, special, block);
+
+        block = good;
+
+        const auto decr = BinaryOperator::CreateSub(trunc, ConstantInt::get(trunc->getType(), 1ULL), "decr", block);
+        new StoreInst(SetterFor<ui64>(decr, context, block), statePtr, block);
+        result->addIncoming(getres.first, block);
+        BranchInst::Create(done, block);
+
+        block = done;
+        return {result, std::move(getres.second)};
+    }
+#endif
 private:
     void RegisterDependencies() const final {
         if (const auto flow = FlowDependsOn(Flow))
@@ -248,7 +301,7 @@ IComputationNode* WrapTake(TCallable& callable, const TComputationNodeFactoryCon
     const auto count = LocateNode(ctx.NodeLocator, callable, 1);
     if (type->IsFlow()) {
         if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow))
-            return new TWideTakeWrapper(ctx.Mutables, wide, count, GetWideComponentsCount(AS_TYPE(TFlowType, type)));
+            return new TWideTakeWrapper(ctx.Mutables, wide, count);
         else
             return new TTakeFlowWrapper(ctx.Mutables, GetValueRepresentation(type), flow, count);
     } else if (type->IsStream()) {

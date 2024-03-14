@@ -13,7 +13,6 @@ target_link_libraries(blobstorage-vdisk-syncer PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  version_definition
   library-actors-core
   library-actors-interconnect
   monlib-service-pages

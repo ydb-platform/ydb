@@ -81,7 +81,10 @@ ETargetKind TTargetBase::GetTargetKind() const {
     return Kind;
 }
 
-void TTargetBase::Progress(ui64 schemeShardId, const TActorId& proxy, const TActorContext& ctx) {
+void TTargetBase::Progress(TReplication::TPtr replication, const TActorContext& ctx) {
+    const auto schemeShardId = replication->GetPathId().OwnerId;
+    const auto& proxy = replication->GetYdbProxy();
+
     switch (DstState) {
     case EDstState::Creating:
         if (!DstCreator) {

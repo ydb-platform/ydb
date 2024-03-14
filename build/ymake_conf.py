@@ -59,6 +59,17 @@ def find_conf(conf_file):
     return None
 
 
+# All paths in build graph shall be in posix format.
+# This ensures that UIDs of cross and native builds won't diverge
+# due to paths difference. This function is to be used to fix paths produced
+# by os.path.join on Windows.
+#
+# FIXME: upon complete switch to Python3 os.path.join may be replaced by posixpath.join
+#        and this function will become unnecessary
+def win_path_fix(path):
+    return path if sys.platform != 'win32' else path.replace('\\', '/')
+
+
 class DebugString(object):
     def __init__(self, get_string_func):
         self.get_string_func = get_string_func
@@ -301,7 +312,7 @@ def which(prog):
         for ext in pathext:
             p = os.path.join(dir_, prog + ext)
             if os.path.exists(p) and os.path.isfile(p) and os.access(p, os.X_OK):
-                return p
+                return win_path_fix(p)
 
     return None
 
@@ -1802,8 +1813,8 @@ class MSVCToolchainOptions(ToolchainOptions):
 
             sdk_dir = '$(WindowsSdkDir)'
             self.sdk_version = '$(WindowsTargetPlatformVersion)'
-            self.kit_includes = os.path.join(sdk_dir, 'Include', self.sdk_version)
-            self.kit_libs = os.path.join(sdk_dir, 'Lib', self.sdk_version)
+            self.kit_includes = win_path_fix(os.path.join(sdk_dir, 'Include', self.sdk_version))
+            self.kit_libs = win_path_fix(os.path.join(sdk_dir, 'Lib', self.sdk_version))
 
         elif detector:
             self.use_clang = is_positive('USE_CLANG_CL')
@@ -1820,8 +1831,8 @@ class MSVCToolchainOptions(ToolchainOptions):
                 raise ConfigureError('No %WindowsSdkDir%, %WindowsSDKVersion% or %VCINSTALLDIR% present. Please, run vcvars64.bat to setup preferred environment.')
 
             self.vc_root = os.path.normpath(vc_install_dir)
-            self.kit_includes = os.path.normpath(os.path.join(sdk_dir, 'Include', self.sdk_version))
-            self.kit_libs = os.path.normpath(os.path.join(sdk_dir, 'Lib', self.sdk_version))
+            self.kit_includes = win_path_fix(os.path.normpath(os.path.join(sdk_dir, 'Include', self.sdk_version)))
+            self.kit_libs = win_path_fix(os.path.normpath(os.path.join(sdk_dir, 'Lib', self.sdk_version)))
 
             # TODO(somov): Определять автоматически self.version в этом случае
 
@@ -1835,10 +1846,10 @@ class MSVCToolchainOptions(ToolchainOptions):
             sdk_dir = '$WINDOWS_KITS_RESOURCE_GLOBAL'
 
             self.vc_root = self.name_marker if not self.use_clang else '$MSVC_FOR_CLANG_RESOURCE_GLOBAL'
-            self.kit_includes = os.path.join(sdk_dir, 'Include', self.sdk_version)
-            self.kit_libs = os.path.join(sdk_dir, 'Lib', self.sdk_version)
+            self.kit_includes = win_path_fix(os.path.join(sdk_dir, 'Include', self.sdk_version))
+            self.kit_libs = win_path_fix(os.path.join(sdk_dir, 'Lib', self.sdk_version))
 
-            bindir = os.path.join(self.vc_root, 'bin', 'Hostx64')
+            bindir = win_path_fix(os.path.join(self.vc_root, 'bin', 'Hostx64'))
 
             tools_name = select(selectors=[
                 (build.target.is_x86, 'x86'),
@@ -1852,9 +1863,9 @@ class MSVCToolchainOptions(ToolchainOptions):
                 (build.target.is_armv7, 'armasm.exe'),
             ])
 
-            self.masm_compiler = os.path.join(bindir, tools_name, asm_name)
-            self.link = os.path.join(bindir, tools_name, 'link.exe')
-            self.lib = os.path.join(bindir, tools_name, 'lib.exe')
+            self.masm_compiler = win_path_fix(os.path.join(bindir, tools_name, asm_name))
+            self.link = win_path_fix(os.path.join(bindir, tools_name, 'link.exe'))
+            self.lib = win_path_fix(os.path.join(bindir, tools_name, 'lib.exe'))
 
 
 class MSVC(object):
@@ -2071,14 +2082,14 @@ class MSVCCompiler(MSVC, Compiler):
         else:
             defines += ['/D_MBCS']
 
-        vc_include = os.path.join(self.tc.vc_root, 'include') if not self.tc.ide_msvs else "$(VC_VC_IncludePath.Split(';')[0].Replace('\\','/'))"
+        vc_include = win_path_fix(os.path.join(self.tc.vc_root, 'include')) if not self.tc.ide_msvs else "$(VC_VC_IncludePath.Split(';')[0].Replace('\\','/'))"
 
         if not self.tc.ide_msvs:
             def include_flag(path):
                 return '{flag}"{path}"'.format(path=path, flag='/I ' if not self.tc.use_clang else '-imsvc')
 
             for name in ('shared', 'ucrt', 'um', 'winrt'):
-                flags.append(include_flag(os.path.join(self.tc.kit_includes, name)))
+                flags.append(include_flag(win_path_fix(os.path.join(self.tc.kit_includes, name))))
             flags.append(include_flag(vc_include))
 
         if self.tc.use_clang:
@@ -2107,7 +2118,7 @@ class MSVCCompiler(MSVC, Compiler):
 
         emit('_MSVC_FLAGS', flags)
 
-        ucrt_include = os.path.join(self.tc.kit_includes, 'ucrt') if not self.tc.ide_msvs else "$(UniversalCRT_IncludePath.Split(';')[0].Replace('\\','/'))"
+        ucrt_include = win_path_fix(os.path.join(self.tc.kit_includes, 'ucrt')) if not self.tc.ide_msvs else "$(UniversalCRT_IncludePath.Split(';')[0].Replace('\\','/'))"
 
         # clang-cl has '#include_next', and MSVC hasn't. It needs separately specified CRT and VC include directories for libc++ to include second in order standard C and C++ headers.
         if not self.tc.use_clang:

@@ -13,21 +13,24 @@ Add the following dependency to your project:
 {% list tabs %}
 
 - Maven
-```xml
-<dependency>
-    <groupId>tech.ydb.dialects</groupId>
-    <artifactId>hibernate-ydb-dialect</artifactId>
-    <!-- Set actual version -->
-    <version>${hibernate.ydb.dialect.version}</version> 
-</dependency>
-```
+
+    ```xml
+    <dependency>
+        <groupId>tech.ydb.dialects</groupId>
+        <artifactId>hibernate-ydb-dialect</artifactId>
+        <!-- Set actual version -->
+        <version>${hibernate.ydb.dialect.version}</version> 
+    </dependency>
+    ```
 
 - Gradle
-```groovy
-dependencies {
-    implementation 'tech.ydb.dialects:hibernate-ydb-dialect:$version' // Set actual version
-}
-```
+
+    ```groovy
+    dependencies {
+        implementation 'tech.ydb.dialects:hibernate-ydb-dialect:$version' // Set actual version
+    }
+    ```
+
 {% endlist %}
 
 If you use Hibernate version 5, you need `<artifactId>hibernate-ydb-dialect-v5</artifactId>`.

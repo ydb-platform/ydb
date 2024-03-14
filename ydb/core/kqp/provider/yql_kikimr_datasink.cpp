@@ -735,6 +735,7 @@ public:
                             .DataSink(node->Child(1))
                             .Table().Build(key.GetTablePath())
                             .Filter(settings.Filter.Cast())
+                            .ReturningColumns(returningColumns)
                             .Done()
                             .Ptr();
                     } else {

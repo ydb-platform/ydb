@@ -91,46 +91,46 @@ Y_UNIT_TEST(ReturningSerial) {
 
     {
         const auto query = Q_(R"(
-            --!syntax_pg
-            UPDATE ReturningTable SET  value = 3 where key = 1 RETURNING *;
+            --!syntax_v1
+            UPDATE ReturningTable SET  value = 3 where key = 1 RETURNING VALUES *;
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT(result.IsSuccess());
-        CompareYson(R"([["1";"3"]])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[[1];[3]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
     {
         const auto query = Q_(R"(
-            --!syntax_pg
-            UPDATE ReturningTableExtraValue SET  value2 = 3 where key = 2 RETURNING *;
+            --!syntax_v1
+            UPDATE ReturningTableExtraValue SET  value2 = 3 where key = 2 RETURNING VALUES *;
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT(result.IsSuccess());
-        CompareYson(R"([["2";"4";"3"]])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[[2];[4];[3]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
     {
         const auto query = Q_(R"(
-            --!syntax_pg
-            DELETE FROM ReturningTableExtraValue WHERE key = 2 RETURNING key, value, value2;
+            --!syntax_v1
+            DELETE FROM ReturningTableExtraValue WHERE key = 2 RETURNING VALUES key, value, value2;
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT(result.IsSuccess());
-        CompareYson(R"([["2";"4";"3"]])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[2;[4];[3]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
     {
         const auto query = Q_(R"(
-            --!syntax_pg
-            DELETE FROM ReturningTable WHERE key <= 3 RETURNING key, value;
+            --!syntax_v1
+            DELETE FROM ReturningTable WHERE key <= 3 RETURNING VALUES key, value;
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT(result.IsSuccess());
-        CompareYson(R"([["2";"2"];["3";"2"];["1";"3"]])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[[2];[2]];[[3];[2]];[[1];[3]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 }
 

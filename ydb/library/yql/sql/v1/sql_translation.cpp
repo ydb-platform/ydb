@@ -4612,8 +4612,6 @@ TNodePtr TSqlTranslation::ReturningList(const ::NSQLv1Generated::TRule_returning
         }
     }
 
-
-
     return result.Release();
 }
 

@@ -7,9 +7,8 @@
 
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
-#include <ydb/library/yverify_stream/yverify_stream.h>
-
 #include <ydb/library/actors/core/events.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
@@ -23,7 +22,7 @@ class TReplication::TImpl {
     ITarget* CreateTarget(ui64 id, ETargetKind kind, Args&&... args) const {
         switch (kind) {
         case ETargetKind::Table:
-            return new TTableTarget(ReplicationId, id, std::forward<Args>(args)...);
+            return new TTableTarget(id, std::forward<Args>(args)...);
         }
     }
 
@@ -228,6 +227,10 @@ const TPathId& TReplication::GetPathId() const {
 
 const TActorId& TReplication::GetYdbProxy() const {
     return Impl->YdbProxy;
+}
+
+ui64 TReplication::GetSchemeShardId() const {
+    return GetPathId().OwnerId;
 }
 
 void TReplication::SetState(EState state, TString issue) {

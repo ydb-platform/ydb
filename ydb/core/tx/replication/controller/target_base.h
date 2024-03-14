@@ -11,7 +11,10 @@ protected:
     using EStreamState = TReplication::EStreamState;
 
 public:
-    explicit TTargetBase(ETargetKind kind, ui64 rid, ui64 tid, const TString& srcPath, const TString& dstPath);
+    explicit TTargetBase(ETargetKind kind, ui64 id, const TString& srcPath, const TString& dstPath);
+
+    ui64 GetId() const override;
+    ETargetKind GetKind() const override;
 
     const TString& GetSrcPath() const override;
     const TString& GetDstPath() const override;
@@ -34,15 +37,9 @@ public:
     void Progress(TReplication::TPtr replication, const TActorContext& ctx) override;
     void Shutdown(const TActorContext& ctx) override;
 
-protected:
-    ui64 GetReplicationId() const;
-    ui64 GetTargetId() const;
-    ETargetKind GetTargetKind() const;
-
 private:
+    const ui64 Id;
     const ETargetKind Kind;
-    const ui64 ReplicationId;
-    const ui64 TargetId;
     const TString SrcPath;
     const TString DstPath;
 

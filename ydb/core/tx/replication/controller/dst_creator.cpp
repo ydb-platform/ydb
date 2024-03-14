@@ -3,9 +3,6 @@
 #include "private_events.h"
 #include "util.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/hfunc.h>
-
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/protos/console_config.pb.h>
@@ -13,6 +10,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 namespace NKikimr::NReplication::NController {
 
@@ -495,6 +494,13 @@ private:
     TPathId DstPathId;
 
 }; // TDstCreator
+
+IActor* CreateDstCreator(TReplication::TPtr replication, ui64 targetId, const TActorContext& ctx) {
+    const auto* target = replication->FindTarget(targetId);
+    Y_ABORT_UNLESS(target);
+    return CreateDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
+        replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath());
+}
 
 IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath)

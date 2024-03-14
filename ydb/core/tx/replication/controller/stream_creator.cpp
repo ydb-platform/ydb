@@ -4,11 +4,10 @@
 #include "target_with_stream.h"
 #include "util.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/hfunc.h>
-
 #include <ydb/core/base/path.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 namespace NKikimr::NReplication::NController {
 
@@ -151,6 +150,13 @@ private:
     const TActorLogPrefix LogPrefix;
 
 }; // TStreamCreator
+
+IActor* CreateStreamCreator(TReplication::TPtr replication, ui64 targetId, const TActorContext& ctx) {
+    const auto* target = replication->FindTarget(targetId);
+    Y_ABORT_UNLESS(target);
+    return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),
+        replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetStreamName());
+}
 
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
         TReplication::ETargetKind kind, const TString& srcPath, const TString& streamName)

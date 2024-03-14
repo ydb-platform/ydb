@@ -1,5 +1,6 @@
 #pragma once
 
+#include "config.h"
 #include "harmonizer.h"
 #include "executor_pool.h"
 #include "executor_pool_shared.h"

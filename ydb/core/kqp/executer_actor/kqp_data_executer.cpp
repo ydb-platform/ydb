@@ -238,7 +238,19 @@ public:
         }
     }
 
-    void OnComputeActorFinished(TActorId computeActor) override {
+    void Finalize() {
+        if (LocksBroken) {
+            TString message = "Transaction locks invalidated.";
+
+            return ReplyErrorAndDie(Ydb::StatusIds::ABORTED,
+                YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message));
+        }
+
+        auto& response = *ResponseEv->Record.MutableResponse();
+
+        FillResponseStats(Ydb::StatusIds::SUCCESS);
+        Counters->TxProxyMon->ReportStatusOK->Inc();
+
         auto addLocks = [this](const auto& data) {
             if (data.GetData().template Is<NKikimrTxDataShard::TEvKqpInputActorResultInfo>()) {
                 NKikimrTxDataShard::TEvKqpInputActorResultInfo info;
@@ -255,30 +267,18 @@ public:
             }
         };
 
-        const auto& data = ExtraData.at(computeActor);
-        for (const auto& source : data.GetSourcesExtraData()) {
-            addLocks(source);
-        }
-        for (const auto& transform : data.GetInputTransformsData()) {
-            addLocks(transform);
-        }
-        for (const auto& sink : data.GetSinksExtraData()) {
-            addLocks(sink);
-        }
-    }
-
-    void Finalize() {
-        if (LocksBroken) {
-            TString message = "Transaction locks invalidated.";
-
-            return ReplyErrorAndDie(Ydb::StatusIds::ABORTED,
-                YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message));
+        for (auto& [_, data] : ExtraData) {
+            for (const auto& source : data.GetSourcesExtraData()) {
+                addLocks(source);
+            }
+            for (const auto& transform : data.GetInputTransformsData()) {
+                addLocks(transform);
+            }
+            for (const auto& sink : data.GetSinksExtraData()) {
+                addLocks(sink);
+            }
         }
 
-        auto& response = *ResponseEv->Record.MutableResponse();
-
-        FillResponseStats(Ydb::StatusIds::SUCCESS);
-        Counters->TxProxyMon->ReportStatusOK->Inc();
         ResponseEv->Snapshot = GetSnapshot();
 
         if (!Locks.empty()) {
@@ -1444,9 +1444,6 @@ private:
         for (const auto& tx : Request.Transactions) {
             for (const auto& stage : tx.Body->GetStages()) {
                 if (stage.GetIsEffectsStage()) {
-                    return false;
-                }
-                if (!stage.GetSinks().empty()) {
                     return false;
                 }
             }

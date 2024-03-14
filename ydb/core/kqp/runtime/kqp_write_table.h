@@ -23,7 +23,7 @@ public:
 
     using TBatches = THashMap<ui64, std::deque<TString>>;
 
-    virtual TBatches FlushBatches() = 0;
+    virtual TBatches FlushBatches(const bool force = false) = 0;
 
     virtual i64 GetMemory() = 0;
 };

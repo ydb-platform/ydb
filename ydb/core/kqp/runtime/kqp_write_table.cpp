@@ -75,7 +75,7 @@ std::vector<ui32> BuildWriteColumnIds(const NSchemeCache::TSchemeCacheNavigate::
 std::set<std::string> BuildNotNullColumns(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns) {
     std::set<std::string> result;
     for (const auto& column : inputColumns) {
-        if (column.GetNotNull()) { // TODO: Recheck
+        if (column.GetNotNull()) {
             result.insert(column.GetName());
         }
     }
@@ -187,7 +187,8 @@ public:
         return IsClosed() && IsEmpty();
     }
 
-    TBatches FlushBatches() override {
+    TBatches FlushBatches(const bool force) override {
+        Y_UNUSED(force);
         TBatches newBatches;
         std::swap(Batches, newBatches);
         return std::move(newBatches);

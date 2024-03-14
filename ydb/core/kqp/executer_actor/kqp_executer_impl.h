@@ -458,8 +458,6 @@ protected:
                 LastTaskId = taskId;
                 LastComputeActorId = computeActor.ToString();
 
-                OnComputeActorFinished(computeActor);
-
                 if (Planner) {
                     auto it = Planner->GetPendingComputeActors().find(computeActor);
                     if (it == Planner->GetPendingComputeActors().end()) {
@@ -487,10 +485,6 @@ protected:
         }
 
         static_cast<TDerived*>(this)->CheckExecutionComplete();
-    }
-
-    virtual void OnComputeActorFinished(TActorId computeActor) {
-        Y_UNUSED(computeActor);
     }
 
     STATEFN(ReadyState) {

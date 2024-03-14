@@ -55,19 +55,7 @@
                     "clang-format"
                 ]
             },
-            "formula": {
-                "by_platform": {
-                    "darwin-arm64": {
-                        "uri": "sbr:5950102802"
-                    },
-                    "darwin-x86_64": {
-                        "uri": "sbr:5950103181"
-                    },
-                    "linux-x86_64": {
-                        "uri": "sbr:5950104171"
-                    }
-                }
-            }
+            "formula": "build/platform/clang/clang-format16.json"
         },
         "clang14": {
             "executable": {

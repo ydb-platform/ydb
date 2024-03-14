@@ -32,6 +32,9 @@ public:
     using TProto = NKikimrSchemeOp::TOlapColumn::TSerializer;
     virtual ~ISerializer() = default;
 
+    virtual bool IsCompatibleForExchangeWithSameClass(const ISerializer& item) const = 0;
+    virtual bool IsEqualToSameClass(const ISerializer& item) const = 0;
+
     TConclusionStatus DeserializeFromRequest(NYql::TFeaturesExtractor& features) {
         return DoDeserializeFromRequest(features);
     }
@@ -85,6 +88,32 @@ public:
         : TBase(object)
     {
 
+    }
+
+    bool IsCompatibleForExchange(const TSerializerContainer& item) const {
+        if (!GetObjectPtr() && !!item.GetObjectPtr()) {
+            return false;
+        }
+        if (!!GetObjectPtr() && !item.GetObjectPtr()) {
+            return false;
+        }
+        if (GetObjectPtr()->GetClassName() != item.GetObjectPtr()->GetClassName()) {
+            return false;
+        }
+        return GetObjectPtr()->IsCompatibleForExchangeWithSameClass(*item.GetObjectPtr());
+    }
+
+    bool IsEqualTo(const TSerializerContainer& item) const {
+        if (!GetObjectPtr() && !!item.GetObjectPtr()) {
+            return false;
+        }
+        if (!!GetObjectPtr() && !item.GetObjectPtr()) {
+            return false;
+        }
+        if (GetObjectPtr()->GetClassName() != item.GetObjectPtr()->GetClassName()) {
+            return false;
+        }
+        return GetObjectPtr()->IsEqualToSameClass(*item.GetObjectPtr());
     }
 
     TString DebugString() const {

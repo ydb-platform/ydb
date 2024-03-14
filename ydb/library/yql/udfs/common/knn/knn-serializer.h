@@ -15,34 +15,9 @@ enum EFormat : ui8 {
 };
 
 
-class ISerializer {
+class TFloatVectorSerializer {
 public:
-    virtual ~ISerializer() = default;
-
-    virtual TUnboxedValue Serialize(const IValueBuilder* valueBuilder, const TUnboxedValue x) const = 0;
-    virtual TUnboxedValue Deserialize(const IValueBuilder *valueBuilder, const TStringRef str) const = 0;
-
-    const static size_t HeaderSize = sizeof(ui8);
-};
-
-class TDummySerializer : public ISerializer {
-public:
-    TUnboxedValue Serialize(const IValueBuilder* valueBuilder, const TUnboxedValue x) const override {
-        Y_UNUSED(valueBuilder);
-        Y_UNUSED(x);
-        return {};
-    }
-
-    TUnboxedValue Deserialize(const IValueBuilder *valueBuilder, const TStringRef str) const override {
-        Y_UNUSED(valueBuilder);
-        Y_UNUSED(str);
-        return {};
-    }
-};
-
-class TFloatVectorSerializer : public ISerializer {
-public:
-    TUnboxedValue Serialize(const IValueBuilder* valueBuilder, const TUnboxedValue x) const override {
+    static TUnboxedValue Serialize(const IValueBuilder* valueBuilder, const TUnboxedValue x) {
         auto serialize = [&x] (IOutputStream& outStream) {
             const EFormat format = EFormat::FloatVector;
             outStream.Write(&format, 1);
@@ -65,7 +40,7 @@ public:
         }
     }
 
-    TUnboxedValue Deserialize(const IValueBuilder *valueBuilder, const TStringRef str) const override {
+    static TUnboxedValue Deserialize(const IValueBuilder *valueBuilder, const TStringRef& str) {
         //skip format byte, it was already read
         const char* buf = str.Data() + 1;
         const size_t len = str.Size() - 1;
@@ -93,16 +68,26 @@ public:
 
 class TSerializerFacade {
 public:
-    static ISerializer& Get(ui8 formatByte) {
-        switch (formatByte) {
+    static TUnboxedValue Serialize(EFormat format, const IValueBuilder* valueBuilder, const TUnboxedValue x) {
+        switch (format) {
             case EFormat::FloatVector:
-                return FloatVectorSerializer;
+                return TFloatVectorSerializer::Serialize(valueBuilder, x);
             default:
-                return DummySerializer;
+                return {};
         }
     }
-private:
-    inline static TFloatVectorSerializer FloatVectorSerializer;
-    inline static TDummySerializer DummySerializer;
+
+    static TUnboxedValue Deserialize(const IValueBuilder *valueBuilder, const TStringRef& str) {
+        if (str.Size() == 0)
+            return {};
+
+        ui8 formatByte = str.Data()[0];
+        switch (formatByte) {
+            case EFormat::FloatVector:
+                return TFloatVectorSerializer::Deserialize(valueBuilder, str);
+            default:
+                return {};
+        }
+    }
 };
 

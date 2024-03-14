@@ -12,20 +12,15 @@ using namespace NYql::NUdf;
 
 SIMPLE_STRICT_UDF(TToBinaryString, char*(TAutoMap<TListType<float>>)) {
     const TUnboxedValuePod x = args[0];
-
     const EFormat format = EFormat::FloatVector; // will be taken from args in future
     
-    return TSerializerFacade::Get(format).Serialize(valueBuilder, x);
+    return TSerializerFacade::Serialize(format, valueBuilder, x);
 }
 
 SIMPLE_STRICT_UDF(TFromBinaryString, TOptional<TListType<float>>(const char*)) {
     TStringRef str = args[0].AsStringRef();
-    if (str.Size() == 0)
-        return {};
 
-    ui8 formatByte = str.Data()[0];
-    
-    return TSerializerFacade::Get(formatByte).Deserialize(valueBuilder, str);
+    return TSerializerFacade::Deserialize(valueBuilder, str);
 }
 
 

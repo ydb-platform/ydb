@@ -358,6 +358,8 @@ private:
                 response.mutable_result()->mutable_query_stats()->set_query_plan(kqpResponse.GetQueryPlan());
             }
 
+            FillDebugInfo(*response.mutable_result(), kqpResponse);
+
             AuditContextAppend(Request_.get(), *GetProtoRequest(), response);
 
             Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);

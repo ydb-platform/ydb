@@ -227,6 +227,7 @@ PEERDIR(
     library/cpp/digest/md5
     library/cpp/html/pcdata
     library/cpp/json
+    library/cpp/json/writer
     library/cpp/json/yson
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
@@ -287,6 +288,7 @@ RECURSE_FOR_TESTS(
     ut_change_collector
     ut_change_exchange
     ut_compaction
+    ut_debug_info
     ut_erase_rows
     ut_followers
     ut_init

@@ -315,6 +315,8 @@ private:
                     response.mutable_result()->mutable_query_stats()->set_query_ast(kqpResponse.GetQueryAst());
                 }
 
+                FillDebugInfo(*response.mutable_result(), kqpResponse);
+
                 response.mutable_result()->set_query_full_diagnostics(kqpResponse.GetQueryDiagnostics());
 
                 Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);

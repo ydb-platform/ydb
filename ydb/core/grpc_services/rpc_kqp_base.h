@@ -77,6 +77,18 @@ inline bool CheckQuery(const TString& query, NYql::TIssues& issues) {
 void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKqpProto::TKqpStatsQuery& kqpStats);
 void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKikimrKqp::TQueryResponse& kqpResponse);
 
+template<class TPublicResponse>
+void FillDebugInfo(TPublicResponse& response, const NKikimrKqp::TQueryResponse& kqpResponse) {
+    auto size = kqpResponse.DebugInfoSize();
+    if (size > 0) {
+        auto* p = response.mutable_query_stats()->mutable_debug_info();
+        p->Reserve(size);
+        for (TString debugInfo : kqpResponse.GetDebugInfo()) {
+            p->Add(std::move(debugInfo));
+        }
+    }
+}
+
 Ydb::Table::QueryStatsCollection::Mode GetCollectStatsMode(Ydb::Query::StatsMode mode);
 
 template <typename TDerived, typename TRequest>

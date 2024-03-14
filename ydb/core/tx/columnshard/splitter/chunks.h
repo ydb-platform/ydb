@@ -1,4 +1,5 @@
 #pragma once
+#include "abstract/chunk_meta.h"
 #include "abstract/chunks.h"
 
 #include <ydb/core/tx/columnshard/counters/splitter.h>

@@ -4,6 +4,8 @@
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/db_wrapper.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/formats/arrow/simple_arrays_cache.h>
@@ -69,8 +71,14 @@ TPortionInfo TPortionInfo::CopyWithFilteredColumns(const THashSet<ui32>& columnI
 
     for (auto& rec : Records) {
         Y_ABORT_UNLESS(rec.Valid());
-        if (columnIds.contains(rec.ColumnId)) {
+        if (columnIds.contains(rec.GetColumnId())) {
             result.Records.push_back(rec);
+        }
+    }
+
+    for (auto& rec : Indexes) {
+        if (columnIds.contains(rec.GetIndexId())) {
+            result.Indexes.push_back(rec);
         }
     }
     return result;
@@ -319,7 +327,7 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
         return TConclusionStatus::Fail("cannot parse meta");
     }
     for (auto&& i : proto.GetRecords()) {
-        auto parse = TColumnRecord::BuildFromProto(i, info);
+        auto parse = TColumnRecord::BuildFromProto(i, info.GetColumnFeaturesVerified(i.GetColumnId()));
         if (!parse) {
             return parse;
         }

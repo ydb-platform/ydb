@@ -26,24 +26,6 @@ namespace NFq {
 
 using namespace NActors;
 
-namespace {
-
-auto RetryPolicy = NYql::NDq::THttpSenderRetryPolicy::GetExponentialBackoffPolicy(
-    [](const NHttp::TEvHttpProxy::TEvHttpIncomingResponse* resp){
-        if (!resp || !resp->Response) {
-            // Connection wasn't established. Should retry.
-            return ERetryErrorClass::ShortRetry;
-        }
-
-        if (resp->Response->Status == "401") {
-            return ERetryErrorClass::NoRetry;
-        }
-
-        return ERetryErrorClass::ShortRetry;
-    });
-
-}
-
 class TMonitoringRestServiceActor : public NActors::TActor<TMonitoringRestServiceActor> {
 public:
     using TBase = NActors::TActor<TMonitoringRestServiceActor>;
@@ -76,7 +58,7 @@ public:
         LOG_D(httpRequest->GetRawData());
         httpRequest->Set("Authorization", CredentialsProvider->GetAuthInfo());
 
-        auto httpSenderId = Register(NYql::NDq::CreateHttpSenderActor(SelfId(), HttpProxyId, RetryPolicy));
+        auto httpSenderId = Register(NYql::NDq::CreateHttpSenderActor(SelfId(), HttpProxyId, NYql::NDq::THttpSenderRetryPolicy::GetNoRetryPolicy()));
         Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest), 0, Cookie);
         Requests[Cookie++] = ev;
     }

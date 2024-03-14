@@ -109,13 +109,16 @@ ui64 TPortionInfo::GetRawBytes(const std::set<ui32>& entityIds) const {
     return sum;
 }
 
-ui64 TPortionInfo::GetIndexBytes(const std::set<ui32>& entityIds) const {
+ui64 TPortionInfo::GetIndexRawBytes(const std::set<ui32>& entityIds) const {
     ui64 sum = 0;
+    std::set<ui32> readyIndexes;
     for (auto&& r : Indexes) {
         if (entityIds.contains(r.GetIndexId())) {
-            sum += r.GetBlobRange().Size;
+            sum += r.GetRawBytes();
+            readyIndexes.emplace(r.GetIndexId());
         }
     }
+    AFL_VERIFY(readyIndexes.size() == entityIds.size())("requested", JoinSeq(",", entityIds))("found", JoinSeq(",", readyIndexes));
     return sum;
 }
 

@@ -51,7 +51,7 @@ ui64 TBlobsFetchingStep::PredictRawBytes(const std::shared_ptr<IDataSource>& sou
         return source->GetRawBytes(Columns->GetColumnIds());
     } else {
         AFL_VERIFY(Indexes);
-        return source->GetIndexBytes(Indexes->GetIndexIdsSet());
+        return source->GetIndexRawBytes(Indexes->GetIndexIdsSet());
     }
 }
 

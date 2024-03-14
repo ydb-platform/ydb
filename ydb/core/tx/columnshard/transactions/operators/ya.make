@@ -4,6 +4,7 @@ SRCS(
     GLOBAL schema.cpp
     GLOBAL long_tx_write.cpp
     GLOBAL ev_write.cpp
+    GLOBAL backup.cpp
 )
 
 PEERDIR(

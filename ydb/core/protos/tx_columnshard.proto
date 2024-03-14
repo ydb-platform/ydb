@@ -129,6 +129,7 @@ enum ETransactionKind {
     TX_KIND_TTL = 3; // Immediate (not planned)
     TX_KIND_DATA = 4;
     TX_KIND_COMMIT_WRITE = 5;
+    TX_KIND_BACKUP = 6;
 }
 
 enum ETransactionFlag {
@@ -180,6 +181,10 @@ message TEvNotifyTxCompletionResult {
 message TCommitTxBody {
     optional uint64 TxInitiator = 1;
     repeated uint64 WriteIds = 2;
+}
+
+message TBackupTxBody {
+    optional NKikimrSchemeOp.TBackupTask BackupTask = 1;
 }
 
 message TCommitWriteTxBody {

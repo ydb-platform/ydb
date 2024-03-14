@@ -2349,7 +2349,7 @@ private:
                 }
 
                 for (auto& [_, tx] : evWriteTxs) {
-                    tx->MutableLocks()->SetOp(locksOp);
+                    tx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
                     *tx->MutableLocks()->MutableSendingShards() = sendingShards;
                     *tx->MutableLocks()->MutableReceivingShards() = receivingShards;
                 }

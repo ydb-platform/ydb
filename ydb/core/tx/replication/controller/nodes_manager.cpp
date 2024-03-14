@@ -21,25 +21,39 @@ void TNodesManager::DiscoverNodes(const TString& tenant, const TActorId& cache, 
     );
 }
 
-void TNodesManager::ProcessResponse(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx) {
+TNodesManager::TProcessResult TNodesManager::ProcessResponse(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx) {
     Y_ABORT_UNLESS(ev->Get()->CachedMessageData);
     Y_ABORT_UNLESS(!ev->Get()->CachedMessageData->InfoEntries.empty());
     Y_ABORT_UNLESS(ev->Get()->CachedMessageData->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok);
 
+    TProcessResult result;
+
     auto it = NodeDiscoverers.find(ev->Sender);
     if (it == NodeDiscoverers.end()) {
-        return;
+        return result;
     }
 
-    auto& nodes = TenantNodes[it->second];
-    nodes.clear();
+    THashSet<ui32> newNodes;
+    auto& curNodes = TenantNodes[it->second];
 
     for (const auto& [actorId, _] : ev->Get()->CachedMessageData->InfoEntries) {
-        nodes.insert(actorId.NodeId());
+        const ui32 nodeId = actorId.NodeId();
+        newNodes.insert(nodeId);
+        auto it = curNodes.find(nodeId);
+        if (it != curNodes.end()) {
+            curNodes.erase(it);
+        } else {
+            result.NewNodes.insert(nodeId);
+        }
     }
+
+    result.RemovedNodes = std::move(curNodes);
+    curNodes = std::move(newNodes);
 
     ctx.Schedule(UpdateInternal, new TEvPrivate::TEvUpdateTenantNodes(it->second));
     NodeDiscoverers.erase(it);
+
+    return result;
 }
 
 void TNodesManager::ProcessResponse(TEvDiscovery::TEvError::TPtr& ev, const TActorContext& ctx) {

@@ -55,6 +55,8 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvUpdateTenantNodes, Handle);
         HFunc(TEvDiscovery::TEvDiscoveryData, Handle);
         HFunc(TEvDiscovery::TEvError, Handle);
+        HFunc(TEvService::TEvStatus, Handle);
+        HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
     default:
         HandleDefaultEvents(ev, SelfId());
     }
@@ -184,15 +186,71 @@ void TController::Handle(TEvPrivate::TEvUpdateTenantNodes::TPtr& ev, const TActo
 
 void TController::Handle(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx) {
     Y_ABORT_UNLESS(ev->Get()->CachedMessageData);
-
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
 
-    NodesManager.ProcessResponse(ev, ctx);
+    auto result = NodesManager.ProcessResponse(ev, ctx);
+
+    for (auto nodeId : result.NewNodes) {
+        if (!Sessions.contains(nodeId)) {
+            CreateSession(nodeId, ctx);
+        }
+    }
+
+    for (auto nodeId : result.RemovedNodes) {
+        if (Sessions.contains(nodeId)) {
+            DeleteSession(nodeId, ctx);
+        }
+    }
 }
 
 void TController::Handle(TEvDiscovery::TEvError::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
     NodesManager.ProcessResponse(ev, ctx);
+}
+
+void TController::CreateSession(ui32 nodeId, const TActorContext& ctx) {
+    CLOG_D(ctx, "Create session"
+        << ": nodeId# " << nodeId);
+
+    Y_ABORT_UNLESS(!Sessions.contains(nodeId));
+    Sessions.emplace(nodeId, TSessionInfo{});
+
+    auto ev = MakeHolder<TEvService::TEvHandshake>(TabletID(), Executor()->Generation());
+    ui32 flags = 0;
+    if (SelfId().NodeId() != nodeId) {
+        flags = IEventHandle::FlagSubscribeOnSession;
+    }
+
+    Send(MakeReplicationServiceId(nodeId), std::move(ev), flags);
+}
+
+void TController::DeleteSession(ui32 nodeId, const TActorContext& ctx) {
+    CLOG_D(ctx, "Delete session"
+        << ": nodeId# " << nodeId);
+
+    auto it = Sessions.find(nodeId);
+    Y_ABORT_UNLESS(it != Sessions.end());
+    Sessions.erase(it);
+
+    if (SelfId().NodeId() != nodeId) {
+        Send(ctx.InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe());
+    }
+}
+
+void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    // TODO
+}
+
+void TController::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx) {
+    const ui32 nodeId = ev->Get()->NodeId;
+
+    CLOG_I(ctx, "Node disconnected"
+        << ": nodeId# " << nodeId);
+
+    if (Sessions.contains(nodeId)) {
+        DeleteSession(nodeId, ctx);
+    }
 }
 
 TReplication::TPtr TController::Find(ui64 id) {

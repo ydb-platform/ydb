@@ -11,7 +11,7 @@ namespace NKikimr::NReplication::NService {
 
 struct TEvWorker {
     enum EEv {
-        EvBegin = EventSpaceBegin(TKikimrEvents::ES_REPLICATION_SERVICE),
+        EvBegin = EventSpaceBegin(TKikimrEvents::ES_REPLICATION_WORKER),
 
         EvHandshake,
         EvPoll,
@@ -21,7 +21,7 @@ struct TEvWorker {
         EvEnd,
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_REPLICATION_SERVICE));
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_REPLICATION_WORKER));
 
     struct TEvHandshake: public TEventLocal<TEvHandshake, EvHandshake> {};
     struct TEvPoll: public TEventLocal<TEvPoll, EvPoll> {};

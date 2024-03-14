@@ -8,9 +8,6 @@
 #include <ydb/core/tx/columnshard/columnshard_ttl.h>
 
 #include "changes/actualization/controller/controller.h"
-#include "changes/indexation.h"
-#include "changes/ttl.h"
-#include "changes/with_appended.h"
 
 #include "scheme/tier_info.h"
 #include "storage/granule.h"
@@ -21,6 +18,13 @@ struct TSortDescription;
 }
 
 namespace NKikimr::NOlap {
+
+class TCompactColumnEngineChanges;
+class TTTLColumnEngineChanges;
+class TChangesWithAppend;
+class TCompactColumnEngineChanges;
+class TCleanupPortionsColumnEngineChanges;
+class TCleanupTablesColumnEngineChanges;
 
 namespace NDataSharing {
 class TDestinationSession;
@@ -41,7 +45,8 @@ class TColumnEngineForLogs : public IColumnEngine {
     friend class TTTLColumnEngineChanges;
     friend class TChangesWithAppend;
     friend class TCompactColumnEngineChanges;
-    friend class TCleanupColumnEngineChanges;
+    friend class TCleanupPortionsColumnEngineChanges;
+    friend class TCleanupTablesColumnEngineChanges;
     friend class NDataSharing::TDestinationSession;
 private:
     bool TiersInitialized = false;
@@ -100,7 +105,8 @@ public:
 
     std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept override;
     std::shared_ptr<TColumnEngineChanges> StartCompaction(const TCompactionLimits& limits, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
-    std::shared_ptr<TCleanupColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, THashSet<ui64>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
+    std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshot& snapshot, const THashSet<ui64>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
+    std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(THashSet<ui64>& pathsToDrop) noexcept override;
     std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
         const std::shared_ptr<NDataLocks::TManager>& locksManager, const ui64 memoryUsageLimit) noexcept override;
 

@@ -4,7 +4,8 @@ SRCS(
     compaction.cpp
     ttl.cpp
     indexation.cpp
-    cleanup.cpp
+    cleanup_portions.cpp
+    cleanup_tables.cpp
     with_appended.cpp
     general_compaction.cpp
 )

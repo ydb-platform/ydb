@@ -170,6 +170,12 @@ public:
         return fetchRes;
     }
 
+#ifndef MKQL_DISABLE_CODEGEN
+    TGenerateResult GenFetchProcess(Value*, const TCodegenContext&, const TFetcher&, BasicBlock*&) const {
+        return {nullptr, {}};
+    }
+#endif
+
 private:
     void RegisterDependencies() const final {
         if (const auto flow = FlowDependsOn(Flow)) {
@@ -217,6 +223,12 @@ public:
         return fetchRes;
     }
 
+#ifndef MKQL_DISABLE_CODEGEN
+    TBaseComputation::TGenerateResult GenFetchProcess(Value*, const TCodegenContext&, const TBaseComputation::TFetcher&, BasicBlock*&) const {
+        return {nullptr, {}};
+    }
+#endif
+
 private:
     void RegisterDependencies() const final {
         if (const auto flow = this->FlowDependsOn(Flow)) {
@@ -257,6 +269,12 @@ public:
         }
         return fetchRes;
     }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    TBaseComputation::TGenerateResult GenFetchProcess(Value*, const TCodegenContext&, const TBaseComputation::TFetcher&, BasicBlock*&) const {
+        return {nullptr, {}};
+    }
+#endif
 
 private:
     void RegisterDependencies() const final {

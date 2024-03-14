@@ -144,6 +144,30 @@ public:
         return fetchRes;
     }
 
+#ifndef MKQL_DISABLE_CODEGEN
+    TGenerateResult GenFetchProcess(Value* cntToSkipPtrVal, const TCodegenContext& ctx, const TFetcher& fetcher, BasicBlock*& block) const {
+        auto& context = ctx.Codegen.GetContext();
+        const auto decr = BasicBlock::Create(context, "decr", ctx.Func);
+        const auto end = BasicBlock::Create(context, "end", ctx.Func);
+
+        const auto fetched = fetcher(ctx, block);
+        const auto cntToSkipVal = GetterFor<ui64>(new LoadInst(IntegerType::getInt128Ty(context), cntToSkipPtrVal, "unboxed_state", block), context, block);
+        const auto needSkipCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGT, cntToSkipVal, ConstantInt::get(cntToSkipVal->getType(), 0), "need_skip", block);
+        const auto gotOneCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, fetched.first, ConstantInt::get(fetched.first->getType(), 1), "got_one", block);
+        const auto willSkipCond = BinaryOperator::Create(Instruction::And, needSkipCond, gotOneCond, "will_skip", block);
+        BranchInst::Create(decr, end, willSkipCond, block);
+
+        block = decr;
+        const auto cntToSkipNewVal = BinaryOperator::CreateSub(cntToSkipVal, ConstantInt::get(cntToSkipVal->getType(), 1), "decr", block);
+        new StoreInst(SetterFor<ui64>(cntToSkipNewVal, context, block), cntToSkipPtrVal, block);
+        BranchInst::Create(end, block);
+
+        block = end;
+        const auto result = SelectInst::Create(willSkipCond, TMaybeFetchResult::None().LLVMConst(context), TMaybeFetchResult::LLVMFromFetchResult(fetched.first, "fetch_res_ext", block), "result", block);
+        return {result, fetched.second};
+    }
+#endif
+
 private:
     void RegisterDependencies() const final {
         if (const auto flow = FlowDependsOn(Flow))

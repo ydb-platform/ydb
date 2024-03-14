@@ -810,8 +810,6 @@ struct TEvBlobStorage {
         EvControllerSelectGroupsResult              = 0x10031806,
         EvRequestControllerInfo                     = 0x10031807,
         EvResponseControllerInfo                    = 0x10031808,
-        EvControllerGroupReconfigureWipe            = 0x1003180b,
-        EvControllerGroupReconfigureWipeResult      = 0x1003180c,
         EvControllerNodeReport                      = 0x1003180d,
         EvControllerScrubStartQuantum               = 0x1003180e,
         EvControllerUpdateSystemViews               = 0x10031815,
@@ -2315,8 +2313,6 @@ struct TEvBlobStorage {
     struct TEvControllerNodeServiceSetUpdate;
     struct TEvControllerProposeGroupKey;
     struct TEvControllerSelectGroupsResult;
-    struct TEvControllerGroupReconfigureWipe;
-    struct TEvControllerGroupReconfigureWipeResult;
     struct TEvControllerNodeReport;
     struct TEvControllerConfigRequest;
     struct TEvControllerConfigResponse;

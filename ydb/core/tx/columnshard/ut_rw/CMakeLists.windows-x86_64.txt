@@ -36,6 +36,7 @@ target_sources(ydb-core-tx-columnshard-ut_rw PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_ut_common.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/ut_rw/ut_columnshard_read_write.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/ut_rw/ut_normalizer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/ut_rw/ut_backup.cpp
 )
 set_property(
   TARGET

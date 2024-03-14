@@ -60,10 +60,6 @@ namespace NFwd {
             DoNext,
             Exhausted
         };
-        struct TBinarySearchState {
-            TPageId PageId;
-            TRowId BeginRowId, EndRowId;
-        };
 
     public:
         using TGroupId = NPage::TGroupId;

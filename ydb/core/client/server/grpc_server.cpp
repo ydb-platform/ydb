@@ -454,7 +454,6 @@ void TGRpcService::SetupIncomingRequests() {
 
 
     // actor requests
-    ADD_ACTOR_REQUEST(BSAdm,                     TBSAdm,                            MTYPE_CLIENT_BSADM)
     ADD_ACTOR_REQUEST(BlobStorageConfig,         TBlobStorageConfigRequest,         MTYPE_CLIENT_BLOB_STORAGE_CONFIG_REQUEST)
     ADD_ACTOR_REQUEST(HiveCreateTablet,          THiveCreateTablet,                 MTYPE_CLIENT_HIVE_CREATE_TABLET)
     ADD_ACTOR_REQUEST(LocalEnumerateTablets,     TLocalEnumerateTablets,            MTYPE_CLIENT_LOCAL_ENUMERATE_TABLETS)

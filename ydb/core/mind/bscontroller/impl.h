@@ -1808,7 +1808,6 @@ private:
     void Handle(TEvBlobStorage::TEvControllerUpdateNodeDrives::TPtr &ev);
     void Handle(TEvControllerCommitGroupLatencies::TPtr &ev);
     void Handle(TEvBlobStorage::TEvRequestControllerInfo::TPtr &ev);
-    void Handle(TEvBlobStorage::TEvControllerGroupReconfigureWipe::TPtr &ev);
     void Handle(TEvBlobStorage::TEvControllerNodeReport::TPtr &ev);
     void Handle(TEvBlobStorage::TEvControllerConfigRequest::TPtr &ev);
     void Handle(TEvBlobStorage::TEvControllerProposeGroupKey::TPtr &ev);
@@ -2052,7 +2051,6 @@ public:
             hFunc(TEvBlobStorage::TEvControllerUpdateNodeDrives, Handle);
             hFunc(TEvControllerCommitGroupLatencies, Handle);
             hFunc(TEvBlobStorage::TEvRequestControllerInfo, Handle);
-            hFunc(TEvBlobStorage::TEvControllerGroupReconfigureWipe, Handle);
             hFunc(TEvBlobStorage::TEvControllerNodeReport, Handle);
             hFunc(TEvBlobStorage::TEvControllerConfigRequest, Handle);
             hFunc(TEvBlobStorage::TEvControllerProposeGroupKey, Handle);
@@ -2087,7 +2085,6 @@ public:
             fFunc(TEvBlobStorage::EvControllerUpdateNodeDrives, EnqueueIncomingEvent);
             fFunc(TEvControllerCommitGroupLatencies::EventType, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvRequestControllerInfo, EnqueueIncomingEvent);
-            fFunc(TEvBlobStorage::EvControllerGroupReconfigureWipe, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvControllerNodeReport, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvControllerConfigRequest, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvControllerProposeGroupKey, EnqueueIncomingEvent);

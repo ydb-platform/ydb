@@ -37,5 +37,4 @@ END()
 
 RECURSE(
     flatc
-    samples
 )

@@ -1187,6 +1187,11 @@ SELECT jsonb_typeof('"1.0"') AS string;
  string
 (1 row)
 
+SELECT jsonb_build_object('{a,b,c}'::text[]); -- error
+ERROR:  argument list must have even number of elements
+HINT:  The arguments of jsonb_build_object() must consist of alternating keys and values.
+SELECT jsonb_build_object('{a,b,c}'::text[], '{d,e,f}'::text[]); -- error, key cannot be array
+ERROR:  key value must be scalar, not array, composite, or json
 -- empty objects/arrays
 SELECT jsonb_build_array();
  jsonb_build_array 
@@ -1200,6 +1205,19 @@ SELECT jsonb_build_object();
  {}
 (1 row)
 
+-- make sure keys are quoted
+SELECT jsonb_build_object(1,2);
+ jsonb_build_object 
+--------------------
+ {"1": 2}
+(1 row)
+
+SELECT jsonb_build_object(r,2) FROM (SELECT 1 AS a, 2 AS b) r;
+ERROR:  key value must be scalar, not array, composite, or json
+SELECT jsonb_build_object(json '{"a":1,"b":2}', 3);
+ERROR:  key value must be scalar, not array, composite, or json
+SELECT jsonb_build_object('{1,2,3}'::int[], 3);
+ERROR:  key value must be scalar, not array, composite, or json
 -- handling of NULL values
 SELECT jsonb_object_agg(1, NULL::jsonb);
  jsonb_object_agg 

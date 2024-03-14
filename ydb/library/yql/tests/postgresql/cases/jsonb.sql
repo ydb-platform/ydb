@@ -234,9 +234,16 @@ SELECT jsonb_typeof('false') AS boolean;
 SELECT jsonb_typeof('"hello"') AS string;
 SELECT jsonb_typeof('"true"') AS string;
 SELECT jsonb_typeof('"1.0"') AS string;
+SELECT jsonb_build_object('{a,b,c}'::text[]); -- error
+SELECT jsonb_build_object('{a,b,c}'::text[], '{d,e,f}'::text[]); -- error, key cannot be array
 -- empty objects/arrays
 SELECT jsonb_build_array();
 SELECT jsonb_build_object();
+-- make sure keys are quoted
+SELECT jsonb_build_object(1,2);
+SELECT jsonb_build_object(r,2) FROM (SELECT 1 AS a, 2 AS b) r;
+SELECT jsonb_build_object(json '{"a":1,"b":2}', 3);
+SELECT jsonb_build_object('{1,2,3}'::int[], 3);
 -- handling of NULL values
 SELECT jsonb_object_agg(1, NULL::jsonb);
 SELECT jsonb_object_agg(NULL, '{"a":1}');

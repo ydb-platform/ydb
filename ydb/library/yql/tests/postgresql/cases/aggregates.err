@@ -1968,10 +1968,10 @@ group by p order by p;
     -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
     	select p, percentile_cont(p,p)  -- error
 	^
-        -stdin-:<main>:1:11: Error: At function: PgAgg
+        -stdin-:<main>:1:11: Error: At function: PgResolvedCall
         	select p, percentile_cont(p,p)  -- error
 	          ^
-            -stdin-:<main>:1:11: Error: Only normal aggregation supported
+            -stdin-:<main>:1:11: Error: Aggregate function percentile_cont cannot be called directly
             	select p, percentile_cont(p,p)  -- error
 	          ^
 <sql-statement>

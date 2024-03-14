@@ -23,9 +23,9 @@ int4,70,68,97.14
 int8,142,127,89.44
 interval,168,118,70.24
 join,591,200,33.84
-json,450,139,30.89
+json,450,153,34.0
 json_encoding,42,42,100.0
-jsonb,1013,509,50.25
+jsonb,1013,515,50.84
 jsonb_jsonpath,427,88,20.61
 jsonpath,169,152,89.94
 jsonpath_encoding,31,31,100.0
@@ -42,7 +42,7 @@ select_implicit,44,28,63.64
 select_into,67,3,4.48
 strings,390,300,76.92
 subselect,234,107,45.73
-text,76,16,21.05
+text,76,56,73.68
 time,39,29,74.36
 timestamp,145,88,60.69
 timestamptz,315,99,31.43

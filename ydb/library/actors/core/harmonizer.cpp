@@ -394,7 +394,7 @@ Y_FORCE_INLINE bool IsStarved(double consumed, double booked) {
     return Max(consumed, booked) > 0.1 && consumed < booked * 0.7;
 }
 
-Y_FORCE_INLINE bool IsHoggish(double booked, ui16 currentThreadCount) {
+Y_FORCE_INLINE bool IsHoggish(double booked, double currentThreadCount) {
     return booked < currentThreadCount - 1;
 }
 
@@ -488,7 +488,7 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
         TPoolInfo& pool = Pools[poolIdx];
         total += pool.DefaultThreadCount;
 
-        ui32 currentThreadCount = pool.GetThreadCount();
+        double currentThreadCount = pool.GetThreadCount();
         sumOfAdditionalThreads += currentThreadCount - pool.DefaultThreadCount;
 
         double poolBooked = 0.0;
@@ -518,7 +518,8 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
         }
 
         ui32 sharedHalfThreadCount = hasSharedThread[poolIdx] + hasSharedThreadWhichWasNotBorrowed[poolIdx] + hasBorrowedSharedThread[poolIdx];
-        bool isNeedy = (pool.IsAvgPingGood() || pool.NewNotEnoughCpuExecutions) && (2 * poolBooked >= 2 * currentThreadCount + sharedHalfThreadCount);
+        currentThreadCount += 0.5 * sharedHalfThreadCount;
+        bool isNeedy = (pool.IsAvgPingGood() || pool.NewNotEnoughCpuExecutions) && (poolBooked >= currentThreadCount);
         if (pool.AvgPingCounter) {
             if (pool.LastUpdateTs + Us2Ts(3'000'000ull) > ts) {
                 isNeedy = false;
@@ -543,7 +544,7 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
         booked += poolBooked;
         consumed += poolConsumed;
         AtomicSet(pool.LastFlags, (i64)isNeedy | ((i64)isStarved << 1) | ((i64)isHoggish << 2));
-        LWPROBE(HarmonizeCheckPool, poolIdx, pool.Pool->GetName(), poolBooked, poolConsumed, lastSecondPoolBooked, lastSecondPoolConsumed, pool.GetThreadCount(), pool.MaxThreadCount, isStarved, isNeedy, isHoggish);
+        LWPROBE(HarmonizeCheckPool, poolIdx, pool.Pool->GetName(), poolBooked, poolConsumed, lastSecondPoolBooked, lastSecondPoolConsumed, currentThreadCount, pool.MaxThreadCount, isStarved, isNeedy, isHoggish);
     }
 
     double budget = total - Max(booked, lastSecondBooked);

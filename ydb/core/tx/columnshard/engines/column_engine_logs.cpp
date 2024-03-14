@@ -275,6 +275,9 @@ std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCl
     for (auto&& i : pathsToRemove) {
         pathsToDrop.erase(i);
     }
+    if (changes->TablesToDrop.empty()) {
+        return nullptr;
+    }
     return changes;
 }
 

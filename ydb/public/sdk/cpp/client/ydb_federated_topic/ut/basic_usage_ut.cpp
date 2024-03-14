@@ -757,6 +757,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         // Create write session.
         auto writeSettings = NTopic::TWriteSessionSettings()
+            .DirectWriteToPartition(false)
             .Path(setup->GetTestTopic())
             .MessageGroupId("src_id");
 

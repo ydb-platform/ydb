@@ -37,9 +37,9 @@ TFilteredSnapshotSchema::TFilteredSnapshotSchema(ISnapshotSchema::TPtr originalS
     Schema = std::make_shared<arrow::Schema>(schemaFields);
 }
 
-TColumnSaver TFilteredSnapshotSchema::GetColumnSaver(const ui32 columnId, const TSaverContext& context) const {
+TColumnSaver TFilteredSnapshotSchema::GetColumnSaver(const ui32 columnId) const {
     Y_ABORT_UNLESS(ColumnIds.contains(columnId));
-    return OriginalSnapshot->GetColumnSaver(columnId, context);
+    return OriginalSnapshot->GetColumnSaver(columnId);
 }
 
 std::shared_ptr<TColumnLoader> TFilteredSnapshotSchema::GetColumnLoaderOptional(const ui32 columnId) const {

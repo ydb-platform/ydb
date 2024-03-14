@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/persqueue
     ydb/core/kqp/session_actor
     ydb/core/tx/tx_proxy
+    ydb/core/tx/columnshard/engines/storage/chunks
     ydb/core/tx
     ydb/core/mind
     ydb/library/yql/minikql/comp_nodes/llvm14

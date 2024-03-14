@@ -52,12 +52,14 @@ using TVectorView = TArrayView<std::vector<TObject>>;
 class TDefaultSchemaDetails: public ISchemaDetailInfo {
 private:
     ISnapshotSchema::TPtr Schema;
-    const TSaverContext Context;
     std::shared_ptr<TSerializationStats> Stats;
+protected:
+    virtual TColumnSaver DoGetColumnSaver(const ui32 columnId) const override {
+        return Schema->GetColumnSaver(columnId);
+    }
 public:
-    TDefaultSchemaDetails(ISnapshotSchema::TPtr schema, const TSaverContext& context, const std::shared_ptr<TSerializationStats>& stats)
+    TDefaultSchemaDetails(ISnapshotSchema::TPtr schema, const std::shared_ptr<TSerializationStats>& stats)
         : Schema(schema)
-        , Context(context)
         , Stats(stats)
     {
         AFL_VERIFY(Stats);
@@ -84,9 +86,6 @@ public:
     }
     virtual ui32 GetColumnId(const std::string& fieldName) const override {
         return Schema->GetColumnId(fieldName);
-    }
-    virtual TColumnSaver GetColumnSaver(const ui32 columnId) const override {
-        return Schema->GetColumnSaver(columnId, Context);
     }
 };
 

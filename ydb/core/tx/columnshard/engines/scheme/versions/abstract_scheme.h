@@ -23,12 +23,12 @@ public:
     std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const std::string& columnName) const;
     std::shared_ptr<TColumnLoader> GetColumnLoaderVerified(const std::string& columnName) const;
 
-    virtual TColumnSaver GetColumnSaver(const ui32 columnId, const TSaverContext& context) const = 0;
-    TColumnSaver GetColumnSaver(const TString& columnName, const TSaverContext& context) const {
-        return GetColumnSaver(GetColumnId(columnName), context);
+    virtual TColumnSaver GetColumnSaver(const ui32 columnId) const = 0;
+    TColumnSaver GetColumnSaver(const TString& columnName) const {
+        return GetColumnSaver(GetColumnId(columnName));
     }
-    TColumnSaver GetColumnSaver(const std::string& columnName, const TSaverContext& context) const {
-        return GetColumnSaver(TString(columnName.data(), columnName.size()), context);
+    TColumnSaver GetColumnSaver(const std::string& columnName) const {
+        return GetColumnSaver(TString(columnName.data(), columnName.size()));
     }
 
     virtual std::optional<ui32> GetColumnIdOptional(const std::string& columnName) const = 0;

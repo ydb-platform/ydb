@@ -13,6 +13,7 @@ target_link_libraries(schemeshard-olap-schema PUBLIC
   yutil
   schemeshard-olap-columns
   schemeshard-olap-indexes
+  schemeshard-olap-options
   tx-schemeshard-common
 )
 target_sources(schemeshard-olap-schema PRIVATE

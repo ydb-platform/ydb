@@ -7,17 +7,13 @@
 
 
 
-add_library(schemeshard-olap-schema)
-target_link_libraries(schemeshard-olap-schema PUBLIC
-  contrib-libs-linux-headers
+add_library(schemeshard-olap-options)
+target_link_libraries(schemeshard-olap-options PUBLIC
   contrib-libs-cxxsupp
   yutil
-  schemeshard-olap-columns
-  schemeshard-olap-indexes
-  schemeshard-olap-options
-  tx-schemeshard-common
+  services-bg_tasks-abstract
 )
-target_sources(schemeshard-olap-schema PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/schema/schema.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/schema/update.cpp
+target_sources(schemeshard-olap-options PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/options/schema.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/options/update.cpp
 )

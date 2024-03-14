@@ -47,4 +47,5 @@ target_sources(behaviour-tablestore-operations.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/drop_index.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/upsert_stat.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/drop_stat.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/upsert_opt.cpp
 )

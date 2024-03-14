@@ -7,17 +7,12 @@
 
 
 
-add_library(schemeshard-olap-schema)
-target_link_libraries(schemeshard-olap-schema PUBLIC
+add_library(columnshard-blobs_action-common)
+target_link_libraries(columnshard-blobs_action-common PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  schemeshard-olap-columns
-  schemeshard-olap-indexes
-  schemeshard-olap-options
-  tx-schemeshard-common
 )
-target_sources(schemeshard-olap-schema PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/schema/schema.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/schema/update.cpp
+target_sources(columnshard-blobs_action-common PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/common/const.cpp
 )

@@ -10,6 +10,7 @@ add_subdirectory(columns)
 add_subdirectory(common)
 add_subdirectory(indexes)
 add_subdirectory(operations)
+add_subdirectory(options)
 add_subdirectory(schema)
 add_subdirectory(statistics)
 
@@ -23,4 +24,5 @@ target_link_libraries(tx-schemeshard-olap INTERFACE
   schemeshard-olap-common
   schemeshard-olap-operations
   schemeshard-olap-statistics
+  schemeshard-olap-options
 )

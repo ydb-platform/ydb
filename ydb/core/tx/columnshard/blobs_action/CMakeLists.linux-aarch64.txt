@@ -8,6 +8,7 @@
 
 add_subdirectory(abstract)
 add_subdirectory(bs)
+add_subdirectory(common)
 add_subdirectory(counters)
 add_subdirectory(events)
 add_subdirectory(protos)

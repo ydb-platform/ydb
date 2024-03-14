@@ -20,18 +20,19 @@ ui64 TSpecialReadContext::GetMemoryForSources(const std::map<ui32, std::shared_p
 std::shared_ptr<NKikimr::NOlap::NPlainReader::IFetchingStep> TSpecialReadContext::GetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source, const bool exclusiveSource) const {
     const bool needSnapshots = !exclusiveSource || ReadMetadata->GetRequestSnapshot() < source->GetRecordSnapshotMax();
     const bool partialUsageByPK = ReadMetadata->GetPKRangesFilter().IsPortionInPartialUsage(source->GetStartReplaceKey(), source->GetFinishReplaceKey(), ReadMetadata->GetIndexInfo());
-    auto result = CacheFetchingScripts[needSnapshots ? 1 : 0][exclusiveSource ? 1 : 0][partialUsageByPK ? 1 : 0];
+    const bool useIndexes = (IndexChecker ? source->HasIndexes(IndexChecker->GetIndexIds()) : false);
+    auto result = CacheFetchingScripts[needSnapshots ? 1 : 0][exclusiveSource ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0];
     if (!result) {
         return std::make_shared<TBuildFakeSpec>(source->GetRecordsCount(), "fake");
     }
     return result;
 }
 
-std::shared_ptr<NKikimr::NOlap::NPlainReader::IFetchingStep> TSpecialReadContext::BuildColumnsFetchingPlan(const bool needSnapshots, const bool exclusiveSource, const bool partialUsageByPredicateExt) const {
+std::shared_ptr<NKikimr::NOlap::NPlainReader::IFetchingStep> TSpecialReadContext::BuildColumnsFetchingPlan(const bool needSnapshots, const bool exclusiveSource, const bool partialUsageByPredicateExt, const bool useIndexes) const {
     std::shared_ptr<IFetchingStep> result = std::make_shared<TFakeStep>();
     std::shared_ptr<IFetchingStep> current = result;
     const bool partialUsageByPredicate = partialUsageByPredicateExt && PredicateColumns->GetColumnsCount();
-    if (!!IndexChecker) {
+    if (!!IndexChecker && useIndexes) {
         current = current->AttachNext(std::make_shared<TBlobsFetchingStep>(std::make_shared<TIndexesSet>(IndexChecker->GetIndexIds())));
         current = current->AttachNext(std::make_shared<TApplyIndexStep>(IndexChecker));
     }
@@ -164,14 +165,23 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
     MergeColumns = std::make_shared<TColumnsSet>(*PKColumns + *SpecColumns);
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("columns_context_info", DebugString());
-    CacheFetchingScripts[0][0][0] = BuildColumnsFetchingPlan(false, false, false);
-    CacheFetchingScripts[0][1][0] = BuildColumnsFetchingPlan(false, true, false);
-    CacheFetchingScripts[1][0][0] = BuildColumnsFetchingPlan(true, false, false);
-    CacheFetchingScripts[1][1][0] = BuildColumnsFetchingPlan(true, true, false);
-    CacheFetchingScripts[0][0][1] = BuildColumnsFetchingPlan(false, false, true);
-    CacheFetchingScripts[0][1][1] = BuildColumnsFetchingPlan(false, true, true);
-    CacheFetchingScripts[1][0][1] = BuildColumnsFetchingPlan(true, false, true);
-    CacheFetchingScripts[1][1][1] = BuildColumnsFetchingPlan(true, true, true);
+    CacheFetchingScripts[0][0][0][0] = BuildColumnsFetchingPlan(false, false, false, false);
+    CacheFetchingScripts[0][1][0][0] = BuildColumnsFetchingPlan(false, true, false, false);
+    CacheFetchingScripts[1][0][0][0] = BuildColumnsFetchingPlan(true, false, false, false);
+    CacheFetchingScripts[1][1][0][0] = BuildColumnsFetchingPlan(true, true, false, false);
+    CacheFetchingScripts[0][0][1][0] = BuildColumnsFetchingPlan(false, false, true, false);
+    CacheFetchingScripts[0][1][1][0] = BuildColumnsFetchingPlan(false, true, true, false);
+    CacheFetchingScripts[1][0][1][0] = BuildColumnsFetchingPlan(true, false, true, false);
+    CacheFetchingScripts[1][1][1][0] = BuildColumnsFetchingPlan(true, true, true, false);
+
+    CacheFetchingScripts[0][0][0][1] = BuildColumnsFetchingPlan(false, false, false, true);
+    CacheFetchingScripts[0][1][0][1] = BuildColumnsFetchingPlan(false, true, false, true);
+    CacheFetchingScripts[1][0][0][1] = BuildColumnsFetchingPlan(true, false, false, true);
+    CacheFetchingScripts[1][1][0][1] = BuildColumnsFetchingPlan(true, true, false, true);
+    CacheFetchingScripts[0][0][1][1] = BuildColumnsFetchingPlan(false, false, true, true);
+    CacheFetchingScripts[0][1][1][1] = BuildColumnsFetchingPlan(false, true, true, true);
+    CacheFetchingScripts[1][0][1][1] = BuildColumnsFetchingPlan(true, false, true, true);
+    CacheFetchingScripts[1][1][1][1] = BuildColumnsFetchingPlan(true, true, true, true);
 }
 
 }

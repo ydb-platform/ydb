@@ -12,9 +12,11 @@ using namespace NTable;
 
 class TStatisticsScan: public NTable::IScan {
 public:
-    explicit TStatisticsScan(TActorId replyTo)
+    explicit TStatisticsScan(TActorId replyTo, ui64 cookie, ui64 shardTabletId)
         : Driver(nullptr)
         , ReplyTo(replyTo)
+        , Cookie(cookie)
+        , ShardTabletId(shardTabletId)
     {}
 
     void Describe(IOutputStream& o) const noexcept override {
@@ -28,7 +30,7 @@ public:
         auto columnCount = Scheme->Tags().size();
         CountMinSketches.reserve(columnCount);
         for (size_t i = 0; i < columnCount; ++i) {
-            CountMinSketches.emplace_back(TCountMinSketch::Create(256, 8));
+            CountMinSketches.emplace_back(TCountMinSketch::Create());
         }
 
         return {EScan::Feed, {}};
@@ -57,10 +59,11 @@ public:
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
         auto response = std::make_unique<TEvDataShard::TEvStatisticsScanResponse>();
         auto& record = response->Record;
+        record.SetShardTabletId(ShardTabletId);
 
         if (abort != EAbort::None) {
             record.SetStatus(NKikimrTxDataShard::TEvStatisticsScanResponse::ABORTED);
-            TlsActivationContext->Send(new IEventHandle(ReplyTo, TActorId(), response.release()));
+            TlsActivationContext->Send(new IEventHandle(ReplyTo, TActorId(), response.release(), 0, Cookie));
             return nullptr;
         }
 
@@ -73,18 +76,20 @@ public:
             auto countMinSketch = CountMinSketches[t]->AsStringBuf();
             auto* statCMS = column->AddStatistics();
             statCMS->SetType(NKikimr::NStat::COUNT_MIN_SKETCH);
-            statCMS->SetBytes(countMinSketch.Data(), countMinSketch.Size());
+            statCMS->SetData(countMinSketch.Data(), countMinSketch.Size());
         }
 
-        TlsActivationContext->Send(new IEventHandle(ReplyTo, TActorId(), response.release()));
+        TlsActivationContext->Send(new IEventHandle(ReplyTo, TActorId(), response.release(), 0, Cookie));
         return nullptr;
     }
 
 private:
-    IDriver* Driver;
+    IDriver* Driver = nullptr;
     TIntrusiveConstPtr<TScheme> Scheme;
 
     TActorId ReplyTo;
+    ui64 Cookie = 0;
+    ui64 ShardTabletId = 0;
 
     std::vector<std::unique_ptr<TCountMinSketch>> CountMinSketches;
 };
@@ -112,27 +117,45 @@ void TDataShard::Handle(TEvDataShard::TEvStatisticsScanRequest::TPtr& ev, const 
     Execute(new TTxHandleSafeStatisticsScan(this, std::move(ev)));
 }
 
+void TDataShard::Handle(TEvPrivate::TEvStatisticsScanFinished::TPtr&, const TActorContext&) {
+    StatisticsScanTableId = 0;
+    StatisticsScanId = 0;
+}
+
 void TDataShard::HandleSafe(TEvDataShard::TEvStatisticsScanRequest::TPtr& ev, const TActorContext&) {
     const auto& record = ev->Get()->Record;
 
-    TPathId tablePathId = PathIdFromPathId(record.GetTablePathId());
-    auto infoIt = TableInfos.find(tablePathId.LocalPathId);
-    if (infoIt == TableInfos.end()) {
-        auto response = std::make_unique<TEvDataShard::TEvStatisticsScanResponse>();
+    auto response = std::make_unique<TEvDataShard::TEvStatisticsScanResponse>();
+    response->Record.SetShardTabletId(TabletID());
+
+    const auto& tableId = record.GetTableId();
+    if (PathOwnerId != tableId.GetOwnerId()) {
         response->Record.SetStatus(NKikimrTxDataShard::TEvStatisticsScanResponse::ERROR);
-        Send(ev->Sender, response.release());
+        Send(ev->Sender, response.release(), 0, ev->Cookie);
+        return;
+    }
+
+    auto infoIt = TableInfos.find(tableId.GetTableId());
+    if (infoIt == TableInfos.end()) {
+        response->Record.SetStatus(NKikimrTxDataShard::TEvStatisticsScanResponse::ERROR);
+        Send(ev->Sender, response.release(), 0, ev->Cookie);
         return;
     }
     const auto& tableInfo = infoIt->second;
 
-    auto scan = std::make_unique<TStatisticsScan>(ev->Sender);
+    if (StatisticsScanId != 0) {
+        CancelScan(StatisticsScanTableId, StatisticsScanId);
+    }
+
+    auto scan = std::make_unique<TStatisticsScan>(ev->Sender, ev->Cookie, TabletID());
 
     auto scanOptions = TScanOptions()
         .SetResourceBroker("statistics_scan", 20)
         .SetReadAhead(524288, 1048576)
         .SetReadPrio(TScanOptions::EReadPrio::Low);
 
-    QueueScan(tableInfo->LocalTid, scan.release(), -1, scanOptions);
+    StatisticsScanTableId = tableInfo->LocalTid;
+    StatisticsScanId = QueueScan(StatisticsScanTableId, scan.release(), -1, scanOptions);
 }
 
 } // NKikimr::NDataShard

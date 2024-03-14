@@ -65,7 +65,7 @@ public:
 
     ui32 Probe(const char* data, size_t size) const;
 
-    TCountMinSketch& operator+=(TCountMinSketch& rhs);
+    TCountMinSketch& operator+=(const TCountMinSketch& rhs);
 };
 
 static_assert(sizeof(TCountMinSketch) == 24);

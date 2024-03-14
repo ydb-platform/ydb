@@ -38,12 +38,12 @@ ui32 TCountMinSketch::Probe(const char* data, size_t size) const {
     return minValue;
 }
 
-TCountMinSketch& TCountMinSketch::operator+=(TCountMinSketch& rhs) {
+TCountMinSketch& TCountMinSketch::operator+=(const TCountMinSketch& rhs) {
     if (Width != rhs.Width || Depth != rhs.Depth) {
         return *this;
     }
     ui32* dst = Buckets();
-    ui32* src = rhs.Buckets();
+    const ui32* src = rhs.Buckets();
     ui32* end = dst + Width * Depth;
     for (; dst != end; ++dst, ++src) {
         ui32 sum = *dst + *src;

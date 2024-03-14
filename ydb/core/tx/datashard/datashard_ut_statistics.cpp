@@ -37,13 +37,11 @@ Y_UNIT_TEST_SUITE(StatisticsScan) {
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", 1);
         ExecSQL(server, sender, FillTableQuery());
 
-        auto navigate = Navigate(runtime, sender, "/Root/table-1",
-            NSchemeCache::TSchemeCacheNavigate::EOp::OpPath);
-        auto pathId = navigate->ResultSet[0].TableId.PathId;
-
         ui64 shardId = shards.at(0);
         auto request = std::make_unique<TEvDataShard::TEvStatisticsScanRequest>();
-        PathIdFromPathId(pathId, request->Record.MutableTablePathId());
+        auto* reqTableId = request->Record.MutableTableId();
+        reqTableId->SetOwnerId(tableId.PathId.OwnerId);
+        reqTableId->SetTableId(tableId.PathId.LocalPathId);
         runtime.SendToPipe(shardId, sender, request.release());
 
         auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvStatisticsScanResponse>(sender);
@@ -59,8 +57,8 @@ Y_UNIT_TEST_SUITE(StatisticsScan) {
             auto& stat = column.GetStatistics(0);
             UNIT_ASSERT(stat.GetType() == 2);
 
-            auto* bytes = stat.GetBytes().Data();
-            auto* sketch = reinterpret_cast<const TCountMinSketch*>(bytes);
+            auto* data = stat.GetData().Data();
+            auto* sketch = reinterpret_cast<const TCountMinSketch*>(data);
 
             for (ui32 j = 0; j <= 10; ++j) {
                 ui32 value = (i + 1) * j;

@@ -150,10 +150,11 @@ private:
 
 // Usage facade
 
-template <typename TReq, typename TResp>
+template <typename TReq, typename TResp, typename TRes>
 struct TCallBase {
     using TRequest = TReq;
     using TResponse = TResp;
+    using TResult = TRes;
 
     static TIntrusivePtr<NYdbGrpc::IRequestContextBase> MakeContext(
         TReq&& request,
@@ -165,7 +166,7 @@ struct TCallBase {
     }
 };
 
-/// Specializations are expected to derive from TLocalGrpcCallBase<TReq, TResp> and implement
+/// Specializations are expected to derive from TLocalGrpcCallBase<TReq, TResp, TRes> and implement
 ///   static std::unique_ptr<TEvProxyRuntimeEvent> MakeRequest(TReq&&, std::shared_ptr<IRequestCtx>&&, std::function<void(const TResp&)>&&)
 template <typename TReq>
 struct TCall;

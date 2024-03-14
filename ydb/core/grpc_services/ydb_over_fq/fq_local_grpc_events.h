@@ -47,12 +47,12 @@ enum EEventTypes {
 };
 } // namespace NYdbOverFq
 
-#define DEFINE_LOCAL_GRPC_CALL_IMPL(Req, Resp, Ctor) \
+#define DEFINE_LOCAL_GRPC_CALL_IMPL(Req, Resp, Res, Ctor) \
 template <> \
 struct NLocalGrpc::TCall<Req> \
-    : public TCallBase<Req, Resp> { \
+    : public TCallBase<Req, Resp, Res> { \
     \
-    using TBase = TCallBase<Req, Resp>; \
+    using TBase = TCallBase<Req, Resp, Res>; \
     \
     static std::unique_ptr<TEvProxyRuntimeEvent> MakeRequest( \
         TRequest&& request, \
@@ -72,7 +72,9 @@ class NLocalGrpc::TEvent<FederatedQuery::Event> : public TEventBase<FederatedQue
 using TEvFq##Event = NLocalGrpc::TEvent<FederatedQuery::Event>;
 
 #define DEFINE_LOCAL_GRPC_CALL(Method) \
-    DEFINE_LOCAL_GRPC_CALL_IMPL(FederatedQuery::Method##Request, FederatedQuery::Method##Response, CreateFederatedQuery##Method##RequestOperationCall) \
+    DEFINE_LOCAL_GRPC_CALL_IMPL( \
+        FederatedQuery::Method##Request, FederatedQuery::Method##Response, FederatedQuery::Method##Result, \
+        CreateFederatedQuery##Method##RequestOperationCall) \
     using TFq##Method##Call = NLocalGrpc::TCall<FederatedQuery::Method##Request>; \
     DEFINE_EVENT(Method##Request) \
     DEFINE_EVENT(Method##Response)

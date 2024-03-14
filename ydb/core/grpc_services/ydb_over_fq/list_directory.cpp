@@ -1,37 +1,27 @@
-#include "service.h"
 #include "fq_local_grpc_events.h"
+#include "rpc_base.h"
+#include "service.h"
 
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 
 namespace NKikimr::NGRpcService::NYdbOverFq {
 
 class ListDirectoryRPC
-    : public TRpcOperationRequestActor<
-        ListDirectoryRPC, TGrpcRequestOperationCall<Ydb::Scheme::ListDirectoryRequest, Ydb::Scheme::ListDirectoryResponse>>
-    , public NLocalGrpc::TCaller {
+    : public TRpcBase<
+        ListDirectoryRPC, Ydb::Scheme::ListDirectoryRequest, Ydb::Scheme::ListDirectoryResponse> {
 public:
-    using TBase = TRpcOperationRequestActor<
-        ListDirectoryRPC,
-        TGrpcRequestOperationCall<Ydb::Scheme::ListDirectoryRequest, Ydb::Scheme::ListDirectoryResponse>>;
-    using TBase::Become;
-    using TBase::Send;
-    using TBase::PassAway;
-    using TBase::Request_;
-    using TBase::GetProtoRequest;
+    using TBase = TRpcBase<
+        ListDirectoryRPC, Ydb::Scheme::ListDirectoryRequest, Ydb::Scheme::ListDirectoryResponse>;
+    static constexpr std::string_view RpcName = "ListDirectory";
 
-    ListDirectoryRPC(IRequestOpCtx* request, TActorId grpcProxyId)
-        : TBase{request}
-        , TCaller{std::move(grpcProxyId)}
-    {}
+    using TBase::TBase;
 
     void Bootstrap(const TActorContext& ctx) {
-        Become(&ListDirectoryRPC::ListBindingsState);
         ListBindings(ctx, "");
     }
 
-private:
     STRICT_STFUNC(ListBindingsState,
-        HFunc(TEvFqListBindingsResponse, HandleListBindings);
+        HFunc(TEvFqListBindingsResponse, TBase::HandleResponse<FederatedQuery::ListBindingsRequest>);
     )
 
     void ListBindings(const TActorContext& ctx, TString continuationToken) {
@@ -44,18 +34,11 @@ private:
         LOG_DEBUG_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
             "pseudo ListDirectories actorId: " << SelfId().ToString() << ", listing bindings");
 
-        MakeLocalCall(std::move(req), Request_, ctx);
+        Become(&ListDirectoryRPC::ListBindingsState);
+        MakeLocalCall(std::move(req), ctx);
     }
 
-    void HandleListBindings(typename TEvFqListBindingsResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& resp = ev->Get()->Message;
-        if (HandleFailure(resp.operation(), "ListBindings", ctx)) [[unlikely]] {
-            return;
-        }
-
-        FederatedQuery::ListBindingsResult result;
-        resp.operation().result().UnpackTo(&result);
-
+    void Handle(const FederatedQuery::ListBindingsResult& result, const TActorContext& ctx) {
         for (const auto& binding : result.binding()) {
             Bindings_.push_back(binding);
         }
@@ -83,23 +66,6 @@ private:
         }
 
         ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
-    }
-
-    // helpers
-
-    // if status is not success, replies error, returns true
-    bool HandleFailure(const Ydb::Operations::Operation& operation, std::string_view opName, const TActorContext& ctx) {
-        if (operation.status() == Ydb::StatusIds::SUCCESS) {
-            return false;
-        }
-
-        NYql::TIssues issues;
-        NYql::IssuesFromMessage(operation.issues(), issues);
-        LOG_INFO_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-            "pseudo ListDirectory actorId: " << SelfId().ToString() << ", failed to " << opName << ", status: " <<
-            Ydb::StatusIds::StatusCode_Name(operation.status()) << ", issues: " << issues.ToOneLineString());
-        Reply(Ydb::StatusIds_StatusCode_INTERNAL_ERROR, operation.issues(), ctx);
-        return true;
     }
 
 private:

@@ -71,7 +71,6 @@ spring.datasource.url=jdbc:ydb:grpc://localhost:2136/local
 Create simple entity and repository:
 
 ```kotlin
-
 @Entity
 @Table(name = "employee")
 data class Employee(

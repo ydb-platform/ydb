@@ -145,12 +145,12 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult GenFetchProcess(Value* cntToSkipPtrVal, const TCodegenContext& ctx, const TFetcher& fetcher, BasicBlock*& block) const {
+    TGenerateResult GenFetchProcess(Value* cntToSkipPtrVal, const TCodegenContext& ctx, const TResultCodegenerator& fetchGenerator, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
         const auto decr = BasicBlock::Create(context, "decr", ctx.Func);
         const auto end = BasicBlock::Create(context, "end", ctx.Func);
 
-        const auto fetched = fetcher(ctx, block);
+        const auto fetched = fetchGenerator(ctx, block);
         const auto cntToSkipVal = GetterFor<ui64>(new LoadInst(IntegerType::getInt128Ty(context), cntToSkipPtrVal, "unboxed_state", block), context, block);
         const auto needSkipCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGT, cntToSkipVal, ConstantInt::get(cntToSkipVal->getType(), 0), "need_skip", block);
         const auto gotOneCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, fetched.first, ConstantInt::get(fetched.first->getType(), 1), "got_one", block);

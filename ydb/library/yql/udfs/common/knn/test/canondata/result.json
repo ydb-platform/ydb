@@ -1,0 +1,37 @@
+{
+    "test.test[CosineDistance]": [
+        {
+            "uri": "file://test.test_CosineDistance_/results.txt"
+        }
+    ],
+    "test.test[CosineSimilarity]": [
+        {
+            "uri": "file://test.test_CosineSimilarity_/results.txt"
+        }
+    ],
+    "test.test[DeserializationError]": [
+        {
+            "uri": "file://test.test_DeserializationError_/results.txt"
+        }
+    ],
+    "test.test[EuclideanDistance]": [
+        {
+            "uri": "file://test.test_EuclideanDistance_/results.txt"
+        }
+    ],
+    "test.test[InnerProductSimilarity]": [
+        {
+            "uri": "file://test.test_InnerProductSimilarity_/results.txt"
+        }
+    ],
+    "test.test[LazyListSerialization]": [
+        {
+            "uri": "file://test.test_LazyListSerialization_/results.txt"
+        }
+    ],
+    "test.test[ListSerialization]": [
+        {
+            "uri": "file://test.test_ListSerialization_/results.txt"
+        }
+    ]
+}

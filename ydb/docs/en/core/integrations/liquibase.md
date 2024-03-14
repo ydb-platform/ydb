@@ -1,6 +1,6 @@
-## Support for the YDB dialect in the Liquibase migration tool. ##
+# Support for the YDB dialect in the Liquibase migration tool. 
 
-### Introduction ###
+## Introduction 
 
 In today's world of software development, database schema versioning is a critical task to ensure consistency and the ability to roll back changes. Database migration tools, such as Liquibase, provide tools for versioning, tracking, and applying changes to the schema. 
 
@@ -8,7 +8,7 @@ However, the emergence of new database management systems (DBMS) has made it nec
 
 We will discuss the results of integrating DB dialect with Liquibase in this article.
 
-### Features of the YDB Dialect ###
+## Features of the YDB Dialect 
 
 Liquibase's main functionality is the abstract description of database schemas in `.xml`, `.json`, and `.yaml` formats. This ensures portability when switching between different database management systems (DBMS).
 
@@ -22,13 +22,11 @@ The following basic features are supported in the YDB dialect:
 
 To learn more about which SQL features YDB supports, please refer to the [YQL](https://ydb.tech/docs/en/yql/reference/) documentation. It is important to note that YQL custom queries can be executed through native SQL. 
 
-However, YDB is evolving, and in the future, we expect to support more and more traditional SQL features.
-
-### How to use it? ### 
+## How to use it? 
 
 There are two ways: programmatically from a Java / Kotlin application or via the Liquibase CLI. Using Java / Kotlin is described in detail in the [README](https://github.com/ydb-platform/ydb-java-dialects/tree/main/liquibase-dialect) of the project; there's also a link to an example Spring Boot app.
 
-### Example of using a dialect ###
+### Example of using a dialect 
 
 First, you need to install the Liquibase utility itself using [existing methods](https://docs.liquibase.com/start/install/home.html). Then, you need to place the actual .jar archives for the [JDBC driver](https://github.com/ydb-platform/ydb-jdbc-driver) and YDB [dialect](https://github.com/ydb-platform/ydb-java-dialects/tree/main/liquibase-dialect) for Liquibase.
 
@@ -48,8 +46,7 @@ url=jdbc:ydb:grpc://localhost:2136/local
 
 Now, let's move on to migrating the data schema.
 
-<details>
-<summary>Let's create the first table and add two records there</summary>
+Let's create the first table and add two records there:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -100,10 +97,8 @@ Now, let's move on to migrating the data schema.
     </changeSet>
 </databaseChangeLog>
 ```
-</details>
 
-<details>
-<summary>Content changelogs.xml</summary>
+Content changelogs.xml:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -116,12 +111,8 @@ Now, let's move on to migrating the data schema.
     <include file="/migration/series.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
 ```
-</details>
 
-After executing the `liquibase update` command, Liquibase will print a log of the executed migrations.
-
-<details>
-<summary>Log</summary>
+After executing the `liquibase update` command, Liquibase will print a log of the executed migrations:
 
 ```bash
 i113855673:liquibase kurdyukov-kir$ liquibase update
@@ -130,7 +121,7 @@ INFO: YDB JDBC Driver registered: tech.ydb.jdbc.YdbDriver@4b45dcb8
 SLF4J: Failed to load class "org.slf4j.impl.StaticLoggerBinder".
 SLF4J: Defaulting to no-operation (NOP) logger implementation
 SLF4J: See http://www.slf4j.org/codes.html#StaticLoggerBinder for further details.
-####################################################
+ ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ###
 ##   _     _             _ _                      ##
 ##  | |   (_)           (_) |                     ##
 ##  | |    _  __ _ _   _ _| |__   __ _ ___  ___   ##
@@ -143,7 +134,7 @@ SLF4J: See http://www.slf4j.org/codes.html#StaticLoggerBinder for further detail
 ##  Get documentation at docs.liquibase.com       ##
 ##  Get certified courses at learn.liquibase.com  ## 
 ##                                                ##
-####################################################
+ ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ###
 Starting Liquibase at 18:42:35 (version 4.25.1 #690 built at 2023-12-18 16:29+0000)
 Liquibase Version: 4.25.1
 Liquibase Open Source 4.25.1 by Liquibase
@@ -160,24 +151,20 @@ Total change sets:            2
 Liquibase: Update has been successful. Rows affected: 4
 Liquibase command 'update' was executed successfully.
 ```
-</details>
 
 Next, you can see two system tables created by Liquibase in your database: DATABASECHANGELOG, DATABASECHANGELOGLOCK.
 
-<details>
-<summary>Records DATABASECHANGELOG</summary>
+Records DATABASECHANGELOG:
 
 | AUTHOR | COMMENTS | CONTEXTS | DATEEXECUTED | DEPLOYMENT\_ID | DESCRIPTION | EXECTYPE | FILENAME | ID | LABELS | LIQUIBASE | MD5SUM | ORDEREXECUTED | TAG |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | kurdyukov-kir |  | null | 15:42:40 | 9826159656 | insert tableName=series; insert tableName=series | EXECUTED | migration/series.xml | added\_data\_into\_series | null | 4.25.1 | 9:cb49879b530528bc2555422bb7db58da | 2 | null |
 | kurdyukov-kir | Table series. | null | 15:42:40 | 9826159656 | createTable tableName=series; createIndex indexName=series\_index, tableName=series | EXECUTED | migration/series.xml | series | null | 4.25.1 | 9:5809802102bcd74f1d8bc0f1d874463f | 1 | null |
 
-</details>
 
 Next, let's assume that our database schema requires additional migrations.
 
-<details>
-<summary>Let's create the seasons and episodes tables</summary>
+Let's create the seasons and episodes tables:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -235,9 +222,8 @@ Next, let's assume that our database schema requires additional migrations.
     </changeSet>
 </databaseChangeLog>
 ```
-</details>
-<details>
-<summary>Upload the data from the CSV file to the "episodes" table.</summary>
+
+Upload the data from the CSV file to the "episodes" table:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -252,9 +238,8 @@ Next, let's assume that our database schema requires additional migrations.
     </changeSet>
 </databaseChangeLog>
 ```
-</details>
-<details>
-<summary>Create YDB topic</summary>
+
+Create YDB topic:
 
 ```sql
 --liquibase formatted sql
@@ -265,9 +250,8 @@ CREATE TOPIC `my_topic` (
     ) WITH (retention_period = Interval('P1D')
 );
 ```
-</details>
-<details>
-<summary>Content changelogs.xml</summary>
+
+Content changelogs.xml:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -283,12 +267,7 @@ CREATE TOPIC `my_topic` (
     <include file="/migration/sql/topic.sql" relativeToChangelogFile="true"/>
 </databaseChangeLog>
 ```
-</details>
 
 After executing `liquibase update`, the database schema will be successfully updated.
 
 ![YDB UI after apply migrations](../_assets/liquibase-result-example.png =450x)
-
-### Support and Contact
-
-For support, you can open issues in the [repository](https://github.com/ydb-platform/ydb-java-dialects/tree/main/liquibase-dialect) issue tracker with tag `liquibase`.

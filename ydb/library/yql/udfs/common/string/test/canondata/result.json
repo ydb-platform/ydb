@@ -14,6 +14,11 @@
             "uri": "file://test.test_BlockFind_/results.txt"
         }
     ],
+    "test.test[BlockStreamFormat]": [
+        {
+            "uri": "file://test.test_BlockStreamFormat_/results.txt"
+        }
+    ],
     "test.test[BlockStringUDF]": [
         {
             "uri": "file://test.test_BlockStringUDF_/results.txt"

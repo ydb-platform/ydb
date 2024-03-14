@@ -1,6 +1,6 @@
-## Поддержка диалекта YDB в инструменте миграции Liquibase. ##
+# Поддержка диалекта YDB в инструменте миграции Liquibase #
 
-### Введение ###
+## Введение 
 
 В современном мире разработки ПО управление версиями схемы базы данных стало критически важной задачей для обеспечения согласованности и отката изменений. Инструменты миграции базы данных, такие как Liquibase предоставляют средства для версионирования, отслеживания и применения изменений схемы.
 
@@ -8,7 +8,7 @@
 
 Как раз о результатах интеграции диалекта YDB c Liquibase мы поговорим в этой статье.
 
-### Возможности диалекта YDB ###
+## Возможности диалекта YDB 
 
 Основной функциональностью Liquibase является абстрактное описание схемы базы данных в форматах `.xml`, `.json`, `.yaml`. Что обеспечивает переносимость при смене одной СУБД на другую.
 
@@ -20,13 +20,13 @@
 
 Чтобы понять, какие SQL-конструкции может выполнять YDB, ознакомьтесь с документацией по языку запросов [YQL](https://ydb.tech/docs/ru/yql/reference/).
 
-Важно отметить, что кастомные инструукции YQL можно накатывать через нативные SQL запросы. Но YDB не стоит на месте! В дальнейшем все больше и больше классических SQL конструкций будут поддержаны.
+Важно отметить, что кастомные инструкции YQL можно применять через нативные SQL запросы.
 
-### Как воспользоваться? ###
+## Как воспользоваться? 
 
 Есть два способа - программно из Java / Kotlin приложения или через liquibase CLI. Как воспользоваться из Java / Kotlin подробно описано в [README](https://github.com/ydb-platform/ydb-java-dialects/tree/main/liquibase-dialect) проекта, там же есть ссылка на пример Spring Boot приложения.
 
-### Пример использования диалекта ### 
+## Пример использования диалекта 
 
 Для начала нужно установить саму утилиту liquibase [существующими способами](https://docs.liquibase.com/start/install/home.html). Затем нужно подложить актуальные .jar архивы [YDB JDBC драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases) и Liquibase [диалекта YDB](https://github.com/ydb-platform/ydb-java-dialects/tree/main/liquibase-dialect).
 
@@ -45,8 +45,7 @@ url=jdbc:ydb:grpc://localhost:2136/local
 
 Теперь перейдем к миграции схемы данных.
 
-<details>
-<summary>Создадим первую таблицу series и добавим туда две записи.</summary>
+Создадим первую таблицу series и добавим туда две записи:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -97,10 +96,8 @@ url=jdbc:ydb:grpc://localhost:2136/local
     </changeSet>
 </databaseChangeLog>
 ```
-</details>
 
-<details>
-<summary>Содержимое файла changelogs.xml</summary>
+Содержимое файла changelogs.xml:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -113,12 +110,8 @@ url=jdbc:ydb:grpc://localhost:2136/local
     <include file="/migration/series.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
 ```
-</details>
 
-После исполнения `liquibase update` Liquibase напечатает лог исполненных миграций.
-
-<details>
-<summary>Лог</summary>
+После исполнения `liquibase update` Liquibase напечатает лог исполненных миграций:
 
 ```bash
 i113855673:liquibase kurdyukov-kir$ liquibase update
@@ -127,7 +120,7 @@ INFO: YDB JDBC Driver registered: tech.ydb.jdbc.YdbDriver@4b45dcb8
 SLF4J: Failed to load class "org.slf4j.impl.StaticLoggerBinder".
 SLF4J: Defaulting to no-operation (NOP) logger implementation
 SLF4J: See http://www.slf4j.org/codes.html#StaticLoggerBinder for further details.
-####################################################
+###################################
 ##   _     _             _ _                      ##
 ##  | |   (_)           (_) |                     ##
 ##  | |    _  __ _ _   _ _| |__   __ _ ___  ___   ##
@@ -140,7 +133,7 @@ SLF4J: See http://www.slf4j.org/codes.html#StaticLoggerBinder for further detail
 ##  Get documentation at docs.liquibase.com       ##
 ##  Get certified courses at learn.liquibase.com  ## 
 ##                                                ##
-####################################################
+###################################
 Starting Liquibase at 18:42:35 (version 4.25.1 #690 built at 2023-12-18 16:29+0000)
 Liquibase Version: 4.25.1
 Liquibase Open Source 4.25.1 by Liquibase
@@ -157,24 +150,18 @@ Total change sets:            2
 Liquibase: Update has been successful. Rows affected: 4
 Liquibase command 'update' was executed successfully.
 ```
-</details>
 
 Далее в своей базе данных можно увидеть созданные Liquibase две системные таблицы: DATABASECHANGELOG, DATABASECHANGELOGLOCK.
 
-<details>
-<summary>Записи DATABASECHANGELOG</summary>
+Записи DATABASECHANGELOG:
 
 | AUTHOR | COMMENTS | CONTEXTS | DATEEXECUTED | DEPLOYMENT\_ID | DESCRIPTION | EXECTYPE | FILENAME | ID | LABELS | LIQUIBASE | MD5SUM | ORDEREXECUTED | TAG |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | kurdyukov-kir |  | null | 15:42:40 | 9826159656 | insert tableName=series; insert tableName=series | EXECUTED | migration/series.xml | added\_data\_into\_series | null | 4.25.1 | 9:cb49879b530528bc2555422bb7db58da | 2 | null |
 | kurdyukov-kir | Table series. | null | 15:42:40 | 9826159656 | createTable tableName=series; createIndex indexName=series\_index, tableName=series | EXECUTED | migration/series.xml | series | null | 4.25.1 | 9:5809802102bcd74f1d8bc0f1d874463f | 1 | null |
 
-</details>
 
-Далее допустим, что наша схема базы данных нуждается в дополнительных миграциях.
-
-<details>
-<summary>Создадим таблицы seasons и episodes</summary>
+Далее допустим, что наша схема базы данных нуждается в дополнительных миграциях. Создадим таблицы seasons и episodes:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -232,9 +219,8 @@ Liquibase command 'update' was executed successfully.
     </changeSet>
 </databaseChangeLog>
 ```
-</details>
-<details>
-<summary>Загрузим из .csv файла данные в таблицу episodes</summary>
+
+Загрузим из .csv файла данные в таблицу episodes:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -249,9 +235,8 @@ Liquibase command 'update' was executed successfully.
     </changeSet>
 </databaseChangeLog>
 ```
-</details>
-<details>
-<summary>Создание YDB топика</summary>
+
+Создание YDB топика:
 
 ```sql
 --liquibase formatted sql
@@ -262,9 +247,8 @@ CREATE TOPIC `my_topic` (
     ) WITH (retention_period = Interval('P1D')
 );
 ```
-</details>
-<details>
-<summary>Содержимое changelogs.xml</summary>
+
+Содержимое changelogs.xml:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -280,12 +264,7 @@ CREATE TOPIC `my_topic` (
     <include file="/migration/sql/topic.sql" relativeToChangelogFile="true"/>
 </databaseChangeLog>
 ```
-</details>
 
 После исполнения `liquibase update` схема базы успешно обновится.
 
 ![YDB UI после применения всех миграций](../_assets/liquibase-result-example.png =450x)
-
-### Поддержка и контакты ###
-
-Если вы столкнулись с какой - то проблемой или у вас есть предложение по улучшению диалекта, то можно открыть issue в репозитории [ydb-java-dialects](https://github.com/ydb-platform/ydb-java-dialects) с тэгом `liquibase`.

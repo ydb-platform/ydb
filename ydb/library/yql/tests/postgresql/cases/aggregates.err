@@ -4,6 +4,8 @@ Registering pre-existing tables
 	INT4_TBL
 	tenk1
 	VARCHAR_TBL
+	aggtest
+	student
 	varchar_tbl
 	int8_tbl
 <sql-statement>
@@ -19,130 +21,62 @@ SELECT avg(four) AS avg_1 FROM onek;
 <sql-statement>
 SELECT avg(a) AS avg_32 FROM aggtest WHERE a < 100;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
-    
 <sql-statement>
 -- In 7.1, avg(float4) is computed using float8 arithmetic.
 -- Round the result to 3 digits to avoid platform-specific results.
 SELECT avg(b)::numeric(10,3) AS avg_107_943 FROM aggtest;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
-    
 <sql-statement>
 SELECT avg(gpa) AS avg_3_4 FROM ONLY student;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.student
-    
 <sql-statement>
 SELECT sum(four) AS sum_1500 FROM onek;
 </sql-statement>
 <sql-statement>
 SELECT sum(a) AS sum_198 FROM aggtest;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
-    
 <sql-statement>
 SELECT sum(b) AS avg_431_773 FROM aggtest;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
-    
 <sql-statement>
 SELECT sum(gpa) AS avg_6_8 FROM ONLY student;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.student
-    
 <sql-statement>
 SELECT max(four) AS max_3 FROM onek;
 </sql-statement>
 <sql-statement>
 SELECT max(a) AS max_100 FROM aggtest;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
-    
 <sql-statement>
 SELECT max(aggtest.b) AS max_324_78 FROM aggtest;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
-    
 <sql-statement>
 SELECT max(student.gpa) AS max_3_7 FROM student;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.student
-    
 <sql-statement>
 SELECT stddev_pop(b) FROM aggtest;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
-    
 <sql-statement>
 SELECT stddev_samp(b) FROM aggtest;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
-    
 <sql-statement>
 SELECT var_pop(b) FROM aggtest;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
-    
 <sql-statement>
 SELECT var_samp(b) FROM aggtest;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
-    
 <sql-statement>
 SELECT stddev_pop(b::numeric) FROM aggtest;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
-    
 <sql-statement>
 SELECT stddev_samp(b::numeric) FROM aggtest;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
-    
 <sql-statement>
 SELECT var_pop(b::numeric) FROM aggtest;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
-    
 <sql-statement>
 SELECT var_samp(b::numeric) FROM aggtest;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
-    
 <sql-statement>
 -- population variance is defined for a single tuple, sample variance
 -- is not
@@ -284,66 +218,30 @@ FROM (VALUES (7000000000005), (7000000000007)) v(x);
 -- SQL2003 binary aggregates
 SELECT regr_count(b, a) FROM aggtest;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
-    
 <sql-statement>
 SELECT regr_sxx(b, a) FROM aggtest;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
-    
 <sql-statement>
 SELECT regr_syy(b, a) FROM aggtest;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
-    
 <sql-statement>
 SELECT regr_sxy(b, a) FROM aggtest;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
-    
 <sql-statement>
 SELECT regr_avgx(b, a), regr_avgy(b, a) FROM aggtest;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
-    
 <sql-statement>
 SELECT regr_r2(b, a) FROM aggtest;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
-    
 <sql-statement>
 SELECT regr_slope(b, a), regr_intercept(b, a) FROM aggtest;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
-    
 <sql-statement>
 SELECT covar_pop(b, a), covar_samp(b, a) FROM aggtest;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
-    
 <sql-statement>
 SELECT corr(b, a) FROM aggtest;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
-    
 <sql-statement>
 -- check single-tuple behavior
 SELECT covar_pop(1::float8,2::float8), covar_samp(3::float8,4::float8);

@@ -1,3 +1,5 @@
+Registering pre-existing tables
+	testjsonb
 <sql-statement>
 -- Strings.
 SELECT '""'::jsonb;				-- OK.
@@ -1105,27 +1107,15 @@ SELECT jsonb '{"a":"null", "b":"qq"}' ? 'a';
 -- array exists - array elements should behave as keys
 SELECT count(*) from testjsonb  WHERE j->'array' ? 'bar';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 -- type sensitive array exists - should return no rows (since "exists" only
 -- matches strings that are either object keys or array elements)
 SELECT count(*) from testjsonb  WHERE j->'array' ? '5'::text;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 -- However, a raw scalar is *contained* within the array
 SELECT count(*) from testjsonb  WHERE j->'array' @> '5'::jsonb;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT jsonb_exists_any('{"a":null, "b":"qq"}', ARRAY['a','b']);
 </sql-statement>
@@ -3873,192 +3863,84 @@ DROP TYPE jb_unordered_pair;
 -- indexing
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":null}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC"}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC", "public":true}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"age":25}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"age":25.0}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j ? 'public';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j ? 'bar';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j ?| ARRAY['public','disabled'];
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j ?& ARRAY['public','disabled'];
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.wait == null';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '"CC" == $.wait';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.wait == "CC" && true == $.public';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.age == 25';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.age == 25.0';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.public)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.bar)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.public) || exists($.disabled)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.public) && exists($.disabled)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? (@ == null)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? ("CC" == @)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.wait == "CC" && true == @.public)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.age ? (@ == 25)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.age == 25.0)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.public';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.bar';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 CREATE INDEX jidx ON testjsonb USING gin (j);
 </sql-statement>
@@ -4073,88 +3955,40 @@ SET enable_seqscan = off;
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":null}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC"}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC", "public":true}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"age":25}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"age":25.0}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"array":["foo"]}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"array":["bar"]}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 -- exercise GIN_SEARCH_MODE_ALL
 SELECT count(*) FROM testjsonb WHERE j @> '{}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j ? 'public';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j ? 'bar';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j ?| ARRAY['public','disabled'];
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j ?& ARRAY['public','disabled'];
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 EXPLAIN (COSTS OFF)
 SELECT count(*) FROM testjsonb WHERE j @@ '$.wait == null';
@@ -4167,122 +4001,54 @@ SELECT count(*) FROM testjsonb WHERE j @@ '$.wait == null';
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.wait == null';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($ ? (@.wait == null))';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.wait ? (@ == null))';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '"CC" == $.wait';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.wait == "CC" && true == $.public';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.age == 25';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.age == 25.0';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.array[*] == "foo"';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.array[*] == "bar"';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($ ? (@.array[*] == "bar"))';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.array ? (@[*] == "bar"))';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.array[*] ? (@ == "bar"))';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.public)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.bar)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.public) || exists($.disabled)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.public) && exists($.disabled)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 EXPLAIN (COSTS OFF)
 SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? (@ == null)';
@@ -4295,80 +4061,36 @@ SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? (@ == null)';
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? (@ == null)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? ("CC" == @)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.wait == "CC" && true == @.public)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.age ? (@ == 25)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.age == 25.0)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.array[*] == "bar")';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.array ? (@[*] == "bar")';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.array[*] ? (@ == "bar")';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.public';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.bar';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 -- array exists - array elements should behave as keys (for GIN index scans too)
 CREATE INDEX jidx_array ON testjsonb USING gin((j->'array'));
@@ -4381,27 +4103,15 @@ CREATE INDEX jidx_array ON testjsonb USING gin((j->'array'));
 <sql-statement>
 SELECT count(*) from testjsonb  WHERE j->'array' ? 'bar';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 -- type sensitive array exists - should return no rows (since "exists" only
 -- matches strings that are either object keys or array elements)
 SELECT count(*) from testjsonb  WHERE j->'array' ? '5'::text;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 -- However, a raw scalar is *contained* within the array
 SELECT count(*) from testjsonb  WHERE j->'array' @> '5'::jsonb;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 RESET enable_seqscan;
 </sql-statement>
@@ -4430,10 +4140,6 @@ SELECT key, count(*) FROM (SELECT (jsonb_each(j)).key FROM testjsonb) AS wow GRO
 -- sort/hash
 SELECT count(distinct j) FROM testjsonb;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SET enable_hashagg = off;
 </sql-statement>
@@ -4445,10 +4151,6 @@ SET enable_hashagg = off;
 <sql-statement>
 SELECT count(*) FROM (SELECT j FROM (SELECT * FROM testjsonb UNION ALL SELECT * FROM testjsonb) js GROUP BY j) js2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SET enable_hashagg = on;
 </sql-statement>
@@ -4468,10 +4170,6 @@ SET enable_sort = off;
 <sql-statement>
 SELECT count(*) FROM (SELECT j FROM (SELECT * FROM testjsonb UNION ALL SELECT * FROM testjsonb) js GROUP BY j) js2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT distinct * FROM (values (jsonb '{}' || ''::text),('{}')) v(j);
 </sql-statement>
@@ -4541,17 +4239,9 @@ SET enable_seqscan = off;
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j > '{"p":1}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j = '{"pos":98, "line":371, "node":"CBA", "indexed":true}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 --gin path opclass
 DROP INDEX jidx;
@@ -4575,137 +4265,61 @@ SET enable_seqscan = off;
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":null}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC"}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC", "public":true}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"age":25}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"age":25.0}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 -- exercise GIN_SEARCH_MODE_ALL
 SELECT count(*) FROM testjsonb WHERE j @> '{}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.wait == null';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($ ? (@.wait == null))';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.wait ? (@ == null))';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '"CC" == $.wait';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.wait == "CC" && true == $.public';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.age == 25';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.age == 25.0';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.array[*] == "foo"';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.array[*] == "bar"';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($ ? (@.array[*] == "bar"))';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.array ? (@[*] == "bar"))';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.array[*] ? (@ == "bar"))';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 EXPLAIN (COSTS OFF)
 SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? (@ == null)';
@@ -4718,80 +4332,36 @@ SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? (@ == null)';
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? (@ == null)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? ("CC" == @)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.wait == "CC" && true == @.public)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.age ? (@ == 25)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.age == 25.0)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.array[*] == "bar")';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.array ? (@[*] == "bar")';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.array[*] ? (@ == "bar")';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.public';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.bar';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 RESET enable_seqscan;
 </sql-statement>

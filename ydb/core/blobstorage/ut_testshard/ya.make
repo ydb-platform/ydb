@@ -12,6 +12,7 @@ UNITTEST()
     )
 
     PEERDIR(
+        ydb/apps/version
         ydb/core/base
         ydb/core/blob_depot
         ydb/core/blobstorage/backpressure

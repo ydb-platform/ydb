@@ -18,6 +18,10 @@ inline bool IsBadInterval(TScaledDate val) {
     return val <= -TScaledDate(NUdf::MAX_TIMESTAMP) || val >= TScaledDate(NUdf::MAX_TIMESTAMP);
 }
 
+inline bool IsBadInterval64(TScaledDate val) {
+    return val < -TScaledDate(NUdf::MAX_TIMESTAMP64) || val > TScaledDate(NUdf::MAX_TIMESTAMP64);
+}
+
 template<typename TSrc> inline
 TScaledDate ToScaledDate(typename TSrc::TLayout src);
 

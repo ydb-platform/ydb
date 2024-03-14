@@ -26,7 +26,9 @@ TExecFunc arrow_hashvarlenaextended() { return MakeIndirectExec<true, true>(&has
 TExecFunc arrow_jsonb_agg_finalfn() { return MakeIndirectExec<false, false>(&jsonb_agg_finalfn); }
 TExecFunc arrow_jsonb_agg_transfn() { return MakeIndirectExec<false, true>(&jsonb_agg_transfn); }
 TExecFunc arrow_jsonb_bool() { return MakeIndirectExec<true, true>(&jsonb_bool); }
+TExecFunc arrow_jsonb_build_array() { return MakeIndirectExec<false, false>(&jsonb_build_array); }
 TExecFunc arrow_jsonb_build_array_noargs() { return MakeIndirectExec<false, false>(&jsonb_build_array_noargs); }
+TExecFunc arrow_jsonb_build_object() { return MakeIndirectExec<false, false>(&jsonb_build_object); }
 TExecFunc arrow_jsonb_build_object_noargs() { return MakeIndirectExec<false, false>(&jsonb_build_object_noargs); }
 TExecFunc arrow_jsonb_float4() { return MakeIndirectExec<true, true>(&jsonb_float4); }
 TExecFunc arrow_jsonb_float8() { return MakeIndirectExec<true, true>(&jsonb_float8); }

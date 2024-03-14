@@ -29,7 +29,14 @@ int Main(int argc, const char *argv[])
         json.WriteKey("ret_type").WriteString(retTypeDesc.Name);
         json.WriteKey("ret_type_fixed").WriteBool(retTypeDesc.PassByValue &&
             retTypeDesc.TypeLen > 0 && retTypeDesc.TypeLen <= 8);
-        json.WriteKey("variadic").WriteBool(false);
+        if (desc.VariadicType != 0) {
+            const auto& varTypeDesc = NPg::LookupType(desc.VariadicType);
+            json.WriteKey("var_type").WriteString( varTypeDesc.Name);
+            if (varTypeDesc.Name != "any") {
+                json.WriteKey("var_type_fixed").WriteBool(varTypeDesc.PassByValue &&
+                    varTypeDesc.TypeLen > 0 && varTypeDesc.TypeLen <= 8);
+            }
+        }
         json.WriteKey("args").BeginList();
         for (const auto& a : desc.ArgTypes) {
             const auto& argTypeDesc = NPg::LookupType(a);

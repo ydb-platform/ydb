@@ -37,7 +37,7 @@
 
 ## Конфигурация диалекта {#configuration-dialect}
 
-Сконфигурировать Hibernate c помощью hibernate.cfg.xml:
+После добавления зависимости в проект нужно явно указать ваш диалект. Сконфигурировать Hibernate c помощью hibernate.cfg.xml:
 
 ```xml
 <property name="hibernate.dialect">tech.ydb.hibernate.dialect.YdbDialect</property>

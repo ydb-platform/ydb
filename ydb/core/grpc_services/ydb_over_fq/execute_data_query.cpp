@@ -248,7 +248,6 @@ private:
             ResultSets_.push_back(result.result_set());
             resultSet = &ResultSets_.back();
         } else {
-            // TODO: validate columns
             resultSet = &ResultSets_.back();
             for (const auto& srcRow : result.result_set().rows()) {
                 *resultSet->add_rows() = srcRow;

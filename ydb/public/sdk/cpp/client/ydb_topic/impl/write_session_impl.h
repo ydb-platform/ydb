@@ -317,7 +317,6 @@ private:
     };
 
     THandleResult OnErrorImpl(NYdb::TPlainStatus&& status); // true - should Start(), false - should Close(), empty - no action
-
 public:
     TWriteSessionImpl(const TWriteSessionSettings& settings,
             std::shared_ptr<TTopicClient::TImpl> client,
@@ -387,6 +386,7 @@ private:
     void OnWriteDone(NYdbGrpc::TGrpcStatus&& status, size_t connectionGeneration);
     TProcessSrvMessageResult ProcessServerMessageImpl();
     TMemoryUsageChange OnMemoryUsageChangedImpl(i64 diff);
+    TBuffer CompressBufferImpl(TVector<TStringBuf>& data, ECodec codec, i32 level);
     void CompressImpl(TBlock&& block);
     void OnCompressed(TBlock&& block, bool isSyncCompression=false);
     TMemoryUsageChange OnCompressedImpl(TBlock&& block);
@@ -478,6 +478,9 @@ private:
     TInstant LastCountersLogTs;
     TWriterCounters::TPtr Counters;
     TDuration WakeupInterval;
+
+    // Set by the write session, if Settings.DirectWriteToPartition is true and Settings.PartitionId is unset. Otherwise ignored.
+    TMaybe<ui64> DirectWriteToPartitionId;
 protected:
     ui64 MessagesAcquired = 0;
 };

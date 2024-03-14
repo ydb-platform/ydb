@@ -19,20 +19,6 @@ using namespace NYdb::NScheme;
 
 namespace {
 
-void CreateDatabase(TTestEnv& env, const TString& databaseName, size_t nodeCount = 1) {
-    auto subdomain = GetSubDomainDeclareSettings(databaseName);
-    UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-        env.GetClient().CreateExtSubdomain("/Root", subdomain));
-
-    env.GetTenants().Run("/Root/" + databaseName, nodeCount);
-
-    auto subdomainSettings = GetSubDomainDefaultSettings(databaseName, env.GetPools());
-    subdomainSettings.SetExternalSchemeShard(true);
-    subdomainSettings.SetExternalStatisticsAggregator(true);
-    UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-        env.GetClient().AlterExtSubdomain("/Root", subdomainSettings));
-}
-
 void CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, TPathId resourcesDomainKey) {
     auto subdomain = GetSubDomainDeclareSettings(databaseName);
     subdomain.MutableResourcesDomainKey()->SetSchemeShard(resourcesDomainKey.OwnerId);

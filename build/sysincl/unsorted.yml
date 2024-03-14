@@ -50,10 +50,7 @@
   - fsio.h
   - fwriteerror.h
   - gdbm.h
-  - ghostscript/iapi.h
-  - ghostscript/ierrors.h
   - gmp.h
-  - gnutls/x509.h
   - hp-timing.h
   - httpd_wrap.h
   - i86.h
@@ -104,18 +101,14 @@
   - nonblocking.h
   - note.h
   - opcdef.h
-  - os2def.h
-  - oslib/osfscontrol.h
   - paper.h
   - pire/config.h
   - pngusr.h
   - pth.h
   - relocatable.h
   - rtl.h
-  - semLib.h
   - shlib-compat.h
   - sigsegv.h
-  - sockLib.h
   - socket.h
   - socketshr.h
   - socklib.h
@@ -124,11 +117,8 @@
   - streams/un.h
   - stropts
   - swill.h
-  - sysLib.h
-  - taskLib.h
   - tcp.h
   - thread.h
-  - tickLib.h
   - ttdef.h
   - type_traits.h
   - udplite.h
@@ -199,7 +189,6 @@
   - zircon/types.h
   - zircon/process.h
   - sys/linux-syscalls.h
-  - ompt.h
   # vvvvv ____ because in [geobase/perl/dynamic] does not work ignoring via "// Y_IGNORE"
   - geobase6/service_getter.hpp
   - geobase6/timezone_getter.hpp
@@ -314,37 +303,8 @@
   - perl.h
   - XSUB.h
   #endif
-  #if defined(_OS2_)
-  - os2.h
-  #endif
   #if defined(_arm_)
   - arm/limits.h
-  #endif
-  #if defined(_VMS_) && TODO
-  - atrdef.h
-  - dcdef.h
-  - descrip.h
-  - dvsdef.h
-  - fab.h
-  - fibdef.h
-  - gen64def.h
-  - iledef.h
-  - iodef.h
-  - lib$routines.h
-  - libfildef.h
-  - libfisdef.h
-  - lnmdef.h
-  - nam.h
-  - rms.h
-  - rmsdef.h
-  - ssdef.h
-  - starlet.h
-  - str$routines.h
-  - stsdef.h
-  - syidef.h
-  - times.h
-  - unixio.h
-  - tcpSocketVaxRoutines.h
   #endif
   #if defined(_SOLARIS_) && TODO
   - synch.h
@@ -371,18 +331,6 @@
   #if defined(HAVE_ALTIVEC)
   - altivec.h
   #endif
-  #if defined(__vxWorks__)
-  - vxCpuLib.h
-  - vxWorks.h
-  - sockLib.h
-  - hostLib.h
-  - ioLib.h
-  - iosLib.h
-  - resolvLib.h
-  - rtpLib.h
-  - pipeDrv.h
-  - selectLib.h
-  #endif
   #if defined(_LIBC) && TRASH
   - ../locale/localeinfo.h
   - ../locale/elem-hash.h
@@ -393,7 +341,6 @@
   #endif
   #if defined(_TRASH_) && TODO
   - gcrypt.h
-  - gnutls/gnutls.h
   - gdwmfapi.h
   - winmmap.h
   - sf_unistd.h
@@ -412,9 +359,6 @@
   - sys/systemcfg.h
   - sys/thread.h
   #endif
-  - iostream.h
-  - streambuf.h
-  - ostream.h
   - nacl/nacl_random.h
   - jemalloc/jemalloc.h
   - sys/inttypes.h
@@ -524,9 +468,6 @@
 
 - case_sensitive: false
   includes:
-  - cor.h
-  - fusion.h
-  - metahost.h
   #if defined(WINDOWS) && CONTRIB && TRASH
   - ../include/stdint.h
   #endif
@@ -544,7 +485,6 @@
   - efndef
   - exiv2/types.hpp
   - hw_ubsec.h
-  - hwcryptohook.h
   - jpidef.h
   - lckdef.h
   - libdtdef.h

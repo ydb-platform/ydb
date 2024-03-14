@@ -66,6 +66,8 @@ public:
     NCompression::ECodec RequestCodec;
     NCompression::ECodec ResponseCodec;
 
+    bool EnableLegacyRpcCodecs;
+
     bool EnableRetries;
     NRpc::TRetryingChannelConfigPtr RetryingChannel;
 

@@ -12,12 +12,14 @@
 namespace NKikimr::NReplication::NService {
 
 Y_UNIT_TEST_SUITE(LocalTableWriter) {
+    using namespace NTestHelpers;
+
     Y_UNIT_TEST(WriteTable) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
 
         env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
-            .Name = "Test",
+            .Name = "Table",
             .KeyColumns = {"key"},
             .Columns = {
                 {.Name = "key", .Type = "Uint32"},
@@ -41,7 +43,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
 
         env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
-            .Name = "Test",
+            .Name = "Table",
             .KeyColumns = {"key"},
             .Columns = {
                 {.Name = "key", .Type = "Uint32"},

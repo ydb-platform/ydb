@@ -21,7 +21,7 @@ class TBoardSubscriberTest: public NUnitTest::TTestBase {
 
     TActorId CreateSubscriber(const TString& path, const TActorId& owner, ui32 nodeIdx) {
         const TActorId subscriber = Context->Register(
-            CreateBoardLookupActor(path, owner, 0, EBoardLookupMode::Subscription), nodeIdx
+            CreateBoardLookupActor(path, owner, EBoardLookupMode::Subscription), nodeIdx
         );
         Context->EnableScheduleForActor(subscriber);
         return subscriber;
@@ -30,7 +30,7 @@ class TBoardSubscriberTest: public NUnitTest::TTestBase {
     TActorId CreatePublisher(
             const TString& path, const TString& payload, const TActorId& owner, ui32 nodeIdx) {
         const TActorId publisher = Context->Register(
-            CreateBoardPublishActor(path, payload, owner, 0, 0, true), nodeIdx
+            CreateBoardPublishActor(path, payload, owner, 0, true), nodeIdx
         );
         Context->EnableScheduleForActor(publisher);
         return publisher;
@@ -61,7 +61,7 @@ class TBoardSubscriberTest: public NUnitTest::TTestBase {
     }
 
     TVector<TActorId> ResolveReplicas() {
-        const TActorId proxy = MakeStateStorageProxyID(0);
+        const TActorId proxy = MakeStateStorageProxyID();
         const TActorId edge = Context->AllocateEdgeActor();
 
         Context->Send(proxy, edge, new TEvStateStorage::TEvResolveBoard("path"));
@@ -76,7 +76,7 @@ public:
     void SetUp() override {
         Context = MakeHolder<TTestBasicRuntime>(3);
 
-        SetupCustomStateStorage(*Context, 3, 3, 1, 0);
+        SetupCustomStateStorage(*Context, 3, 3, 1);
 
         Context->Initialize(TAppPrepare().Unwrap());
     }

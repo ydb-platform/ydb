@@ -1001,9 +1001,9 @@
     ],
     "test.test[join-lookupjoin_semi_2o--Debug]": [
         {
-            "checksum": "64f200e4e8720ee054f9aeb2ba5b4f4c",
-            "size": 2904,
-            "uri": "https://{canondata_backend}/1937027/67f47e98bc150e7387e3e30adedc957caafe9c32/resource.tar.gz#test.test_join-lookupjoin_semi_2o--Debug_/opt.yql"
+            "checksum": "69d494929026763cd1b8abe8f161312f",
+            "size": 2932,
+            "uri": "https://{canondata_backend}/1773845/222710319af77df66a1ed7393fa40d1186e569f2/resource.tar.gz#test.test_join-lookupjoin_semi_2o--Debug_/opt.yql"
         }
     ],
     "test.test[join-lookupjoin_semi_2o--Plan]": [
@@ -1693,6 +1693,27 @@
             "checksum": "fbd2ac6477eaa5549b105e7ed1c65ff9",
             "size": 1465,
             "uri": "https://{canondata_backend}/1937027/67f47e98bc150e7387e3e30adedc957caafe9c32/resource.tar.gz#test.test_pg-select_table2-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[pg-sublink_projection_array_corr-default.txt-Debug]": [
+        {
+            "checksum": "ce9332a8ad6b7557757786bcbfee8111",
+            "size": 2399,
+            "uri": "https://{canondata_backend}/1889210/217f5bc86115daa345d05d3491a45286f75061f1/resource.tar.gz#test.test_pg-sublink_projection_array_corr-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[pg-sublink_projection_array_corr-default.txt-Plan]": [
+        {
+            "checksum": "a3b64a2cf9903b3868a2dd88a18fc46e",
+            "size": 922,
+            "uri": "https://{canondata_backend}/1889210/217f5bc86115daa345d05d3491a45286f75061f1/resource.tar.gz#test.test_pg-sublink_projection_array_corr-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-sublink_projection_array_corr-default.txt-Results]": [
+        {
+            "checksum": "ad71e811b260b82c9629cc1cf6b3db0d",
+            "size": 2140,
+            "uri": "https://{canondata_backend}/1889210/217f5bc86115daa345d05d3491a45286f75061f1/resource.tar.gz#test.test_pg-sublink_projection_array_corr-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pg-sublink_projection_exists_corr-default.txt-Debug]": [

@@ -118,6 +118,7 @@ class StaticConfigGenerator(object):
         if tracing is not None:
             self.__tracing = (
                 tracing["backend"],
+                tracing.get("uploader"),
                 tracing.get("sampling", []),
                 tracing.get("external_throttling", []),
             )
@@ -1121,26 +1122,32 @@ class StaticConfigGenerator(object):
 
     def __generate_tracing_txt(self):
         def get_selectors(selectors):
-            return config_pb2.TTracingConfig.TSelectors()
+            selectors_pb = config_pb2.TTracingConfig.TSelectors()
+
+            request_type = selectors["request_type"]
+            if request_type is not None:
+                selectors_pb.RequestType = request_type
+
+            return selectors_pb
 
         def get_sampling_scope(sampling):
-            sampling_scope_pb = config_pb2.TTracingConfig.TSamplingScope()
+            sampling_scope_pb = config_pb2.TTracingConfig.TSamplingRule()
             selectors = sampling.get("scope")
             if selectors is not None:
                 sampling_scope_pb.Scope.CopyFrom(get_selectors(selectors))
             sampling_scope_pb.Fraction = sampling['fraction']
             sampling_scope_pb.Level = sampling['level']
-            sampling_scope_pb.MaxRatePerMinute = sampling['max_rate_per_minute']
-            sampling_scope_pb.MaxBurst = sampling.get('max_burst', 0)
+            sampling_scope_pb.MaxTracesPerMinute = sampling['max_traces_per_minute']
+            sampling_scope_pb.MaxTracesBurst = sampling.get('max_traces_burst', 0)
             return sampling_scope_pb
 
         def get_external_throttling(throttling):
-            throttling_scope_pb = config_pb2.TTracingConfig.TExternalThrottlingScope()
+            throttling_scope_pb = config_pb2.TTracingConfig.TExternalThrottlingRule()
             selectors = throttling.get("scope")
             if selectors is not None:
                 throttling_scope_pb.Scope.CopyFrom(get_selectors(selectors))
-            throttling_scope_pb.MaxRatePerMinute = throttling['max_rate_per_minute']
-            throttling_scope_pb.MaxBurst = throttling.get('max_burst', 0)
+            throttling_scope_pb.MaxTracesPerMinute = throttling['max_traces_per_minute']
+            throttling_scope_pb.MaxTracesBurst = throttling.get('max_traces_burst', 0)
             return throttling_scope_pb
 
         def get_auth_config(auth):
@@ -1186,11 +1193,41 @@ class StaticConfigGenerator(object):
 
             return backend_pb
 
+        def get_uploader(uploader):
+            uploader_pb = config_pb2.TTracingConfig.TUploaderConfig()
+
+            max_exported_spans_per_second = uploader.get("max_exported_spans_per_second")
+            if max_exported_spans_per_second is not None:
+                uploader_pb.MaxExportedSpansPerSecond = max_exported_spans_per_second
+
+            max_spans_in_batch = uploader.get("max_spans_in_batch")
+            if max_spans_in_batch is not None:
+                uploader_pb.MaxSpansInBatch = max_spans_in_batch
+
+            max_bytes_in_batch = uploader.get("max_bytes_in_batch")
+            if max_bytes_in_batch is not None:
+                uploader_pb.MaxBytesInBatch = max_bytes_in_batch
+
+            max_batch_accumulation_milliseconds = uploader.get("max_batch_accumulation_milliseconds")
+            if max_batch_accumulation_milliseconds is not None:
+                uploader_pb.MaxBatchAccumulationMilliseconds = max_batch_accumulation_milliseconds
+
+            span_export_timeout_seconds = uploader.get("span_export_timeout_seconds")
+            if span_export_timeout_seconds is not None:
+                uploader_pb.SpanExportTimeoutSeconds = span_export_timeout_seconds
+
+            max_export_requests_inflight = uploader.get("max_export_requests_inflight")
+            if max_export_requests_inflight is not None:
+                uploader_pb.MaxExportRequestsInflight = max_export_requests_inflight
+
+            return uploader_pb
+
         pb = config_pb2.TAppConfig()
         if self.__tracing:
             tracing_pb = pb.TracingConfig
             (
                 backend,
+                uploader,
                 sampling,
                 external_throttling
             ) = self.__tracing
@@ -1199,6 +1236,9 @@ class StaticConfigGenerator(object):
             assert isinstance(external_throttling, list)
 
             tracing_pb.Backend.CopyFrom(get_backend(backend))
+
+            if uploader is not None:
+                tracing_pb.Uploader.CopyFrom(get_uploader(uploader))
 
             for sampling_scope in sampling:
                 tracing_pb.Sampling.append(get_sampling_scope(sampling_scope))

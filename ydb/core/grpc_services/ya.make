@@ -106,6 +106,7 @@ PEERDIR(
     ydb/core/io_formats/ydb_dump
     ydb/core/kesus/tablet
     ydb/core/kqp/common
+    ydb/core/kqp/federated_query
     ydb/core/protos
     ydb/core/scheme
     ydb/core/sys_view
@@ -114,6 +115,7 @@ PEERDIR(
     ydb/core/tx/sharding
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/data_events
+    ydb/core/util
     ydb/core/ydb_convert
     ydb/core/security
     ydb/library/aclib

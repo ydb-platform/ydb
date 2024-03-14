@@ -115,6 +115,34 @@ void TDynamicConcurrencyLimit::SetDynamicLimit(std::optional<int> dynamicLimit)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TDynamicConcurrencyByteLimit::Reconfigure(i64 limit)
+{
+    ConfigByteLimit_.store(limit, std::memory_order::relaxed);
+    SetDynamicByteLimit(limit);
+}
+
+i64 TDynamicConcurrencyByteLimit::GetByteLimitFromConfiguration() const
+{
+    return ConfigByteLimit_.load(std::memory_order::relaxed);
+}
+
+i64 TDynamicConcurrencyByteLimit::GetDynamicByteLimit() const
+{
+    return DynamicByteLimit_.load(std::memory_order::relaxed);
+}
+
+void TDynamicConcurrencyByteLimit::SetDynamicByteLimit(std::optional<i64> dynamicLimit)
+{
+    auto limit = dynamicLimit.has_value() ? *dynamicLimit : ConfigByteLimit_.load(std::memory_order::relaxed);
+    auto oldLimit = DynamicByteLimit_.exchange(limit, std::memory_order::relaxed);
+
+    if (oldLimit != limit) {
+        Updated_.Fire();
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TServiceBase::TMethodDescriptor::TMethodDescriptor(
     TString method,
     TLiteHandler liteHandler,
@@ -166,10 +194,24 @@ auto TServiceBase::TMethodDescriptor::SetQueueSizeLimit(int value) const -> TMet
     return result;
 }
 
+auto TServiceBase::TMethodDescriptor::SetQueueByteSizeLimit(i64 value) const -> TMethodDescriptor
+{
+    auto result = *this;
+    result.QueueByteSizeLimit = value;
+    return result;
+}
+
 auto TServiceBase::TMethodDescriptor::SetConcurrencyLimit(int value) const -> TMethodDescriptor
 {
     auto result = *this;
     result.ConcurrencyLimit = value;
+    return result;
+}
+
+auto TServiceBase::TMethodDescriptor::SetConcurrencyByteLimit(i64 value) const -> TMethodDescriptor
+{
+    auto result = *this;
+    result.ConcurrencyByteLimit = value;
     return result;
 }
 
@@ -222,6 +264,13 @@ auto TServiceBase::TMethodDescriptor::SetPooled(bool value) const -> TMethodDesc
     return result;
 }
 
+auto TServiceBase::TMethodDescriptor::SetHandleMethodError(bool value) const -> TMethodDescriptor
+{
+    auto result = *this;
+    result.HandleMethodError = value;
+    return result;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TServiceBase::TMethodPerformanceCounters::TMethodPerformanceCounters(
@@ -271,6 +320,7 @@ TServiceBase::TRuntimeMethodInfo::TRuntimeMethodInfo(
     , ResponseLoggingAnchor(NLogging::TLogManager::Get()->RegisterDynamicAnchor(
         Format("%v.%v ->", ServiceId.ServiceName, Descriptor.Method)))
     , RequestQueueSizeLimitErrorCounter(Profiler.Counter("/request_queue_size_errors"))
+    , RequestQueueByteSizeLimitErrorCounter(Profiler.Counter("/request_queue_byte_size_errors"))
     , UnauthenticatedRequestsCounter(Profiler.Counter("/unauthenticated_requests"))
     , LoggingSuppressionFailedRequestThrottler(
         CreateReconfigurableThroughputThrottler(
@@ -320,10 +370,18 @@ public:
 
     ~TServiceContext()
     {
-        if (!Replied_ && !CanceledList_.IsFired()) {
+        if (!Replied_) {
             // Prevent alerting.
             RequestInfoSet_ = true;
-            Reply(TError(NRpc::EErrorCode::Unavailable, "Service is unable to complete your request"));
+            if (CanceledList_.IsFired()) {
+                if (TimedOutLatch_) {
+                    Reply(TError(NYT::EErrorCode::Timeout, "Request timed out"));
+                } else {
+                    Reply(TError(NYT::EErrorCode::Canceled, "Request canceled"));
+                }
+            } else {
+                Reply(TError(NRpc::EErrorCode::Unavailable, "Service is unable to complete your request"));
+            }
         }
 
         Finish();
@@ -451,7 +509,7 @@ public:
             RequestId_);
 
         if (RuntimeInfo_->Descriptor.StreamingEnabled) {
-            static const auto CanceledError = TError("Request canceled");
+            static const auto CanceledError = TError(NYT::EErrorCode::Canceled, "Request canceled");
             AbortStreamsUnlessClosed(CanceledError);
         }
 
@@ -476,11 +534,12 @@ public:
             stage);
 
         if (RuntimeInfo_->Descriptor.StreamingEnabled) {
-            static const auto TimedOutError = TError("Request timed out");
+            static const auto TimedOutError = TError(NYT::EErrorCode::Timeout, "Request timed out");
             AbortStreamsUnlessClosed(TimedOutError);
         }
 
         CanceledList_.Fire(GetCanceledError());
+
         MethodPerformanceCounters_->TimedOutRequestCounter.Increment();
 
         // Guards from race with DoGuardedRun.
@@ -666,7 +725,7 @@ private:
 
     bool IsRegistrable()
     {
-        if (RuntimeInfo_->Descriptor.Cancelable && !RequestHeader_->uncancelable()) {
+        if (Cancelable_) {
             return true;
         }
 
@@ -710,11 +769,11 @@ private:
 
         BuildGlobalRequestInfo();
 
+        Cancelable_ = RuntimeInfo_->Descriptor.Cancelable && !RequestHeader_->uncancelable();
+
         if (IsRegistrable()) {
             Service_->RegisterRequest(this);
         }
-
-        Cancelable_ = RuntimeInfo_->Descriptor.Cancelable && !RequestHeader_->uncancelable();
     }
 
     void BuildGlobalRequestInfo()
@@ -836,6 +895,11 @@ private:
             TCurrentTraceContextGuard guard(TraceContext_);
             DoGuardedRun(handler);
         } catch (const std::exception& ex) {
+            const auto& descriptor = RuntimeInfo_->Descriptor;
+            if (descriptor.HandleMethodError) {
+                Service_->OnMethodError(ex, descriptor.Method);
+            }
+
             Reply(ex);
         }
     }
@@ -1013,15 +1077,15 @@ private:
         }
 
         if (RequestRun_) {
-            RequestQueue_->OnRequestFinished();
+            auto requestTotalSize = GetMessageBodySize(RequestMessage_) +
+                GetTotalMessageAttachmentSize(RequestMessage_);
+            RequestQueue_->OnRequestFinished(requestTotalSize);
         }
-
 
         if (ActiveRequestCountIncremented_) {
             Service_->DecrementActiveRequestCount();
         }
     }
-
 
     void LogRequest() override
     {
@@ -1269,6 +1333,10 @@ bool TRequestQueue::Register(TServiceBase* service, TServiceBase::TRuntimeMethod
             RuntimeInfo_->ConcurrencyLimit.SubscribeUpdated(BIND(
                 &TRequestQueue::OnConcurrencyLimitChanged,
                 MakeWeak(this)));
+
+            RuntimeInfo_->ConcurrencyByteLimit.SubscribeUpdated(BIND(
+                &TRequestQueue::OnConcurrencyByteLimitChanged,
+                MakeWeak(this)));
         }
         Registered_.store(true, std::memory_order::release);
     }
@@ -1279,6 +1347,13 @@ bool TRequestQueue::Register(TServiceBase* service, TServiceBase::TRuntimeMethod
 void TRequestQueue::OnConcurrencyLimitChanged()
 {
     if (QueueSize_.load() > 0) {
+        ScheduleRequestsFromQueue();
+    }
+}
+
+void TRequestQueue::OnConcurrencyByteLimitChanged()
+{
+    if (QueueByteSize_.load() > 0) {
         ScheduleRequestsFromQueue();
     }
 }
@@ -1313,11 +1388,16 @@ void TRequestQueue::ConfigureWeightThrottler(const TThroughputThrottlerConfigPtr
     WeightThrottler_.Reconfigure(config);
 }
 
-bool TRequestQueue::IsQueueLimitSizeExceeded() const
+bool TRequestQueue::IsQueueSizeLimitExceeded() const
 {
-    return
-        QueueSize_.load(std::memory_order::relaxed) >=
+    return QueueSize_.load(std::memory_order::relaxed) >=
         RuntimeInfo_->QueueSizeLimit.load(std::memory_order::relaxed);
+}
+
+bool TRequestQueue::IsQueueByteSizeLimitExceeded() const
+{
+    return QueueByteSize_.load(std::memory_order::relaxed) >=
+        RuntimeInfo_->QueueByteSizeLimit.load(std::memory_order::relaxed);
 }
 
 int TRequestQueue::GetQueueSize() const
@@ -1325,16 +1405,26 @@ int TRequestQueue::GetQueueSize() const
     return QueueSize_.load(std::memory_order::relaxed);
 }
 
+i64 TRequestQueue::GetQueueByteSize() const
+{
+    return QueueByteSize_.load(std::memory_order::relaxed);
+}
+
 int TRequestQueue::GetConcurrency() const
 {
     return Concurrency_.load(std::memory_order::relaxed);
 }
 
-void TRequestQueue::OnRequestArrived(TServiceBase::TServiceContextPtr context)
+i64 TRequestQueue::GetConcurrencyByte() const
+{
+    return ConcurrencyByte_.load(std::memory_order::relaxed);
+}
+
+void TRequestQueue::OnRequestArrived(const TServiceBase::TServiceContextPtr& context)
 {
     // Fast path.
-    auto newConcurrencySemaphore = IncrementConcurrency();
-    if (newConcurrencySemaphore <= RuntimeInfo_->ConcurrencyLimit.GetDynamicLimit() &&
+    auto concurrencyExceeded = IncrementConcurrency(context);
+    if (concurrencyExceeded &&
         !AreThrottlersOverdrafted())
     {
         RunRequest(std::move(context));
@@ -1342,8 +1432,8 @@ void TRequestQueue::OnRequestArrived(TServiceBase::TServiceContextPtr context)
     }
 
     // Slow path.
-    DecrementConcurrency();
-    IncrementQueueSize();
+    DecrementConcurrency(GetTotalRequestSize(context));
+    IncrementQueueSize(context);
 
     context->BeforeEnqueued();
     YT_VERIFY(Queue_.enqueue(std::move(context)));
@@ -1351,9 +1441,9 @@ void TRequestQueue::OnRequestArrived(TServiceBase::TServiceContextPtr context)
     ScheduleRequestsFromQueue();
 }
 
-void TRequestQueue::OnRequestFinished()
+void TRequestQueue::OnRequestFinished(i64 requestTotalSize)
 {
-    DecrementConcurrency();
+    DecrementConcurrency(requestTotalSize);
 
     if (QueueSize_.load() > 0) {
         // Slow path.
@@ -1385,7 +1475,8 @@ void TRequestQueue::ScheduleRequestsFromQueue()
 
     // NB: Racy, may lead to overcommit in concurrency semaphore and request bytes throttler.
     auto concurrencyLimit = RuntimeInfo_->ConcurrencyLimit.GetDynamicLimit();
-    while (QueueSize_.load() > 0 && Concurrency_.load() < concurrencyLimit) {
+    auto concurrencyByteLimit = RuntimeInfo_->ConcurrencyByteLimit.GetDynamicByteLimit();
+    while (QueueSize_.load() > 0 && Concurrency_.load() < concurrencyLimit && ConcurrencyByte_.load() < concurrencyByteLimit) {
         if (AreThrottlersOverdrafted()) {
             SubscribeToThrottlers();
             return;
@@ -1401,14 +1492,14 @@ void TRequestQueue::ScheduleRequestsFromQueue()
                 return;
             }
 
-            DecrementQueueSize();
+            DecrementQueueSize(context);
             context->AfterDequeued();
             if (context->IsCanceled()) {
                 context.Reset();
             }
         }
 
-        IncrementConcurrency();
+        IncrementConcurrency(context);
         RunRequest(std::move(context));
     }
 }
@@ -1432,26 +1523,41 @@ void TRequestQueue::RunRequest(TServiceBase::TServiceContextPtr context)
     }
 }
 
-int TRequestQueue::IncrementQueueSize()
+void TRequestQueue::IncrementQueueSize(const TServiceBase::TServiceContextPtr& context)
 {
-    return ++QueueSize_;
+    ++QueueSize_;
+    QueueByteSize_.fetch_add(GetTotalRequestSize(context));
 }
 
-void  TRequestQueue::DecrementQueueSize()
+void  TRequestQueue::DecrementQueueSize(const TServiceBase::TServiceContextPtr& context)
 {
     auto newQueueSize = --QueueSize_;
+    auto oldQueueByteSize = QueueByteSize_.fetch_sub(GetTotalRequestSize(context));
+
     YT_ASSERT(newQueueSize >= 0);
+    YT_ASSERT(oldQueueByteSize >= 0);
 }
 
-int TRequestQueue::IncrementConcurrency()
+i64 TRequestQueue::GetTotalRequestSize(const TServiceBase::TServiceContextPtr& context)
 {
-    return ++Concurrency_;
+    return GetMessageBodySize(context->GetRequestMessage()) +
+        GetTotalMessageAttachmentSize(context->GetRequestMessage());
 }
 
-void TRequestQueue::DecrementConcurrency()
+bool TRequestQueue::IncrementConcurrency(const TServiceBase::TServiceContextPtr& context)
+{
+    auto resultSize = ++Concurrency_ <= RuntimeInfo_->ConcurrencyLimit.GetDynamicLimit();
+    auto resultByteSize = ConcurrencyByte_.fetch_add(GetTotalRequestSize(context)) <= RuntimeInfo_->ConcurrencyByteLimit.GetDynamicByteLimit();
+    return resultSize && resultByteSize;
+}
+
+void TRequestQueue::DecrementConcurrency(i64 requestTotalSize)
 {
     auto newConcurrencySemaphore = --Concurrency_;
+    auto newConcurrencyByteSemaphore = ConcurrencyByte_.fetch_sub(requestTotalSize);
+
     YT_ASSERT(newConcurrencySemaphore >= 0);
+    YT_ASSERT(newConcurrencyByteSemaphore >= 0);
 }
 
 bool TRequestQueue::AreThrottlersOverdrafted() const
@@ -1466,9 +1572,7 @@ void TRequestQueue::AcquireThrottlers(const TServiceBase::TServiceContextPtr& co
 {
     if (BytesThrottler_.Specified.load(std::memory_order::acquire)) {
         // Slow path.
-        auto requestSize =
-            GetMessageBodySize(context->GetRequestMessage()) +
-            GetTotalMessageAttachmentSize(context->GetRequestMessage());
+        auto requestSize = GetTotalRequestSize(context);
         BytesThrottler_.Throttler->Acquire(requestSize);
     }
     if (WeightThrottler_.Specified.load(std::memory_order::acquire)) {
@@ -1610,12 +1714,23 @@ void TServiceBase::HandleRequest(
 
     auto maybeThrottled = GetThrottledError(*header);
 
-    if (requestQueue->IsQueueLimitSizeExceeded()) {
+    if (requestQueue->IsQueueSizeLimitExceeded()) {
         runtimeInfo->RequestQueueSizeLimitErrorCounter.Increment();
         replyError(TError(
             NRpc::EErrorCode::RequestQueueSizeLimitExceeded,
             "Request queue size limit exceeded")
             << TErrorAttribute("limit", runtimeInfo->QueueSizeLimit.load())
+            << TErrorAttribute("queue", requestQueue->GetName())
+            << maybeThrottled);
+        return;
+    }
+
+    if (requestQueue->IsQueueByteSizeLimitExceeded()) {
+        runtimeInfo->RequestQueueByteSizeLimitErrorCounter.Increment();
+        replyError(TError(
+            NRpc::EErrorCode::RequestQueueSizeLimitExceeded,
+            "Request queue bytes size limit exceeded")
+            << TErrorAttribute("limit", runtimeInfo->QueueByteSizeLimit.load())
             << TErrorAttribute("queue", requestQueue->GetName())
             << maybeThrottled);
         return;
@@ -1699,6 +1814,9 @@ void TServiceBase::ReplyError(
     auto errorMessage = CreateErrorResponseMessage(requestId, richError);
     YT_UNUSED_FUTURE(replyBus->Send(errorMessage));
 }
+
+void TServiceBase::OnMethodError(const TError& /*error*/, const TString& /*method*/)
+{ }
 
 void TServiceBase::OnRequestAuthenticated(
     const NProfiling::TWallTimer& timer,
@@ -1810,8 +1928,14 @@ void TServiceBase::RegisterRequestQueue(
     profiler.AddFuncGauge("/request_queue_size", MakeStrong(this), [=] {
         return requestQueue->GetQueueSize();
     });
+    profiler.AddFuncGauge("/request_queue_byte_size", MakeStrong(this), [=] {
+        return requestQueue->GetQueueByteSize();
+    });
     profiler.AddFuncGauge("/concurrency", MakeStrong(this), [=] {
         return requestQueue->GetConcurrency();
+    });
+    profiler.AddFuncGauge("/concurrency_byte", MakeStrong(this), [=] {
+        return requestQueue->GetConcurrencyByte();
     });
 
     TMethodConfigPtr methodConfig;
@@ -1988,10 +2112,10 @@ void TServiceBase::OnRequestTimeout(TRequestId requestId, ERequestProcessingStag
     context->HandleTimeout(stage);
 }
 
-void TServiceBase::OnReplyBusTerminated(const IBusPtr& bus, const TError& error)
+void TServiceBase::OnReplyBusTerminated(const NYT::TWeakPtr<NYT::NBus::IBus>& busWeak, const TError& error)
 {
     std::vector<TServiceContextPtr> contexts;
-    {
+    if (auto bus = busWeak.Lock()) {
         auto* bucket = GetReplyBusBucket(bus);
         auto guard = Guard(bucket->Lock);
         auto it = bucket->ReplyBusToContexts.find(bus);
@@ -2053,7 +2177,7 @@ void TServiceBase::RegisterRequest(TServiceContext* context)
     }
 
     if (subscribe) {
-        replyBus->SubscribeTerminated(BIND(&TServiceBase::OnReplyBusTerminated, MakeWeak(this), replyBus));
+        replyBus->SubscribeTerminated(BIND(&TServiceBase::OnReplyBusTerminated, MakeWeak(this), MakeWeak(replyBus.Get())));
     }
 
     auto pendingPayloads = GetAndErasePendingPayloads(requestId);
@@ -2086,6 +2210,9 @@ void TServiceBase::UnregisterRequest(TServiceContext* context)
         if (it != bucket->ReplyBusToContexts.end()) {
             auto& contexts = it->second;
             contexts.erase(context);
+            if (contexts.empty()) {
+                bucket->ReplyBusToContexts.erase(it);
+            }
         }
     }
 }
@@ -2387,7 +2514,9 @@ TServiceBase::TRuntimeMethodInfoPtr TServiceBase::RegisterMethod(const TMethodDe
 
     runtimeInfo->Heavy.store(descriptor.Options.Heavy);
     runtimeInfo->QueueSizeLimit.store(descriptor.QueueSizeLimit);
+    runtimeInfo->QueueByteSizeLimit.store(descriptor.QueueByteSizeLimit);
     runtimeInfo->ConcurrencyLimit.Reconfigure(descriptor.ConcurrencyLimit);
+    runtimeInfo->ConcurrencyByteLimit.Reconfigure(descriptor.ConcurrencyByteLimit);
     runtimeInfo->LogLevel.store(descriptor.LogLevel);
     runtimeInfo->LoggingSuppressionTimeout.store(descriptor.LoggingSuppressionTimeout);
 
@@ -2398,8 +2527,14 @@ TServiceBase::TRuntimeMethodInfoPtr TServiceBase::RegisterMethod(const TMethodDe
     profiler.AddFuncGauge("/request_queue_size_limit", MakeStrong(this), [=] {
         return runtimeInfo->QueueSizeLimit.load(std::memory_order::relaxed);
     });
+    profiler.AddFuncGauge("/request_queue_byte_size_limit", MakeStrong(this), [=] {
+        return runtimeInfo->QueueByteSizeLimit.load(std::memory_order::relaxed);
+    });
     profiler.AddFuncGauge("/concurrency_limit", MakeStrong(this), [=] {
         return runtimeInfo->ConcurrencyLimit.GetDynamicLimit();
+    });
+    profiler.AddFuncGauge("/concurrency_byte_limit", MakeStrong(this), [=] {
+        return runtimeInfo->ConcurrencyByteLimit.GetDynamicByteLimit();
     });
 
     return runtimeInfo;
@@ -2461,7 +2596,9 @@ void TServiceBase::DoConfigure(
 
             runtimeInfo->Heavy.store(methodConfig->Heavy.value_or(descriptor.Options.Heavy));
             runtimeInfo->QueueSizeLimit.store(methodConfig->QueueSizeLimit.value_or(descriptor.QueueSizeLimit));
+            runtimeInfo->QueueByteSizeLimit.store(methodConfig->QueueByteSizeLimit.value_or(descriptor.QueueByteSizeLimit));
             runtimeInfo->ConcurrencyLimit.Reconfigure(methodConfig->ConcurrencyLimit.value_or(descriptor.ConcurrencyLimit));
+            runtimeInfo->ConcurrencyByteLimit.Reconfigure(methodConfig->ConcurrencyByteLimit.value_or(descriptor.ConcurrencyByteLimit));
             runtimeInfo->LogLevel.store(methodConfig->LogLevel.value_or(descriptor.LogLevel));
             runtimeInfo->LoggingSuppressionTimeout.store(methodConfig->LoggingSuppressionTimeout.value_or(descriptor.LoggingSuppressionTimeout));
             runtimeInfo->Pooled.store(methodConfig->Pooled.value_or(config->Pooled.value_or(descriptor.Pooled)));

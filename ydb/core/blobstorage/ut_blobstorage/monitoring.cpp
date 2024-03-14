@@ -33,13 +33,16 @@ ui64 AggregateVDiskCounters(std::unique_ptr<TEnvironmentSetup>& env, TString sto
 };
 
 void SetupEnv(const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<TEnvironmentSetup>& env,
-        ui32& groupSize, TBlobStorageGroupType& groupType, ui32& groupId, std::vector<ui32>& pdiskLayout) {
+        ui32& groupSize, TBlobStorageGroupType& groupType, ui32& groupId, std::vector<ui32>& pdiskLayout,
+        ui32 burstThresholdNs = 0, float diskTimeAvailableScale = 1) {
     groupSize = topology.TotalVDisks;
     groupType = topology.GType;
     env.reset(new TEnvironmentSetup({
         .NodeCount = groupSize,
         .Erasure = groupType,
         .DiskType = NPDisk::EDeviceType::DEVICE_TYPE_ROT,
+        .BurstThresholdNs = burstThresholdNs,
+        .DiskTimeAvailableScale =  diskTimeAvailableScale,
     }));
 
     env->CreateBoxAndPool(1, 1);
@@ -244,13 +247,17 @@ enum class ELoadDistribution : ui8 {
 };
 
 template <typename TInflightActor>
-void TestBurst(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* actor, ELoadDistribution loadDistribution) {
+void TestBurst(ui32 requests, ui32 inflight, TDuration delay, ELoadDistribution loadDistribution,
+        ui32 burstThresholdNs = 0, float diskTimeAvailableScale = 1) {
+    TBlobStorageGroupInfo::TTopology topology(TBlobStorageGroupType::ErasureNone, 1, 1, 1, true);
+    auto* actor = new TInflightActor({requests, inflight, delay}, 8_MB);
     std::unique_ptr<TEnvironmentSetup> env;
     ui32 groupSize;
     TBlobStorageGroupType groupType;
     ui32 groupId;
     std::vector<ui32> pdiskLayout;
-    SetupEnv(topology, env, groupSize, groupType, groupId, pdiskLayout);
+    SetupEnv(topology, env, groupSize, groupType, groupId, pdiskLayout, burstThresholdNs,
+            diskTimeAvailableScale);
 
     actor->SetGroupId(groupId);
     env->Runtime->Register(actor, 1);
@@ -266,16 +273,47 @@ void TestBurst(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor*
     }
 }
 
-#define MAKE_BURST_TEST(requestType, requests, inflight, delay, distribution)                       \
-Y_UNIT_TEST(Test##requestType##distribution) {                                                      \
-    TBlobStorageGroupInfo::TTopology topology(TBlobStorageGroupType::ErasureNone, 1, 1, 1, true);   \
-    auto* actor = new TInflightActor##requestType({requests, inflight, delay}, 8_MB);               \
-    TestBurst(topology, actor, ELoadDistribution::Distribution##distribution);                      \
+Y_UNIT_TEST_SUITE(BurstDetection) {
+    Y_UNIT_TEST(TestPutEvenly) {
+        TestBurst<TInflightActorPut>(10, 1, TDuration::Seconds(1), ELoadDistribution::DistributionEvenly);
+    }
+
+    Y_UNIT_TEST(TestPutBurst) {
+        TestBurst<TInflightActorPut>(10, 10, TDuration::MilliSeconds(1), ELoadDistribution::DistributionBurst);
+    }
+
+    Y_UNIT_TEST(TestOverlySensitive) {
+        TestBurst<TInflightActorPut>(10, 1, TDuration::Seconds(1), ELoadDistribution::DistributionBurst, 1);
+    }
 }
 
-Y_UNIT_TEST_SUITE(BurstDetection) {
-    MAKE_BURST_TEST(Put, 10, 1, TDuration::Seconds(1), Evenly);
-    MAKE_BURST_TEST(Put, 10, 100, TDuration::MilliSeconds(1), Burst);
+void TestDiskTimeAvailableScaling() {
+    auto measure = [](float scale) {
+        TBlobStorageGroupInfo::TTopology topology(TBlobStorageGroupType::ErasureNone, 1, 1, 1, true);
+        std::unique_ptr<TEnvironmentSetup> env;
+        ui32 groupSize;
+        TBlobStorageGroupType groupType;
+        ui32 groupId;
+        std::vector<ui32> pdiskLayout;
+        SetupEnv(topology, env, groupSize, groupType, groupId, pdiskLayout, 0, scale);
+
+        return AggregateVDiskCounters(env, env->StoragePoolName, groupSize, groupId, pdiskLayout,
+                "advancedCost", "DiskTimeAvailable");
+    };
+
+    i64 test1 = measure(1);
+    i64 test2 = measure(2);
+
+    i64 delta = test1 * 2 - test2;
+
+    UNIT_ASSERT_LE_C(std::abs(delta), 10, "Total time available: with scale=1 time=" << test1 <<
+            ", with scale=2 time=" << test2);
+}
+
+Y_UNIT_TEST_SUITE(DiskTimeAvailable) {
+    Y_UNIT_TEST(Scaling) {
+        TestDiskTimeAvailableScaling();
+    }
 }
 
 #undef MAKE_BURST_TEST

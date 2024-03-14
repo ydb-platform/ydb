@@ -18,7 +18,7 @@ ui64 TSpecialReadContext::GetMemoryForSources(const std::map<ui32, std::shared_p
 }
 
 std::shared_ptr<NKikimr::NOlap::NPlainReader::IFetchingStep> TSpecialReadContext::GetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source, const bool exclusiveSource) const {
-    const bool needSnapshots = !exclusiveSource || ReadMetadata->GetSnapshot() < source->GetRecordSnapshotMax();
+    const bool needSnapshots = !exclusiveSource || ReadMetadata->GetRequestSnapshot() < source->GetRecordSnapshotMax();
     const bool partialUsageByPK = ReadMetadata->GetPKRangesFilter().IsPortionInPartialUsage(source->GetStartReplaceKey(), source->GetFinishReplaceKey(), ReadMetadata->GetIndexInfo());
     auto result = CacheFetchingScripts[needSnapshots ? 1 : 0][exclusiveSource ? 1 : 0][partialUsageByPK ? 1 : 0];
     if (!result) {
@@ -51,7 +51,7 @@ std::shared_ptr<NKikimr::NOlap::NPlainReader::IFetchingStep> TSpecialReadContext
         }
     } else if (exclusiveSource) {
         TColumnsSet columnsFetch = *EFColumns;
-        if (needSnapshots || FFColumns->Contains(SpecColumns)) {
+        if (needSnapshots || FFColumns->Cross(*SpecColumns)) {
             columnsFetch = columnsFetch + *SpecColumns;
         }
         if (partialUsageByPredicate) {
@@ -60,7 +60,7 @@ std::shared_ptr<NKikimr::NOlap::NPlainReader::IFetchingStep> TSpecialReadContext
         AFL_VERIFY(columnsFetch.GetColumnsCount());
         current = current->AttachNext(std::make_shared<TBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsFetch), "ef"));
 
-        if (needSnapshots || FFColumns->Contains(SpecColumns)) {
+        if (needSnapshots || FFColumns->Cross(*SpecColumns)) {
             current = current->AttachNext(std::make_shared<TAssemblerStep>(SpecColumns));
             current = current->AttachNext(std::make_shared<TSnapshotFilter>());
             columnsFetch = columnsFetch - *SpecColumns;
@@ -123,7 +123,7 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
     Y_ABORT_UNLESS(ReadMetadata);
     Y_ABORT_UNLESS(ReadMetadata->SelectInfo);
 
-    auto readSchema = ReadMetadata->GetLoadSchema(ReadMetadata->GetSnapshot());
+    auto readSchema = ReadMetadata->GetLoadSchema(ReadMetadata->GetRequestSnapshot());
     SpecColumns = std::make_shared<TColumnsSet>(TIndexInfo::GetSpecialColumnIdsSet(), ReadMetadata->GetIndexInfo(), readSchema);
     IndexChecker = ReadMetadata->GetProgram().GetIndexChecker();
     {

@@ -5,6 +5,8 @@
 
 #include <util/generic/vector.h>
 
+#include <functional>
+
 namespace NKikimr::NReplication::NService {
 
 struct TEvWorker {
@@ -36,6 +38,7 @@ struct TEvWorker {
 
         TVector<TRecord> Records;
 
+        explicit TEvData(const TVector<TRecord>& records);
         explicit TEvData(TVector<TRecord>&& records);
         TString ToString() const override;
     };
@@ -53,7 +56,7 @@ struct TEvWorker {
     };
 };
 
-IActor* CreateWorker(THolder<IActor>&& reader, THolder<IActor>&& writer);
+IActor* CreateWorker(std::function<IActor*(void)>&& createReaderFn, std::function<IActor*(void)>&& createWriterFn);
 
 }
 

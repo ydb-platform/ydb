@@ -13,7 +13,7 @@ struct TEnvironmentSetup {
     static constexpr ui32 DrivesPerNode = 5;
     const TString DomainName = "Root";
     const ui32 DomainId = 1;
-    const ui64 TabletId = MakeBSControllerID(DomainId);
+    const ui64 TabletId = MakeBSControllerID();
     const ui32 GroupId = 0;
     const TString StoragePoolName = "test";
     const ui32 NumGroups = 1;
@@ -39,6 +39,8 @@ struct TEnvironmentSetup {
         const bool SuppressCompatibilityCheck = false;
         const TFeatureFlags FeatureFlags;
         const NPDisk::EDeviceType DiskType = NPDisk::EDeviceType::DEVICE_TYPE_NVME;
+        const ui32 BurstThresholdNs = 0;
+        const float DiskTimeAvailableScale = 1;
     };
 
     const TSettings Settings;
@@ -136,7 +138,7 @@ struct TEnvironmentSetup {
         auto domain = TDomainsInfo::TDomain::ConstructEmptyDomain(DomainName, DomainId);
         domainsInfo->AddDomain(domain.Get());
         if (Settings.SetupHive) {
-            domainsInfo->AddHive(domain->DefaultHiveUid, MakeDefaultHiveID(domain->DefaultStateStorageGroup));
+            domainsInfo->AddHive(MakeDefaultHiveID());
         }
 
         return std::make_unique<TTestActorSystem>(Settings.NodeCount, NLog::PRI_ERROR, domainsInfo, featureFlags);
@@ -323,6 +325,16 @@ struct TEnvironmentSetup {
                     config->CacheAccessor = std::make_unique<TAccessor>(Cache[nodeId]);
                 }
                 config->FeatureFlags = Settings.FeatureFlags;
+
+                {
+                    auto* type = config->BlobStorageConfig.MutableCostMetricsSettings()->AddVDiskTypes();
+                    type->SetPDiskType(NKikimrBlobStorage::EPDiskType::ROT);
+                    if (Settings.BurstThresholdNs) {
+                        type->SetBurstThresholdNs(Settings.BurstThresholdNs);
+                    }
+                    type->SetDiskTimeAvailableScale(Settings.DiskTimeAvailableScale);
+                }
+
                 warden.reset(CreateBSNodeWarden(config));
             }
 
@@ -339,11 +351,10 @@ struct TEnvironmentSetup {
             ui32 NumChannels = 3;
         };
         std::vector<TTabletInfo> tablets{
-            {MakeBSControllerID(DomainId), TTabletTypes::BSController, &CreateFlatBsController},
+            {MakeBSControllerID(), TTabletTypes::BSController, &CreateFlatBsController},
         };
 
-
-        for (const auto& [uid, tabletId] : Runtime->GetDomainsInfo()->HivesByHiveUid) {
+        if (const ui64 tabletId = Runtime->GetDomainsInfo()->GetHive(); tabletId != TDomainsInfo::BadTabletId) {
             tablets.push_back(TTabletInfo{tabletId, TTabletTypes::Hive, &CreateDefaultHive});
         }
 
@@ -753,17 +764,20 @@ struct TEnvironmentSetup {
         Sim(TDuration::Seconds(15));
     }
 
-    void Wipe(ui32 nodeId, ui32 pdiskId, ui32 vslotId) {
-        const TActorId self = Runtime->AllocateEdgeActor(Settings.ControllerNodeId, __FILE__, __LINE__);
-        auto ev = std::make_unique<TEvBlobStorage::TEvControllerGroupReconfigureWipe>();
-        auto& record = ev->Record;
-        auto *vslot = record.MutableVSlotId();
+    void Wipe(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId) {
+        NKikimrBlobStorage::TConfigRequest request;
+        request.SetIgnoreGroupFailModelChecks(true);
+        request.SetIgnoreDegradedGroupsChecks(true);
+        request.SetIgnoreDisintegratedGroupsChecks(true);
+        auto *cmd = request.AddCommand();
+        auto *wipe = cmd->MutableWipeVDisk();
+        auto *vslot = wipe->MutableVSlotId();
         vslot->SetNodeId(nodeId);
         vslot->SetPDiskId(pdiskId);
         vslot->SetVSlotId(vslotId);
-        Runtime->SendToPipe(TabletId, self, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
-        auto response = WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerGroupReconfigureWipeResult>(self);
-        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), NKikimrProto::OK);
+        VDiskIDFromVDiskID(vdiskId, wipe->MutableVDiskId());
+        auto response = Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
     }
 
     void WaitForVDiskToGetRunning(const TVDiskID& vdiskId, TActorId actorId) {

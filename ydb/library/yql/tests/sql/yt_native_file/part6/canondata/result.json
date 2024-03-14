@@ -338,6 +338,27 @@
             "uri": "https://{canondata_backend}/1936997/a879c594903fb53f2cbc586abd0c0e9fac5dd32a/resource.tar.gz#test.test_ansi_idents-struct_access-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[bigdate-bitcast_interval64-default.txt-Debug]": [
+        {
+            "checksum": "8205c71567a0a1c0bca8f254335b6eb3",
+            "size": 736,
+            "uri": "https://{canondata_backend}/1784826/1b875f3c9cf7fd4085f5cb50ada69e82ef0954d8/resource.tar.gz#test.test_bigdate-bitcast_interval64-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[bigdate-bitcast_interval64-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1784826/1b875f3c9cf7fd4085f5cb50ada69e82ef0954d8/resource.tar.gz#test.test_bigdate-bitcast_interval64-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[bigdate-bitcast_interval64-default.txt-Results]": [
+        {
+            "checksum": "471a1b91231b29b03425beeebb0538f3",
+            "size": 2718,
+            "uri": "https://{canondata_backend}/1784826/1b875f3c9cf7fd4085f5cb50ada69e82ef0954d8/resource.tar.gz#test.test_bigdate-bitcast_interval64-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[bigdate-input_date32-default.txt-Debug]": [
         {
             "checksum": "a4c35e7dd5514c254d9b6dbc16f153f7",
@@ -1330,9 +1351,9 @@
     ],
     "test.test[join-lookupjoin_inner_1o--Debug]": [
         {
-            "checksum": "c536b12b798d9e9b1a4fce43b40a61df",
-            "size": 3195,
-            "uri": "https://{canondata_backend}/1936842/f78569e172299b7a2aee3d6ade84c2cc02cc5940/resource.tar.gz#test.test_join-lookupjoin_inner_1o--Debug_/opt.yql"
+            "checksum": "842e1e44493a6ab7bdc80f5b5c605713",
+            "size": 3281,
+            "uri": "https://{canondata_backend}/1936947/27044849191fa57e78f8e84ac7ecb11a14e41ad3/resource.tar.gz#test.test_join-lookupjoin_inner_1o--Debug_/opt.yql"
         }
     ],
     "test.test[join-lookupjoin_inner_1o--Plan]": [
@@ -1351,9 +1372,9 @@
     ],
     "test.test[join-premap_map_inner--Debug]": [
         {
-            "checksum": "8a6f86726e00e9533d6348e1ba66a572",
-            "size": 3193,
-            "uri": "https://{canondata_backend}/1936842/f78569e172299b7a2aee3d6ade84c2cc02cc5940/resource.tar.gz#test.test_join-premap_map_inner--Debug_/opt.yql"
+            "checksum": "da871099502b72e095047d22e1154449",
+            "size": 3221,
+            "uri": "https://{canondata_backend}/1936947/27044849191fa57e78f8e84ac7ecb11a14e41ad3/resource.tar.gz#test.test_join-premap_map_inner--Debug_/opt.yql"
         }
     ],
     "test.test[join-premap_map_inner--Plan]": [
@@ -1882,9 +1903,9 @@
     ],
     "test.test[pg-tpcds-q52-default.txt-Debug]": [
         {
-            "checksum": "0abd38ef2d6d532608c27c9b48dcd778",
-            "size": 1008,
-            "uri": "https://{canondata_backend}/1936842/5d6d393872cda475b6b05e0b26199ad4ccdbcef7/resource.tar.gz#test.test_pg-tpcds-q52-default.txt-Debug_/opt.yql"
+            "checksum": "14317455f4ca9be1725a5b9844f5468a",
+            "size": 674,
+            "uri": "https://{canondata_backend}/1600758/c5ea854dabc84a4e630a2d65d117d9d6d55a5034/resource.tar.gz#test.test_pg-tpcds-q52-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-tpcds-q52-default.txt-Plan]": [
@@ -1945,9 +1966,9 @@
     ],
     "test.test[pg-tpcds-q92-default.txt-Debug]": [
         {
-            "checksum": "f04da7838bbf61d9c3f3e023f6d1ca73",
-            "size": 1657,
-            "uri": "https://{canondata_backend}/1689644/4f33cb0e4ea8c1f718492ab219f9586a69123ad0/resource.tar.gz#test.test_pg-tpcds-q92-default.txt-Debug_/opt.yql"
+            "checksum": "75d0c437159be5511d63aba39dd14b0b",
+            "size": 1557,
+            "uri": "https://{canondata_backend}/1600758/c5ea854dabc84a4e630a2d65d117d9d6d55a5034/resource.tar.gz#test.test_pg-tpcds-q92-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-tpcds-q92-default.txt-Plan]": [

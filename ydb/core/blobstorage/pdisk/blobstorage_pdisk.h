@@ -1519,14 +1519,16 @@ struct TEvReadMetadata : TEventLocal<TEvReadMetadata, TEvBlobStorage::EvReadMeta
 struct TEvReadMetadataResult : TEventLocal<TEvReadMetadataResult, TEvBlobStorage::EvReadMetadataResult> {
     EPDiskMetadataOutcome Outcome;
     TRcBuf Metadata;
+    std::optional<ui64> PDiskGuid;
 
     TEvReadMetadataResult(EPDiskMetadataOutcome outcome)
         : Outcome(outcome)
     {}
 
-    TEvReadMetadataResult(TRcBuf&& metadata)
+    TEvReadMetadataResult(TRcBuf&& metadata, std::optional<ui64> pdiskGuid)
         : Outcome(EPDiskMetadataOutcome::OK)
         , Metadata(std::move(metadata))
+        , PDiskGuid(pdiskGuid)
     {}
 };
 
@@ -1540,9 +1542,11 @@ struct TEvWriteMetadata : TEventLocal<TEvWriteMetadata, TEvBlobStorage::EvWriteM
 
 struct TEvWriteMetadataResult : TEventLocal<TEvWriteMetadataResult, TEvBlobStorage::EvWriteMetadataResult> {
     EPDiskMetadataOutcome Outcome;
+    std::optional<ui64> PDiskGuid;
 
-    TEvWriteMetadataResult(EPDiskMetadataOutcome outcome)
+    TEvWriteMetadataResult(EPDiskMetadataOutcome outcome, std::optional<ui64> pdiskGuid)
         : Outcome(outcome)
+        , PDiskGuid(pdiskGuid)
     {}
 };
 

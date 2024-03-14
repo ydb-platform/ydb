@@ -52,66 +52,65 @@ NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type) {
             YQL_ENSURE(false, "Unexpected query type: " << type);
     }
 }
-
-NSQLTranslation::TTranslationSettings GetTranslationSettings(NYql::EKikimrQueryType queryType, const TMaybe<bool>& usePgParser, bool sqlAutoCommit,
-        const TString& queryText, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameters, TMaybe<ui16>& sqlVersion, TString cluster,
-        TString kqpTablePathPrefix, ui16 kqpYqlSyntaxVersion, NSQLTranslation::EBindingsMode bindingsMode, bool isEnableExternalDataSources,
-        NYql::TExprContext& ctx, bool isEnablePgConstsToParams) {
-    NSQLTranslation::TTranslationSettings settings{};
-
-    if (usePgParser) {
-        settings.PgParser = *usePgParser;
-    }
+           
+NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql::TExprContext& ctx) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.PgParser = UsePgParser && *UsePgParser;
 
     if (settings.PgParser) {
-        settings.AutoParametrizeEnabled = isEnablePgConstsToParams;
-        settings.AutoParametrizeValuesStmt = isEnablePgConstsToParams;
+        settings.AutoParametrizeEnabled = IsEnablePgConstsToParams ;
+        settings.AutoParametrizeValuesStmt = IsEnablePgConstsToParams;
     }
 
-    if (queryType == NYql::EKikimrQueryType::Scan || queryType == NYql::EKikimrQueryType::Query) {
-        sqlVersion = sqlVersion ? *sqlVersion : 1;
+    if (QueryType == NYql::EKikimrQueryType::Scan || QueryType == NYql::EKikimrQueryType::Query) {
+        SqlVersion = SqlVersion ? *SqlVersion : 1;
     }
 
-    if (sqlVersion) {
-        settings.SyntaxVersion = *sqlVersion;
+    if (SqlVersion) {
+        settings.SyntaxVersion = *SqlVersion;
 
-        if (*sqlVersion > 0) {
+        if (*SqlVersion > 0) {
             // Restrict fallback to V0
             settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
         }
     } else {
-        settings.SyntaxVersion = kqpYqlSyntaxVersion;
+        settings.SyntaxVersion = KqpYqlSyntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
     }
 
-    if (isEnableExternalDataSources) {
+    if (IsEnableExternalDataSources) {
         settings.DynamicClusterProvider = NYql::KikimrProviderName;
-        settings.BindingsMode = bindingsMode;
+        settings.BindingsMode = BindingsMode;
+        settings.SaveWorldDependencies = true;
     }
 
     settings.InferSyntaxVersion = true;
     settings.V0ForceDisable = false;
     settings.WarnOnV0 = false;
-    settings.DefaultCluster = cluster;
+    settings.DefaultCluster = Cluster;
     settings.ClusterMapping = {
-        {cluster, TString(NYql::KikimrProviderName)},
+        {Cluster, TString(NYql::KikimrProviderName)},
         {"pg_catalog", TString(NYql::PgProviderName)},
         {"information_schema", TString(NYql::PgProviderName)}
     };
-    auto tablePathPrefix = kqpTablePathPrefix;
-    if (!tablePathPrefix.empty()) {
-        settings.PathPrefix = tablePathPrefix;
+    auto tablePathPrefix = KqpTablePathPrefix;
+    if (!KqpTablePathPrefix.empty()) {
+        settings.PathPrefix = KqpTablePathPrefix;
     }
 
-    settings.EndOfQueryCommit = sqlAutoCommit;
+    if (SqlAutoCommit) {
+        settings.EndOfQueryCommit = *SqlAutoCommit;
+    } else {
+        settings.EndOfQueryCommit = QueryType == NYql::EKikimrQueryType::YqlScript || QueryType == NYql::EKikimrQueryType::YqlScriptStreaming;
+    }
 
     settings.Flags.insert("FlexibleTypes");
     settings.Flags.insert("AnsiLike");
-    if (queryType == NYql::EKikimrQueryType::Scan
-        || queryType == NYql::EKikimrQueryType::YqlScript
-        || queryType == NYql::EKikimrQueryType::YqlScriptStreaming
-        || queryType == NYql::EKikimrQueryType::Query
-        || queryType == NYql::EKikimrQueryType::Script)
+    if (QueryType == NYql::EKikimrQueryType::Scan
+        || QueryType == NYql::EKikimrQueryType::YqlScript
+        || QueryType == NYql::EKikimrQueryType::YqlScriptStreaming
+        || QueryType == NYql::EKikimrQueryType::Query
+        || QueryType == NYql::EKikimrQueryType::Script)
     {
         // We enable EmitAggApply for filter and aggregate pushdowns to Column Shards
         settings.Flags.insert("EmitAggApply");
@@ -119,7 +118,7 @@ NSQLTranslation::TTranslationSettings GetTranslationSettings(NYql::EKikimrQueryT
         settings.Flags.insert("DisableEmitStartsWith");
     }
 
-    if (queryType == NYql::EKikimrQueryType::Query || queryType == NYql::EKikimrQueryType::Script)
+    if (QueryType == NYql::EKikimrQueryType::Query || QueryType == NYql::EKikimrQueryType::Script)
     {
         settings.Flags.insert("AnsiOptionalAs");
         settings.Flags.insert("WarnOnAnsiAliasShadowing");
@@ -127,12 +126,12 @@ NSQLTranslation::TTranslationSettings GetTranslationSettings(NYql::EKikimrQueryT
         settings.Flags.insert("AnsiInForEmptyOrNullableItemsCollections");
     }
 
-    if (queryParameters) {
+    if (QueryParameters) {
         NSQLTranslation::TTranslationSettings versionSettings = settings;
         NYql::TIssues versionIssues;
 
-        if (ParseTranslationSettings(queryText, versionSettings, versionIssues) && versionSettings.SyntaxVersion == 1) {
-            for (const auto& [paramName, paramType] : *(queryParameters)) {
+        if (ParseTranslationSettings(QueryText, versionSettings, versionIssues) && versionSettings.SyntaxVersion == 1) {
+            for (const auto& [paramName, paramType] : *(QueryParameters)) {
                 auto type = NYql::ParseTypeFromYdbType(paramType, ctx);
                 if (type != nullptr) {
                     if (paramName.StartsWith("$")) {
@@ -145,17 +144,17 @@ NSQLTranslation::TTranslationSettings GetTranslationSettings(NYql::EKikimrQueryT
         }
     }
 
+    settings.ApplicationName = ApplicationName;
+
     return settings;
 }
 
-NYql::TAstParseResult ParseQuery(NYql::EKikimrQueryType queryType, const TMaybe<bool>& usePgParser, const TString& queryText,
-        std::shared_ptr<std::map<TString, Ydb::Type>> queryParameters, bool isSql, bool sqlAutoCommit,
-        TMaybe<ui16>& sqlVersion, bool& deprecatedSQL, TString cluster, TString kqpTablePathPrefix,
-        ui16 kqpYqlSyntaxVersion, NSQLTranslation::EBindingsMode bindingsMode, bool isEnableExternalDataSources,
-        NYql::TExprContext& ctx, bool isEnablePgConstsToParams) {
+NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui16>& sqlVersion, bool& deprecatedSQL,
+        NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder) {
     NYql::TAstParseResult astRes;
+    settingsBuilder.SetSqlVersion(sqlVersion);
     if (isSql) {
-        auto settings = GetTranslationSettings(queryType, usePgParser, sqlAutoCommit, queryText, queryParameters, sqlVersion, cluster, kqpTablePathPrefix, kqpYqlSyntaxVersion, bindingsMode, isEnableExternalDataSources, ctx, isEnablePgConstsToParams);
+        auto settings = settingsBuilder.Build(ctx);
         ui16 actualSyntaxVersion = 0;
         auto ast = NSQLTranslation::SqlToYql(queryText, settings, nullptr, &actualSyntaxVersion);
         deprecatedSQL = (actualSyntaxVersion == 0);
@@ -171,32 +170,51 @@ NYql::TAstParseResult ParseQuery(NYql::EKikimrQueryType queryType, const TMaybe<
     }
 }
 
-TQueryAst ParseQuery(NYql::EKikimrQueryType queryType, const TMaybe<Ydb::Query::Syntax>& syntax, const TString& queryText, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameters, bool isSql,
-        TString cluster, TString kqpTablePathPrefix, ui16 kqpYqlSyntaxVersion, NSQLTranslation::EBindingsMode bindingsMode, bool isEnableExternalDataSources, bool isEnablePgConstsToParams) {
+TQueryAst ParseQuery(const TString& queryText, const TMaybe<Ydb::Query::Syntax>& syntax, bool isSql, TKqpTranslationSettingsBuilder& settingsBuilder) {
     bool deprecatedSQL;
     TMaybe<ui16> sqlVersion;
-    TMaybe<bool> usePgParser;
-    if (syntax)
-        switch (*syntax) {
-            case Ydb::Query::Syntax::SYNTAX_YQL_V1:
-                usePgParser = false;
-                break;
-            case Ydb::Query::Syntax::SYNTAX_PG:
-                usePgParser = true;
-                break;
-            default:
-                break;
-        }
+    if (syntax && *syntax == Ydb::Query::Syntax::SYNTAX_PG) {
+        settingsBuilder.SetUsePgParser(true);
+    }
 
     NYql::TExprContext ctx;
-    bool sqlAutoCommit;
-    if (queryType == NYql::EKikimrQueryType::YqlScript || queryType == NYql::EKikimrQueryType::YqlScriptStreaming) {
-            sqlAutoCommit = true;
-    } else {
-        sqlAutoCommit = false;
-    }
-    auto astRes = ParseQuery(queryType, usePgParser, queryText, queryParameters, isSql, sqlAutoCommit, sqlVersion, deprecatedSQL, cluster, kqpTablePathPrefix, kqpYqlSyntaxVersion, bindingsMode, isEnableExternalDataSources, ctx, isEnablePgConstsToParams);
+    auto astRes = ParseQuery(queryText, isSql, sqlVersion, deprecatedSQL, ctx, settingsBuilder);
     return TQueryAst(std::make_shared<NYql::TAstParseResult>(std::move(astRes)), sqlVersion, deprecatedSQL);
+}
+
+TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<ui16>& sqlVersion, bool& deprecatedSQL,
+        NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder) {
+
+    TVector<TQueryAst> result;
+    settingsBuilder.SetSqlVersion(sqlVersion);
+    if (isSql) {
+        auto settings = settingsBuilder.Build(ctx);
+        ui16 actualSyntaxVersion = 0;
+        auto astStatements = NSQLTranslation::SqlToAstStatements(queryText, settings, nullptr, &actualSyntaxVersion);
+        deprecatedSQL = (actualSyntaxVersion == 0);
+        sqlVersion = actualSyntaxVersion;
+        for (auto&& ast : astStatements) {
+            result.push_back({std::make_shared<NYql::TAstParseResult>(std::move(ast)), sqlVersion, (actualSyntaxVersion == 0)});
+        }
+        return result;
+    } else {
+        sqlVersion = {};
+        return {{std::make_shared<NYql::TAstParseResult>(NYql::ParseAst(queryText)), sqlVersion, true}};
+    }
+}
+
+TVector<TQueryAst> ParseStatements(const TString& queryText, const TMaybe<Ydb::Query::Syntax>& syntax, bool isSql, TKqpTranslationSettingsBuilder& settingsBuilder, bool perStatementExecution) {
+    if (!perStatementExecution) {
+        return {ParseQuery(queryText, syntax, isSql, settingsBuilder)};
+    }
+    bool deprecatedSQL;
+    TMaybe<ui16> sqlVersion;
+    if (syntax && *syntax == Ydb::Query::Syntax::SYNTAX_PG) {
+        settingsBuilder.SetUsePgParser(true);
+    }
+
+    NYql::TExprContext ctx;
+    return ParseStatements(queryText, isSql, sqlVersion, deprecatedSQL, ctx, settingsBuilder);
 }
 
 } // namespace NKqp

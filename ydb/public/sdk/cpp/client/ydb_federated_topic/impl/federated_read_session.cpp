@@ -63,10 +63,12 @@ NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& 
 TFederatedReadSessionImpl::TFederatedReadSessionImpl(const TFederatedReadSessionSettings& settings,
                                                      std::shared_ptr<TGRpcConnectionsImpl> connections,
                                                      const TFederatedTopicClientSettings& clientSettings,
-                                                     std::shared_ptr<TFederatedDbObserver> observer)
+                                                     std::shared_ptr<TFederatedDbObserver> observer,
+                                                     std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> codecs)
     : Settings(settings)
     , Connections(std::move(connections))
     , SubClientSetttings(FromFederated(clientSettings))
+    , ProvidedCodecs(std::move(codecs))
     , Observer(std::move(observer))
     , AsyncInit(Observer->WaitForFirstState())
     , FederationState(nullptr)
@@ -102,6 +104,7 @@ void TFederatedReadSessionImpl::OpenSubSessionsImpl(const std::vector<std::share
             .Database(db->path())
             .DiscoveryEndpoint(db->endpoint());
         auto subclient = make_shared<NTopic::TTopicClient::TImpl>(Connections, settings);
+        subclient->SetProvidedCodecs(ProvidedCodecs);
         auto subsession = subclient->CreateReadSession(FromFederated(Settings, db, EventFederator));
         SubSessions.emplace_back(subsession, db);
     }
@@ -212,8 +215,7 @@ TVector<TReadSessionEvent::TEvent> TFederatedReadSessionImpl::GetEvents(bool blo
     }
     with_lock(Lock) {
         if (Closing) {
-            // TODO correct conversion
-            return {NTopic::TSessionClosedEvent(FederationState->Status.GetStatus(), {})};
+            return {NTopic::TSessionClosedEvent(FederationState->Status.GetStatus(), NYql::TIssues(FederationState->Status.GetIssues()))};
         }
         // TODO!!! handle aborting or closing state
         //         via handler on SessionClosedEvent {

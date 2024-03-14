@@ -1570,7 +1570,9 @@
                 {"Index": 3, "Name": "LeftKeysColumns", "Type": "TCoAtomList"},
                 {"Index": 4, "Name": "RightKeysColumns", "Type": "TCoAtomList"},
                 {"Index": 5, "Name": "LeftRenames", "Type": "TCoAtomList"},
-                {"Index": 6, "Name": "RightRenames", "Type": "TCoAtomList"}
+                {"Index": 6, "Name": "RightRenames", "Type": "TCoAtomList"},
+                {"Index": 7, "Name": "LeftKeysColumnNames", "Type": "TCoAtomList"},
+                {"Index": 8, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"}
             ]
         },
         {
@@ -1585,7 +1587,9 @@
                 {"Index": 4, "Name": "RightKeysColumns", "Type": "TCoAtomList"},
                 {"Index": 5, "Name": "LeftRenames", "Type": "TCoAtomList"},
                 {"Index": 6, "Name": "RightRenames", "Type": "TCoAtomList"},
-                {"Index": 7, "Name": "Flags", "Type": "TCoAtomList"}
+                {"Index": 7, "Name": "LeftKeysColumnNames", "Type": "TCoAtomList"},
+                {"Index": 8, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"},  
+                {"Index": 9, "Name": "Flags", "Type": "TCoAtomList"}
             ]
         },
         {
@@ -1599,7 +1603,9 @@
                 {"Index": 3, "Name": "RightKeysColumns", "Type": "TCoAtomList"},
                 {"Index": 4, "Name": "LeftRenames", "Type": "TCoAtomList"},
                 {"Index": 5, "Name": "RightRenames", "Type": "TCoAtomList"},
-                {"Index": 6, "Name": "Flags", "Type": "TCoAtomList"}
+                {"Index": 6, "Name": "LeftKeysColumnNames", "Type": "TCoAtomList"},
+                {"Index": 7, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"}, 
+                {"Index": 8, "Name": "Flags", "Type": "TCoAtomList"}
             ]
         },
         {
@@ -2442,6 +2448,14 @@
             "Name": "TCoWideFromBlocks",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "WideFromBlocks"}
+        },
+        {
+            "Name": "TCoReplicateScalars",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "ReplicateScalars"},
+            "Children": [
+                {"Index": 1, "Name": "Indexes", "Type": "TCoAtomList", "Optional": true}
+            ]
         },
         {
             "Name": "TCoWideToBlocks",

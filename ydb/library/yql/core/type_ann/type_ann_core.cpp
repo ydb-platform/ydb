@@ -726,22 +726,6 @@ namespace NTypeAnnImpl {
                 if (!IsValidTzData<ui64>(input->Head(), input->Content(), ctx.Expr, NKikimr::NUdf::EDataSlot::Timestamp, textValue)) {
                     return IGraphTransformer::TStatus::Error;
                 }
-            } else if (input->Content() == "Uuid") {
-                if (input->Head().Content().size() != 16) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Bad atom format for type: "
-                        << input->Content() << ", value: " << TString(input->Head().Content()).Quote()));
-
-                    return IGraphTransformer::TStatus::Error;
-                }
-            } else if (input->Content() == "JsonDocument") {
-                // check will be performed in JsonDocument callable
-            } else if (input->Content() == "DyNumber") {
-                if (!NKikimr::NMiniKQL::IsValidStringValue(EDataSlot::DyNumber, input->Head().Content())) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Bad atom format for type: "
-                        << input->Content() << ", value: " << TString(input->Head().Content()).Quote()));
-
-                    return IGraphTransformer::TStatus::Error;
-                }
             } else if (input->Content() == "Date32") {
                 if (!IsValidSmallData<i32>(input->Head(), input->Content(), ctx.Expr, NKikimr::NUdf::EDataSlot::Date32, textValue)) {
                     return IGraphTransformer::TStatus::Error;
@@ -756,6 +740,22 @@ namespace NTypeAnnImpl {
                 }
             } else if (input->Content() == "Interval64") {
                 if (!IsValidSmallData<i64>(input->Head(), input->Content(), ctx.Expr, NKikimr::NUdf::EDataSlot::Interval64, textValue)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } else if (input->Content() == "Uuid") {
+                if (input->Head().Content().size() != 16) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Bad atom format for type: "
+                        << input->Content() << ", value: " << TString(input->Head().Content()).Quote()));
+
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } else if (input->Content() == "JsonDocument") {
+                // check will be performed in JsonDocument callable
+            } else if (input->Content() == "DyNumber") {
+                if (!NKikimr::NMiniKQL::IsValidStringValue(EDataSlot::DyNumber, input->Head().Content())) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Bad atom format for type: "
+                        << input->Content() << ", value: " << TString(input->Head().Content()).Quote()));
+
                     return IGraphTransformer::TStatus::Error;
                 }
             } else {
@@ -12086,6 +12086,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgGroupRef"] = &PgGroupRefWrapper;
         Functions["PgGrouping"] = &PgGroupingWrapper;
         Functions["PgGroupingSet"] = &PgGroupingSetWrapper;
+        Functions["PgToRecord"] = &PgToRecordWrapper;
 
         Functions["AutoDemux"] = &AutoDemuxWrapper;
         Functions["AggrCountInit"] = &AggrCountInitWrapper;

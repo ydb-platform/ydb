@@ -420,6 +420,13 @@ struct TShardedTableOptions {
         TString DefaultFromSequence;
     };
 
+    static TVector<TColumn> DefaultColumns() {
+        return {
+            {"key",   "Uint32", true,  false}, 
+            {"value", "Uint32", false, false}
+        };
+    }
+
     struct TIndex {
         using EType = NKikimrSchemeOp::EIndexType;
 
@@ -468,7 +475,7 @@ struct TShardedTableOptions {
     TABLE_OPTION(bool, EnableOutOfOrder, true);
     TABLE_OPTION(const NLocalDb::TCompactionPolicy*, Policy, nullptr);
     TABLE_OPTION(EShadowDataMode, ShadowData, EShadowDataMode::Default);
-    TABLE_OPTION(TVector<TColumn>, Columns, (TVector<TColumn>{{"key", "Uint32", true, false}, {"value", "Uint32", false, false}}));
+    TABLE_OPTION(TVector<TColumn>, Columns, DefaultColumns());
     TABLE_OPTION(TVector<TIndex>, Indexes, {});
     TABLE_OPTION(TVector<TFamily>, Families, {});
     TABLE_OPTION(ui64, Followers, 0);
@@ -685,6 +692,8 @@ TString ReadShardedTable(
 void WaitTxNotification(Tests::TServer::TPtr server, TActorId sender, ui64 txId);
 void WaitTxNotification(Tests::TServer::TPtr server, ui64 txId);
 
+NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runtime, ui64 tabletId, ui64 minPartCount = 0, ui64 minRows = 0);
+
 void SimulateSleep(Tests::TServer::TPtr server, TDuration duration);
 void SimulateSleep(TTestActorRuntime& runtime, TDuration duration);
 
@@ -709,9 +718,12 @@ void ExecSQL(Tests::TServer::TPtr server,
              bool dml = true,
              Ydb::StatusIds::StatusCode code = Ydb::StatusIds::SUCCESS);
 
-NKikimrDataEvents::TEvWriteResult Write(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, std::unique_ptr<NEvents::TDataEvents::TEvWrite>&& request, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED, NWilson::TTraceId traceId = {});
-NKikimrDataEvents::TEvWriteResult Write(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount, ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED, NWilson::TTraceId traceId = {});
-NKikimrDataEvents::TEvWriteResult WaitForWriteCompleted(TTestActorRuntime& runtime, TActorId sender); 
+std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequest(ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount, ui64 seed = 0);
+NKikimrDataEvents::TEvWriteResult Write(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, std::unique_ptr<NEvents::TDataEvents::TEvWrite>&& request, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED);
+NKikimrDataEvents::TEvWriteResult Upsert(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount, ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED);
+NKikimrDataEvents::TEvWriteResult Replace(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount, ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED);
+NKikimrDataEvents::TEvWriteResult Delete(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount, ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED);
+NKikimrDataEvents::TEvWriteResult WaitForWriteCompleted(TTestActorRuntime& runtime, TActorId sender, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
 
 struct TEvWriteRow {
     TEvWriteRow(const TTableId& tableId, std::initializer_list<ui32> init)

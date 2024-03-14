@@ -154,7 +154,7 @@ public:
         , CommitTactic(commitTactic)
         , Info(info)
         , RepliesToWait(Max<ui32>())
-        , RequestSpan(TWilsonTablet::Tablet, std::move(traceId), "Tablet.WriteLog")
+        , RequestSpan(TWilsonTablet::TabletDetailed, std::move(traceId), "Tablet.WriteLog")
     {
         References.swap(refs);
         Y_ABORT_UNLESS(Info);
@@ -171,9 +171,9 @@ public:
             NWilson::TTraceId innerTraceId;
 
             if (RequestSpan) {
-                auto res = BlobSpans.try_emplace(ref.Id, TWilsonTablet::Tablet, RequestSpan.GetTraceId(), "Tablet.WriteLog.Reference");
+                auto res = BlobSpans.try_emplace(ref.Id, TWilsonTablet::TabletDetailed, RequestSpan.GetTraceId(), "Tablet.WriteLog.Reference");
 
-                innerTraceId = std::move(res.first->second.GetTraceId());
+                innerTraceId = res.first->second.GetTraceId();
             }
 
             SendToBS(ref.Id, ref.Buffer, ctx, handleClass, ref.Tactic ? *ref.Tactic : CommitTactic, std::move(innerTraceId));
@@ -191,7 +191,7 @@ public:
         NWilson::TTraceId traceId;
 
         if (RequestSpan) {
-            auto res = BlobSpans.try_emplace(actualLogEntryId, TWilsonTablet::Tablet, RequestSpan.GetTraceId(), "Tablet.WriteLog.LogEntry");
+            auto res = BlobSpans.try_emplace(actualLogEntryId, TWilsonTablet::TabletDetailed, RequestSpan.GetTraceId(), "Tablet.WriteLog.LogEntry");
 
             traceId = std::move(res.first->second.GetTraceId());
         }

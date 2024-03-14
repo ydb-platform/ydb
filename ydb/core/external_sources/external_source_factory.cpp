@@ -50,6 +50,10 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         {
             ToString(NYql::EDatabaseType::Ydb),
             CreateExternalDataSource(TString{NYql::GenericProviderName}, {"BASIC", "SERVICE_ACCOUNT"}, {"database_name", "use_tls", "database_id"}, hostnamePatternsRegEx)
+        },
+        {
+            ToString(NYql::EDatabaseType::YT),
+            CreateExternalDataSource(TString{NYql::YtProviderName}, {"TOKEN"}, {}, hostnamePatternsRegEx)
         }
     });
 }

@@ -3852,15 +3852,7 @@ void TSchemeShard::PersistRemovePublishingPath(NIceDb::TNiceDb& db, TTxId txId, 
 }
 
 TTabletId TSchemeShard::GetGlobalHive(const TActorContext& ctx) const {
-    auto domainsInfo = AppData(ctx)->DomainsInfo;
-
-    ui32 domainUid = domainsInfo->GetDomainUidByTabletId(TabletID());
-    auto domain = domainsInfo->GetDomain(domainUid);
-
-    const ui32 hiveIdx = Max<ui32>();
-    ui32 hiveUid = domain.GetHiveUidByIdx(hiveIdx);
-
-    return TTabletId(domainsInfo->GetHive(hiveUid));
+    return TTabletId(AppData(ctx)->DomainsInfo->GetHive());
 }
 
 TShardIdx TSchemeShard::GetShardIdx(TTabletId tabletId) const {
@@ -4215,14 +4207,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
 }
 
 const TDomainsInfo::TDomain& TSchemeShard::GetDomainDescription(const TActorContext &ctx) const {
-    auto appdata = AppData(ctx);
-    Y_ABORT_UNLESS(appdata);
-
-    const ui32 selfDomain = appdata->DomainsInfo->GetDomainUidByTabletId(TabletID());
-    Y_ABORT_UNLESS(selfDomain != appdata->DomainsInfo->BadDomainId);
-    const auto& domain = appdata->DomainsInfo->GetDomain(selfDomain);
-
-    return domain;
+    return *AppData(ctx)->DomainsInfo->GetDomain();
 }
 
 const NKikimrConfig::TDomainsConfig& TSchemeShard::GetDomainsConfig() {
@@ -4310,8 +4295,7 @@ void TSchemeShard::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActor
 
 static TVector<ui64> CollectTxAllocators(const TAppData *appData) {
     TVector<ui64> allocators;
-    for (auto it: appData->DomainsInfo->Domains) {
-        auto &domain = it.second;
+    if (const auto& domain = appData->DomainsInfo->Domain) {
         for (auto tabletId: domain->TxAllocators) {
             allocators.push_back(tabletId);
         }

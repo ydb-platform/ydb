@@ -1,5 +1,7 @@
 PROTO_LIBRARY()
 
+SET(PROTOC_TRANSITIVE_HEADERS "no")
+
 GRPC()
 
 IF (OS_WINDOWS)
@@ -153,6 +155,7 @@ PEERDIR(
     ydb/library/login/protos
     ydb/library/mkql_proto/protos
     ydb/public/api/protos
+    ydb/library/yql/core/file_storage/proto
     ydb/library/yql/core/issue/protos
     ydb/library/yql/dq/actors/protos
     ydb/library/yql/dq/proto
@@ -161,6 +164,7 @@ PEERDIR(
     ydb/library/yql/public/types
     ydb/library/services
     ydb/library/ydb_issue/proto
+    ydb/core/tx/columnshard/engines/scheme/statistics/protos
 )
 
 CPP_PROTO_PLUGIN0(config_proto_plugin ydb/core/config/tools/protobuf_plugin)

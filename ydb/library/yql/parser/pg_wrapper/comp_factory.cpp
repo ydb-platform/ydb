@@ -424,7 +424,35 @@ public:
                 };
 
                 ApplyFillers(AllPgClassFillers, Y_ARRAY_SIZE(AllPgClassFillers), PgClassFillers_);
-            }
+            } else if (Table_ == "pg_proc") {
+                static const std::pair<const char*, TPgProcFiller> AllPgProcFillers[] = {
+                    {"oid", [](const NPg::TProcDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.ProcId)); }},
+                    {"proname", [](const NPg::TProcDesc& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN)); }},
+                    {"pronamespace", [](const NPg::TProcDesc&) { return ScalarDatumToPod(ObjectIdGetDatum(PG_CATALOG_NAMESPACE)); }},
+                    {"proowner", [](const NPg::TProcDesc&) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
+                    {"prorettype", [](const NPg::TProcDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.ResultType)); }},
+                    {"prolang", [](const NPg::TProcDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.Lang)); }},
+                    {"prokind", [](const NPg::TProcDesc& desc) { return ScalarDatumToPod(CharGetDatum(desc.Kind)); }},
+                };
+
+                ApplyFillers(AllPgProcFillers, Y_ARRAY_SIZE(AllPgProcFillers), PgProcFillers_);
+            } else if (Table_ == "pg_aggregate") {
+                static const std::pair<const char*, TPgAggregateFiller> AllPgAggregateFillers[] = {
+                    {"aggfnoid", [](const NPg::TAggregateDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.AggId)); }},
+                    {"aggkind", [](const NPg::TAggregateDesc& desc) { return ScalarDatumToPod(CharGetDatum(desc.Kind)); }},
+                    {"aggtranstype", [](const NPg::TAggregateDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.TransTypeId)); }},
+                };
+
+                ApplyFillers(AllPgAggregateFillers, Y_ARRAY_SIZE(AllPgAggregateFillers), PgAggregateFillers_);
+            } else if (Table_ == "pg_language") {
+                static const std::pair<const char*, TPgLanguageFiller> AllPgLanguageFillers[] = {
+                    {"oid", [](const NPg::TLanguageDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.LangId)); }},
+                    {"lanname", [](const NPg::TLanguageDesc& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN)); }},
+                    {"lanowner", [](const NPg::TLanguageDesc&) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
+                };
+
+                ApplyFillers(AllPgLanguageFillers, Y_ARRAY_SIZE(AllPgLanguageFillers), PgLanguageFillers_);
+            }            
         } else {
             if (Table_ == "tables") {
                 static const std::pair<const char*, TTablesFiller> AllTablesFillers[] = {
@@ -462,10 +490,6 @@ public:
         if (Cluster_ == "pg_catalog") {
             if (Table_ == "pg_type") {
                 NPg::EnumTypes([&](ui32 oid, const NPg::TTypeDesc& desc) {
-                    if (desc.ArrayTypeId == desc.TypeId) {
-                        return;
-                    }
-
                     NUdf::TUnboxedValue* items;
                     auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgTypeFillers_.size(), items);
                     for (ui32 i = 0; i < PgTypeFillers_.size(); ++i) {
@@ -701,6 +725,42 @@ public:
 
                     rows.emplace_back(row);
                 }
+            } else if (Table_ == "pg_proc") {
+                NPg::EnumProc([&](ui32, const NPg::TProcDesc& desc) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgProcFillers_.size(), items);
+                    for (ui32 i = 0; i < PgProcFillers_.size(); ++i) {
+                        if (PgProcFillers_[i]) {
+                            items[i] = PgProcFillers_[i](desc);
+                        }
+                    }
+
+                    rows.emplace_back(row);
+                });
+            } else if (Table_ == "pg_aggregate") {
+                NPg::EnumAggregation([&](ui32, const NPg::TAggregateDesc& desc) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgAggregateFillers_.size(), items);
+                    for (ui32 i = 0; i < PgAggregateFillers_.size(); ++i) {
+                        if (PgAggregateFillers_[i]) {
+                            items[i] = PgAggregateFillers_[i](desc);
+                        }
+                    }
+
+                    rows.emplace_back(row);
+                });
+            } else if (Table_ == "pg_language") {
+                NPg::EnumLanguages([&](ui32, const NPg::TLanguageDesc& desc) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgLanguageFillers_.size(), items);
+                    for (ui32 i = 0; i < PgLanguageFillers_.size(); ++i) {
+                        if (PgLanguageFillers_[i]) {
+                            items[i] = PgLanguageFillers_[i](desc);
+                        }
+                    }
+
+                    rows.emplace_back(row);
+                });
             }
         } else {
             if (Table_ == "tables") {
@@ -783,6 +843,15 @@ private:
 
     using TPgClassFiller = NUdf::TUnboxedValuePod(*)(const NPg::TTableInfo&, ui32 namespaceOid, ui32 amOid);
     TVector<TPgClassFiller> PgClassFillers_;
+
+    using TPgProcFiller = NUdf::TUnboxedValuePod(*)(const NPg::TProcDesc&);
+    TVector<TPgProcFiller> PgProcFillers_;
+
+    using TPgAggregateFiller = NUdf::TUnboxedValuePod(*)(const NPg::TAggregateDesc&);
+    TVector<TPgAggregateFiller> PgAggregateFillers_;
+
+    using TPgLanguageFiller = NUdf::TUnboxedValuePod(*)(const NPg::TLanguageDesc&);
+    TVector<TPgLanguageFiller> PgLanguageFillers_;
 };
 
 class TFunctionCallInfo {
@@ -1302,6 +1371,121 @@ public:
 
         return compCtx.HolderFactory.Create<TListValue>(compCtx, Name, std::move(args), ArgDesc, RetTypeDesc, ProcDesc, &FInfo, StructType, compCtx.HolderFactory);
     }
+};
+
+class TPgToRecord : public TMutableComputationNode<TPgToRecord> {
+    typedef TMutableComputationNode<TPgToRecord> TBaseComputation;
+public:
+    TPgToRecord(
+        TComputationMutables& mutables,
+        IComputationNode* arg,
+        TStructType* structType,
+        TVector<std::pair<TString,TString>>&& members
+    )
+        : TBaseComputation(mutables)
+        , Arg(arg)
+        , StructType(structType)
+        , Members(std::move(members))
+        , StateIndex(mutables.CurValueIndex++)
+    {
+        StructIndicies.resize(Members.size());
+        FieldTypes.resize(Members.size());
+        for (ui32 i = 0; i < Members.size(); ++i) {
+            StructIndicies[i] = structType->GetMemberIndex(Members[i].second);
+            auto itemType = structType->GetMemberType(StructIndicies[i]);
+            ui32 oid;
+            if (itemType->IsNull()) {
+                oid = UNKNOWNOID;
+            } else {
+                oid = AS_TYPE(TPgType, itemType)->GetTypeId();
+            }
+
+            FieldTypes[i] = &NPg::LookupType(oid);
+        }
+    }
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
+        auto input = Arg->GetValue(compCtx);
+        auto& state = GetState(compCtx);
+
+        auto elements = input.GetElements();
+        TVector<NUdf::TUnboxedValue> elemValues;
+        if (!elements) {
+            elemValues.reserve(StructType->GetMembersCount());
+            for (ui32 i = 0; i < StructType->GetMembersCount(); ++i) {
+                elemValues.push_back(input.GetElement(i));
+            }
+
+            elements = elemValues.data();
+        }
+
+        for (ui32 i = 0; i < Members.size(); ++i) {
+            auto index = StructIndicies[i];
+            if (!elements[index]) {
+                state.Nulls[i] = true;
+            } else {
+                state.Nulls[i] = false;
+                if (FieldTypes[i]->PassByValue) {
+                    state.Values[i] = ScalarDatumFromPod(elements[index]);
+                } else {
+                    state.Values[i] = PointerDatumFromPod(elements[index]);
+                }
+            }
+        }
+
+        HeapTuple tuple = heap_form_tuple(state.Desc, state.Values.get(), state.Nulls.get());
+        auto result = (HeapTupleHeader) palloc(tuple->t_len);
+        memcpy(result, tuple->t_data, tuple->t_len);
+        heap_freetuple(tuple);
+        return PointerDatumToPod((Datum)result);
+    }
+
+private:
+    void RegisterDependencies() const final {
+        DependsOn(Arg);
+    }
+
+    struct TPgToRecordState : public TComputationValue<TPgToRecordState> {
+        TPgToRecordState(TMemoryUsageInfo* memInfo, const TVector<std::pair<TString,TString>>& members,
+            const TVector<const NPg::TTypeDesc*>& fieldTypes)
+            : TComputationValue(memInfo)
+        {
+            Values.reset(new Datum[members.size()]);
+            Nulls.reset(new bool[members.size()]);
+            Desc = CreateTemplateTupleDesc(members.size());
+            for (ui32 i = 0; i < members.size(); ++i) {
+                TupleDescInitEntry(Desc, (AttrNumber) 1 + i, members[i].first.c_str(), fieldTypes[i]->TypeId, -1, 0);
+            }
+
+            Desc = BlessTupleDesc(Desc);
+        }
+
+        ~TPgToRecordState()
+        {
+            FreeTupleDesc(Desc);
+        }
+
+        std::unique_ptr<Datum[]> Values;
+        std::unique_ptr<bool[]> Nulls;
+        TupleDesc Desc;
+    };
+
+    TPgToRecordState& GetState(TComputationContext& compCtx) const {
+        auto& result = compCtx.MutableValues[StateIndex];
+        if (!result.HasValue()) {
+            result = compCtx.HolderFactory.Create<TPgToRecordState>(Members, FieldTypes);
+        }
+
+        return *static_cast<TPgToRecordState*>(result.AsBoxed().Get());
+    }
+
+
+    IComputationNode* const Arg;
+    TStructType* const StructType;
+    const TVector<std::pair<TString,TString>> Members;
+    const ui32 StateIndex;
+    TVector<ui32> StructIndicies;
+    TVector<const NPg::TTypeDesc*> FieldTypes;
 };
 
 class TPgCast : public TMutableComputationNode<TPgCast> {
@@ -2201,7 +2385,7 @@ struct TFromPgExec {
                     len = strlen(ptr);
                 } else {
                     len = GetCleanVarSize((const text*)ptr);
-                    Y_ENSURE(len + VARHDRSZ + sizeof(void*) == item.AsStringRef().Size());
+                    Y_ENSURE(len + VARHDRSZ + sizeof(void*) <= item.AsStringRef().Size());
                     ptr += VARHDRSZ;
                 }
 
@@ -2314,12 +2498,9 @@ struct TToPgExec {
             break;
         }
         case TEXTOID:
-        case VARCHAROID:
-        case BYTEAOID:
-        case CSTRINGOID: {
+        case BYTEAOID: {
             NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
             NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
-            std::vector<char> tmp;
             for (size_t i = 0; i < length; ++i) {
                 auto item = reader.GetItem(array, i);
                 if (!item) {
@@ -2327,38 +2508,9 @@ struct TToPgExec {
                     continue;
                 }
 
-                ui32 len;
-                if (IsCString) {
-                    len = sizeof(void*) + 1 + item.AsStringRef().Size();
-                    if (Y_UNLIKELY(len < item.AsStringRef().Size())) {
-                        ythrow yexception() << "Too long string";
-                    }
-
-                    if (tmp.capacity() < len) {
-                        tmp.reserve(Max<ui64>(len, tmp.capacity() * 2));
-                    }
-
-                    tmp.resize(len);
-                    NUdf::ZeroMemoryContext(tmp.data() + sizeof(void*));
-                    memcpy(tmp.data() + sizeof(void*), item.AsStringRef().Data(), len - 1 - sizeof(void*));
-                    tmp[len - 1] = 0;
-                } else {
-                    len = sizeof(void*) + VARHDRSZ + item.AsStringRef().Size();
-                    if (Y_UNLIKELY(len < item.AsStringRef().Size())) {
-                        ythrow yexception() << "Too long string";
-                    }
-
-                    if (tmp.capacity() < len) {
-                        tmp.reserve(Max<ui64>(len, tmp.capacity() * 2));
-                    }
-
-                    tmp.resize(len);
-                    NUdf::ZeroMemoryContext(tmp.data() + sizeof(void*));
-                    memcpy(tmp.data() + sizeof(void*) + VARHDRSZ, item.AsStringRef().Data(), len - VARHDRSZ - sizeof(void*));
-                    UpdateCleanVarSize((text*)(tmp.data() + sizeof(void*)), item.AsStringRef().Size());
-                }
-
-                builder.Add(NUdf::TBlockItem(NUdf::TStringRef(tmp.data(), len)));
+                auto ref = item.AsStringRef();
+                auto ptr = builder.AddPgItem<false, VARHDRSZ>(ref);
+                UpdateCleanVarSize((text*)(ptr + sizeof(void*)), ref.Size());
             }
 
             *res = builder.Build(true);
@@ -2466,6 +2618,23 @@ TComputationNodeFactory GetPgFactory() {
                 const auto table = tableData->AsValue().AsStringRef();
                 const auto returnType = callable.GetType()->GetReturnType();
                 return new TPgTableContent(ctx.Mutables, cluster, table, returnType);
+            }
+
+            if (name == "PgToRecord") {
+                auto structType = AS_TYPE(TStructType, callable.GetInput(0).GetStaticType());
+                auto input = LocateNode(ctx.NodeLocator, callable, 0);
+                TVector<std::pair<TString, TString>> members;
+                auto tuple = AS_VALUE(TTupleLiteral, callable.GetInput(1));
+                MKQL_ENSURE(tuple->GetValuesCount() % 2 == 0, "Malformed names");
+                for (ui32 i = 0; i < tuple->GetValuesCount(); i += 2) {
+                    const auto recordFieldData = AS_VALUE(TDataLiteral, tuple->GetValue(i));
+                    const auto struсtMemberData = AS_VALUE(TDataLiteral, tuple->GetValue(i + 1));
+                    const TString recordField(recordFieldData->AsValue().AsStringRef());
+                    const TString struсtMember(struсtMemberData->AsValue().AsStringRef());
+                    members.push_back({recordField, struсtMember});
+                }
+
+                return new TPgToRecord(ctx.Mutables, input, structType, std::move(members));
             }
 
             if (name == "PgResolvedCall") {

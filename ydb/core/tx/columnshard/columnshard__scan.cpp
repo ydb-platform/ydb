@@ -646,7 +646,7 @@ PrepareStatsReadMetadata(ui64 tabletId, const NOlap::TReadDescription& read, con
         }
     }
 
-    auto out = std::make_shared<NOlap::TReadStatsMetadata>(tabletId,
+    auto out = std::make_shared<NOlap::TReadStatsMetadata>(index ? index->CopyVersionedIndexPtr() : nullptr, tabletId,
                 isReverse ? NOlap::TReadStatsMetadata::ESorting::DESC : NOlap::TReadStatsMetadata::ESorting::ASC,
                 read.GetProgram(), index ? index->GetVersionedIndex().GetSchema(read.GetSnapshot()) : nullptr, read.GetSnapshot());
 
@@ -846,7 +846,11 @@ void TTxScan::Complete(const TActorContext& ctx) {
         return;
     }
 
-    ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(ReadMetadataRanges);
+    const NOlap::TVersionedIndex* index = nullptr;
+    if (Self->HasIndex()) {
+        index = &Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex();
+    }
+    ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(ReadMetadataRanges, index);
     auto statsDelta = Self->InFlightReadsTracker.GetSelectStatsDelta();
 
     Self->IncCounter(COUNTER_READ_INDEX_PORTIONS, statsDelta.Portions);

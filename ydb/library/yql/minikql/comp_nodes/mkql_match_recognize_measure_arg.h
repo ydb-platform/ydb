@@ -32,6 +32,7 @@ public:
             , VarNames(varNames)
             , MatchNumber(matchNumber)
     {}
+
     NUdf::TUnboxedValue GetElement(ui32 index) const override {
         switch(ColumnOrder[index].first) {
             case EMeasureInputDataSpecialColumns::Classifier: {

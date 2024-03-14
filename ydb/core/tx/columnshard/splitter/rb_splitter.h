@@ -4,7 +4,6 @@
 #include <ydb/core/tx/columnshard/counters/indexation.h>
 #include <ydb/core/tx/columnshard/engines/scheme/column_features.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
-#include <ydb/core/tx/columnshard/engines/storage/granule.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
@@ -63,7 +62,7 @@ public:
         return std::move(Slices);
     }
 
-    bool Next(std::vector<std::vector<std::shared_ptr<IPortionDataChunk>>>& portionBlobs, std::shared_ptr<arrow::RecordBatch>& batch);
+    bool Next(std::vector<std::vector<std::shared_ptr<IPortionDataChunk>>>& portionBlobs, std::shared_ptr<arrow::RecordBatch>& batch, const TEntityGroups& groups);
 };
 
 }

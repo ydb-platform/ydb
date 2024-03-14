@@ -1977,7 +1977,6 @@ static struct PyMethodDef m_methods[] = {
   {NULL,         (PyCFunction)NULL, 0, NULL}            /* sentinel */
 };
 
-#if  PY_MAJOR_VERSION >= 3
 static char module_doc[] = "C optimizations for zope.interface\n\n";
 
 static struct PyModuleDef _zic_module = {
@@ -1991,20 +1990,14 @@ static struct PyModuleDef _zic_module = {
         NULL,
         NULL
 };
-#endif
 
 static PyObject *
 init(void)
 {
   PyObject *m;
 
-#if  PY_MAJOR_VERSION < 3
-#define DEFINE_STRING(S) \
-  if(! (str ## S = PyString_FromString(# S))) return NULL
-#else
 #define DEFINE_STRING(S) \
   if(! (str ## S = PyUnicode_FromString(# S))) return NULL
-#endif
 
   DEFINE_STRING(__dict__);
   DEFINE_STRING(__implemented__);
@@ -2054,13 +2047,7 @@ init(void)
   if (PyType_Ready(&VerifyingBase) < 0)
     return NULL;
 
-  #if PY_MAJOR_VERSION < 3
-  /* Create the module and add the functions */
-  m = Py_InitModule3("_zope_interface_coptimizations", m_methods,
-                     "C optimizations for zope.interface\n\n");
-  #else
   m = PyModule_Create(&_zic_module);
-  #endif
   if (m == NULL)
     return NULL;
 
@@ -2084,17 +2071,10 @@ init(void)
 }
 
 PyMODINIT_FUNC
-#if PY_MAJOR_VERSION < 3
-init_zope_interface_coptimizations(void)
-{
-  init();
-}
-#else
 PyInit__zope_interface_coptimizations(void)
 {
   return init();
 }
-#endif
 
 #ifdef __clang__
 #pragma clang diagnostic pop

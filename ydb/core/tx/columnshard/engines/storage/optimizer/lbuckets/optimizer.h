@@ -3,6 +3,7 @@
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
+#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/engines/changes/general_compaction.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
@@ -200,6 +201,27 @@ private:
     }
 
 public:
+    bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
+        for (auto&& f : Futures) {
+            for (auto&& p : f.second) {
+                if (dataLocksManager->IsLocked(*p.second)) {
+                    return true;
+                }
+            }
+        }
+        for (auto&& i : PreActuals) {
+            if (dataLocksManager->IsLocked(*i.second)) {
+                return true;
+            }
+        }
+        for (auto&& i : Actuals) {
+            if (dataLocksManager->IsLocked(*i.second)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool Validate(const std::shared_ptr<TPortionInfo>& portion) const {
         if (portion) {
             AFL_VERIFY(!PreActuals.contains(portion->GetPortionId()));
@@ -582,6 +604,7 @@ class TPortionsBucket: public TMoveOnly {
 private:
     std::shared_ptr<TPortionInfo> MainPortion;
     const std::shared_ptr<TCounters> Counters;
+    mutable std::optional<i64> LastWeight;
     TPortionsPool Others;
     std::optional<NArrow::TReplaceKey> NextBorder;
 
@@ -630,6 +653,13 @@ public:
             }
         }
     };
+
+    bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
+        if (MainPortion && dataLocksManager->IsLocked(*MainPortion)) {
+            return true;
+        }
+        return Others.IsLocked(dataLocksManager);
+    }
 
     bool IsEmpty() const {
         return !MainPortion && Others.IsEmpty();
@@ -699,11 +729,20 @@ public:
     }
 
     i64 GetWeight() const {
-        return Others.GetWeight(MainPortion, !NextBorder);
+        LastWeight = Others.GetWeight(MainPortion, !NextBorder);
+        return *LastWeight;
+    }
+
+    i64 GetLastWeight() const {
+        if (LastWeight) {
+            return *LastWeight;
+        } else {
+            return GetWeight();
+        }
     }
 
     std::shared_ptr<TColumnEngineChanges> BuildOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule,
-        const THashSet<TPortionAddress>& busyPortions, const NArrow::TReplaceKey* nextBorder, const std::shared_ptr<arrow::Schema>& primaryKeysSchema,
+        const std::shared_ptr<NDataLocks::TManager>& locksManager, const NArrow::TReplaceKey* nextBorder, const std::shared_ptr<arrow::Schema>& primaryKeysSchema,
         const std::shared_ptr<IStoragesManager>& storagesManager) const
     {
         auto youngestPortion = GetYoungestPortion(nextBorder);
@@ -744,14 +783,14 @@ public:
         ui64 size = 0;
         for (auto&& i : portions) {
             size += i->GetBlobBytes();
-            if (busyPortions.contains(i->GetAddress())) {
+            if (locksManager->IsLocked(*i)) {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("info", Others.DebugString())("event", "skip_optimization")("reason", "busy");
                 return nullptr;
             }
         }
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("stop_instant", stopInstant)("size", size)("next", NextBorder ? NextBorder->DebugString() : "")
             ("count", portions.size())("info", Others.DebugString())("event", "start_optimization")("stop_point", stopPoint ? stopPoint->DebugString() : "");
-        TSaverContext saverContext(storagesManager->GetOperator(IStoragesManager::DefaultStorageId), storagesManager);
+        TSaverContext saverContext(storagesManager);
         auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(limits.GetSplitSettings(), granule, portions, saverContext);
         if (MainPortion) {
             NIndexedReader::TSortableBatchPosition pos(MainPortion->IndexKeyStart().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
@@ -838,7 +877,7 @@ private:
     }
 
     void RemoveBucketFromRating(const std::shared_ptr<TPortionsBucket>& bucket) {
-        auto it = BucketsByWeight.find(bucket->GetWeight());
+        auto it = BucketsByWeight.find(bucket->GetLastWeight());
         AFL_VERIFY(it != BucketsByWeight.end());
         AFL_VERIFY(it->second.erase(bucket.get()));
         if (it->second.empty()) {
@@ -917,6 +956,17 @@ public:
         AddBucketToRating(LeftBucket);
     }
 
+    bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
+        if (BucketsByWeight.empty()) {
+            return false;
+        }
+        if (BucketsByWeight.rbegin()->second.empty()) {
+            return false;
+        }
+        const TPortionsBucket* bucketForOptimization = *BucketsByWeight.rbegin()->second.begin();
+        return bucketForOptimization->IsLocked(dataLocksManager);
+    }
+
     bool IsEmpty() const {
         return Buckets.empty() && LeftBucket->IsEmpty();
     }
@@ -952,31 +1002,30 @@ public:
         }
     }
 
-    std::shared_ptr<TColumnEngineChanges> BuildOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const THashSet<TPortionAddress>& busyPortions) const {
+    std::shared_ptr<TColumnEngineChanges> BuildOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
         AFL_VERIFY(BucketsByWeight.size());
         if (!BucketsByWeight.rbegin()->first) {
             return nullptr;
-        } else {
-            AFL_VERIFY(BucketsByWeight.rbegin()->second.size());
-            const TPortionsBucket* bucketForOptimization = *BucketsByWeight.rbegin()->second.begin();
-            if (bucketForOptimization == LeftBucket.get()) {
-                if (Buckets.size()) {
-                    return bucketForOptimization->BuildOptimizationTask(limits, granule, busyPortions, &Buckets.begin()->first, PrimaryKeysSchema, StoragesManager);
-                } else {
-                    return bucketForOptimization->BuildOptimizationTask(limits, granule, busyPortions, nullptr, PrimaryKeysSchema, StoragesManager);
-                }
+        }
+        AFL_VERIFY(BucketsByWeight.rbegin()->second.size());
+        const TPortionsBucket* bucketForOptimization = *BucketsByWeight.rbegin()->second.begin();
+        if (bucketForOptimization == LeftBucket.get()) {
+            if (Buckets.size()) {
+                return bucketForOptimization->BuildOptimizationTask(limits, granule, locksManager, &Buckets.begin()->first, PrimaryKeysSchema, StoragesManager);
             } else {
-                auto it = Buckets.find(bucketForOptimization->GetPortion()->IndexKeyStart());
-                AFL_VERIFY(it != Buckets.end());
-                ++it;
-                if (it != Buckets.end()) {
-                    return bucketForOptimization->BuildOptimizationTask(limits, granule, busyPortions, &it->first, PrimaryKeysSchema, StoragesManager);
-                } else {
-                    return bucketForOptimization->BuildOptimizationTask(limits, granule, busyPortions, nullptr, PrimaryKeysSchema, StoragesManager);
-                }
+                return bucketForOptimization->BuildOptimizationTask(limits, granule, locksManager, nullptr, PrimaryKeysSchema, StoragesManager);
+            }
+        } else {
+            auto it = Buckets.find(bucketForOptimization->GetPortion()->IndexKeyStart());
+            AFL_VERIFY(it != Buckets.end());
+            ++it;
+            if (it != Buckets.end()) {
+                return bucketForOptimization->BuildOptimizationTask(limits, granule, locksManager, &it->first, PrimaryKeysSchema, StoragesManager);
+            } else {
+                return bucketForOptimization->BuildOptimizationTask(limits, granule, locksManager, nullptr, PrimaryKeysSchema, StoragesManager);
             }
         }
-   }
+    }
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& portion, const TInstant now) {
         if (portion->GetBlobBytes() < SmallPortionDetectSizeLimit) {
@@ -1025,6 +1074,10 @@ private:
     TPortionBuckets Buckets;
     const std::shared_ptr<IStoragesManager> StoragesManager;
 protected:
+    virtual bool DoIsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const override {
+        return Buckets.IsLocked(dataLocksManager);
+    }
+
     virtual void DoModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) override {
         const TInstant now = TInstant::Now();
         for (auto&& [_, i] : remove) {
@@ -1046,8 +1099,8 @@ protected:
             Buckets.AddPortion(i, now);
         }
     }
-    virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const THashSet<TPortionAddress>& busyPortions) const override {
-        return Buckets.BuildOptimizationTask(limits, granule, busyPortions);
+    virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
+        return Buckets.BuildOptimizationTask(limits, granule, locksManager);
 
     }
     virtual void DoActualize(const TInstant currentInstant) override {

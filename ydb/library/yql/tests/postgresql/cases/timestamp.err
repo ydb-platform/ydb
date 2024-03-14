@@ -25,9 +25,27 @@ INSERT INTO TIMESTAMP_TBL VALUES ('tomorrow');
 -- time zone should be ignored by this data type
 INSERT INTO TIMESTAMP_TBL VALUES ('tomorrow EST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- time zone should be ignored by this data type
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp: "tomorrow EST"
+
+        	-- time zone should be ignored by this data type
+	^
 <sql-statement>
 INSERT INTO TIMESTAMP_TBL VALUES ('tomorrow zulu');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMP_TBL VALUES ('tomorrow zulu');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp: "tomorrow zulu"
+
+        	INSERT INTO TIMESTAMP_TBL VALUES ('tomorrow zulu');
+	^
 <sql-statement>
 SELECT count(*) AS One FROM TIMESTAMP_TBL WHERE d1 = timestamp without time zone 'today';
 </sql-statement>
@@ -76,14 +94,6 @@ SELECT count(*) AS two FROM TIMESTAMP_TBL WHERE d1 = timestamp(2) without time z
 <sql-statement>
 SELECT count(d1) AS three, count(DISTINCT d1) AS two FROM TIMESTAMP_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Execution
-
-    -stdin-:<main>:1:1: Fatal: Execution of node: YtMapReduce!
-    	SELECT count(d1) AS three, count(DISTINCT d1) AS two FROM TIMESTAMP_TBL;
-	^
-        -stdin-:<main>:1:1: Fatal: Failed to unwrap empty optional
-        	SELECT count(d1) AS three, count(DISTINCT d1) AS two FROM TIMESTAMP_TBL;
-	^
 <sql-statement>
 COMMIT;
 </sql-statement>
@@ -109,22 +119,76 @@ INSERT INTO TIMESTAMP_TBL VALUES ('epoch');
 -- Postgres v6.0 standard output format
 INSERT INTO TIMESTAMP_TBL VALUES ('Mon Feb 10 17:32:01 1997 PST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- Postgres v6.0 standard output format
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp: "Mon Feb 10 17:32:01 1997 PST"
+
+        	-- Postgres v6.0 standard output format
+	^
 <sql-statement>
 -- Variations on Postgres v6.1 standard output format
 INSERT INTO TIMESTAMP_TBL VALUES ('Mon Feb 10 17:32:01.000001 1997 PST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- Variations on Postgres v6.1 standard output format
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp: "Mon Feb 10 17:32:01.000001 1997 PST"
+
+        	-- Variations on Postgres v6.1 standard output format
+	^
 <sql-statement>
 INSERT INTO TIMESTAMP_TBL VALUES ('Mon Feb 10 17:32:01.999999 1997 PST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMP_TBL VALUES ('Mon Feb 10 17:32:01.999999 1997 PST');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp: "Mon Feb 10 17:32:01.999999 1997 PST"
+
+        	INSERT INTO TIMESTAMP_TBL VALUES ('Mon Feb 10 17:32:01.999999 1997 PST');
+	^
 <sql-statement>
 INSERT INTO TIMESTAMP_TBL VALUES ('Mon Feb 10 17:32:01.4 1997 PST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMP_TBL VALUES ('Mon Feb 10 17:32:01.4 1997 PST');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp: "Mon Feb 10 17:32:01.4 1997 PST"
+
+        	INSERT INTO TIMESTAMP_TBL VALUES ('Mon Feb 10 17:32:01.4 1997 PST');
+	^
 <sql-statement>
 INSERT INTO TIMESTAMP_TBL VALUES ('Mon Feb 10 17:32:01.5 1997 PST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMP_TBL VALUES ('Mon Feb 10 17:32:01.5 1997 PST');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp: "Mon Feb 10 17:32:01.5 1997 PST"
+
+        	INSERT INTO TIMESTAMP_TBL VALUES ('Mon Feb 10 17:32:01.5 1997 PST');
+	^
 <sql-statement>
 INSERT INTO TIMESTAMP_TBL VALUES ('Mon Feb 10 17:32:01.6 1997 PST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMP_TBL VALUES ('Mon Feb 10 17:32:01.6 1997 PST');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp: "Mon Feb 10 17:32:01.6 1997 PST"
+
+        	INSERT INTO TIMESTAMP_TBL VALUES ('Mon Feb 10 17:32:01.6 1997 PST');
+	^
 <sql-statement>
 -- ISO 8601 format
 INSERT INTO TIMESTAMP_TBL VALUES ('1997-01-02');
@@ -182,51 +246,131 @@ INSERT INTO TIMESTAMP_TBL VALUES ('1997/02/10 17:32:01-0800');
 <sql-statement>
 INSERT INTO TIMESTAMP_TBL VALUES ('1997-02-10 17:32:01 PST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMP_TBL VALUES ('1997-02-10 17:32:01 PST');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp: "1997-02-10 17:32:01 PST"
+
+        	INSERT INTO TIMESTAMP_TBL VALUES ('1997-02-10 17:32:01 PST');
+	^
 <sql-statement>
 INSERT INTO TIMESTAMP_TBL VALUES ('Feb-10-1997 17:32:01 PST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMP_TBL VALUES ('Feb-10-1997 17:32:01 PST');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp: "Feb-10-1997 17:32:01 PST"
+
+        	INSERT INTO TIMESTAMP_TBL VALUES ('Feb-10-1997 17:32:01 PST');
+	^
 <sql-statement>
 INSERT INTO TIMESTAMP_TBL VALUES ('02-10-1997 17:32:01 PST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMP_TBL VALUES ('02-10-1997 17:32:01 PST');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp: "02-10-1997 17:32:01 PST"
+
+        	INSERT INTO TIMESTAMP_TBL VALUES ('02-10-1997 17:32:01 PST');
+	^
 <sql-statement>
 INSERT INTO TIMESTAMP_TBL VALUES ('19970210 173201 PST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMP_TBL VALUES ('19970210 173201 PST');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp: "19970210 173201 PST"
+
+        	INSERT INTO TIMESTAMP_TBL VALUES ('19970210 173201 PST');
+	^
 <sql-statement>
 set datestyle to ymd;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: datestyle
-    	set datestyle to ymd;
-	^
 <sql-statement>
 INSERT INTO TIMESTAMP_TBL VALUES ('97FEB10 5:32:01PM UTC');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMP_TBL VALUES ('97FEB10 5:32:01PM UTC');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp: "97FEB10 5:32:01PM UTC"
+
+        	INSERT INTO TIMESTAMP_TBL VALUES ('97FEB10 5:32:01PM UTC');
+	^
 <sql-statement>
 INSERT INTO TIMESTAMP_TBL VALUES ('97/02/10 17:32:01 UTC');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMP_TBL VALUES ('97/02/10 17:32:01 UTC');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp: "97/02/10 17:32:01 UTC"
+
+        	INSERT INTO TIMESTAMP_TBL VALUES ('97/02/10 17:32:01 UTC');
+	^
 <sql-statement>
 reset datestyle;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
-    	reset datestyle;
-	^
 <sql-statement>
 INSERT INTO TIMESTAMP_TBL VALUES ('1997.041 17:32:01 UTC');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMP_TBL VALUES ('1997.041 17:32:01 UTC');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp: "1997.041 17:32:01 UTC"
+
+        	INSERT INTO TIMESTAMP_TBL VALUES ('1997.041 17:32:01 UTC');
+	^
 <sql-statement>
 INSERT INTO TIMESTAMP_TBL VALUES ('19970210 173201 America/New_York');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMP_TBL VALUES ('19970210 173201 America/New_York');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "america/new_york" not recognized
+
+        	INSERT INTO TIMESTAMP_TBL VALUES ('19970210 173201 America/New_York');
+	^
 <sql-statement>
 -- this fails (even though TZ is a no-op, we still look it up)
 INSERT INTO TIMESTAMP_TBL VALUES ('19970710 173201 America/Does_not_exist');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- this fails (even though TZ is a no-op, we still look it up)
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "america/does_not_exist" not recognized
+
+        	-- this fails (even though TZ is a no-op, we still look it up)
+	^
 <sql-statement>
 -- Check date conversion and date arithmetic
 INSERT INTO TIMESTAMP_TBL VALUES ('1997-06-10 18:32:01 PDT');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- Check date conversion and date arithmetic
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type timestamp: "1997-06-10 18:32:01 PDT"
+
+        	-- Check date conversion and date arithmetic
+	^
 <sql-statement>
 INSERT INTO TIMESTAMP_TBL VALUES ('Feb 10 17:32:01 1997');
 </sql-statement>
@@ -299,6 +443,15 @@ INSERT INTO TIMESTAMP_TBL VALUES ('Feb 28 17:32:01 1997');
 <sql-statement>
 INSERT INTO TIMESTAMP_TBL VALUES ('Feb 29 17:32:01 1997');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMP_TBL VALUES ('Feb 29 17:32:01 1997');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "Feb 29 17:32:01 1997"
+
+        	INSERT INTO TIMESTAMP_TBL VALUES ('Feb 29 17:32:01 1997');
+	^
 <sql-statement>
 INSERT INTO TIMESTAMP_TBL VALUES ('Mar 01 17:32:01 1997');
 </sql-statement>
@@ -324,9 +477,27 @@ INSERT INTO TIMESTAMP_TBL VALUES ('Jan 01 17:32:01 2001');
 -- Currently unsupported syntax and ranges
 INSERT INTO TIMESTAMP_TBL VALUES ('Feb 16 17:32:01 -0097');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- Currently unsupported syntax and ranges
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone displacement out of range: "Feb 16 17:32:01 -0097"
+
+        	-- Currently unsupported syntax and ranges
+	^
 <sql-statement>
 INSERT INTO TIMESTAMP_TBL VALUES ('Feb 16 17:32:01 5097 BC');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMP_TBL VALUES ('Feb 16 17:32:01 5097 BC');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  timestamp out of range: "Feb 16 17:32:01 5097 BC"
+
+        	INSERT INTO TIMESTAMP_TBL VALUES ('Feb 16 17:32:01 5097 BC');
+	^
 <sql-statement>
 SELECT d1 FROM TIMESTAMP_TBL;
 </sql-statement>

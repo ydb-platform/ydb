@@ -1,20 +1,34 @@
 #include "gc.h"
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap {
 
 void IBlobsGCAction::OnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) {
     if (!AbortedFlag) {
+        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("tablet_id", self.TabletID());
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompleteTxAfterCleaning")("action_guid", GetActionGuid());
+        auto storage = self.GetStoragesManager()->GetOperator(GetStorageId());
+        storage->GetSharedBlobs()->OnTransactionCompleteAfterCleaning(BlobsToRemove);
+        for (auto i = BlobsToRemove.GetIterator(); i.IsValid(); ++i) {
+            Counters->OnReply(i.GetBlobId().BlobSize());
+        }
         if (!DoOnCompleteTxAfterCleaning(self, taskAction)) {
             return;
         }
         taskAction->OnFinished();
+        NYDBTest::TControllers::GetColumnShardController()->OnAfterGCAction(self, *taskAction);
     }
 }
 
-void IBlobsGCAction::OnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs) {
+void IBlobsGCAction::OnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) {
     if (!AbortedFlag) {
+        const NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("tablet_id", self.TabletID());
+        auto storage = self.GetStoragesManager()->GetOperator(GetStorageId());
+        storage->GetSharedBlobs()->OnTransactionExecuteAfterCleaning(BlobsToRemove, dbBlobs.GetDatabase());
+        for (auto i = BlobsToRemove.GetIterator(); i.IsValid(); ++i) {
+            RemoveBlobIdFromDB(i.GetTabletId(), i.GetBlobId(), dbBlobs);
+        }
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnExecuteTxAfterCleaning")("action_guid", GetActionGuid());
         return DoOnExecuteTxAfterCleaning(self, dbBlobs);
     }

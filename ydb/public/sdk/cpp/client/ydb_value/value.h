@@ -517,7 +517,3 @@ public:
 };
 
 } // namespace NYdb
-
-Y_DECLARE_OUT_SPEC(inline, NYdb::TType, o, x) {
-    return x.Out(o);
-}

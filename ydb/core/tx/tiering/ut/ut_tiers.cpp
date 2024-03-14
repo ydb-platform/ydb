@@ -28,6 +28,13 @@ using namespace NColumnShard;
 
 class TFastTTLCompactionController: public NKikimr::NYDBTest::ICSController {
 public:
+    virtual TDuration GetLagForCompactionBeforeTierings(const TDuration /*def*/) const override {
+        return TDuration::Zero();
+    }
+    virtual bool DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) override {
+        changes = nullptr;
+        return true;
+    }
     virtual TDuration GetTTLDefaultWaitingDuration(const TDuration /*defaultValue*/) const override {
         return TDuration::Seconds(1);
     }
@@ -548,7 +555,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
         server->EnableGRpc(grpcPort);
         Tests::TClient client(serverSettings);
-        Tests::NCommon::TLoggerInit(server->GetRuntime()).SetComponents({ NKikimrServices::TX_COLUMNSHARD }).Initialize();
+        Tests::NCommon::TLoggerInit(server->GetRuntime()).Clear().SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").Initialize();
 
         auto& runtime = *server->GetRuntime();
 //        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
@@ -563,11 +570,12 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         //        runtime.SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
 
         TLocalHelper lHelper(*server);
+        lHelper.SetOptionalStorageId("__DEFAULT");
         lHelper.StartSchemaRequest("CREATE OBJECT secretAccessKey ( "
             "TYPE SECRET) WITH (value = ak)");
         lHelper.StartSchemaRequest("CREATE OBJECT secretSecretKey ( "
-            "TYPE SECRET) WITH (value = sk)");
-        Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("sk");
+            "TYPE SECRET) WITH (value = fakeSecret)");
+        Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
 
         lHelper.StartSchemaRequest("CREATE OBJECT tier1 ( "
             "TYPE TIER) WITH (tierConfig = `" + TierConfigProtoStr + "`)");

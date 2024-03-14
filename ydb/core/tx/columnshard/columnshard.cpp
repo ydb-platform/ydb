@@ -3,6 +3,9 @@
 #include "hooks/abstract/abstract.h"
 #include "resource_subscriber/actor.h"
 #include "engines/writer/buffer/actor.h"
+#include "engines/column_engine_logs.h"
+
+#include <ydb/core/protos/table_stats.pb.h>
 
 namespace NKikimr {
 
@@ -36,9 +39,8 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SwitchToWork");
 
         for (auto&& i : TablesManager.GetTables()) {
-            ActivateTiering(i.first, i.second.GetTieringUsage(), true);
+            ActivateTiering(i.first, i.second.GetTieringUsage());
         }
-        OnTieringModified();
 
         Become(&TThis::StateWork);
         SignalTabletActive(ctx);
@@ -57,6 +59,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr.release());
 
     const auto selfActorId = SelfId();
+    StoragesManager->Initialize();
     Tiers = std::make_shared<TTiersManager>(TabletID(), SelfId(),
         [selfActorId](const TActorContext& ctx) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "tiering_new_event");
@@ -139,7 +142,11 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
     Y_UNUSED(ctx);
     ui64 readCookie = ev->Get()->RequestCookie;
     LOG_S_DEBUG("Finished read cookie: " << readCookie << " at tablet " << TabletID());
-    InFlightReadsTracker.RemoveInFlightRequest(ev->Get()->RequestCookie);
+    const NOlap::TVersionedIndex* index = nullptr;
+    if (HasIndex()) {
+        index = &GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex();
+    }
+    InFlightReadsTracker.RemoveInFlightRequest(ev->Get()->RequestCookie, index);
 
     ui64 txId = ev->Get()->TxId;
     if (ScanTxInFlight.contains(txId)) {

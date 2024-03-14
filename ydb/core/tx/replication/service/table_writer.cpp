@@ -105,7 +105,18 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
                 << ": status# " << static_cast<ui32>(record.GetStatus())
                 << ", reason# " << static_cast<ui32>(record.GetReason())
                 << ", error# " << record.GetErrorDescription());
-            return Leave();
+            return Leave(IsHardError(record.GetReason()));
+        }
+    }
+
+    static bool IsHardError(NKikimrTxDataShard::TEvApplyReplicationChangesResult::EReason reason) {
+        switch (reason) {
+        case NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_SCHEME_ERROR:
+        case NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST:
+        case NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_UNEXPECTED_ROW_OPERATION:
+            return true;
+        default:
+            return false;
         }
     }
 
@@ -115,8 +126,8 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
         }
     }
 
-    void Leave() {
-        Send(Parent, new NChangeExchange::TEvChangeExchangePrivate::TEvGone(TabletId));
+    void Leave(bool hardError = false) {
+        Send(Parent, new NChangeExchange::TEvChangeExchangePrivate::TEvGone(TabletId, hardError));
         PassAway();
     }
 
@@ -451,7 +462,12 @@ class TLocalTableWriter
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
-        OnGone(ev->Get()->PartitionId);
+
+        if (ev->Get()->HardError) {
+            Leave(TEvWorker::TEvGone::SCHEME_ERROR);
+        } else {
+            OnGone(ev->Get()->PartitionId);
+        }
     }
 
     void Retry() {

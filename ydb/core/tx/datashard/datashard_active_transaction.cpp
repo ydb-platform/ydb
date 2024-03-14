@@ -229,12 +229,13 @@ ui32 TValidatedDataTx::ExtractKeys(bool allowErrors)
     return KeysCount();
 }
 
-bool TValidatedDataTx::ReValidateKeys()
+bool TValidatedDataTx::ReValidateKeys(const NTable::TScheme& scheme)
 {
     using EResult = NMiniKQL::IEngineFlat::EResult;
 
     if (IsKqpTx()) {
-        TKeyValidator::TValidateOptions options(EngineBay.GetUserDb());
+        const auto& userDb = EngineBay.GetUserDb();
+        TKeyValidator::TValidateOptions options(userDb.GetLockTxId(), userDb.GetLockNodeId(), userDb.GetIsRepeatableSnapshot(), userDb.GetIsImmediateTx(), userDb.GetIsWriteTx(), scheme);
         auto [result, error] = EngineBay.GetKeyValidator().ValidateKeys(options);
         if (result != EResult::Ok) {
             ErrStr = std::move(error);
@@ -409,7 +410,7 @@ TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self,
     if (!DataTx) {
         Y_ABORT_UNLESS(TxBody);
         DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
-                                                    GetReceivedAt(), TxBody, MvccSnapshotRepeatable);
+                                                    GetReceivedAt(), TxBody, IsMvccSnapshotRepeatable());
         if (DataTx->HasStreamResponse())
             SetStreamSink(DataTx->GetSink());
     }
@@ -638,7 +639,7 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
 
     bool extractKeys = DataTx->IsTxInfoLoaded();
     DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
-                                                GetReceivedAt(), TxBody, MvccSnapshotRepeatable);
+                                                GetReceivedAt(), TxBody, IsMvccSnapshotRepeatable());
     if (DataTx->Ready() && extractKeys) {
         DataTx->ExtractKeys(true);
     }

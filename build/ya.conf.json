@@ -41,6 +41,14 @@
                 }
             }
         },
+        "bloat": {
+            "executable": {
+                "bloat": [
+                    "bloat"
+                ]
+            },
+            "formula": "build/external_resources/bloat/resources.json"
+        },
         "clang-format": {
             "executable": {
                 "clang-format": [
@@ -49,11 +57,14 @@
             },
             "formula": {
                 "by_platform": {
+                    "darwin-arm64": {
+                        "uri": "sbr:5950102802"
+                    },
                     "darwin-x86_64": {
-                        "uri": "sbr:4111727026"
+                        "uri": "sbr:5950103181"
                     },
                     "linux-x86_64": {
-                        "uri": "sbr:4111727778"
+                        "uri": "sbr:5950104171"
                     }
                 }
             }
@@ -316,6 +327,28 @@
                 "black": {
                     "bottle": "black",
                     "executable": "black"
+                }
+            }
+        },
+        "bloat": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "bloat": {
+                    "bottle": "bloat",
+                    "executable": "bloat"
                 }
             }
         },
@@ -856,6 +889,17 @@
                 {
                     "default": false,
                     "host": {
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "armv7ahf_cortex_a53",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "arch": "arm64",
                         "os": "DARWIN"
                     },
                     "target": {
@@ -1421,6 +1465,17 @@
                         "arch": "wasm64",
                         "os": "EMSCRIPTEN"
                     }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "armv7ahf_cortex_a53",
+                        "os": "LINUX"
+                    }
                 }
             ],
             "tools": {
@@ -1482,8 +1537,7 @@
                 "use_bundle": true,
                 "use_clang": true,
                 "version": "2019",
-                "werror_mode": "all",
-                "wine": "yes"
+                "werror_mode": "all"
             },
             "platforms": [
                 {
@@ -1909,6 +1963,10 @@
         },
         "black": {
             "description": "Python styler, Python 3 only"
+        },
+        "bloat": {
+            "description": "Run bloat tool",
+            "visible": false
         },
         "c++": {
             "description": "Run C++ compiler"

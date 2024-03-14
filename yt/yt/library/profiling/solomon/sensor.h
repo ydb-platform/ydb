@@ -99,6 +99,8 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+DECLARE_REFCOUNTED_CLASS(THistogram)
+
 std::vector<double> GenerateGenericBucketBounds();
 
 class THistogram

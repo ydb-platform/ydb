@@ -631,10 +631,14 @@ bool TDataLiteral::Equals(const TDataLiteral& nodeToCompare) const {
         case NUdf::TDataType<NUdf::TDate>::Id:
         case NUdf::TDataType<ui16>::Id:   return self.Get<ui16>() == that.Get<ui16>();
         case NUdf::TDataType<i16>::Id:    return self.Get<i16>() == that.Get<i16>();
+        case NUdf::TDataType<NUdf::TDate32>::Id:
         case NUdf::TDataType<i32>::Id:    return self.Get<i32>() == that.Get<i32>();
         case NUdf::TDataType<NUdf::TDatetime>::Id:
         case NUdf::TDataType<ui32>::Id:   return self.Get<ui32>() == that.Get<ui32>();
         case NUdf::TDataType<NUdf::TInterval>::Id:
+        case NUdf::TDataType<NUdf::TInterval64>::Id:
+        case NUdf::TDataType<NUdf::TDatetime64>::Id:
+        case NUdf::TDataType<NUdf::TTimestamp64>::Id:
         case NUdf::TDataType<i64>::Id:    return self.Get<i64>() == that.Get<i64>();
         case NUdf::TDataType<NUdf::TTimestamp>::Id:
         case NUdf::TDataType<ui64>::Id:   return self.Get<ui64>() == that.Get<ui64>();
@@ -2525,7 +2529,7 @@ EValueRepresentation GetValueRepresentation(const TType* type) {
 }
 
 TArrayRef<TType* const> GetWideComponents(const TFlowType* type) {
-    if (RuntimeVersion > 35) {
+    if (type->GetItemType()->IsMulti()) {
         return AS_TYPE(TMultiType, type->GetItemType())->GetElements();
     }
     return AS_TYPE(TTupleType, type->GetItemType())->GetElements();

@@ -46,13 +46,13 @@ The following command is used to create a table:
 
 ```yql
 CREATE TABLE `kv_test`(
-    c0 Uint64 NOT NULL,
-    c1 Uint64 NOT NULL,
+    c0 Uint64,
+    c1 Uint64,
     ...
-    cI Uint64 NOT NULL,
-    cI+1 String NOT NULL,
+    cI Uint64,
+    cI+1 String,
     ...
-    cN String NOT NULL,
+    cN String,
     PRIMARY KEY(c0, c1, ... cK)) WITH (
         AUTO_PARTITIONING_BY_LOAD = ENABLED,
         AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = partsNum,
@@ -117,6 +117,7 @@ Parameter name | Short name | Parameter description
 ---|---|---
 `--seconds <value>` | `-s <value>` | Duration of the test, in seconds. Default: 10.
 `--threads <value>` | `-t <value>` | The number of parallel threads creating the load. Default: 10.
+`--rate <value>` | - | Total rate for all threads, in requests per second. Default: 0 (no rate limit).
 `--quiet` | - | Outputs only the total result.
 `--print-timestamp` | - | Print the time together with the statistics of each time window.
 `--client-timeout` | - | [Transport timeout in milliseconds](../../best_practices/timeouts.md).

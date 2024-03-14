@@ -42,7 +42,7 @@ namespace NKqpHelpers {
     inline TString CreateSessionRPC(TTestActorRuntime& runtime, const TString& database = {}) {
         Ydb::Table::CreateSessionRequest request;
         auto future = NRpcService::DoLocalRpc<TEvCreateSessionRequest>(
-           std::move(request), database, "", /* token */ runtime.GetActorSystem(0));
+           std::move(request), database, /* token */ "", runtime.GetActorSystem(0));
         TString sessionId;
         auto response = AwaitResponse(runtime, future);
         UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
@@ -71,7 +71,7 @@ namespace NKqpHelpers {
         TTestActorRuntime& runtime, Ydb::Table::ExecuteDataQueryRequest&& request, const TString& database = {})
     {
         return NRpcService::DoLocalRpc<TEvExecuteDataQueryRequest>(
-            std::move(request), database, "" /* token */, runtime.GetActorSystem(0));
+            std::move(request), database, /* token */ "", runtime.GetActorSystem(0));
     }
 
     inline Ydb::Table::ExecuteDataQueryRequest MakeSimpleRequestRPC(
@@ -119,7 +119,7 @@ namespace NKqpHelpers {
         Ydb::Table::DeleteSessionRequest request;
         request.set_session_id(sessionId);
         auto future = NRpcService::DoLocalRpc<TEvDeleteSessionRequest>(
-            std::move(request), "", "", /* token */ runtime.GetActorSystem(0));
+            std::move(request), "", /* token */ "", runtime.GetActorSystem(0));
     }
 
     inline THolder<NKqp::TEvKqp::TEvQueryRequest> MakeStreamRequest(
@@ -146,7 +146,17 @@ namespace NKqpHelpers {
         if (result.result_sets_size() == 0) {
             return "<empty>";
         }
-        return FormatResult(result.result_sets(0));
+        if (result.result_sets_size() == 1) {
+            return FormatResult(result.result_sets(0));
+        }
+        TStringBuilder sb;
+        for (int i = 0; i < result.result_sets_size(); ++i) {
+            if (i != 0) {
+                sb << "\n";
+            }
+            sb << FormatResult(result.result_sets(i));
+        }
+        return sb;
     }
 
     inline TString FormatResult(const Ydb::Table::ExecuteDataQueryResponse& response) {
@@ -158,17 +168,15 @@ namespace NKqpHelpers {
         return FormatResult(result);
     }
 
-    inline TString KqpSimpleExec(TTestActorRuntime& runtime, const TString& query, bool staleRo = false, const TString& database = {}) {
+    inline auto KqpSimpleSend(TTestActorRuntime& runtime, const TString& query, bool staleRo = false, const TString& database = {}) {
         TString sessionId = CreateSessionRPC(runtime, database);
         TString txId;
-        auto response = AwaitResponse(
-            runtime, SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, txId, true /* commitTx */, staleRo), database));
-        if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
-            return TStringBuilder() << "ERROR: " << response.operation().status();
-        }
-        Ydb::Table::ExecuteQueryResult result;
-        response.operation().result().UnpackTo(&result);
-        return FormatResult(result);
+        return SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, txId, /* commitTx */ true, staleRo), database);
+    }
+
+    inline TString KqpSimpleExec(TTestActorRuntime& runtime, const TString& query, bool staleRo = false, const TString& database = {}) {
+        auto response = AwaitResponse(runtime, KqpSimpleSend(runtime, query, staleRo, database));
+        return FormatResult(response);
     }
 
     inline TString KqpSimpleStaleRoExec(TTestActorRuntime& runtime, const TString& query, const TString& database = {}) {

@@ -5,6 +5,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/datashard_failpoints.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
+#include <ydb/core/protos/query_stats.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <google/protobuf/text_format.h>

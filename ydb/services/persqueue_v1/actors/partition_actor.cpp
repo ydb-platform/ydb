@@ -593,7 +593,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
 
         if (!StartReading) {
-            ctx.Send(ParentId, new TEvPQProxy::TEvPartitionStatus(Partition, CommittedOffset, EndOffset, WriteTimestampEstimateMs, TabletGeneration, NodeId));
+            ctx.Send(ParentId, new TEvPQProxy::TEvPartitionStatus(Partition, CommittedOffset, EndOffset, WriteTimestampEstimateMs, NodeId, TabletGeneration));
         } else {
             InitStartReading(ctx);
         }
@@ -802,15 +802,14 @@ void TPartitionActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const 
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
 
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                            << " pipe restart attempt " << PipeGeneration << " pipe creation result: " << msg->Status);
+                            << " pipe restart attempt " << PipeGeneration << " pipe creation result: " << msg->Status
+                            << " TabletId: " << msg->TabletId << " Generation: " << msg->Generation);
 
     if (msg->Status != NKikimrProto::OK) {
         RestartPipe(ctx, TStringBuilder() << "pipe to tablet is dead " << msg->TabletId, NPersQueue::NErrorCode::TABLET_PIPE_DISCONNECTED);
         return;
     }
 
-    auto prevGeneration = TabletGeneration;
-    Y_UNUSED(prevGeneration);
     TabletGeneration = msg->Generation;
     NodeId = msg->ServerId.NodeId();
 

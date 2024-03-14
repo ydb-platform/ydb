@@ -1,11 +1,10 @@
 #include "base_compute_actor.h"
+#include "status_tracker_actor.h"
 
-#include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/fq/libs/compute/common/metrics.h>
 #include <ydb/core/fq/libs/compute/common/retry_actor.h>
 #include <ydb/core/fq/libs/compute/common/run_actor_params.h>
-#include <ydb/core/fq/libs/compute/common/utils.h>
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/compute/ydb/control_plane/compute_database_control_plane_service.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
@@ -14,7 +13,6 @@
 
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/providers/common/metrics/service_counters.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
@@ -40,6 +38,8 @@ using namespace NFq;
 class TStatusTrackerActor : public TBaseComputeActor<TStatusTrackerActor> {
 public:
     using IRetryPolicy = IRetryPolicy<const TEvYdbCompute::TEvGetOperationResponse::TPtr&>;
+
+    using TBase = TBaseComputeActor<TStatusTrackerActor>;
 
     enum ERequestType {
         RT_GET_OPERATION,
@@ -69,16 +69,16 @@ public:
         }
     };
 
-    TStatusTrackerActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector, const TActorId& pinger, const NYdb::TOperation::TOperationId& operationId, const ::NYql::NCommon::TServiceCounters& queryCounters)
-        : TBaseComputeActor(queryCounters, "StatusTracker")
+    TStatusTrackerActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector, const TActorId& pinger, const NYdb::TOperation::TOperationId& operationId, std::unique_ptr<IPlanStatProcessor>&& processor, const ::NYql::NCommon::TServiceCounters& queryCounters)
+        : TBase(queryCounters, "StatusTracker")
         , Params(params)
         , Parent(parent)
         , Connector(connector)
         , Pinger(pinger)
         , OperationId(operationId)
+        , Builder(params.Config.GetCommon(), std::move(processor))
         , Counters(GetStepCountersSubgroup())
         , BackoffTimer(20, 1000)
-        , Compressor(params.Config.GetCommon().GetQueryArtifactsCompressionMethod(), params.Config.GetCommon().GetQueryArtifactsCompressionMinSize())
     {}
 
     static constexpr char ActorName[] = "FQ_STATUS_TRACKER";
@@ -97,19 +97,23 @@ public:
     void Handle(const TEvents::TEvForwardPingResponse::TPtr& ev) {
         auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
         pingCounters->InFly->Dec();
+        pingCounters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
+
+        if (ev.Get()->Get()->Success) {
+            pingCounters->Ok->Inc();
+        } else {
+            pingCounters->Error->Inc();
+        }
 
         if (ev->Cookie) {
             return;
         }
 
-        pingCounters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
         if (ev.Get()->Get()->Success) {
-            pingCounters->Ok->Inc();
             LOG_I("Information about the status of operation is stored");
             Send(Parent, new TEvYdbCompute::TEvStatusTrackerResponse(Issues, Status, ExecStatus, ComputeStatus));
             CompleteAndPassAway();
         } else {
-            pingCounters->Error->Inc();
             LOG_E("Error saving information about the status of operation");
             Send(Parent, new TEvYdbCompute::TEvStatusTrackerResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error saving information about the status of operation: " << ProtoToString(OperationId)}}, NYdb::EStatus::INTERNAL_ERROR, ExecStatus, ComputeStatus));
             FailedAndPassAway();
@@ -118,6 +122,12 @@ public:
 
     void Handle(const TEvYdbCompute::TEvGetOperationResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
+
+        if (response.Status == NYdb::EStatus::SUCCESS && !response.Ready) {
+            LOG_D("GetOperation IS NOT READY, repeating");
+            SendGetOperation(TDuration::MilliSeconds(BackoffTimer.NextBackoffMs()));
+            return;
+        }
 
         if (response.Status == NYdb::EStatus::NOT_FOUND) { // FAILING / ABORTING_BY_USER / ABORTING_BY_SYSTEM
             LOG_I("Operation has been already removed");
@@ -133,8 +143,6 @@ public:
             return;
         }
 
-        ReportPublicCounters(response.QueryStats);
-        StartTime = TInstant::Now();
         LOG_D("Execution status: " << static_cast<int>(response.ExecStatus));
         switch (response.ExecStatus) {
             case NYdb::NQuery::EExecStatus::Unspecified:
@@ -163,47 +171,42 @@ public:
         }
     }
 
-    void ReportPublicCounters(const Ydb::TableStats::QueryStats& stats) {
-        try {
-            auto stat = GetPublicStat(GetV1StatFromV2Plan(stats.query_plan()));
-            auto publicCounters = GetPublicCounters();
+    void ReportPublicCounters(const TPublicStat& stat) {
+        auto publicCounters = GetPublicCounters();
 
-            if (stat.MemoryUsageBytes) {
-                auto& counter = *publicCounters->GetNamedCounter("name", "query.memory_usage_bytes");
-                counter = *stat.MemoryUsageBytes;
-            }
+        if (stat.MemoryUsageBytes) {
+            auto& counter = *publicCounters->GetNamedCounter("name", "query.memory_usage_bytes");
+            counter = *stat.MemoryUsageBytes;
+        }
 
-            if (stat.CpuUsageUs) {
-                auto& counter = *publicCounters->GetNamedCounter("name", "query.cpu_usage_us", true);
-                counter = *stat.CpuUsageUs;
-            }
+        if (stat.CpuUsageUs) {
+            auto& counter = *publicCounters->GetNamedCounter("name", "query.cpu_usage_us", true);
+            counter = *stat.CpuUsageUs;
+        }
 
-            if (stat.InputBytes) {
-                auto& counter = *publicCounters->GetNamedCounter("name", "query.input_bytes", true);
-                counter = *stat.InputBytes;
-            }
+        if (stat.InputBytes) {
+            auto& counter = *publicCounters->GetNamedCounter("name", "query.input_bytes", true);
+            counter = *stat.InputBytes;
+        }
 
-            if (stat.OutputBytes) {
-                auto& counter = *publicCounters->GetNamedCounter("name", "query.output_bytes", true);
-                counter = *stat.OutputBytes;
-            }
+        if (stat.OutputBytes) {
+            auto& counter = *publicCounters->GetNamedCounter("name", "query.output_bytes", true);
+            counter = *stat.OutputBytes;
+        }
 
-            if (stat.SourceInputRecords) {
-                auto& counter = *publicCounters->GetNamedCounter("name", "query.source_input_records", true);
-                counter = *stat.SourceInputRecords;
-            }
+        if (stat.SourceInputRecords) {
+            auto& counter = *publicCounters->GetNamedCounter("name", "query.source_input_records", true);
+            counter = *stat.SourceInputRecords;
+        }
 
-            if (stat.SinkOutputRecords) {
-                auto& counter = *publicCounters->GetNamedCounter("name", "query.sink_output_records", true);
-                counter = *stat.SinkOutputRecords;
-            }
+        if (stat.SinkOutputRecords) {
+            auto& counter = *publicCounters->GetNamedCounter("name", "query.sink_output_records", true);
+            counter = *stat.SinkOutputRecords;
+        }
 
-            if (stat.RunningTasks) {
-                auto& counter = *publicCounters->GetNamedCounter("name", "query.running_tasks");
-                counter = *stat.RunningTasks;
-            }
-        } catch(const NJson::TJsonException& ex) {
-            LOG_E("Error statistics conversion: " << ex.what());
+        if (stat.RunningTasks) {
+            auto& counter = *publicCounters->GetNamedCounter("name", "query.running_tasks");
+            counter = *stat.RunningTasks;
         }
     }
 
@@ -211,75 +214,57 @@ public:
         Register(new TRetryActor<TEvYdbCompute::TEvGetOperationRequest, TEvYdbCompute::TEvGetOperationResponse, NYdb::TOperation::TOperationId>(Counters.GetCounters(ERequestType::RT_GET_OPERATION), delay, SelfId(), Connector, OperationId));
     }
 
-    void UpdateProgress() {
+    void OnPingRequestStart() {
+        StartTime = TInstant::Now();
         auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
         pingCounters->InFly->Inc();
-        Fq::Private::PingTaskRequest pingTaskRequest;
-        PrepareAstAndPlan(pingTaskRequest, QueryStats.query_plan(), QueryStats.query_ast());
-        try {
-            pingTaskRequest.set_statistics(GetV1StatFromV2Plan(QueryStats.query_plan()));
-        } catch(const NJson::TJsonException& ex) {
-            LOG_E("Error statistics conversion: " << ex.what());
+    }
+
+    void UpdateProgress() {
+        OnPingRequestStart();
+
+        Fq::Private::PingTaskRequest pingTaskRequest = Builder.Build(QueryStats, Issues);
+        if (Builder.Issues) {
+            LOG_W(Builder.Issues.ToOneLineString());
         }
+        ReportPublicCounters(Builder.PublicStat);
         Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest), 0, 1);
+    }
+
+    void UpdateCpuQuota(double cpuUsage) {
+        TDuration duration = TDuration::MicroSeconds(QueryStats.total_duration_us());
+        if (cpuUsage && duration) {
+            Send(NFq::ComputeDatabaseControlPlaneServiceActorId(), new TEvYdbCompute::TEvCpuQuotaAdjust(Params.Scope.ToString(), duration, cpuUsage)); 
+        }
     }
 
     void Failed() {
         LOG_I("Execution status: Failed, Status: " << Status << ", StatusCode: " << NYql::NDqProto::StatusIds::StatusCode_Name(StatusCode) << " Issues: " << Issues.ToOneLineString());
-        auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
-        pingCounters->InFly->Inc();
-        Fq::Private::PingTaskRequest pingTaskRequest;
-        NYql::IssuesToMessage(Issues, pingTaskRequest.mutable_issues());
-        pingTaskRequest.set_pending_status_code(StatusCode);
-        PrepareAstAndPlan(pingTaskRequest, QueryStats.query_plan(), QueryStats.query_ast());
-        try {
-            TDuration duration = TDuration::MicroSeconds(QueryStats.total_duration_us());
-            double cpuUsage = 0.0;
-            pingTaskRequest.set_statistics(GetV1StatFromV2Plan(QueryStats.query_plan(), &cpuUsage));
-            if (duration && cpuUsage) {
-                Send(NFq::ComputeDatabaseControlPlaneServiceActorId(), new TEvYdbCompute::TEvCpuQuotaAdjust(Params.Scope.ToString(), duration, cpuUsage)); 
-            }
-        } catch(const NJson::TJsonException& ex) {
-            LOG_E("Error statistics conversion: " << ex.what());
+        OnPingRequestStart();
+
+        Fq::Private::PingTaskRequest pingTaskRequest = Builder.Build(QueryStats, Issues, std::nullopt, StatusCode);
+        if (Builder.Issues) {
+            LOG_W(Builder.Issues.ToOneLineString());
         }
+        ReportPublicCounters(Builder.PublicStat);
+        UpdateCpuQuota(Builder.CpuUsage);
+
         Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest));
     }
 
     void Complete() {
         LOG_I("Execution status: Complete " << Status << ", StatusCode: " << NYql::NDqProto::StatusIds::StatusCode_Name(StatusCode) << " Issues: " << Issues.ToOneLineString());
-        auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
-        pingCounters->InFly->Inc();
-        Fq::Private::PingTaskRequest pingTaskRequest;
-        NYql::IssuesToMessage(Issues, pingTaskRequest.mutable_issues());
+        OnPingRequestStart();
+
         ComputeStatus = ::FederatedQuery::QueryMeta::COMPLETING;
-        pingTaskRequest.set_status(ComputeStatus);
-        PrepareAstAndPlan(pingTaskRequest, QueryStats.query_plan(), QueryStats.query_ast());
-        try {
-            TDuration duration = TDuration::MicroSeconds(QueryStats.total_duration_us());
-            double cpuUsage = 0.0;
-            pingTaskRequest.set_statistics(GetV1StatFromV2Plan(QueryStats.query_plan(), &cpuUsage));
-            if (duration && cpuUsage) {
-                Send(NFq::ComputeDatabaseControlPlaneServiceActorId(), new TEvYdbCompute::TEvCpuQuotaAdjust(Params.Scope.ToString(), duration, cpuUsage)); 
-            }
-        } catch(const NJson::TJsonException& ex) {
-            LOG_E("Error statistics conversion: " << ex.what());
+        Fq::Private::PingTaskRequest pingTaskRequest = Builder.Build(QueryStats, Issues, ComputeStatus, std::nullopt);
+        if (Builder.Issues) {
+            LOG_W(Builder.Issues.ToOneLineString());
         }
+        ReportPublicCounters(Builder.PublicStat);
+        UpdateCpuQuota(Builder.CpuUsage);
+
         Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest));
-    }
-
-    void PrepareAstAndPlan(Fq::Private::PingTaskRequest& request, const TString& plan, const TString& expr) const {
-        if (Compressor.IsEnabled()) {
-            auto [astCompressionMethod, astCompressed] = Compressor.Compress(expr);
-            request.mutable_ast_compressed()->set_method(astCompressionMethod);
-            request.mutable_ast_compressed()->set_data(astCompressed);
-
-            auto [planCompressionMethod, planCompressed] = Compressor.Compress(plan);
-            request.mutable_plan_compressed()->set_method(planCompressionMethod);
-            request.mutable_plan_compressed()->set_data(planCompressed);
-        } else {
-            request.set_ast(expr);
-            request.set_plan(plan);
-        }
     }
 
 private:
@@ -288,16 +273,16 @@ private:
     TActorId Connector;
     TActorId Pinger;
     NYdb::TOperation::TOperationId OperationId;
+    PingTaskRequestBuilder Builder;
     TCounters Counters;
-    TInstant StartTime;
     NYql::TIssues Issues;
     NYdb::EStatus Status = NYdb::EStatus::SUCCESS;
     NYdb::NQuery::EExecStatus ExecStatus = NYdb::NQuery::EExecStatus::Unspecified;
     NYql::NDqProto::StatusIds::StatusCode StatusCode = NYql::NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_UNSPECIFIED;
     Ydb::TableStats::QueryStats QueryStats;
     NKikimr::TBackoffTimer BackoffTimer;
-    const TCompressor Compressor;
     FederatedQuery::QueryMeta::ComputeStatus ComputeStatus = FederatedQuery::QueryMeta::RUNNING;
+    TInstant StartTime;
 };
 
 std::unique_ptr<NActors::IActor> CreateStatusTrackerActor(const TRunActorParams& params,
@@ -305,8 +290,9 @@ std::unique_ptr<NActors::IActor> CreateStatusTrackerActor(const TRunActorParams&
                                                           const TActorId& connector,
                                                           const TActorId& pinger,
                                                           const NYdb::TOperation::TOperationId& operationId,
+                                                          std::unique_ptr<IPlanStatProcessor>&& processor,
                                                           const ::NYql::NCommon::TServiceCounters& queryCounters) {
-    return std::make_unique<TStatusTrackerActor>(params, parent, connector, pinger, operationId, queryCounters);
+    return std::make_unique<TStatusTrackerActor>(params, parent, connector, pinger, operationId, std::move(processor), queryCounters);
 }
 
 }

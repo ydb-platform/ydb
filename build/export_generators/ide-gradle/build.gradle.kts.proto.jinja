@@ -31,6 +31,14 @@ repositories {
 }
 }
 
+sourceSets {
+    main {
+        java.srcDir("build/generated/source/proto")
+    }
+}
+
+val project_root="{%- if exportRoot.startswith(arcadiaRoot + '/') -%}{{ arcadiaRoot }}{%- else -%}{{ exportRoot }}{%- endif -%}"
+
 java {
     withSourcesJar()
     withJavadocJar()
@@ -95,7 +103,7 @@ protobuf {
         }
     }
     generateProtoTasks {
-        ofSourceSet("main").forEach {
+        all().forEach {
             it.plugins {
                 id("grpc")
             }
@@ -108,6 +116,16 @@ val prepareProto = tasks.register<Copy>("prepareProto") {
     from(rootDir) {
 {%- for proto in target.proto_files %}
         include("{{ proto }}")
+{%- endfor %}
+{# Mining proto-deps sources directories #}
+{%- for library in target.consumer if library.prebuilt -%}
+{%-     if library.type == "library" %}      
+{%-         set proto_rep = library.classpath|replace('project(":','') %}
+{%-         set proto_rep = proto_rep|replace('")','') %}
+{%-         set proto_rep = proto_rep|replace(':','/') %}
+{%-         set proto = proto_rep + '/**' %}
+        include("{{ proto }}")
+{%-     endif -%}
 {%- endfor %}
     }
     into(buildProtoDir)

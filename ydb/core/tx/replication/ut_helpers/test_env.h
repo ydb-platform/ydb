@@ -8,7 +8,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr::NReplication {
+namespace NKikimr::NReplication::NTestHelpers {
 
 template <bool UseDatabase = true>
 class TEnv {
@@ -58,6 +58,14 @@ public:
         if (init) {
             Init();
         }
+    }
+
+    explicit TEnv(const TString& builtin)
+        : TEnv(false)
+    {
+        UNIT_ASSERT_STRING_CONTAINS(builtin, "@builtin");
+        Init(builtin);
+        Client.ModifyOwner("/", DomainName, builtin);
     }
 
     explicit TEnv(const TString& user, const TString& password)
@@ -121,6 +129,10 @@ public:
         return TPathId(self.GetSchemeshardId(), self.GetPathId());
     }
 
+    ui64 GetSchemeshardId(const TString& path) {
+        return GetPathId(path).OwnerId;
+    }
+
     template <typename... Args>
     auto CreateTable(Args&&... args) {
         return Client.CreateTable(std::forward<Args>(args)...);
@@ -134,11 +146,6 @@ public:
     auto Send(const TActorId& recipient, IEventBase* ev) {
         SendAsync(recipient, ev);
         return Server.GetRuntime()->GrabEdgeEvent<TEvResponse>(Sender);
-    }
-
-    template <typename TEvResponse>
-    auto Send(IEventBase* ev) {
-        return Send<TEvResponse>(YdbProxy, ev);
     }
 
     auto& GetRuntime() {

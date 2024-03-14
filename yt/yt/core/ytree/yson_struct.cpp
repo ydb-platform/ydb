@@ -98,7 +98,7 @@ void TYsonStructBase::Save(IOutputStream* output) const
 
 void TYsonStructBase::Postprocess(const TYPath& path)
 {
-    Meta_->Postprocess(this, path);
+    Meta_->PostprocessStruct(this, path);
 }
 
 void TYsonStructBase::SetDefaults()
@@ -112,9 +112,9 @@ void TYsonStructBase::SaveParameter(const TString& key, IYsonConsumer* consumer)
     Meta_->GetParameter(key)->Save(this, consumer);
 }
 
-void TYsonStructBase::LoadParameter(const TString& key, const NYTree::INodePtr& node, EMergeStrategy mergeStrategy)
+void TYsonStructBase::LoadParameter(const TString& key, const NYTree::INodePtr& node)
 {
-    Meta_->LoadParameter(this, key, node, mergeStrategy);
+    Meta_->LoadParameter(this, key, node);
 }
 
 void TYsonStructBase::ResetParameter(const TString& key)

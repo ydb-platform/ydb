@@ -100,6 +100,33 @@ void TBaseBackend::FillResult(TMetricsValues& values, const NKikimrGraph::TEvGet
     }
 }
 
+double TBaseBackend::GetTimingForPercentile(double percentile, const TVector<ui64>& values, const TVector<ui64>& /*upper*/bounds, ui64 total) {
+    ui64 ppMark = total * percentile;
+    ui64 accm = 0;
+    ui32 n = 0;
+    while (n < bounds.size() && accm < ppMark) {
+        if (accm + values[n] >= ppMark) {
+            ui64 lowerBound = 0;
+            if (n > 0) {
+                lowerBound = bounds[n - 1];
+            }
+            ui64 upperBound = bounds[n];
+            if (upperBound == std::numeric_limits<ui64>::max()) {
+                return lowerBound; // workaround for INF bucket
+            }
+            ui64 currentValue = values[n];
+            ui64 ppValue = ppMark - accm;
+            if (currentValue == 0) {
+                return NAN;
+            }
+            return (static_cast<double>(ppValue) / currentValue) * (upperBound - lowerBound) + lowerBound;
+        }
+        accm += values[n];
+        n++;
+    }
+    return NAN;
+}
+
 void TMemoryBackend::StoreMetrics(TMetricsData&& data) {
     if (!MetricsValues.empty() && MetricsValues.back().Timestamp >= data.Timestamp) {
         BLOG_ERROR("Invalid timestamp ordering for " << data.Timestamp << " and " << MetricsValues.back().Timestamp);
@@ -210,8 +237,9 @@ void TMemoryBackend::DownsampleData(TInstant now, const TAggregateSettings& sett
 
     TMetricsValues values;
     TInstant prevTimestamp = {};
+    const TInstant itStopTs = itStop->Timestamp;
 
-    for (auto it = itStart; it->Timestamp < itStop->Timestamp; ++it) {
+    for (auto it = itStart; it->Timestamp < itStopTs; ++it) {
         TDuration step = it->Timestamp - prevTimestamp;
         if (prevTimestamp == TInstant() || step >= settings.SampleSize) {
             prevTimestamp = it->Timestamp;
@@ -219,8 +247,8 @@ void TMemoryBackend::DownsampleData(TInstant now, const TAggregateSettings& sett
         }
         values.Clear();
         values.Values.resize(MetricsIndex.size());
-        TInstant stop = std::min(TInstant::FromValue(prevTimestamp.GetValue() / settings.SampleSize.GetValue() * settings.SampleSize.GetValue()) + settings.SampleSize, itStop->Timestamp);
-        auto point = std::prev(it);
+        TInstant stop = std::min(TInstant::FromValue(prevTimestamp.GetValue() / settings.SampleSize.GetValue() * settings.SampleSize.GetValue()) + settings.SampleSize, itStopTs);
+        const auto point = std::prev(it);
         auto jt = point;
         for (; jt->Timestamp < stop; ++jt) {
             values.Timestamps.emplace_back(jt->Timestamp);
@@ -244,7 +272,7 @@ void TMemoryBackend::DownsampleData(TInstant now, const TAggregateSettings& sett
         }
         prevTimestamp = it->Timestamp;
     }
-    settings.StartTimestamp = itStop->Timestamp;
+    settings.StartTimestamp = itStopTs;
     BLOG_D("Downsampled " << before - MetricsValues.size() << " logical rows");
 }
 

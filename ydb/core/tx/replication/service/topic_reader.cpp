@@ -13,14 +13,12 @@
 namespace NKikimr::NReplication::NService {
 
 class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
-    using TReadSessionSettings = NYdb::NTopic::TReadSessionSettings;
-
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
                 << "[RemoteTopicReader]"
-                << "[" << Settings.Topics_[0].Path_ << "]"
-                << "[" << Settings.Topics_[0].PartitionIds_[0] << "]"
+                << "[" << Settings.GetBase().Topics_[0].Path_ << "]"
+                << "[" << Settings.GetBase().Topics_[0].PartitionIds_[0] << "]"
                 << SelfId() << " ";
         }
 
@@ -50,18 +48,6 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
         Y_ABORT_UNLESS(ReadSession);
         Send(ReadSession, new TEvYdbProxy::TEvReadTopicRequest());
-
-        if (CommitOffset) {
-            LOG_D("Commit offset"
-                << ": offset# " << CommitOffset);
-
-            Send(YdbProxy, new TEvYdbProxy::TEvCommitOffsetRequest(
-                Settings.Topics_[0].Path_,
-                Settings.Topics_[0].PartitionIds_[0],
-                Settings.ConsumerName_,
-                CommitOffset, {}
-            ));
-        }
     }
 
     void Handle(TEvYdbProxy::TEvReadTopicResponse::TPtr& ev) {
@@ -72,30 +58,20 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
         for (auto& msg : result.Messages) {
             Y_ABORT_UNLESS(msg.GetCodec() == NYdb::NTopic::ECodec::RAW);
-            Y_DEBUG_ABORT_UNLESS(msg.GetOffset() + 1 > CommitOffset);
-            CommitOffset = Max(CommitOffset, msg.GetOffset() + 1);
             records.emplace_back(msg.GetOffset(), std::move(msg.GetData()));
         }
 
         Send(Worker, new TEvWorker::TEvData(std::move(records)));
     }
 
-    void Handle(TEvYdbProxy::TEvCommitOffsetResponse::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
-
-        if (!ev->Get()->Result.IsSuccess()) {
-            LOG_N("Unsuccessful commit offset");
-            Leave(TEvWorker::TEvGone::UNAVAILABLE);
-        }
-    }
-
     void Handle(TEvYdbProxy::TEvTopicReaderGone::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
+
         switch (ev->Get()->Result.GetStatus()) {
-            case NYdb::EStatus::SCHEME_ERROR:
-                return Leave(TEvWorker::TEvGone::SCHEME_ERROR);
-            default:
-                return Leave(TEvWorker::TEvGone::UNAVAILABLE);
+        case NYdb::EStatus::SCHEME_ERROR:
+            return Leave(TEvWorker::TEvGone::SCHEME_ERROR);
+        default:
+            return Leave(TEvWorker::TEvGone::UNAVAILABLE);
         }
     }
 
@@ -118,13 +94,13 @@ public:
         return NKikimrServices::TActivity::REPLICATION_REMOTE_TOPIC_READER;
     }
 
-    explicit TRemoteTopicReader(const TActorId& ydbProxy, const TReadSessionSettings& opts)
+    explicit TRemoteTopicReader(const TActorId& ydbProxy, const TEvYdbProxy::TTopicReaderSettings& opts)
         : TActor(&TThis::StateWork)
         , YdbProxy(ydbProxy)
         , Settings(opts)
     {
-        Y_ABORT_UNLESS(Settings.Topics_.size() == 1);
-        Y_ABORT_UNLESS(Settings.Topics_.at(0).PartitionIds_.size() == 1);
+        Y_ABORT_UNLESS(Settings.GetBase().Topics_.size() == 1);
+        Y_ABORT_UNLESS(Settings.GetBase().Topics_.at(0).PartitionIds_.size() == 1);
     }
 
     STFUNC(StateWork) {
@@ -133,7 +109,6 @@ public:
             hFunc(TEvWorker::TEvPoll, Handle);
             hFunc(TEvYdbProxy::TEvCreateTopicReaderResponse, Handle);
             hFunc(TEvYdbProxy::TEvReadTopicResponse, Handle);
-            hFunc(TEvYdbProxy::TEvCommitOffsetResponse, Handle);
             hFunc(TEvYdbProxy::TEvTopicReaderGone, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
@@ -141,16 +116,15 @@ public:
 
 private:
     const TActorId YdbProxy;
-    const TReadSessionSettings Settings;
+    const TEvYdbProxy::TTopicReaderSettings Settings;
     mutable TMaybe<TString> LogPrefix;
 
     TActorId Worker;
     TActorId ReadSession;
-    ui64 CommitOffset = 0;
 
 }; // TRemoteTopicReader
 
-IActor* CreateRemoteTopicReader(const TActorId& ydbProxy, const NYdb::NTopic::TReadSessionSettings& opts) {
+IActor* CreateRemoteTopicReader(const TActorId& ydbProxy, const TEvYdbProxy::TTopicReaderSettings& opts) {
     return new TRemoteTopicReader(ydbProxy, opts);
 }
 

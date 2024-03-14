@@ -64,6 +64,7 @@ TWorkloadCommand::TWorkloadCommand(const TString& name, const std::initializer_l
     , CancelAfterTimeoutMs(0)
     , WindowSec(0)
     , Quiet(false)
+    , Verbose(false)
     , PrintTimestamp(false)
     , QueryExecuterType()
     , WindowHist(60000, 2) // highestTrackableValue 60000ms = 60s, precision 2
@@ -118,6 +119,7 @@ void TWorkloadCommand::PrepareForRun(TConfig& config) {
         .SetBalancingPolicy(EBalancingPolicy::UseAllNodes)
         .SetCredentialsProviderFactory(config.CredentialsGetter(config));
 
+    Verbose = config.IsVerbose();
     if (config.EnableSsl) {
         driverConfig.UseSecureConnection(config.CaCerts);
     }
@@ -237,9 +239,9 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
             } else {
                 TotalErrors++;
                 WindowErrors++;
-                // if (status.GetStatus() != EStatus::ABORTED) {
-                    // Cerr << "Task ID: " << taskId << " Status: " << status.GetStatus() << " " << status.GetIssues().ToString() << Endl;
-                // }
+                if (Verbose && status.GetStatus() != EStatus::ABORTED) {
+                    Cerr << "Task ID: " << taskId << " Status: " << status.GetStatus() << " " << status.GetIssues().ToString() << Endl;
+                }
                 break;
             }
             if (retryCount > 0) {

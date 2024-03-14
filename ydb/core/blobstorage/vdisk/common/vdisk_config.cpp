@@ -119,6 +119,9 @@ namespace NKikimr {
 #else
         BarrierValidation = true; // switch by default on debug builds
 #endif
+
+        BurstThresholdNs = NPDisk::DevicePerformance.at(baseInfo.DeviceType).BurstThresholdNs;
+        DiskTimeAvailableScale = 1;
     }
 
     void TVDiskConfig::SetupHugeBytes() {
@@ -160,6 +163,7 @@ namespace NKikimr {
         UPDATE_MACRO(ReplInterconnectChannel);
 
         UPDATE_MACRO(BarrierValidation);
+
 #undef UPDATE_MACRO
     }
 
@@ -177,6 +181,15 @@ namespace NKikimr {
         bool result = google::protobuf::TextFormat::ParseFromString(prototext, &AllKindsConfig);
         Y_ABORT_UNLESS(result, "Failed to parse AllVDiskKinds config "
                 "(error in protobuf format):\n%s\n", prototext.data());
+        ParseConfig();
+    }
+
+    TAllVDiskKinds::TAllVDiskKinds(const NKikimrBlobStorage::TAllVDiskKinds &proto)
+        : AllKindsConfig()
+        , VDiskMegaBaseConfig(TVDiskConfig::TBaseInfo())
+        , KindsMap()
+    {
+        AllKindsConfig.CopyFrom(proto);
         ParseConfig();
     }
 

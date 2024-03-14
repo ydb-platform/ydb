@@ -1,6 +1,9 @@
 #pragma once
 
 #include <ydb/core/protos/grpc.pb.h>
+#include <ydb/core/protos/msgbus.pb.h>
+#include <ydb/core/protos/msgbus_pq.pb.h>
+#include <ydb/core/protos/msgbus_kv.pb.h>
 
 #include <util/datetime/base.h>
 #include <ydb/library/grpc/client/grpc_common.h>

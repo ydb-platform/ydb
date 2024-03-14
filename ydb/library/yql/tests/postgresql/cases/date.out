@@ -9,6 +9,10 @@ INSERT INTO DATE_TBL VALUES ('1996-02-29');
 INSERT INTO DATE_TBL VALUES ('1996-03-01');
 INSERT INTO DATE_TBL VALUES ('1996-03-02');
 INSERT INTO DATE_TBL VALUES ('1997-02-28');
+INSERT INTO DATE_TBL VALUES ('1997-02-29');
+ERROR:  date/time field value out of range: "1997-02-29"
+LINE 1: INSERT INTO DATE_TBL VALUES ('1997-02-29');
+                                     ^
 INSERT INTO DATE_TBL VALUES ('1997-03-01');
 INSERT INTO DATE_TBL VALUES ('1997-03-02');
 INSERT INTO DATE_TBL VALUES ('2000-04-01');
@@ -18,6 +22,11 @@ INSERT INTO DATE_TBL VALUES ('2038-04-08');
 INSERT INTO DATE_TBL VALUES ('2039-04-09');
 INSERT INTO DATE_TBL VALUES ('2040-04-10');
 INSERT INTO DATE_TBL VALUES ('2040-04-10 BC');
+--
+-- Check all the documented input formats
+--
+SET datestyle TO iso;  -- display results in ISO
+SET datestyle TO ymd;
 SELECT date 'January 8, 1999';
     date    
 ------------
@@ -139,6 +148,7 @@ SELECT date '1999 08 01';
  1999-08-01
 (1 row)
 
+SET datestyle TO dmy;
 SELECT date 'January 8, 1999';
     date    
 ------------
@@ -314,6 +324,7 @@ SELECT date '1999 08 01';
  1999-08-01
 (1 row)
 
+SET datestyle TO mdy;
 SELECT date 'January 8, 1999';
     date    
 ------------
@@ -585,6 +596,53 @@ SELECT date '5874898-01-01';  -- out of range
 ERROR:  date out of range: "5874898-01-01"
 LINE 1: SELECT date '5874898-01-01';
                     ^
+RESET datestyle;
+--
+-- Simple math
+-- Leave most of it for the horology tests
+--
+SELECT f1 - date '2000-01-01' AS "Days From 2K" FROM DATE_TBL;
+ Days From 2K 
+--------------
+       -15607
+       -15542
+        -1403
+        -1402
+        -1401
+        -1400
+        -1037
+        -1036
+        -1035
+           91
+           92
+           93
+        13977
+        14343
+        14710
+     -1475115
+(16 rows)
+
+SELECT f1 - date 'epoch' AS "Days From Epoch" FROM DATE_TBL;
+ Days From Epoch 
+-----------------
+           -4650
+           -4585
+            9554
+            9555
+            9556
+            9557
+            9920
+            9921
+            9922
+           11048
+           11049
+           11050
+           24934
+           25300
+           25667
+        -1464158
+(16 rows)
+
 SELECT date 'yesterday' - date 'today' AS "One day";
  One day 
 ---------

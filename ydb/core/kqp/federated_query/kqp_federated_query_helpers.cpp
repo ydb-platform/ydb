@@ -11,10 +11,21 @@
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
 
+#include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
+#include <ydb/library/yql/providers/yt/gateway/native/yql_yt_native.h>
+#include <ydb/library/yql/providers/yt/lib/yt_download/yt_download.h>
+
 #include <util/system/file.h>
 #include <util/stream/file.h>
 
 namespace NKikimr::NKqp {
+    NYql::IYtGateway::TPtr MakeYtGateway(const NMiniKQL::IFunctionRegistry* functionRegistry, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
+        NYql::TYtNativeServices ytServices;
+        ytServices.FunctionRegistry = functionRegistry;
+        ytServices.FileStorage = WithAsync(CreateFileStorage(queryServiceConfig.GetFileStorage(), {MakeYtDownloader(queryServiceConfig.GetFileStorage())}));
+        ytServices.Config = std::make_shared<NYql::TYtGatewayConfig>(queryServiceConfig.GetYt());
+        return CreateYtNativeGateway(ytServices);
+    }
 
     NYql::THttpGatewayConfig DefaultHttpGatewayConfig() {
         NYql::THttpGatewayConfig config;
@@ -52,6 +63,9 @@ namespace NKikimr::NKqp {
         HttpGateway = NYql::IHTTPGateway::Make(&HttpGatewayConfig, httpGatewayGroup);
 
         S3GatewayConfig = queryServiceConfig.GetS3();
+
+        YtGatewayConfig = queryServiceConfig.GetYt();
+        YtGateway = MakeYtGateway(appData->FunctionRegistry, queryServiceConfig);
 
         // Initialize Token Accessor
         if (appConfig.GetAuthConfig().HasTokenAccessorConfig()) {
@@ -102,14 +116,18 @@ namespace NKikimr::NKqp {
             CredentialsFactory,
             nullptr,
             S3GatewayConfig,
-            GenericGatewaysConfig};
+            GenericGatewaysConfig,
+            YtGatewayConfig,
+            YtGateway,
+            nullptr};
 
         // Init DatabaseAsyncResolver only if all requirements are met
-        if (DatabaseResolverActorId && GenericGatewaysConfig.HasMdbGateway() && MdbEndpointGenerator) {
+        if (DatabaseResolverActorId && MdbEndpointGenerator &&
+            (GenericGatewaysConfig.HasMdbGateway() || GenericGatewaysConfig.HasYdbMvpEndpoint())) {
             result.DatabaseAsyncResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
                 actorSystem,
                 DatabaseResolverActorId.value(),
-                "", // TODO: use YDB Gateway endpoint?
+                GenericGatewaysConfig.GetYdbMvpEndpoint(),
                 GenericGatewaysConfig.GetMdbGateway(),
                 MdbEndpointGenerator);
         }
@@ -128,4 +146,28 @@ namespace NKikimr::NKqp {
 
         return std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryDefault>(setup, appData, appConfig);
     }
-}
+
+    NMiniKQL::TComputationNodeFactory MakeKqpFederatedQueryComputeFactory(NMiniKQL::TComputationNodeFactory baseComputeFactory, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup) {
+        auto ytComputeFactory = NYql::GetDqYtFactory();
+        auto federatedComputeFactory = federatedQuerySetup ? federatedQuerySetup->ComputationFactory : nullptr;
+
+        return [baseComputeFactory, ytComputeFactory, federatedComputeFactory]
+            (NMiniKQL::TCallable& callable, const NMiniKQL::TComputationNodeFactoryContext& ctx) -> NMiniKQL::IComputationNode* {
+                if (auto compute = baseComputeFactory(callable, ctx)) {
+                    return compute;
+                }
+
+                if (auto ytCompute = ytComputeFactory(callable, ctx)) {
+                    return ytCompute;
+                }
+
+                if (federatedComputeFactory) {
+                    if (auto compute = federatedComputeFactory(callable, ctx)) {
+                        return compute;
+                    }
+                }
+
+                return nullptr;
+            };
+    }
+}  // namespace NKikimr::NKqp

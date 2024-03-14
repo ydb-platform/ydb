@@ -31,7 +31,7 @@ struct TConfigParams {
 };
 
 struct TCreatePartitionParams {
-    ui32 Partition = 1;
+    TPartitionId Partition = TPartitionId{1};
     ui64 Begin = 0;
     ui64 End = 0;
     TMaybe<ui64> PlanStep;
@@ -127,7 +127,7 @@ protected:
     void SetUp(NUnitTest::TTestContext&) override;
     void TearDown(NUnitTest::TTestContext&) override;
 
-    void CreatePartitionActor(ui32 partition,
+    void CreatePartitionActor(const TPartitionId& partition,
                               const TConfigParams& config,
                               bool newPartition,
                               TVector<TTransaction> txs);
@@ -205,7 +205,9 @@ protected:
     void SendSubDomainStatus(bool subDomainOutOfSpace = false);
     void SendReserveBytes(const ui64 cookie, const ui32 size, const TString& ownerCookie, const ui64 messageNo, bool lastRequest = false);
     void SendChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const bool force = true);
-    void SendWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, const TString& data, bool ignoreQuotaDeadline = false);
+    void SendWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, const TString& data,
+                   bool ignoreQuotaDeadline = false, ui64 seqNo = 0);
+    void SendGetWriteInfo(ui32 internalPartitionId);
 
     TMaybe<TTestContext> Ctx;
     TMaybe<TFinalizer> Finalizer;
@@ -231,7 +233,7 @@ void TPartitionFixture::TearDown(NUnitTest::TTestContext&)
 {
 }
 
-void TPartitionFixture::CreatePartitionActor(ui32 id,
+void TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
                                              const TConfigParams& config,
                                              bool newPartition,
                                              TVector<TTransaction> txs)
@@ -261,9 +263,21 @@ void TPartitionFixture::CreatePartitionActor(ui32 id,
 
     NPersQueue::TTopicNamesConverterFactory factory(true, "/Root/PQ", "dc1");
     TopicConverter = factory.MakeTopicConverter(Config);
-
+    TActorId quoterId;
+    if (Ctx->Runtime->GetAppData(0).PQConfig.GetQuotingConfig().GetEnableQuoting()) {
+        quoterId = Ctx->Runtime->Register(new TWriteQuoter(
+                TopicConverter,
+                Config,
+                Ctx->Runtime->GetAppData().PQConfig,
+                id,
+                Ctx->Edge,
+                Ctx->TabletId,
+                Config.GetLocalDC(),
+                *TabletCounters
+        ));
+    }
     auto actor = new NPQ::TPartition(Ctx->TabletId,
-                                     TPartitionId(id),
+                                     id,
                                      Ctx->Edge,
                                      0,
                                      Ctx->Edge,
@@ -274,6 +288,7 @@ void TPartitionFixture::CreatePartitionActor(ui32 id,
                                      *TabletCounters,
                                      false,
                                      1,
+                                     quoterId,
                                      newPartition,
                                      std::move(txs));
     ActorId = Ctx->Runtime->Register(actor);
@@ -300,7 +315,7 @@ void TPartitionFixture::CreatePartition(const TCreatePartitionParams& params,
         SendMetaReadResponse(params.PlanStep, params.TxId);
 
         WaitInfoRangeRequest();
-        SendInfoRangeResponse(params.Partition, params.Config.Consumers);
+        SendInfoRangeResponse(params.Partition.InternalPartitionId, params.Config.Consumers);
 
         WaitDataRangeRequest();
         SendDataRangeResponse(params.Begin, params.End);
@@ -486,11 +501,13 @@ void TPartitionFixture::SendReserveBytes(const ui64 cookie, const ui32 size, con
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
-void TPartitionFixture::SendWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, const TString& data, bool ignoreQuotaDeadline)
-{
+void TPartitionFixture::SendWrite
+        (const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, const TString& data,
+        bool ignoreQuotaDeadline, ui64 seqNo
+) {
     TEvPQ::TEvWrite::TMsg msg;
     msg.SourceId = "SourceId";
-    msg.SeqNo = messageNo;
+    msg.SeqNo = seqNo ? seqNo : messageNo;
     msg.PartNo = 0;
     msg.TotalParts = 1;
     msg.TotalSize = data.size();
@@ -515,6 +532,11 @@ void TPartitionFixture::SendWrite(const ui64 cookie, const ui64 messageNo, const
 void TPartitionFixture::SendChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const bool force)
 {
     auto event = MakeHolder<TEvPQ::TEvChangeOwner>(cookie, owner, pipeClient, Ctx->Edge, force, true);
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+}
+
+void TPartitionFixture::SendGetWriteInfo(const ui32 internalPartitionId) {
+    auto event = MakeHolder<TEvPQ::TEvGetWriteInfoRequest>(internalPartitionId);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -900,7 +922,7 @@ Y_UNIT_TEST_F(Batching, TPartitionFixture)
 
 Y_UNIT_TEST_F(SetOffset, TPartitionFixture)
 {
-    const ui32 partition = 0;
+    const TPartitionId partition{0};
     const ui64 begin = 0;
     const ui64 end = 10;
     const TString client = "client";
@@ -952,7 +974,7 @@ Y_UNIT_TEST_F(SetOffset, TPartitionFixture)
 
 Y_UNIT_TEST_F(TooManyImmediateTxs, TPartitionFixture)
 {
-    const ui32 partition = 0;
+    const TPartitionId partition{0};
     const ui64 begin = 0;
     const ui64 end = 2'000;
     const TString client = "client";
@@ -963,7 +985,7 @@ Y_UNIT_TEST_F(TooManyImmediateTxs, TPartitionFixture)
     CreateSession(client, session);
 
     for (ui64 txId = 1; txId <= 1'002; ++txId) {
-        SendProposeTransactionRequest(partition,
+        SendProposeTransactionRequest(partition.InternalPartitionId,
                                       txId - 1, txId, // range
                                       client,
                                       "topic-path",
@@ -995,7 +1017,7 @@ Y_UNIT_TEST_F(TooManyImmediateTxs, TPartitionFixture)
     //
     // while the writing is in progress, another command has arrived
     //
-    SendProposeTransactionRequest(partition,
+    SendProposeTransactionRequest(partition.InternalPartitionId,
                                   1'001, 1'002, // range
                                   client,
                                   "topic-path",
@@ -1011,7 +1033,7 @@ Y_UNIT_TEST_F(TooManyImmediateTxs, TPartitionFixture)
 
 Y_UNIT_TEST_F(CommitOffsetRanges, TPartitionFixture)
 {
-    const ui32 partition = 0;
+    const TPartitionId partition{0};
     const ui64 begin = 0;
     const ui64 end = 10;
     const TString client = "client";
@@ -1024,7 +1046,7 @@ Y_UNIT_TEST_F(CommitOffsetRanges, TPartitionFixture)
     //
     CreateSession(client, session);
 
-    SendProposeTransactionRequest(partition,
+    SendProposeTransactionRequest(partition.InternalPartitionId,
                                   0, 2,  // 0 --> 2
                                   client,
                                   "topic-path",
@@ -1032,31 +1054,31 @@ Y_UNIT_TEST_F(CommitOffsetRanges, TPartitionFixture)
                                   1);
     WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session=session, .Offset=2}}}});
 
-    SendProposeTransactionRequest(partition,
+    SendProposeTransactionRequest(partition.InternalPartitionId,
                                   2, 0,          // begin > end
                                   client,
                                   "topic-path",
                                   true,
                                   2);
-    SendProposeTransactionRequest(partition,
+    SendProposeTransactionRequest(partition.InternalPartitionId,
                                   4, 6,          // begin > client.end
                                   client,
                                   "topic-path",
                                   true,
                                   3);
-    SendProposeTransactionRequest(partition,
+    SendProposeTransactionRequest(partition.InternalPartitionId,
                                   1, 4,          // begin < client.end
                                   client,
                                   "topic-path",
                                   true,
                                   4);
-    SendProposeTransactionRequest(partition,
+    SendProposeTransactionRequest(partition.InternalPartitionId,
                                   2, 4,          // begin == client.end
                                   client,
                                   "topic-path",
                                   true,
                                   5);
-    SendProposeTransactionRequest(partition,
+    SendProposeTransactionRequest(partition.InternalPartitionId,
                                   4, 13,         // end > partition.end
                                   client,
                                   "topic-path",
@@ -1081,7 +1103,7 @@ Y_UNIT_TEST_F(CommitOffsetRanges, TPartitionFixture)
 
 Y_UNIT_TEST_F(CorrectRange_Commit, TPartitionFixture)
 {
-    const ui32 partition = 3;
+    const TPartitionId partition{3};
     const ui64 begin = 0;
     const ui64 end = 10;
     const TString client = "client";
@@ -1106,7 +1128,7 @@ Y_UNIT_TEST_F(CorrectRange_Commit, TPartitionFixture)
 
 Y_UNIT_TEST_F(CorrectRange_Multiple_Transactions, TPartitionFixture)
 {
-    const ui32 partition = 3;
+    const TPartitionId partition{3};
     const ui64 begin = 0;
     const ui64 end = 10;
     const TString client = "client";
@@ -1142,7 +1164,7 @@ Y_UNIT_TEST_F(CorrectRange_Multiple_Transactions, TPartitionFixture)
 
 Y_UNIT_TEST_F(CorrectRange_Multiple_Consumers, TPartitionFixture)
 {
-    const ui32 partition = 3;
+    const TPartitionId partition{3};
     const ui64 begin = 0;
     const ui64 end = 10;
 
@@ -1173,7 +1195,7 @@ Y_UNIT_TEST_F(CorrectRange_Multiple_Consumers, TPartitionFixture)
 
 Y_UNIT_TEST_F(OldPlanStep, TPartitionFixture)
 {
-    const ui32 partition = 3;
+    const TPartitionId partition{3};
     const ui64 begin = 0;
     const ui64 end = 10;
 
@@ -1188,7 +1210,7 @@ Y_UNIT_TEST_F(OldPlanStep, TPartitionFixture)
 
 Y_UNIT_TEST_F(AfterRestart_1, TPartitionFixture)
 {
-    const ui32 partition = 3;
+    const TPartitionId partition{3};
     const ui64 begin = 0;
     const ui64 end = 10;
     const TString consumer = "client";
@@ -1219,7 +1241,7 @@ Y_UNIT_TEST_F(AfterRestart_1, TPartitionFixture)
 
 Y_UNIT_TEST_F(AfterRestart_2, TPartitionFixture)
 {
-    const ui32 partition = 3;
+    const TPartitionId partition{3};
     const ui64 begin = 0;
     const ui64 end = 10;
     const TString consumer = "client";
@@ -1245,7 +1267,7 @@ Y_UNIT_TEST_F(AfterRestart_2, TPartitionFixture)
 
 Y_UNIT_TEST_F(IncorrectRange, TPartitionFixture)
 {
-    const ui32 partition = 3;
+    const TPartitionId partition{3};
     const ui64 begin = 0;
     const ui64 end = 10;
     const TString client = "client";
@@ -1281,7 +1303,7 @@ Y_UNIT_TEST_F(IncorrectRange, TPartitionFixture)
 
 Y_UNIT_TEST_F(CorrectRange_Rollback, TPartitionFixture)
 {
-    const ui32 partition = 3;
+    const TPartitionId partition{3};
     const ui64 begin = 0;
     const ui64 end = 10;
     const TString client = "client";
@@ -1305,7 +1327,7 @@ Y_UNIT_TEST_F(CorrectRange_Rollback, TPartitionFixture)
 
 Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
 {
-    const ui32 partition = 3;
+    const TPartitionId partition{3};
     const ui64 begin = 0;
     const ui64 end = 10;
 
@@ -1362,7 +1384,7 @@ Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
 Y_UNIT_TEST_F(TabletConfig_Is_Newer_That_PartitionConfig, TPartitionFixture)
 {
     CreatePartition({
-                    .Partition=3,
+                    .Partition=TPartitionId{3},
                     .Begin=0, .End=10,
                     //
                     // конфиг партиции
@@ -1389,7 +1411,7 @@ Y_UNIT_TEST_F(ReserveSubDomainOutOfSpace, TPartitionFixture)
     Ctx->Runtime->GetAppData().FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
 
     CreatePartition({
-                    .Partition=1,
+                    .Partition=TPartitionId{1},
                     .Begin=0, .End=10,
                     //
                     // partition configuration
@@ -1432,9 +1454,8 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace, TPartitionFixture)
 {
     Ctx->Runtime->GetAppData().FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
     Ctx->Runtime->GetAppData().PQConfig.MutableQuotingConfig()->SetQuotaWaitDurationMs(300);
-
     CreatePartition({
-                    .Partition=1,
+                    .Partition=TPartitionId{1},
                     .Begin=0, .End=10,
                     //
                     // partition configuration
@@ -1482,9 +1503,10 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace_DisableExpiration, TPartitionFixture)
     Ctx->Runtime->GetAppData().FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
     // disable write request expiration while thes wait quota
     Ctx->Runtime->GetAppData().PQConfig.MutableQuotingConfig()->SetQuotaWaitDurationMs(0);
+    Ctx->Runtime->SetLogPriority( NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);
 
     CreatePartition({
-                    .Partition=1,
+                    .Partition=TPartitionId{1},
                     .Begin=0, .End=10,
                     //
                     // partition configuration
@@ -1507,7 +1529,9 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace_DisableExpiration, TPartitionFixture)
     auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
 
     TAutoPtr<IEventHandle> handle;
-    std::function<bool(const TEvPQ::TEvProxyResponse&)> truth = [&](const TEvPQ::TEvProxyResponse& e) { return cookie == e.Cookie; };
+    std::function<bool(const TEvPQ::TEvProxyResponse&)> truth = [&](const TEvPQ::TEvProxyResponse& e) {
+        return cookie == e.Cookie;
+    };
 
     TString data = "data for write";
 
@@ -1516,6 +1540,10 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace_DisableExpiration, TPartitionFixture)
     messageNo++;
 
     SendDiskStatusResponse();
+    {
+        auto event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
+        UNIT_ASSERT(event != nullptr);
+    }
 
     // Second message will not be processed because the limit is exceeded.
     SendWrite(++cookie, messageNo, ownerCookie, (messageNo + 1) * 100, data);
@@ -1540,7 +1568,7 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace_IgnoreQuotaDeadline, TPartitionFixture)
     Ctx->Runtime->GetAppData().PQConfig.MutableQuotingConfig()->SetQuotaWaitDurationMs(300);
 
     CreatePartition({
-                    .Partition=1,
+                    .Partition=TPartitionId{1},
                     .Begin=0, .End=10,
                     //
                     // partition configuration
@@ -1570,8 +1598,11 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace_IgnoreQuotaDeadline, TPartitionFixture)
     // First message will be processed because used storage 0 and limit 0. That is, the limit is not exceeded.
     SendWrite(++cookie, messageNo, ownerCookie, (messageNo + 1) * 100, data, true);
     messageNo++;
-
     SendDiskStatusResponse();
+    {
+        auto event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
+        UNIT_ASSERT(event != nullptr);
+    }
 
     // Second message will not be processed because the limit is exceeded.
     SendWrite(++cookie, messageNo, ownerCookie, (messageNo + 1) * 100, data, true);
@@ -1590,6 +1621,123 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace_IgnoreQuotaDeadline, TPartitionFixture)
     UNIT_ASSERT_EQUAL(NMsgBusProxy::MSTATUS_OK, event->Response->GetStatus());
 }
 
-}
+Y_UNIT_TEST_F(GetPartitionWriteInfoSuccess, TPartitionFixture) {
+    Ctx->Runtime->SetLogPriority( NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);
+    Ctx->Runtime->GetAppData().PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
 
-}
+    CreatePartition({
+                    .Partition=TPartitionId{2, 10, 100'001},
+                    //
+                    // partition configuration
+                    //
+                    .Config={.Version=1, .Consumers={}}
+                    },
+                    //
+                    // tablet configuration
+                    //
+                    {.Version=2, .Consumers={}}
+    );
+
+    ui64 cookie = 1;
+
+    SendChangeOwner(cookie, "owner1", Ctx->Edge, true);
+    auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
+    UNIT_ASSERT(ownerEvent != nullptr);
+    auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+
+    TAutoPtr<IEventHandle> handle;
+    auto truth = [&](const TEvPQ::TEvProxyResponse& e) { return cookie == e.Cookie; };
+
+    TString data = "data for write";
+
+    for (auto i = 0; i < 3; i++) {
+        SendWrite(++cookie, i, ownerCookie, i + 100, data, true, (i+1)*2);
+        SendDiskStatusResponse();
+        {
+            auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvError>(TDuration::Seconds(1));
+            UNIT_ASSERT(event == nullptr);
+        }
+        auto event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
+        UNIT_ASSERT(event != nullptr);
+    }
+    SendWrite(++cookie, 3, ownerCookie, 110, data, true, 7);
+    SendDiskStatusResponse();
+    {
+        auto event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
+        UNIT_ASSERT(event != nullptr);
+    }
+    SendGetWriteInfo(100'001);
+    {
+        {
+            auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoError>(TDuration::Seconds(1));
+            UNIT_ASSERT(event == nullptr);
+
+        }
+        auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoResponse>(TDuration::Seconds(1));
+        UNIT_ASSERT(event != nullptr);
+        Cerr << "Got write info resposne. Body keys: " << event->BodyKeys.size() << ", head: " << event->BlobsFromHead.size() << ", src id info: " << event->SrcIdInfo.size() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(event->BodyKeys.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(event->BlobsFromHead.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(event->SrcIdInfo.size(), 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(event->SrcIdInfo.begin()->second.MinSeqNo, 2);
+        UNIT_ASSERT_VALUES_EQUAL(event->SrcIdInfo.begin()->second.SeqNo, 7);
+        UNIT_ASSERT_VALUES_EQUAL(event->SrcIdInfo.begin()->second.Offset, 110);
+
+        Cerr << "Body key 1: " << event->BodyKeys.begin()->Key.ToString() << ", size: " << event->BodyKeys.begin()->CumulativeSize << Endl;
+        Cerr << "Body key last " << event->BodyKeys.back().Key.ToString() << ", size: " << event->BodyKeys.back().CumulativeSize << Endl;
+        Cerr << "Head blob 1 size: " << event->BlobsFromHead.begin()->GetBlobSize() << Endl;
+        UNIT_ASSERT(event->BodyKeys.begin()->Key.ToString().StartsWith("D0000100001_"));
+        UNIT_ASSERT(event->BlobsFromHead.begin()->GetBlobSize() > 0);
+    }
+
+} // GetPartitionWriteInfoSuccess
+
+Y_UNIT_TEST_F(GetPartitionWriteInfoError, TPartitionFixture) {
+    CreatePartition({
+                    .Partition=TPartitionId{2, 10, 100'001},
+                    .Begin=0, .End=10,
+                    //
+                    // partition configuration
+                    //
+                    .Config={.Version=1, .Consumers={}}
+                    },
+                    //
+                    // tablet configuration
+                    //
+                    {.Version=2, .Consumers={}}
+    );
+
+    ui64 cookie = 1;
+
+    SendChangeOwner(cookie, "owner1", Ctx->Edge, true);
+    auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
+    UNIT_ASSERT(ownerEvent != nullptr);
+    auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+
+    TAutoPtr<IEventHandle> handle;
+    std::function<bool(const TEvPQ::TEvError&)> truth = [&](const TEvPQ::TEvError& e) { return cookie == e.Cookie; };
+
+    TString data = "data for write";
+
+    SendWrite(++cookie, 0, ownerCookie, 100, data, false, 1);
+    {
+        SendGetWriteInfo(100'001);
+        auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoError>(TDuration::Seconds(1));
+        UNIT_ASSERT(event != nullptr);
+    }
+    SendDiskStatusResponse();
+    {
+        auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(handle, TDuration::Seconds(1));
+        UNIT_ASSERT(event != nullptr);
+    }
+    {
+        SendGetWriteInfo(100'001);
+        auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoError>(TDuration::Seconds(1));
+        UNIT_ASSERT(event != nullptr);
+    }
+} // GetPartitionWriteInfoErrors
+
+} // End of suite
+
+} // namespace

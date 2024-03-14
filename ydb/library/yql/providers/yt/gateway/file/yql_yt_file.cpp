@@ -747,7 +747,7 @@ public:
                 Services_->GetFunctionRegistry()->SupportsSizedAllocators());
             TMemoryUsageInfo memInfo("Stat");
             TTypeEnvironment env(alloc);
-            TProgramBuilder pgmBuilder(env, *Services_->GetFunctionRegistry());
+            NKikimr::NMiniKQL::TTypeBuilder typeBuilder(env);
             THolderFactory holderFactory(alloc.Ref(), memInfo, Services_->GetFunctionRegistry());
 
             NCommon::TCodecContext codecCtx(env, *Services_->GetFunctionRegistry(), &holderFactory);
@@ -759,7 +759,7 @@ public:
             writer.SetSpecs(spec);
 
             TStringStream err;
-            auto type = BuildType(*tableInfo.RowSpec->GetType(), pgmBuilder, err);
+            auto type = BuildType(*tableInfo.RowSpec->GetType(), typeBuilder, err);//
             TValuePacker packer(true, type);
             for (auto& c: content) {
                 auto val = packer.Unpack(c, holderFactory);
@@ -1079,6 +1079,9 @@ public:
         res.Partitions.Partitions.back().TableRanges = std::move(paths);
         res.SetSuccess();
         return res;
+    }
+
+    void AddCluster(const TYtClusterConfig&) override {
     }
 
 private:

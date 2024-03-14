@@ -289,6 +289,9 @@ NKikimrDataEvents::TEvWriteResult::EStatus NEvWrite::TConvertor::ConvertErrCode(
             return NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST;
         case NKikimrTxDataShard::TError_EKind_SCHEME_CHANGED:
             return NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED;
+        case NKikimrTxDataShard::TError_EKind_OUT_OF_SPACE:
+        case NKikimrTxDataShard::TError_EKind_DISK_SPACE_EXHAUSTED:
+            return NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
         default:
             return NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR;
     }

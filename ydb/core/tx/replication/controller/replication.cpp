@@ -28,6 +28,10 @@ class TReplication::TImpl {
     }
 
     void DiscoverTargets(const TActorContext& ctx) {
+        if (TargetDiscoverer) {
+            return;
+        }
+
         switch (Config.GetTargetCase()) {
             case NKikimrReplication::TReplicationConfig::kEverything:
                 return ErrorState("Not implemented");
@@ -91,6 +95,9 @@ public:
             switch (Config.GetCredentialsCase()) {
             case NKikimrReplication::TReplicationConfig::kStaticCredentials:
                 ydbProxy.Reset(CreateYdbProxy(Config.GetSrcEndpoint(), Config.GetSrcDatabase(), Config.GetStaticCredentials()));
+                break;
+            case NKikimrReplication::TReplicationConfig::kOAuthToken:
+                ydbProxy.Reset(CreateYdbProxy(Config.GetSrcEndpoint(), Config.GetSrcDatabase(), Config.GetOAuthToken()));
                 break;
             default:
                 ErrorState(TStringBuilder() << "Unexpected credentials: " << Config.GetCredentialsCase());

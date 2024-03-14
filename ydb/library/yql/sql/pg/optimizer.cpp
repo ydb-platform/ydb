@@ -654,7 +654,7 @@ struct TPgOptimizerImpl
                 left, right,
                 joinConditions,
                 joinKind,
-                GraceJoin
+                MapJoin
                 );
         } else {
             YQL_ENSURE(false, "Wrong CBO node");

@@ -66,6 +66,7 @@ TMaybe<Ydb::Table::CreateTableRequest> GenYdbScheme(
     FillPartitioningSettings(scheme, tableDesc);
     FillKeyBloomFilter(scheme, tableDesc);
     FillReadReplicasSettings(scheme, tableDesc);
+    FillSequenceDescription(scheme, tableDesc);
 
     return scheme;
 }

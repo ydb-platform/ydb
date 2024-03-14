@@ -36,6 +36,7 @@ struct TProfilingTags
     TString Cluster;
     TString LeadingStatus;
     TString QueueAgentStage;
+    TString ObjectType;
 
     bool operator==(const TProfilingTags& other) const = default;
     bool operator<(const TProfilingTags& other) const = default;

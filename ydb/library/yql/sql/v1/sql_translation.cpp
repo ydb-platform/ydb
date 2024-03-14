@@ -53,6 +53,33 @@ TString CollectTokens(const TRule_select_stmt& selectStatement) {
     return tokenCollector.Tokens;
 }
 
+NSQLTranslation::TTranslationSettings CreateViewTranslationSettings(const NSQLTranslation::TTranslationSettings& base) {
+    NSQLTranslation::TTranslationSettings settings;
+    
+    settings.ClusterMapping = base.ClusterMapping;
+    settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
+
+    return settings;
+}
+
+TNodePtr BuildViewSelect(const TRule_select_stmt& query, TContext& ctx) {
+    const auto viewTranslationSettings = CreateViewTranslationSettings(ctx.Settings);
+    TContext viewParsingContext(viewTranslationSettings, {}, ctx.Issues);
+    TSqlSelect select(viewParsingContext, viewTranslationSettings.Mode);
+    TPosition pos;
+    auto source = select.Build(query, pos);
+    if (!source) {
+        return nullptr;
+    }
+    return BuildSelectResult(
+        pos,
+        std::move(source),
+        false,
+        false,
+        viewParsingContext.Scoped
+    );
+}
+
 }
 
 namespace NSQLTranslationV1 {
@@ -1378,11 +1405,15 @@ bool TSqlTranslation::FillFamilySettings(const TRule_family_settings& settingsNo
 
 
 
-bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCreateTableParameters& params)
+bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCreateTableParameters& params, const bool isCreateTableAs)
 {
     switch (node.Alt_case()) {
         case TRule_create_table_entry::kAltCreateTableEntry1:
         {
+            if (isCreateTableAs) {
+                Ctx.Error() << "Column types are not supported for CREATE TABLE AS";
+                return false;
+            }
             // column_schema
             auto columnSchema = ColumnSchemaImpl(node.GetAlt_create_table_entry1().GetRule_column_schema1());
             if (!columnSchema) {
@@ -1482,6 +1513,10 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
         }
         case TRule_create_table_entry::kAltCreateTableEntry4:
         {
+            if (isCreateTableAs) {
+                Ctx.Error() << "Column families are not supported for CREATE TABLE AS";
+                return false;
+            }
             // family_entry
             auto& family_entry = node.GetAlt_create_table_entry4().GetRule_family_entry1();
             TFamilyEntry family(IdEx(family_entry.GetRule_an_id2(), *this));
@@ -1499,6 +1534,19 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
             if (!CreateChangefeed(changefeed, expr, params.Changefeeds)) {
                 return false;
             }
+            break;
+        }
+        case TRule_create_table_entry::kAltCreateTableEntry6:
+        {
+            if (!isCreateTableAs) {
+                Ctx.Error() << "Column requires a type";
+                return false;
+            }
+            // an_id_schema
+            const TString name(Id(node.GetAlt_create_table_entry6().GetRule_an_id_schema1(), *this));
+            const TPosition pos(Context().Pos());
+
+            params.Columns.push_back(TColumnSchema(pos, name, nullptr, true, {}, false, nullptr));
             break;
         }
         default:
@@ -4405,14 +4453,16 @@ bool TSqlTranslation::ValidateAuthMethod(const std::map<TString, TDeferredAtom>&
         "password_secret_name",
         "aws_access_key_id_secret_name",
         "aws_secret_access_key_secret_name",
-        "aws_region"
+        "aws_region",
+        "token_secret_name"
     };
     const static TMap<TStringBuf, TSet<TStringBuf>> authMethodFields{
         {"NONE", {}},
         {"SERVICE_ACCOUNT", {"service_account_id", "service_account_secret_name"}},
         {"BASIC", {"login", "password_secret_name"}},
         {"AWS", {"aws_access_key_id_secret_name", "aws_secret_access_key_secret_name", "aws_region"}},
-        {"MDB_BASIC", {"service_account_id", "service_account_secret_name", "login", "password_secret_name"}}
+        {"MDB_BASIC", {"service_account_id", "service_account_secret_name", "login", "password_secret_name"}},
+        {"TOKEN", {"token_secret_name"}}
     };
     auto authMethodIt = result.find("auth_method");
     if (authMethodIt == result.end() || authMethodIt->second.GetLiteral() == nullptr) {
@@ -4493,19 +4543,11 @@ bool TSqlTranslation::ParseViewQuery(std::map<TString, TDeferredAtom>& features,
     const TString queryText = CollectTokens(query);
     features["query_text"] = {Ctx.Pos(), queryText};
 
-    {
-        TSqlSelect select(Ctx, Mode);
-        TPosition pos;
-        auto source = select.Build(query, pos);
-        if (!source) {
-            return false;
-        }
-        features["query_ast"] = {BuildSelectResult(pos,
-                                                   std::move(source),
-                                                   false,
-                                                   false,
-                                                   Ctx.Scoped), Ctx};
+    const auto viewSelect = BuildViewSelect(query, Ctx);
+    if (!viewSelect) {
+        return false;
     }
+    features["query_ast"] = {viewSelect, Ctx};
 
     return true;
 }

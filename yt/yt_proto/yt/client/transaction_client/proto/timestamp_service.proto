@@ -5,6 +5,7 @@ package NYT.NTransactionClient.NProto;
 message TReqGenerateTimestamps
 {
     optional int32 count = 1 [default = 1];
+    optional int32 clock_cluster_tag = 2;
 }
 
 message TRspGenerateTimestamps

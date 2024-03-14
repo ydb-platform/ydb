@@ -47,7 +47,8 @@ public:
         AddHandler({TYtReadTableScheme::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleReadTableScheme));
         AddHandler({TYtTableContent::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTableContent));
         AddHandler({TYtLength::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleLength));
-        AddHandler({TYtConfigure::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleConfigure));
+        AddHandler({TCoConfigure::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleConfigure));
+        AddHandler({TYtConfigure::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleYtConfigure));
         AddHandler({TYtTablePath::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTablePath));
         AddHandler({TYtTableRecord::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTableRecord));
         AddHandler({TYtRowNumber::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTableRecord));
@@ -878,6 +879,23 @@ public:
     }
 
     TStatus HandleConfigure(TExprBase input, TExprContext& ctx) {
+        if (!EnsureMinArgsCount(input.Ref(), 2, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureWorldType(*input.Ptr()->Child(TCoConfigure::idx_World), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureSpecificDataSource(*input.Ptr()->Child(TCoConfigure::idx_DataSource), YtProviderName, ctx)) {
+            return TStatus::Error;
+        }
+
+        input.Ptr()->SetTypeAnn(input.Ref().Child(TCoConfigure::idx_World)->GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleYtConfigure(TExprBase input, TExprContext& ctx) {
         if (!EnsureMinArgsCount(input.Ref(), 2, ctx)) {
             return TStatus::Error;
         }

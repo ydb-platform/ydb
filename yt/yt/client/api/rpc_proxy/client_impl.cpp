@@ -1648,6 +1648,11 @@ TFuture<TCellIdToSnapshotIdMap> TClient::BuildMasterSnapshots(const TBuildMaster
     ThrowUnimplemented("BuildMasterSnapshots");
 }
 
+TFuture<TCellIdToSequenceNumberMap> TClient::GetMasterConsistentState(const TGetMasterConsistentStateOptions& /*options*/)
+{
+    ThrowUnimplemented("GetMasterConsistentState");
+}
+
 TFuture<void> TClient::ExitReadOnly(
     NHydra::TCellId cellId,
     const TExitReadOnlyOptions& /*options*/)
@@ -1830,7 +1835,7 @@ NProto::EMaintenanceType ConvertMaintenanceTypeToProto(EMaintenanceType type)
 
 } // namespace
 
-TFuture<TMaintenanceId> TClient::AddMaintenance(
+TFuture<TMaintenanceIdPerTarget> TClient::AddMaintenance(
     EMaintenanceComponent component,
     const TString& address,
     EMaintenanceType type,
@@ -1848,13 +1853,28 @@ TFuture<TMaintenanceId> TClient::AddMaintenance(
     req->set_address(address);
     req->set_type(ConvertMaintenanceTypeToProto(type));
     req->set_comment(comment);
+    req->set_supports_per_target_response(true);
 
-    return req->Invoke().Apply(BIND([] (const TErrorOr<TApiServiceProxy::TRspAddMaintenancePtr>& rsp) {
-        return FromProto<TMaintenanceId>(rsp.ValueOrThrow()->id());
-    }));
+    return req->Invoke().Apply(BIND(
+        [address] (const TErrorOr<TApiServiceProxy::TRspAddMaintenancePtr>& rsp) {
+            const auto& value = rsp.ValueOrThrow();
+
+            TMaintenanceIdPerTarget result;
+
+            // COMPAT(kvk1920): Compatibility with pre-24.2 RPC proxies.
+            if (value->has_id()) {
+                result[address] = FromProto<TMaintenanceId>(value->id());
+            } else {
+                result.reserve(value->id_per_target_size());
+                for (const auto& [target, id] : value->id_per_target()) {
+                    result.insert({target, FromProto<TMaintenanceId>(id)});
+                }
+            }
+            return result;
+        }));
 }
 
-TFuture<TMaintenanceCounts> TClient::RemoveMaintenance(
+TFuture<TMaintenanceCountsPerTarget> TClient::RemoveMaintenance(
     EMaintenanceComponent component,
     const TString& address,
     const TMaintenanceFilter& filter,
@@ -1884,26 +1904,39 @@ TFuture<TMaintenanceCounts> TClient::RemoveMaintenance(
             req->set_user(user);
         });
 
-    return req->Invoke().Apply(BIND([] (const TErrorOr<TApiServiceProxy::TRspRemoveMaintenancePtr>& rsp) {
+    req->set_supports_per_target_response(true);
+
+    return req->Invoke().Apply(BIND([address] (const TErrorOr<TApiServiceProxy::TRspRemoveMaintenancePtr>& rsp) {
         auto rspValue = rsp.ValueOrThrow();
+        TMaintenanceCountsPerTarget result;
 
-        const auto& protoCounts = rspValue->removed_maintenance_counts();
-        TMaintenanceCounts counts;
-
-        if (!rspValue->use_map_instead_of_fields()) {
-            counts[EMaintenanceType::Ban] = rspValue->ban();
-            counts[EMaintenanceType::Decommission] = rspValue->decommission();
-            counts[EMaintenanceType::DisableSchedulerJobs] = rspValue->disable_scheduler_jobs();
-            counts[EMaintenanceType::DisableWriteSessions] = rspValue->disable_write_sessions();
-            counts[EMaintenanceType::DisableTabletCells] = rspValue->disable_tablet_cells();
-            counts[EMaintenanceType::PendingRestart] = rspValue->pending_restart();
+        // COMPAT(kvk1920): Compatibility with pre-24.2 RPC proxies.
+        if (!rspValue->supports_per_target_response()) {
+            auto& counts = result[address];
+            // COMPAT(kvk1920): Compatibility with pre-23.2 RPC proxies.
+            if (!rspValue->use_map_instead_of_fields()) {
+                counts[EMaintenanceType::Ban] = rspValue->ban();
+                counts[EMaintenanceType::Decommission] = rspValue->decommission();
+                counts[EMaintenanceType::DisableSchedulerJobs] = rspValue->disable_scheduler_jobs();
+                counts[EMaintenanceType::DisableWriteSessions] = rspValue->disable_write_sessions();
+                counts[EMaintenanceType::DisableTabletCells] = rspValue->disable_tablet_cells();
+                counts[EMaintenanceType::PendingRestart] = rspValue->pending_restart();
+            } else {
+                for (const auto& [type, count] : rspValue->removed_maintenance_counts()) {
+                    counts[CheckedEnumCast<EMaintenanceType>(type)] = count;
+                }
+            }
         } else {
-            for (auto [type, count] : protoCounts) {
-                counts[CheckedEnumCast<EMaintenanceType>(type)] = count;
+            result.reserve(rspValue->removed_maintenance_counts_per_target_size());
+            for (const auto& [target, protoCounts] : rspValue->removed_maintenance_counts_per_target()) {
+                auto& counts = result[target];
+                for (const auto& [type, count] : protoCounts.counts()) {
+                    counts[CheckedEnumCast<EMaintenanceType>(type)] = count;
+                }
             }
         }
 
-        return counts;
+        return result;
     }));
 }
 
@@ -2019,60 +2052,237 @@ TFuture<TRequestRestartResult> TClient::RequestRestart(
 }
 
 TFuture<NQueryTrackerClient::TQueryId> TClient::StartQuery(
-    NQueryTrackerClient::EQueryEngine /*engine*/,
-    const TString& /*query*/,
-    const TStartQueryOptions& /*options*/)
+    NQueryTrackerClient::EQueryEngine engine,
+    const TString& query,
+    const TStartQueryOptions& options)
 {
-    ThrowUnimplemented("StartQuery");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.StartQuery();
+    SetTimeoutOptions(*req, options);
+
+    req->set_query_tracker_stage(options.QueryTrackerStage);
+    req->set_engine(NProto::ConvertQueryEngineToProto(engine));
+    req->set_query(query);
+    req->set_draft(options.Draft);
+
+    if (options.Settings) {
+        req->set_settings(ConvertToYsonString(options.Settings).ToString());
+    }
+    if (options.Annotations) {
+        req->set_annotations(ConvertToYsonString(options.Annotations).ToString());
+    }
+    if (options.AccessControlObject) {
+        req->set_access_control_object(*options.AccessControlObject);
+    }
+
+    for (const auto& file : options.Files) {
+        auto* protoFile = req->add_files();
+        protoFile->set_name(file->Name);
+        protoFile->set_content(file->Content);
+        protoFile->set_type(static_cast<NProto::EContentType>(file->Type));
+    }
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspStartQueryPtr& rsp) {
+        return FromProto<NQueryTrackerClient::TQueryId>(rsp->query_id());
+    }));
 }
 
 TFuture<void> TClient::AbortQuery(
-    NQueryTrackerClient::TQueryId /*queryId*/,
-    const TAbortQueryOptions& /*options*/)
+    NQueryTrackerClient::TQueryId queryId,
+    const TAbortQueryOptions& options)
 {
-    ThrowUnimplemented("AbortQuery");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.AbortQuery();
+    SetTimeoutOptions(*req, options);
+
+    req->set_query_tracker_stage(options.QueryTrackerStage);
+    ToProto(req->mutable_query_id(), queryId);
+
+    if (options.AbortMessage) {
+        req->set_abort_message(*options.AbortMessage);
+    }
+
+    return req->Invoke().AsVoid();
 }
 
 TFuture<TQueryResult> TClient::GetQueryResult(
-    NQueryTrackerClient::TQueryId /*queryId*/,
-    i64 /*resultIndex*/,
-    const TGetQueryResultOptions& /*options*/)
+    NQueryTrackerClient::TQueryId queryId,
+    i64 resultIndex,
+    const TGetQueryResultOptions& options)
 {
-    ThrowUnimplemented("GetQueryResult");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetQueryResult();
+    SetTimeoutOptions(*req, options);
+
+    req->set_query_tracker_stage(options.QueryTrackerStage);
+    ToProto(req->mutable_query_id(), queryId);
+    req->set_result_index(resultIndex);
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryResultPtr& rsp) {
+        return TQueryResult{
+            .Id = FromProto<NQueryTrackerClient::TQueryId>(rsp->query_id()),
+            .ResultIndex = rsp->result_index(),
+            .Error = FromProto<TError>(rsp->error()),
+            .Schema = rsp->has_schema() ? FromProto<NTableClient::TTableSchemaPtr>(rsp->schema()) : nullptr,
+            .DataStatistics = FromProto<NChunkClient::NProto::TDataStatistics>(rsp->data_statistics()),
+            .IsTruncated = rsp->is_truncated(),
+        };
+    }));
 }
 
 TFuture<IUnversionedRowsetPtr> TClient::ReadQueryResult(
-    NQueryTrackerClient::TQueryId /*queryId*/,
-    i64 /*resultIndex*/,
-    const TReadQueryResultOptions& /*options*/)
+    NQueryTrackerClient::TQueryId queryId,
+    i64 resultIndex,
+    const TReadQueryResultOptions& options)
 {
-    ThrowUnimplemented("AbortQuery");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.ReadQueryResult();
+    SetTimeoutOptions(*req, options);
+
+    req->set_query_tracker_stage(options.QueryTrackerStage);
+    ToProto(req->mutable_query_id(), queryId);
+    req->set_result_index(resultIndex);
+
+    if (options.Columns) {
+        auto* protoColumns = req->mutable_columns();
+        for (const auto& column : *options.Columns) {
+            protoColumns->add_items(column);
+        }
+    }
+    if (options.LowerRowIndex) {
+        req->set_lower_row_index(*options.LowerRowIndex);
+    }
+    if (options.UpperRowIndex) {
+        req->set_upper_row_index(*options.UpperRowIndex);
+    }
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspReadQueryResultPtr& rsp) {
+        return DeserializeRowset<TUnversionedRow>(
+            rsp->rowset_descriptor(),
+            MergeRefsToRef<TRpcProxyClientBufferTag>(rsp->Attachments()));
+    }));
 }
 
 TFuture<TQuery> TClient::GetQuery(
-    NQueryTrackerClient::TQueryId /*queryId*/,
-    const TGetQueryOptions& /*options*/)
+    NQueryTrackerClient::TQueryId queryId,
+    const TGetQueryOptions& options)
 {
-    ThrowUnimplemented("GetQuery");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetQuery();
+    SetTimeoutOptions(*req, options);
+
+    req->set_query_tracker_stage(options.QueryTrackerStage);
+    ToProto(req->mutable_query_id(), queryId);
+
+    if (options.Attributes) {
+        ToProto(req->mutable_attributes(), options.Attributes);
+    }
+    if (options.Timestamp) {
+        req->set_timestamp(ToProto<i64>(options.Timestamp));
+    }
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryPtr& rsp) {
+        return FromProto<TQuery>(rsp->query());
+    }));
 }
 
 TFuture<TListQueriesResult> TClient::ListQueries(
-    const TListQueriesOptions& /*options*/)
+    const TListQueriesOptions& options)
 {
-    ThrowUnimplemented("ListQueries");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.ListQueries();
+    SetTimeoutOptions(*req, options);
+
+    req->set_query_tracker_stage(options.QueryTrackerStage);
+
+    if (options.FromTime) {
+        req->set_from_time(NYT::ToProto<i64>(*options.FromTime));
+    }
+    if (options.ToTime) {
+        req->set_to_time(NYT::ToProto<i64>(*options.ToTime));
+    }
+    if (options.CursorTime) {
+        req->set_cursor_time(NYT::ToProto<i64>(*options.CursorTime));
+    }
+    req->set_cursor_direction(static_cast<NProto::EOperationSortDirection>(options.CursorDirection));
+
+    if (options.UserFilter) {
+        req->set_user_filter(*options.UserFilter);
+    }
+    if (options.StateFilter) {
+        req->set_state_filter(NProto::ConvertQueryStateToProto(*options.StateFilter));
+    }
+    if (options.EngineFilter) {
+        req->set_engine_filter(NProto::ConvertQueryEngineToProto(*options.EngineFilter));
+    }
+    if (options.SubstrFilter) {
+        req->set_substr_filter(*options.SubstrFilter);
+    }
+
+    req->set_limit(options.Limit);
+
+    if (options.Attributes) {
+        ToProto(req->mutable_attributes(), options.Attributes);
+    }
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspListQueriesPtr& rsp) {
+        return TListQueriesResult{
+            .Queries = FromProto<std::vector<TQuery>>(rsp->queries()),
+            .Incomplete = rsp->incomplete(),
+            .Timestamp = rsp->timestamp(),
+        };
+    }));
 }
 
 TFuture<void> TClient::AlterQuery(
-    NQueryTrackerClient::TQueryId /*queryId*/,
-    const TAlterQueryOptions& /*options*/)
+    NQueryTrackerClient::TQueryId queryId,
+    const TAlterQueryOptions& options)
 {
-    ThrowUnimplemented("AlterQuery");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.AlterQuery();
+    SetTimeoutOptions(*req, options);
+
+    req->set_query_tracker_stage(options.QueryTrackerStage);
+    ToProto(req->mutable_query_id(), queryId);
+
+    if (options.Annotations) {
+        req->set_annotations(ConvertToYsonString(options.Annotations).ToString());
+    }
+    if (options.AccessControlObject) {
+        req->set_access_control_object(*options.AccessControlObject);
+    }
+
+    return req->Invoke().AsVoid();
 }
 
 TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
-    const TGetQueryTrackerInfoOptions& /*options*/)
+    const TGetQueryTrackerInfoOptions& options)
 {
-    ThrowUnimplemented("GetQueryTrackerInfo");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetQueryTrackerInfo();
+    SetTimeoutOptions(*req, options);
+
+    req->set_query_tracker_stage(options.QueryTrackerStage);
+
+    if (options.Attributes) {
+        ToProto(req->mutable_attributes(), options.Attributes);
+    }
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryTrackerInfoPtr& rsp) {
+        return TGetQueryTrackerInfoResult{
+            .ClusterName = rsp->cluster_name(),
+            .SupportedFeatures = TYsonString(rsp->supported_features()),
+            .AccessControlObjects = FromProto<std::vector<TString>>(rsp->access_control_objects()),
+        };
+    }));
 }
 
 TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr> TClient::GetBundleConfig(

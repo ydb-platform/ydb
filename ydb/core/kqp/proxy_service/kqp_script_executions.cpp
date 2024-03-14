@@ -478,6 +478,8 @@ private:
 
 class TScriptLeaseUpdateActor : public TActorBootstrapped<TScriptLeaseUpdateActor> {
 public:
+    using TLeaseUpdateRetryActor = TQueryRetryActor<TScriptLeaseUpdater, TEvScriptLeaseUpdateResponse, TString, TString, TDuration>;
+
     TScriptLeaseUpdateActor(const TActorId& runScriptActorId, const TString& database, const TString& executionId, TDuration leaseDuration, TIntrusivePtr<TKqpCounters> counters)
         : RunScriptActorId(runScriptActorId)
         , Database(database)
@@ -488,7 +490,11 @@ public:
     {}
 
     void Bootstrap() {
-        Register(new TQueryRetryActor<TScriptLeaseUpdater, TEvScriptLeaseUpdateResponse, TString, TString, TDuration>(SelfId(), Database, ExecutionId, LeaseDuration, LeaseDuration / 2));
+        Register(new TLeaseUpdateRetryActor(
+            SelfId(),
+            TLeaseUpdateRetryActor::IRetryPolicy::GetExponentialBackoffPolicy(TLeaseUpdateRetryActor::Retryable, TDuration::MilliSeconds(10), TDuration::MilliSeconds(200), TDuration::Seconds(1), std::numeric_limits<size_t>::max(), LeaseDuration / 2),
+            Database, ExecutionId, LeaseDuration
+        ));
         Become(&TScriptLeaseUpdateActor::StateFunc);
     }
 
@@ -826,7 +832,6 @@ private:
 
 class TForgetScriptExecutionOperationQueryActor : public TQueryBase {
     static constexpr i64 MAX_NUMBER_ROWS_IN_BATCH = 100000;
-    static constexpr TDuration MINIMAL_DEADLINE_TIME = TDuration::Seconds(1);
 
     struct TResultSetDescription {
         i64 MaxRowId;
@@ -837,7 +842,7 @@ public:
     TForgetScriptExecutionOperationQueryActor(const TString& executionId, const TString& database, TInstant operationDeadline)
         : ExecutionId(executionId)
         , Database(database)
-        , Deadline(operationDeadline - MINIMAL_DEADLINE_TIME)
+        , Deadline(operationDeadline)
     {}
 
     void OnRunQuery() override {
@@ -964,10 +969,14 @@ public:
         Send(Owner, new TEvForgetScriptExecutionOperationResponse(status, std::move(issues)));
     }
 
+    static NYql::TIssues ForgetOperationTimeoutIssues() {
+        return { NYql::TIssue("Forget script execution operation timeout") };
+    }
+
 private:
     bool CheckDeadline() {
         if (TInstant::Now() >= Deadline) {
-            Finish(Ydb::StatusIds::TIMEOUT, "Forget script execution operation timeout");
+            Finish(Ydb::StatusIds::TIMEOUT, ForgetOperationTimeoutIssues());
             return false;
         }
         return true;
@@ -982,6 +991,8 @@ private:
 
 class TForgetScriptExecutionOperationActor : public TActorBootstrapped<TForgetScriptExecutionOperationActor> {
 public:
+    using TForgetOperationRetryActor = TQueryRetryActor<TForgetScriptExecutionOperationQueryActor, TEvForgetScriptExecutionOperationResponse, TString, TString, TInstant>;
+
     explicit TForgetScriptExecutionOperationActor(TEvForgetScriptExecutionOperation::TPtr ev)
         : Request(std::move(ev))
     {}
@@ -1017,7 +1028,18 @@ public:
             }
         }
 
-        Register(new TForgetScriptExecutionOperationQueryActor(ExecutionId, Request->Get()->Database, Request->Get()->Deadline));
+        TDuration minDelay = TDuration::MilliSeconds(10);
+        TDuration maxTime = Request->Get()->Deadline - TInstant::Now() - TDuration::Seconds(1);
+        if (maxTime <= minDelay) {
+            Reply(Ydb::StatusIds::TIMEOUT, TForgetScriptExecutionOperationQueryActor::ForgetOperationTimeoutIssues());
+            return;
+        }
+
+        Register(new TForgetOperationRetryActor(
+            SelfId(),
+            TForgetOperationRetryActor::IRetryPolicy::GetExponentialBackoffPolicy(TForgetOperationRetryActor::Retryable, minDelay, TDuration::MilliSeconds(200), TDuration::Seconds(1), std::numeric_limits<size_t>::max(), maxTime),
+            ExecutionId, Request->Get()->Database, TInstant::Now() + maxTime
+        ));
     }
 
     void Handle(TEvForgetScriptExecutionOperationResponse::TPtr& ev) {
@@ -1885,13 +1907,13 @@ public:
               AND execution_id = $execution_id
               AND (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
 
-            SELECT row_id, result_set
+            SELECT database, execution_id, result_set_id, row_id, result_set
             FROM `.metadata/result_sets`
             WHERE database = $database
               AND execution_id = $execution_id
               AND result_set_id = $result_set_id
               AND row_id >= $offset
-            ORDER BY row_id
+            ORDER BY database, execution_id, result_set_id, row_id
             LIMIT $limit;
         )";
 

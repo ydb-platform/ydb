@@ -172,8 +172,9 @@ private:
         TPollerThread()
             : TThread(
                 "DelayedPoller",
-                NThreading::EThreadPriority::Normal,
-                /*shutdownPriority*/ 200)
+                NThreading::TThreadOptions{
+                    .ShutdownPriority = 200,
+                })
         { }
 
         void EnqueueSubmission(TDelayedExecutorEntryPtr entry)

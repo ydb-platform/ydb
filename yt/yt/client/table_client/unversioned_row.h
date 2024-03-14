@@ -772,10 +772,15 @@ public:
 
     size_t GetSpaceUsed() const
     {
-        return StringData_.GetHolder()->GetTotalByteSize().value_or(StringData_.Size()) +
-            RowData_.GetHolder()->GetTotalByteSize().value_or(RowData_.Size());
+        size_t size = 0;
+        if (StringData_) {
+            size += StringData_.GetHolder()->GetTotalByteSize().value_or(StringData_.Size());
+        }
+        if (RowData_) {
+            size += RowData_.GetHolder()->GetTotalByteSize().value_or(RowData_.Size());
+        }
+        return size;
     }
-
 
     friend void swap(TUnversionedOwningRow& lhs, TUnversionedOwningRow& rhs)
     {

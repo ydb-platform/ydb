@@ -1,6 +1,7 @@
 #include "datashard_impl.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
+#include "datashard_locks_db.h"
 
 namespace NKikimr {
 namespace NDataShard {
@@ -42,8 +43,7 @@ EExecutionStatus TStoreAndSendWriteOutRSUnit::Execute(TOperation::TPtr op,
                                                  TTransactionContext &txc,
                                                  const TActorContext &ctx)
 {
-    TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
-    Y_VERIFY_S(writeOp, "cannot cast operation of kind " << op->GetKind());
+    TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 
     bool newArtifact = false;
     // TODO: move artifact flags into operation flags.
@@ -62,7 +62,8 @@ EExecutionStatus TStoreAndSendWriteOutRSUnit::Execute(TOperation::TPtr op,
             ui64 lockId = pr.first;
             auto lock = DataShard.SysLocksTable().GetRawLock(lockId, TRowVersion::Min());
             if (lock && lock->IsPersistent()) {
-                lock->SetFrozen();
+                TDataShardLocksDb locksDb(DataShard, txc);
+                lock->SetFrozen(&locksDb);
             }
         }
         writeOp->MarkLocksStored();

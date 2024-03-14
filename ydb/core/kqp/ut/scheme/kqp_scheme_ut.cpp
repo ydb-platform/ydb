@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -5025,6 +5026,54 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetLocation(), "/folder1/*");
     }
 
+    Y_UNIT_TEST(CreateExternalTableWithUpperCaseSettings) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString externalDataSourceName = "/Root/ExternalDataSource";
+        TString externalTableName = "/Root/ExternalTable";
+        auto query = TStringBuilder() << R"(
+            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="my-bucket",
+                AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `)" << externalTableName << R"(` (
+                Key Uint64,
+                Value String,
+                Year Int64 NOT NULL,
+                Month Int64 NOT NULL
+            ) WITH (
+                DATA_SOURCE=")" << externalDataSourceName << R"(",
+                LOCATION="/folder1/*",
+                FORMAT="json_as_string",
+                `projection.enabled`="true",
+                `projection.Year.type`="integer",
+                `projection.Year.min`="2010",
+                `projection.Year.max`="2022",
+                `projection.Year.interval`="1",
+                `projection.Month.type`="integer",
+                `projection.Month.min`="1",
+                `projection.Month.max`="12",
+                `projection.Month.interval`="1",
+                `projection.Month.digits`="2",
+                `storage.location.template`="${Year}/${Month}",
+                PARTITIONED_BY = "[Year, Month]"
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto externalTableDesc = Navigate(runtime, runtime.AllocateEdgeActor(), externalTableName, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+        const auto& externalTable = externalTableDesc->ResultSet.at(0);
+        UNIT_ASSERT_EQUAL(externalTable.Kind, NKikimr::NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalTable);
+        UNIT_ASSERT(externalTable.ExternalTableInfo);
+        UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.ColumnsSize(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetDataSourcePath(), externalDataSourceName);
+        UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetLocation(), "/folder1/*");
+    }
+
     Y_UNIT_TEST(DoubleCreateExternalTable) {
         TKikimrRunner kikimr;
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
@@ -5210,6 +5259,52 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         }
     }
 
+    Y_UNIT_TEST(InvalidColumnInTieringRule) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
+
+        const TString tableName = "/Root/ColumnTableTest";
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id_second").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32),
+            TTestHelper::TColumnSchema().SetName("created_at").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false)
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName(tableName).SetPrimaryKey({"id", "id_second"}).SetSharding({"id"}).SetSchema(schema).SetTTL("created_at", "Interval(\"PT1H\")");
+        testHelper.CreateTable(testTable);
+        testHelper.CreateTier("tier1");
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add(1).Add(7).Add((TInstant::Now() - TDuration::Days(30)).MilliSeconds());
+            tableInserter.AddRow().Add(1).Add(2).Add(7).Add((TInstant::Now() - TDuration::Days(30)).MilliSeconds());
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+
+        while (csController->GetIndexations().Val() == 0) {
+            Cout << "Wait indexation..." << Endl;
+            Sleep(TDuration::Seconds(2));
+        }
+
+        // const auto ruleName = testHelper.CreateTieringRule("tier1", "created_att");
+        const auto ruleName = testHelper.CreateTieringRule("tier1", "created_at");
+        testHelper.SetTiering(tableName, ruleName);
+
+        while (csController->GetTieringUpdates().Val() == 0) {
+            Cout << "Wait tiering..." << Endl;
+            Sleep(TDuration::Seconds(2));
+        }
+
+        testHelper.RebootTablets(tableName);
+    }
+
     Y_UNIT_TEST(AddColumnWithTtl) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -5242,7 +5337,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT_VALUES_EQUAL(description.GetTtlSettings()->GetDateTypeColumn().GetExpireAfter(), TDuration::Hours(1));
         }
         {
-            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetType(NScheme::NTypeIds::Uint64));
             auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` ADD COLUMN new_column Uint64;";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
@@ -5257,12 +5351,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT_VALUES_EQUAL(columns.size(), 5);
             UNIT_ASSERT_VALUES_EQUAL(description.GetTtlSettings()->GetDateTypeColumn().GetExpireAfter(), TDuration::Hours(1));
         }
-        {
-            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetType(NScheme::NTypeIds::Uint64));
-            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() <<  R"(` SET(TIERING = 'tiering1');)";
-            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
-        }
+        testHelper.SetTiering("/Root/ColumnTableTest", "tiering1");
         {
             auto settings = TDescribeTableSettings().WithTableStatistics(true);
             auto describeResult = testHelper.GetSession().DescribeTable("/Root/ColumnTableTest", settings).GetValueSync();
@@ -5274,7 +5363,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT_VALUES_EQUAL(description.GetTtlSettings()->GetDateTypeColumn().GetExpireAfter(), TDuration::Hours(1));
         }
         {
-            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetType(NScheme::NTypeIds::Uint64));
             auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() <<  R"(` RESET (TTL);)";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
@@ -5289,12 +5377,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT_VALUES_EQUAL(*description.GetTiering(), "tiering1");
             UNIT_ASSERT(!description.GetTtlSettings());
         }
-        {
-            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetType(NScheme::NTypeIds::Uint64));
-            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() <<  R"(` RESET (TIERING);)";
-            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
-        }
+        testHelper.ResetTiering("/Root/ColumnTableTest");
         {
             auto settings = TDescribeTableSettings().WithTableStatistics(true);
             auto describeResult = testHelper.GetSession().DescribeTable("/Root/ColumnTableTest", settings).GetValueSync();
@@ -5368,7 +5451,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
             TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
         };
-        
+
         Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
         TTestHelper::TColumnTable testTable;
 
@@ -5533,8 +5616,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT resource_id FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=3", "[[[\"test_res_3\"]]]");
         testHelper.ReadData("SELECT new_column FROM `/Root/TableStoreTest/ColumnTableTest`", "[[#];[#];[[200u]]]");
 
-    //    testHelper.RebootTablets(testTable.GetName());
-    //    testHelper.ReadData("SELECT new_column FROM `/Root/TableStoreTest/ColumnTableTest`", "[[#];[#];[[200u]]]");
+        testHelper.RebootTablets(testTable.GetName());
+        testHelper.ReadData("SELECT new_column FROM `/Root/TableStoreTest/ColumnTableTest`", "[[#];[#];[[200u]]]");
     }
 
     Y_UNIT_TEST(AddColumnErrors) {

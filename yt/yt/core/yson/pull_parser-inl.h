@@ -8,6 +8,8 @@
 
 #include <yt/yt/core/misc/parser_helpers.h>
 
+#include <library/cpp/yt/misc/optional.h>
+
 #include <optional>
 
 namespace NYT::NYson {

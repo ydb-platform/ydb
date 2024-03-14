@@ -12,6 +12,8 @@
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <ydb/library/yql/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -23,13 +25,15 @@ using TStatus = IGraphTransformer::TStatus;
 
 class TKqpPhysicalOptTransformer : public TOptimizeTransformerBase {
 public:
-    TKqpPhysicalOptTransformer(TTypeAnnotationContext& typesCtx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+    TKqpPhysicalOptTransformer(TTypeAnnotationContext& typesCtx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, const TKikimrConfiguration::TPtr& config)
         : TOptimizeTransformerBase(nullptr, NYql::NLog::EComponent::ProviderKqp, {})
         , TypesCtx(typesCtx)
         , KqpCtx(*kqpCtx)
+        , Config(config)
     {
 #define HNDL(name) "KqpPhysical-"#name, Hndl(&TKqpPhysicalOptTransformer::name)
         AddHandler(0, &TDqSourceWrap::Match, HNDL(BuildStageWithSourceWrap));
+        AddHandler(0, &TDqReadWrap::Match, HNDL(BuildStageWithReadWrap));
         AddHandler(0, &TKqlReadTable::Match, HNDL(BuildReadTableStage));
         AddHandler(0, &TKqlReadTableRanges::Match, HNDL(BuildReadTableRangesStage));
         AddHandler(0, &TKqlLookupTable::Match, HNDL(BuildLookupTableStage));
@@ -426,8 +430,9 @@ protected:
         // TODO: Allow push to left stage for data queries.
         // It is now possible as we don't use datashard transactions for reads in data queries.
         bool pushLeftStage = !KqpCtx.IsDataQuery() && AllowFuseJoinInputs(node);
+        bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel) == 3;
         TExprBase output = DqBuildJoin(node, ctx, optCtx, *getParents(), IsGlobal,
-            pushLeftStage, KqpCtx.Config->GetHashJoinMode()
+            pushLeftStage, KqpCtx.Config->GetHashJoinMode(), useCBO
         );
         DumpAppliedRule("BuildJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
@@ -581,15 +586,22 @@ protected:
         return output;
     }
 
+    TMaybeNode<TExprBase> BuildStageWithReadWrap(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqBuildStageWithReadWrap(node, ctx);
+        DumpAppliedRule("BuildStageWithReadWrap", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
 private:
     TTypeAnnotationContext& TypesCtx;
     const TKqpOptimizeContext& KqpCtx;
+    const TKikimrConfiguration::TPtr& Config;
 };
 
 TAutoPtr<IGraphTransformer> CreateKqpPhyOptTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-    NYql::TTypeAnnotationContext& typesCtx)
+    NYql::TTypeAnnotationContext& typesCtx, const TKikimrConfiguration::TPtr& config)
 {
-    return THolder<IGraphTransformer>(new TKqpPhysicalOptTransformer(typesCtx, kqpCtx));
+    return THolder<IGraphTransformer>(new TKqpPhysicalOptTransformer(typesCtx, kqpCtx, config));
 }
 
 } // namespace NKikimr::NKqp::NOpt

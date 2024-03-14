@@ -280,9 +280,9 @@ public:
         try {
             TSession::TPtr session = GetSession(options.SessionId());
             auto logCtx = NYql::NLog::CurrentLogContextPath();
-            return session->Queue_->Async([session, logCtx, abort=options.Abort()] () {
+            return session->Queue_->Async([session, logCtx, abort=options.Abort(), detachSnapshotTxs=options.DetachSnapshotTxs()] () {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
-                return ExecFinalize(session, abort);
+                return ExecFinalize(session, abort, detachSnapshotTxs);
             });
         } catch (...) {
             return MakeFuture(ResultFromCurrentException<TFinalizeResult>());
@@ -1217,6 +1217,10 @@ public:
         }
     }
 
+    void AddCluster(const TYtClusterConfig& cluster) override {
+        Clusters_->AddCluster(cluster, false);
+    }
+
 private:
     class TNodeResultBuilder {
     public:
@@ -1350,9 +1354,13 @@ private:
         const TString OptLLVM_;
     };
 
-    static TFinalizeResult ExecFinalize(const TSession::TPtr& session, bool abort) {
+    static TFinalizeResult ExecFinalize(const TSession::TPtr& session, bool abort, bool detachSnapshotTxs) {
         try {
             TFinalizeResult res;
+            if (detachSnapshotTxs) {
+                YQL_CLOG(INFO, ProviderYt) << "Detaching all snapshot transactions";
+                session->TxCache_.DetachSnapshotTxs();
+            }
             if (abort) {
                 YQL_CLOG(INFO, ProviderYt) << "Aborting all transactions for hidden query";
                 session->TxCache_.AbortAll();
@@ -2383,15 +2391,23 @@ private:
                 );
             for (auto& idx: idxs) {
                 batchRes.push_back(batchGet->Get(tables[idx.first].Table() + "&/@", getOpts).Apply([idx, &attributes](const TFuture<NYT::TNode>& f) {
-                    NYT::TNode attrs = f.GetValue();
-                    if (GetTypeFromAttributes(attrs, false) == "link") {
-                        // override some attributes by the link ones
-                        if (attrs.HasKey(QB2Premapper)) {
-                            attributes[idx.first][QB2Premapper] = attrs[QB2Premapper];
+                    try {
+                        NYT::TNode attrs = f.GetValue();
+                        if (GetTypeFromAttributes(attrs, false) == "link") {
+                            // override some attributes by the link ones
+                            if (attrs.HasKey(QB2Premapper)) {
+                                attributes[idx.first][QB2Premapper] = attrs[QB2Premapper];
+                            }
+                            if (attrs.HasKey(YqlRowSpecAttribute)) {
+                                attributes[idx.first][YqlRowSpecAttribute] = attrs[YqlRowSpecAttribute];
+                            }
                         }
-                        if (attrs.HasKey(YqlRowSpecAttribute)) {
-                            attributes[idx.first][YqlRowSpecAttribute] = attrs[YqlRowSpecAttribute];
+                    } catch (const TErrorResponse& e) {
+                        // Yt returns NoSuchTransaction as inner issue for ResolveError
+                        if (!e.IsResolveError() || e.IsNoSuchTransaction()) {
+                            throw;
                         }
+                        // Just ignore. Original table path may be deleted at this time
                     }
                 }));
             }
@@ -2695,7 +2711,7 @@ private:
         }
 
         TString type;
-        NYT::TNode rowSpec; 
+        NYT::TNode rowSpec;
         if (execCtx->Options_.FillSettings().Format == IDataProvider::EResultFormat::Skiff) {
             auto ytType =  ParseYTType(pull.Input().Ref(), ctx, execCtx, columns);
 
@@ -2970,7 +2986,7 @@ private:
                     return ExecCalc(lambda, extraUsage, tmpTablePath, execCtx, {},
                         TSkiffExprResultFactory(execCtx->Options_.FillSettings().RowsLimitPerWrite,
                             execCtx->Options_.FillSettings().AllResultsBytesLimit,
-                            hasListResult, 
+                            hasListResult,
                             rowSpec,
                             execCtx->Options_.OptLLVM()),
                         &columns,

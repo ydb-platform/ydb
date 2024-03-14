@@ -6,6 +6,7 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/locks/sys_tables.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 
 namespace NKikimr {
 namespace NKqp {

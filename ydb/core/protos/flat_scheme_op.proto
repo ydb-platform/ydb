@@ -17,6 +17,7 @@ import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/core/protos/index_builder.proto";
+import "ydb/core/tx/columnshard/engines/scheme/statistics/protos/data.proto";
 
 import "google/protobuf/empty.proto";
 
@@ -418,6 +419,7 @@ message TOlapColumnDiff {
     optional string Name = 1;
     optional TDictionaryEncodingSettings DictionaryEncoding = 4;
     optional TOlapColumn.TSerializer Serializer = 5;
+    optional string StorageId = 6;
 }
 
 message TOlapColumnDescription {
@@ -435,6 +437,7 @@ message TOlapColumnDescription {
     optional TCompressionOptions Compression = 8[deprecated = true];
     optional TDictionaryEncodingSettings DictionaryEncoding = 9;
     optional TOlapColumn.TSerializer Serializer = 10;
+    optional string StorageId = 11;
 }
 
 message TRequestedBloomFilter {
@@ -445,8 +448,9 @@ message TRequestedBloomFilter {
 message TOlapIndexRequested {
     optional string Name = 1;
     optional TCompressionOptions Compression = 3;
+    optional string StorageId = 4;
 
-    optional string ClassName = 2;
+    optional string ClassName = 39;
     oneof Implementation {
         TRequestedBloomFilter BloomFilter = 40;
     }
@@ -465,9 +469,11 @@ message TOlapIndexDescription {
     optional string Name = 2;
     optional TCompressionOptions Compression = 3;
 
-    optional string ClassName = 4;
+    optional string StorageId = 4;
+
+    optional string ClassName = 40;
     oneof Implementation {
-        TBloomFilter BloomFilter = 40;
+        TBloomFilter BloomFilter = 41;
     }
 }
 
@@ -507,6 +513,7 @@ message TColumnTableSchema {
 
     optional bool CompositeMarks = 9 [ default = false ];
     repeated TOlapIndexDescription Indexes = 10;
+    repeated NKikimrColumnShardStatisticsProto.TOperatorContainer Statistics = 11;
 }
 
 message TAlterColumnTableSchema {
@@ -516,6 +523,8 @@ message TAlterColumnTableSchema {
     repeated TOlapColumnDiff AlterColumns = 7;
     repeated TOlapIndexRequested UpsertIndexes = 8;
     repeated string DropIndexes = 9;
+    repeated NKikimrColumnShardStatisticsProto.TConstructorContainer UpsertStatistics = 10;
+    repeated string DropStatistics = 11;
 }
 
 // Schema presets are used to manage multiple tables with the same schema
@@ -1854,6 +1863,10 @@ message TBasic {
     optional string PasswordSecretName = 2;
 }
 
+message TToken {
+    optional string TokenSecretName = 2;
+}
+
 message TAuth {
     oneof identity {
         TNoneAuth None = 3;
@@ -1861,6 +1874,7 @@ message TAuth {
         TBasic Basic = 5;
         TMdbBasic MdbBasic = 6;
         TAws Aws = 7;
+        TToken Token = 8;
     }
 }
 

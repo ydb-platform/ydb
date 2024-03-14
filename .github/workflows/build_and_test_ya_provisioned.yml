@@ -13,10 +13,12 @@ on:
         description: "Build preset"
         options:
           - debug
+          - release
           - relwithdebinfo
           - release-asan
           - release-tsan
           - release-msan
+          - release-cmake14
       test_size:
         type: choice
         default: "small,medium,large"
@@ -99,8 +101,7 @@ jobs:
     with:
       # FIXME: always use auto-provisioned here?
       runner_label: ${{ inputs.runner_label }}
-      # naive check for -asan, -tsan, -msan
-      runner_additional_label: ${{ contains(inputs.build_preset, '-') && format('build-preset-{0}', inputs.build_preset) || '' }}
+      runner_additional_label: ${{ format('build-preset-{0}', inputs.build_preset) }}
       build_target: ${{ inputs.build_target }}
       build_preset: ${{ inputs.build_preset }}
       run_build: ${{ inputs.run_build }}

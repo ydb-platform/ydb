@@ -33,6 +33,7 @@ class EmptyArguments(object):
         self.auth_config_path = None
         self.debug_logging = []
         self.fixed_ports = False
+        self.base_port_offset = 0
         self.public_http_config_path = None
         self.dont_use_log_files = False
         self.enabled_feature_flags = []
@@ -271,7 +272,7 @@ def generic_connector_config():
 
     valid_schemes = ['grpc', 'grpcs']
     if parsed.scheme not in valid_schemes:
-        raise ValueError("Invalid schema '{}' in FQ_CONNECTOR_ENDPOINT (possible: {})".format(parsed.schema, valid_schemes))
+        raise ValueError("Invalid schema '{}' in FQ_CONNECTOR_ENDPOINT (possible: {})".format(parsed.scheme, valid_schemes))
 
     cfg = TGenericConnectorConfig()
     cfg.Endpoint.host = parsed.hostname
@@ -330,7 +331,8 @@ def deploy(arguments):
 
     port_allocator = None
     if getattr(arguments, 'fixed_ports', False):
-        port_allocator = KikimrFixedPortAllocator([KikimrFixedNodePortAllocator()])
+        base_port_offset = getattr(arguments, 'base_port_offset', 0)
+        port_allocator = KikimrFixedPortAllocator(base_port_offset, [KikimrFixedNodePortAllocator(base_port_offset=base_port_offset)])
 
     optionals = {}
     if enable_tls():
@@ -511,6 +513,7 @@ def produce_arguments(args):
     parser.add_argument("--debug-logging", nargs='*')
     parser.add_argument("--enable-pq", action='store_true', default=False)
     parser.add_argument("--fixed-ports", action='store_true', default=False)
+    parser.add_argument("--base-port-offset", action="store", type=int, default=0)
     parser.add_argument("--pq-client-service-type", action='append', default=[])
     parser.add_argument("--enable-datastreams", action='store_true', default=False)
     parser.add_argument("--enable-pqcd", action='store_true', default=False)
@@ -519,6 +522,7 @@ def produce_arguments(args):
     arguments.suppress_version_check = parsed.suppress_version_check
     arguments.ydb_working_dir = parsed.ydb_working_dir
     arguments.fixed_ports = parsed.fixed_ports
+    arguments.base_port_offset = parsed.base_port_offset
     if parsed.use_packages is not None:
         arguments.use_packages = parsed.use_packages
     if parsed.debug_logging:

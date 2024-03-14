@@ -14,6 +14,14 @@ ui64 PutUnitsSize(const ui64 size);
 
 TString SourceIdHash(const TString& sourceId);
 
+void Migrate(NKikimrPQ::TPQTabletConfig& config);
+
+// This function required for marking the code which required remove after 25-1
+constexpr bool ReadRuleCompatible() { return true; }
+
+bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName);
+size_t ConsumerCount(const NKikimrPQ::TPQTabletConfig& config);
+
 const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config, const ui32 partitionId);
 
 // The graph of split-merge operations. 
@@ -47,6 +55,7 @@ private:
 };
 
 TPartitionGraph MakePartitionGraph(const NKikimrPQ::TPQTabletConfig& config);
+TPartitionGraph MakePartitionGraph(const NKikimrPQ::TUpdateBalancerConfig& config);
 TPartitionGraph MakePartitionGraph(const NKikimrSchemeOp::TPersQueueGroupDescription& config);
 
 } // NKikimr::NPQ

@@ -7,6 +7,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 
 #include <ydb/core/protos/counters_sequenceshard.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
 
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>

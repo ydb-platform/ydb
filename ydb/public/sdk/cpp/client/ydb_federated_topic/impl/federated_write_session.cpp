@@ -23,10 +23,12 @@ NTopic::TTopicClientSettings FromFederated(const TFederatedTopicClientSettings& 
 TFederatedWriteSession::TFederatedWriteSession(const TFederatedWriteSessionSettings& settings,
                                              std::shared_ptr<TGRpcConnectionsImpl> connections,
                                              const TFederatedTopicClientSettings& clientSetttings,
-                                             std::shared_ptr<TFederatedDbObserver> observer)
+                                             std::shared_ptr<TFederatedDbObserver> observer,
+                                             std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> codecs)
     : Settings(settings)
     , Connections(std::move(connections))
     , SubClientSetttings(FromFederated(clientSetttings))
+    , ProvidedCodecs(std::move(codecs))
     , Observer(std::move(observer))
     , AsyncInit(Observer->WaitForFirstState())
     , FederationState(nullptr)
@@ -37,6 +39,7 @@ TFederatedWriteSession::TFederatedWriteSession(const TFederatedWriteSessionSetti
 
 void TFederatedWriteSession::Start() {
     // TODO validate settings?
+    Settings.EventHandlers_.HandlersExecutor_->Start();
     with_lock(Lock) {
         ClientEventsQueue->PushEvent(NTopic::TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
         ClientHasToken = true;
@@ -61,6 +64,7 @@ void TFederatedWriteSession::OpenSubSessionImpl(std::shared_ptr<TDbInfo> db) {
         .Database(db->path())
         .DiscoveryEndpoint(db->endpoint());
     auto subclient = make_shared<NTopic::TTopicClient::TImpl>(Connections, clientSettings);
+    subclient->SetProvidedCodecs(ProvidedCodecs);
 
     auto handlers = NTopic::TWriteSessionSettings::TEventHandlers()
         .HandlersExecutor(Settings.EventHandlers_.HandlersExecutor_)
@@ -148,7 +152,7 @@ std::shared_ptr<TDbInfo> TFederatedWriteSession::SelectDatabaseImpl() {
 
 void TFederatedWriteSession::OnFederatedStateUpdateImpl() {
     if (!FederationState->Status.IsSuccess()) {
-        CloseImpl(FederationState->Status.GetStatus(), NYql::TIssues{});
+        CloseImpl(FederationState->Status.GetStatus(), NYql::TIssues(FederationState->Status.GetIssues()));
         return;
     }
 

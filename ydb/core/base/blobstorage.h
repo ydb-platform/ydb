@@ -786,64 +786,35 @@ struct TEvBlobStorage {
         EvBunchOfEvents,
 
         // blobstorage controller interface
-        // EvControllerReadSchemeString = EvPut + 11 * 512,
-        // EvControllerReadDataString,
-        EvControllerRegisterNode = EvPut + 11 * 512 + 2,
-        EvControllerCreatePDisk,
-        EvControllerCreateVDiskSlots,
-        EvControllerCreateGroup,
-        EvControllerSelectGroups,
-        EvControllerGetGroup,
-        EvControllerUpdateDiskStatus,
-        EvControllerUpdateGroupsUsage, // Not used.
-        EvControllerConfigRequest,
-        EvControllerConfigResponse,
-        EvControllerProposeRequest,
-        EvControllerProposeResponse,
-        EvControllerVDiskStatusSubscribeRequest,
-        EvControllerVDiskStatusReport,
-        EvControllerGroupStatusRequest,
-        EvControllerGroupStatusResponse,
-        EvControllerUpdateGroup,
-        EvControllerUpdateFaultyDisks,
-        EvControllerProposeGroupKey,
-        EvControllerUpdateGroupLatencies, // Not used.
-        EvControllerUpdateGroupStat,
-        EvControllerNotifyGroupChange,
-        EvControllerCommitGroupLatencies,
-        EvControllerUpdateSelfHealInfo,
-        EvControllerScrubQueryStartQuantum,
-        EvControllerScrubQuantumFinished,
-        EvControllerScrubReportQuantumInProgress,
-        EvControllerUpdateNodeDrives,
-        EvControllerGroupDecommittedNotify,
-        EvControllerGroupDecommittedResponse,
-        EvControllerGroupMetricsExchange,
+        EvControllerRegisterNode                    = 0x10031602,
+        EvControllerSelectGroups                    = 0x10031606,
+        EvControllerGetGroup                        = 0x10031607,
+        EvControllerUpdateDiskStatus                = 0x10031608,
+        EvControllerConfigRequest                   = 0x1003160a,
+        EvControllerConfigResponse                  = 0x1003160b,
+        EvControllerProposeGroupKey                 = 0x10031614,
+        EvControllerUpdateGroupStat                 = 0x10031616,
+        EvControllerNotifyGroupChange               = 0x10031617,
+        EvControllerCommitGroupLatencies            = 0x10031618,
+        EvControllerUpdateSelfHealInfo              = 0x10031619,
+        EvControllerScrubQueryStartQuantum          = 0x1003161a,
+        EvControllerScrubQuantumFinished            = 0x1003161b,
+        EvControllerScrubReportQuantumInProgress    = 0x1003161c,
+        EvControllerUpdateNodeDrives                = 0x1003161d,
+        EvControllerGroupDecommittedNotify          = 0x1003161e,
+        EvControllerGroupDecommittedResponse        = 0x1003161f,
+        EvControllerGroupMetricsExchange            = 0x10031620,
 
-        // EvControllerReadSchemeStringResult = EvPut + 12 * 512,
-        // EvControllerReadDataStringResult,
-        EvControllerNodeServiceSetUpdate = EvPut + 12 * 512 + 2,
-        EvControllerCreatePDiskResult,
-        EvControllerCreateVDiskSlotsResult,
-        EvControllerCreateGroupResult,
-        EvControllerSelectGroupsResult,
-        EvRequestControllerInfo,
-        EvResponseControllerInfo,
-        EvControllerGroupReconfigureReplace, // Not used.
-        EvControllerGroupReconfigureReplaceResult, // Not used.
-        EvControllerGroupReconfigureWipe,
-        EvControllerGroupReconfigureWipeResult,
-        EvControllerNodeReport,
-        EvControllerScrubStartQuantum,
-
-        EvControllerMigrationPause,
-        EvControllerMigrationContinue,
-        EvControllerMigrationFinished,
-        EvControllerMigrationBatch,
-        EvControllerMigrationBatchRequest,
-        EvControllerMigrationDone,
-
-        EvControllerUpdateSystemViews,
+        // BSC interface result section
+        EvControllerNodeServiceSetUpdate            = 0x10031802,
+        EvControllerSelectGroupsResult              = 0x10031806,
+        EvRequestControllerInfo                     = 0x10031807,
+        EvResponseControllerInfo                    = 0x10031808,
+        EvControllerGroupReconfigureWipe            = 0x1003180b,
+        EvControllerGroupReconfigureWipeResult      = 0x1003180c,
+        EvControllerNodeReport                      = 0x1003180d,
+        EvControllerScrubStartQuantum               = 0x1003180e,
+        EvControllerUpdateSystemViews               = 0x10031815,
 
         // proxy - node controller interface
         EvConfigureProxy = EvPut + 13 * 512,
@@ -866,6 +837,9 @@ struct TEvBlobStorage {
         EvNodeWardenQueryStorageConfig,
         EvNodeWardenStorageConfig,
         EvAskRestartVDisk,
+        EvNodeConfigInvokeOnRoot,
+        EvNodeConfigInvokeOnRootResult,
+        EvNodeWardenStorageConfigConfirm,
 
         // Other
         EvRunActor = EvPut + 15 * 512,
@@ -1010,14 +984,16 @@ struct TEvBlobStorage {
         bool WrittenBeyondBarrier = false; // was this blob written beyond the barrier?
         mutable NLWTrace::TOrbit Orbit;
         std::shared_ptr<TExecutionRelay> ExecutionRelay;
+        const TString StorageId;
 
         TEvPutResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &id, const TStorageStatusFlags statusFlags,
-                ui32 groupId, float approximateFreeSpaceShare)
+                ui32 groupId, float approximateFreeSpaceShare, const TString& storageId = Default<TString>())
             : Status(status)
             , Id(id)
             , StatusFlags(statusFlags)
             , GroupId(groupId)
             , ApproximateFreeSpaceShare(approximateFreeSpaceShare)
+            , StorageId(storageId)
         {}
 
         TString Print(bool isFull) const {

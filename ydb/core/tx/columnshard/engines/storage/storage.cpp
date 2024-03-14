@@ -1,4 +1,5 @@
 #include "storage.h"
+#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 
 namespace NKikimr::NOlap {
 
@@ -9,16 +10,16 @@ void TGranulesStorage::UpdateGranuleInfo(const TGranuleMeta& granule) {
     }
 }
 
-std::shared_ptr<NKikimr::NOlap::TGranuleMeta> TGranulesStorage::GetGranuleForCompaction(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules, const THashSet<ui64>& busyGranuleIds) const {
+std::shared_ptr<NKikimr::NOlap::TGranuleMeta> TGranulesStorage::GetGranuleForCompaction(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
     const TInstant now = TInstant::Now();
     std::optional<NStorageOptimizer::TOptimizationPriority> priority;
     std::shared_ptr<TGranuleMeta> granule;
     for (auto&& i : granules) {
         i.second->ActualizeOptimizer(now);
-        if (busyGranuleIds.contains(i.first)) {
-            continue;
-        }
         if (!priority || *priority < i.second->GetCompactionPriority()) {
+            if (i.second->IsLockedOptimizer(dataLocksManager)) {
+                continue;
+            }
             priority = i.second->GetCompactionPriority();
             granule = i.second;
         }

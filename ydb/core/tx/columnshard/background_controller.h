@@ -50,10 +50,8 @@ private:
 
     using TCurrentCompaction = THashMap<ui64, NOlap::TPlanCompactionInfo>;
     TCurrentCompaction ActiveCompactionInfo;
-    THashMap<ui64, THashSet<NOlap::TPortionAddress>> CompactionInfoPortions;
 
     bool ActiveCleanup = false;
-    THashSet<NOlap::TPortionAddress> TtlPortions;
     YDB_READONLY(TMonotonic, LastIndexationInstant, TMonotonic::Zero());
 public:
     THashSet<NOlap::TPortionAddress> GetConflictTTLPortions() const;
@@ -62,10 +60,9 @@ public:
     void CheckDeadlines();
     void CheckDeadlinesIndexation();
 
-    bool StartCompaction(const NOlap::TPlanCompactionInfo& info, const NOlap::TColumnEngineChanges& changes);
+    bool StartCompaction(const NOlap::TPlanCompactionInfo& info);
     void FinishCompaction(const NOlap::TPlanCompactionInfo& info) {
         Y_ABORT_UNLESS(ActiveCompactionInfo.erase(info.GetPathId()));
-        Y_ABORT_UNLESS(CompactionInfoPortions.erase(info.GetPathId()));
     }
     const TCurrentCompaction& GetActiveCompaction() const {
         return ActiveCompactionInfo;
@@ -91,15 +88,6 @@ public:
     }
     bool IsCleanupActive() const {
         return ActiveCleanup;
-    }
-
-    void StartTtl(const NOlap::TColumnEngineChanges& changes);
-    void FinishTtl() {
-        Y_ABORT_UNLESS(!TtlPortions.empty());
-        TtlPortions.clear();
-    }
-    bool IsTtlActive() const {
-        return !TtlPortions.empty();
     }
 };
 

@@ -321,9 +321,6 @@ void RunPredicateTest(const std::vector<TString>& predicates, bool withNulls) {
     auto streamDb = kikimr.GetTableClient();
 
     for (auto& item: predicates) {
-        TString disablePredicateExtractor = R"(
-            PRAGMA Kikimr.OptEnablePredicateExtract = "false";
-        )";
         TString query = R"(
             SELECT `Value` FROM `/Root/TestPredicates` WHERE <PREDICATE> ORDER BY `Value`;
         )";
@@ -332,7 +329,7 @@ void RunPredicateTest(const std::vector<TString>& predicates, bool withNulls) {
 
         Cerr << "Execute query" << Endl << query << Endl;
 
-        auto it = streamDb.StreamExecuteScanQuery(disablePredicateExtractor + query).GetValueSync();
+        auto it = streamDb.StreamExecuteScanQuery(query).GetValueSync();
         UNIT_ASSERT(it.IsSuccess());
 
         auto expectedYson = StreamResultToYson(it);
@@ -1489,10 +1486,6 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
             --!syntax_v1
         )";
 
-        TString enablePredicateExtractor = R"(
-            PRAGMA Kikimr.OptEnablePredicateExtract = "true";
-        )";
-
         for (const auto& predicate : predicates) {
             TString query = R"(
 
@@ -1511,7 +1504,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
             UNIT_ASSERT_C(expectedResult.IsSuccess(), expectedResult.GetIssues().ToString());
             const auto expectedYson = FormatResultSetYson(expectedResult.GetResultSet(0));
 
-            auto result = session.ExecuteDataQuery(useSyntaxV1 + enablePredicateExtractor + query,
+            auto result = session.ExecuteDataQuery(useSyntaxV1 + query,
                 TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 

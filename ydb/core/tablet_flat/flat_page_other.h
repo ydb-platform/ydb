@@ -28,7 +28,7 @@ namespace NPage {
             Tags.resize(TagsCount + (TagsCount & 1), 0);
             Cook.reserve(tags);
 
-            Y_ABORT_UNLESS(tags <= ui32(-Min<i16>()), "Too many columnt tags");
+            Y_ABORT_UNLESS(tags <= ui32(-Min<i16>()), "Too many column tags");
         }
 
         void Put(TRowId row, ui16 tag, ui32 bytes) noexcept

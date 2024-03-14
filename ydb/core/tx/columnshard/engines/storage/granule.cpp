@@ -1,7 +1,9 @@
 #include "granule.h"
 #include "storage.h"
-#include <ydb/library/actors/core/log.h>
 #include "optimizer/lbuckets/optimizer.h"
+
+#include <ydb/library/actors/core/log.h>
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
 
 namespace NKikimr::NOlap {
 
@@ -50,21 +52,11 @@ bool TGranuleMeta::ErasePortion(const ui64 portion) {
     return true;
 }
 
-void TGranuleMeta::AddColumnRecord(const TIndexInfo& indexInfo, const TPortionInfo& portion, const TColumnRecord& rec, const NKikimrTxColumnShard::TIndexPortionMeta* portionMeta) {
-    auto it = Portions.find(portion.GetPortion());
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "add_column_record")("portion_info", portion.DebugString())("record", rec.DebugString());
-    if (it == Portions.end()) {
-        Y_ABORT_UNLESS(portion.Records.empty());
-        auto portionNew = std::make_shared<TPortionInfo>(portion);
-        it = Portions.emplace(portion.GetPortion(), portionNew).first;
-    } else {
-        AFL_VERIFY(it->second->IsEqualWithSnapshots(portion))("self", it->second->DebugString())("item", portion.DebugString());
-    }
-    it->second->AddRecord(indexInfo, rec, portionMeta);
-
-    if (portionMeta) {
-        it->second->InitOperator(Owner->GetStoragesManager()->InitializePortionOperator(*it->second), false);
-    }
+void TGranuleMeta::AddColumnRecordOnLoad(const TIndexInfo& indexInfo, const TPortionInfo& portion, const TColumnChunkLoadContext& rec, const NKikimrTxColumnShard::TIndexPortionMeta* portionMeta) {
+    std::shared_ptr<TPortionInfo> pInfo = UpsertPortionOnLoad(portion);
+    TColumnRecord cRecord(pInfo->RegisterBlobId(rec.GetBlobRange().GetBlobId()), rec, indexInfo);
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "AddColumnRecordOnLoad")("portion_info", portion.DebugString())("record", cRecord.DebugString());
+    pInfo->AddRecord(indexInfo, cRecord, portionMeta);
 }
 
 void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard) {
@@ -78,6 +70,8 @@ void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> port
             } else {
                 OptimizerPlanner->StartModificationGuard().AddPortion(portionAfter);
             }
+            NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
+            ActualizationIndex->AddPortion(portionAfter, context);
         }
     }
     if (!!AdditiveSummaryCache) {
@@ -107,6 +101,7 @@ void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> por
         PortionInfoGuard.OnDropPortion(portionBefore);
         if (!portionBefore->HasRemoveSnapshot()) {
             OptimizerPlanner->StartModificationGuard().RemovePortion(portionBefore);
+            ActualizationIndex->RemovePortion(portionBefore);
         }
     }
     if (!!AdditiveSummaryCache) {
@@ -166,11 +161,25 @@ TGranuleMeta::TGranuleMeta(const ui64 pathId, std::shared_ptr<TGranulesStorage> 
 {
     Y_ABORT_UNLESS(Owner);
     OptimizerPlanner = std::make_shared<NStorageOptimizer::NBuckets::TOptimizerPlanner>(PathId, owner->GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey());
+    ActualizationIndex = std::make_shared<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex);
 
 }
 
 bool TGranuleMeta::InCompaction() const {
     return Activity.contains(EActivity::GeneralCompaction);
+}
+
+std::shared_ptr<NKikimr::NOlap::TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(const TPortionInfo& portion) {
+    auto it = Portions.find(portion.GetPortion());
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "UpsertPortionOnLoad")("portion_info", portion.DebugString());
+    if (it == Portions.end()) {
+        Y_ABORT_UNLESS(portion.Records.empty());
+        auto portionNew = std::make_shared<TPortionInfo>(portion);
+        it = Portions.emplace(portion.GetPortion(), portionNew).first;
+    } else {
+        AFL_VERIFY(it->second->IsEqualWithSnapshots(portion))("self", it->second->DebugString())("item", portion.DebugString());
+    }
+    return it->second;
 }
 
 } // namespace NKikimr::NOlap

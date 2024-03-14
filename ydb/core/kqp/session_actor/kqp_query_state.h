@@ -33,12 +33,12 @@ namespace NKikimr::NKqp {
 // common case).
 class TKqpQueryState : public TNonCopyable {
 public:
-    TKqpQueryState(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 queryId, const TString& database,
-        const TString& cluster, TKqpDbCountersPtr dbCounters, bool longSession,
-        const NKikimrConfig::TTableServiceConfig& tableServiceConfig, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-        const TString& sessionId, TMonotonic startedAt)
+    TKqpQueryState(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 queryId, const TString& database, const TMaybe<TString>& applicationName,
+        const TString& cluster, TKqpDbCountersPtr dbCounters, bool longSession, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TString& sessionId, TMonotonic startedAt)
         : QueryId(queryId)
         , Database(database)
+        , ApplicationName(applicationName)
         , Cluster(cluster)
         , DbCounters(dbCounters)
         , Sender(ev->Sender)
@@ -63,7 +63,7 @@ public:
         SetQueryDeadlines(tableServiceConfig, queryServiceConfig);
         auto action = GetAction();
         KqpSessionSpan = NWilson::TSpan(
-            TWilsonKqp::KqpSession, std::move(RequestEv->GetWilsonTraceId()),
+            TWilsonKqp::KqpSession, std::move(ev->TraceId),
             "Session.query." + NKikimrKqp::EQueryAction_Name(action), NWilson::EFlags::AUTO_END);
         if (RequestEv->GetUserRequestContext()) {
             UserRequestContext = RequestEv->GetUserRequestContext();
@@ -78,6 +78,7 @@ public:
     // with cookie less than current QueryId.
     ui64 QueryId = 0;
     TString Database;
+    TMaybe<TString> ApplicationName;
     TString Cluster;
     TKqpDbCountersPtr DbCounters;
     TActorId Sender;
@@ -121,9 +122,19 @@ public:
 
     TKqpTempTablesState::TConstPtr TempTablesState;
 
+    THolder<NYql::TExprContext> SplittedCtx;
+    TVector<NYql::TExprNode::TPtr> SplittedExprs;
+    NYql::TExprNode::TPtr SplittedWorld;
+    int NextSplittedExpr = 0;
+
     TString ReplayMessage;
 
     NYql::TIssues Issues;
+
+    TVector<TQueryAst> Statements;
+    ui32 CurrentStatementId = 0;
+    ui32 StatementResultIndex = 0;
+    ui32 StatementResultSize = 0;
 
     NKikimrKqp::EQueryAction GetAction() const {
         return RequestEv->GetAction();
@@ -233,6 +244,8 @@ public:
             }
         }
     }
+
+    void FillViews(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& views);
 
     bool NeedCheckTableVersions() const {
         return CompileStats.FromCache;
@@ -368,6 +381,44 @@ public:
         return RequestEv->GetTxControl();
     }
 
+    bool ProcessingLastStatement() const {
+        return CurrentStatementId + 1 >= Statements.size();
+    }
+
+    void PrepareCurrentStatement() {
+        QueryData = {};
+        PreparedQuery = {};
+        CompileResult = {};
+        TxCtx = {};
+        CurrentTx = 0;
+        TableVersions = {};
+        MaxReadType = ETableReadType::Other;
+        Commit = false;
+        Commited = false;
+        TopicOperations = {};
+        ReplayMessage = {};
+    }
+
+    void PrepareNextStatement() {
+        CurrentStatementId++;
+        StatementResultIndex += StatementResultSize;
+        StatementResultSize = 0;
+        PrepareCurrentStatement();
+    }
+
+    void PrepareStatementTransaction(NKqpProto::TKqpPhyTx_EType txType) {
+        if (!HasTxControl()) {
+            switch (txType) {
+                case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
+                    TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
+                    break;
+                default:
+                    Commit = true;
+                    TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
+            }
+        }
+    }
+
     // validate the compiled query response and ensure that all table versions are not
     // changed since the last compilation.
      bool EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigateKeySetResult& response);
@@ -376,11 +427,18 @@ public:
     std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet> BuildNavigateKeySet();
     // same the context of the compiled query to the query state.
     bool SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev);
+    bool SaveAndCheckParseResult(TEvKqp::TEvParseResponse&& ev);
+    bool SaveAndCheckSplitResult(TEvKqp::TEvSplitResponse* ev);
     // build the compilation request.
     std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie);
     // TODO(gvit): get rid of code duplication in these requests,
     // use only one of these requests.
     std::unique_ptr<TEvKqp::TEvRecompileRequest> BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie);
+
+    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildSplitRequest(std::shared_ptr<std::atomic<bool>> cookie);
+    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileSplittedRequest(std::shared_ptr<std::atomic<bool>> cookie);
+
+    bool PrepareNextStatementPart();
 
     const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& GetYdbParameters() const {
         return RequestEv->GetYdbParameters();

@@ -40,6 +40,11 @@ public:
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
 
+    virtual void ReplaceRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+    
     virtual void EraseRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key) = 0;
@@ -100,6 +105,11 @@ public:
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops) override;
     
+    void ReplaceRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+            
     void EraseRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key) override;

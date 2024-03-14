@@ -2,6 +2,7 @@
 
 #include "common.h"
 
+#include <ydb/core/protos/kqp.pb.h>
 
 namespace NKqpRun {
 
@@ -9,7 +10,7 @@ class TKqpRunner {
 public:
     explicit TKqpRunner(const TRunnerOptions& options);
 
-    bool ExecuteSchemeQuery(const TString& query) const;
+    bool ExecuteSchemeQuery(const TString& query, const TString& traceId) const;
 
     bool ExecuteScript(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId) const;
 

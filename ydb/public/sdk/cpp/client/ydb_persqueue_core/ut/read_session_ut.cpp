@@ -513,6 +513,7 @@ public:
     std::shared_ptr<TCallbackContext<TSingleClusterReadSessionImpl<true>>> CbContext;
     std::shared_ptr<TThreadPool> ThreadPool;
     ::IExecutor::TPtr DefaultExecutor;
+    std::shared_ptr<std::unordered_map<ECodec, THolder<NTopic::ICodec>>> ProvidedCodecs = std::make_shared<std::unordered_map<ECodec, THolder<NTopic::ICodec>>>();
 };
 
 class TReorderingExecutor : public ::IExecutor {
@@ -588,6 +589,9 @@ TReadSessionImplTestSetup::TReadSessionImplTestSetup() {
 
     Log.SetFormatter(GetPrefixLogFormatter(""));
 
+    (*ProvidedCodecs)[ECodec::GZIP] = MakeHolder<NTopic::TGzipCodec>();
+    (*ProvidedCodecs)[ECodec::LZOP] = MakeHolder<NTopic::TUnsupportedCodec>();
+    (*ProvidedCodecs)[ECodec::ZSTD] = MakeHolder<NTopic::TZstdCodec>();
 }
 
 TReadSessionImplTestSetup::~TReadSessionImplTestSetup() noexcept(false) {
@@ -631,7 +635,9 @@ TSingleClusterReadSessionImpl<true>* TReadSessionImplTestSetup::GetSession() {
             MockProcessorFactory,
             GetEventsQueue(),
             FakeContext,
-            PartitionIdStart, PartitionIdStep);
+            PartitionIdStart,
+            PartitionIdStep,
+            ProvidedCodecs);
         Session = CbContext->TryGet();
     }
     return Session.get();
@@ -1579,8 +1585,8 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                 }
                 for (const auto& range : req.offset_ranges()) {
                     Cerr << "RANGE " << range.start_offset() << " " << range.end_offset() << "\n";
-                    if (range.start_offset() == 10 && range.end_offset() == 12) has1 = true;
-                    else if (range.start_offset() == 0 && range.end_offset() == 10) has2 = true;
+                    if (range.start_offset() == 3 && range.end_offset() == 12) has1 = true;
+                    else if (range.start_offset() == 0 && range.end_offset() == 3) has2 = true;
                     else UNIT_ASSERT(false);
                 }
             }));

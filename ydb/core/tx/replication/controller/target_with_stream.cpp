@@ -10,22 +10,18 @@ namespace NKikimr::NReplication::NController {
 const TString ReplicationConsumerName = "replicationConsumer";
 
 void TTargetWithStream::Progress(TReplication::TPtr replication, const TActorContext& ctx) {
-    const auto& proxy = replication->GetYdbProxy();
-
     switch (GetStreamState()) {
     case EStreamState::Creating:
         if (GetStreamName().empty() && !NameAssignmentInProcess) {
-            ctx.Send(ctx.SelfID, new TEvPrivate::TEvAssignStreamName(GetReplicationId(), GetTargetId()));
+            ctx.Send(ctx.SelfID, new TEvPrivate::TEvAssignStreamName(replication->GetId(), GetId()));
             NameAssignmentInProcess = true;
         } else if (!StreamCreator) {
-            StreamCreator = ctx.Register(CreateStreamCreator(ctx.SelfID, proxy,
-                GetReplicationId(), GetTargetId(), GetTargetKind(), GetSrcPath(), GetStreamName()));
+            StreamCreator = ctx.Register(CreateStreamCreator(replication, GetId(), ctx));
         }
         return;
     case EStreamState::Removing:
         if (!StreamRemover) {
-            StreamRemover = ctx.Register(CreateStreamRemover(ctx.SelfID, proxy,
-                GetReplicationId(), GetTargetId(), GetTargetKind(), GetSrcPath(), GetStreamName()));
+            StreamRemover = ctx.Register(CreateStreamRemover(replication, GetId(), ctx));
         }
         return;
     case EStreamState::Ready:

@@ -50,6 +50,9 @@ public:
     public:
         virtual ~ITarget() = default;
 
+        virtual ui64 GetId() const = 0;
+        virtual ETargetKind GetKind() const = 0;
+
         virtual const TString& GetSrcPath() const = 0;
         virtual const TString& GetDstPath() const = 0;
 
@@ -94,6 +97,7 @@ public:
     ui64 GetId() const;
     const TPathId& GetPathId() const;
     const TActorId& GetYdbProxy() const;
+    ui64 GetSchemeShardId() const;
     void SetState(EState state, TString issue = {});
     EState GetState() const;
     const TString& GetIssue() const;

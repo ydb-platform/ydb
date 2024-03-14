@@ -31,7 +31,7 @@ public:
     const TString& GetIssue() const override;
     void SetIssue(const TString& value) override;
 
-    void Progress(ui64 schemeShardId, const TActorId& proxy, const TActorContext& ctx) override;
+    void Progress(TReplication::TPtr replication, const TActorContext& ctx) override;
     void Shutdown(const TActorContext& ctx) override;
 
 protected:

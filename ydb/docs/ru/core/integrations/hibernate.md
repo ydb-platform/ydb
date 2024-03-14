@@ -14,22 +14,22 @@
 
 - Maven
 
-```xml
-<dependency>
-    <groupId>tech.ydb.dialects</groupId>
-    <artifactId>hibernate-ydb-dialect</artifactId>
-    <!-- Set actual version -->
-    <version>${hibernate.ydb.dialect.version}</version> 
-</dependency>
-```
+    ```xml
+    <dependency>
+        <groupId>tech.ydb.dialects</groupId>
+        <artifactId>hibernate-ydb-dialect</artifactId>
+        <!-- Set actual version -->
+        <version>${hibernate.ydb.dialect.version}</version> 
+    </dependency>
+    ```
 
 - Gradle
 
-```groovy
-dependencies {
-    implementation 'tech.ydb.dialects:hibernate-ydb-dialect:$version' // Set actual version
-}
-```
+    ```groovy
+    dependencies {
+        implementation 'tech.ydb.dialects:hibernate-ydb-dialect:$version' // Set actual version
+    }
+    ```
 
 {% endlist %}
 

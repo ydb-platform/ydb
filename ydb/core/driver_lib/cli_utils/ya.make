@@ -17,7 +17,6 @@ SRCS(
     cli_cmds_disk.cpp
     cli_cmds_genconfig.cpp
     cli_cmds_get.cpp
-    cli_cmds_group.cpp
     cli_cmds_node.cpp
     cli_cmds_root.cpp
     cli_cmds_server.cpp

@@ -506,6 +506,11 @@ void TWriteSessionActor::ProceedPartition(const ui32 partition, const TActorCont
 }
 
 void TWriteSessionActor::CloseSession(const TString& errorReason, const NPersQueue::NErrorCode::EErrorCode errorCode, const NActors::TActorContext& ctx) {
+    if (SessionClosed) {
+        return;
+    }
+    SessionClosed = true;
+
     if (errorCode != NPersQueue::NErrorCode::OK) {
         if (InternalErrorCode(errorCode)) {
             SLIErrors.Inc();

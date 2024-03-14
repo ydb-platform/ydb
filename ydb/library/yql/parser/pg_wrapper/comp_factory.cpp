@@ -983,9 +983,9 @@ public:
         fmgr_info(Id, &FInfo);
         Y_ENSURE(FInfo.fn_retset == isList);
         Y_ENSURE(FInfo.fn_addr);
-        Y_ENSURE(FInfo.fn_nargs == ArgNodes.size());
-        ArgDesc.reserve(ProcDesc.ArgTypes.size());
-        for (ui32 i = 0; i < ProcDesc.ArgTypes.size(); ++i) {
+        Y_ENSURE(ArgNodes.size() <= FUNC_MAX_ARGS);
+        ArgDesc.reserve(ArgTypes.size());
+        for (ui32 i = 0; i < ArgTypes.size(); ++i) {
             ui32 type;
             // extract real type from input args
             auto argType = ArgTypes[i];
@@ -4415,7 +4415,7 @@ public:
     {
         if (TypeId == ArrayTypeId) {
             const auto& typeDesc = NYql::NPg::LookupType(ElementTypeId);
-            YdbTypeName = TString("_pg") + typeDesc.Name;
+            YdbTypeName = TString("_pg") + desc.Name.substr(1);
             if (typeDesc.CompareProcId) {
                 CompareProcId = NYql::NPg::LookupProc("btarraycmp", { 0, 0 }).ProcId;
             }
@@ -4936,9 +4936,10 @@ public:
 
 private:
     void InitType(ui32 pgTypeId, const NYql::NPg::TTypeDesc& type) {
+        Y_ENSURE(pgTypeId);
         auto desc = TPgTypeDescriptor(type);
-        ByName[desc.YdbTypeName] = pgTypeId;
-        PgTypeDescriptors.emplace(pgTypeId, desc);
+        Y_ENSURE(ByName.emplace(desc.YdbTypeName, pgTypeId).second);
+        Y_ENSURE(PgTypeDescriptors.emplace(pgTypeId, desc).second);
     }
 
 private:

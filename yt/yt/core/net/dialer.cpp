@@ -241,9 +241,9 @@ private:
 
         YT_VERIFY(Pollable_);
         auto pollable = std::move(Pollable_);
-        SpinLock_.Release();
+
+        auto inverseGuard = Unguard(SpinLock_);
         YT_UNUSED_FUTURE(Poller_->Unregister(pollable));
-        SpinLock_.Acquire();
     }
 
     void Connect(TGuard<NThreading::TSpinLock>& guard)

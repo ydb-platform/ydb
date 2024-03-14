@@ -40,14 +40,15 @@ inline TTestInfo InitTest(TEnvironmentSetup& env) {
 }
 
 // calculate mapping orderNumber->pdiskId
-std::vector<ui32> MakePDiskLayout(const NKikimrBlobStorage::TBaseConfig& base, ui32 groupId) {
-    std::vector<ui32> pdiskLayout.resize(groupSize);
+inline std::vector<ui32> MakePDiskLayout(const NKikimrBlobStorage::TBaseConfig& base,
+        const TBlobStorageGroupInfo::TTopology& topology, ui32 groupId) {
+    std::vector<ui32> pdiskLayout;
     for (const auto& vslot : base.GetVSlot()) {
         const auto& vslotId = vslot.GetVSlotId();
         ui32 orderNumber = topology.GetOrderNumber(TVDiskIdShort(vslot.GetFailRealmIdx(), vslot.GetFailDomainIdx(), vslot.GetVDiskIdx()));
         if (vslot.GetGroupId() == groupId) {
-            if (orderNumber > pdiskLayout.size()) {
-                pdiskLayout.resize(orderNumber);
+            if (orderNumber >= pdiskLayout.size()) {
+                pdiskLayout.resize(orderNumber + 1);
             }
             pdiskLayout[orderNumber] = vslotId.GetPDiskId();
         }

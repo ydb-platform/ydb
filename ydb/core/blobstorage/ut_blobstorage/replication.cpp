@@ -1,4 +1,5 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
 #include <util/system/info.h>
 
@@ -10,13 +11,8 @@ enum class EState {
     OFFLINE,
 };
 
-struct TestResult {
-    TString GetMsg;
-    ui64 VDisksWithStuckRepl;
-};
-
 TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::vector<EState>& states,
-        bool blockReplication = false) {
+        bool detainReplication = false) {
     TStringStream s;
     IOutputStream& log = SINGLE_THREAD ? Cerr : s;
 
@@ -54,11 +50,12 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
     env.Sim(TDuration::Minutes(1));
 
     auto baseConfig = env.FetchBaseConfig();
-    Y_ABORT_UNLESS(baseConfig.GroupSize(), 1);
-    ui32 groupId = baseConfig.GetGroups(0);
-    std::vector<ui32> pdiskLayout = MakePDiskLayout(base, groupId);
+    Y_ABORT_UNLESS(baseConfig.GroupSize() == 1);
+    ui32 groupId = baseConfig.GetGroup(0).GetGroupId();
 
     auto groupInfo = env.GetGroupInfo(groupId);
+    const auto& topology = groupInfo->GetTopology();
+    std::vector<ui32> pdiskLayout = MakePDiskLayout(baseConfig, topology, groupId);
     std::vector<TActorId> queues;
     for (ui32 i = 0; i < groupInfo->GetTotalVDisksNum(); ++i) {
         queues.push_back(env.CreateQueueActor(groupInfo->GetVDiskId(i), NKikimrBlobStorage::EVDiskQueueId::GetFastRead, 0));
@@ -132,11 +129,12 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
         Y_ABORT_UNLESS(res->Get()->Status == NKikimrProto::OK);
     }
 
+    const ui64 checkBlobCookie = 0xABCDEF;
     auto checkBlob = [&] {
         TActorId edge = env.Runtime->AllocateEdgeActor(cleanNodeId);
         env.Runtime->WrapInActorContext(edge, [&] {
             SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
-                NKikimrBlobStorage::EGetHandleClass::FastRead));
+                NKikimrBlobStorage::EGetHandleClass::FastRead), checkBlobCookie);
         });
         auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge);
         auto *msg = res->Get();
@@ -216,19 +214,22 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
         }
     }
 
+    std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> detainedMsgs;
+
     filterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
         if (ev->Type == TEvBlobStorage::EvVGet && states[ev->Recipient.NodeId() - 1] == EState::OFFLINE) {
             env.Runtime->Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::Disconnected).release(), nodeId);
             return false;
         }
-        if (ev->Type == TEvBlobStorage::EvReplFinished) {
-            return !replicationBlocked;
+        if (ev->Type == TEvBlobStorage::EvReplFinished && detainReplication) {
+            detainedMsgs.emplace_back(nodeId, std::move(ev));
+            return false;
         }
         return true;
     };
 
     env.Initialize();
-    env.Sim(TDuration::Seconds(150));
+    env.Sim(TDuration::Minutes(360));
 
     const NKikimrProto::EReplyStatus status = checkBlob();
     log << "checkBlob status# " << NKikimrProto::EReplyStatus_Name(status) << Endl;
@@ -238,10 +239,22 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
         Y_ABORT_UNLESS(status == NKikimrProto::ERROR || status == NKikimrProto::OK);
     }
 
-    ui64 vdisksWithStuckRepl = env.AggregateVDiskCounters(env->StoragePoolName, nodeCount, groupId,
-            pdiskLayout, "repl", "ReplMadeNoProgress", false);
+    if (detainReplication) {
+        ui64 vdisksWithStuckRepl = env.AggregateVDiskCounters(env.StoragePoolName, nodeCount, nodeCount,
+                groupId, pdiskLayout, "repl", "ReplMadeNoProgress", false);
+        UNIT_ASSERT_VALUES_UNEQUAL(vdisksWithStuckRepl, 0);
+        env.Runtime->FilterFunction = {};
+        for (auto& [nodeId, ev] : detainedMsgs) {
+            env.Runtime->Send(ev.release(), nodeId);
+        }
+        checkBlob();
+        env.Sim(TDuration::Minutes(360));
+        vdisksWithStuckRepl = env.AggregateVDiskCounters(env.StoragePoolName, nodeCount, nodeCount,
+                groupId, pdiskLayout, "repl", "ReplMadeNoProgress", false);
+        UNIT_ASSERT_VALUES_EQUAL(vdisksWithStuckRepl, 0);
+    }
 
-    return {s.Str(), vdisksWithStuckRepl};
+    return s.Str();
 }
 
 void DoTest(TBlobStorageGroupType::EErasureSpecies erasure) {
@@ -262,7 +275,7 @@ void DoTest(TBlobStorageGroupType::EErasureSpecies erasure) {
             }
 
             // run test case
-            TString log = DoTestCase(queue[index].first, queue[index].second).GetMsg;
+            TString log = DoTestCase(queue[index].first, queue[index].second);
 
             with_lock (logMutex) {
                 ++testCasesProcessed;
@@ -335,7 +348,6 @@ Y_UNIT_TEST_SUITE(Replication) {
     }
 
     Y_UNIT_TEST(ReplStuck_mirror3dc) {
-        auto res = DoTestCase(TBlobStorageGroupType::ErasureMirror3dc, {E::OK, E::FORMAT, E::OK, E::OK, E::OFFLINE, E::OK, E::OK, E::OFFLINE, E::OK});
-        UNIT_ASSERT_VALUES_UNEQUAL(res.VDisksWithStuckRepl, 0);
+        DoTestCase(TBlobStorageGroupType::ErasureMirror3dc, {E::OK, E::FORMAT, E::OK, E::OK, E::OFFLINE, E::OK, E::OK, E::OFFLINE, E::OK}, true);
     }
 }

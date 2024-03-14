@@ -3,6 +3,7 @@
 #include "blobstorage_replbroker.h"
 #include "blobstorage_hullrepljob.h"
 #include "query_donor.h"
+#include <ydb/library/actors/interconnect/watchdog_timer.h>
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 #include <ydb/core/blobstorage/vdisk/common/circlebuf.h>
@@ -264,6 +265,7 @@ namespace NKikimr {
             UnrecoveredNonphantomBlobs = false;
 
             Become(&TThis::StateRepl);
+            ReplProgressWasMade(false);
 
             // switch to planning state
             Transition(Relaxation, Plan);
@@ -349,7 +351,7 @@ namespace NKikimr {
             UnreplicatedBlobRecords = std::move(info->UnreplicatedBlobRecords);
 
             if (info->ItemsRecovered > 0) {
-                ReplProgress();
+                ReplProgressWasMade(false);
             }
 
             bool finished = false;
@@ -400,6 +402,7 @@ namespace NKikimr {
                     // release token as we have finished replicating
                     Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
                 }
+                ReplProgressWasMade(true);
 
                 Become(&TThis::StateRelax);
                 if (!BlobsToReplicatePtr->empty()) {
@@ -500,8 +503,12 @@ namespace NKikimr {
             return TDuration::Seconds(workAtEnd / workPerSecond);
         }
 
-        void ReplProgress() {
-            ReplProgressWatchdog.Rearm(SelfId());
+        void ReplProgressWasMade(bool finish) {
+            if (finish) {
+                ReplProgressWatchdog.Disarm();
+            } else {
+                ReplProgressWatchdog.Rearm(SelfId());
+            }
             ReplCtx->MonGroup.ReplMadeNoProgress() = 0;
         }
 
@@ -601,6 +608,7 @@ namespace NKikimr {
             hFunc(TEvents::TEvActorDied, Handle)
             cFunc(TEvBlobStorage::EvCommenceRepl, StartReplication)
             hFunc(TEvReplInvoke, Handle)
+            hFunc(TEvReplCheckProgress, ReplProgressWatchdog)
         )
 
         void PassAway() override {
@@ -626,6 +634,7 @@ namespace NKikimr {
                 Send(ReplJobActorId, new TEvents::TEvPoison);
             }
 
+            ReplProgressWatchdog.Disarm();
             TActorBootstrapped::PassAway();
         }
 

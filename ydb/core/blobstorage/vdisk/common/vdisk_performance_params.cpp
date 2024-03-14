@@ -1,18 +1,18 @@
-#include "params.h"
+#include "vdisk_performance_params.h"
 
 namespace NKikimr {
 
-extern const std::unordered_map<NPDisk::EDeviceType, TVDiskPerformanceParams> DevicePerformance= {
-    { DEVICE_TYPE_UNKNOWN, TVDiskPerformanceParams{
+extern const std::unordered_map<NPDisk::EDeviceType, TVDiskPerformanceParams> VDiskPerformance = {
+    { NPDisk::DEVICE_TYPE_UNKNOWN, TVDiskPerformanceParams{
         .ReplMaxTimeToMakeProgress =    TDuration::Minutes(180),
     } },
-    { DEVICE_TYPE_ROT, TVDiskPerformanceParams{
+    { NPDisk::DEVICE_TYPE_ROT, TVDiskPerformanceParams{
         .ReplMaxTimeToMakeProgress =    TDuration::Minutes(180),
     } },
-    { DEVICE_TYPE_SSD, TVDiskPerformanceParams{
+    { NPDisk::DEVICE_TYPE_SSD, TVDiskPerformanceParams{
         .ReplMaxTimeToMakeProgress =    TDuration::Minutes(30),
     } },
-    { DEVICE_TYPE_NVME, TVDiskPerformanceParams{
+    { NPDisk::DEVICE_TYPE_NVME, TVDiskPerformanceParams{
         .ReplMaxTimeToMakeProgress =    TDuration::Minutes(30),
     } },
 };

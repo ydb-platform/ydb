@@ -1,4 +1,5 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include "ut_helpers.h"
 
@@ -35,7 +36,7 @@ void SetupEnv(const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<
     const auto& baseConfig = response.GetStatus(0).GetBaseConfig();
     UNIT_ASSERT_VALUES_EQUAL(baseConfig.GroupSize(), 1);
     groupId = baseConfig.GetGroup(0).GetGroupId();
-    pdiskLayout = MakePDiskLayout(baseConfig, groupId);
+    pdiskLayout = MakePDiskLayout(baseConfig, topology, groupId);
 }
 
 template <typename TInflightActor>
@@ -78,7 +79,7 @@ void TestDSProxyAndVDiskEqualCost(const TBlobStorageGroupInfo::TTopology& topolo
                     GetCounter("QueueItemsSent")->Val();
             }
         }
-        vdiskCost = env->AggregateVDiskCounters(env->StoragePoolName, groupSize, groupId, pdiskLayout,
+        vdiskCost = env->AggregateVDiskCounters(env->StoragePoolName, groupSize, groupSize, groupId, pdiskLayout,
                 "cost", "SkeletonFrontUserCostNs");
     };
 
@@ -236,7 +237,7 @@ void TestBurst(ui32 requests, ui32 inflight, TDuration delay, ELoadDistribution 
     env->Runtime->Register(actor, 1);
     env->Sim(TDuration::Minutes(10));
 
-    ui64 redMs = env->AggregateVDiskCounters(env->StoragePoolName, groupSize, groupId, pdiskLayout,
+    ui64 redMs = env->AggregateVDiskCounters(env->StoragePoolName, groupSize, groupSize, groupId, pdiskLayout,
             "advancedCost", "BurstDetector_redMs");
     
     if (loadDistribution == ELoadDistribution::DistributionBurst) {
@@ -270,7 +271,7 @@ void TestDiskTimeAvailableScaling() {
         std::vector<ui32> pdiskLayout;
         SetupEnv(topology, env, groupSize, groupType, groupId, pdiskLayout, 0, scale);
 
-        return env->AggregateVDiskCounters(env->StoragePoolName, groupSize, groupId, pdiskLayout,
+        return env->AggregateVDiskCounters(env->StoragePoolName, groupSize, groupSize, groupId, pdiskLayout,
                 "advancedCost", "DiskTimeAvailable");
     };
 

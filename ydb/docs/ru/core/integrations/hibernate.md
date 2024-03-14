@@ -8,7 +8,7 @@
 
 ## Установка диалекта {{ ydb-short-name }} {#install-dialect}
 
-Чтобы воспользоваться диалектом YDB в ваш проект нужно добавить зависимость самого диалекта и [JDBC драйвера](https://github.com/ydb-platform/ydb-jdbc-driver) в свой проект:
+Чтобы воспользоваться диалектом YDB в ваш проект нужно добавить зависимость самого диалекта и [JDBC драйвера](https://github.com/ydb-platform/ydb-jdbc-driver):
 
 {% list tabs %}
 

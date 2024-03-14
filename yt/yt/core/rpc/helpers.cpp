@@ -302,11 +302,13 @@ public:
         IChannelPtr underlyingChannel,
         std::optional<TDuration> acknowledgementTimeout,
         TCallback<void(const IChannelPtr&, const TError&)> onFailure,
-        TCallback<bool(const TError&)> isError)
+        TCallback<bool(const TError&)> isError,
+        TCallback<TError(TError)> maybeTransformError)
         : TChannelWrapper(std::move(underlyingChannel))
         , AcknowledgementTimeout_(acknowledgementTimeout)
         , OnFailure_(std::move(onFailure))
         , IsError_(std::move(isError))
+        , MaybeTransformError_(std::move(maybeTransformError))
         , OnTerminated_(BIND(&TFailureDetectingChannel::OnTerminated, MakeWeak(this)))
     {
         UnderlyingChannel_->SubscribeTerminated(OnTerminated_);
@@ -328,7 +330,7 @@ public:
         }
         return UnderlyingChannel_->Send(
             request,
-            New<TResponseHandler>(this, std::move(responseHandler), OnFailure_, IsError_),
+            New<TResponseHandler>(this, std::move(responseHandler), OnFailure_, IsError_, MaybeTransformError_),
             updatedOptions);
     }
 
@@ -336,6 +338,7 @@ private:
     const std::optional<TDuration> AcknowledgementTimeout_;
     const TCallback<void(const IChannelPtr&, const TError&)> OnFailure_;
     const TCallback<bool(const TError&)> IsError_;
+    const TCallback<TError(TError)> MaybeTransformError_;
     const TCallback<void(const TError&)> OnTerminated_;
 
 
@@ -352,11 +355,13 @@ private:
             IChannelPtr channel,
             IClientResponseHandlerPtr underlyingHandler,
             TCallback<void(const IChannelPtr&, const TError&)> onFailure,
-            TCallback<bool(const TError&)> isError)
+            TCallback<bool(const TError&)> isError,
+            TCallback<TError(TError)> maybeTransformError)
             : Channel_(std::move(channel))
             , UnderlyingHandler_(std::move(underlyingHandler))
             , OnFailure_(std::move(onFailure))
             , IsError_(std::move(isError))
+            , MaybeTransformError_(std::move(maybeTransformError))
         { }
 
         void HandleAcknowledgement() override
@@ -374,6 +379,11 @@ private:
             if (IsError_(error)) {
                 OnFailure_.Run(Channel_, error);
             }
+
+            if (MaybeTransformError_) {
+                error = MaybeTransformError_(std::move(error));
+            }
+
             UnderlyingHandler_->HandleError(std::move(error));
         }
 
@@ -392,6 +402,7 @@ private:
         const IClientResponseHandlerPtr UnderlyingHandler_;
         const TCallback<void(const IChannelPtr&, const TError&)> OnFailure_;
         const TCallback<bool(const TError&)> IsError_;
+        const TCallback<TError(TError)> MaybeTransformError_;
     };
 };
 
@@ -399,13 +410,15 @@ IChannelPtr CreateFailureDetectingChannel(
     IChannelPtr underlyingChannel,
     std::optional<TDuration> acknowledgementTimeout,
     TCallback<void(const IChannelPtr&, const TError& error)> onFailure,
-    TCallback<bool(const TError&)> isError)
+    TCallback<bool(const TError&)> isError,
+    TCallback<TError(TError)> maybeTransformError)
 {
     return New<TFailureDetectingChannel>(
         std::move(underlyingChannel),
         acknowledgementTimeout,
         std::move(onFailure),
-        std::move(isError));
+        std::move(isError),
+        std::move(maybeTransformError));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

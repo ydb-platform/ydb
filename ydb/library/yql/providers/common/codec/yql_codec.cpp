@@ -918,12 +918,14 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type, ui64 nativeYtTypeFlags,
                 if (nativeYtTypeFlags & NTCF_DECIMAL) {
                     auto const params = static_cast<TDataDecimalType*>(type)->GetParams();
                     if (params.first < 10) {
-                        i32 res = NYT::NDecimal::TDecimal::ParseBinary32(params.first, nextString);
-                        YQL_ENSURE(!NDecimal::IsError(res));
+                        i32 tmpRes = NYT::NDecimal::TDecimal::ParseBinary32(params.first, nextString);
+                        YQL_ENSURE(!NDecimal::IsError(tmpRes));
+                        NDecimal::TInt128 res = tmpRes;
                         return NUdf::TUnboxedValuePod(res);
                     } else if (params.first < 19) {
-                        i64 res = NYT::NDecimal::TDecimal::ParseBinary64(params.first, nextString);
-                        YQL_ENSURE(!NDecimal::IsError(res));
+                        i64 tmpRes = NYT::NDecimal::TDecimal::ParseBinary64(params.first, nextString);
+                        YQL_ENSURE(!NDecimal::IsError(tmpRes));
+                        NDecimal::TInt128 res = tmpRes;
                         return NUdf::TUnboxedValuePod(res);
                     } else {
                         YQL_ENSURE(params.first < 36);

@@ -6,6 +6,7 @@ SRCS(
     kqp_output_stream.cpp
     kqp_program_builder.cpp
     kqp_read_actor.cpp
+    kqp_read_iterator_common.cpp
     kqp_read_table.cpp
     kqp_runtime_impl.h
     kqp_scan_data.cpp

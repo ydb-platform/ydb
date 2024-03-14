@@ -1346,7 +1346,8 @@ protected:
                         .TaskParams = taskParams,
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
-                        .RandomProvider = randomProvider
+                        .RandomProvider = randomProvider,
+                        .TraceId = ComputeActorSpan.GetTraceId()
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create sink " << outputDesc.GetSink().GetType() << ": " << ex.what();

@@ -12,6 +12,18 @@ private:
     std::shared_ptr<arrow::Schema> ExpectedSchema;
     const ui32 ColumnId;
 public:
+    bool IsEqualTo(const TColumnLoader& item) const {
+        if (!!Transformer != !!item.Transformer) {
+            return false;
+        } else if (!!Transformer && !Transformer->IsEqualTo(*item.Transformer)) {
+            return false;
+        }
+        if (!Serializer.IsEqualTo(item.Serializer)) {
+            return false;
+        }
+        return true;
+    }
+
     TString DebugString() const;
 
     TColumnLoader(NArrow::NTransformation::ITransformer::TPtr transformer, const NArrow::NSerialization::TSerializerContainer& serializer,

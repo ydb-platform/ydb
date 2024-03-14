@@ -140,7 +140,8 @@ private:
 public:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId);
 
-    bool TryFinalizeDropPath(NTable::TDatabase& dbTable, const ui64 pathId);
+    bool TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const ui64 pathId) const;
+    bool TryFinalizeDropPathOnComplete(const ui64 pathId);
 
     const TTtl& GetTtl() const {
         return Ttl;

@@ -58,7 +58,6 @@ namespace NFwd {
             DoStart,
             Valid,
             DoNext,
-            DoBinarySearch,
             Exhausted
         };
         struct TBinarySearchState {
@@ -208,7 +207,7 @@ namespace NFwd {
             Pages.back().Fetch = EFetch::Wait;
         }
 
-        // IndexState: {DoStart, Valid, DoNext, DoBinarySearch} -> {DoStart, DoNext, DoBinarySearch} (returns false) | {Valid, DoNext} (returns true)
+        // IndexState: {DoStart, Valid, DoNext} -> {DoStart, DoNext} (returns false) | {Valid, DoNext} (returns true)
         bool SyncIndex(TPageId pageId) noexcept
         {
             if (IndexState == DoStart) {
@@ -217,36 +216,16 @@ namespace NFwd {
                 }
             }
 
-            if (IndexState == Valid && Index->GetPageId() < pageId) {
-                IndexState = DoNext;
-            }
-
-            if (IndexState == DoNext) {
-                if (!IndexDoNext()) {
+            while (IndexState == DoNext || IndexState == Valid && Index->GetPageId() < pageId) {
+                if (IndexState = DoNext; !IndexDoNext()) {
                     return false;
                 }
 
                 Y_ABORT_UNLESS(IndexState == Valid, "Requested page is outside of slices");
                 Y_ABORT_UNLESS(Index->GetPageId() <= pageId, "Index is out of sync");
-
-                if (Index->GetPageId() < pageId) {
-                    IndexState = DoBinarySearch;
-                    BinarySearchState = {pageId, Index->GetNextRowId(), EndRowId};
-                }
             }
 
-            if (IndexState == DoBinarySearch) {
-                if (BinarySearchState.PageId != pageId) {
-                    Y_ABORT_UNLESS(BinarySearchState.PageId < pageId);
-                    BinarySearchState = {pageId, BinarySearchState.BeginRowId, EndRowId};
-                }
-
-                if (!IndexDoBinarySearch()) {
-                    return false;
-                }
-            }
-
-            Y_ABORT_UNLESS(IndexState == Valid);
+            Y_ABORT_UNLESS(IndexState == Valid, "Requested page is outside of slices");
             Y_ABORT_UNLESS(Index->GetPageId() == pageId, "Index is out of sync");
             
             IndexState = DoNext; // point to the next page
@@ -259,14 +238,6 @@ namespace NFwd {
         bool IndexDoStart() noexcept
         {
             Y_ABORT_UNLESS(IndexState == DoStart);
-
-            if (EndRowId == Max<TRowId>()) { // may happen with flat group indexes
-                if (auto ready = Index->SeekLast(); ready != EReady::Data) {
-                    Y_ABORT_UNLESS(ready == EReady::Page, "Slices are invalid");
-                    return false;
-                }
-                EndRowId = Index->GetRowId() + 1; // not real but appropriate for a binary search 
-            }
 
             if (auto ready = Index->Seek(BeginRowId); ready != EReady::Data) {
                 Y_ABORT_UNLESS(ready == EReady::Page, "Slices are invalid");
@@ -297,34 +268,9 @@ namespace NFwd {
             return true;
         }
 
-        // IndexState: DoBinarySearch -> DoBinarySearch (returns false) | Valid (returns true)
-        bool IndexDoBinarySearch() noexcept
-        {
-            Y_ABORT_UNLESS(IndexState == DoBinarySearch);
-
-            while (BinarySearchState.BeginRowId < BinarySearchState.EndRowId) {
-                auto middleRowId = (BinarySearchState.BeginRowId + BinarySearchState.EndRowId) / 2;
-                if (auto ready = Index->Seek(middleRowId); ready != EReady::Data) {
-                    Y_ABORT_UNLESS(ready == EReady::Page, "Slices are invalid");
-                    return false;
-                }
-                if (Index->GetPageId() == BinarySearchState.PageId) {
-                    IndexState = Valid;
-                    return true;
-                } else if (Index->GetPageId() > BinarySearchState.PageId) {
-                    BinarySearchState.EndRowId = middleRowId;
-                } else { // Index->GetPageId() < BinarySearchState.PageId
-                    BinarySearchState.BeginRowId = middleRowId + 1;
-                }
-            }
-
-            Y_ABORT("Index is out of sync");
-        }
-
     private:
         THolder<IIndexIter> Index; /* Points on next to load page */
         EIndexState IndexState = DoStart;
-        TBinarySearchState BinarySearchState;
         TRowId BeginRowId, EndRowId;
         TLoadedPagesCircularBuffer<TPart::Trace> Trace;
 

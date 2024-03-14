@@ -7,6 +7,7 @@
 
 
 add_subdirectory(abstract)
+add_subdirectory(column)
 add_subdirectory(indexes)
 add_subdirectory(statistics)
 add_subdirectory(tiering)
@@ -27,6 +28,7 @@ target_link_libraries(columnshard-engines-scheme PUBLIC
   engines-scheme-abstract
   engines-scheme-versions
   engines-scheme-tiering
+  engines-scheme-column
   columnshard-blobs_action-abstract
   engines-changes-compaction
 )

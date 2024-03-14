@@ -7,6 +7,7 @@
 
 
 add_subdirectory(actualizer)
+add_subdirectory(chunks)
 add_subdirectory(optimizer)
 get_built_tool_path(
   TOOL_enum_parser_bin
@@ -23,6 +24,7 @@ target_link_libraries(columnshard-engines-storage PUBLIC
   ydb-core-protos
   engines-storage-optimizer
   engines-storage-actualizer
+  engines-storage-chunks
   core-formats-arrow
   tools-enum_parser-enum_serialization_runtime
 )

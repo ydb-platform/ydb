@@ -3,7 +3,7 @@
 
 namespace NKikimr::NOlap {
 
-class TCleanupColumnEngineChanges: public TColumnEngineChanges {
+class TCleanupPortionsColumnEngineChanges: public TColumnEngineChanges {
 private:
     using TBase = TColumnEngineChanges;
     THashMap<TString, THashSet<NOlap::TEvictedBlob>> BlobsToForget;
@@ -32,13 +32,12 @@ protected:
     }
 
 public:
-    TCleanupColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager)
+    TCleanupPortionsColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager)
         : TBase(storagesManager, StaticTypeName()) {
 
     }
 
     std::vector<TPortionInfo> PortionsToDrop;
-    bool NeedRepeat = false;
 
     virtual ui32 GetWritePortionsCount() const override {
         return 0;
@@ -47,11 +46,11 @@ public:
         return nullptr;
     }
     virtual bool NeedWritePortion(const ui32 /*index*/) const override {
-        return true;
+        return false;
     }
 
     static TString StaticTypeName() {
-        return "CS::CLEANUP";
+        return "CS::CLEANUP::PORTIONS";
     }
 
     virtual TString TypeString() const override {

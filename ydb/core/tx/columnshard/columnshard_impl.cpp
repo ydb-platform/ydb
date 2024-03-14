@@ -4,8 +4,6 @@
 #include "common/tablet_id.h"
 #include "blobs_reader/task.h"
 #include "blobs_reader/events.h"
-#include "engines/changes/ttl.h"
-#include "engines/changes/cleanup.h"
 #include "blobs_action/bs/storage.h"
 #include "resource_subscriber/task.h"
 
@@ -22,6 +20,11 @@
 #include "data_sharing/destination/session/destination.h"
 #include "data_sharing/source/session/source.h"
 #include "data_sharing/common/transactions/tx_extension.h"
+
+#include "engines/changes/indexation.h"
+#include "engines/changes/cleanup_portions.h"
+#include "engines/changes/cleanup_tables.h"
+#include "engines/changes/ttl.h"
 
 #include "resource_subscriber/counters.h"
 
@@ -522,24 +525,12 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivit
 //  !!!!!! MUST BE FIRST THROUGH DATA HAVE TO BE SAME IN SESSIONS AFTER TABLET RESTART
     SharingSessionsManager->Start(*this);
 
-    if (activity.HasIndexation()) {
-        SetupIndexation();
-    }
-
-    if (activity.HasCompaction()) {
-        SetupCompaction();
-    }
-
-    if (activity.HasCleanup()) {
-        SetupCleanup();
-    }
-
-    if (activity.HasTtl()) {
-        SetupTtl();
-    }
-
+    SetupIndexation();
+    SetupCompaction();
+    SetupCleanupPortions();
+    SetupCleanupTables();
+    SetupTtl();
     SetupGC();
-
     SetupCleanupInsertTable();
 }
 
@@ -764,16 +755,39 @@ bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls) {
     return true;
 }
 
-void TColumnShard::SetupCleanup() {
+void TColumnShard::SetupCleanupPortions() {
     CSCounters.OnSetupCleanup();
-    if (BackgroundController.IsCleanupActive()) {
+    if (BackgroundController.IsCleanupPortionsActive()) {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "in_progress");
         return;
     }
 
     NOlap::TSnapshot cleanupSnapshot{GetMinReadStep(), 0};
 
-    auto changes = TablesManager.MutablePrimaryIndex().StartCleanup(cleanupSnapshot, TablesManager.MutablePathsToDrop(), DataLocksManager);
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(cleanupSnapshot, TablesManager.GetPathsToDrop(), DataLocksManager);
+    if (!changes) {
+        ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
+        return;
+    }
+
+    ACFL_DEBUG("background", "cleanup")("changes_info", changes->DebugString());
+    auto actualIndexInfo = std::make_shared<NOlap::TVersionedIndex>(TablesManager.GetPrimaryIndex()->GetVersionedIndex());
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(actualIndexInfo, changes, false);
+    ev->SetPutStatus(NKikimrProto::OK); // No new blobs to write
+
+    changes->Start(*this);
+
+    Send(SelfId(), ev.release());
+}
+
+void TColumnShard::SetupCleanupTables() {
+    CSCounters.OnSetupCleanup();
+    if (BackgroundController.IsCleanupTablesActive()) {
+        ACFL_DEBUG("background", "cleanup")("skip_reason", "in_progress");
+        return;
+    }
+
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(TablesManager.MutablePathsToDrop());
     if (!changes) {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
         return;

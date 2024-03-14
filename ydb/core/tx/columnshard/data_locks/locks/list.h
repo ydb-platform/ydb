@@ -9,7 +9,7 @@ class TListPortionsLock: public ILock {
 private:
     using TBase = ILock;
     THashSet<TPortionAddress> Portions;
-    THashSet<TTabletId> Granules;
+    THashSet<ui64> Granules;
 protected:
     virtual std::optional<TString> DoIsLocked(const TPortionInfo& portion) const override {
         if (Portions.contains(portion.GetAddress())) {
@@ -18,7 +18,7 @@ protected:
         return {};
     }
     virtual std::optional<TString> DoIsLocked(const TGranuleMeta& granule) const override {
-        if (Granules.contains((TTabletId)granule.GetPathId())) {
+        if (Granules.contains(granule.GetPathId())) {
             return GetLockName();
         }
         return {};
@@ -32,7 +32,7 @@ public:
     {
         for (auto&& p : portions) {
             Portions.emplace(p->GetAddress());
-            Granules.emplace((TTabletId)p->GetPathId());
+            Granules.emplace(p->GetPathId());
         }
     }
 
@@ -40,7 +40,7 @@ public:
         : TBase(lockName, readOnly) {
         for (auto&& p : portions) {
             Portions.emplace(p.GetAddress());
-            Granules.emplace((TTabletId)p.GetPathId());
+            Granules.emplace(p.GetPathId());
         }
     }
 
@@ -50,7 +50,7 @@ public:
         for (auto&& p : portions) {
             const auto address = g(p);
             Portions.emplace(address);
-            Granules.emplace((TTabletId)address.GetPathId());
+            Granules.emplace(address.GetPathId());
         }
     }
 
@@ -60,8 +60,36 @@ public:
         for (auto&& p : portions) {
             const auto address = p.first;
             Portions.emplace(address);
-            Granules.emplace((TTabletId)address.GetPathId());
+            Granules.emplace(address.GetPathId());
         }
+    }
+};
+
+class TListTablesLock: public ILock {
+private:
+    using TBase = ILock;
+    THashSet<ui64> Tables;
+protected:
+    virtual std::optional<TString> DoIsLocked(const TPortionInfo& portion) const override {
+        if (Tables.contains(portion.GetPathId())) {
+            return GetLockName();
+        }
+        return {};
+    }
+    virtual std::optional<TString> DoIsLocked(const TGranuleMeta& granule) const override {
+        if (Tables.contains(granule.GetPathId())) {
+            return GetLockName();
+        }
+        return {};
+    }
+    bool DoIsEmpty() const override {
+        return Tables.empty();
+    }
+public:
+    TListTablesLock(const TString& lockName, const THashSet<ui64>& tables, const bool readOnly = false)
+        : TBase(lockName, readOnly)
+        , Tables(tables)
+    {
     }
 };
 

@@ -45,12 +45,31 @@ private:
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
     std::map<NStatistics::TIdentifier, NStatistics::TOperatorContainer> Statistics;
     TIndexInfo(const TString& name);
+    bool SchemeNeedActualization = false;
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators);
     TColumnFeatures& GetOrCreateColumnFeatures(const ui32 columnId) const;
     void BuildSchemaWithSpecials();
     void BuildArrowSchema();
     void InitializeCaches(const std::shared_ptr<IStoragesManager>& operators);
 public:
+    const TColumnFeatures& GetColumnFeaturesVerified(const ui32 columnId) const {
+        auto it = ColumnFeatures.find(columnId);
+        AFL_VERIFY(it != ColumnFeatures.end());
+        return it->second;
+    }
+
+    TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier) const {
+        TEntityGroups groups(IStoragesManager::DefaultStorageId);
+        for (auto&& i : GetEntityIds()) {
+            groups.Add(i, GetEntityStorageId(i, specialTier));
+        }
+        return groups;
+    }
+
+    bool GetSchemeNeedActualization() const {
+        return SchemeNeedActualization;
+    }
+
     std::set<TString> GetUsedStorageIds(const TString& portionTierName) const {
         std::set<TString> result;
         if (portionTierName && portionTierName != IStoragesManager::DefaultStorageId) {
@@ -63,7 +82,7 @@ public:
         return result;
     }
 
-    std::vector<std::shared_ptr<IPortionDataChunk>> MakeEmptyChunks(const ui32 columnId, const std::vector<ui32>& pages, const std::shared_ptr<ISnapshotSchema>& schema, const TSaverContext& saverContext) const;
+    std::vector<std::shared_ptr<IPortionDataChunk>> MakeEmptyChunks(const ui32 columnId, const std::vector<ui32>& pages, const TSimpleColumnInfo& columnInfo) const;
 
     const std::map<NStatistics::TIdentifier, NStatistics::TOperatorContainer>& GetStatistics() const {
         return Statistics;
@@ -173,7 +192,7 @@ public:
     std::shared_ptr<arrow::Field> GetColumnFieldVerified(const ui32 columnId) const;
     std::shared_ptr<arrow::Schema> GetColumnSchema(const ui32 columnId) const;
     std::shared_ptr<arrow::Schema> GetColumnsSchema(const std::set<ui32>& columnIds) const;
-    TColumnSaver GetColumnSaver(const ui32 columnId, const TSaverContext& context) const;
+    TColumnSaver GetColumnSaver(const ui32 columnId) const;
     virtual std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const ui32 columnId) const override;
     std::optional<std::string> GetColumnNameOptional(const ui32 columnId) const {
         auto f = GetColumnFieldOptional(columnId);
@@ -309,6 +328,9 @@ public:
     }
 
     bool CheckCompatible(const TIndexInfo& other) const;
+    NArrow::NSerialization::TSerializerContainer GetDefaultSerializer() const {
+        return DefaultSerializer;
+    }
 
 private:
     ui64 Version = 0;
@@ -319,7 +341,7 @@ private:
     std::shared_ptr<arrow::Schema> ExtendedKey; // Extend PK with snapshot columns to allow old shapshot reads
     THashSet<TString> RequiredColumns;
     THashSet<ui32> MinMaxIdxColumnsIds;
-    NArrow::NSerialization::TSerializerContainer DefaultSerializer;
+    NArrow::NSerialization::TSerializerContainer DefaultSerializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
 };
 
 std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, bool withSpecials = false);

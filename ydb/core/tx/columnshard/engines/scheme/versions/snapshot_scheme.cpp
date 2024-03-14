@@ -9,8 +9,8 @@ TSnapshotSchema::TSnapshotSchema(TIndexInfo&& indexInfo, const TSnapshot& snapsh
 {
 }
 
-TColumnSaver TSnapshotSchema::GetColumnSaver(const ui32 columnId, const TSaverContext& context) const {
-    return IndexInfo.GetColumnSaver(columnId, context);
+TColumnSaver TSnapshotSchema::GetColumnSaver(const ui32 columnId) const {
+    return IndexInfo.GetColumnSaver(columnId);
 }
 
 std::shared_ptr<TColumnLoader> TSnapshotSchema::GetColumnLoaderOptional(const ui32 columnId) const {

@@ -117,8 +117,8 @@ std::vector<TSharedRef> DecompressAttachments(
 template <class E>
 int FeatureIdToInt(E featureId);
 
-std::optional<TError> TryEnrichClientRequestError(
-    const TError& error,
+void EnrichClientRequestError(
+    TError* error,
     TFeatureIdFormatter featureIdFormatter);
 
 ////////////////////////////////////////////////////////////////////////////////

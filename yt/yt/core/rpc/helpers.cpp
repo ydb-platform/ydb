@@ -369,12 +369,12 @@ private:
             UnderlyingHandler_->HandleResponse(std::move(message), std::move(address));
         }
 
-        void HandleError(const TError& error) override
+        void HandleError(TError error) override
         {
             if (IsError_(error)) {
                 OnFailure_.Run(Channel_, error);
             }
-            UnderlyingHandler_->HandleError(error);
+            UnderlyingHandler_->HandleError(std::move(error));
         }
 
         void HandleStreamingPayload(const TStreamingPayload& payload) override
@@ -597,34 +597,27 @@ std::vector<TSharedRef> DecompressAttachments(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::optional<TError> TryEnrichClientRequestError(
-    const TError& error,
+void EnrichClientRequestError(
+    TError* error,
     TFeatureIdFormatter featureIdFormatter)
 {
-    std::optional<TError> result;
-
+    YT_VERIFY(error);
     // Try to enrich error with feature name.
-    if (error.GetCode() == NRpc::EErrorCode::UnsupportedServerFeature &&
-        error.Attributes().Contains(FeatureIdAttributeKey) &&
-        !error.Attributes().Contains(FeatureNameAttributeKey) &&
+    if (error->GetCode() == NRpc::EErrorCode::UnsupportedServerFeature &&
+        error->Attributes().Contains(FeatureIdAttributeKey) &&
+        !error->Attributes().Contains(FeatureNameAttributeKey) &&
         featureIdFormatter)
     {
-        auto featureId = error.Attributes().Get<int>(FeatureIdAttributeKey);
+        auto featureId = error->Attributes().Get<int>(FeatureIdAttributeKey);
         if (auto featureName = (*featureIdFormatter)(featureId)) {
-            result = error;
-            result->MutableAttributes()->Set(FeatureNameAttributeKey, featureName);
+            error->MutableAttributes()->Set(FeatureNameAttributeKey, featureName);
         }
     }
 
     // Try to enrich error with handled channel failure label.
-    if (IsChannelFailureError(error) && !IsChannelFailureErrorHandled(error)) {
-        if (!result) {
-            result = error;
-        }
-        LabelHandledChannelFailureError(&*result);
+    if (IsChannelFailureError(*error) && !IsChannelFailureErrorHandled(*error)) {
+        LabelHandledChannelFailureError(&*error);
     }
-
-    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

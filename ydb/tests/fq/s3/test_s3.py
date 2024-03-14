@@ -452,7 +452,7 @@ Pear,15,33'''
 
         time.sleep(10)  # 2 x node info update period
 
-        sql = f'''
+        sql = '''
             SELECT Fruit, sum(Price) as Price, sum(Weight) as Weight
             FROM fruitbucket.`fruits*`
             WITH (format=csv_with_names, SCHEMA (

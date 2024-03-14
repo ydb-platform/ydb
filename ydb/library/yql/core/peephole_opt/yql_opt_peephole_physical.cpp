@@ -2585,6 +2585,16 @@ TExprNode::TPtr ExpandContainerIf(const TExprNode::TPtr& input, TExprContext& ct
     return ctx.NewCallable(input->Pos(), "If", {input->HeadPtr(), std::move(item), std::move(none)});
 }
 
+TExprNode::TPtr DropDependsOnFromEmptyIterator(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (input->ChildrenSize() > 1) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Drop DependsOn from " << input->Content();
+        TExprNode::TListType newChildren;
+        newChildren.push_back(input->Child(0));
+        return ctx.ChangeChildren(*input, std::move(newChildren));
+    }
+    return input;
+}
+
 TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
     const bool isStream = node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow ||
@@ -7868,6 +7878,7 @@ struct TPeepHoleRules {
         {"CheckedMinus", &ExpandCheckedMinus},
         {"JsonValue", &ExpandJsonValue},
         {"JsonExists", &ExpandJsonExists},
+        {"EmptyIterator", &DropDependsOnFromEmptyIterator},
     };
 
     const TExtPeepHoleOptimizerMap CommonStageExtRules = {

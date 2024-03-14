@@ -1897,8 +1897,13 @@ namespace {
 
     IGraphTransformer::TStatus EmptyIteratorWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
-        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+        if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
+        }
+        for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
+            if (!EnsureDependsOn(*input->Child(i), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
         }
 
         if (auto status = EnsureTypeRewrite(input->HeadRef(), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {

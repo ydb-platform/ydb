@@ -23,8 +23,8 @@ private:
     NIndexes::TIndexCheckerContainer IndexChecker;
     TReadMetadata::TConstPtr ReadMetadata;
     std::shared_ptr<TColumnsSet> EmptyColumns = std::make_shared<TColumnsSet>();
-    std::shared_ptr<IFetchingStep> BuildColumnsFetchingPlan(const bool needSnapshotsFilter, const bool exclusiveSource, const bool partialUsageByPredicate) const;
-    std::array<std::array<std::array<std::shared_ptr<IFetchingStep>, 2>, 2>, 2> CacheFetchingScripts;
+    std::shared_ptr<IFetchingStep> BuildColumnsFetchingPlan(const bool needSnapshotsFilter, const bool exclusiveSource, const bool partialUsageByPredicate, const bool useIndexes) const;
+    std::array<std::array<std::array<std::array<std::shared_ptr<IFetchingStep>, 2>, 2>, 2>, 2> CacheFetchingScripts;
 public:
     ui64 GetMemoryForSources(const std::map<ui32, std::shared_ptr<IDataSource>>& sources, const bool isExclusive);
 

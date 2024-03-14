@@ -20,7 +20,7 @@ namespace NKikimr::NColumnShard {
             if (!txBody.HasBackupTask()) {
                 return false;
             }
-            BackupTask = std::make_shared<TBackupTask>();
+            BackupTask = std::make_shared<TBackupTask>(EBackupStatus::Draft);
             return BackupTask->Parse(txBody.GetBackupTask());
         }
 

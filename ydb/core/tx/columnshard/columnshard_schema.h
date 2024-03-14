@@ -325,12 +325,10 @@ struct Schema : NIceDb::Schema {
 
     struct Backups : NIceDb::Schema::Table<BackupsId> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct SnapshotStep : Column<2, NScheme::NTypeIds::Uint64> {};
-        struct SnapshotTxId : Column<3, NScheme::NTypeIds::Uint64> {};
-        struct Status : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct Status : Column<2, NScheme::NTypeIds::Uint64> {};
 
-        using TKey = TableKey<PathId, SnapshotStep, SnapshotTxId>;
-        using TColumns = TableColumns<PathId, SnapshotStep, SnapshotTxId>;
+        using TKey = TableKey<PathId>;
+        using TColumns = TableColumns<PathId, Status>;
     };
 
     struct TierBlobsDraft: NIceDb::Schema::Table<(ui32)ETierTables::TierBlobsDraft> {

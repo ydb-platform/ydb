@@ -12,9 +12,14 @@ namespace NKikimr::NColumnShard {
 
     class TBackupTask {
         YDB_ACCESSOR(ui64, PathId, 0);
+        YDB_ACCESSOR(EBackupStatus, Status, EBackupStatus::Draft);
         YDB_ACCESSOR(NOlap::TSnapshot, Snapshot, NOlap::TSnapshot::Zero());
     public:
         using TPtr = std::shared_ptr<TBackupTask>;
+
+        TBackupTask(EBackupStatus status)
+            : Status(status)
+        {}
 
         TString GetTaskId() const {
             return TStringBuilder() << PathId;

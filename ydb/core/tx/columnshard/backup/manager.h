@@ -17,12 +17,12 @@ namespace NKikimr::NColumnShard {
             NIceDb::TNiceDb db(txc.DB);
             if (it == Tasks.end()) {
                 Tasks.emplace(backupTask->GetTaskId(), backupTask);
-                db.Table<Schema::Backups>().Key(backupTask->GetPathId(), backupTask->GetSnapshot().GetPlanStep(), backupTask->GetSnapshot().GetTxId()).Update(
+                db.Table<Schema::Backups>().Key(backupTask->GetPathId()).Update(
                         NIceDb::TUpdate<Schema::Backups::Status>((ui64)EBackupStatus::Draft));
                 return true;
             }
             if (*it->second == *backupTask) {
-                db.Table<Schema::Backups>().Key(backupTask->GetPathId(), backupTask->GetSnapshot().GetPlanStep(), backupTask->GetSnapshot().GetTxId()).Update(
+                db.Table<Schema::Backups>().Key(backupTask->GetPathId()).Update(
                         NIceDb::TUpdate<Schema::Backups::Status>((ui64)EBackupStatus::Draft));
                 return true;
             }
@@ -33,7 +33,7 @@ namespace NKikimr::NColumnShard {
             auto it = Tasks.find(backupTask->GetTaskId());
             AFL_VERIFY(it != Tasks.end())("debug", backupTask->DebugString());
             NIceDb::TNiceDb db(txc.DB);
-            db.Table<Schema::Backups>().Key(backupTask->GetPathId(), backupTask->GetSnapshot().GetPlanStep(), backupTask->GetSnapshot().GetTxId()).Update(
+            db.Table<Schema::Backups>().Key(backupTask->GetPathId()).Update(
                     NIceDb::TUpdate<Schema::Backups::Status>((ui64)EBackupStatus::Started));
         }
 
@@ -45,9 +45,13 @@ namespace NKikimr::NColumnShard {
         }
 
         void RemoveBackupTask(const TBackupTask::TPtr& backupTask, NTabletFlatExecutor::TTransactionContext& txc) {
+            auto it = Tasks.find(backupTask->GetTaskId());
+            if (it != Tasks.end()) {
+                AFL_VERIFY(it->second->GetStatus() == EBackupStatus::Draft)("status", (ui64) it->second->GetStatus());
+            }
             Tasks.erase(backupTask->GetTaskId());
             NIceDb::TNiceDb db(txc.DB);
-            db.Table<Schema::Backups>().Key(backupTask->GetPathId(), backupTask->GetSnapshot().GetPlanStep(), backupTask->GetSnapshot().GetTxId()).Delete();
+            db.Table<Schema::Backups>().Key(backupTask->GetPathId()).Delete();
         }
 
     private:

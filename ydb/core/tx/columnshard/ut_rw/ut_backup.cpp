@@ -13,19 +13,19 @@ using namespace NTxUT;
 
 Y_UNIT_TEST_SUITE(Backup) {
 
-    bool ProposeTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId) {
+    bool ProposeTx(TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, const TString& txBody, const ui64 txId) {
         auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
-            NKikimrTxColumnShard::TX_KIND_BACKUP, sender, txId, txBody);
+            txKind, sender, txId, txBody);
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
         auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
         const auto& res = ev->Get()->Record;
         UNIT_ASSERT_EQUAL(res.GetTxId(), txId);
-        UNIT_ASSERT_EQUAL(res.GetTxKind(), NKikimrTxColumnShard::TX_KIND_BACKUP);
+        UNIT_ASSERT_EQUAL(res.GetTxKind(), txKind);
         return (res.GetStatus() == NKikimrTxColumnShard::PREPARED);
     }
 
-    void PlanTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap, bool waitResult = true) {
+    void PlanTx(TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, NOlap::TSnapshot snap, bool waitResult = true) {
         auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>(snap.GetPlanStep(), 0, TTestTxConfig::TxTablet0);
         auto tx = plan->Record.AddTransactions();
         tx->SetTxId(snap.GetTxId());
@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(Backup) {
             auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
             const auto& res = ev->Get()->Record;
             UNIT_ASSERT_EQUAL(res.GetTxId(), snap.GetTxId());
-            UNIT_ASSERT_EQUAL(res.GetTxKind(), NKikimrTxColumnShard::TX_KIND_BACKUP);
+            UNIT_ASSERT_EQUAL(res.GetTxKind(), txKind);
             UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::SUCCESS);
         }
     }
@@ -62,8 +62,8 @@ Y_UNIT_TEST_SUITE(Backup) {
         txBody.MutableBackupTask()->SetTableId(tableId);
         txBody.MutableBackupTask()->SetSnapshotStep(backupSnapshot.GetPlanStep());
         txBody.MutableBackupTask()->SetSnapshotTxId(backupSnapshot.GetTxId());
-        ProposeTx(runtime, sender, txBody.SerializeAsString(), txId);
-        PlanTx(runtime, sender, NOlap::TSnapshot(11, txId));
+        UNIT_ASSERT(ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), txId));
+        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(11, txId));
     }
 }
 

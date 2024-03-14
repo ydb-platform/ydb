@@ -44,7 +44,7 @@ protected:
     NTable::TTableClient TableClient;
     NScheme::TSchemeClient SchemeClient;
     const TSettings Settings;
-    TAdaptiveLock Lock;
+    std::mutex Lock;
 };
 
 class TDefaultSchemePrinter : public TSchemePrinterBase {

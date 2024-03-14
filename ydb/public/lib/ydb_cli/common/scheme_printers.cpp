@@ -33,10 +33,10 @@ NThreading::TFuture<void> TSchemePrinterBase::PrintDirectoryRecursive(const TStr
         ThrowOnError(result);
 
         if (relativePath || IsDirectoryLike(result.GetEntry())) {
-            auto g = Guard(Lock);
+            std::lock_guard g(Lock);
             PrintDirectory(relativePath, result);
         } else {
-            auto g = Guard(Lock);
+            std::lock_guard g(Lock);
             PrintEntry(relativePath, result.GetEntry());
         }
 
@@ -48,7 +48,7 @@ NThreading::TFuture<void> TSchemePrinterBase::PrintDirectoryRecursive(const TStr
                 if (IsDirectoryLike(child)) {
                     childFutures.push_back(PrintDirectoryRecursive(childFullPath, childRelativePath));
                 } else {
-                    auto g = Guard(Lock);
+                    std::lock_guard g(Lock);
                     PrintEntry(childRelativePath, child);
                 }
             }

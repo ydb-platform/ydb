@@ -2385,9 +2385,9 @@
     ],
     "test.test[pg_catalog-pg_type_syntax_pg-default.txt-Debug]": [
         {
-            "checksum": "2a6a57755c2a514ac83a9373bf58a955",
-            "size": 719,
-            "uri": "https://{canondata_backend}/1942525/968864b3be3864b00b0f0fb54ee97438202376c6/resource.tar.gz#test.test_pg_catalog-pg_type_syntax_pg-default.txt-Debug_/opt.yql_patched"
+            "checksum": "eb38f13e9235a746801979bf17ed9ac5",
+            "size": 793,
+            "uri": "https://{canondata_backend}/1942525/bdd139810f50778f152db9396ade27a31f707314/resource.tar.gz#test.test_pg_catalog-pg_type_syntax_pg-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg_catalog-pg_type_syntax_pg-default.txt-Plan]": [

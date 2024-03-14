@@ -9,6 +9,7 @@
 
 namespace NYql::NPg {
 
+constexpr ui32 FuncMaxArgs = 100;
 constexpr ui32 InvalidOid = 0;
 constexpr ui32 Int2VectorOid = 22;
 constexpr ui32 OidVectorOid = 30;
@@ -72,13 +73,13 @@ bool IsCompatibleTo(ui32 actualTypeId, ui32 expectedTypeId, const TTypes& types)
     if (expectedTypeId == AnyArrayOid) {
         const auto& actualDescPtr = types.FindPtr(actualTypeId);
         Y_ENSURE(actualDescPtr);
-        return actualDescPtr->ArrayTypeId == actualDescPtr->TypeId;
+        return actualDescPtr->ArrayTypeId && actualDescPtr->ArrayTypeId == actualDescPtr->TypeId;
     }
 
     if (expectedTypeId == AnyNonArrayOid) {
         const auto& actualDescPtr = types.FindPtr(actualTypeId);
         Y_ENSURE(actualDescPtr);
-        return actualDescPtr->ArrayTypeId != actualDescPtr->TypeId;
+        return actualDescPtr->ArrayTypeId && actualDescPtr->ArrayTypeId != actualDescPtr->TypeId;
     }
 
     return false;
@@ -157,6 +158,39 @@ TStringBuf GetCanonicalTypeName(TStringBuf name) {
     }
 
     return name;
+}
+
+bool ValidateArgs(const TVector<ui32>& descArgTypeIds, const TVector<ui32>& argTypeIds, const TTypes& types, ui32 variadicArgType = 0) {
+    if (argTypeIds.size() > FuncMaxArgs) {
+        return false;
+    }
+
+    if (argTypeIds.size() < descArgTypeIds.size()) {
+        return false;
+    }
+
+    if (!variadicArgType && argTypeIds.size() > descArgTypeIds.size()) {
+        return false;
+    }
+
+    if (variadicArgType && argTypeIds.size() == descArgTypeIds.size()) {
+        // at least one variadic argument is required
+        return false;
+    }
+
+    for (size_t i = 0; i < descArgTypeIds.size(); ++i) {
+        if (!IsCompatibleTo(argTypeIds[i], descArgTypeIds[i], types)) {
+            return false;
+        }
+    }
+
+    for (size_t i = descArgTypeIds.size(); i < argTypeIds.size(); ++i) {
+        if (!IsCompatibleTo(argTypeIds[i], variadicArgType, types)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 class TParser {
@@ -368,7 +402,9 @@ public:
         if (key == "oid") {
             LastProc.ProcId = FromString<ui32>(value);
         } else if (key == "provariadic") {
-            IsSupported = false;
+            auto idPtr = TypeByName.FindPtr(value);
+            Y_ENSURE(idPtr);
+            LastProc.VariadicType = *idPtr;
         } else if (key == "descr") {
             LastProc.Descr = value;
         } else if (key == "prokind") {
@@ -419,35 +455,56 @@ public:
 
     void OnFinish() override {
         if (IsSupported) {
+            if (LastProc.VariadicType) {
+                Y_ENSURE(!ArgModesStr.empty());
+            }
+
             if (!ArgModesStr.empty()) {
-                Y_ENSURE(!AllArgTypesStr.empty());
                 Y_ENSURE(ArgModesStr.front() == '{');
                 Y_ENSURE(ArgModesStr.back() == '}');
                 TVector<TString> modes;
                 Split(ArgModesStr.substr(1, ArgModesStr.size() - 2), ",", modes);
                 Y_ENSURE(modes.size() >= LastProc.ArgTypes.size());
+                ui32 inputArgsCount = 0;
+                bool startedVarArgs = false;
+                bool startedOutArgs = false;
                 for (size_t i = 0; i < modes.size(); ++i) {
-                    if (i < LastProc.ArgTypes.size()) {
-                        if (modes[i] != "i") {
-                            IsSupported = false;
-                            break;
-                        }
-                    } else if (modes[i] != "o") {
-                        IsSupported = false;
-                        break;
+                    if (modes[i] == "i") {
+                        Y_ENSURE(!startedVarArgs && !startedOutArgs);
+                        inputArgsCount = i + 1;
+                    } else if (modes[i] == "o") {
+                        startedOutArgs = true;
+                    } else {
+                        Y_ENSURE(!startedVarArgs && !startedOutArgs);
+                        Y_ENSURE(modes[i] == "v");
+                        Y_ENSURE(LastProc.VariadicType);
+                        startedVarArgs = true;
                     }
                 }
+
+                if (LastProc.VariadicType) {
+                    Y_ENSURE(LastProc.ArgTypes.size() > inputArgsCount);
+                    LastProc.VariadicArgType = LastProc.ArgTypes[inputArgsCount];
+                    Y_ENSURE(LastProc.VariadicArgType);
+                }
+
+                LastProc.ArgTypes.resize(inputArgsCount);
             }
         }
 
         if (IsSupported) {
+            auto variadicDelta = LastProc.VariadicType ? 1 : 0;
             if (!ArgNamesStr.empty()) {
                 Y_ENSURE(ArgNamesStr.front() == '{');
                 Y_ENSURE(ArgNamesStr.back() == '}');
                 TVector<TString> names;
                 Split(ArgNamesStr.substr(1, ArgNamesStr.size() - 2), ",", names);
-                Y_ENSURE(names.size() >= LastProc.ArgTypes.size());
-                LastProc.OutputArgNames.insert(LastProc.OutputArgNames.begin(), names.begin() + LastProc.ArgTypes.size(), names.end());
+                Y_ENSURE(names.size() >= LastProc.ArgTypes.size() + variadicDelta);
+                LastProc.OutputArgNames.insert(LastProc.OutputArgNames.begin(), names.begin() + LastProc.ArgTypes.size() + variadicDelta, names.end());
+                if (LastProc.VariadicType) {
+                    LastProc.VariadicArgName = names[LastProc.ArgTypes.size()];
+                }
+
                 LastProc.InputArgNames.insert(LastProc.InputArgNames.begin(), names.begin(), names.begin() + LastProc.ArgTypes.size());
             }
 
@@ -457,9 +514,9 @@ public:
                 Y_ENSURE(AllArgTypesStr.back() == '}');
                 TVector<TString> types;
                 Split(AllArgTypesStr.substr(1, AllArgTypesStr.size() - 2), ",", types);
-                Y_ENSURE(types.size() >= LastProc.ArgTypes.size());
+                Y_ENSURE(types.size() >= LastProc.ArgTypes.size() + variadicDelta);
 
-                for (size_t i = LastProc.ArgTypes.size(); i < types.size(); ++i) {
+                for (size_t i = LastProc.ArgTypes.size() + variadicDelta; i < types.size(); ++i) {
                     auto idPtr = TypeByName.FindPtr(types[i]);
                     Y_ENSURE(idPtr);
                     LastProc.OutputArgTypes.push_back(*idPtr);
@@ -605,6 +662,14 @@ public:
         }
 
         LazyInfos[LastType.TypeId] = LastLazyTypeInfo;
+        if (LastType.ArrayTypeId) {
+            LastLazyTypeInfo.OutFunc = "array_out";
+            LastLazyTypeInfo.InFunc = "array_in";
+            LastLazyTypeInfo.SendFunc = "array_send";
+            LastLazyTypeInfo.ReceiveFunc = "array_recv";
+            LastLazyTypeInfo.ElementType = "";
+            LazyInfos[LastType.ArrayTypeId] = LastLazyTypeInfo;
+        }
 
         LastType = TTypeDesc();
         LastLazyTypeInfo = TLazyTypeInfo();
@@ -851,7 +916,7 @@ public:
             for (const auto id : *funcIdsPtr) {
                 auto procPtr = Procs.FindPtr(id);
                 Y_ENSURE(procPtr);
-                if (procPtr->ArgTypes == LastAggregation.ArgTypes) {
+                if (ValidateArgs(procPtr->ArgTypes, LastAggregation.ArgTypes, Types, procPtr->VariadicType)) {
                     LastAggregation.AggId = id;
                     break;
                 }
@@ -1695,22 +1760,9 @@ struct TCatalog {
     THashMap<TTableInfoKey, TVector<TColumnInfo>> StaticColumns;
 };
 
-bool ValidateArgs(const TVector<ui32>& descArgTypeIds, const TVector<ui32>& argTypeIds) {
-    if (argTypeIds.size() != descArgTypeIds.size()) {
-        return false;
-    }
-
-    for (size_t i = 0; i < argTypeIds.size(); ++i) {
-        if (!IsCompatibleTo(argTypeIds[i], descArgTypeIds[i])) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
 bool ValidateProcArgs(const TProcDesc& d, const TVector<ui32>& argTypeIds) {
-    return ValidateArgs(d.ArgTypes, argTypeIds);
+    const auto& catalog = TCatalog::Instance();
+    return ValidateArgs(d.ArgTypes, argTypeIds, catalog.Types, d.VariadicType);
 }
 
 const TProcDesc& LookupProc(ui32 procId, const TVector<ui32>& argTypeIds) {
@@ -2083,15 +2135,56 @@ ui64 CalcUnaryOperatorScore(const TOperDesc& oper, ui32 argTypeId, const TCatalo
     return CalcArgumentMatchScore(oper.RightType, argTypeId, catalog);
 }
 
-ui64 CalcProcScore(const TVector<ui32>& procArgTypes, const TVector<ui32>& argTypeIds, const TCatalog& catalog) {
-    ui64 result = 0UL;
+bool IsExactMatch(const TVector<ui32>& procArgTypes, ui32 procVariadicType, const TVector<ui32>& argTypeIds) {
+    if (argTypeIds.size() < procArgTypes.size()) {
+        return false;
+    }
 
-    if (argTypeIds.size() != procArgTypes.size()) {
+    if (!procVariadicType && argTypeIds.size() > procArgTypes.size()) {
+        return false;
+    }
+
+    for (ui32 i = 0; i < procArgTypes.size(); ++i) {
+        if (procArgTypes[i] != argTypeIds[i]) {
+            return false;
+        }
+    }
+
+    if (procVariadicType) {
+        if (argTypeIds.size() == procArgTypes.size()) {
+            return false;
+        }
+
+        for (ui32 i = procArgTypes.size(); i < argTypeIds.size(); ++i) {
+            if (procVariadicType != argTypeIds[i]) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+ui64 CalcProcScore(const TVector<ui32>& procArgTypes, ui32 procVariadicType, const TVector<ui32>& argTypeIds, const TCatalog& catalog) {
+    ui64 result = 0UL;
+    if (!procVariadicType) {
+        ++result;
+    }
+
+    if (argTypeIds.size() < procArgTypes.size()) {
+        return ArgTypeMismatch;
+    }
+
+    if (!procVariadicType && argTypeIds.size() > procArgTypes.size()) {
+        return ArgTypeMismatch;
+    }
+
+    if (procVariadicType && argTypeIds.size() == procArgTypes.size()) {
         return ArgTypeMismatch;
     }
 
     for (size_t i = 0; i < argTypeIds.size(); ++i) {
-        auto score = CalcArgumentMatchScore(procArgTypes[i], argTypeIds[i], catalog);
+        auto score = CalcArgumentMatchScore(i >= procArgTypes.size() ? procVariadicType : procArgTypes[i], argTypeIds[i], catalog);
 
         if (score == ArgTypeMismatch) {
             return ArgTypeMismatch;
@@ -2188,7 +2281,11 @@ TVector<const C*> TryResolveUnknownsByCategory(const TVector<const C*>& candidat
         bool isPreferred = false;
 
         std::function<ui32(const C *)> typeGetter = [i] (const auto* candidate) {
-            return candidate->ArgTypes[i];
+            if constexpr (std::is_same_v<C, TProcDesc>) {
+                return i < candidate->ArgTypes.size() ? candidate->ArgTypes[i] : candidate->VariadicType;
+            } else {
+                return candidate->ArgTypes[i];
+            }
         };
 
         if (InvalidCategory != (category = NPrivate::FindCommonCategory<C>(candidates, typeGetter, catalog, isPreferred))) {
@@ -2205,7 +2302,12 @@ TVector<const C*> TryResolveUnknownsByCategory(const TVector<const C*>& candidat
         auto keepIt = true;
 
         for (const auto& category : argCommonCategory) {
-            const auto argTypeId = candidate->ArgTypes[category.Position];
+            ui32 argTypeId;
+            if constexpr (std::is_same_v<C, TProcDesc>) {
+                argTypeId = category.Position < candidate->ArgTypes.size() ? candidate->ArgTypes[category.Position] : candidate->VariadicType;
+            } else {
+                argTypeId = candidate->ArgTypes[category.Position];
+            }
 
             const auto& argTypePtr = catalog.Types.FindPtr(argTypeId);
             Y_ENSURE(argTypePtr);
@@ -2331,15 +2433,14 @@ std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TStri
         const auto& d = catalog.Procs.FindPtr(id);
         Y_ENSURE(d);
 
-        if (argTypeIds == d->ArgTypes) {
+        if (NPrivate::IsExactMatch(d->ArgTypes, d->VariadicType, argTypeIds)) {
             // At most one exact match is possible, so look no further
             // https://www.postgresql.org/docs/14/typeconv-func.html, step 2
             return d;
         }
 
         // https://www.postgresql.org/docs/14/typeconv-func.html, steps 4.a, 4.c, 4.d
-        auto score = NPrivate::CalcProcScore(d->ArgTypes, argTypeIds, catalog);
-
+        auto score = NPrivate::CalcProcScore(d->ArgTypes, d->VariadicType, argTypeIds, catalog);
         if (bestScore < score) {
             bestScore = score;
 
@@ -2428,7 +2529,7 @@ std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TStri
 
             for (const auto* candidate : candidates) {
                 for (size_t i = 0; i < argTypeIds.size(); ++i) {
-                    if (NPrivate::IsCoercible(commonType, candidate->ArgTypes[i], ECoercionCode::Implicit, catalog)) {
+                    if (NPrivate::IsCoercible(commonType, i >= candidate->ArgTypes.size() ? candidate->VariadicType : candidate->ArgTypes[i], ECoercionCode::Implicit, catalog)) {
                         if (finalCandidate) {
                             NPrivate::ThrowProcAmbiguity(name, argTypeIds);
                         }
@@ -2641,13 +2742,27 @@ const TOperDesc& LookupOper(ui32 operId) {
     return *operPtr;
 }
 
-bool HasAggregation(const TString& name) {
+bool HasAggregation(const TString& name, EAggKind kind) {
     const auto& catalog = TCatalog::Instance();
-    return catalog.AggregationsByName.contains(to_lower(name));
+    auto aggIdPtr = catalog.AggregationsByName.FindPtr(to_lower(name));
+    if (!aggIdPtr) {
+        return false;
+    }
+
+    for (const auto& id : *aggIdPtr) {
+        const auto& d = catalog.Aggregations.FindPtr(id);
+        Y_ENSURE(d);
+        if (d->Kind == kind) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool ValidateAggregateArgs(const TAggregateDesc& d, const TVector<ui32>& argTypeIds) {
-    return ValidateArgs(d.ArgTypes, argTypeIds);
+    const auto& catalog = TCatalog::Instance();
+    return ValidateArgs(d.ArgTypes, argTypeIds, catalog.Types);
 }
 
 bool ValidateAggregateArgs(const TAggregateDesc& d, ui32 stateType, ui32 resultType) {
@@ -2678,14 +2793,14 @@ const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>
         const auto& d = catalog.Aggregations.FindPtr(id);
         Y_ENSURE(d);
 
-        if (argTypeIds == d->ArgTypes) {
+        if (NPrivate::IsExactMatch(d->ArgTypes, 0, argTypeIds)) {
             // At most one exact match is possible, so look no further
             // https://www.postgresql.org/docs/14/typeconv-func.html, step 2
             return *d;
         }
 
         // https://www.postgresql.org/docs/14/typeconv-func.html, steps 4.a, 4.c, 4.d
-        auto score = NPrivate::CalcProcScore(d->ArgTypes, argTypeIds, catalog);
+        auto score = NPrivate::CalcProcScore(d->ArgTypes, 0, argTypeIds, catalog);
 
         if (bestScore < score) {
             bestScore = score;

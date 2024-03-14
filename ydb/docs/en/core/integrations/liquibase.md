@@ -35,7 +35,7 @@ cp ydb-jdbc-driver-shaded-2.0.7.jar ./liquibase/internal/lib/
 cp liquibase-ydb-dialect-0.9.6.jar ./liquibase/internal/lib/
 ```
 
-For a more detailed description, please see the [Manual library management] (https://docs.liquibase.com/start/install/home.html). Now the liquibase utility can be used in standard ways.
+For a more detailed description, please see the [Manual library management](https://docs.liquibase.com/start/install/home.html). Now the liquibase utility can be used in standard ways.
 
 Let's write a simple `liquibase.properties`:
 

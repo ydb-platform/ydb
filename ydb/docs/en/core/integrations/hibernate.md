@@ -57,7 +57,7 @@ public static Configuration basedConfiguration() {
 
 Use this custom dialect just like any other Hibernate dialect. Map your entity classes to database tables and use Hibernate's session factory to perform database operations.
 
-## Integration with Spring Data JPA {#integration-with-spring-data-jpa}
+### Example Spring Data JPA
 
 Configure Spring Data JPA with Hibernate to use custom YDB dialect by updating your application.properties:
 
@@ -66,6 +66,66 @@ spring.jpa.properties.hibernate.dialect=tech.ydb.hibernate.dialect.YdbDialect
 
 spring.datasource.driver-class-name=tech.ydb.jdbc.YdbDriver
 spring.datasource.url=jdbc:ydb:grpc://localhost:2136/local
+```
+
+Create simple entity and repository:
+
+```kotlin
+
+@Entity
+@Table(name = "employee")
+data class Employee(
+    @Id
+    val id: Long,
+
+    @Column(name = "full_name")
+    val fullName: String,
+
+    @Column
+    val email: String,
+
+    @Column(name = "hire_date")
+    val hireDate: LocalDate,
+
+    @Column
+    val salary: java.math.BigDecimal,
+
+    @Column(name = "is_active")
+    val isActive: Boolean,
+
+    @Column
+    val department: String,
+
+    @Column
+    val age: Int,
+)
+
+interface EmployeeRepository : CrudRepository<Employee, Long>
+
+fun EmployeeRepository.findByIdOrNull(id: Long): Employee? = this.findById(id).orElse(null)
+```
+
+Example using:
+
+```kotlin
+val employee = Employee(
+    1,
+    "Kirill Kurdyukov",
+    "kurdyukov-kir@ydb.tech",
+    LocalDate.parse("2023-12-20"),
+    BigDecimal("500000.000000000"),
+    true,
+    "YDB AppTeam",
+    23
+)
+
+employeeRepository.save(employee)
+
+assertEquals(employee, employeeRepository.findByIdOrNull(employee.id))
+
+employeeRepository.delete(employee)
+
+assertNull(employeeRepository.findByIdOrNull(employee.id))
 ```
 
 An example of a simple Spring Data JPA repository can be found at the following [link](https://github.com/ydb-platform/ydb-java-examples/tree/master/jdbc/spring-data-jpa).

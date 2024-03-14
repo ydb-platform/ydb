@@ -1,17 +1,18 @@
-## Диалект YDB для Hibernate ##
+# Диалект {{ ydb-short-name }} для Hibernate 
 
-### Введение ### 
+## Введение {#overview}
 
-Это руководство использования Hibernate с YDB. 
+Это руководство использования Hibernate с {{ ydb-short-name }}. 
 
-Hibernate - это фреймворк объектно-реляционного отображения (ORM) для Java, облегчающий процесс маппинга объектно-ориентированных моделей. Каждая СУБД частично реализует стандарт SQL, интерпретируя те или иные конструкции по - своему. 
+[Hibernate](https://hibernate.org/orm/) - это фреймворк объектно-реляционного отображения (ORM) для Java, облегчающий процесс маппинга объектно-ориентированных моделей. 
 
-Для того чтобы иметь единый ORM фреймворк для различных СУБД, вводится на клиенте такая сущность как диалект, которая разрешает спорные моменты.
-Например, какие типы поддерживает база данных, `1` или `0` - будет являться типом bool, или явно нужно генерировать `TRUE` или `FALSE` и так далее.
+## Установка диалекта {{ ydb-short-name }} {#install-dialect}
 
-### Установка диалекта YDB ###
+Чтобы воспользоваться диалектом YDB в ваш проект нужно добавить зависимость самого диалекта и [JDBC драйвера](https://github.com/ydb-platform/ydb-jdbc-driver) в свой проект:
 
-Чтобы воспользоваться диалектом YDB в ваш проект нужно добавить следующие зависимости (пример для maven):
+{% list tabs %}
+
+- Maven
 
 ```xml
 <dependency>
@@ -22,11 +23,19 @@ Hibernate - это фреймворк объектно-реляционного 
 </dependency>
 ```
 
-В случае использования Hibernate 5 версии нужен `<artifactId>hibernate-ydb-dialect-v5</artifactId>`.
+- Gradle
 
-А также зависимость актуальной версии [JDBC драйвера](https://github.com/ydb-platform/ydb-jdbc-driver). 
+```groovy
+dependencies {
+    implementation 'tech.ydb.dialects:hibernate-ydb-dialect:$version' // Set actual version
+}
+```
 
-### Конфигурация диалекта ###
+{% endlist %}
+
+В случае использования Hibernate 5 версии нужен artifactId равный `hibernate-ydb-dialect-v5`.
+
+## Конфигурация диалекта {#configuration-dialect}
 
 Сконфигурировать Hibernate c помощью hibernate.cfg.xml:
 
@@ -43,11 +52,11 @@ public static Configuration basedConfiguration() {
 }
 ```
 
-### Использование ###
+## Использование {#using}
 
 Используйте этот диалект так же, как и любой другой диалект Hibernate. Сопоставьте классы сущностей с таблицами базы данных и используйте фабрику сессий Hibernate для выполнения операций с базой данных.
 
-### Интеграция с Spring Data JPA ### 
+## Интеграция с Spring Data JPA {#integration-with-spring-data-jpa}
 
 Настройте Spring Data JPA для использования диалекта YDB, обновив свой application.properties:
 
@@ -59,7 +68,3 @@ spring.datasource.url=jdbc:ydb:grpc://localhost:2136/local
 ```
 
 Пример простого приложение Spring Data JPA можно найти по [ссылке](https://github.com/ydb-platform/ydb-java-examples/tree/master/jdbc/spring-data-jpa).
-
-### Контакты ###
-
-В случае нахождения каких-либо проблем вы можете открыть `issue` в [репозитории](https://github.com/ydb-platform/ydb-java-dialects/tree/main/hibernate-dialect) с соответствующим тегом (`hibernate-v6` или `hibernate-v5`).

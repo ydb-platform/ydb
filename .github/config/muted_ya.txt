@@ -4,7 +4,6 @@ ydb/core/client/ut TClientTest.PromoteFollower
 ydb/core/client/ut TClientTest.ReadFromFollower
 ydb/core/client/ut TFlatTest.AutoSplitMergeQueue
 ydb/core/cms/ut_sentinel TSentinelTests.BSControllerCantChangeStatus
-ydb/core/debug_tools/ut OperationLog.ConcurrentWrites
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/kafka_proxy/ut KafkaProtocol.CreatePartitionsScenario
 ydb/core/kafka_proxy/ut KafkaProtocol.ProduceScenario

@@ -32,7 +32,8 @@ target_sources(columnshard-engines-changes PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/compaction.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/ttl.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/indexation.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/cleanup.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/cleanup_portions.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/cleanup_tables.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/with_appended.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/general_compaction.cpp
 )

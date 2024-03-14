@@ -658,27 +658,37 @@ public:
 
                 auto returningColumns = Build<TCoAtomList>(ctx, node->Pos()).Done();
 
+                auto fillStar = [&]() {
+                    bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
+
+                    auto dataSinkNode = node->Child(1);
+                    TKiDataSink dataSink(dataSinkNode);
+                    auto table = SessionCtx->Tables().EnsureTableExists(
+                        TString(dataSink.Cluster()),
+                        key.GetTablePath(), node->Pos(), ctx);
+
+                    returningColumns = BuildColumnsList(*table, node->Pos(), ctx, sysColumnsEnabled, true /*ignoreWriteOnlyColumns*/);
+                };
+
                 TVector<TExprBase> columnsToReturn;
                 for (const auto item : settings.ReturningList.Cast()) {
-                    auto pgResultNode = item.Cast<TCoPgResultItem>();
-                    const auto value = pgResultNode.ExpandedColumns().Cast<TCoAtom>().Value();
-                    if (value.empty()) {
-                        bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
-
-                        auto dataSinkNode = node->Child(1);
-                        TKiDataSink dataSink(dataSinkNode);
-                        auto table = SessionCtx->Tables().EnsureTableExists(
-                            TString(dataSink.Cluster()),
-                            key.GetTablePath(), node->Pos(), ctx);
-
-                        returningColumns = BuildColumnsList(*table, node->Pos(), ctx, sysColumnsEnabled, true /*ignoreWriteOnlyColumns*/);
-
+                    if (item.Maybe<TCoPgResultItem>()) {
+                        auto pgResultNode = item.Cast<TCoPgResultItem>();
+                        const auto value = pgResultNode.ExpandedColumns().Cast<TCoAtom>().Value();
+                        if (value.empty()) {
+                            fillStar();
+                            break;
+                        } else {
+                            auto atom = Build<TCoAtom>(ctx, node->Pos())
+                                .Value(value)
+                                .Done();
+                            columnsToReturn.emplace_back(std::move(atom));
+                        }
+                    } else if (auto returningItem = item.Maybe<TCoReturningListItem>()) {
+                        columnsToReturn.push_back(returningItem.Cast().ColumnRef());
+                    } else if (auto returningStar = item.Maybe<TCoReturningStar>()) {
+                        fillStar();
                         break;
-                    } else {
-                        auto atom = Build<TCoAtom>(ctx, node->Pos())
-                            .Value(value)
-                            .Done();
-                        columnsToReturn.emplace_back(std::move(atom));
                     }
                 }
 

@@ -48,45 +48,45 @@ Y_UNIT_TEST(ReturningSerial) {
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT(result.IsSuccess());
 
-        CompareYson(R"([["1"]])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[[1]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
     {
         const auto query = Q_(R"(
-            --!syntax_pg
-            INSERT INTO ReturningTable (value) VALUES(2) RETURNING key, value;
-            INSERT INTO ReturningTableExtraValue (value) VALUES(3) RETURNING key, value;
+            --!syntax_v1
+            INSERT INTO ReturningTable (value) VALUES(2) RETURNING VALUES key, value;
+            INSERT INTO ReturningTableExtraValue (value) VALUES(3) RETURNING VALUES key, value;
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT(result.IsSuccess());
-        CompareYson(R"([["2";"2"]])", FormatResultSetYson(result.GetResultSet(0)));
-        CompareYson(R"([["1";"3"]])", FormatResultSetYson(result.GetResultSet(1)));
+        CompareYson(R"([[[2];[2]]])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[[1];[3]]])", FormatResultSetYson(result.GetResultSet(1)));
     }
 
     {
         const auto query = Q_(R"(
-            --!syntax_pg
-            INSERT INTO ReturningTable (value) VALUES(2) RETURNING *;
-            INSERT INTO ReturningTableExtraValue (value) VALUES(4) RETURNING *;
+            --!syntax_v1
+            INSERT INTO ReturningTable (value) VALUES(2) RETURNING VALUES *;
+            INSERT INTO ReturningTableExtraValue (value) VALUES(4) RETURNING VALUES *;
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT(result.IsSuccess());
-        CompareYson(R"([["3";"2"]])", FormatResultSetYson(result.GetResultSet(0)));
-        CompareYson(R"([["2";"4";"2"]])", FormatResultSetYson(result.GetResultSet(1)));
+        CompareYson(R"([[[3];[2]]])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[[2];[4];[2]]])", FormatResultSetYson(result.GetResultSet(1)));
     }
 
     {
         const auto query = Q_(R"(
-            --!syntax_pg
-            INSERT INTO ReturningTable (value) VALUES(2) RETURNING fake;
+            --!syntax_v1
+            INSERT INTO ReturningTable (value) VALUES(2) RETURNING VALUES fake;
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT(!result.IsSuccess());
         Cerr << result.GetIssues().ToString(true) << Endl;
-        UNIT_ASSERT(result.GetIssues().ToString(true) == "{ <main>: Error: Type annotation, code: 1030 subissue: { <main>:1:1: Error: At function: DataQueryBlocks, At function: TKiDataQueryBlock, At function: KiReturningList! subissue: { <main>:1:1: Error: Column not found: fake } } }");
+        UNIT_ASSERT(result.GetIssues().ToString(true) == "{ <main>: Error: Type annotation, code: 1030 subissue: { <main>:3:25: Error: At function: DataQueryBlocks, At function: TKiDataQueryBlock, At function: KiReturningList! subissue: { <main>:3:25: Error: Column not found: fake } } }");
     }
 
     {

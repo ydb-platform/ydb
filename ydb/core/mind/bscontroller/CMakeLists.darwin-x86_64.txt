@@ -68,7 +68,6 @@ target_sources(core-mind-bscontroller PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/group_layout_checker.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/group_mapper.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/group_metrics_exchange.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/group_reconfigure_wipe.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/init_scheme.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/layout_helpers.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/load_everything.cpp

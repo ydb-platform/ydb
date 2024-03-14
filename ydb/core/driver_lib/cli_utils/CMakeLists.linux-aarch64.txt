@@ -59,7 +59,6 @@ target_sources(cli_utils PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_disk.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_genconfig.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_get.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_group.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_node.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_root.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_server.cpp

@@ -70,7 +70,6 @@ target_sources(core-client-server PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/grpc_proxy_status.h
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/http_ping.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_blobstorage_config.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_bsadm.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_http_server.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_cms.cpp

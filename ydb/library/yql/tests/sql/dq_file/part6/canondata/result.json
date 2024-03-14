@@ -750,6 +750,28 @@
         }
     ],
     "test.test[expr-constraints_of--Results]": [],
+    "test.test[expr-empty_iterator--Analyze]": [
+        {
+            "checksum": "871982365800c99f1e074eb2a78bbebb",
+            "size": 4741,
+            "uri": "https://{canondata_backend}/1773845/3def89d5ccced162be2b44de48124676a496e8db/resource.tar.gz#test.test_expr-empty_iterator--Analyze_/plan.txt"
+        }
+    ],
+    "test.test[expr-empty_iterator--Debug]": [
+        {
+            "checksum": "53cfc51c507185f73a0cd5deef5b4d17",
+            "size": 1976,
+            "uri": "https://{canondata_backend}/1773845/3def89d5ccced162be2b44de48124676a496e8db/resource.tar.gz#test.test_expr-empty_iterator--Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[expr-empty_iterator--Plan]": [
+        {
+            "checksum": "871982365800c99f1e074eb2a78bbebb",
+            "size": 4741,
+            "uri": "https://{canondata_backend}/1773845/3def89d5ccced162be2b44de48124676a496e8db/resource.tar.gz#test.test_expr-empty_iterator--Plan_/plan.txt"
+        }
+    ],
+    "test.test[expr-empty_iterator--Results]": [],
     "test.test[expr-expr_named_yql_lambda_multiline_atoms-default.txt-Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",

@@ -3433,15 +3433,9 @@ namespace NTypeAnnImpl {
         }
         const auto kind = input->Head().GetTypeAnn()->GetKind();
 
-        if (ETypeAnnotationKind::Flow == kind || ETypeAnnotationKind::Stream == kind) {
-            if (!EnsureMaxArgsCount(*input, 1, ctx.Expr)) {
+        for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
+            if (!EnsureDependsOn(*input->Child(i), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
-            }
-        } else {
-            for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
-                if (!EnsureDependsOn(*input->Child(i), ctx.Expr)) {
-                    return IGraphTransformer::TStatus::Error;
-                }
             }
         }
 

@@ -35,11 +35,13 @@ target_link_libraries(ydb-library-yql-minikql-protobuf_udf-ut PUBLIC
   yql-minikql-protobuf_udf
   yt-lib-schema
   providers-yt-common
-  yql-parser-pg_wrapper
   udf-service-exception_policy
   library-yql-minikql
   yql-public-udf
   common-schema-mkql
+  providers-common-codec
+  library-yql-sql
+  yql-sql-pg_dummy
   contrib-libs-protobuf
 )
 target_link_options(ydb-library-yql-minikql-protobuf_udf-ut PRIVATE
@@ -58,6 +60,7 @@ target_proto_messages(ydb-library-yql-minikql-protobuf_udf-ut PRIVATE
 target_sources(ydb-library-yql-minikql-protobuf_udf-ut PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/library/yql/minikql/protobuf_udf/ut/protobuf_ut.pb.h
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/protobuf_udf/ut/type_builder_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/protobuf_udf/ut/value_builder_ut.cpp
 )
 set_property(
   TARGET

@@ -46,7 +46,9 @@ public:
 #endif
 };
 
+#ifndef MKQL_DISABLE_CODEGEN
 using TResultCodegenerator = std::function<ICodegeneratorInlineWideNode::TGenerateResult(const TCodegenContext&, BasicBlock*&)>;
+#endif
 
 template<typename TDerived, typename TState, EValueRepresentation StateKind = EValueRepresentation::Embedded>
 class TSimpleStatefulWideFlowCodegeneratorNode

@@ -27,6 +27,11 @@ namespace NKikimr {
         DEFINE_TRACING_LEVELS(TDistributedStorage, 4, 9, 13, 14, 15)
 
 #undef DEFINE_TRACING_LEVELS
+
+        enum : ui8 {
+            // The most verbose detalisation level used in production
+            ProductionVerbose = 13,
+        };
     };
 
 

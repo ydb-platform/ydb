@@ -26,6 +26,11 @@ public:
     template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result>>
     inline explicit TBlockItem(T value);
 
+    inline explicit TBlockItem(bool value) {
+        Raw.Simple.bool_ = value ? 1 : 0;
+        Raw.Simple.Meta = static_cast<ui8>(EMarkers::Present);
+    }
+
     inline explicit TBlockItem(TStringRef value) {
         Raw.String.Value = value.Data();
         Raw.String.Size = value.Size();
@@ -109,6 +114,10 @@ private:
                 #define FIELD(type) type type##_;
                 PRIMITIVE_VALUE_TYPES(FIELD);
                 #undef FIELD
+                // According to the YQL <-> arrow type mapping convention,
+                // boolean values are processed as 8-bit unsigned integer
+                // with either 0 or 1 as a condition payload.
+                ui8 bool_;
                 ui64 Count;
             };
             union {
@@ -167,6 +176,9 @@ UDF_ASSERT_TYPE_SIZE(TBlockItem, 16);
 PRIMITIVE_VALUE_TYPES(VALUE_AS)
 PRIMITIVE_VALUE_TYPES(VALUE_GET)
 PRIMITIVE_VALUE_TYPES(VALUE_CONSTR)
+// XXX: TBlockItem constructor with <bool> parameter is implemented above.
+VALUE_AS(bool)
+VALUE_GET(bool)
 
 #undef VALUE_AS
 #undef VALUE_GET

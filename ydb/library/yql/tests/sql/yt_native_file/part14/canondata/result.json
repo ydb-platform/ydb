@@ -340,9 +340,9 @@
     ],
     "test.test[ansi_idents-escaped_udf_name-default.txt-Debug]": [
         {
-            "checksum": "4988877c69725bebc3eb77a48625f5cd",
-            "size": 2011,
-            "uri": "https://{canondata_backend}/1923547/5154c8bd8ef9ead4f609771f831f20c15e795571/resource.tar.gz#test.test_ansi_idents-escaped_udf_name-default.txt-Debug_/opt.yql"
+            "checksum": "bba9b3784ee486de1c6c60c024b7ac96",
+            "size": 2024,
+            "uri": "https://{canondata_backend}/1942525/2596beba419499583afc5dd08cdd9d8cff9ec93b/resource.tar.gz#test.test_ansi_idents-escaped_udf_name-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[ansi_idents-escaped_udf_name-default.txt-Plan]": [

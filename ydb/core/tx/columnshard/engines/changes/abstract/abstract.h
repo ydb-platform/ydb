@@ -42,7 +42,6 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, CurrentScheme);
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, TargetScheme);
     std::optional<TString> TargetTierName;
-    YDB_ACCESSOR_DEF(NArrow::NSerialization::TSerializerContainer, CustomTierSerializer);
     const TString CurrentTierName;
     std::optional<NActualizer::TRWAddress> RWAddress;
 public:

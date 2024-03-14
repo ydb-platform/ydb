@@ -1,8 +1,10 @@
 #pragma once
-#include "chunk_meta.h"
 #include <ydb/core/tx/columnshard/engines/portions/common.h>
-#include <ydb/core/tx/columnshard/engines/scheme/abstract/saver.h>
 #include <ydb/core/tx/columnshard/common/blob.h>
+
+#include <ydb/library/actors/core/log.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 
 namespace NKikimr::NColumnShard {
 class TSplitterCounters;
@@ -11,6 +13,8 @@ class TSplitterCounters;
 namespace NKikimr::NOlap {
 
 class TPortionInfo;
+class TSimpleColumnInfo;
+class TColumnSaver;
 
 class IPortionDataChunk {
 private:
@@ -30,6 +34,10 @@ protected:
     virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const = 0;
     virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const = 0;
     virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfo& portionInfo) const = 0;
+    virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(TString&& /*data*/, const TSimpleColumnInfo& /*columnInfo*/) const {
+        AFL_VERIFY(false);
+        return nullptr;
+    }
 public:
     IPortionDataChunk(const ui32 entityId, const std::optional<ui16>& chunkIdx = {})
         : EntityId(entityId)
@@ -77,14 +85,18 @@ public:
         ChunkIdx = value;
     }
 
+    std::shared_ptr<IPortionDataChunk> CopyWithAnotherBlob(TString&& data, const TSimpleColumnInfo& columnInfo) const {
+        return DoCopyWithAnotherBlob(std::move(data), columnInfo);
+    }
+
     std::shared_ptr<arrow::Scalar> GetFirstScalar() const {
         auto result = DoGetFirstScalar();
-        Y_ABORT_UNLESS(result);
+        AFL_VERIFY(result);
         return result;
     }
     std::shared_ptr<arrow::Scalar> GetLastScalar() const {
         auto result = DoGetLastScalar();
-        Y_ABORT_UNLESS(result);
+        AFL_VERIFY(result);
         return result;
     }
 

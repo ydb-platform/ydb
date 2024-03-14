@@ -117,6 +117,7 @@ struct TRunOptions {
     IOutputStream* StatisticsStream = nullptr;
     bool PrintPlan = false;
     bool AnalyzeQuery = false;
+    bool NoForceDq = false;
     bool AnsiLexer = false;
     IOutputStream* ExprOut = nullptr;
     IOutputStream* ResultOut = &Cout;
@@ -313,7 +314,7 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
         sqlSettings.AnsiLexer = options.AnsiLexer;
         sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
         sqlSettings.Flags.insert("DqEngineEnable");
-        if (!options.AnalyzeQuery) {
+        if (!options.AnalyzeQuery && !options.NoForceDq) {
             sqlSettings.Flags.insert("DqEngineForce");
         }
 
@@ -571,6 +572,7 @@ int RunMain(int argc, const char* argv[])
         .SetFlag(&runOptions.PrintPlan);
     opts.AddLongOption("keep-temp", "keep temporary tables").NoArgument();
     opts.AddLongOption("analyze-query", "enable analyze query").Optional().NoArgument().SetFlag(&runOptions.AnalyzeQuery);
+    opts.AddLongOption("no-force-dq", "don't set force dq mode").Optional().NoArgument().SetFlag(&runOptions.NoForceDq);
     opts.AddLongOption("ansi-lexer", "Use ansi lexer").Optional().NoArgument().SetFlag(&runOptions.AnsiLexer);
     opts.AddLongOption('E', "emulate-yt", "Emulate YT tables").Optional().NoArgument().SetFlag(&emulateYt);
 

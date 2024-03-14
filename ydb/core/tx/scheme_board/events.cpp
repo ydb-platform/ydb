@@ -148,7 +148,7 @@ void NInternalEvents::TEvNotifyBuilder::SetPathDescription(const TOpaquePathDesc
     );
 }
 
-// NInternalEvents::TEvNotifyk
+// NInternalEvents::TEvNotify
 //
 
 template <typename T>

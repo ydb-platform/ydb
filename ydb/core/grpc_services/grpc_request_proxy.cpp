@@ -95,19 +95,6 @@ private:
 
     void Handle(TEvListEndpointsRequest::TPtr& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
-        // see comment in PreHandle about replacing database with scope
-        // Another part of that hack:
-        // 1. Most clients, provided with database, will substitute it in ListEndpoints request
-        // 2. For FQ we replace database with scope
-        // 3. Those clients will use scope instead of database, it will cause error in ListEndpoints
-        // 4. Substitute the same database here as we do in metadata
-        if (AllowYdbRequestsWithoutDatabase && !Databases.contains(requestBaseCtx->GetDatabaseName().GetOrElse(""))) {
-            LOG_DEBUG_S(ctx, NKikimrServices::GRPC_SERVER,
-                "substituting " << event->Get()->GetRequestName() << ", meta database: " << event->Get()->GetDatabaseName() <<
-                ", request database: " << RootDatabase);
-            event->Get()->GetProtoRequestMut(event->Get())->set_database(RootDatabase);
-        }
-
         if (ValidateAndReplyOnError(requestBaseCtx)) {
             requestBaseCtx->FinishSpan();
             TGRpcRequestProxy::Handle(event, ctx);
@@ -199,13 +186,8 @@ private:
                 databaseName = CanonizePath(maybeDatabaseName.GetRef());
             } else {
                 if (!AllowYdbRequestsWithoutDatabase && DynamicNode) {
-<<<<<<< HEAD
-                    LOG_INFO_S(ctx, NKikimrServices::GRPC_SERVER, "MY_MARKER has no database, should have " << event->Get()->GetRequestName());
                     requestBaseCtx->ReplyUnauthenticated("Requests without specified database is not allowed");
                     return true;
-=======
-                    return;
->>>>>>> Adjust to comments
                 } else {
                     databaseName = RootDatabase;
                     skipResourceCheck = true;
@@ -218,15 +200,6 @@ private:
                 requestBaseCtx->ReplyUnauthenticated("Empty database name");
                 return true;
             }
-            // Dirty hack for seamless support of YDB API for FQ
-            // 1. FQ already doesn't set database in it's gRPC requests
-            // 2. FQ requests have scope in their metadata
-            // 3. Let's put scope instead of database into FQ requests and replace it with database where needed
-            if (!Databases.contains(databaseName) && (AllowYdbRequestsWithoutDatabase || !DynamicNode)) {
-                databaseName = RootDatabase;
-                skipResourceCheck = true;
-            }
-
             auto it = Databases.find(databaseName);
             if (it != Databases.end() && it->second.IsDatabaseReady()) {
                 database = &it->second;

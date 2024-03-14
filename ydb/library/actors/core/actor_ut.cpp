@@ -35,14 +35,14 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         TAtomic actorsAlive = 0;
         THPTimer Timer;
 
-        ui64 eventsPerPair = 100000000;
+        ui64 eventsPerPair = 1000;
 
         Timer.Reset();
         ui32 followerPoolId = 0;
         ui32 leaderPoolId = 0;
         TActorId followerId = actorSystem.Register(
             new TActorBenchmark::TSendReceiveActor(
-                TSendReceiveActorParams{.OtherEvents=eventsPerPair / 2, .Allocation=true}
+                TSendReceiveActorParams{.OtherEvents=eventsPerPair / 2, .Allocation=true, .ToSchedule=false}
             ),
             TMailboxType::HTSwap,
             followerPoolId
@@ -89,8 +89,8 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         TAtomic actorsAlive = 0;
         THPTimer Timer;
 
-        //ui64 eventsPerPair = 1000;
-        ui64 eventsPerPair = 100000000;
+        ui64 eventsPerPair = 1000;
+        //ui64 eventsPerPair = 100000000;
 
         Timer.Reset();
         ui32 followerPoolId = 0;

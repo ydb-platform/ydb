@@ -3386,7 +3386,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     } else if (ns == "datetime2" && (name == "Format" || name == "Parse")) {
         return BuildUdf(ctx, pos, nameSpace, name, args);
     } else if (ns == "pg") {
-        const bool isAggregateFunc = NYql::NPg::HasAggregation(name);
+        const bool isAggregateFunc = NYql::NPg::HasAggregation(name, NYql::NPg::EAggKind::Normal);
         if (isAggregateFunc) {
             if (aggMode == EAggregateMode::Distinct) {
                 return new TInvalidBuiltin(pos, "Distinct is not supported yet for PG aggregation ");
@@ -3548,7 +3548,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
             if (to_lower(*args[0]->GetLiteral("String")).StartsWith("pg::")) {
                 auto name = args[0]->GetLiteral("String")->substr(4);
-                const bool isAggregateFunc = NYql::NPg::HasAggregation(name);
+                const bool isAggregateFunc = NYql::NPg::HasAggregation(name, NYql::NPg::EAggKind::Normal);
                 if (!isAggregateFunc) {
                     return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown aggregation function: " << *args[0]->GetLiteral("String"));
                 }

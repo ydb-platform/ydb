@@ -70,7 +70,7 @@ runs:
           release)
             build_type=release
             ;;
-          release-cmake14)
+          release-clang14)
             build_type=release
             extra_params+=(--target-platform="CLANG14-LINUX-X86_64")
             extra_params+=(-DLLD_VERSION=16)

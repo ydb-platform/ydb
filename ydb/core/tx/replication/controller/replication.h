@@ -68,7 +68,7 @@ public:
         virtual const TString& GetIssue() const = 0;
         virtual void SetIssue(const TString& value) = 0;
 
-        virtual void Progress(ui64 schemeShardId, const TActorId& proxy, const TActorContext& ctx) = 0;
+        virtual void Progress(TReplication::TPtr replication, const TActorContext& ctx) = 0;
         virtual void Shutdown(const TActorContext& ctx) = 0;
     };
 
@@ -93,6 +93,7 @@ public:
 
     ui64 GetId() const;
     const TPathId& GetPathId() const;
+    const TActorId& GetYdbProxy() const;
     void SetState(EState state, TString issue = {});
     EState GetState() const;
     const TString& GetIssue() const;

@@ -9,7 +9,9 @@ namespace NKikimr::NReplication::NController {
 
 const TString ReplicationConsumerName = "replicationConsumer";
 
-void TTargetWithStream::Progress(ui64 schemeShardId, const TActorId& proxy, const TActorContext& ctx) {
+void TTargetWithStream::Progress(TReplication::TPtr replication, const TActorContext& ctx) {
+    const auto& proxy = replication->GetYdbProxy();
+
     switch (GetStreamState()) {
     case EStreamState::Creating:
         if (GetStreamName().empty() && !NameAssignmentInProcess) {
@@ -32,7 +34,7 @@ void TTargetWithStream::Progress(ui64 schemeShardId, const TActorId& proxy, cons
         break;
     }
 
-    TTargetBase::Progress(schemeShardId, proxy, ctx);
+    TTargetBase::Progress(replication, ctx);
 }
 
 void TTargetWithStream::Shutdown(const TActorContext& ctx) {

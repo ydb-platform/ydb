@@ -53,6 +53,7 @@ ydb/services/datastreams/ut DataStreams.TestReservedConsumersMetering
 ydb/services/datastreams/ut DataStreams.TestReservedStorageMetering
 ydb/services/fq/ut_integration Yq_1.*
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleWriteRead
+ydb/services/keyvalue/ut KeyValueGRPCService.SimpleCopyUnexistedKey
 ydb/services/keyvalue/ut sole*
 ydb/services/persqueue_v1/ut/describes_ut TTopicApiDescribes.DescribeTopic
 ydb/services/persqueue_v1/ut TPersQueueTest.CheckACLForGrpcWrite

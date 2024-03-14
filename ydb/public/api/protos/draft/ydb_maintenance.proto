@@ -43,6 +43,7 @@ message Node {
     }
     // start_time defines time when node was registered in cms.
     google.protobuf.Timestamp start_time = 8;
+    string version = 9;
 }
 
 message ListClusterNodesRequest {

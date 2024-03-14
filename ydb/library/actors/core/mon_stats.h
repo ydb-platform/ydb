@@ -80,6 +80,9 @@ namespace NActors {
         bool IsNeedy = false;
         bool IsStarved = false;
         bool IsHoggish = false;
+        bool HasFullOwnSharedThread = false;
+        bool HasHalfOfOwnSharedThread = false;
+        bool HasHalfOfOtherSharedThread = false;
     };
 
     struct TExecutorThreadStats {

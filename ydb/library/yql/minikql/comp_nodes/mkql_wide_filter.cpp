@@ -224,7 +224,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    TBaseComputation::TGenerateResult GenFetchProcess(Value*, const TCodegenContext&, const TResultCodegenerator&, BasicBlock*&) const {
+    typename TBaseComputation::TGenerateResult GenFetchProcess(Value*, const TCodegenContext&, const TResultCodegenerator&, BasicBlock*&) const {
         return {nullptr, {}};
     }
 #endif
@@ -271,7 +271,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    TBaseComputation::TGenerateResult GenFetchProcess(Value*, const TCodegenContext&, const TResultCodegenerator&, BasicBlock*&) const {
+    typename TBaseComputation::TGenerateResult GenFetchProcess(Value*, const TCodegenContext&, const TResultCodegenerator&, BasicBlock*&) const {
         return {nullptr, {}};
     }
 #endif

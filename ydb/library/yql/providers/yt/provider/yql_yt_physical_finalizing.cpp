@@ -1814,7 +1814,7 @@ private:
             auto readerNode = ctx.NewList(op.Pos(), std::move(readerNodeChildren));
             limitNodeChildren.push_back(readerNode);
         }
-
+        std::stable_sort(limitNodeChildren.begin(), limitNodeChildren.end(), [](const auto& p1, const auto& p2) { return p1->UniqueId() < p2->UniqueId(); });
         return ctx.ChangeChild(*node, TYtTransientOpBase::idx_Settings,
             NYql::AddSetting(op.Settings().Ref(), EYtSettingType::Limit, ctx.NewList(op.Pos(), std::move(limitNodeChildren)), ctx));
     }

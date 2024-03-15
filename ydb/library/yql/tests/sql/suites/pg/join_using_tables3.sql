@@ -3,4 +3,4 @@ select * from (
     plato."Input" a
     full join
     plato."Input"
-    using(key,subkey,value))
+    using(key,subkey,value)) order by key

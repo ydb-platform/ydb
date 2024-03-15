@@ -928,7 +928,9 @@ TUsedColumns GatherUsedColumns(const TExprNode::TPtr& result, const TExprNode::T
 
                 for (ui32 col = 0; col < join->Child(3)->ChildrenSize(); ++col) {
                     auto lr = join->Child(3)->Child(col);
-                    usedColumns.insert(std::make_pair(TString(lr->Child(0)->Content()), std::make_pair(Max<ui32>(), TString())));
+                    if (lr->Child(0)->IsAtom()) {
+                        usedColumns.insert(std::make_pair(TString(lr->Child(0)->Content()), std::make_pair(Max<ui32>(), TString())));
+                    }
                     usedColumns.insert(std::make_pair(TString(lr->Child(1)->Content()), std::make_pair(Max<ui32>(), TString())));
                     usedColumns.erase(TString(join->Child(2)->Child(col)->Content()));
                     joinUsingColumns.emplace_back(ToString(groupNo), join->Child(2)->Child(col)->Content());
@@ -1530,15 +1532,22 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
                 current = cartesian;
                 continue;
             }
-            if (join->ChildrenSize() > 1 && join->Child(1)->Content() == "using") {
+            if (join->ChildrenSize() > 2) {
+                Y_ENSURE(join->Child(1)->IsAtom(), "expected only USING clause when join_ops children size > 2");
+                Y_ENSURE(join->Child(1)->Content() == "using", "expected only USING clause when join_ops children size > 2");
                 Y_ENSURE(join->ChildrenSize() > 3 && join->Child(3)->IsList(), "Excepted list of aliased columns in USING join");
                 auto left = current;
                 auto right = with;
                 TExprNode::TListType leftColumns;
                 TExprNode::TListType rightColumns;
-
+                TExprNode::TListType toRemove;
                 for (auto& col: join->Child(3)->ChildrenList()) {
-                    leftColumns.push_back(col->Child(0));
+                    if (col->Child(0)->IsAtom()) {
+                        leftColumns.push_back(col->Child(0));
+                    } else {
+                        toRemove.push_back(col->Child(0)->Child(0));
+                        leftColumns.push_back(col->Child(0)->Child(0));
+                    }
                     rightColumns.push_back(col->Child(1));
                 }
                 current = BuildEquiJoin(pos, joinType, left, right, leftColumns, rightColumns, ctx);
@@ -1567,6 +1576,11 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
                     .Seal()
                 .Seal()
                 .Build();
+                auto removeProjection = ctx.Builder(pos)
+                    .Lambda()
+                        .Param("row")
+                        .Arg(0, "row")
+                    .Seal().Build();
                 current = ctx.Builder(pos)
                     .Callable("OrderedMap")
                         .Add(0, current)
@@ -1575,7 +1589,17 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
                             .Callable("FlattenMembers")
                                 .List(0)
                                     .Atom(0, "")
-                                    .Arg(1, "row")
+                                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                        if (toRemove.size()) {
+                                            parent.Callable(1, "RemoveMembers")
+                                                .Arg(0, "row")
+                                                .Add(1, ctx.NewList(pos, std::move(toRemove)))
+                                            .Seal();
+                                        } else {
+                                            parent.Arg(1, "row");
+                                        }
+                                        return parent;
+                                    })
                                 .Seal()
                                 .List(1)
                                     .Atom(0, "")

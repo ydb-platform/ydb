@@ -1718,9 +1718,9 @@
     ],
     "test.test[pg-join_using7-default.txt-Debug]": [
         {
-            "checksum": "49c77e660d471ca4c184d799ed4b9681",
-            "size": 702,
-            "uri": "https://{canondata_backend}/1599023/7bff6ca2efa2bb9c0dc4531099e9a5e552074719/resource.tar.gz#test.test_pg-join_using7-default.txt-Debug_/opt.yql"
+            "checksum": "f4f8726a6c3f147f0e5d5c148bfa8d36",
+            "size": 772,
+            "uri": "https://{canondata_backend}/1880306/3aa48e557fc07db205c9caace5408eef6058c74c/resource.tar.gz#test.test_pg-join_using7-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-join_using7-default.txt-Plan]": [

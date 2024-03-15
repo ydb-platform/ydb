@@ -9,4 +9,4 @@ select * from (
     (select 2 as foo) a
     join
     (select 2 as bar) b
-    on(a.foo = b.bar))
+    on(a.foo = b.bar)) order by x

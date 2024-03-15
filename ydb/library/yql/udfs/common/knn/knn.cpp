@@ -17,7 +17,7 @@ SIMPLE_STRICT_UDF(TToBinaryString, char*(TAutoMap<TListType<float>>)) {
     return TSerializerFacade::Serialize(format, valueBuilder, x);
 }
 
-SIMPLE_STRICT_UDF(TFromBinaryString, TOptional<TListType<float>>(const char*)) {
+SIMPLE_STRICT_UDF(TFromBinaryString, TOptional<TListType<float>>(TAutoMap<const char*>)) {
     TStringRef str = args[0].AsStringRef();
 
     return TSerializerFacade::Deserialize(valueBuilder, str);

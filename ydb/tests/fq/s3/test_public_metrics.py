@@ -12,7 +12,10 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 class TestPublicMetrics:
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_public_metrics(self, kikimr, s3, client, yq_version):
+    def test_public_metrics(self, kikimr, s3, client, yq_version, unique_prefix):
+        if yq_version == "v2":
+            pytest.skip("Tiket: ")
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -37,14 +40,15 @@ Apple,2,22
 Pear,15,33'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
         kikimr.control_plane.wait_bootstrap(1)
-        client.create_storage_connection("fruitbucket", "fbucket")
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
 
         cloud_id = "mock_cloud"
         folder_id = "my_folder"
 
-        sql = R'''
+        sql = fR'''
             SELECT *
-            FROM fruitbucket.`fruits.csv`
+            FROM `{storage_connection_name}`.`fruits.csv`
             WITH (format=csv_with_names, SCHEMA (
                 Fruit String NOT NULL,
                 Price Int NOT NULL,
@@ -80,10 +84,10 @@ Pear,15,33'''
             assert metrics.find_sensor(
                 {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.output_bytes"}) == 0
 
-        sql = R'''
-            INSERT INTO fruitbucket.`/copy/` WITH (format=parquet)
+        sql = fR'''
+            INSERT INTO `{storage_connection_name}`.`/copy/` WITH (format=parquet)
             SELECT *
-            FROM fruitbucket.`fruits.csv`
+            FROM `{storage_connection_name}`.`fruits.csv`
             WITH (format=csv_with_names, SCHEMA (
                 Fruit String NOT NULL,
                 Price Int NOT NULL,

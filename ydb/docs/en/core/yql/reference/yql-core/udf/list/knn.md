@@ -1,8 +1,8 @@
 # KNN
 ## Introduction
 
-[Nearest Neighbor search](https://en.wikipedia.org/wiki/Nearest_neighbor_search) (NN) is an optimization task that consists in finding the closest point (or set of points) in a given dataset to a given query point. Closeness can be defined in terms of distance or similarity metrics.
-A generalization of the NN problem is the k-NN problem, where it's required to find the k nearest points to the query point. This can be useful in various applications such as image classification, recommendation systems, and more.
+[Nearest Neighbor search](https://en.wikipedia.org/wiki/Nearest_neighbor_search) (NN) is an optimization task that consists of finding the closest point in a given dataset to a given query point. Closeness can be defined in terms of distance or similarity metrics.
+A generalization of the NN problem is the [k-NN problem](https://en.wikipedia.org/wiki/K-nearest_neighbors_algorithm), where it's required to find the `k` nearest points to the query point. This can be useful in various applications such as image classification, recommendation systems, etc.
 https://en.wikipedia.org/wiki/Nearest_neighbor_search
 
 The solution of the problem is divided into two major subclasses of methods: exact and approximate. In this document, we will talk about the exact brute force method.

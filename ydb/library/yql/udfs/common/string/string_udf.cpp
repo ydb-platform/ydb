@@ -183,12 +183,26 @@ namespace {
     END_SIMPLE_ARROW_UDF(T##function, T##function##KernelExec::Do)
 
 #define STRING_STREAM_TEXT_FORMATTER_UDF(function)                                \
-    SIMPLE_STRICT_UDF(T##function, char*(TAutoMap<char*>)) {                      \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##function, char*(TAutoMap<char*>)) {          \
         TStringStream result;                                                     \
         const TStringBuf input(args[0].AsStringRef());                            \
         result << function(input);                                                \
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size())); \
-    }
+    }                                                                             \
+                                                                                  \
+    struct T##function##KernelExec                                                \
+        : public TUnaryKernelExec<T##function##KernelExec>                        \
+    {                                                                             \
+        template <typename TSink>                                                 \
+        static void Process(TBlockItem arg1, const TSink& sink) {                 \
+            TStringStream result;                                                 \
+            const TStringBuf input(arg1.AsStringRef());                           \
+            result << function(input);                                            \
+            sink(TBlockItem(TStringRef(result.Data(), result.Size())));           \
+        }                                                                         \
+    };                                                                            \
+                                                                                  \
+    END_SIMPLE_ARROW_UDF(T##function, T##function##KernelExec::Do)
 
 
 #define STRING_STREAM_HRSZ_FORMATTER_UDF(udfName, hrSize)                         \

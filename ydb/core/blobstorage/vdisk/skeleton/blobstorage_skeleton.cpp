@@ -1360,7 +1360,7 @@ namespace NKikimr {
 
         void Handle(TEvHullCompactResult::TPtr &ev, const TActorContext &ctx) {
             Y_ABORT_UNLESS(VDiskCompactionState);
-            VDiskCompactionState->Compacted(ctx, ev->Get()->RequestId, ev->Get()->Type);
+            VDiskCompactionState->Compacted(ctx, ev->Get()->RequestId, ev->Get()->Type, VCtx->VDiskLogPrefix, VCtx->OOSMonGroup);
         }
 
         ////////////////////////////////////////////////////////////////////////

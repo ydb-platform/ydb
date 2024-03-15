@@ -236,7 +236,7 @@ namespace NKikimr::NPrivate {
             AddMark((FoundOriginalParts.size() ? "Found parts" : "Parts were not found"));
             CurrentEventTrace = nullptr;
 #endif
-            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, FoundPartsEvent.release(), Cookie, VDiskLogPrefix, MonGroup); // TODO
+            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, FoundPartsEvent.release(), Cookie, VDiskLogPrefix, MonGroup);
         }
 
         void PullOriginalPart(ui64 pullingPart) {

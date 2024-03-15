@@ -54,7 +54,9 @@ namespace NKikimr {
     void TVDiskCompactionState::Compacted(
             const TActorContext &ctx,
             i64 reqId,
-            EHullDbType dbType) {
+            EHullDbType dbType,
+            const TString& vDiskLogPrefix,
+            std::shared_ptr<NMonGroup::TOutOfSpaceGroup> monGroup) {
         auto it = Requests.find(reqId);
         Y_ABORT_UNLESS(it != Requests.end());
         auto &req = it->second;
@@ -67,7 +69,7 @@ namespace NKikimr {
         }
 
         if (req.AllDone()) {
-            SendVDiskResponse(ctx, req.ClientId, req.Reply.release(), req.ClientCookie, "", nullptr); // TODO
+            SendVDiskResponse(ctx, req.ClientId, req.Reply.release(), req.ClientCookie, vDiskLogPrefix, monGroup);
             // delete req from Request, we handled it
             Requests.erase(it);
         }

@@ -158,7 +158,7 @@ namespace NKikimr {
         LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_OTHER,
                 VDISKP(vctx->VDiskLogPrefix,
                     "TEvVDbStatResult: %s", result->ToString().data()));
-        SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, "", nullptr); // TODO
+        SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, vctx->VDiskLogPrefix, vctx->OOSMonGroup);
     }
 
     template <class TKey, class TMemRec>

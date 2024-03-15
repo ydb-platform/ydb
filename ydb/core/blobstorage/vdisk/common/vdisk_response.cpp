@@ -31,7 +31,7 @@ void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEve
             UpdateMonOOSStatus(item.GetStatusFlags(), monGroup);
         }
     }
-    
+
     switch (const ui32 type = ev->Type()) {
 #define HANDLE_EVENT(T) \
         case TEvBlobStorage::T::EventType: { \

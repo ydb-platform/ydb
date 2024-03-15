@@ -16,6 +16,7 @@ private:
     YDB_READONLY(TAtomicCounter, IndexesApprovedOnSelect, 0);
     YDB_READONLY(TAtomicCounter, IndexesSkippedNoData, 0);
     YDB_READONLY(TAtomicCounter, TieringUpdates, 0);
+    YDB_READONLY(TAtomicCounter, ActualizationsCount, 0);
     YDB_ACCESSOR(std::optional<TDuration>, GuaranteeIndexationInterval, TDuration::Zero());
     YDB_ACCESSOR(std::optional<TDuration>, PeriodicWakeupActivationPeriod, std::nullopt);
     YDB_ACCESSOR(std::optional<TDuration>, StatsReportInterval, std::nullopt);
@@ -118,6 +119,9 @@ private:
 
     THashSet<TString> SharingIds;
 protected:
+    virtual void OnPortionActualization(const NOlap::TPortionInfo& /*info*/) override {
+        ActualizationsCount.Inc();
+    }
     virtual void DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumnShard& shard) override;
     virtual void DoOnTabletStopped(const ::NKikimr::NColumnShard::TColumnShard& shard) override;
     virtual void DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard& shard, const NOlap::IBlobsGCAction& action) override;

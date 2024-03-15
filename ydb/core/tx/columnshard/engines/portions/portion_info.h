@@ -72,6 +72,9 @@ public:
         return false;
     }
 
+    void ReorderChunks();
+
+    THashMap<TString, THashMap<TUnifiedBlobId, std::vector<std::shared_ptr<IPortionDataChunk>>>> RestoreEntityChunks(NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
     THashMap<TString, THashMap<TUnifiedBlobId, std::vector<TEntityChunk>>> GetEntityChunks(const TIndexInfo & info) const;
 
     const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {

@@ -454,6 +454,25 @@ TBlobRangeLink16::TLinkId TPortionInfo::RegisterBlobId(const TUnifiedBlobId& blo
     return idx;
 }
 
+THashMap<TString, THashMap<TUnifiedBlobId, std::vector<std::shared_ptr<IPortionDataChunk>>>> TPortionInfo::RestoreEntityChunks(NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const {
+    THashMap<TString, THashMap<TUnifiedBlobId, std::vector<std::shared_ptr<IPortionDataChunk>>>> result;
+    for (auto&& c : GetRecords()) {
+        const TString& storageId = GetColumnStorageId(c.GetColumnId(), indexInfo);
+        auto& storageRecords = result[storageId];
+        auto& blobRecords = storageRecords[GetBlobId(c.GetBlobRange().GetBlobIdxVerified())];
+        blobRecords.emplace_back(std::make_shared<NChunks::TChunkPreparation>(blobs.Extract(storageId, RestoreBlobRange(c.GetBlobRange())), c, indexInfo.GetColumnFeaturesVerified(c.GetColumnId())));
+        blobRecords.back()->SetChunkIdx(c.GetChunkIdx());
+    }
+    for (auto&& c : GetIndexes()) {
+        const TString& storageId = indexInfo.GetIndexStorageId(c.GetIndexId());
+        auto& storageRecords = result[storageId];
+        auto& blobRecords = storageRecords[GetBlobId(c.GetBlobRange().GetBlobIdxVerified())];
+        blobRecords.emplace_back(std::make_shared<NChunks::TPortionIndexChunk>(c.GetAddress(), c.GetRecordsCount(), c.GetRawBytes(), blobs.Extract(storageId, RestoreBlobRange(c.GetBlobRange()))));
+        blobRecords.back()->SetChunkIdx(c.GetChunkIdx());
+    }
+    return result;
+}
+
 THashMap<TString, THashMap<NKikimr::NOlap::TUnifiedBlobId, std::vector<NKikimr::NOlap::TEntityChunk>>> TPortionInfo::GetEntityChunks(const TIndexInfo& indexInfo) const {
     THashMap<TString, THashMap<TUnifiedBlobId, std::vector<TEntityChunk>>> result;
     for (auto&& c : GetRecords()) {
@@ -469,6 +488,41 @@ THashMap<TString, THashMap<NKikimr::NOlap::TUnifiedBlobId, std::vector<NKikimr::
         blobRecords.emplace_back(TEntityChunk(c.GetAddress(), c.GetRecordsCount(), c.GetRawBytes(), c.GetBlobRange()));
     }
     return result;
+}
+
+void TPortionInfo::ReorderChunks() {
+    {
+        auto pred = [](const TColumnRecord& l, const TColumnRecord& r) {
+            return l.GetAddress() < r.GetAddress();
+        };
+        std::sort(Records.begin(), Records.end(), pred);
+        std::optional<TChunkAddress> chunk;
+        for (auto&& i : Records) {
+            if (!chunk) {
+                chunk = i.GetAddress();
+            } else {
+                AFL_VERIFY(*chunk < i.GetAddress());
+                chunk = i.GetAddress();
+            }
+            AFL_VERIFY(chunk->GetEntityId());
+        }
+    }
+    {
+        auto pred = [](const TIndexChunk& l, const TIndexChunk& r) {
+            return l.GetAddress() < r.GetAddress();
+        };
+        std::sort(Indexes.begin(), Indexes.end(), pred);
+        std::optional<TChunkAddress> chunk;
+        for (auto&& i : Indexes) {
+            if (!chunk) {
+                chunk = i.GetAddress();
+            } else {
+                AFL_VERIFY(*chunk < i.GetAddress());
+                chunk = i.GetAddress();
+            }
+            AFL_VERIFY(chunk->GetEntityId());
+        }
+    }
 }
 
 std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() const {

@@ -1724,7 +1724,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
             auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
             TString blobData = NArrow::SerializeBatchNoCompression(batch);
             UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
-            auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
             evWrite->SetLockId(lockId, 1);
 
             ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
@@ -1751,7 +1751,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
             auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
             TString blobData = NArrow::SerializeBatchNoCompression(batch);
             UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
-            auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
             evWrite->SetLockId(lockId, 1);
 
             ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
@@ -1774,9 +1774,10 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         }
         {
             auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
-            evWrite->SetLockId(lockId, 1);
             evWrite->SetTxId(txId);
             evWrite->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+            auto* lock = evWrite->Record.MutableLocks()->AddLocks();
+            lock->SetLockId(lockId);
 
             TActorId sender = runtime.AllocateEdgeActor();
             ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());

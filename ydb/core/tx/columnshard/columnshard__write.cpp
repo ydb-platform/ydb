@@ -227,7 +227,9 @@ public:
     using TPtr = std::shared_ptr<TCommitOperation>;
 
     bool Parse(const NEvents::TDataEvents::TEvWrite& evWrite) {
-        YQL_ENSURE(evWrite.Record.GetLocks().GetLocks().size() == 1);
+        if (evWrite.Record.GetLocks().GetLocks().size() != 1) {
+            return false;
+        }
         LockId = evWrite.Record.GetLocks().GetLocks()[0].GetLockId();
         TxId = evWrite.Record.GetTxId();
         KqpLocks = evWrite.Record.GetLocks();

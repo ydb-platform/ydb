@@ -372,6 +372,19 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
+    Y_UNIT_TEST(ExecuteDDLStatusCodeSchemeError) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        {
+            auto db = kikimr.GetQueryClient();
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE unsupported_TzTimestamp (key Int32, payload TzTimestamp, primary key(key)))",
+                TTxControl::NoTx()
+            ).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(ExecuteQueryScalar) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();

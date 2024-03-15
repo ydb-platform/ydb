@@ -44,6 +44,7 @@ target_sources(blobstorage-vdisk-common PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_mon.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_outofspace.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_performance_params.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_pdisk_error.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_private_events.h
@@ -66,6 +67,7 @@ target_sources(blobstorage-vdisk-common PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_log.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_outofspace.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_performance_params.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_recoverylogwriter.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_response.cpp
 )

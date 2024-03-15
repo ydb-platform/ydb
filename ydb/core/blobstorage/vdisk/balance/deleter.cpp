@@ -24,10 +24,6 @@ namespace {
         ui32 Responses;
         ui32 ExpectedResponses;
     public:
-        enum EState {
-            WAITING_RESPONSES,
-            FINISHED,
-        };
 
         TPartsRequester(TActorId notifyId, size_t batchSize, TQueue<TPartInfo> parts, TReplQuoter::TPtr quoter, TIntrusivePtr<TBlobStorageGroupInfo> gInfo, TQueueActorMapPtr queueActorMapPtr)
             : NotifyId(notifyId)
@@ -41,13 +37,7 @@ namespace {
             , ExpectedResponses(0)
         {}
 
-        EState DoJobQuant(const TActorId& selfId) {
-            if (ExpectedResponses != 0) {
-                return WAITING_RESPONSES;
-            }
-            if (Parts.empty()) {
-                return FINISHED;
-            }
+        void ScheduleJobQuant(const TActorId& selfId) {
             Result.resize(Min(Parts.size(), BatchSize));
             ExpectedResponses = 0;
             for (ui64 i = 0; i < BatchSize && !Parts.empty(); ++i) {
@@ -60,6 +50,8 @@ namespace {
                 };
 
                 auto vDiskId = GetMainReplicaVDiskId(*GInfo, item.Key);
+
+                // query which would tell us which parts are realy on main (not by ingress)
                 auto ev = TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(
                     vDiskId, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::AsyncRead,
                     TEvBlobStorage::TEvVGet::EFlags::None, i,
@@ -73,16 +65,15 @@ namespace {
                 );
                 ++ExpectedResponses;
             }
-            return WAITING_RESPONSES;
         }
 
-        std::optional<TVector<TPartOnMain>> TryGetResults() {
-            if (ExpectedResponses != 0 && ExpectedResponses == Responses) {
+        std::pair<std::optional<TVector<TPartOnMain>>, ui32> TryGetResults() {
+            if (ExpectedResponses == Responses) {
                 ExpectedResponses = 0;
                 Responses = 0;
-                return Result;
+                return {std::move(Result), Parts.size()};
             }
-            return std::nullopt;
+            return {std::nullopt, Parts.size()};
         }
 
         void Handle(TEvBlobStorage::TEvVGetResult::TPtr ev) {
@@ -116,9 +107,18 @@ namespace {
         };
         TStats Stats;
 
-        void DoJobQuant() {
-            auto status = PartsRequester.DoJobQuant(SelfId());
-            if (auto batch = PartsRequester.TryGetResults()) {
+        void ScheduleJobQuant() {
+            PartsRequester.ScheduleJobQuant(SelfId());
+            TryProcessResults();
+        }
+
+        void Handle(TEvBlobStorage::TEvVGetResult::TPtr ev) {
+            PartsRequester.Handle(ev);
+            TryProcessResults();
+        }
+
+        void TryProcessResults() {
+            if (auto [batch, partsLeft] = PartsRequester.TryGetResults(); batch.has_value()) {
                 Stats.PartsRequested += batch->size();
                 for (auto& part: *batch) {
                     if (part.HasOnMain) {
@@ -126,10 +126,10 @@ namespace {
                         DeleteLocal(part.Key);
                     }
                 }
-            }
-            BLOG_D(Ctx->VCtx->VDiskLogPrefix << "PartsRequester status " << ": " << (ui32)status << " " << Stats.PartsDecidedToDelete);
-            if (status == TPartsRequester::EState::FINISHED && Stats.PartsDecidedToDelete == Stats.PartsMarkedDeleted) {
-                PassAway();
+                Send(NotifyId, new NActors::TEvents::TEvCompleted(DELETER_ID, partsLeft));
+                if (partsLeft == 0) {
+                    PassAway();
+                }
             }
         }
 
@@ -159,8 +159,8 @@ namespace {
         }
 
         STRICT_STFUNC(StateFunc,
-            cFunc(NActors::TEvents::TEvWakeup::EventType, DoJobQuant)
-            hFunc(TEvBlobStorage::TEvVGetResult, PartsRequester.Handle)
+            cFunc(NActors::TEvents::TEvWakeup::EventType, ScheduleJobQuant)
+            hFunc(TEvBlobStorage::TEvVGetResult, Handle)
             hFunc(TEvDelLogoBlobDataSyncLogResult, Handle)
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
 

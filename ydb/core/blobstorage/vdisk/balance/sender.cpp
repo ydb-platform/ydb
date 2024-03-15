@@ -20,10 +20,6 @@ namespace {
         ui32 Responses;
         ui32 ExpectedResponses;
     public:
-        enum EReaderState {
-            WAITING_PDISK_RESPONSES,
-            FINISHED,
-        };
 
         TReader(size_t batchSize, TPDiskCtxPtr pDiskCtx, TQueue<TPartInfo> parts, TReplQuoter::TPtr replPDiskReadQuoter, TBlobStorageGroupType gType)
             : BatchSize(batchSize)
@@ -36,13 +32,7 @@ namespace {
             , ExpectedResponses(0)
         {}
 
-        EReaderState DoJobQuant(const TActorId& selfId) {
-            if (ExpectedResponses != 0) {
-                return WAITING_PDISK_RESPONSES;
-            }
-            if (Parts.empty()) {
-                return FINISHED;
-            }
+        void ScheduleJobQuant(const TActorId& selfId) {
             Result.resize(Min(Parts.size(), BatchSize));
             ExpectedResponses = 0;
             for (ui64 i = 0; i < BatchSize && !Parts.empty(); ++i) {
@@ -54,6 +44,7 @@ namespace {
                 };
                 std::visit(TOverloaded{
                     [&](const TRope& data) {
+                        // part is already in memory, no need to read it from disk
                         Result[i].PartData = data;
                         ++Responses;
                     },
@@ -77,16 +68,15 @@ namespace {
                 }, item.PartData);
                 ++ExpectedResponses;
             }
-            return Responses != ExpectedResponses ? WAITING_PDISK_RESPONSES : FINISHED;
         }
 
-        std::optional<TVector<TPart>> TryGetResults() {
-            if (ExpectedResponses != 0 && ExpectedResponses == Responses) {
+        std::pair<std::optional<TVector<TPart>>, ui32> TryGetResults() {
+            if (ExpectedResponses == Responses) {
                 ExpectedResponses = 0;
                 Responses = 0;
-                return std::move(Result);
+                return {std::move(Result), Parts.size()};
             }
-            return std::nullopt;
+            return {std::nullopt, Parts.size()};
         }
 
         void Handle(NPDisk::TEvChunkReadResult::TPtr ev) {
@@ -118,17 +108,30 @@ namespace {
         };
         TStats Stats;
 
-        void DoJobQuant() {
-            auto status = Reader.DoJobQuant(SelfId());
-            if (auto batch = Reader.TryGetResults()) {
+        void ScheduleJobQuant() {
+            Reader.ScheduleJobQuant(SelfId());
+            // if all parts are already in memory, we could process results right away
+            TryProcessResults();
+        }
+
+        void TryProcessResults() {
+            if (auto [batch, partsLeft] = Reader.TryGetResults(); batch.has_value()) {
                 Stats.PartsRead += batch->size();
                 SendParts(*batch);
+
+                // notify about job quant completion
+                Send(NotifyId, new NActors::TEvents::TEvCompleted(SENDER_ID, partsLeft));
+
+                if (partsLeft == 0) {
+                    // no more parts to send
+                    PassAway();
+                }
             }
-            BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Reader status "
-                    << ": " << (ui32)status << " " << Stats.PartsRead << " " << Stats.PartsSent);
-            if (status == TReader::EReaderState::FINISHED && Stats.PartsRead == Stats.PartsSent) {
-                PassAway();
-            }
+        }
+
+        void Handle(NPDisk::TEvChunkReadResult::TPtr ev) {
+            Reader.Handle(ev);
+            TryProcessResults();
         }
 
         void SendParts(const TVector<TPart>& batch) {
@@ -172,8 +175,8 @@ namespace {
         }
 
         STRICT_STFUNC(StateFunc,
-            cFunc(NActors::TEvents::TEvWakeup::EventType, DoJobQuant)
-            hFunc(NPDisk::TEvChunkReadResult, Reader.Handle)
+            cFunc(NActors::TEvents::TEvWakeup::EventType, ScheduleJobQuant)
+            hFunc(NPDisk::TEvChunkReadResult, Handle)
             hFunc(TEvBlobStorage::TEvVPutResult, Handle)
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
 

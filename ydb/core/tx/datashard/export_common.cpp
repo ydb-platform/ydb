@@ -118,5 +118,15 @@ bool PgToStream(TStringBuf data, void* typeDesc, IOutputStream& out, TString& er
     return true;
 }
 
+bool UuidToStream(const std::pair<ui64, ui64>& loHi, IOutputStream& out, TString& err) {
+    Y_UNUSED(err);
+
+    NYdb::TUuidValue uuid(loHi.first, loHi.second);
+    
+    out << uuid.ToString();
+    
+    return true;
+}
+
 } // NDataShard
 } // NKikimr

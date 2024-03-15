@@ -506,7 +506,7 @@ namespace {
     END_SIMPLE_ARROW_UDF(TReplaceLast, TReplaceLastKernelExec::Do)
 
 
-    SIMPLE_STRICT_UDF(TRemoveAll, char*(TAutoMap<char*>, char*)) {
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TRemoveAll, char*(TAutoMap<char*>, char*)) {
         std::string input(args[0].AsStringRef());
         const std::string_view remove(args[1].AsStringRef());
         const std::unordered_set<char> chars(remove.cbegin(), remove.cend());
@@ -522,6 +522,31 @@ namespace {
         }
         return args[0];
     }
+
+    struct TRemoveAllKernelExec
+        : public TBinaryKernelExec<TRemoveAllKernelExec>
+    {
+        template <typename TSink>
+        static void Process(TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
+            std::string input(arg1.AsStringRef());
+            const std::string_view remove(arg2.AsStringRef());
+            const std::unordered_set<char> chars(remove.cbegin(), remove.cend());
+            size_t tpos = 0;
+            for (const char c : input) {
+                if (!chars.contains(c)) {
+                    input[tpos++] = c;
+                }
+            }
+            if (tpos != input.size()) {
+                input.resize(tpos);
+                return sink(TBlockItem(input));
+            }
+            sink(arg1);
+        }
+    };
+
+    END_SIMPLE_ARROW_UDF(TRemoveAll, TRemoveAllKernelExec::Do)
+
 
     SIMPLE_STRICT_UDF(TRemoveFirst, char*(TAutoMap<char*>, char*)) {
         std::string input(args[0].AsStringRef());

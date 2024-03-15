@@ -17,7 +17,10 @@ Example:
 ```sql
 SELECT id, fact, embedding FROM Facts
 WHERE user="Williams"
-ORDER BY Knn::CosineDistance(Knn::FromBinaryString(embedding), $TargetEmbedding)
+ORDER BY Knn::CosineDistance(
+    Knn::FromBinaryString(embedding),
+    $TargetEmbedding
+)
 LIMIT 10
 ```
 

@@ -5,6 +5,7 @@
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 #include <ydb/core/metering/metering.h>
+
 #include <ydb/library/protobuf_printer/size_printer.h>
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 
@@ -42,6 +43,7 @@ struct TPingTaskParams {
 
 struct TFinalStatus {
     FederatedQuery::QueryMeta::ComputeStatus Status = FederatedQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED;
+    NYql::NDqProto::StatusIds::StatusCode StatusCode = NYql::NDqProto::StatusIds::UNSPECIFIED;
     NYql::TIssues Issues;
     NYql::TIssues TransientIssues;
 };
@@ -394,6 +396,7 @@ TPingTaskParams ConstructHardPingTask(
         }
 
         finalStatus->Status = query.meta().status();
+        finalStatus->StatusCode = internal.status_code();
         NYql::IssuesFromMessage(query.issue(), finalStatus->Issues);
         NYql::IssuesFromMessage(query.transient_issue(), finalStatus->TransientIssues);
 
@@ -637,7 +640,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
             if (success) {
                 actorSystem->Send(ControlPlaneStorageServiceActorId(), new TEvControlPlaneStorage::TEvFinalStatusReport(
                     request.query_id().value(), request.job_id().value(), cloudId, scope, std::move(*finalStatistics),
-                    finalStatus->Status, finalStatus->Issues, finalStatus->TransientIssues));
+                    finalStatus->Status, finalStatus->StatusCode, finalStatus->Issues, finalStatus->TransientIssues));
             }
         });
 }
@@ -646,6 +649,16 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvFinalStatus
     const auto& event = *ev->Get();
     if (!IsTerminalStatus(event.Status)) {
         return;
+    }
+
+    if (IsFailedStatus(event.Status)) {
+        FailedStatusCodeCounters->IncByStatusCode(event.StatusCode);
+        LOG_YQ_AUDIT_SERVICE_INFO("FinalFailedStatus: cloud id: [" << event.CloudId  << "], scope: [" << event.Scope << "], query id: [" <<
+                                event.QueryId << "], job id: [" << event.JobId << "], "
+                                "status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(event.Status) <<
+                                ", status code: " << NYql::NDqProto::StatusIds::StatusCode_Name(event.StatusCode) <<
+                                ", issues: " << event.Issues.ToOneLineString() <<
+                                ", transient issues " << event.TransientIssues.ToOneLineString());
     }
 
     if (HasIssuesCode(event.Issues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE) || HasIssuesCode(event.TransientIssues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE)) {

@@ -44,6 +44,6 @@ struct IActorFactory : public TThrRefBase {
                                                            const NYdb::TOperation::TOperationId& operationId) const = 0;
 };
 
-IActorFactory::TPtr CreateActorFactory(const TRunActorParams& params, const ::NYql::NCommon::TServiceCounters& counters);
+IActorFactory::TPtr CreateActorFactory(const TRunActorParams& params, const ::NYql::NCommon::TServiceCounters& serviceCounters, const ::NMonitoring::TDynamicCounterPtr& counters);
 
 }

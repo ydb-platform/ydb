@@ -553,7 +553,10 @@ namespace NYql::NDq {
         part << ';';
         */
 
-        auto tokenProvider = CreateGenericTokenProvider(source, credentialsFactory);
+        auto tokenProvider = CreateGenericTokenProvider(
+            source.GetToken(),
+            source.GetServiceAccountId(), source.GetServiceAccountIdSignature(),
+            credentialsFactory);
 
         const auto actor = new TGenericReadActor(
             inputIndex,

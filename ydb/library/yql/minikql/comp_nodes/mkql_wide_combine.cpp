@@ -1,17 +1,17 @@
 #include "mkql_wide_combine.h"
 #include "mkql_rh_hash.h"
-#include "ydb/library/yql/minikql/computation/mkql_computation_node.h"
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
+#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
+#include <ydb/library/yql/minikql/computation/mkql_spiller_adapter.h>
+#include <ydb/library/yql/minikql/computation/mkql_spiller.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/computation/mkql_spiller.h>
 #include <ydb/library/yql/minikql/mkql_runtime_version.h>
 #include <ydb/library/yql/minikql/mkql_stats_registry.h>
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/utils/cast.h>
-#include <ydb/library/yql/minikql/computation/mkql_spiller_adapter.h>
 
 #include <util/string/cast.h>
 
@@ -110,7 +110,7 @@ struct TCombinerNodes {
         std::transform(itemsOnResults.cbegin(), itemsOnResults.cend(), PasstroughtItems.begin(), [](const TPasstroughtMap::value_type& v) { return v.has_value(); });
     }
 
-	bool IsInputItemNodeUsed(size_t i) const {
+    bool IsInputItemNodeUsed(size_t i) const {
         return (ItemNodes[i]->GetDependencesCount() > 0U || PasstroughtItems[i]);
     }
 
@@ -400,12 +400,12 @@ private:
 
             auto& processingState = *bucket.InMemoryProcessingState;
 
-            for (size_t i = 0; i != KeyWidth; ++i) {
+            for (size_t i = 0; i < KeyWidth; ++i) {
                 //jumping into unsafe world, refusing ownership
                 static_cast<NUdf::TUnboxedValue&>(processingState.Tongue[i]) = std::move(keyAndState[i]);
             }
             processingState.TasteIt();
-            for (size_t i = KeyWidth; i != KeyAndStateType->GetElementsCount(); ++i) {
+            for (size_t i = KeyWidth; i < KeyAndStateType->GetElementsCount(); ++i) {
                 //jumping into unsafe world, refusing ownership
                 static_cast<NUdf::TUnboxedValue&>(processingState.Throat[i - KeyWidth]) = std::move(keyAndState[i]);
             }
@@ -460,7 +460,7 @@ private:
 
         while (const auto keyAndState = static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Extract())) {
             bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
-            for (size_t i = 0; i != KeyAndStateType->GetElementsCount(); ++i) {
+            for (size_t i = 0; i < KeyAndStateType->GetElementsCount(); ++i) {
                 //releasing values stored in unsafe TUnboxedValue buffer
                 keyAndState[i].UnRef();
             }
@@ -542,7 +542,7 @@ private:
                     auto& bucket = SpilledBuckets[bucketId];
 
                     if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) {
-                        for (size_t i = 0; i != KeyWidth; ++i) {
+                        for (size_t i = 0; i < KeyWidth; ++i) {
                         //jumping into unsafe world, refusing ownership
                             static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Tongue[i]) = std::move(BufferForKeyAnsState[i]);
                         }
@@ -557,7 +557,7 @@ private:
                     } else {
                         BufferForKeyAnsState.resize(0);
                         MKQL_ENSURE(BufferForUsedInputItems.empty(), "Internal logic error");
-                        for (size_t i = 0; i != Nodes.ItemNodes.size(); ++i) {
+                        for (size_t i = 0; i < Nodes.ItemNodes.size(); ++i) {
                             if (fields[i]) {
                                 BufferForUsedInputItems.push_back(*fields[i]);
                             }
@@ -619,13 +619,13 @@ private:
                     BufferForKeyAnsState.resize(0);
                     return EFetchResult::Yield;
                 }
-                for (size_t i = 0; i != KeyWidth; ++i) {
+                for (size_t i = 0; i< KeyWidth; ++i) {
                     //jumping into unsafe world, refusing ownership
                     static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Tongue[i]) = std::move(BufferForKeyAnsState[i]);
                 }
                 auto isNew = bucket.InMemoryProcessingState->TasteIt();
                 MKQL_ENSURE(isNew, "Internal logic error");
-                for (size_t i = KeyWidth; i != KeyAndStateType->GetElementsCount(); ++i) {
+                for (size_t i = KeyWidth; i < KeyAndStateType->GetElementsCount(); ++i) {
                     //jumping into unsafe world, refusing ownership
                     static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Throat[i - KeyWidth]) = std::move(BufferForKeyAnsState[i]);
                 }
@@ -640,7 +640,7 @@ private:
                     return EFetchResult::Yield;
                 }
                 auto **fields = ctx.WideFields.data() + WideFieldsIndex;
-                for (size_t i = 0, j = 0; i != Nodes.ItemNodes.size(); ++i) {
+                for (size_t i = 0, j = 0; i < Nodes.ItemNodes.size(); ++i) {
                     if (Nodes.IsInputItemNodeUsed(i)) {
                         fields[i] = &(BufferForUsedInputItems[j++]);
                     } else {
@@ -682,8 +682,8 @@ private:
                 SpilledBuckets.resize(SpilledBucketCount);
                 for (auto &b: SpilledBuckets) {
                     auto spiller = ctx.SpillerFactory->CreateSpiller();
-                    b.SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, KeyAndStateType, 1 << 20);
-                    b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 1 << 20);
+                    b.SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, KeyAndStateType, 5_MB);
+                    b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 5_MB);
                     b.InMemoryProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal);
                 }
                 SplitStateIntoBuckets();

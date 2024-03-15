@@ -167,7 +167,6 @@ private:
                 TaskRunner->SetWatermarkIn(watermark);
             }
 
-            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(TxId, NActors::TActivationContext::ActorSystem(), WakeUpCallback));
             res = TaskRunner->Run();
         }
 
@@ -428,7 +427,8 @@ private:
         }
 
         TaskRunner->Prepare(settings, ev->Get()->MemoryLimits, *ev->Get()->ExecCtx);
-        WakeUpCallback = ev->Get()->ExecCtx->GetWakeupCallback();
+        auto wakeUpCallback = ev->Get()->ExecCtx->GetWakeupCallback();
+        TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(TxId, NActors::TActivationContext::ActorSystem(), wakeUpCallback));
 
         auto event = MakeHolder<TEvTaskRunnerCreateFinished>(
             TaskRunner->GetSecureParams(),
@@ -475,8 +475,6 @@ private:
     TIntrusivePtr<NDq::IDqTaskRunner> TaskRunner;
     THashSet<ui32> InputChannelsWithDisabledCheckpoints;
     THolder<TDqMemoryQuota> MemoryQuota;
-
-    std::function<void()> WakeUpCallback;
 };
 
 struct TLocalTaskRunnerActorFactory: public ITaskRunnerActorFactory {

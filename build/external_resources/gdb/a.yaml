@@ -13,10 +13,6 @@ ci:
   runtime:
     sandbox:
       owner: DTCC
-      notifications:
-        - statuses: [FAILURE, EXCEPTION]
-          transport: email
-          recipients: devtools-cc
 
   permissions:
     start-flow:

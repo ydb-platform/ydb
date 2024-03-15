@@ -217,7 +217,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffec
     while (!BootQueue.BootQueue.empty() && processedItems < GetMaxBootBatchSize()) {
         TBootQueue::TBootQueueRecord record = BootQueue.PopFromBootQueue();
         ++processedItems;
-        TTabletInfo* tablet = FindTablet(record.TabletId);
+        TTabletInfo* tablet = FindTablet(record.TabletId, record.FollowerId);
         if (tablet == nullptr) {
             continue;
         }

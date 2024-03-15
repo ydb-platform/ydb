@@ -8,8 +8,9 @@ namespace NHive {
 
 struct TBootQueue {
     struct TBootQueueRecord {
-        TFullTabletId TabletId;
+        TTabletId TabletId;
         double Priority;
+        TFollowerId FollowerId;
         TNodeId SuggestedNodeId;
 
         static double GetBootPriority(const TTabletInfo& tablet) {
@@ -46,13 +47,10 @@ struct TBootQueue {
             return Priority < o.Priority;
         }
 
-        TBootQueueRecord(const TTabletInfo& tablet, TNodeId suggestedNodeId = 0)
-            : TabletId(tablet.GetFullTabletId())
-            , Priority(GetBootPriority(tablet))
-            , SuggestedNodeId(suggestedNodeId)
-        {
-        }
+        TBootQueueRecord(const TTabletInfo& tablet, TNodeId suggestedNodeId = 0);
     };
+
+    static_assert(sizeof(TBootQueueRecord) <= 24);
 
     std::priority_queue<TBootQueueRecord, std::vector<TBootQueueRecord>> BootQueue;
     std::deque<TBootQueueRecord> WaitQueue; // tablets from BootQueue waiting for new nodes

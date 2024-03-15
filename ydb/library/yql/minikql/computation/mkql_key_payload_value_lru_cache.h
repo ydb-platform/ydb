@@ -15,7 +15,6 @@ namespace NKikimr::NMiniKQL {
 //  Lazy(postponed) TTL implementation. An entry is not deleted immediately when its TTL is expired, the deletion is postponed until:
 //   - when it is accessed via Get()
 //   - when it is not accessed for a long period of time and becomes the LRU. Then it is garbage collected in Tick()
-//  In order to store values in HashMap serializes Key(TUnboxedValue) to TString
 //  Not thread safe
 //  Never requests system time, expects monotonically increased time points in methods argument
 class TUnboxedKeyValueLruCacheWithTtl {

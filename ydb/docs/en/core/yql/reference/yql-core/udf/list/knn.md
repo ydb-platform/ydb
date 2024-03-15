@@ -15,6 +15,8 @@ The disadvantage is the need for a complete data search. But this disadvantage i
 Example:
 
 ```sql
+$TargetEmbedding = [1.2f, 2.3f, 3.4f, 4.5f]
+
 SELECT id, fact, embedding FROM Facts
 WHERE user="Williams"
 ORDER BY Knn::CosineDistance(

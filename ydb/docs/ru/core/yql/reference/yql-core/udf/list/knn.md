@@ -14,6 +14,8 @@
 Пример:
 
 ```sql
+$TargetEmbedding = [1.2f, 2.3f, 3.4f, 4.5f]
+
 SELECT id, fact, embedding FROM Facts
 WHERE user="Ivanov"
 ORDER BY Knn::CosineDistance(Knn::FromBinaryString(embedding), $TargetEmbedding)

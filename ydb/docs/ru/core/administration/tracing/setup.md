@@ -62,7 +62,7 @@ tracing_config:
       max_traces_burst: 2
 ```
 
-Секции `external_throttling` и `sampling` можно менять с помощью механизма [динамической конфигурации](../../maintenance/manual/dynamic-config.md), изменение остальных секций с помощью этого механизма пока недоступно.
+Секции `external_throttling` и `sampling` можно изменять без перезагрузки узла с помощью механизма [динамической конфигурации](../../maintenance/manual/dynamic-config.md), изменение остальных секций без перезагрузки узла пока недоступно.
 
 {% note warning %}
 

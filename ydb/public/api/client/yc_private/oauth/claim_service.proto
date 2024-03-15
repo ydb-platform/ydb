@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.oauth.v1;
+
+import "yandex/cloud/priv/validation.proto";
+import "yandex/cloud/priv/oauth/claims.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/oauth/v1;oauth";
+option java_outer_classname = "PACS";
+
+service ClaimService {
+    rpc Get (GetClaimsRequest) returns (GetClaimsResponse);
+}
+
+message GetClaimsRequest {
+    // enum values correspond to SubjectClaims fields
+    enum Claim {
+        CLAIM_UNSPECIFIED = 0;      // protobuf3 enum should start from 0
+        SUB = 1;
+        NAME = 2;
+        GIVEN_NAME = 3;
+        FAMILY_NAME = 4;
+        PREFERRED_USERNAME = 7;
+        PICTURE = 9;
+        EMAIL = 11;
+        GENDER = 13;
+        ZONEINFO = 15;
+        LOCALE = 16;
+        PHONE_NUMBER = 17;
+        SUB_TYPE = 99;
+        FEDERATION = 100;
+        PICTURE_DATA = 101;
+        GROUPS = 103;
+        ORGANIZATION = 104;
+        YANDEX_CLAIMS_ALL = 200;
+        YANDEX_CLAIMS_STAFF_LOGIN = 201;
+        YANDEX_CLAIMS_PASSPORT_UID = 202;
+        YANDEX_CLAIMS_KARMA = 207;
+    }
+
+    repeated string subject_ids = 1 [(size) = "1-1000", (length) = "<=50"];
+    // request only certain claims. Empty list for all claims. Please avoid requesting all claims, each claim authorized separately.
+    repeated Claim claims = 2 [(size) = "<=22"];
+}
+
+message GetClaimsResponse {
+    repeated SubjectDetails subject_details = 2;
+}
+
+message SubjectDetails {
+    SubjectClaims subject_claims = 1 [(required) = true];
+}

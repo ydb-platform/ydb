@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.oauth.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/priv/validation.proto";
+import "yandex/cloud/priv/sensitive.proto";
+import "yandex/cloud/priv/oauth/claims.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/oauth/v1;oauth";
+option java_outer_classname = "LoginHistory";
+
+service LoginHistoryService {
+    // Returns the device's login history by client's cookies.
+    //
+    // gRPC error codes
+    // InvalidArgument: the Cookie header field is malformed.
+    rpc List (ListLoginsRequest) returns (ListLoginsResponse);
+
+    // Removes the specified record from the device's login history.
+    //
+    // gRPC error codes
+    // InvalidArgument: the Cookie header field is malformed.
+    rpc Delete (DeleteDeviceLoginRequest) returns (google.protobuf.Empty);
+}
+
+message ListLoginsRequest {
+    // The "Cookie" HTTP-header passed from the end-user's client
+    string cookie_header = 1 [(required) = true, (length) = "<=32768", (sensitive) = true, (sensitive_type) = SENSITIVE_COOKIE_HEADER];
+    int64 page_size = 100 [(value) = "0-1000"];
+    string page_token = 101 [(length) = "<=100"];
+}
+
+message DeviceLogin {
+    // claims of the logged-in subject
+    SubjectClaims subject_claims = 1;
+    // when last time SessionService/Create was successfully completed for the subject
+    google.protobuf.Timestamp last_session_created_at = 2;
+}
+
+message ListLoginsResponse {
+    // Fields `sub` & `federation` of nested subject claims are guaranteed to be filled.
+    // They should be used for building redirects to federation login URLs and login entry deletion requests.
+    repeated DeviceLogin logins = 1;
+    string next_page_token = 100;
+}
+
+message DeleteDeviceLoginRequest {
+    // The "Cookie" HTTP header containing the "yc_device" cookie.
+    string cookie_header = 1 [(required) = true, (length) = "<=32768", (sensitive) = true, (sensitive_type) = SENSITIVE_COOKIE_HEADER];
+    // Subject identifier (SubjectClaims.sub) of the login history entry to remove.
+    string subject_id = 2 [(required) = true, (length) = "<=50"];
+}

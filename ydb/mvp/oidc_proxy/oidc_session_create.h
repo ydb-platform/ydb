@@ -14,7 +14,7 @@
 #include <library/cpp/http/io/stream.h>
 #include <util/network/sock.h>
 #include <library/cpp/json/json_reader.h>
-#include <ydb/public/api/client/yc_private/oauth/v1/session_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/oauth/session_service.grpc.pb.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/mvp_log.h>
 #include <ydb/mvp/core/mvp_tokens.h>

@@ -4,6 +4,7 @@
 
 #include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/compute/common/config.h>
+#include <ydb/core/fq/libs/compute/common/run_actor_params.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 
@@ -79,5 +80,7 @@ private:
     const TCompressor Compressor;
     std::unique_ptr<IPlanStatProcessor> Processor;
 };
+
+TString GetStatViewName(const NFq::TRunActorParams& params);
 
 } // namespace NFq

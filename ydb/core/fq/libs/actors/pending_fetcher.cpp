@@ -452,8 +452,8 @@ private:
         }
     }
 
-    NActors::IActor* CreateYdbRunActor(TRunActorParams&& params, const ::NYql::NCommon::TServiceCounters& queryCounters) const {
-        auto actorFactory = CreateActorFactory(params, queryCounters);
+    NActors::IActor* CreateYdbRunActor(TRunActorParams&& params, const ::NYql::NCommon::TServiceCounters& queryCounters, const ::NMonitoring::TDynamicCounterPtr& counters) const {
+        auto actorFactory = CreateActorFactory(params, queryCounters, counters);
         return ::NFq::CreateYdbRunActor(SelfId(), queryCounters, std::move(params), actorFactory);
     }
 

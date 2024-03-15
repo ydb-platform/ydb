@@ -15,6 +15,7 @@ std::unique_ptr<NActors::IActor> CreateStatusTrackerActor(const TRunActorParams&
                                                           const NActors::TActorId& pinger,
                                                           const NYdb::TOperation::TOperationId& operationId,
                                                           std::unique_ptr<IPlanStatProcessor>&& processor,
-                                                          const ::NYql::NCommon::TServiceCounters& queryCounters);
+                                                          const ::NYql::NCommon::TServiceCounters& queryCounters,
+                                                          const ::NMonitoring::TDynamicCounterPtr& counters);
 
 }

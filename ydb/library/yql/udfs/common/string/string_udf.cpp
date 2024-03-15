@@ -143,6 +143,47 @@ namespace {
         }                                                         \
     }
 
+#define STRING_STREAM_PAD_FORMATTER_UDF(function)                                                    \
+    SIMPLE_UDF_WITH_OPTIONAL_ARGS(T##function, char*(TAutoMap<char*>, ui64, TOptional<char*>), 1) {  \
+        TStringStream result;                                                                        \
+        const TStringBuf input(args[0].AsStringRef());                                               \
+        char paddingSymbol = ' ';                                                                    \
+        if (args[2]) {                                                                               \
+            if (args[2].AsStringRef().Size() != 1) {                                                 \
+                ythrow yexception() << "Not 1 symbol in paddingSymbol";                              \
+            }                                                                                        \
+            paddingSymbol = TString(args[2].AsStringRef())[0];                                       \
+        }                                                                                            \
+        const ui64 padLen = args[1].Get<ui64>();                                                     \
+        if (padLen > padLim) {                                                                       \
+             ythrow yexception() << "Padding length (" << padLen << ") exceeds maximum: " << padLim; \
+        }                                                                                            \
+        result << function(input, padLen, paddingSymbol);                                            \
+        return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));                    \
+    }
+
+#define STRING_STREAM_NUM_FORMATTER_UDF(function, argType)                        \
+    SIMPLE_STRICT_UDF(T##function, char*(TAutoMap<argType>)) {                    \
+        TStringStream result;                                                     \
+        result << function(args[0].Get<argType>());                               \
+        return valueBuilder->NewString(TStringRef(result.Data(), result.Size())); \
+    }
+
+#define STRING_STREAM_TEXT_FORMATTER_UDF(function)                                \
+    SIMPLE_STRICT_UDF(T##function, char*(TAutoMap<char*>)) {                      \
+        TStringStream result;                                                     \
+        const TStringBuf input(args[0].AsStringRef());                            \
+        result << function(input);                                                \
+        return valueBuilder->NewString(TStringRef(result.Data(), result.Size())); \
+    }
+
+#define STRING_STREAM_HRSZ_FORMATTER_UDF(udfName, hrSize)                         \
+    SIMPLE_STRICT_UDF(T##udfName, char*(TAutoMap<ui64>)) {                        \
+        TStringStream result;                                                     \
+        result << HumanReadableSize(args[0].Get<ui64>(), hrSize);                 \
+        return valueBuilder->NewString(TStringRef(result.Data(), result.Size())); \
+    }
+
 #define STRING_UDF_MAP(XX)           \
     XX(Base32Encode, Base32Encode)   \
     XX(Base64Encode, Base64Encode)   \
@@ -207,6 +248,24 @@ namespace {
     XX(IsAsciiAlpha)         \
     XX(IsAsciiAlnum)         \
     XX(IsAsciiHex)
+
+#define STRING_STREAM_PAD_FORMATTER_UDF_MAP(XX) \
+    XX(LeftPad)                                 \
+    XX(RightPad)
+
+#define STRING_STREAM_NUM_FORMATTER_UDF_MAP(XX) \
+    XX(Hex, ui64)                               \
+    XX(SHex, i64)                               \
+    XX(Bin, ui64)                               \
+    XX(SBin, i64)
+
+#define STRING_STREAM_TEXT_FORMATTER_UDF_MAP(XX) \
+    XX(HexText)                                  \
+    XX(BinText)
+
+#define STRING_STREAM_HRSZ_FORMATTER_UDF_MAP(XX) \
+    XX(HumanReadableQuantity, SF_QUANTITY)       \
+    XX(HumanReadableBytes, SF_BYTES)
 
     SIMPLE_STRICT_UDF(TCollapseText, char*(TAutoMap<char*>, ui64)) {
         TString input(args[0].AsStringRef());
@@ -446,97 +505,10 @@ namespace {
 
     END_SIMPLE_ARROW_UDF(TLevensteinDistance, TLevensteinDistanceKernelExec::Do);
 
-    static constexpr ui64 padLim = 1000000;
-
-    SIMPLE_UDF_WITH_OPTIONAL_ARGS(TRightPad, char*(TAutoMap<char*>, ui64, TOptional<char*>), 1) {
-        TStringStream result;
-        const TStringBuf input(args[0].AsStringRef());
-        char paddingSymbol = ' ';
-        if (args[2]) {
-            if (args[2].AsStringRef().Size() != 1) {
-                ythrow yexception() << "Not 1 symbol in paddingSymbol";
-            }
-            paddingSymbol = TString(args[2].AsStringRef())[0];
-        }
-        const ui64 padLen = args[1].Get<ui64>();
-        if (padLen > padLim) {
-             ythrow yexception() << "Padding length (" << padLen << ") exceeds maximum: " << padLim;
-        }
-        result << RightPad(input, padLen, paddingSymbol);
-        return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
-    }
-
-    SIMPLE_UDF_WITH_OPTIONAL_ARGS(TLeftPad, char*(TAutoMap<char*>, ui64, TOptional<char*>), 1) {
-        TStringStream result;
-        const TStringBuf input(args[0].AsStringRef());
-        char paddingSymbol = ' ';
-        if (args[2]) {
-            if (args[2].AsStringRef().Size() != 1) {
-                ythrow yexception() << "Not 1 symbol in paddingSymbol";
-            }
-            paddingSymbol = TString(args[2].AsStringRef())[0];
-        }
-        const ui64 padLen = args[1].Get<ui64>();
-        if (padLen > padLim) {
-             ythrow yexception() << "Padding length (" << padLen << ") exceeds maximum: " << padLim;
-        }
-        result << LeftPad(input, padLen, paddingSymbol);
-        return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
-    }
-
-    SIMPLE_STRICT_UDF(THex, char*(TAutoMap<ui64>)) {
-        TStringStream result;
-        result << Hex(args[0].Get<ui64>());
-        return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
-    }
-
-    SIMPLE_STRICT_UDF(TSHex, char*(TAutoMap<i64>)) {
-        TStringStream result;
-        result << SHex(args[0].Get<i64>());
-        return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
-    }
-
-    SIMPLE_STRICT_UDF(TBin, char*(TAutoMap<ui64>)) {
-        TStringStream result;
-        result << Bin(args[0].Get<ui64>());
-        return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
-    }
-
-    SIMPLE_STRICT_UDF(TSBin, char*(TAutoMap<i64>)) {
-        TStringStream result;
-        result << SBin(args[0].Get<i64>());
-        return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
-    }
-
-    SIMPLE_STRICT_UDF(THexText, char*(TAutoMap<char*>)) {
-        TStringStream result;
-        const TStringBuf input(args[0].AsStringRef());
-        result << HexText(input);
-        return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
-    }
-
-    SIMPLE_STRICT_UDF(TBinText, char*(TAutoMap<char*>)) {
-        TStringStream result;
-        const TStringBuf input(args[0].AsStringRef());
-        result << BinText(input);
-        return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
-    }
 
     SIMPLE_STRICT_UDF(THumanReadableDuration, char*(TAutoMap<ui64>)) {
         TStringStream result;
         result << HumanReadable(TDuration::MicroSeconds(args[0].Get<ui64>()));
-        return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
-    }
-
-    SIMPLE_STRICT_UDF(THumanReadableQuantity, char*(TAutoMap<ui64>)) {
-        TStringStream result;
-        result << HumanReadableSize(args[0].Get<ui64>(), SF_QUANTITY);
-        return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
-    }
-
-    SIMPLE_STRICT_UDF(THumanReadableBytes, char*(TAutoMap<ui64>)) {
-        TStringStream result;
-        result << HumanReadableSize(args[0].Get<ui64>(), SF_BYTES);
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
     }
 
@@ -591,6 +563,12 @@ namespace {
     STRING_TWO_ARGS_UDF_MAP(STRING_TWO_ARGS_UDF)
     IS_ASCII_UDF_MAP(IS_ASCII_UDF)
 
+    static constexpr ui64 padLim = 1000000;
+    STRING_STREAM_PAD_FORMATTER_UDF_MAP(STRING_STREAM_PAD_FORMATTER_UDF)
+    STRING_STREAM_NUM_FORMATTER_UDF_MAP(STRING_STREAM_NUM_FORMATTER_UDF)
+    STRING_STREAM_TEXT_FORMATTER_UDF_MAP(STRING_STREAM_TEXT_FORMATTER_UDF)
+    STRING_STREAM_HRSZ_FORMATTER_UDF_MAP(STRING_STREAM_HRSZ_FORMATTER_UDF)
+
     SIMPLE_MODULE(TStringModule,
         STRING_UDF_MAP(STRING_REGISTER_UDF)
         STRING_UNSAFE_UDF_MAP(STRING_REGISTER_UDF)
@@ -600,6 +578,10 @@ namespace {
         STROKA_FIND_UDF_MAP(STRING_REGISTER_UDF)
         STRING_TWO_ARGS_UDF_MAP(STRING_REGISTER_UDF)
         IS_ASCII_UDF_MAP(STRING_REGISTER_UDF)
+        STRING_STREAM_PAD_FORMATTER_UDF_MAP(STRING_REGISTER_UDF)
+        STRING_STREAM_NUM_FORMATTER_UDF_MAP(STRING_REGISTER_UDF)
+        STRING_STREAM_TEXT_FORMATTER_UDF_MAP(STRING_REGISTER_UDF)
+        STRING_STREAM_HRSZ_FORMATTER_UDF_MAP(STRING_REGISTER_UDF)
         TCollapseText,
         TReplaceAll,
         TReplaceFirst,
@@ -614,17 +596,7 @@ namespace {
         TSplitToList,
         TJoinFromList,
         TLevensteinDistance,
-        TRightPad,
-        TLeftPad,
-        THex,
-        TSHex,
-        TBin,
-        TSBin,
-        THexText,
-        TBinText,
         THumanReadableDuration,
-        THumanReadableQuantity,
-        THumanReadableBytes,
         TPrec,
         TToByteList,
         TFromByteList)

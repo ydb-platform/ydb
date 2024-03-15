@@ -95,7 +95,7 @@ private:
 };
 
 template <typename TDerived>
-TReadSessionSettingsBase<TDerived>::TEventHandlers&
+typename TReadSessionSettingsBase<TDerived>::TEventHandlers&
 TReadSessionSettingsBase<TDerived>::TEventHandlers::SimpleDataHandlers(
     std::function<void(TReadSessionEvent::TDataReceivedEvent&)> dataHandler, bool commitDataAfterProcessing,
     bool gracefulReleaseAfterCommit) {

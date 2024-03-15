@@ -188,4 +188,5 @@ enum ETxTypes {
     TXTYPE_DATA_SHARING_CONFIRM_FROM_INITIATOR = 26         [(TxTypeOpts) = {Name: "TxDataSharingConfirmFromInitiator"}];
     TXTYPE_DATA_SHARING_APPLY_LINKS_MODIFICATION = 27       [(TxTypeOpts) = {Name: "TxDataSharingApplyLinksModification"}];
     TXTYPE_DATA_SHARING_WRITE_SOURCE_CURSOR = 28            [(TxTypeOpts) = {Name: "TxDataSharingWriteSourceCursor"}];
+    TXTYPE_EXPORT_SAVE_CURSOR = 29                          [(TxTypeOpts) = {Name: "TxExportSaveCursor"}];
 }

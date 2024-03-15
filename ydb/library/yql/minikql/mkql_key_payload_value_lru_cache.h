@@ -1,13 +1,14 @@
 #pragma once
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
+#include <ydb/library/yql/minikql/mkql_node.h>
+#include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <util/generic/string.h>
 #include <unordered_map>
 #include <list>
 #include <chrono>
 
-namespace NYql::NDq {
+namespace NKikimr::NMiniKQL {
 
 //Design notes:
 //  Commodity LRUCache with HashMap and DoubleLinkedList. Key(that is TUnboxedValue) is stored in both HashMap and List
@@ -124,4 +125,4 @@ private:
 
 };
 
-} //namespace NYql::NDq {
+} //namespace NKikimr::NMiniKQL

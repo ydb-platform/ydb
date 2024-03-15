@@ -2,9 +2,7 @@
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NYql::NDq {
-
-using namespace NKikimr::NMiniKQL;
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TUnboxedKeyValueLruCacheWithTtlTest) {
 
@@ -68,4 +66,4 @@ Y_UNIT_TEST_SUITE(TUnboxedKeyValueLruCacheWithTtlTest) {
     }
 }
 
-} //namespace NYql::NDq
+} //namespace namespace NKikimr::NMiniKQL

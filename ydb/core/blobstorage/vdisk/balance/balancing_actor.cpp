@@ -12,6 +12,7 @@ namespace NBalancing {
     class TBalancingActor : public TActorBootstrapped<TBalancingActor> {
     private:
         std::shared_ptr<TBalancingCtx> Ctx;
+        TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         TLogoBlobsSnapshot::TForwardIterator It;
         TQueueActorMapPtr QueueActorMapPtr;
         THashSet<TVDiskID> ConnectedVDisks;
@@ -32,12 +33,12 @@ namespace NBalancing {
         void CreateVDisksQueues() {
             QueueActorMapPtr = std::make_shared<TQueueActorMap>();
             auto interconnectChannel = TInterconnectChannels::EInterconnectChannels::IC_BLOBSTORAGE_ASYNC_DATA;
-            const TBlobStorageGroupInfo::TTopology& topology = Ctx->GInfo->GetTopology();
+            const TBlobStorageGroupInfo::TTopology& topology = GInfo->GetTopology();
             NBackpressure::TQueueClientId queueClientId(
                 NBackpressure::EQueueClientType::Balancing, topology.GetOrderNumber(Ctx->VCtx->ShortSelfVDisk));
 
-            CreateQueuesForVDisks(*QueueActorMapPtr, SelfId(), Ctx->GInfo, Ctx->VCtx,
-                    Ctx->GInfo->GetVDisks(), Ctx->MonGroup.GetGroup(),
+            CreateQueuesForVDisks(*QueueActorMapPtr, SelfId(), GInfo, Ctx->VCtx,
+                    GInfo->GetVDisks(), Ctx->MonGroup.GetGroup(),
                     queueClientId, NKikimrBlobStorage::EVDiskQueueId::GetAsyncRead,
                     "DisksBalancing", interconnectChannel);
         }
@@ -54,10 +55,10 @@ namespace NBalancing {
                     return;
                 }
 
-                TPartsCollectorMerger merger(Ctx->GInfo->GetTopology().GType);
+                TPartsCollectorMerger merger(GInfo->GetTopology().GType);
                 It.PutToMerger(&merger);
 
-                for (ui8 partId: PartIdsToSendOnMain(Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, It.GetCurKey().LogoBlobID(), merger.Ingress)) {
+                for (ui8 partId: PartIdsToSendOnMain(GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, It.GetCurKey().LogoBlobID(), merger.Ingress)) {
                     if (!merger.Parts[partId - 1].has_value()) {
                         BLOG_W(Ctx->VCtx->VDiskLogPrefix << "not found part " << (ui32)partId << " for " << It.GetCurKey().LogoBlobID().ToString());
                         continue;  // something strange
@@ -68,16 +69,16 @@ namespace NBalancing {
                         .PartData=*merger.Parts[partId - 1]
                     });
                     BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Send on main: " << SendOnMainParts.back().Key.ToString() << " "
-                        << SendOnMainParts.back().Ingress.ToString(&Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, SendOnMainParts.back().Key));
+                        << SendOnMainParts.back().Ingress.ToString(&GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, SendOnMainParts.back().Key));
                 }
 
-                for (ui8 partId: PartIdsToDelete(Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, It.GetCurKey().LogoBlobID(), merger.Ingress)) {
+                for (ui8 partId: PartIdsToDelete(GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, It.GetCurKey().LogoBlobID(), merger.Ingress)) {
                     TryDeleteParts.push(TPartInfo{
                         .Key=TLogoBlobID(It.GetCurKey().LogoBlobID(), partId),
                         .Ingress=merger.Ingress,
                     });
                     BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Delete: " << TryDeleteParts.back().Key.ToString()
-                            << " " << TryDeleteParts.back().Ingress.ToString(&Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, TryDeleteParts.back().Key));
+                            << " " << TryDeleteParts.back().Ingress.ToString(&GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, TryDeleteParts.back().Key));
                 }
                 merger.Clear();
             }
@@ -150,11 +151,14 @@ namespace NBalancing {
             for (const auto& kv : *QueueActorMapPtr) {
                 Send(kv.second, msg->Clone());
             }
-            Ctx->GInfo = msg->NewInfo;
+            GInfo = msg->NewInfo;
+
+            Send(SenderId, msg->Clone());
+            Send(DeleterId, msg->Clone());
         }
 
         void DoJobQuant() {
-            BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Connected vdisks " << ConnectedVDisks.size() << "/" << Ctx->GInfo->GetTotalVDisksNum() - 1);
+            BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Connected vdisks " << ConnectedVDisks.size() << "/" << GInfo->GetTotalVDisksNum() - 1);
             Send(SenderId, new NActors::TEvents::TEvWakeup());
             Send(DeleterId, new NActors::TEvents::TEvWakeup());
         }
@@ -193,6 +197,7 @@ namespace NBalancing {
         TBalancingActor(std::shared_ptr<TBalancingCtx> &ctx)
             : TActorBootstrapped<TBalancingActor>()
             , Ctx(ctx)
+            , GInfo(ctx->GInfo)
             , It(Ctx->Snap.HullCtx, &Ctx->Snap.LogoBlobsSnap)
         {
         }

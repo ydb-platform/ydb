@@ -105,6 +105,7 @@ namespace {
     class TDeleter : public TActorBootstrapped<TDeleter> {
         TActorId NotifyId;
         std::shared_ptr<TBalancingCtx> Ctx;
+        TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         TPartsRequester PartsRequester;
         ui32 OrderId = 0;
 
@@ -136,10 +137,10 @@ namespace {
             TLogoBlobID keyWithoutPartId(key, 0);
 
             TIngress ingress;
-            ingress.DeleteHandoff(&Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, key);
+            ingress.DeleteHandoff(&GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, key);
 
             BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Deleting local: " << key.ToString() << " "
-                    << ingress.ToString(&Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, keyWithoutPartId));
+                    << ingress.ToString(&GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, keyWithoutPartId));
 
             Send(Ctx->SkeletonId, new TEvDelLogoBlobDataSyncLog(keyWithoutPartId, ingress, OrderId++));
         }
@@ -153,11 +154,17 @@ namespace {
             TActorBootstrapped::PassAway();
         }
 
+        void Handle(TEvVGenerationChange::TPtr ev) {
+            GInfo = ev->Get()->NewInfo;
+        }
+
         STRICT_STFUNC(StateFunc,
             cFunc(NActors::TEvents::TEvWakeup::EventType, DoJobQuant)
             hFunc(TEvBlobStorage::TEvVGetResult, PartsRequester.Handle)
             hFunc(TEvDelLogoBlobDataSyncLogResult, Handle)
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
+
+            hFunc(TEvVGenerationChange, Handle)
         );
 
     public:
@@ -170,7 +177,8 @@ namespace {
         )
             : NotifyId(notifyId)
             , Ctx(ctx)
-            , PartsRequester(SelfId(), 32, std::move(parts), Ctx->VCtx->ReplNodeRequestQuoter, Ctx->GInfo, queueActorMapPtr)
+            , GInfo(ctx->GInfo)
+            , PartsRequester(SelfId(), 32, std::move(parts), Ctx->VCtx->ReplNodeRequestQuoter, GInfo, queueActorMapPtr)
         {
         }
 

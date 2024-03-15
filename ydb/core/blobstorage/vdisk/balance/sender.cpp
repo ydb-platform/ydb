@@ -108,6 +108,7 @@ namespace {
         TActorId NotifyId;
         TQueueActorMapPtr QueueActorMapPtr;
         std::shared_ptr<TBalancingCtx> Ctx;
+        TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         TReader Reader;
 
         struct TStats {
@@ -133,9 +134,9 @@ namespace {
         void SendParts(const TVector<TPart>& batch) {
             BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Sending parts " << batch.size());
             for (const auto& part: batch) {
-                auto vDiskId = GetMainReplicaVDiskId(*Ctx->GInfo, part.Key);
+                auto vDiskId = GetMainReplicaVDiskId(*GInfo, part.Key);
                 BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Sending " << part.Key.ToString()
-                        << " to " << Ctx->GInfo->GetTopology().GetOrderNumber(TVDiskIdShort(vDiskId))
+                        << " to " << GInfo->GetTopology().GetOrderNumber(TVDiskIdShort(vDiskId))
                         << "; Data size = " << part.PartData.size());
                 auto& queue = (*QueueActorMapPtr)[TVDiskIdShort(vDiskId)];
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(
@@ -166,11 +167,17 @@ namespace {
             TActorBootstrapped::PassAway();
         }
 
+        void Handle(TEvVGenerationChange::TPtr ev) {
+            GInfo = ev->Get()->NewInfo;
+        }
+
         STRICT_STFUNC(StateFunc,
             cFunc(NActors::TEvents::TEvWakeup::EventType, DoJobQuant)
             hFunc(NPDisk::TEvChunkReadResult, Reader.Handle)
             hFunc(TEvBlobStorage::TEvVPutResult, Handle)
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
+
+            hFunc(TEvVGenerationChange, Handle)
         );
 
     public:
@@ -183,7 +190,8 @@ namespace {
             : NotifyId(notifyId)
             , QueueActorMapPtr(queueActorMapPtr)
             , Ctx(ctx)
-            , Reader(32, Ctx->PDiskCtx, std::move(parts), ctx->VCtx->ReplPDiskReadQuoter, Ctx->GInfo->GetTopology().GType)
+            , GInfo(ctx->GInfo)
+            , Reader(32, Ctx->PDiskCtx, std::move(parts), ctx->VCtx->ReplPDiskReadQuoter, GInfo->GetTopology().GType)
         {}
 
         void Bootstrap() {

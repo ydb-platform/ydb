@@ -22,7 +22,7 @@
 | Load balancing across all nodes of all local DCs | \+ | \+ | \+ | ? | \- | \- | \- |
 | **Credentials providers** |
 | Anonymous (default) | \+ | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
-| Static (user - password) | \+ | \+ | \+ | \+ | \- | \- | \- | \- |
+| Static (user - password) | \+ | \+ | \+ | \+ | \- | \- | \+ | \- |
 | Token: IAM, OAuth | \+ | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
 | Service account (Yandex.Cloud specific) | \+ | \+ | \+ | \+ | \+ | \+ | \- | \+ |
 | Metadata (Yandex.Cloud specific) | \+ | \+ | \+ | \+ | \+ | \+ | \+ | \+ |

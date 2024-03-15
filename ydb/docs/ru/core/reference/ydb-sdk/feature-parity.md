@@ -23,7 +23,7 @@
 |Балансировка среди всех нод всех локального ДЦ|\+|\+|\+|?|\-|\-|\-||
 |**Credentials providers**|||||||||
 |Anonymous (по умолчанию)|\+|\+|\+|\+|\+|\+|\+|\+|
-|Static (user - password)|\+|\+|\+|\+|\-|\-|\-|\+|
+|Static (user - password)|\+|\+|\+|\+|\-|\-|\+|\+|
 |Token: IAM, OAuth|\+|\+|\+|\+|\+|\+|\+|\+|
 |Service account (Yandex.Cloud specific)|\+|\+|\+|\+|\+|\+|\-|\+|
 |Metadata (Yandex.Cloud specific)|\+|\+|\+|\+|\+|\+|\+|\+|

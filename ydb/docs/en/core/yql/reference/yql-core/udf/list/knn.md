@@ -24,10 +24,10 @@ ORDER BY Knn::CosineDistance(
 LIMIT 10
 ```
 
-## Data type
+## Data types
 
 In mathematics, a vector of real numbers is used to store points.
-In YDB, for calculations the `List<Float>` data type is used, and data will be stored in the string data type `String`.
+In {{ ydb-short-name }}, for calculations the `List<Float>` data type is used, and data will be stored in the `String` data type.
 
 ## Functions
 
@@ -36,17 +36,22 @@ Vector functions are implemented as user-defined functions (UDF) in the `Knn` mo
 ### Distance and similarity functions
 
 The distance and similarity functions take two lists of real numbers as input and return the distance/similarity between them.
-Distance functions return small values for close vectors, similarity functions return large values for close vectors. This should be taken into account in the sorting order.
+
+{% note info %}
+
+Distance functions return small values for close vectors, while similarity functions return large values for close vectors. This should be taken into account when defining the sorting order.
+
+{% endnote %}
 
 Similarity functions:
-* inner product `InnerProductSimilarity' (sum of products of coordinates)
-* cosine similarity `CosineSimilarity' (inner product / vector lengths)
+* inner product `InnerProductSimilarity` (sum of products of coordinates)
+* cosine similarity `CosineSimilarity` (inner product / vector lengths)
 
 Distance functions:
-* euclidean distance `EuclideanDistance' (the root of the sum of squares of coordinate differences)
-* cosine distance `CosineDistance' (1 - cosine similarity)
+* euclidean distance `EuclideanDistance` (the root of the sum of squares of coordinate differences)
+* cosine distance `CosineDistance` (1 - cosine similarity)
 
-#### Function signature
+#### Function signatures
 
 ```sql
 Knn::InnerProductSimilarity(List<Float>?, List<Float>?)->Float?
@@ -55,12 +60,12 @@ Knn::EuclideanDistance(List<Float>?, List<Float>?)->Float?
 Knn::CosineDistance(List<Float>?, List<Float>?)->Float?
 ```
 
-In case of error, the functions return NULL.
+In case of an error, these functions return `NULL`.
 
-### Functions for converting a vector to a binary representation
+### Functions for converting between vector and binary representations
 
 Conversion functions are needed to serialize the vector set into an internal binary representation and vice versa.
-The binary representation of the vector will be stored in the YDB database in the `String` type.
+The binary representation of a vector can be persisted in a {{ ydb-short-name }}  table column of the `String` type.
 
 #### Function signature
 

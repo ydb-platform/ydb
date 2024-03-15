@@ -129,12 +129,11 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
         Y_ABORT_UNLESS(res->Get()->Status == NKikimrProto::OK);
     }
 
-    const ui64 checkBlobCookie = 0xABCDEF;
     auto checkBlob = [&] {
         TActorId edge = env.Runtime->AllocateEdgeActor(cleanNodeId);
         env.Runtime->WrapInActorContext(edge, [&] {
             SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
-                NKikimrBlobStorage::EGetHandleClass::FastRead), checkBlobCookie);
+                NKikimrBlobStorage::EGetHandleClass::FastRead));
         });
         auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge);
         auto *msg = res->Get();

@@ -265,7 +265,7 @@ namespace NKikimr {
             UnrecoveredNonphantomBlobs = false;
 
             Become(&TThis::StateRepl);
-            ReplProgressWasMade(false);
+            ResetReplProgressTimer(false);
 
             // switch to planning state
             Transition(Relaxation, Plan);
@@ -351,7 +351,7 @@ namespace NKikimr {
             UnreplicatedBlobRecords = std::move(info->UnreplicatedBlobRecords);
 
             if (info->ItemsRecovered > 0) {
-                ReplProgressWasMade(false);
+                ResetReplProgressTimer(false);
             }
 
             bool finished = false;
@@ -402,7 +402,7 @@ namespace NKikimr {
                     // release token as we have finished replicating
                     Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
                 }
-                ReplProgressWasMade(true);
+                ResetReplProgressTimer(true);
 
                 Become(&TThis::StateRelax);
                 if (!BlobsToReplicatePtr->empty()) {
@@ -503,7 +503,7 @@ namespace NKikimr {
             return TDuration::Seconds(workAtEnd / workPerSecond);
         }
 
-        void ReplProgressWasMade(bool finish) {
+        void ResetReplProgressTimer(bool finish) {
             if (finish) {
                 ReplProgressWatchdog.Disarm();
             } else {
@@ -634,7 +634,7 @@ namespace NKikimr {
                 Send(ReplJobActorId, new TEvents::TEvPoison);
             }
 
-            ReplProgressWatchdog.Disarm();
+            ResetReplProgressTimer(true);
             TActorBootstrapped::PassAway();
         }
 

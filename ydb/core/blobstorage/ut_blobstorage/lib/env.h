@@ -41,7 +41,6 @@ struct TEnvironmentSetup {
         const NPDisk::EDeviceType DiskType = NPDisk::EDeviceType::DEVICE_TYPE_NVME;
         const ui32 BurstThresholdNs = 0;
         const float DiskTimeAvailableScale = 1;
-        const TDuration ReplMaxTimeToMakeProgress = TDuration::Minutes(180);
     };
 
     const TSettings Settings;

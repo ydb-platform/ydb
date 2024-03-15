@@ -27,6 +27,15 @@ namespace NKikimr::NKqp {
         return CreateYtNativeGateway(ytServices);
     }
 
+    NMonitoring::TDynamicCounterPtr HttpGatewayGroupCounters(NMonitoring::TDynamicCounterPtr countersRoot) {
+        return GetServiceCounters(countersRoot, "utils")->GetSubgroup("subcomponent", "http_gateway");
+    }
+
+    NYql::IHTTPGateway::TPtr MakeHttpGateway(const NYql::THttpGatewayConfig& httpGatewayConfig, NMonitoring::TDynamicCounterPtr countersRoot) {
+        NMonitoring::TDynamicCounterPtr httpGatewayGroup = HttpGatewayGroupCounters(countersRoot);
+        return NYql::IHTTPGateway::Make(&httpGatewayConfig, httpGatewayGroup);
+    }
+
     NYql::THttpGatewayConfig DefaultHttpGatewayConfig() {
         NYql::THttpGatewayConfig config;
         config.SetMaxInFlightCount(2000);
@@ -56,11 +65,8 @@ namespace NKikimr::NKqp {
         const auto& queryServiceConfig = appConfig.GetQueryServiceConfig();
 
         // Initialize HTTP Gateway
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> httpGatewayGroup = GetServiceCounters(
-            appData->Counters, "utils")->GetSubgroup("subcomponent", "http_gateway");
-
         HttpGatewayConfig = queryServiceConfig.HasHttpGateway() ? queryServiceConfig.GetHttpGateway() : DefaultHttpGatewayConfig();
-        HttpGateway = NYql::IHTTPGateway::Make(&HttpGatewayConfig, httpGatewayGroup);
+        HttpGateway = MakeHttpGateway(HttpGatewayConfig, appData->Counters);
 
         S3GatewayConfig = queryServiceConfig.GetS3();
 
@@ -169,5 +175,20 @@ namespace NKikimr::NKqp {
 
                 return nullptr;
             };
+    }
+
+    bool WaitHttpGatewayFinalization(NMonitoring::TDynamicCounterPtr countersRoot, TDuration timeout, TDuration refreshPeriod) {
+        NMonitoring::TDynamicCounters::TCounterPtr httpRequestsInFlight = HttpGatewayGroupCounters(countersRoot)->GetCounter("InFlight");
+
+        TInstant deadline = TInstant::Now() + timeout;
+        do {
+            if (httpRequestsInFlight->Val() == 0) {
+                return true;
+            }
+
+            Sleep(refreshPeriod);
+        } while (TInstant::Now() <= deadline);
+
+        return false;
     }
 }  // namespace NKikimr::NKqp

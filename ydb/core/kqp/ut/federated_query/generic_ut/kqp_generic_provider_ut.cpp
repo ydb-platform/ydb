@@ -144,7 +144,7 @@ namespace NKikimr::NKqp {
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
-            auto kikimr = MakeKikimrRunner(nullptr, clientMock, databaseAsyncResolverMock, appConfig);
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig);
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -236,7 +236,7 @@ namespace NKikimr::NKqp {
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
-            auto kikimr = MakeKikimrRunner(nullptr, clientMock, databaseAsyncResolverMock, appConfig);
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig);
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -327,7 +327,7 @@ namespace NKikimr::NKqp {
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
-            auto kikimr = MakeKikimrRunner(nullptr, clientMock, databaseAsyncResolverMock, appConfig);
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig);
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -430,7 +430,7 @@ namespace NKikimr::NKqp {
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
-            auto kikimr = MakeKikimrRunner(nullptr, clientMock, databaseAsyncResolverMock, appConfig);
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig);
 
             CreateExternalDataSource(providerType, kikimr);
 

@@ -547,11 +547,26 @@ namespace {
     END_SIMPLE_ARROW_UDF(TLevensteinDistance, TLevensteinDistanceKernelExec::Do);
 
 
-    SIMPLE_STRICT_UDF(THumanReadableDuration, char*(TAutoMap<ui64>)) {
+
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(THumanReadableDuration, char*(TAutoMap<ui64>)) {
         TStringStream result;
         result << HumanReadable(TDuration::MicroSeconds(args[0].Get<ui64>()));
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
     }
+
+    struct THumanReadableDurationKernelExec
+        : public TUnaryKernelExec<THumanReadableDurationKernelExec>
+    {
+        template <typename TSink>
+        static void Process(TBlockItem arg1, const TSink& sink) {
+            TStringStream result;
+            result << HumanReadable(TDuration::MicroSeconds(arg1.Get<ui64>()));
+            sink(TBlockItem(TStringRef(result.Data(), result.Size())));
+        }
+    };
+
+    END_SIMPLE_ARROW_UDF(THumanReadableDuration, THumanReadableDurationKernelExec::Do)
+
 
     SIMPLE_STRICT_UDF(TPrec, char*(TAutoMap<double>, ui64)) {
         TStringStream result;

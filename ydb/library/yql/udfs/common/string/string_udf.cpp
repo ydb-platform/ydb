@@ -163,11 +163,24 @@ namespace {
     }
 
 #define STRING_STREAM_NUM_FORMATTER_UDF(function, argType)                        \
-    SIMPLE_STRICT_UDF(T##function, char*(TAutoMap<argType>)) {                    \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##function, char*(TAutoMap<argType>)) {        \
         TStringStream result;                                                     \
         result << function(args[0].Get<argType>());                               \
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size())); \
-    }
+    }                                                                             \
+                                                                                  \
+    struct T##function##KernelExec                                                \
+        : public TUnaryKernelExec<T##function##KernelExec>                        \
+    {                                                                             \
+        template <typename TSink>                                                 \
+        static void Process(TBlockItem arg1, const TSink& sink) {                 \
+            TStringStream result;                                                 \
+            result << function(arg1.Get<argType>());                              \
+            sink(TBlockItem(TStringRef(result.Data(), result.Size())));           \
+        }                                                                         \
+    };                                                                            \
+                                                                                  \
+    END_SIMPLE_ARROW_UDF(T##function, T##function##KernelExec::Do)
 
 #define STRING_STREAM_TEXT_FORMATTER_UDF(function)                                \
     SIMPLE_STRICT_UDF(T##function, char*(TAutoMap<char*>)) {                      \
@@ -176,6 +189,7 @@ namespace {
         result << function(input);                                                \
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size())); \
     }
+
 
 #define STRING_STREAM_HRSZ_FORMATTER_UDF(udfName, hrSize)                         \
     SIMPLE_STRICT_UDF(T##udfName, char*(TAutoMap<ui64>)) {                        \

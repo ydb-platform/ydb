@@ -3032,13 +3032,13 @@ void TDataShard::Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, cons
                     kind, TabletID(), txId,
                     NKikimrTxDataShard::TEvProposeTransactionResult::CANCELLED);
                 ctx.Send(target, result, 0, cookie);
-                return;
+                break;
             }
             case NEvents::TDataEvents::TEvWrite::EventType: {
                 auto* msg = item.Event->Get<NEvents::TDataEvents::TEvWrite>();
                 auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), msg->GetTxId(), NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED, "Canceled");
                 ctx.Send(target, result.release(), 0, cookie);
-                return;
+                break;
             }
             default:
                 Y_FAIL_S("Unexpected event type " << item.Event->GetTypeRewrite());

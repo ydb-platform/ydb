@@ -119,7 +119,7 @@ NKikimr::NOlap::TPortionInfoWithBlobs TPortionInfoWithBlobs::BuildByBlobs(std::v
 
 TPortionInfoWithBlobs TPortionInfoWithBlobs::BuildByBlobs(std::vector<TSplittedBlob>&& chunks, const TPortionInfo& basePortion,
     const std::shared_ptr<IStoragesManager>& operators) {
-    TPortionInfoWithBlobs result(basePortion.CopyWithFilteredColumns({}));
+    TPortionInfoWithBlobs result(basePortion.CopyBeforeChunksRebuild());
     for (auto&& blob : chunks) {
         auto storage = operators->GetOperatorVerified(blob.GetGroupName());
         auto blobInfo = result.StartBlob(storage);
@@ -182,7 +182,7 @@ void TPortionInfoWithBlobs::FillStatistics(const TIndexInfo& index) {
 TPortionInfoWithBlobs TPortionInfoWithBlobs::SyncPortion(TPortionInfoWithBlobs&& source,
     const ISnapshotSchema::TPtr& from, const ISnapshotSchema::TPtr& to, const TString& targetTier, const std::shared_ptr<IStoragesManager>& storages,
     std::shared_ptr<NColumnShard::TSplitterCounters> counters) {
-    if (from->GetVersion() == to->GetVersion()) {
+    if (from->GetVersion() == to->GetVersion() && targetTier == source.GetPortionInfo().GetTierNameDef(IStoragesManager::DefaultStorageId)) {
         return std::move(source);
     }
     NYDBTest::TControllers::GetColumnShardController()->OnPortionActualization(source.PortionInfo);

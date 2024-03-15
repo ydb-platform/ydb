@@ -64,26 +64,6 @@ std::shared_ptr<arrow::Scalar> TPortionInfo::MaxValue(ui32 columnId) const {
     return result;
 }
 
-TPortionInfo TPortionInfo::CopyWithFilteredColumns(const THashSet<ui32>& columnIds) const {
-    TPortionInfo result(PathId, Portion, GetMinSnapshot());
-    result.Meta = Meta;
-    result.Records.reserve(columnIds.size());
-
-    for (auto& rec : Records) {
-        Y_ABORT_UNLESS(rec.Valid());
-        if (columnIds.contains(rec.GetColumnId())) {
-            result.Records.push_back(rec);
-        }
-    }
-
-    for (auto& rec : Indexes) {
-        if (columnIds.contains(rec.GetIndexId())) {
-            result.Indexes.push_back(rec);
-        }
-    }
-    return result;
-}
-
 ui64 TPortionInfo::GetRawBytes(const std::vector<ui32>& columnIds) const {
     ui64 sum = 0;
     const ui32 numRows = NumRows();
@@ -196,6 +176,7 @@ void TPortionInfo::RemoveFromDatabase(IDbWrapper& db) const {
 }
 
 void TPortionInfo::SaveToDatabase(IDbWrapper& db) const {
+    FullValidation();
     for (auto& record : Records) {
         db.WriteColumn(*this, record);
     }
@@ -522,6 +503,25 @@ void TPortionInfo::ReorderChunks() {
             }
             AFL_VERIFY(chunk->GetEntityId());
         }
+    }
+}
+
+void TPortionInfo::FullValidation() const {
+    AFL_VERIFY(PathId);
+    AFL_VERIFY(Portion);
+    AFL_VERIFY(MinSnapshot.Valid());
+    std::set<ui32> blobIdxs;
+    for (auto&& i : Records) {
+        blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
+    }
+    for (auto&& i : Indexes) {
+        blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
+    }
+    if (BlobIds.size()) {
+        AFL_VERIFY(BlobIds.size() == blobIdxs.size());
+        AFL_VERIFY(BlobIds.size() == *blobIdxs.rbegin() + 1);
+    } else {
+        AFL_VERIFY(blobIdxs.empty());
     }
 }
 

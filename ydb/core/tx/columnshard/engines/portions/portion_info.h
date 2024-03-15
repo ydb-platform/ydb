@@ -61,6 +61,8 @@ private:
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
 public:
 
+    void FullValidation() const;
+
     bool HasIndexes(const std::set<ui32>& ids) const {
         auto idsCopy = ids;
         for (auto&& i : Indexes) {
@@ -288,7 +290,13 @@ public:
     bool CanIntersectOthers() const { return !Valid() || IsInserted() || IsEvicted(); }
     size_t NumChunks() const { return Records.size(); }
 
-    TPortionInfo CopyWithFilteredColumns(const THashSet<ui32>& columnIds) const;
+    TPortionInfo CopyBeforeChunksRebuild() const {
+        TPortionInfo result = *this;
+        result.Records.clear();
+        result.Indexes.clear();
+        result.BlobIds.clear();
+        return result;
+    }
 
     bool IsEqualWithSnapshots(const TPortionInfo& item) const;
 

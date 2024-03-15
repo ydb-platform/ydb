@@ -665,6 +665,10 @@ public:
             }
         }
 
+        if (record.TxLocksSize() > 0 || record.BrokenTxLocksSize() > 0) {
+            useful = true;
+        }
+
         Self->IncCounter(COUNTER_READ_ITERATOR_ROWS_READ, RowsRead);
         if (!isKeysRequest) {
             Self->IncCounter(COUNTER_ENGINE_HOST_SELECT_RANGE_ROW_SKIPS, DeletedRowSkips);

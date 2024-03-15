@@ -1034,6 +1034,24 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             last = current;
         }
     }
+
+    Y_UNIT_TEST(QSReplySize) {
+        TKikimrRunner kikimr;
+        CreateLargeTable(kikimr, 100'000, 100, 1'000, 1'000, 1);
+
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(R"(
+            UPSERT INTO KeyValue2
+            SELECT
+                KeyText AS Key,
+                DataText AS Value
+            FROM `/Root/LargeTable`;
+        )", NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+        UNIT_ASSERT(!to_lower(result.GetIssues().ToString()).Contains("query result"));
+    }
 }
 
 } // namespace NKqp

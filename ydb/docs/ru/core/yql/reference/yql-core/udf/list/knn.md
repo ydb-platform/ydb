@@ -1,10 +1,10 @@
+# KNN
 ## Введение
 
 [Поиск ближайшего соседа](https://en.wikipedia.org/wiki/Nearest_neighbor_search) (NN) - это задача оптимизации, заключающаяся в нахождении ближайшей точки (или набора точек) в заданном наборе данных к заданной точке запроса. Близость может быть определена в терминах метрики расстояния или сходства.
-Обобщением задачи NN является задача k-NN, где от нас требуется найти k ближайших точек к точке запроса. Это может быть полезно в различных приложениях, таких как классификация изображений, рекомендательные системы и многое другое.
+Обобщением задачи NN является задача [k-NN](https://en.wikipedia.org/wiki/K-nearest_neighbors_algorithm), где от нас требуется найти k ближайших точек к точке запроса. Это может быть полезно в различных приложениях, таких как классификация изображений, рекомендательные системы и многое другое.
 
-
-Решения задачи разбивается на два крупных подкласса методов: точные и приближенные. В данном документе речь пойдет о точном походе, а точнее о точном подходе методом грубой силы.
+Решения задачи k-NN разбивается на два крупных подкласса методов: точные и приближенные. В данном документе речь пойдет о точном походе, а точнее о точном подходе методом грубой силы.
 
 В основе метода лежит вычисление расстояния от точки запроса до каждой другой точки в базе данных. Этот алгоритм, также известный как наивный подход, имеет время выполнения `O(dn)`, где `n` - количество точек в наборе данных, а `d` - его размерность.
 
@@ -17,15 +17,18 @@
 $TargetEmbedding = [1.2f, 2.3f, 3.4f, 4.5f]
 
 SELECT id, fact, embedding FROM Facts
-WHERE user="Ivanov"
-ORDER BY Knn::CosineDistance(Knn::FromBinaryString(embedding), $TargetEmbedding)
+WHERE user="Williams"
+ORDER BY Knn::CosineDistance(
+    Knn::FromBinaryString(embedding),
+    $TargetEmbedding
+)
 LIMIT 10
 ```
 
-## Тип данных
+## Типы данных
 
 В математике для хранения точек используется вектор вещественных чисел.
-В YDB операции будут происходить над типом данных `List<Float>`, а храниться данные будут в строковом типе данных `String`.
+В {{ ydb-short-name }} операции будут происходить над типом данных `List<Float>`, а храниться данные будут в строковом типе данных `String`.
 
 ## Функции
 
@@ -34,7 +37,12 @@ LIMIT 10
 ### Функции расстояния и сходства
 
 Функции расстояния и сходства принимают на вход два списка вещественных чисел и возвращает расстояние/сходство между ними.
+
+{% note info %}
+
 Функции расстояния возвращает малое значение для близких векторов, функции сходства возвращают большие значения для близких векторов. Это следует учитывать в порядке сортировки.
+
+{% endnote %}
 
 Фукнции сходства:
 * скалярное произведение `InnerProductSimilarity` (сумма произведений координат)
@@ -44,29 +52,28 @@ LIMIT 10
 * евклидово расстояние `EuclideanDistance` (корень от суммы квадратов разниц координат)
 * косинусное расстояние `CosineDistance` ( 1 - косинусное сходство)
 
-#### Сигнатура функций
+#### Сигнатуры функций
 
 ```sql
-Knn::InnerProductSimilarity(List<Float>?, List<Float>?)->Float?
-Knn::CosineSimilarity(List<Float>?, List<Float>?)->Float?
-Knn::EuclideanDistance(List<Float>?, List<Float>?)->Float?
-Knn::CosineDistance(List<Float>?, List<Float>?)->Float?
+Knn::InnerProductSimilarity(List<Float>{Flags:AutoMap}, List<Float>{Flags:AutoMap})->Float?
+Knn::CosineSimilarity(List<Float>{Flags:AutoMap}, List<Float>{Flags:AutoMap})->Float?
+Knn::EuclideanDistance(List<Float>{Flags:AutoMap}, List<Float>{Flags:AutoMap})->Float?
+Knn::CosineDistance(List<Float>{Flags:AutoMap}, List<Float>{Flags:AutoMap})->Float?
 ```
 
-В случае ошибки вычисления, фукнции возвращают NULL.
+В случае ошибки вычисления, фукнции возвращают `NULL`.
 
 ### Функции преобразования вектора в бинарное представление
 
 Функции преобразования нужны для сериализации множества вектора во внутреннее бинарное представление и обратно.
-Бинарное представление вектора будет храниться в базе данных YDB в типе `String`.
+Бинарное представление вектора будет храниться в {{ ydb-short-name }} в типе `String`.
 
-#### Сигнатура функций
+#### Сигнатуры функций
 
 ```sql
-Knn::ToBinaryString(List<Float>)->String
-Knn::FromBinaryString(String)->List<Float>?
+Knn::ToBinaryString(List<Float>{Flags:AutoMap})->String
+Knn::FromBinaryString(String{Flags:AutoMap})->List<Float>?
 ```
-В случае ошибки десериализации, фукнция `FromBinaryString` возвращает NULL.
 
 ## Примеры
 
@@ -76,7 +83,7 @@ Knn::FromBinaryString(String)->List<Float>?
 CREATE TABLE Facts (
     id Uint64,        // Id of fact
     user String,      // User name
-    fact String,      // Human readable description of user fact
+    fact String,      // Human-readable description of a user fact
     embedding String, // Binary representation of embedding vector (result of Knn::ToBinaryString)
     PRIMARY KEY (id)
 )
@@ -86,7 +93,7 @@ CREATE TABLE Facts (
 
 ```sql
 UPSERT INTO Facts (id, user, fact, embedding) 
-VALUES (123, "Ivanov", "Full name is Ivanov Ivan Ivanovich", Knn::ToBinaryString([1.0f, 2.0f, 3.0f, 4.0f]))
+VALUES (123, "Williams", "Full name is John Williams", Knn::ToBinaryString([1.0f, 2.0f, 3.0f, 4.0f]))
 ```
 
 ### Точный поиск ближайших векторов
@@ -95,7 +102,10 @@ VALUES (123, "Ivanov", "Full name is Ivanov Ivan Ivanovich", Knn::ToBinaryString
 $TargetEmbedding = [1.2f, 2.3f, 3.4f, 4.5f]
 
 SELECT * FROM Facts
-WHERE user="Ivanov"
-ORDER BY Knn::CosineDistance(Knn::FromBinaryString(embedding), $TargetEmbedding)
+WHERE user="Williams"
+ORDER BY Knn::CosineDistance(
+    Knn::FromBinaryString(embedding),
+    $TargetEmbedding
+)
 LIMIT 10
 ```

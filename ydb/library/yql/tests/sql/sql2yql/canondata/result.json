@@ -13474,6 +13474,13 @@
             "uri": "https://{canondata_backend}/937458/e965a077f6aeb511184e419b0de866e505778b68/resource.tar.gz#test_sql2yql.test_pg-variadic_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-variadic_array_arg]": [
+        {
+            "checksum": "1815b2cb1ec493aefbcf189ebd533e2a",
+            "size": 608,
+            "uri": "https://{canondata_backend}/1936273/81aad5938509f97b7812a831a7a4698b6f82ebcc/resource.tar.gz#test_sql2yql.test_pg-variadic_array_arg_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-wide_sort]": [
         {
             "checksum": "0a312c05be5c91545de12d451a697d00",

@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/export/session/selector/abstract/selector.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
 
 namespace NKikimr::NOlap::NExport {
 
@@ -9,7 +10,7 @@ public:
         return "SNAPSHOT";
     }
 private:
-    TSnapshot Snapshot;
+    TSnapshot Snapshot = TSnapshot::Zero();
     static inline const TFactory::TRegistrator<TSnapshotSelector> Registrator = TFactory::TRegistrator<TSnapshotSelector>(GetClassNameStatic());
 public:
     TSnapshotSelector() = default;

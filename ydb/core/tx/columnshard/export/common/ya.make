@@ -7,6 +7,7 @@ SRCS(
 PEERDIR(
     ydb/core/tx/columnshard/export/protos
     ydb/library/conclusion
+    ydb/core/protos
 )
 
 END()

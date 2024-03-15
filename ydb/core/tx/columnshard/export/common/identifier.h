@@ -2,6 +2,7 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/status.h>
 #include <ydb/library/conclusion/result.h>
+#include <ydb/core/protos/tx_columnshard.pb.h>
 
 namespace NKikimrColumnShardExportProto {
 class TIdentifier;
@@ -31,9 +32,7 @@ public:
 
     NKikimrColumnShardExportProto::TIdentifier SerializeToProto() const;
 
-    TString ToString() const {
-        return TStringBuilder() << "path_id=" << PathId << ";";
-    }
+    TString ToString() const;
 
     operator size_t() const {
         return PathId;

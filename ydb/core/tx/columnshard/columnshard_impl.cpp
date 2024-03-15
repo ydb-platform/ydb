@@ -527,7 +527,7 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivit
 //  !!!!!! MUST BE FIRST THROUGH DATA HAVE TO BE SAME IN SESSIONS AFTER TABLET RESTART
     SharingSessionsManager->Start(*this);
 
-    ExportsManager->Start(*this);
+    ExportsManager->Start(this);
 
     SetupIndexation();
     SetupCompaction();

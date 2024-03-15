@@ -4,6 +4,10 @@
 #include <ydb/core/tx/columnshard/export/protos/selector.pb.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
 
+namespace NKikimrTxColumnShard {
+class TBackupTxBody;
+}
+
 namespace NKikimr::NOlap::NExport {
 
 class ISelector {

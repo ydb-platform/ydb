@@ -1373,6 +1373,7 @@ message THiveConfig {
     optional double MinStorageScatterToBalance = 71 [default = 999]; // storage balancer trigger is disabled by default
     optional double MinGroupUsageToBalance = 72 [default = 0.1];
     optional uint64 StorageBalancerInflight = 73 [default = 1];
+    optional bool EnableDestroyOperations = 74 [default = false];
 }
 
 message TColumnShardConfig {
@@ -1561,7 +1562,8 @@ message TTracingConfig {
     }
 
     message TSelectors {
-        optional string RequestType = 1;
+        reserved 1;
+        repeated string RequestTypes = 3;
         optional string Database = 2;
     }
 

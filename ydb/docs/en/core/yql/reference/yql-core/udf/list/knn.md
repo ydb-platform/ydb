@@ -76,7 +76,7 @@ In case of deserialization error, the `FromBinaryString` function return NULL.
 CREATE TABLE Facts (
     id Uint64,        // Id of fact
     user String,      // User name
-    fact String,      // Human readable description of user fact
+    fact String,      // Human-readable description of a user fact
     embedding String, // Binary representation of embedding vector (result of Knn::ToBinaryString)
     PRIMARY KEY (id)
 )

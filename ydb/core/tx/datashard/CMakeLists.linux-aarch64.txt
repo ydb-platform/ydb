@@ -31,6 +31,7 @@ add_subdirectory(ut_replication)
 add_subdirectory(ut_rs)
 add_subdirectory(ut_sequence)
 add_subdirectory(ut_snapshot)
+add_subdirectory(ut_statistics)
 add_subdirectory(ut_stats)
 add_subdirectory(ut_trace)
 add_subdirectory(ut_upload_rows)
@@ -334,6 +335,7 @@ target_sources(core-tx-datashard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/remove_locks.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/range_ops.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/restore_unit.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/statistics_scan.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/store_and_send_out_rs_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/store_and_send_write_out_rs_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/store_commit_writes_tx_unit.cpp

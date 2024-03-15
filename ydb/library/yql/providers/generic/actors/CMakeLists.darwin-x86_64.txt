@@ -25,6 +25,7 @@ target_link_libraries(providers-generic-actors PUBLIC
 )
 target_sources(providers-generic-actors PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/actors/yql_generic_read_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/actors/yql_generic_lookup_actor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/actors/yql_generic_source_factory.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/actors/yql_generic_token_provider.cpp
 )

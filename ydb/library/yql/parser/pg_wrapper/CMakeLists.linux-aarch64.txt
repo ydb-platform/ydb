@@ -287,6 +287,7 @@ target_sources(yql-parser-pg_wrapper PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/cost_mocks.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/syscache.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/pg_utils_wrappers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/utils.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/brin/brin.c
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/brin/brin_bloom.c
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/brin/brin_inclusion.c

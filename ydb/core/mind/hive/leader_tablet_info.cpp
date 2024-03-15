@@ -337,15 +337,15 @@ const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* TLe
     return nullptr;
 }
 
-TString TLeaderTabletInfo::GetChannelStoragePoolName(const TTabletChannelInfo& channel) {
+TString TLeaderTabletInfo::GetChannelStoragePoolName(const TTabletChannelInfo& channel) const {
     return channel.StoragePool.empty() ? DEFAULT_STORAGE_POOL_NAME : channel.StoragePool;
 }
 
-TString TLeaderTabletInfo::GetChannelStoragePoolName(const TChannelProfiles::TProfile::TChannel& channel) {
+TString TLeaderTabletInfo::GetChannelStoragePoolName(const TChannelProfiles::TProfile::TChannel& channel) const {
     return channel.PoolKind.empty() ? DEFAULT_STORAGE_POOL_NAME : channel.PoolKind;
 }
 
-TString TLeaderTabletInfo::GetChannelStoragePoolName(ui32 channelId) {
+TString TLeaderTabletInfo::GetChannelStoragePoolName(ui32 channelId) const {
     if (BoundChannels.size() > channelId) {
         return BoundChannels[channelId].GetStoragePoolName();
     }
@@ -355,7 +355,7 @@ TString TLeaderTabletInfo::GetChannelStoragePoolName(ui32 channelId) {
     return DEFAULT_STORAGE_POOL_NAME;
 }
 
-TStoragePoolInfo& TLeaderTabletInfo::GetStoragePool(ui32 channelId) {
+TStoragePoolInfo& TLeaderTabletInfo::GetStoragePool(ui32 channelId) const {
     TStoragePoolInfo& storagePool = Hive.GetStoragePool(GetChannelStoragePoolName(channelId));
     return storagePool;
 }

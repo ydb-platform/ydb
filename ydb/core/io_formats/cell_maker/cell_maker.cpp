@@ -142,7 +142,7 @@ namespace {
 
     template <>
     bool TryParse(TStringBuf value, TUuidHolder& result) {
-        if (!NKikimr::NUuid::ParseUuidToArray(value, result.Buf.Array, false)) {
+        if (!NUuid::ParseUuidToArray(value, result.Buf.Array, false)) {
             return false;
         }
         return true;

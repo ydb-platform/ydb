@@ -99,6 +99,9 @@ $TargetEmbedding = [1.2f, 2.3f, 3.4f, 4.5f]
 
 SELECT * FROM Facts
 WHERE user="Williams"
-ORDER BY Knn::CosineDistance(Knn::FromBinaryString(embedding), $TargetEmbedding)
+ORDER BY Knn::CosineDistance(
+    Knn::FromBinaryString(embedding),
+    $TargetEmbedding
+)
 LIMIT 10
 ```

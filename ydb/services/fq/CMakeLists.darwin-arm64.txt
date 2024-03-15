@@ -22,4 +22,5 @@ target_link_libraries(ydb-services-fq PUBLIC
 target_sources(ydb-services-fq PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/services/fq/grpc_service.cpp
   ${PROJECT_SOURCE_DIR}/ydb/services/fq/private_grpc.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/fq/ydb_over_fq.cpp
 )

@@ -12,6 +12,7 @@ enum ENativeTypeCompatFlags: ui64 {
     NTCF_FLOAT      = 1ull << 4 /* "float" */,
     NTCF_JSON       = 1ull << 5 /* "json" */,
     NTCF_DECIMAL    = 1ull << 6 /* "decimal" */,
+    NTCF_BIGDATE    = 1ull << 7 /* "bigdate" */,
 
     NTCF_NO_YT_SUPPORT  = 1ull << 40 /* "_no_yt_support" */,
 

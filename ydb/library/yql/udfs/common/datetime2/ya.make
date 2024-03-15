@@ -4,7 +4,6 @@ IF (YQL_PACKAGED)
     FROM_SANDBOX(
         FILE 5703764078 OUT_NOAUTO
             libdatetime2_udf.so
-            EXECUTABLE
     )
 
     END()

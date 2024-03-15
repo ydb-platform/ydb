@@ -3,7 +3,7 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/map.h>
-#include <kikimr/yndx/testlib/service_mocks/session_service_mock.h>
+#include <ydb/library/testlib/service_mocks/session_service_mock.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/mvp_test_runtime.h>
 #include "oidc_protected_page.h"

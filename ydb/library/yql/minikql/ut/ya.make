@@ -15,6 +15,7 @@ SRCS(
     aligned_page_pool_ut.cpp
     compact_hash_ut.cpp
     mkql_alloc_ut.cpp
+    mkql_key_payload_value_lru_cache_ut.cpp
     mkql_node_builder_ut.cpp
     mkql_node_cast_ut.cpp
     mkql_node_printer_ut.cpp

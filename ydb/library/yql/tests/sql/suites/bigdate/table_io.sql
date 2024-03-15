@@ -1,11 +1,15 @@
 /* postgres can not */
 use plato;
 
-select * from Input;
+select * from BigDates;
 
-insert into Output with truncate
-select cast(-1 as date32), cast(-1 as datetime64), cast(-1 as timestamp64), cast(-1 as interval64);
+insert into @Output with truncate
+select * from BigDates
+where row > -100;
 
 commit;
 
-select * from Output;
+select * from @Output;
+
+select row, cast(d32 as string), cast(dt64 as string), cast(ts64 as string), cast(i64 as string)
+from BigDates;

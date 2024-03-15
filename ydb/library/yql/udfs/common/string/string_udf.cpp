@@ -568,11 +568,23 @@ namespace {
     END_SIMPLE_ARROW_UDF(THumanReadableDuration, THumanReadableDurationKernelExec::Do)
 
 
-    SIMPLE_STRICT_UDF(TPrec, char*(TAutoMap<double>, ui64)) {
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TPrec, char*(TAutoMap<double>, ui64)) {
         TStringStream result;
         result << Prec(args[0].Get<double>(), args[1].Get<ui64>());
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
     }
+
+    struct TPrecKernelExec : public TBinaryKernelExec<TPrecKernelExec> {
+        template <typename TSink>
+        static void Process(TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
+            TStringStream result;
+            result << Prec(arg1.Get<double>(), arg2.Get<ui64>());
+            sink(TBlockItem(TStringRef(result.Data(), result.Size())));
+        }
+    };
+
+    END_SIMPLE_ARROW_UDF(TPrec, TPrecKernelExec::Do)
+
 
     SIMPLE_STRICT_UDF(TToByteList, TListType<ui8>(char*)) {
         const TStringBuf input(args[0].AsStringRef());

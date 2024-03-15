@@ -31,9 +31,9 @@ private:
     )
 
     void ApplyConfigs(const NKikimrConfig::TTracingConfig& cfg);
-    static TMaybe<ERequestType> GetRequestType(const NKikimrConfig::TTracingConfig::TSelectors& selectors);
+    static TVector<ERequestType> GetRequestTypes(const NKikimrConfig::TTracingConfig::TSelectors& selectors);
     static TMaybe<TString> GetDatabase(const NKikimrConfig::TTracingConfig::TSelectors& selectors);
-    static TSettings<double, TThrottlingSettings> GetSettings(const NKikimrConfig::TTracingConfig& cfg);
+    static TSettings<double, TWithTag<TThrottlingSettings>> GetSettings(const NKikimrConfig::TTracingConfig& cfg);
 
     TSamplingThrottlingConfigurator TracingConfigurator;
     NKikimrConfig::TTracingConfig initialConfig;
@@ -76,14 +76,25 @@ void TJaegerTracingConfigurator::ApplyConfigs(const NKikimrConfig::TTracingConfi
     return TracingConfigurator.UpdateSettings(std::move(settings));
 }
 
-TMaybe<ERequestType> TJaegerTracingConfigurator::GetRequestType(const NKikimrConfig::TTracingConfig::TSelectors& selectors) {
-    if (!selectors.HasRequestType()) {
-        return ERequestType::UNSPECIFIED;
+TVector<ERequestType> TJaegerTracingConfigurator::GetRequestTypes(const NKikimrConfig::TTracingConfig::TSelectors& selectors) {
+    TVector<ERequestType> requestTypes;
+    bool hasErrors = false;
+    for (const auto& requestType: selectors.GetRequestTypes()) {
+        if (auto it = NameToRequestType.FindPtr(requestType)) {
+            requestTypes.push_back(*it);
+        } else {
+            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "Failed to parse request type \"" << requestType << "\"");
+            hasErrors = true;
+        }
     }
-    if (auto it = NameToRequestType.FindPtr(selectors.GetRequestType())) {
-        return *it;
+
+    if (hasErrors) {
+        return  {};
     }
-    return {};
+    if (requestTypes.empty()) {
+        requestTypes.push_back(ERequestType::UNSPECIFIED);
+    }
+    return requestTypes;
 }
 
 TMaybe<TString> TJaegerTracingConfigurator::GetDatabase(const NKikimrConfig::TTracingConfig::TSelectors& selectors) {
@@ -93,16 +104,16 @@ TMaybe<TString> TJaegerTracingConfigurator::GetDatabase(const NKikimrConfig::TTr
     return NothingObject;
 }
 
-TSettings<double, TThrottlingSettings> TJaegerTracingConfigurator::GetSettings(const NKikimrConfig::TTracingConfig& cfg) {
-    TSettings<double, TThrottlingSettings> settings;
+TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::GetSettings(const NKikimrConfig::TTracingConfig& cfg) {
+    TSettings<double, TWithTag<TThrottlingSettings>> settings;
+
+    size_t tag = 0;
 
     for (const auto& samplingRule : cfg.GetSampling()) {
         const auto& scope = samplingRule.GetScope();
 
-        ERequestType requestType;
-        if (auto parsedRequestType = GetRequestType(scope)) {
-            requestType = *parsedRequestType;
-        } else {
+        auto requestTypes = GetRequestTypes(scope);
+        if (requestTypes.empty()) {
             ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "failed to parse request type in the rule "
                        << samplingRule.ShortDebugString() << ". Skipping the rule");
             continue;
@@ -132,31 +143,34 @@ TSettings<double, TThrottlingSettings> TJaegerTracingConfigurator::GetSettings(c
             fraction = std::min(1.0, std::max(0.0, fraction));
         }
 
-        TSamplingRule<double, TThrottlingSettings> rule {
+        TSamplingRule<double, TWithTag<TThrottlingSettings>> rule {
             .Level = static_cast<ui8>(level),
             .Sampler = fraction,
-            .Throttler = TThrottlingSettings {
-                .MaxTracesPerMinute = samplingRule.GetMaxTracesPerMinute(),
-                .MaxTracesBurst = samplingRule.GetMaxTracesBurst(),
+            .Throttler = TWithTag<TThrottlingSettings> {
+                .value = TThrottlingSettings {
+                    .MaxTracesPerMinute = samplingRule.GetMaxTracesPerMinute(),
+                    .MaxTracesBurst = samplingRule.GetMaxTracesBurst(),
+                },
+                .tag = tag++,
             },
         };
 
-        auto& requestTypeRules = settings.SamplingRules[static_cast<size_t>(requestType)];
-        auto database = GetDatabase(scope);
-        if (database) {
-            requestTypeRules.DatabaseRules[*database].push_back(rule);
-        } else {
-            requestTypeRules.Global.push_back(rule);
+        for (auto requestType: requestTypes) {
+            auto& requestTypeRules = settings.SamplingRules[static_cast<size_t>(requestType)];
+            auto database = GetDatabase(scope);
+            if (database) {
+                requestTypeRules.DatabaseRules[*database].push_back(rule);
+            } else {
+                requestTypeRules.Global.push_back(rule);
+            }
         }
     }
 
     for (const auto& throttlingRule : cfg.GetExternalThrottling()) {
         const auto& scope = throttlingRule.GetScope();
 
-        ERequestType requestType;
-        if (auto parsedRequestType = GetRequestType(throttlingRule.GetScope())) {
-            requestType = *parsedRequestType;
-        } else {
+        auto requestTypes = GetRequestTypes(throttlingRule.GetScope());
+        if (requestTypes.empty()) {
             ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "failed to parse request type in rule "
                        << throttlingRule.ShortDebugString() << ". Skipping the rule");
             continue;
@@ -175,28 +189,36 @@ TSettings<double, TThrottlingSettings> TJaegerTracingConfigurator::GetSettings(c
 
         ui64 maxRatePerMinute = throttlingRule.GetMaxTracesPerMinute();
         ui64 maxBurst = throttlingRule.GetMaxTracesBurst();
-        TExternalThrottlingRule<TThrottlingSettings> rule {
-            .Throttler = TThrottlingSettings {
-                .MaxTracesPerMinute = maxRatePerMinute,
-                .MaxTracesBurst = maxBurst,
-            },
+        TExternalThrottlingRule<TWithTag<TThrottlingSettings>> rule {
+            .Throttler = TWithTag<TThrottlingSettings> {
+                .value = TThrottlingSettings {
+                    .MaxTracesPerMinute = maxRatePerMinute,
+                    .MaxTracesBurst = maxBurst,
+                },
+                .tag = tag++,
+            }
         };
 
-        auto& requestTypeRules = settings.ExternalThrottlingRules[static_cast<size_t>(requestType)];
-        auto database = GetDatabase(scope);
-        if (database) {
-            requestTypeRules.DatabaseRules[*database].push_back(rule);
-        } else {
-            requestTypeRules.Global.push_back(rule);
+        for (auto requestType : requestTypes) {
+            auto& requestTypeRules = settings.ExternalThrottlingRules[static_cast<size_t>(requestType)];
+            auto database = GetDatabase(scope);
+            if (database) {
+                requestTypeRules.DatabaseRules[*database].push_back(rule);
+            } else {
+                requestTypeRules.Global.push_back(rule);
+            }
         }
     }
 
     // If external_throttling section is absent we want to allow all requests to be traced
     if (cfg.GetExternalThrottling().empty()){
-        TExternalThrottlingRule<TThrottlingSettings> rule {
-            .Throttler = TThrottlingSettings {
-                .MaxTracesPerMinute = Max<ui64>(),
-                .MaxTracesBurst = 0,
+        TExternalThrottlingRule<TWithTag<TThrottlingSettings>> rule {
+            .Throttler = TWithTag<TThrottlingSettings> {
+                .value = TThrottlingSettings {
+                    .MaxTracesPerMinute = Max<ui64>(),
+                    .MaxTracesBurst = 0,
+                },
+                .tag = tag++,
             },
         };
 

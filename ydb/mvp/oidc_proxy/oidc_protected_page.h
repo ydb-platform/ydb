@@ -11,7 +11,7 @@
 #include <ydb/public/lib/deprecated/client/grpc_client.h>
 #include <ydb/library/grpc/client/grpc_client_low.h>
 #include <ydb/library/actors/core/log.h>
-#include <cloud/bitbucket/private-api/yandex/cloud/priv/oauth/v1/session_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/oauth/v1/session_service.grpc.pb.h>
 #include <ydb/mvp/core/mvp_log.h>
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/appdata.h>

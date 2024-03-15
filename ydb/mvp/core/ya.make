@@ -41,15 +41,15 @@ SRCS(
 )
 
 PEERDIR(
-    cloud/bitbucket/private-api/yandex/cloud/priv/ydb/v1
-    cloud/bitbucket/private-api/yandex/cloud/priv/resourcemanager/v1
-    cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1
+    ydb/public/api/client/yc_private/ydb/v1
+    ydb/public/api/client/yc_private/resourcemanager
+    ydb/public/api/client/yc_private/iam
     contrib/libs/googleapis-common-protos
     contrib/libs/jwt-cpp
     contrib/libs/yaml-cpp
 
     ydb/mvp/core/protos
-    kikimr/yndx/security/simple
+    ydb/mvp/security/simple
 
     ydb/library/actors/core
     ydb/library/actors/http

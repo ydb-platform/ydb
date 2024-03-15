@@ -9,7 +9,7 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/json_reader.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
-#include <cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/iam_token_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/iam/iam_token_service.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_auth.pb.h>
 #include "grpc_log.h"
 

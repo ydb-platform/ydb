@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cloud/bitbucket/private-api/yandex/cloud/priv/oauth/v1/session_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/oauth/v1/session_service.grpc.pb.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/actors/core/events.h>

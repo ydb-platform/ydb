@@ -1,0 +1,131 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.ydb.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "google/type/timeofday.proto";
+import "google/type/dayofweek.proto";
+
+message BackupSchedule {
+  oneof policy {
+    // option (exactly_one) = true;
+    DailyBackupSchedule daily_backup_schedule = 1;
+    WeeklyBackupSchedule weekly_backup_schedule = 2;
+    RecurringBackupSchedule recurring_backup_schedule = 4;
+  }
+
+  // output only field: when next backup will be executed
+  // using provided schedule.
+  google.protobuf.Timestamp next_execute_time = 3;
+}
+
+
+message RecurringBackupSchedule {
+  // Timestamp of the first recurrence.
+  google.protobuf.Timestamp start_time = 1;// [(required) = true];
+  // An RRULE (https://tools.ietf.org/html/rfc5545#section-3.8.5.3) for how
+  // this backup reccurs.
+  // The FREQ values of MINUTELY, and SECONDLY are not supported.
+  string recurrence = 2; // [(required) = true];
+}
+
+
+message DaysOfWeekBackupSchedule {
+  repeated google.type.DayOfWeek days = 1; // [(size) = "1-7"];
+  google.type.TimeOfDay execute_time = 2; // [(required) = true];
+}
+
+
+message WeeklyBackupSchedule {
+  repeated DaysOfWeekBackupSchedule days_of_week = 1; // [(size) = "1-7"];
+}
+
+
+message DailyBackupSchedule {
+  google.type.TimeOfDay execute_time = 1; // [(required) = true];
+}
+
+
+message BackupSettings {
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    SYSTEM = 1;
+    USER = 2;
+  }
+
+  enum StorageClass {
+    STORAGE_CLASS_UNSPECIFIED = 0;
+    STANDARD = 1;
+    REDUCED_REDUNDANCY = 2;
+    STANDARD_IA = 3;
+    ONEZONE_IA = 4;
+    INTELLIGENT_TIERING = 5;
+    GLACIER = 6;
+    DEEP_ARCHIVE = 7;
+    OUTPOSTS = 8;
+  }
+
+  // name of backup settings
+  string name = 1; // [(length) = "<=256"];
+  // human readable description.
+  string description = 2; // [(length) = "<=256"];
+  // provide schedule. if empty, backup will be disabled.
+  BackupSchedule backup_schedule = 3;
+  // provide time to live of backup.
+  google.protobuf.Duration backup_time_to_live = 4;
+  // provide a list of source paths. Each path can be directory, table or even database itself.
+  // Each directory (or database) will be traversed recursively and all childs of directory will be included to backup.
+  // By default, backup will be created for full database.
+  repeated string source_paths = 5; // [(size) = "<=256"];
+  // provide a list of paths to exclude from backup.
+  // Each path is a directory, table, or database.
+  // Each directory (or database) will be traversed recursively and all childs of directory will be excluded.
+  repeated string source_paths_to_exclude = 6; // [(size) = "<=256"];
+  Type type = 7;
+  StorageClass storage_class = 8;
+}
+
+
+message BackupConfig {
+  repeated BackupSettings backup_settings = 1;
+}
+
+
+message Backup {
+  // id of backup
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    CREATING = 1;
+    READY = 2;
+    ERROR = 3;
+    CANCELLED = 4;
+  }
+
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    // indicates that backup started by the system.
+    SYSTEM = 1;
+    USER = 2;
+  }
+
+  string id = 1;
+  // human readable backup name.
+  string name = 2;
+  string folder_id = 3;
+  string database_id = 4;
+  // description of backup.
+  string description = 5;
+  google.protobuf.Timestamp created_at = 6;
+  // indicates when backup started.
+  google.protobuf.Timestamp started_at = 7;
+  // indicates when backup completed.
+  google.protobuf.Timestamp completed_at = 8;
+  Status status = 9;
+  // settings used to make backup.
+  BackupSettings backup_settings = 10;
+
+  Type type = 11;
+  // size of backup in bytes.
+  int64 size = 12;
+}

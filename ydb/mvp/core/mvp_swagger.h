@@ -13,10 +13,10 @@
 #include <library/cpp/resource/resource.h>
 #include <ydb/core/viewer/json/json.h>
 #include "core_ydbc_impl.h"
-#include <cloud/bitbucket/private-api/yandex/cloud/priv/ydb/v1/database_service.grpc.pb.h>
-#include <cloud/bitbucket/private-api/yandex/cloud/priv/ydb/v1/backup_service.grpc.pb.h>
-#include <cloud/bitbucket/private-api/yandex/cloud/priv/ydb/v1/quota_service.grpc.pb.h>
-#include <cloud/bitbucket/private-api/yandex/cloud/priv/ydb/v1/console_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/ydb/v1/database_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/ydb/v1/backup_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/ydb/v1/quota_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/ydb/v1/console_service.grpc.pb.h>
 #include <filesystem>
 
 namespace NMVP {

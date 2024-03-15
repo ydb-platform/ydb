@@ -1,17 +1,17 @@
 #pragma once
 #include <contrib/libs/googleapis-common-protos/google/rpc/status.pb.h>
-#include <cloud/bitbucket/private-api/yandex/cloud/priv/quota/quota.pb.h>
+#include <ydb/public/api/client/yc_private/quota/quota.pb.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <ydb/core/viewer/json/json.h>
 #include "core_ydb_impl.h"
-#include <cloud/bitbucket/private-api/yandex/cloud/priv/ydb/v1/database_service.grpc.pb.h>
-#include <cloud/bitbucket/private-api/yandex/cloud/priv/ydb/v1/backup_service.grpc.pb.h>
-#include <cloud/bitbucket/private-api/yandex/cloud/priv/ydb/v1/storage_type_service.grpc.pb.h>
-#include <cloud/bitbucket/private-api/yandex/cloud/priv/ydb/v1/resource_preset_service.grpc.pb.h>
-#include <cloud/bitbucket/private-api/yandex/cloud/priv/ydb/v1/quota_service.grpc.pb.h>
-#include <cloud/bitbucket/private-api/yandex/cloud/priv/resourcemanager/v1/cloud_service.grpc.pb.h>
-#include <cloud/bitbucket/private-api/yandex/cloud/priv/ydb/v1/console_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/ydb/v1/database_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/ydb/v1/backup_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/ydb/v1/storage_type_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/ydb/v1/resource_preset_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/ydb/v1/quota_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/resourcemanager/cloud.pb.h>
+#include <ydb/public/api/client/yc_private/ydb/v1/console_service.grpc.pb.h>
 
 namespace NMVP {
 

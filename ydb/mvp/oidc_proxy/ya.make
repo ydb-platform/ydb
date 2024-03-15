@@ -17,7 +17,7 @@ SRCS(
 
 PEERDIR(
     ydb/mvp/core
-    cloud/bitbucket/private-api/yandex/cloud/priv/oauth/v1
+    ydb/public/api/client/yc_private/oauth/v1
 )
 
 YQL_LAST_ABI_VERSION()

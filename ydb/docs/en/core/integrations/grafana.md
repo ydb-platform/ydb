@@ -74,7 +74,7 @@ The query editor allows to get data in different representations: time series, t
 
 ### Time series { #time-series }
 
-Time series visualization options are selectable if the query returns at least one field with `Date`, `Datetime`, or `Timestamp` type and at least one field with `Int64`, `Int32`, `Int16`, `Int8`, `Uint64`, `Uint32`, `Uint16`, `Uint8`, `Double` or `Float` type. Then you can select time series visualization options. Grafana interprets timestamp rows without an explicit time zone as UTC. Any other column is treated as a value column.
+Time series visualization options are selectable if the query returns at least one field with `Date`, `Datetime`, or `Timestamp` type (for now work with time supported only in UTC format) and at least one field with `Int64`, `Int32`, `Int16`, `Int8`, `Uint64`, `Uint32`, `Uint16`, `Uint8`, `Double` or `Float` type. Then you can select time series visualization options. Grafana interprets timestamp rows without an explicit time zone as UTC. Any other column is treated as a value column.
 
 ![Time-series](../_assets/grafana/time-series.png)
 
@@ -97,7 +97,7 @@ ORDER BY `timestamp`
 
 ### Tables { #tables }
 
-Table visualizations will always be available for any valid {{ ydb-short-name }} query (multiple result sets are not supported).
+Table visualizations will always be available for any valid {{ ydb-short-name }} query with exactly one result set.
 
 
 ![Table](../_assets/grafana/table.png)
@@ -122,9 +122,15 @@ FROM `/database/endpoint/my-logs`
 WHERE $__timeFilter(`timeCol`)
 ```
 
+```sql
+SELECT `timeCol`
+FROM `/database/endpoint/my-logs`
+WHERE $__timeFilter(`timeCol` + INTERVAL("PT24H"))
+```
+
 | Macro                                        | Description                                                                                                                      | Output example                                                                                  |
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `$__timeFilter(columnName)`                | Replaced by a conditional that filters the data (using the provided column) based on the time range of the panel in microseconds | `foo >= CAST(1636717526371000 AS TIMESTAMP) AND foo <=  CAST(1668253526371000 AS TIMESTAMP)' )` |
+| `$__timeFilter(columnName)`                | Replaced by a conditional that filters the data (using the provided column or expression) based on the time range of the panel in microseconds | `foo >= CAST(1636717526371000 AS TIMESTAMP) AND foo <=  CAST(1668253526371000 AS TIMESTAMP)' )` |
 | `$__fromTimestamp`                         | Replaced by the starting time of the range of the panel casted to Timestamp                                                      | `CAST(1636717526371000 AS TIMESTAMP)`                                                           |
 | `$__toTimestamp`                           | Replaced by the ending time of the range of the panel casted to Timestamp                                                        | `CAST(1636717526371000 AS TIMESTAMP)`                                                           |
 | `$__varFallback(condition, $templateVar)` | Replaced by the first parameter when the template variable in the second parameter is not provided.                              | `$__varFallback('foo', $bar)` `foo` if variable `bar` is not provided, or `bar`'s value                                                               |

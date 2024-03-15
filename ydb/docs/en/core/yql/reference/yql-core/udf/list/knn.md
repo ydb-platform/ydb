@@ -73,7 +73,7 @@ The binary representation of a vector can be persisted in a {{ ydb-short-name }}
 
 ```sql
 Knn::ToBinaryString(List<Float>{Flags:AutoMap})->String
-Knn::FromBinaryString(String)->List<Float>?
+Knn::FromBinaryString(String{Flags:AutoMap})->List<Float>?
 
 ## Examples
 

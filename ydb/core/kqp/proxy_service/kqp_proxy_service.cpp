@@ -868,7 +868,7 @@ public:
         }
 
         const TKqpSessionInfo* info = LocalSessions->FindPtr(proxyRequest->SessionId);
-        if (info) {
+        if (info && !info->AttachedRpcId) {
             LocalSessions->StartIdleCheck(info, GetSessionIdleDuration());
         }
 

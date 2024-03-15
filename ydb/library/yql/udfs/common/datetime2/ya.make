@@ -2,7 +2,7 @@ IF (YQL_PACKAGED)
     PACKAGE()
 
     FROM_SANDBOX(
-        FILE 5703764078 OUT_NOAUTO
+        FILE {FILE_RESOURCE_ID} OUT_NOAUTO
             libdatetime2_udf.so
     )
 

@@ -1558,7 +1558,8 @@ message TTracingConfig {
     }
 
     message TSelectors {
-        optional string RequestType = 1;
+        reserved 1;
+        repeated string RequestTypes = 3;
         optional string Database = 2;
     }
 

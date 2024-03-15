@@ -108,7 +108,7 @@ namespace NKikimr {
         void PassAway() override {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_VDISK_GET, SelfId() << " finished query");
             Send(ParentId, new TEvents::TEvActorDied);
-            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, Result.release(), Cookie);
+            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, Result.release(), Cookie, "", nullptr); // TODO
             TActorBootstrapped::PassAway();
         }
 

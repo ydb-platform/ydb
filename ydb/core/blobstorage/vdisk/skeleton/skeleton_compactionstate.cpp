@@ -67,7 +67,7 @@ namespace NKikimr {
         }
 
         if (req.AllDone()) {
-            SendVDiskResponse(ctx, req.ClientId, req.Reply.release(), req.ClientCookie);
+            SendVDiskResponse(ctx, req.ClientId, req.Reply.release(), req.ClientCookie, "", nullptr); // TODO
             // delete req from Request, we handled it
             Requests.erase(it);
         }

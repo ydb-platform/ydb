@@ -179,7 +179,7 @@ namespace NKikimr {
         template <class TOrigEv>
         void SendReply(const TActorContext &ctx, std::unique_ptr<IEventBase> result, TOrigEv &orig, EServiceKikimr logService) {
             Y_UNUSED(logService);
-            SendVDiskResponse(ctx, orig->Sender, result.release(), orig->Cookie);
+            SendVDiskResponse(ctx, orig->Sender, result.release(), orig->Cookie, VCtx->VDiskLogPrefix, VCtx->OOSMonGroup);
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -261,7 +261,7 @@ namespace NKikimr {
             std::unique_ptr<IActor> actor{CreateSkeletonVPatchActor(SelfId(), GInfo->Type, ev, now, SkeletonFrontIDPtr,
                     IFaceMonGroup->PatchFoundPartsMsgsPtr(), IFaceMonGroup->PatchResMsgsPtr(),
                     VCtx->Histograms.GetHistogram(NKikimrBlobStorage::FastRead), VCtx->Histograms.GetHistogram(NKikimrBlobStorage::AsyncBlob),
-                    VPatchCtx, VCtx->VDiskLogPrefix, Db->GetVDiskIncarnationGuid())};
+                    VPatchCtx, VCtx->VDiskLogPrefix, Db->GetVDiskIncarnationGuid(), VCtx->OOSMonGroup)};
             TActorId vPatchActor = Register(actor.release());
             VPatchActors.emplace(patchedBlobId, vPatchActor);
         }
@@ -565,7 +565,7 @@ namespace NKikimr {
             ui64 cookie = ev->Cookie;
 
             IActor* vMultiPutActor = CreateSkeletonVMultiPutActor(SelfId(), statuses, oosStatus, ev,
-                    SkeletonFrontIDPtr, IFaceMonGroup->MultiPutResMsgsPtr(), Db->GetVDiskIncarnationGuid());
+                    SkeletonFrontIDPtr, IFaceMonGroup->MultiPutResMsgsPtr(), Db->GetVDiskIncarnationGuid(), VCtx);
             NActors::TActorId vMultiPutActorId = ctx.Register(vMultiPutActor);
             ActiveActors.Insert(vMultiPutActorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
 
@@ -756,7 +756,7 @@ namespace NKikimr {
                     Hull->PostponeReplyUntilCommitted(msg->Result.release(), msg->OrigClient, msg->OrigCookie,
                         std::move(ev->TraceId), status.Lsn);
                 } else {
-                    SendVDiskResponse(ctx, msg->OrigClient, msg->Result.release(), msg->OrigCookie);
+                    SendVDiskResponse(ctx, msg->OrigClient, msg->Result.release(), msg->OrigCookie, VCtx->VDiskLogPrefix, VCtx->OOSMonGroup);
                 }
 
                 return;
@@ -856,7 +856,7 @@ namespace NKikimr {
             using namespace NErrBuilder;
             std::unique_ptr<IEventBase> res(ErroneousResult(VCtx, status, errorReason, ev, now, SkeletonFrontIDPtr, SelfVDiskId,
                     Db->GetVDiskIncarnationGuid(), GInfo));
-            SendVDiskResponse(ctx, ev->Sender, res.release(), ev->Cookie);
+            SendVDiskResponse(ctx, ev->Sender, res.release(), ev->Cookie, VCtx->VDiskLogPrefix, VCtx->OOSMonGroup);
         }
 
         void Handle(TEvBlobStorage::TEvVGet::TPtr &ev, const TActorContext &ctx) {
@@ -1070,7 +1070,7 @@ namespace NKikimr {
             LOG_DEBUG_S(ctx, BS_VDISK_BLOCK, VCtx->VDiskLogPrefix
                     << "TEvVGetBlockResult: " << result->ToString()
                     << " Marker# BSVS17");
-            SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie);
+            SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, VCtx->VDiskLogPrefix, VCtx->OOSMonGroup);
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -1148,7 +1148,7 @@ namespace NKikimr {
             using namespace NErrBuilder;
             std::unique_ptr<IEventBase> res(ErroneousResult(VCtx, status, errorReason, ev, now, SkeletonFrontIDPtr, SelfVDiskId,
                     Db->GetVDiskIncarnationGuid(), GInfo));
-            SendVDiskResponse(ctx, ev->Sender, res.release(), ev->Cookie);
+            SendVDiskResponse(ctx, ev->Sender, res.release(), ev->Cookie, VCtx->VDiskLogPrefix, VCtx->OOSMonGroup);
         }
 
         void Handle(TEvBlobStorage::TEvVGetBarrier::TPtr &ev, const TActorContext &ctx) {
@@ -1210,7 +1210,7 @@ namespace NKikimr {
             using namespace NErrBuilder;
             std::unique_ptr<IEventBase> res(ErroneousResult(VCtx, status, errorReason, ev, now, SkeletonFrontIDPtr, SelfVDiskId,
                     Db->GetVDiskIncarnationGuid(), GInfo));
-            SendVDiskResponse(ctx, ev->Sender, res.release(), ev->Cookie);
+            SendVDiskResponse(ctx, ev->Sender, res.release(), ev->Cookie, VCtx->VDiskLogPrefix, VCtx->OOSMonGroup);
         }
 
         void Handle(TEvBlobStorage::TEvVDbStat::TPtr &ev, const TActorContext &ctx) {
@@ -1282,7 +1282,7 @@ namespace NKikimr {
             using namespace NErrBuilder;
             std::unique_ptr<IEventBase> res(ErroneousResult(VCtx, status, errorReason, ev, now, SkeletonFrontIDPtr,
                 SelfVDiskId, Db->GetVDiskIncarnationGuid(), GInfo));
-            SendVDiskResponse(ctx, ev->Sender, res.release(), ev->Cookie);
+            SendVDiskResponse(ctx, ev->Sender, res.release(), ev->Cookie, VCtx->VDiskLogPrefix, VCtx->OOSMonGroup);
         }
 
         void Handle(TEvBlobStorage::TEvVAssimilate::TPtr& ev, const TActorContext& ctx) {
@@ -1302,7 +1302,7 @@ namespace NKikimr {
         void Reply(const NKikimrProto::EReplyStatus status, const TString& /*errorReason*/, TEvBlobStorage::TEvVCompact::TPtr &ev,
                    const TActorContext &ctx, const TInstant &/*now*/) {
             auto result = std::make_unique<TEvBlobStorage::TEvVCompactResult>(status, SelfVDiskId);
-            SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie);
+            SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, VCtx->VDiskLogPrefix, VCtx->OOSMonGroup);
         }
 
         void ReplyError(NKikimrProto::EReplyStatus status, const TString& errorReason, TEvBlobStorage::TEvVCompact::TPtr &ev,
@@ -1369,7 +1369,7 @@ namespace NKikimr {
         void Reply(const NKikimrProto::EReplyStatus status, const TString& /*errorReason*/,
                 TEvBlobStorage::TEvVBaldSyncLog::TPtr &ev, const TActorContext &ctx, const TInstant &/*now*/) {
             auto result = std::make_unique<TEvBlobStorage::TEvVBaldSyncLogResult>(status, SelfVDiskId);
-            SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie);
+            SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, VCtx->VDiskLogPrefix, VCtx->OOSMonGroup);
         }
 
         void ReplyError(NKikimrProto::EReplyStatus status, const TString& errorReason, TEvBlobStorage::TEvVBaldSyncLog::TPtr &ev,
@@ -1403,7 +1403,7 @@ namespace NKikimr {
             using namespace NErrBuilder;
             std::unique_ptr<IEventBase> res(ErroneousResult(VCtx, status, errorReason, ev, now, SkeletonFrontIDPtr, SelfVDiskId,
                     Db->GetVDiskIncarnationGuid(), GInfo));
-            SendVDiskResponse(ctx, ev->Sender, res.release(), ev->Cookie);
+            SendVDiskResponse(ctx, ev->Sender, res.release(), ev->Cookie, VCtx->VDiskLogPrefix, VCtx->OOSMonGroup);
         }
 
         void Handle(TEvBlobStorage::TEvVSync::TPtr &ev, const TActorContext &ctx) {
@@ -1418,7 +1418,7 @@ namespace NKikimr {
             using namespace NErrBuilder;
             std::unique_ptr<IEventBase> res(ErroneousResult(VCtx, status, errorReason, ev, now, SkeletonFrontIDPtr, SelfVDiskId,
                     Db->GetVDiskIncarnationGuid(), GInfo));
-            SendVDiskResponse(ctx, ev->Sender, res.release(), ev->Cookie);
+            SendVDiskResponse(ctx, ev->Sender, res.release(), ev->Cookie, VCtx->VDiskLogPrefix, VCtx->OOSMonGroup);
         }
 
         // FIXME: check for RACE in other handlers!!!
@@ -1581,7 +1581,7 @@ namespace NKikimr {
             using namespace NErrBuilder;
             std::unique_ptr<IEventBase> res(ErroneousResult(VCtx, status, errorReason, ev, now, SkeletonFrontIDPtr, SelfVDiskId,
                     Db->GetVDiskIncarnationGuid(), GInfo));
-            SendVDiskResponse(ctx, ev->Sender, res.release(), ev->Cookie);
+            SendVDiskResponse(ctx, ev->Sender, res.release(), ev->Cookie, VCtx->VDiskLogPrefix, VCtx->OOSMonGroup);
         }
 
         void Handle(TEvBlobStorage::TEvVSyncFull::TPtr &ev, const TActorContext &ctx) {
@@ -2393,7 +2393,7 @@ namespace NKikimr {
             const auto& record = ev->Get()->Record;
             if (!SelfVDiskId.SameDisk(record.GetVDiskID())) {
                 SendVDiskResponse(ctx, ev->Sender, new TEvBlobStorage::TEvVTakeSnapshotResult(NKikimrProto::RACE,
-                    "group generation race", SelfVDiskId), ev->Cookie);
+                    "group generation race", SelfVDiskId), ev->Cookie, VCtx->VDiskLogPrefix, VCtx->OOSMonGroup);
             } else {
                 const auto [it, inserted] = Snapshots.try_emplace(record.GetSnapshotId());
                 TSnapshotInfo& snapshot = it->second;
@@ -2411,7 +2411,7 @@ namespace NKikimr {
                 }
                 RescheduleSnapshotExpirationCheck();
                 SendVDiskResponse(ctx, ev->Sender, new TEvBlobStorage::TEvVTakeSnapshotResult(status,
-                    {}, SelfVDiskId), ev->Cookie);
+                    {}, SelfVDiskId), ev->Cookie, VCtx->VDiskLogPrefix, VCtx->OOSMonGroup);
             }
         }
 
@@ -2419,16 +2419,16 @@ namespace NKikimr {
             const auto& record = ev->Get()->Record;
             if (!SelfVDiskId.SameDisk(record.GetVDiskID())) {
                 SendVDiskResponse(ctx, ev->Sender, new TEvBlobStorage::TEvVReleaseSnapshotResult(NKikimrProto::RACE,
-                    "group generation race", SelfVDiskId), ev->Cookie);
+                    "group generation race", SelfVDiskId), ev->Cookie, VCtx->VDiskLogPrefix, VCtx->OOSMonGroup);
             } else if (const auto it = Snapshots.find(record.GetSnapshotId()); it != Snapshots.end()) {
                 TSnapshotInfo& snapshot = it->second;
                 SnapshotExpirationMap.erase(snapshot.ExpirationIt);
                 Snapshots.erase(it);
                 SendVDiskResponse(ctx, ev->Sender, new TEvBlobStorage::TEvVReleaseSnapshotResult(NKikimrProto::OK,
-                    {}, SelfVDiskId), ev->Cookie);
+                    {}, SelfVDiskId), ev->Cookie, VCtx->VDiskLogPrefix, VCtx->OOSMonGroup);
             } else {
                 SendVDiskResponse(ctx, ev->Sender, new TEvBlobStorage::TEvVReleaseSnapshotResult(NKikimrProto::NODATA,
-                    {}, SelfVDiskId), ev->Cookie);
+                    {}, SelfVDiskId), ev->Cookie, VCtx->VDiskLogPrefix, VCtx->OOSMonGroup);
             }
         }
 

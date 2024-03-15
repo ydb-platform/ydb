@@ -241,6 +241,7 @@ public:                                                                         
                 COUNTER_INIT(ReplSecondsRemaining, false);
                 COUNTER_INIT(ReplTotalBlobsWithProblems, false);
                 COUNTER_INIT(ReplPhantomBlobsWithProblems, false);
+                COUNTER_INIT(ReplMadeNoProgress, false);
             }
 
             COUNTER_DEF(SyncerVSyncMessagesSent);
@@ -265,6 +266,7 @@ public:                                                                         
             COUNTER_DEF(ReplSecondsRemaining);
             COUNTER_DEF(ReplTotalBlobsWithProblems);
             COUNTER_DEF(ReplPhantomBlobsWithProblems);
+            COUNTER_DEF(ReplMadeNoProgress);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

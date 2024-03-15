@@ -10,6 +10,9 @@ NMetadata::NModifications::TOperationParsingResult TTiersManager::DoBuildPatchFr
 {
     NMetadata::NInternal::TTableRecord result;
     result.SetColumn(TTierConfig::TDecoder::TierName, NMetadata::NInternal::TYDBValue::Utf8(settings.GetObjectId()));
+    if (settings.GetObjectId().StartsWith("$")) {
+        return TConclusionStatus::Fail("tier name cannot start with $ character");
+    }
     {
         auto fConfig = settings.GetFeaturesExtractor().Extract(TTierConfig::TDecoder::TierConfig);
         if (fConfig) {

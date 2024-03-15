@@ -32,6 +32,7 @@ struct TPgKernelState : arrow::compute::KernelState {
     std::vector<bool> IsFixedArg;
     bool IsFixedResult;
     i32 TypeLen;
+    std::shared_ptr<void> FmgrDataHolder;
 };
 
 template <PGFunction PgFunc>

@@ -57,7 +57,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             if (table.IsDropped()) {
                 PathsToDrop.insert(table.GetPathId());
             }
-            Tables.insert_or_assign(table.GetPathId(), std::move(table));
+            AFL_VERIFY(Tables.emplace(table.GetPathId(), std::move(table)).second);
 
             if (!rowset.Next()) {
                 return false;
@@ -82,7 +82,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
                 Y_VERIFY_S(preset.GetName() == "default", "Preset name: " + preset.GetName());
                 isFakePresetOnly = false;
             }
-            SchemaPresets.insert_or_assign(preset.GetId(), preset);
+            AFL_VERIFY(SchemaPresets.emplace(preset.GetId(), preset).second);
             if (!rowset.Next()) {
                 return false;
             }
@@ -292,7 +292,7 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
         } else {
             Ttl.DropPathTtl(pathId);
         }
-        if (PrimaryIndex) {
+        if (PrimaryIndex && manager->IsReady()) {
             PrimaryIndex->OnTieringModified(manager, Ttl, pathId);
         }
     }
@@ -323,22 +323,28 @@ TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& s
 {
 }
 
-bool TTablesManager::TryFinalizeDropPath(NTable::TDatabase& dbTable, const ui64 pathId) {
+bool TTablesManager::TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const ui64 pathId) const {
     auto itDrop = PathsToDrop.find(pathId);
-    if (itDrop == PathsToDrop.end()) {
-        return false;
-    }
-    if (GetPrimaryIndexSafe().HasDataInPathId(pathId)) {
-        return false;
-    }
-    PathsToDrop.erase(itDrop);
+    AFL_VERIFY(itDrop != PathsToDrop.end());
+    AFL_VERIFY(!GetPrimaryIndexSafe().HasDataInPathId(pathId));
     NIceDb::TNiceDb db(dbTable);
     NColumnShard::Schema::EraseTableInfo(db, pathId);
-    const auto& table = Tables.find(pathId);
-    Y_ABORT_UNLESS(table != Tables.end(), "No schema for path %lu", pathId);
-    for (auto&& tableVersion : table->second.GetVersions()) {
+    const auto& itTable = Tables.find(pathId);
+    AFL_VERIFY(itTable != Tables.end())("problem", "No schema for path")("path_id", pathId);
+    for (auto&& tableVersion : itTable->second.GetVersions()) {
         NColumnShard::Schema::EraseTableVersionInfo(db, pathId, tableVersion.first);
     }
+    return true;
+}
+
+bool TTablesManager::TryFinalizeDropPathOnComplete(const ui64 pathId) {
+    auto itDrop = PathsToDrop.find(pathId);
+    AFL_VERIFY(itDrop != PathsToDrop.end());
+    AFL_VERIFY(!GetPrimaryIndexSafe().HasDataInPathId(pathId));
+    PathsToDrop.erase(itDrop);
+    const auto& itTable = Tables.find(pathId);
+    AFL_VERIFY(itTable != Tables.end())("problem", "No schema for path")("path_id", pathId);
+    Tables.erase(itTable);
     return true;
 }
 

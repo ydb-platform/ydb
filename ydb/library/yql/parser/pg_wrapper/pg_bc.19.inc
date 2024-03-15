@@ -240,6 +240,8 @@ LLVM_BC(
     arrow_pg_current_logfile_1arg
     arrow_pg_drop_replication_slot
     arrow_pg_get_replica_identity_index
+    arrow_pg_num_nonnulls
+    arrow_pg_num_nulls
     arrow_pg_relation_is_updatable
     arrow_pg_replication_slot_advance
     arrow_pg_sleep

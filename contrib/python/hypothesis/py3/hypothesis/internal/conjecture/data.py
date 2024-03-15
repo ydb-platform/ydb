@@ -40,7 +40,7 @@ import attr
 
 from hypothesis.errors import Frozen, InvalidArgument, StopTest
 from hypothesis.internal.cache import LRUReusedCache
-from hypothesis.internal.compat import floor, int_from_bytes, int_to_bytes
+from hypothesis.internal.compat import add_note, floor, int_from_bytes, int_to_bytes
 from hypothesis.internal.conjecture.floats import float_to_lex, lex_to_float
 from hypothesis.internal.conjecture.junkdrawer import IntList, uniform
 from hypothesis.internal.conjecture.utils import (
@@ -62,11 +62,14 @@ from hypothesis.internal.floats import (
 from hypothesis.internal.intervalsets import IntervalSet
 
 if TYPE_CHECKING:
+    from typing import TypeAlias
+
     from typing_extensions import dataclass_transform
 
     from hypothesis.strategies import SearchStrategy
     from hypothesis.strategies._internal.strategies import Ex
 else:
+    TypeAlias = object
 
     def dataclass_transform():
         def wrapper(tp):
@@ -92,6 +95,41 @@ InterestingOrigin = Tuple[
 TargetObservations = Dict[Optional[str], Union[int, float]]
 
 T = TypeVar("T")
+
+
+class IntegerKWargs(TypedDict):
+    min_value: Optional[int]
+    max_value: Optional[int]
+    weights: Optional[Sequence[float]]
+    shrink_towards: int
+
+
+class FloatKWargs(TypedDict):
+    min_value: float
+    max_value: float
+    allow_nan: bool
+    smallest_nonzero_magnitude: float
+
+
+class StringKWargs(TypedDict):
+    intervals: IntervalSet
+    min_size: int
+    max_size: Optional[int]
+
+
+class BytesKWargs(TypedDict):
+    size: int
+
+
+class BooleanKWargs(TypedDict):
+    p: float
+
+
+IRType: TypeAlias = Union[int, str, bool, float, bytes]
+IRKWargsType: TypeAlias = Union[
+    IntegerKWargs, FloatKWargs, StringKWargs, BytesKWargs, BooleanKWargs
+]
+IRTypeName: TypeAlias = Literal["integer", "string", "boolean", "float", "bytes"]
 
 
 class ExtraInformation:
@@ -796,34 +834,6 @@ global_test_counter = 0
 
 
 MAX_DEPTH = 100
-
-
-class IntegerKWargs(TypedDict):
-    min_value: Optional[int]
-    max_value: Optional[int]
-    weights: Optional[Sequence[float]]
-    shrink_towards: int
-
-
-class FloatKWargs(TypedDict):
-    min_value: float
-    max_value: float
-    allow_nan: bool
-    smallest_nonzero_magnitude: float
-
-
-class StringKWargs(TypedDict):
-    intervals: IntervalSet
-    min_size: int
-    max_size: Optional[int]
-
-
-class BytesKWargs(TypedDict):
-    size: int
-
-
-class BooleanKWargs(TypedDict):
-    p: float
 
 
 class DataObserver:
@@ -1748,14 +1758,17 @@ class ConjectureData:
         try:
             if not at_top_level:
                 return strategy.do_draw(self)
-            else:
-                assert start_time is not None
+            assert start_time is not None
+            key = observe_as or f"generate:unlabeled_{len(self.draw_times)}"
+            try:
                 strategy.validate()
                 try:
                     return strategy.do_draw(self)
                 finally:
-                    key = observe_as or f"generate:unlabeled_{len(self.draw_times)}"
                     self.draw_times[key] = time.perf_counter() - start_time
+            except Exception as err:
+                add_note(err, f"while generating {key[9:]!r} from {strategy!r}")
+                raise
         finally:
             self.stop_example()
 

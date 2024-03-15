@@ -830,6 +830,15 @@ protected:
 
 
 protected:
+    void FillSecureParamsFromStage(THashMap<TString, TString>& secureParams, const NKqpProto::TKqpPhyStage& stage) {
+        for (const auto& [secretName, authInfo] : stage.GetSecureParams()) {
+            const auto& structuredToken = NYql::CreateStructuredTokenParser(authInfo).ToBuilder().ReplaceReferences(SecureParams).ToJson();
+            const auto& structuredTokenParser = NYql::CreateStructuredTokenParser(structuredToken);
+            YQL_ENSURE(structuredTokenParser.HasIAMToken(), "only token authentification supported for compute tasks");
+            secureParams.emplace(secretName, structuredTokenParser.GetIAMToken());
+        }
+    }
+
     void BuildSysViewScanTasks(TStageInfo& stageInfo) {
         Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.IsSysView());
 
@@ -873,6 +882,7 @@ protected:
             task.Meta.ReadInfo.Reverse = op.GetReadRange().GetReverse();
             task.Meta.Type = TTaskMeta::TTaskType::Compute;
 
+            FillSecureParamsFromStage(task.Meta.SecureParams, stage);
             BuildSinks(stage, task);
 
             LOG_D("Stage " << stageInfo.Id << " create sysview scan task: " << task.Id);
@@ -959,6 +969,7 @@ protected:
             if (structuredToken) {
                 task.Meta.SecureParams.emplace(sourceName, structuredToken);
             }
+            FillSecureParamsFromStage(task.Meta.SecureParams, stage);
 
             if (resourceSnapshot.empty()) {
                 task.Meta.Type = TTaskMeta::TTaskType::Compute;
@@ -1051,6 +1062,7 @@ protected:
                 YQL_ENSURE(!shardsResolved);
                 task.Meta.ShardId = taskLocation;
             }
+            FillSecureParamsFromStage(task.Meta.SecureParams, stage);
 
             const auto& stageSource = stage.GetSources(0);
             auto& input = task.Inputs[stageSource.GetInputIndex()];
@@ -1306,6 +1318,7 @@ protected:
             auto& task = TasksGraph.AddTask(stageInfo);
             task.Meta.Type = TTaskMeta::TTaskType::Compute;
             task.Meta.ExecuterId = SelfId();
+            FillSecureParamsFromStage(task.Meta.SecureParams, stage);
             BuildSinks(stage, task);
             LOG_D("Stage " << stageInfo.Id << " create compute task: " << task.Id);
         }
@@ -1441,6 +1454,7 @@ protected:
         THashMap<ui64, ui64>& assignedShardsCount,
         const bool sorted, const bool isOlapScan)
     {
+        const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
         ui64 nodeId = ShardIdToNodeId.at(shardId);
         if (stageInfo.Meta.IsOlap() && sorted) {
             auto& task = TasksGraph.AddTask(stageInfo);
@@ -1448,6 +1462,7 @@ protected:
             task.Meta.NodeId = nodeId;
             task.Meta.ScanTask = true;
             task.Meta.Type = TTaskMeta::TTaskType::Scan;
+            FillSecureParamsFromStage(task.Meta.SecureParams, stage);
             return task;
         }
 
@@ -1459,6 +1474,7 @@ protected:
             task.Meta.NodeId = nodeId;
             task.Meta.ScanTask = true;
             task.Meta.Type = TTaskMeta::TTaskType::Scan;
+            FillSecureParamsFromStage(task.Meta.SecureParams, stage);
             tasks.push_back(task.Id);
             ++cnt;
             return task;
@@ -1552,6 +1568,7 @@ protected:
                         task.Meta.ScanTask = true;
                         task.Meta.Type = TTaskMeta::TTaskType::Scan;
                         task.SetMetaId(metaGlueingId);
+                        FillSecureParamsFromStage(task.Meta.SecureParams, stage);
                         BuildSinks(stage, task);
                     }
                 }
@@ -1934,7 +1951,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
     TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-    const bool enableOlapSink, ui32 statementResultIndex);
+    const bool enableOlapSink, ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,

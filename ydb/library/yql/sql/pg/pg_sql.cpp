@@ -3490,7 +3490,7 @@ public:
 
         auto name = names.back();
 
-        const bool isAggregateFunc = NYql::NPg::HasAggregation(name);
+        const bool isAggregateFunc = NYql::NPg::HasAggregation(name, NYql::NPg::EAggKind::Normal);
         const bool hasReturnSet = NYql::NPg::HasReturnSetProc(name);
 
         if (isAggregateFunc && !settings.AllowAggregates) {

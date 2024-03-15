@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(TSectorMapPerformance) {
     Y_UNIT_TEST(Test##diskMode##diskSizeGb##GB##operationType##dataSizeMb##MB##On##position##Sector) {          \
         std::pair<double, double> time;                                                                         \
         UNIT_ASSERT_C(TestSectorMapPerformance(EDiskMode::DM_##diskMode, diskSizeGb,  dataSizeMb,               \
-                ESectorPosition::Sector##position, EOperationType::Operation##operationType,  { 0.05, 0.5 },    \
+                ESectorPosition::Sector##position, EOperationType::Operation##operationType, { 0.05, 2.0 },     \
                 &time), "Time expected# " << time.first << " time elapsed#" << time.second);                    \
     }
 

@@ -2,6 +2,7 @@
 
 #include <ydb/library/binary_json/write.h>
 #include <ydb/library/dynumber/dynumber.h>
+#include <ydb/library/uuid/uuid.h>
 
 #include <ydb/library/yql/minikql/dom/yson.h>
 #include <ydb/library/yql/minikql/dom/json.h>
@@ -132,6 +133,21 @@ namespace {
         return true;
     }
 
+    struct TUuidHolder {
+        union {
+            ui16 Array[8];
+            ui64 Halves[2];
+        } Buf;
+    };
+
+    template <>
+    bool TryParse(TStringBuf value, TUuidHolder& result) {
+        if (!NUuid::ParseUuidToArray(value, result.Buf.Array, false)) {
+            return false;
+        }
+        return true;
+    }
+
     template <typename T, typename U>
     using TConverter = std::function<U(const T&)>;
 
@@ -169,6 +185,14 @@ namespace {
     TStringBuf PgToStringBuf(const NPg::TConvertResult& v) {
         Y_ABORT_UNLESS(!v.Error);
         return v.Str;
+    }
+
+    TStringBuf UuidToStringBuf(const TUuidHolder& uuid) {
+        char uuidBuf[16];
+
+        NUuid::UuidHalfsToBytes(uuidBuf, 16, uuid.Buf.Halves[1], uuid.Buf.Halves[0]);
+
+        return TStringBuf(uuidBuf, 16);
     }
 
     template <typename T, typename U = T>
@@ -297,6 +321,8 @@ bool MakeCell(TCell& cell, TStringBuf value, NScheme::TTypeInfo type, TMemoryPoo
         return TCellMaker<NYql::NDecimal::TInt128, std::pair<ui64, ui64>>::Make(cell, value, pool, err, &Int128ToPair);
     case NScheme::NTypeIds::Pg:
         return TCellMaker<NPg::TConvertResult, TStringBuf>::Make(cell, value, pool, err, &PgToStringBuf, type.GetTypeDesc());
+    case NScheme::NTypeIds::Uuid:
+        return TCellMaker<TUuidHolder, TStringBuf>::Make(cell, value, pool, err, &UuidToStringBuf);
     default:
         return false;
     }
@@ -390,6 +416,7 @@ bool CheckCellValue(const TCell& cell, NScheme::TTypeInfo type) {
     case NScheme::NTypeIds::JsonDocument: // checked at parsing time
     case NScheme::NTypeIds::DyNumber: // checked at parsing time
     case NScheme::NTypeIds::Pg:       // checked at parsing time
+    case NScheme::NTypeIds::Uuid:       // checked at parsing time
         return true;
     case NScheme::NTypeIds::Date:
         return cell.AsValue<ui16>() < NUdf::MAX_DATE;

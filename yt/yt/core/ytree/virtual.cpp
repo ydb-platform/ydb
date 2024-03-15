@@ -66,7 +66,7 @@ void ExecuteBatchRead(
             auto batchFuture = BIND([writeItems, batchWriter, batchIndexRange = batchIndexRanges[index]] {
                 writeItems(batchIndexRange, batchWriter);
             })
-                .AsyncVia(NRpc::TDispatcher::Get()->GetHeavyInvoker())
+                .AsyncVia(offloadParams->OffloadInvoker)
                 .Run();
             batchFutures.push_back(std::move(batchFuture));
         }

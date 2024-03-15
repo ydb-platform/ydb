@@ -179,6 +179,11 @@ std::unique_ptr<INodeBrokerClient> MakeDefaultNodeBrokerClient();
 std::unique_ptr<IDynConfigClient> MakeDefaultDynConfigClient();
 std::unique_ptr<IInitLogger> MakeDefaultInitLogger();
 
+std::unique_ptr<IMemLogInitializer> MakeNoopMemLogInitializer();
+std::unique_ptr<INodeBrokerClient> MakeNoopNodeBrokerClient();
+std::unique_ptr<IDynConfigClient> MakeNoopDynConfigClient();
+std::unique_ptr<IInitLogger> MakeNoopInitLogger();
+
 std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(TInitialConfiguratorDependencies deps);
 
 class TInitialConfigurator {

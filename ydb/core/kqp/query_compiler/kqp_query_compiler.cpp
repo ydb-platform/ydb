@@ -438,6 +438,29 @@ void FillOlapProgram(const T& node, const NKikimr::NMiniKQL::TType* miniKqlResul
     CompileOlapProgram(node.Process(), tableMeta, readProto, resultColNames, ctx);
 }
 
+THashMap<TString, TString> FindSecureParams(const TExprNode::TPtr& node, const TTypeAnnotationContext& typesCtx, TSet<TString>& SecretNames) {
+    THashMap<TString, TString> secureParams;
+    NYql::NCommon::FillSecureParams(node, typesCtx, secureParams);
+    
+    for (auto& [secretName, structuredToken] : secureParams) {
+        const auto& tokenParser = CreateStructuredTokenParser(structuredToken);
+        tokenParser.ListReferences(SecretNames);
+        structuredToken = tokenParser.ToBuilder().RemoveSecrets().ToJson();
+    }
+
+    return secureParams;
+}
+
+std::optional<std::pair<TString, TString>> FindOneSecureParam(const TExprNode::TPtr& node, const TTypeAnnotationContext& typesCtx, const TString& nodeName, TSet<TString>& SecretNames) {
+    const auto& secureParams = FindSecureParams(node, typesCtx, SecretNames);
+    if (secureParams.empty()) {
+        return std::nullopt;
+    }
+
+    YQL_ENSURE(secureParams.size() == 1, "Only one SecureParams per " << nodeName << " allowed");
+    return *secureParams.begin();
+}
+
 class TKqpQueryCompiler : public IKqpQueryCompiler {
 public:
     TKqpQueryCompiler(const TString& cluster, const TIntrusivePtr<TKikimrTablesData> tablesData,
@@ -706,6 +729,9 @@ private:
             }
             return true;
         });
+
+        const auto& secureParams = FindSecureParams(stage.Program().Ptr(), TypesCtx, SecretNames);
+        stageProto.MutableSecureParams()->insert(secureParams.begin(), secureParams.end());
 
         auto result = stage.Program().Body();
         auto resultType = result.Ref().GetTypeAnn();
@@ -976,15 +1002,9 @@ private:
                 externalSource.AddPartitionedTaskParams(partitionParam);
             }
 
-            THashMap<TString, TString> secureParams;
-            NYql::NCommon::FillSecureParams(source.Ptr(), TypesCtx, secureParams);
-            if (!secureParams.empty()) {
-                YQL_ENSURE(secureParams.size() == 1, "Only one SecureParams per source allowed");
-                auto it = secureParams.begin();
-                externalSource.SetSourceName(it->first);
-                auto token = it->second;
-                externalSource.SetAuthInfo(CreateStructuredTokenParser(token).ToBuilder().RemoveSecrets().ToJson());
-                CreateStructuredTokenParser(token).ListReferences(SecretNames);
+            if (const auto& secureParams = FindOneSecureParam(source.Ptr(), TypesCtx, "source", SecretNames)) {
+                externalSource.SetSourceName(secureParams->first);
+                externalSource.SetAuthInfo(secureParams->second);
             }
 
             google::protobuf::Any& settings = *externalSource.MutableSettings();
@@ -1062,15 +1082,9 @@ private:
             YQL_ENSURE(!settings.type_url().empty(), "Data sink provider \"" << dataSinkCategory << "\" did't fill dq sink settings for its dq sink node");
             YQL_ENSURE(sinkType, "Data sink provider \"" << dataSinkCategory << "\" did't fill dq sink settings type for its dq sink node");
 
-            THashMap<TString, TString> secureParams;
-            NYql::NCommon::FillSecureParams(sink.Ptr(), TypesCtx, secureParams);
-            if (!secureParams.empty()) {
-                YQL_ENSURE(secureParams.size() == 1, "Only one SecureParams per sink allowed");
-                auto it = secureParams.begin();
-                externalSink.SetSinkName(it->first);
-                auto token = it->second;
-                externalSink.SetAuthInfo(CreateStructuredTokenParser(token).ToBuilder().RemoveSecrets().ToJson());
-                CreateStructuredTokenParser(token).ListReferences(SecretNames);
+            if (const auto& secureParams = FindOneSecureParam(sink.Ptr(), TypesCtx, "sink", SecretNames)) {
+                externalSink.SetSinkName(secureParams->first);
+                externalSink.SetAuthInfo(secureParams->second);
             }
         }
     }

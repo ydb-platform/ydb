@@ -323,6 +323,9 @@ public:
     TFuture<TCellIdToSnapshotIdMap> BuildMasterSnapshots(
         const TBuildMasterSnapshotsOptions& options) override;
 
+    TFuture<TCellIdToSequenceNumberMap> GetMasterConsistentState(
+        const TGetMasterConsistentStateOptions& options) override;
+
     TFuture<void> ExitReadOnly(
         NHydra::TCellId cellId,
         const TExitReadOnlyOptions& options) override;
@@ -394,14 +397,14 @@ public:
         const std::vector<NObjectClient::TCellId>& cellIds,
         const TResumeTabletCellsOptions& options) override;
 
-    TFuture<TMaintenanceId> AddMaintenance(
+    TFuture<TMaintenanceIdPerTarget> AddMaintenance(
         EMaintenanceComponent component,
         const TString& address,
         EMaintenanceType type,
         const TString& comment,
         const TAddMaintenanceOptions& options) override;
 
-    TFuture<TMaintenanceCounts> RemoveMaintenance(
+    TFuture<TMaintenanceCountsPerTarget> RemoveMaintenance(
         EMaintenanceComponent component,
         const TString& address,
         const TMaintenanceFilter& filter,

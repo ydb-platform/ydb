@@ -16,7 +16,7 @@ We use the following symbols as abbreviations:
 1. ㉔ **Default values** for table columns
 1. ㉔ **Asynchronous LLVM JIT** query compilation
 1. ㉔ **Parameters in DECLARE clause are becoming optional**, better SQL compatibility
-1. ㉔ **Cost-based optimizer** for join order selection
+1. 🚧㉔ **Cost-based optimizer** for join order and join algorithm selection
 1. ㉔ **``INSERT INTO table FROM SELECT``** for large datasets
 1. ㉔ Support for **transactional writes into both row and column tables**
 1. ㉔ Support for **computed columns in a table**

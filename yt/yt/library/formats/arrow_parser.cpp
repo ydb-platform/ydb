@@ -698,6 +698,13 @@ void CheckMatchingArrowTypes(
                     arrow::Type::DICTIONARY
                 });
             break;
+
+        case ESimpleLogicalValueType::Date32:
+        case ESimpleLogicalValueType::Datetime64:
+        case ESimpleLogicalValueType::Timestamp64:
+        case ESimpleLogicalValueType::Interval64:
+            THROW_ERROR_EXCEPTION("Unexpected column type %Qv",
+                columnType);
     }
 }
 

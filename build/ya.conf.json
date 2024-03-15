@@ -55,16 +55,7 @@
                     "clang-format"
                 ]
             },
-            "formula": {
-                "by_platform": {
-                    "darwin-x86_64": {
-                        "uri": "sbr:4111727026"
-                    },
-                    "linux-x86_64": {
-                        "uri": "sbr:4111727778"
-                    }
-                }
-            }
+            "formula": "build/platform/clang/clang-format16.json"
         },
         "clang14": {
             "executable": {
@@ -1534,8 +1525,7 @@
                 "use_bundle": true,
                 "use_clang": true,
                 "version": "2019",
-                "werror_mode": "all",
-                "wine": "yes"
+                "werror_mode": "all"
             },
             "platforms": [
                 {

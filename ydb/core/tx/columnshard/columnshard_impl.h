@@ -27,6 +27,8 @@
 #include "data_sharing/common/transactions/tx_extension.h"
 #include "data_sharing/modification/events/change_owning.h"
 
+#include "backup/manager.h"
+
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
@@ -41,7 +43,8 @@
 #include <ydb/services/metadata/service.h>
 
 namespace NKikimr::NOlap {
-class TCleanupColumnEngineChanges;
+class TCleanupPortionsColumnEngineChanges;
+class TCleanupTablesColumnEngineChanges;
 class TTTLColumnEngineChanges;
 class TChangesWithAppend;
 class TCompactColumnEngineChanges;
@@ -140,7 +143,8 @@ class TColumnShard
     friend class TTxMonitoring;
     friend class TTxRemoveSharedBlobs;
 
-    friend class NOlap::TCleanupColumnEngineChanges;
+    friend class NOlap::TCleanupPortionsColumnEngineChanges;
+    friend class NOlap::TCleanupTablesColumnEngineChanges;
     friend class NOlap::TTTLColumnEngineChanges;
     friend class NOlap::TChangesWithAppend;
     friend class NOlap::TCompactColumnEngineChanges;
@@ -167,6 +171,7 @@ class TColumnShard
     friend class TSchemaTransactionOperator;
     friend class TLongTxTransactionOperator;
     friend class TEvWriteTransactionOperator;
+    friend class TBackupTransactionOperator;
 
     class TTxProgressTx;
     class TTxProposeCancel;
@@ -487,6 +492,7 @@ private:
 
     const TCSCounters CSCounters;
     TWritesMonitor WritesMonitor;
+    TBackupManager BackupManager;
 
     bool ProgressTxInFlight = false;
     THashMap<ui64, TInstant> ScanTxInFlight;
@@ -539,7 +545,8 @@ private:
     void SetupIndexation();
     void SetupCompaction();
     bool SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {});
-    void SetupCleanup();
+    void SetupCleanupPortions();
+    void SetupCleanupTables();
     void SetupCleanupInsertTable();
     void SetupGC();
 

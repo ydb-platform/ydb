@@ -11,7 +11,7 @@ namespace NYdb::NFederatedTopic {
 std::shared_ptr<IFederatedReadSession>
 TFederatedTopicClient::TImpl::CreateReadSession(const TFederatedReadSessionSettings& settings) {
     InitObserver();
-    auto session = std::make_shared<TFederatedReadSession>(settings, Connections, ClientSettings, GetObserver());
+    auto session = std::make_shared<TFederatedReadSession>(settings, Connections, ClientSettings, GetObserver(), ProvidedCodecs);
     session->Start();
     return std::move(session);
 }
@@ -38,7 +38,7 @@ TFederatedTopicClient::TImpl::CreateWriteSession(const TFederatedWriteSessionSet
             splitSettings.EventHandlers_.HandlersExecutor(ClientSettings.DefaultHandlersExecutor_);
         }
     }
-    auto session = std::make_shared<TFederatedWriteSession>(splitSettings, Connections, ClientSettings, GetObserver());
+    auto session = std::make_shared<TFederatedWriteSession>(splitSettings, Connections, ClientSettings, GetObserver(), ProvidedCodecs);
     session->Start();
     return std::move(session);
 }

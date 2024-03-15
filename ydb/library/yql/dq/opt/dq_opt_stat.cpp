@@ -154,11 +154,11 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
     TVector<TString> leftJoinKeys;
     TVector<TString> rightJoinKeys;
 
-    for (size_t i=0; i<join.LeftKeysColumns().Size(); i++) {
-        leftJoinKeys.push_back(RemoveAliases(join.LeftKeysColumns().Item(i).StringValue()));
+    for (size_t i=0; i<join.LeftKeysColumnNames().Size(); i++) {
+        leftJoinKeys.push_back(RemoveAliases(join.LeftKeysColumnNames().Item(i).StringValue()));
     }
-    for (size_t i=0; i<join.RightKeysColumns().Size(); i++) {
-        rightJoinKeys.push_back(RemoveAliases(join.RightKeysColumns().Item(i).StringValue()));
+    for (size_t i=0; i<join.RightKeysColumnNames().Size(); i++) {
+        rightJoinKeys.push_back(RemoveAliases(join.RightKeysColumnNames().Item(i).StringValue()));
     }
 
     typeCtx->SetStats(join.Raw(), std::make_shared<TOptimizerStatistics>(
@@ -357,6 +357,16 @@ void InferStatisticsForAggregateMergeFinalize(const TExprNode::TPtr& input, TTyp
     }
 
     typeCtx->SetStats( input.Get(), inputStats );
+}
+
+void InferStatisticsForAsList(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    double nRows = input->ChildrenSize();
+    int nAttrs = 5;
+    if (input->ChildrenSize() && input->Child(0)->IsCallable("AsStruct")) {
+        nAttrs = input->Child(0)->ChildrenSize();
+    }
+    auto outputStats = TOptimizerStatistics(EStatisticsType::BaseTable, nRows, nAttrs, nRows*nAttrs, 0.0);
+    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats));
 }
 
 /***

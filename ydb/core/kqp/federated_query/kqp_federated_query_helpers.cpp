@@ -11,6 +11,7 @@
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
 
+#include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
 #include <ydb/library/yql/providers/yt/gateway/native/yql_yt_native.h>
 #include <ydb/library/yql/providers/yt/lib/yt_download/yt_download.h>
 
@@ -117,14 +118,16 @@ namespace NKikimr::NKqp {
             S3GatewayConfig,
             GenericGatewaysConfig,
             YtGatewayConfig,
-            YtGateway};
+            YtGateway,
+            nullptr};
 
         // Init DatabaseAsyncResolver only if all requirements are met
-        if (DatabaseResolverActorId && GenericGatewaysConfig.HasMdbGateway() && MdbEndpointGenerator) {
+        if (DatabaseResolverActorId && MdbEndpointGenerator &&
+            (GenericGatewaysConfig.HasMdbGateway() || GenericGatewaysConfig.HasYdbMvpEndpoint())) {
             result.DatabaseAsyncResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
                 actorSystem,
                 DatabaseResolverActorId.value(),
-                "", // TODO: use YDB Gateway endpoint?
+                GenericGatewaysConfig.GetYdbMvpEndpoint(),
                 GenericGatewaysConfig.GetMdbGateway(),
                 MdbEndpointGenerator);
         }
@@ -142,5 +145,29 @@ namespace NKikimr::NKqp {
         }
 
         return std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryDefault>(setup, appData, appConfig);
+    }
+
+    NMiniKQL::TComputationNodeFactory MakeKqpFederatedQueryComputeFactory(NMiniKQL::TComputationNodeFactory baseComputeFactory, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup) {
+        auto ytComputeFactory = NYql::GetDqYtFactory();
+        auto federatedComputeFactory = federatedQuerySetup ? federatedQuerySetup->ComputationFactory : nullptr;
+
+        return [baseComputeFactory, ytComputeFactory, federatedComputeFactory]
+            (NMiniKQL::TCallable& callable, const NMiniKQL::TComputationNodeFactoryContext& ctx) -> NMiniKQL::IComputationNode* {
+                if (auto compute = baseComputeFactory(callable, ctx)) {
+                    return compute;
+                }
+
+                if (auto ytCompute = ytComputeFactory(callable, ctx)) {
+                    return ytCompute;
+                }
+
+                if (federatedComputeFactory) {
+                    if (auto compute = federatedComputeFactory(callable, ctx)) {
+                        return compute;
+                    }
+                }
+
+                return nullptr;
+            };
     }
 }  // namespace NKikimr::NKqp

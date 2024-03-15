@@ -35,6 +35,12 @@ TStructuredTokenBuilder& TStructuredTokenBuilder::SetBasicAuthWithSecret(const T
     return *this;
 }
 
+TStructuredTokenBuilder& TStructuredTokenBuilder::SetTokenAuthWithSecret(const TString& tokenReference, const TString& token) {
+    Data.SetField("token_ref", tokenReference);
+    Data.SetField("token", token);
+    return *this;
+}
+
 TStructuredTokenBuilder& TStructuredTokenBuilder::SetIAMToken(const TString& token) {
     Data.SetField("token", token);
     return *this;
@@ -56,12 +62,18 @@ TStructuredTokenBuilder& TStructuredTokenBuilder::ReplaceReferences(const std::m
         Data.ClearField("sa_id_signature_ref");
         Data.SetField("sa_id_signature", secrets.at(reference));
     }
+    if (Data.HasField("token_ref")) {
+        auto reference = Data.GetField("token_ref");
+        Data.ClearField("token_ref");
+        Data.SetField("token", secrets.at(reference));
+    }
     return *this;
 }
 
 TStructuredTokenBuilder& TStructuredTokenBuilder::RemoveSecrets() {
     Data.ClearField("basic_password");
     Data.ClearField("sa_id_signature");
+    Data.ClearField("token");
     return *this;
 }
 
@@ -127,6 +139,9 @@ void TStructuredTokenParser::ListReferences(TSet<TString>& references) const {
     if (Data.HasField("sa_id_signature_ref")) {
         references.insert(Data.GetField("sa_id_signature_ref"));
     }
+    if (Data.HasField("token_ref")) {
+        references.insert(Data.GetField("token_ref"));
+    }
 }
 
 TStructuredTokenBuilder TStructuredTokenParser::ToBuilder() const {
@@ -171,6 +186,18 @@ TString ComposeStructuredTokenJsonForBasicAuthWithSecret(const TString& login, c
     
     if (login && passwordSecretName && password) {
         result.SetBasicAuth(login, password).SetBasicAuthWithSecret(login, passwordSecretName);
+        return result.ToJson();
+    }
+
+    result.SetNoAuth();
+    return result.ToJson();
+}
+
+TString ComposeStructuredTokenJsonForTokenAuthWithSecret(const TString& tokenSecretName, const TString& token) {
+    TStructuredTokenBuilder result;
+
+    if (tokenSecretName && token) {
+        result.SetTokenAuthWithSecret(tokenSecretName, token);
         return result.ToJson();
     }
 

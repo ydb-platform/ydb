@@ -59,6 +59,7 @@ LLVM_BC(
     arrow_multirange_cmp
     arrow_multirange_constructor0
     arrow_multirange_constructor1
+    arrow_multirange_constructor2
     arrow_multirange_contained_by_multirange
     arrow_multirange_contained_by_range
     arrow_multirange_contains_elem

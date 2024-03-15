@@ -310,15 +310,16 @@ void ToProtoArrayImpl(
     }
 }
 
-template <class TOriginalArray, class TSerializedArray>
+template <class TOriginalArray, class TSerializedArray, class... TArgs>
 void FromProtoArrayImpl(
     TOriginalArray* originalArray,
-    const TSerializedArray& serializedArray)
+    const TSerializedArray& serializedArray,
+    TArgs&&... args)
 {
     originalArray->clear();
     originalArray->resize(serializedArray.size());
     for (int i = 0; i < serializedArray.size(); ++i) {
-        FromProto(&(*originalArray)[i], serializedArray.Get(i));
+        FromProto(&(*originalArray)[i], serializedArray.Get(i), args...);
     }
 }
 
@@ -449,12 +450,13 @@ void ToProto(
     NYT::NDetail::ToProtoArrayImpl(serializedArray, originalArray);
 }
 
-template <class TOriginalArray, class TSerialized>
+template <class TOriginalArray, class TSerialized, class... TArgs>
 void FromProto(
     TOriginalArray* originalArray,
-    const ::google::protobuf::RepeatedPtrField<TSerialized>& serializedArray)
+    const ::google::protobuf::RepeatedPtrField<TSerialized>& serializedArray,
+    TArgs&&... args)
 {
-    NYT::NDetail::FromProtoArrayImpl(originalArray, serializedArray);
+    NYT::NDetail::FromProtoArrayImpl(originalArray, serializedArray, std::forward<TArgs>(args)...);
 }
 
 template <class TOriginalArray, class TSerialized>

@@ -1,12 +1,14 @@
 #include "index_info.h"
 #include "statistics/abstract/operator.h"
 
+#include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
+
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/sort_cursor.h>
-#include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/formats/arrow/transformer/dictionary.h>
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/sys_view/common/schema.h>
 
 namespace NKikimr::NOlap {
 
@@ -284,33 +286,10 @@ std::shared_ptr<NArrow::TSortDescription> TIndexInfo::SortReplaceDescription() c
     return {};
 }
 
-bool TIndexInfo::AllowTtlOverColumn(const TString& name) const {
-    auto it = ColumnNames.find(name);
-    if (it == ColumnNames.end()) {
-        return false;
-    }
-    return MinMaxIdxColumnsIds.contains(it->second);
-}
-
-TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId, const TSaverContext& context) const {
-    NArrow::NTransformation::ITransformer::TPtr transformer;
-    NArrow::NSerialization::TSerializerContainer serializer;
-    {
-        auto it = ColumnFeatures.find(columnId);
-        AFL_VERIFY(it != ColumnFeatures.end());
-        transformer = it->second.GetSaveTransformer();
-        serializer = it->second.GetSerializer();
-    }
-
-    if (!!context.GetExternalSerializer()) {
-        return TColumnSaver(transformer, context.GetExternalSerializer());
-    } else if (!!serializer) {
-        return TColumnSaver(transformer, serializer);
-    } else if (DefaultSerializer) {
-        return TColumnSaver(transformer, DefaultSerializer);
-    } else {
-        return TColumnSaver(transformer, NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer());
-    }
+TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId) const {
+    auto it = ColumnFeatures.find(columnId);
+    AFL_VERIFY(it != ColumnFeatures.end());
+    return it->second.GetColumnSaver();
 }
 
 std::shared_ptr<TColumnLoader> TIndexInfo::GetColumnLoaderOptional(const ui32 columnId) const {
@@ -363,6 +342,19 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
     }
 
     {
+        SchemeNeedActualization = schema.GetOptions().GetSchemeNeedActualization();
+    }
+
+    if (schema.HasDefaultCompression()) {
+        NArrow::NSerialization::TSerializerContainer container;
+        if (!container.DeserializeFromProto(schema.GetDefaultCompression())) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_index_info")("reason", "cannot_parse_default_serializer");
+            return false;
+        }
+        DefaultSerializer = container;
+    }
+
+    {
         NStatistics::TPortionStorageCursor cursor;
         for (const auto& stat : schema.GetStatistics()) {
             NStatistics::TOperatorContainer container;
@@ -378,7 +370,6 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
         AFL_VERIFY(meta.DeserializeFromProto(idx));
         Indexes.emplace(meta->GetIndexId(), meta);
     }
-
     for (const auto& col : schema.GetColumns()) {
         const ui32 id = col.GetId();
         const TString& name = col.GetName();
@@ -387,31 +378,22 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
         Columns[id] = NTable::TColumn(name, id, typeInfoMod.TypeInfo, typeInfoMod.TypeMod, notNull);
         ColumnNames[name] = id;
     }
-    InitializeCaches(operators);
-    for (const auto& col : schema.GetColumns()) {
-        std::optional<TColumnFeatures> cFeatures = TColumnFeatures::BuildFromProto(col, *this, operators);
-        if (!cFeatures) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_column_feature");
-            return false;
-        }
-        auto it = ColumnFeatures.find(col.GetId());
-        AFL_VERIFY(it != ColumnFeatures.end());
-        it->second = *cFeatures;
-    }
-
     for (const auto& keyName : schema.GetKeyColumnNames()) {
         Y_ABORT_UNLESS(ColumnNames.contains(keyName));
         KeyColumns.push_back(ColumnNames[keyName]);
     }
-
-    if (schema.HasDefaultCompression()) {
-        NArrow::NSerialization::TSerializerContainer container;
-        if (!container.DeserializeFromProto(schema.GetDefaultCompression())) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_index_info")("reason", "cannot_parse_default_serializer");
+    InitializeCaches(operators);
+    for (const auto& col : schema.GetColumns()) {
+        auto it = ColumnFeatures.find(col.GetId());
+        AFL_VERIFY(it != ColumnFeatures.end());
+        auto parsed = it->second.DeserializeFromProto(col, operators);
+        if (!parsed) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_column_feature")("reason", parsed.GetErrorMessage());
             return false;
         }
-        DefaultSerializer = container;
     }
+
+
     Version = schema.GetVersion();
     return true;
 }
@@ -471,12 +453,27 @@ void TIndexInfo::InitializeCaches(const std::shared_ptr<IStoragesManager>& opera
 
     for (auto&& c : Columns) {
         AFL_VERIFY(ArrowColumnByColumnIdCache.emplace(c.first, GetColumnFieldVerified(c.first)).second);
-        AFL_VERIFY(ColumnFeatures.emplace(c.first, TColumnFeatures::BuildFromIndexInfo(c.first, *this, operators->GetDefaultOperator())).second);
+        AFL_VERIFY(ColumnFeatures.emplace(c.first, TColumnFeatures(c.first, GetColumnFieldVerified(c.first), DefaultSerializer, operators->GetDefaultOperator(), 
+            NArrow::IsPrimitiveYqlType(c.second.PType), c.first == GetPKFirstColumnId())).second);
     }
     for (auto&& cId : GetSpecialColumnIds()) {
         AFL_VERIFY(ArrowColumnByColumnIdCache.emplace(cId, GetColumnFieldVerified(cId)).second);
-        AFL_VERIFY(ColumnFeatures.emplace(cId, TColumnFeatures::BuildFromIndexInfo(cId, *this, operators->GetDefaultOperator())).second);
+        AFL_VERIFY(ColumnFeatures.emplace(cId, TColumnFeatures(cId, GetColumnFieldVerified(cId), DefaultSerializer, operators->GetDefaultOperator(), false, false)).second);
     }
+}
+
+std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TIndexInfo::MakeEmptyChunks(const ui32 columnId, const std::vector<ui32>& pages, const TSimpleColumnInfo& columnInfo) const {
+    std::vector<std::shared_ptr<IPortionDataChunk>> result;
+    auto columnArrowSchema = GetColumnSchema(columnId);
+    TColumnSaver saver = GetColumnSaver(columnId);
+    ui32 idx = 0;
+    for (auto p : pages) {
+        auto arr = NArrow::MakeEmptyBatch(columnArrowSchema, p);
+        AFL_VERIFY(arr->num_columns() == 1)("count", arr->num_columns());
+        result.emplace_back(std::make_shared<NChunks::TChunkPreparation>(saver.Apply(arr), arr->column(0), TChunkAddress(columnId, idx), columnInfo));
+        ++idx;
+    }
+    return result;
 }
 
 } // namespace NKikimr::NOlap

@@ -741,17 +741,126 @@ TYPED_TEST(TRpcTest, SlowCall)
 
 TYPED_TEST(TRpcTest, RequestQueueSizeLimit)
 {
-    TTestProxy proxy(this->CreateChannel());
     std::vector<TFuture<void>> futures;
+    std::vector<TTestProxy> proxies;
+
+    // Concurrency byte limit + queue byte size limit = 10 + 20 = 30
+    // First 30 requests must be successful, 31st request must be failed.
     for (int i = 0; i < 30; ++i) {
-        auto req = proxy.SlowCall();
+        proxies.push_back(TTestProxy(this->CreateChannel()));
+        proxies[i].SetDefaultTimeout(TDuration::Seconds(60.0));
+    }
+
+    for (int i = 0; i < 30; ++i) {
+        auto req = proxies[i].SlowCall();
         futures.push_back(req->Invoke().AsVoid());
     }
-    Sleep(TDuration::MilliSeconds(100));
+
+    Sleep(TDuration::MilliSeconds(400));
     {
+        TTestProxy proxy(this->CreateChannel());
+        proxy.SetDefaultTimeout(TDuration::Seconds(60.0));
         auto req = proxy.SlowCall();
         EXPECT_EQ(NRpc::EErrorCode::RequestQueueSizeLimitExceeded, req->Invoke().Get().GetCode());
     }
+
+    EXPECT_TRUE(AllSucceeded(std::move(futures)).Get().IsOK());
+}
+
+TYPED_TEST(TNotGrpcTest, MemoryTracking)
+{
+    TTestProxy proxy(this->CreateChannel());
+    auto memoryUsageTracker = this->GetMemoryUsageTracker();
+    memoryUsageTracker->ClearTotalUsage();
+    proxy.SetDefaultTimeout(TDuration::Seconds(10.0));
+    for (int i = 0; i < 300; ++i) {
+        auto req = proxy.SomeCall();
+        req->set_a(42);
+        WaitFor(req->Invoke().AsVoid()).ThrowOnError();
+    }
+
+    {
+        auto rpcUsage = memoryUsageTracker->GetTotalUsage();
+        EXPECT_EQ(rpcUsage, (static_cast<i64>(32_KB)));
+    }
+}
+
+TYPED_TEST(TNotGrpcTest, MemoryTrackingMultipleConnections)
+{
+    auto memoryUsageTracker = this->GetMemoryUsageTracker();
+    memoryUsageTracker->ClearTotalUsage();
+    for (int i = 0; i < 300; ++i) {
+        TTestProxy proxy(this->CreateChannel());
+        proxy.SetDefaultTimeout(TDuration::Seconds(10.0));
+        auto req = proxy.SomeCall();
+        req->set_a(42);
+        WaitFor(req->Invoke().AsVoid()).ThrowOnError();
+    }
+
+    {
+        auto rpcUsage = memoryUsageTracker->GetTotalUsage();
+        EXPECT_EQ(rpcUsage, (static_cast<i64>(32_KB) * 300));
+    }
+}
+
+TYPED_TEST(TNotGrpcTest, MemoryTrackingMultipleConcurrent)
+{
+    auto memoryUsageTracker = this->GetMemoryUsageTracker();
+    memoryUsageTracker->ClearTotalUsage();
+    std::vector<TFuture<void>> futures;
+    std::vector<TTestProxy> proxies;
+
+    for (int i = 0; i < 40; ++i) {
+        proxies.push_back(TTestProxy(this->CreateChannel()));
+        proxies[i].SetDefaultTimeout(TDuration::Seconds(60.0));
+    }
+
+    for (int j = 0; j < 40; ++j) {
+        auto req = proxies[j % 40].SlowCall();
+        futures.push_back(req->Invoke().AsVoid());
+    }
+
+    Sleep(TDuration::MilliSeconds(300));
+    {
+        auto rpcUsage = memoryUsageTracker->GetUsed();
+        // 20 = concurrency (10) + queue (20)
+        EXPECT_EQ(rpcUsage, (static_cast<i64>(32_KB) * 40));
+    }
+    EXPECT_TRUE(AllSet(std::move(futures)).Get().IsOK());
+}
+
+TYPED_TEST(TNotGrpcTest, RequestQueueByteSizeLimit)
+{
+    const auto requestCodecId = NCompression::ECodec::Zstd_2;
+
+    std::vector<TFuture<void>> futures;
+    std::vector<TTestProxy> proxies;
+
+    // Every request contains 2 MB, 15 requests contain 30 MB.
+    // Concurrency byte limit + queue byte size limit = 10 MB + 20 MB = 30 MB
+    // First 15 requests must be successful, 16th request must be failed.
+    for (int i = 0; i < 15; ++i) {
+        proxies.push_back(TTestProxy(this->CreateChannel()));
+        proxies[i].SetDefaultTimeout(TDuration::Seconds(60.0));
+    }
+
+    for (int i = 0; i < 15; ++i) {
+        auto req = proxies[i].SlowCall();
+        req->set_request_codec(static_cast<int>(requestCodecId));
+        req->set_message(TString(2_MB, 'x'));
+        futures.push_back(req->Invoke().AsVoid());
+    }
+
+    Sleep(TDuration::MilliSeconds(400));
+    {
+        TTestProxy proxy(this->CreateChannel());
+        proxy.SetDefaultTimeout(TDuration::Seconds(60.0));
+        auto req = proxy.SlowCall();
+        req->set_request_codec(static_cast<int>(requestCodecId));
+        req->set_message(TString(1_MB, 'x'));
+        EXPECT_EQ(NRpc::EErrorCode::RequestQueueSizeLimitExceeded, req->Invoke().Get().GetCode());
+    }
+
     EXPECT_TRUE(AllSucceeded(std::move(futures)).Get().IsOK());
 }
 
@@ -774,7 +883,7 @@ TYPED_TEST(TRpcTest, ConcurrencyLimit)
 
     EXPECT_TRUE(AllSucceeded(std::move(futures)).Get().IsOK());
 
-    Sleep(TDuration::MilliSeconds(400));
+    Sleep(TDuration::MilliSeconds(200));
     EXPECT_FALSE(backlogFuture.IsSet());
 
     EXPECT_TRUE(backlogFuture.Get().IsOK());

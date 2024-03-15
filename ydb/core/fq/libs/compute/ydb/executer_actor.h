@@ -9,6 +9,7 @@
 namespace NFq {
 
 std::unique_ptr<NActors::IActor> CreateExecuterActor(const TRunActorParams& params,
+                                                     Ydb::Query::StatsMode statsMode,
                                                      const NActors::TActorId& parent,
                                                      const NActors::TActorId& connector,
                                                      const NActors::TActorId& pinger,

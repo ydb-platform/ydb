@@ -81,3 +81,11 @@ message TEvDropReplicationResult {
     optional uint64 Origin = 2;
     optional EStatus Status = 3;
 }
+
+message TEvHandshake {
+    optional uint64 ControllerId = 1;
+    optional uint64 Generation = 2;
+}
+
+message TEvStatus {
+}

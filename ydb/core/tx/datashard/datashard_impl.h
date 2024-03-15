@@ -247,6 +247,7 @@ class TDataShard
 
     class TTxHandleSafeKqpScan;
     class TTxHandleSafeBuildIndexScan;
+    class TTxHandleSafeStatisticsScan;
 
     ITransaction *CreateTxMonitoring(TDataShard *self,
                                      NMon::TEvRemoteHttpInfo::TPtr ev);
@@ -364,6 +365,7 @@ class TDataShard
             EvConfirmReadonlyLease,
             EvReadonlyLeaseConfirmation,
             EvPlanPredictedTxs,
+            EvStatisticsScanFinished,
             EvEnd
         };
 
@@ -559,6 +561,8 @@ class TDataShard
         struct TEvReadonlyLeaseConfirmation: public TEventLocal<TEvReadonlyLeaseConfirmation, EvReadonlyLeaseConfirmation> {};
 
         struct TEvPlanPredictedTxs : public TEventLocal<TEvPlanPredictedTxs, EvPlanPredictedTxs> {};
+
+        struct TEvStatisticsScanFinished : public TEventLocal<TEvStatisticsScanFinished, EvStatisticsScanFinished> {};
     };
 
     struct Schema : NIceDb::Schema {
@@ -1284,6 +1288,9 @@ class TDataShard
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAsyncJobComplete::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRestartOperation::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvStatisticsScanRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvStatisticsScanRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvStatisticsScanFinished::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvCancelBackup::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvCancelRestore::TPtr &ev, const TActorContext &ctx);
@@ -2833,6 +2840,10 @@ private:
     TVector<THolder<IEventHandle>> DelayedS3UploadRows;
 
     std::vector<TTrivialLogThrottler> LogThrottlers = {ELogThrottlerType::LAST, TDuration::Seconds(1)};
+
+    ui32 StatisticsScanTableId = 0;
+    ui64 StatisticsScanId = 0;
+
 public:
     auto& GetLockChangeRecords() {
         return LockChangeRecords;
@@ -3006,6 +3017,8 @@ protected:
             HFuncTraced(TEvPrivate::TEvRemoveLockChangeRecords, Handle);
             HFunc(TEvPrivate::TEvConfirmReadonlyLease, Handle);
             HFunc(TEvPrivate::TEvPlanPredictedTxs, Handle);
+            HFunc(TEvDataShard::TEvStatisticsScanRequest, Handle);
+            HFunc(TEvPrivate::TEvStatisticsScanFinished, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());

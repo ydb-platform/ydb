@@ -54,7 +54,7 @@ bool TGranuleMeta::ErasePortion(const ui64 portion) {
 
 void TGranuleMeta::AddColumnRecordOnLoad(const TIndexInfo& indexInfo, const TPortionInfo& portion, const TColumnChunkLoadContext& rec, const NKikimrTxColumnShard::TIndexPortionMeta* portionMeta) {
     std::shared_ptr<TPortionInfo> pInfo = UpsertPortionOnLoad(portion);
-    TColumnRecord cRecord(pInfo->RegisterBlobId(rec.GetBlobRange().GetBlobId()), rec, indexInfo);
+    TColumnRecord cRecord(pInfo->RegisterBlobId(rec.GetBlobRange().GetBlobId()), rec, indexInfo.GetColumnFeaturesVerified(rec.GetAddress().GetColumnId()));
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "AddColumnRecordOnLoad")("portion_info", portion.DebugString())("record", cRecord.DebugString());
     pInfo->AddRecord(indexInfo, cRecord, portionMeta);
 }
@@ -70,6 +70,8 @@ void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> port
             } else {
                 OptimizerPlanner->StartModificationGuard().AddPortion(portionAfter);
             }
+            NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
+            ActualizationIndex->AddPortion(portionAfter, context);
         }
     }
     if (!!AdditiveSummaryCache) {
@@ -99,6 +101,7 @@ void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> por
         PortionInfoGuard.OnDropPortion(portionBefore);
         if (!portionBefore->HasRemoveSnapshot()) {
             OptimizerPlanner->StartModificationGuard().RemovePortion(portionBefore);
+            ActualizationIndex->RemovePortion(portionBefore);
         }
     }
     if (!!AdditiveSummaryCache) {
@@ -158,6 +161,7 @@ TGranuleMeta::TGranuleMeta(const ui64 pathId, std::shared_ptr<TGranulesStorage> 
 {
     Y_ABORT_UNLESS(Owner);
     OptimizerPlanner = std::make_shared<NStorageOptimizer::NBuckets::TOptimizerPlanner>(PathId, owner->GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey());
+    ActualizationIndex = std::make_shared<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex);
 
 }
 

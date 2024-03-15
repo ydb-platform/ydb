@@ -25,6 +25,16 @@
 namespace NYdb::NPersQueue {
 
 template <bool UseMigrationProtocol>
+using TClientImpl = std::conditional_t<UseMigrationProtocol,
+    NYdb::NPersQueue::TPersQueueClient::TImpl,
+    NYdb::NTopic::TTopicClient::TImpl>;
+
+template <bool UseMigrationProtocol>
+using ECodecAlias = std::conditional_t<UseMigrationProtocol,
+    NYdb::NPersQueue::ECodec,
+    NYdb::NTopic::ECodec>;
+
+template <bool UseMigrationProtocol>
 using TClientMessage = std::conditional_t<UseMigrationProtocol,
     Ydb::PersQueue::V1::MigrationStreamingReadClientMessage,
     Ydb::Topic::StreamReadMessage::FromClient>;
@@ -959,7 +969,8 @@ public:
         std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> eventsQueue,
         NYdbGrpc::IQueueClientContextPtr clientContext,
         ui64 partitionStreamIdStart,
-        ui64 partitionStreamIdStep
+        ui64 partitionStreamIdStep,
+        std::shared_ptr<std::unordered_map<ECodecAlias<UseMigrationProtocol>, THolder<NTopic::ICodec>>> codecs
     )
         : Settings(settings)
         , Database(database)
@@ -968,6 +979,7 @@ public:
         , Log(log)
         , NextPartitionStreamId(partitionStreamIdStart)
         , PartitionStreamIdStep(partitionStreamIdStep)
+        , Codecs(std::move(codecs))
         , ConnectionFactory(std::move(connectionFactory))
         , EventsQueue(std::move(eventsQueue))
         , ClientContext(std::move(clientContext))
@@ -1027,6 +1039,13 @@ public:
 
     const TLog& GetLog() const {
         return Log;
+    }
+
+    const NTopic::ICodec* GetCodecImplOrThrow(ECodecAlias<UseMigrationProtocol> codecId) const {
+        if (!Codecs->contains(codecId)) {
+            throw yexception() << "codec with id " << ui32(codecId) << " not provided";
+        }
+        return Codecs->at(codecId).Get();
     }
 
 private:
@@ -1178,6 +1197,7 @@ private:
     TLog Log;
     ui64 NextPartitionStreamId;
     ui64 PartitionStreamIdStep;
+    std::shared_ptr<std::unordered_map<ECodecAlias<UseMigrationProtocol>, THolder<NTopic::ICodec>>> Codecs;
     std::shared_ptr<IReadSessionConnectionProcessorFactory<UseMigrationProtocol>> ConnectionFactory;
     std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> EventsQueue;
     NYdbGrpc::IQueueClientContextPtr ClientContext; // Common client context.

@@ -325,11 +325,11 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvGetCheckpointsMetadataReques
 void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvSaveTaskState::TPtr& ev) {
     auto* event = ev->Get();
     const auto checkpointId = TCheckpointId(event->Checkpoint.GetGeneration(), event->Checkpoint.GetId());
-    LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->GraphId << "-" << checkpointId << "] Got TEvSaveTaskState: task " << event->TaskId);
+    LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->GraphId << "] [" << checkpointId << "] Got TEvSaveTaskState: task " << event->TaskId);
 
     const size_t stateSize = event->State.ByteSizeLong();
     if (stateSize > Config.GetStateStorageLimits().GetMaxTaskStateSizeBytes()) {
-        LOG_STREAMS_STORAGE_SERVICE_WARN("[" << checkpointId << "] Won't save task state because it's too big: task: " << event->TaskId
+        LOG_STREAMS_STORAGE_SERVICE_WARN("[" << event->GraphId << "] [" << checkpointId << "] Won't save task state because it's too big: task: " << event->TaskId
             << ", state size: " << stateSize << "/" << Config.GetStateStorageLimits().GetMaxTaskStateSizeBytes());
         auto response = std::make_unique<NYql::NDq::TEvDqCompute::TEvSaveTaskStateResult>();
         response->Record.MutableCheckpoint()->SetGeneration(checkpointId.CoordinatorGeneration);
@@ -349,6 +349,7 @@ void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvSaveTaskState::TPtr& ev) 
                 sender = ev->Sender,
                 stateSize = stateSize,
                 actorSystem = TActivationContext::ActorSystem()](const NThreading::TFuture<NYql::TIssues>& futureResult) {
+            LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*actorSystem, "[" << graphId << "] [" << checkpointId << "] TEvSaveTaskState Apply: task: " << taskId)
             const auto& issues = futureResult.GetValue();
             auto response = std::make_unique<NYql::NDq::TEvDqCompute::TEvSaveTaskStateResult>();
             response->Record.MutableCheckpoint()->SetGeneration(checkpointId.CoordinatorGeneration);
@@ -357,12 +358,12 @@ void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvSaveTaskState::TPtr& ev) 
             response->Record.SetTaskId(taskId);
 
             if (issues) {
-                LOG_STREAMS_STORAGE_SERVICE_AS_WARN(*actorSystem, "[" << graphId << "-" << checkpointId << "] Failed to save task state: task: " << taskId << ", issues: " << issues.ToString())
+                LOG_STREAMS_STORAGE_SERVICE_AS_WARN(*actorSystem, "[" << graphId << "] [" << checkpointId << "] Failed to save task state: task: " << taskId << ", issues: " << issues.ToString())
                 response->Record.SetStatus(NYql::NDqProto::TEvSaveTaskStateResult::STORAGE_ERROR);
             } else {
                 response->Record.SetStatus(NYql::NDqProto::TEvSaveTaskStateResult::OK);
             }
-            LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*actorSystem, "[" << checkpointId << "] Send TEvSaveTaskStateResult")
+            LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*actorSystem, "[" << graphId << "] [" << checkpointId << "] Send TEvSaveTaskStateResult: task: " << taskId)
             actorSystem->Send(sender, response.release(), 0, cookie);
         });
 }
@@ -370,11 +371,12 @@ void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvSaveTaskState::TPtr& ev) 
 void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev) {
     const auto* event = ev->Get();
     const auto checkpointId = TCheckpointId(event->Checkpoint.GetGeneration(), event->Checkpoint.GetId());
-    LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << checkpointId << "] Got TEvGetTaskState: tasks {" << JoinSeq(", ", event->TaskIds) << "}");
+    LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->GraphId << "] [" << checkpointId << "] Got TEvGetTaskState: tasks {" << JoinSeq(", ", event->TaskIds) << "}");
 
     StateStorage->GetState(event->TaskIds, event->GraphId, checkpointId)
         .Apply([checkpointId = event->Checkpoint,
                 generation = event->Generation,
+                graphId = event->GraphId,
                 taskIds = event->TaskIds,
                 cookie = ev->Cookie,
                 sender = ev->Sender,
@@ -384,9 +386,9 @@ void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev) {
             auto response = std::make_unique<NYql::NDq::TEvDqCompute::TEvGetTaskStateResult>(checkpointId, result.second, generation);
             std::swap(response->States, result.first);
             if (response->Issues) {
-                LOG_STREAMS_STORAGE_SERVICE_AS_WARN(*actorSystem, "[" << checkpointId << "] Failed to get task state: taskIds: {" << JoinSeq(", ", taskIds) << "}, issues: " << response->Issues.ToString());
+                LOG_STREAMS_STORAGE_SERVICE_AS_WARN(*actorSystem, "[" << graphId << "] [" << checkpointId << "] Failed to get task state: tasks: {" << JoinSeq(", ", taskIds) << "}, issues: " << response->Issues.ToString());
             }
-            LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*actorSystem, "[" << checkpointId << "] Send TEvGetTaskStateResult, taskIds: {" << JoinSeq(", ", taskIds) << "}");
+            LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*actorSystem, "[" << graphId << "] [" << checkpointId << "] Send TEvGetTaskStateResult: tasks: {" << JoinSeq(", ", taskIds) << "}");
             actorSystem->Send(sender, response.release(), 0, cookie);
         });
 }

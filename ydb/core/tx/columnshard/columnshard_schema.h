@@ -49,7 +49,8 @@ struct Schema : NIceDb::Schema {
         BorrowedBlobIdsTableId,
         SourceSessionsTableId,
         DestinationSessionsTableId,
-        OperationTxIdsId
+        OperationTxIdsId,
+        BackupsId
     };
 
     enum class ETierTables: ui32 {
@@ -322,6 +323,14 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<TxId, LockId>;
     };
 
+    struct Backups : NIceDb::Schema::Table<BackupsId> {
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Status : Column<2, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<PathId>;
+        using TColumns = TableColumns<PathId, Status>;
+    };
+
     struct TierBlobsDraft: NIceDb::Schema::Table<(ui32)ETierTables::TierBlobsDraft> {
         struct StorageId: Column<1, NScheme::NTypeIds::String> {};
         struct BlobId: Column<2, NScheme::NTypeIds::String> {};
@@ -467,7 +476,8 @@ struct Schema : NIceDb::Schema {
         BorrowedBlobIds,
         SourceSessions,
         DestinationSessions,
-        OperationTxIds
+        OperationTxIds,
+        Backups
         >;
 
     //

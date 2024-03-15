@@ -2,7 +2,6 @@
 
 #include "guid.h"
 #include "mpl.h"
-#include "optional.h"
 #include "object_pool.h"
 #include "range.h"
 #include "serialize.h"
@@ -14,6 +13,7 @@
 
 #include <library/cpp/yt/memory/ref.h>
 
+#include <library/cpp/yt/misc/optional.h>
 #include <library/cpp/yt/misc/preprocessor.h>
 
 #include <google/protobuf/message.h>
@@ -72,10 +72,11 @@ void ToProto(
     ::google::protobuf::RepeatedField<TSerialized>* serializedArray,
     const TOriginalArray& originalArray);
 
-template <class TOriginalArray, class TSerialized>
+template <class TOriginalArray, class TSerialized, class... TArgs>
 void FromProto(
     TOriginalArray* originalArray,
-    const ::google::protobuf::RepeatedPtrField<TSerialized>& serializedArray);
+    const ::google::protobuf::RepeatedPtrField<TSerialized>& serializedArray,
+    TArgs&&... args);
 
 template <class TOriginalArray, class TSerialized>
 void FromProto(

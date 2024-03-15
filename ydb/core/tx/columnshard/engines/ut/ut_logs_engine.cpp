@@ -2,7 +2,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/predicate/predicate.h>
-#include <ydb/core/tx/columnshard/engines/changes/cleanup.h>
+#include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
+#include <ydb/core/tx/columnshard/engines/changes/indexation.h>
+#include <ydb/core/tx/columnshard/engines/changes/ttl.h>
 
 #include <ydb/core/tx/columnshard/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
@@ -97,7 +99,11 @@ public:
             Y_ABORT_UNLESS(portion.GetPathId() == it->second.GetPathId() && portion.GetPortion() == it->second.GetPortion());
         }
         it->second.SetMinSnapshot(portion.GetMinSnapshot());
-        it->second.SetRemoveSnapshot(portion.GetRemoveSnapshot());
+        if (portion.HasRemoveSnapshot()) {
+            it->second.SetRemoveSnapshot(portion.GetRemoveSnapshotVerified());
+        } else {
+            AFL_VERIFY(!it->second.HasRemoveSnapshot());
+        }
 
         bool replaced = false;
         for (auto& rec : it->second.Records) {
@@ -346,7 +352,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, N
 
 bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, ui32 expectedToDrop) {
     THashSet<ui64> pathsToDrop;
-    std::shared_ptr<TCleanupColumnEngineChanges> changes = engine.StartCleanup(snap, pathsToDrop, EmptyDataLocksManager);
+    std::shared_ptr<TCleanupPortionsColumnEngineChanges> changes = engine.StartCleanupPortions(snap, pathsToDrop, EmptyDataLocksManager);
     UNIT_ASSERT(changes || !expectedToDrop);
     if (!expectedToDrop && !changes) {
         return true;
@@ -367,8 +373,9 @@ bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, u
 
 bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db,
          const THashMap<ui64, NOlap::TTiering>& pathEviction, ui32 expectedToDrop) {
-    std::shared_ptr<TTTLColumnEngineChanges> changes = engine.StartTtl(pathEviction, EmptyDataLocksManager, 512 * 1024 * 1024);
-    UNIT_ASSERT(changes);
+    std::vector<std::shared_ptr<TTTLColumnEngineChanges>> vChanges = engine.StartTtl(pathEviction, EmptyDataLocksManager, 512 * 1024 * 1024);
+    AFL_VERIFY(vChanges.size() == 1)("count", vChanges.size());
+    auto changes = vChanges.front();
     UNIT_ASSERT_VALUES_EQUAL(changes->PortionsToRemove.size(), expectedToDrop);
 
 
@@ -749,7 +756,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             std::shared_ptr<arrow::DataType> ttlColType = arrow::timestamp(arrow::TimeUnit::MICRO);
             THashMap<ui64, NOlap::TTiering> pathTtls;
             NOlap::TTiering tiering;
-            tiering.Add(NOlap::TTierInfo::MakeTtl(TDuration::MicroSeconds(TInstant::Now().MicroSeconds() - 10000), "timestamp"));
+            AFL_VERIFY(tiering.Add(NOlap::TTierInfo::MakeTtl(TDuration::MicroSeconds(TInstant::Now().MicroSeconds() - 10000), "timestamp")));
             pathTtls.emplace(pathId, std::move(tiering));
             Ttl(engine, db, pathTtls, 10);
 

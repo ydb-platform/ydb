@@ -11,7 +11,7 @@ void TPortionInfoWithBlobs::TBlobInfo::RestoreChunk(const TPortionInfoWithBlobs&
     const TString& data = chunk->GetData();
     Size += data.size();
     auto address = chunk->GetChunkAddress();
-    AFL_VERIFY(owner.GetPortionInfo().GetRecordPointer(address))("address", address.DebugString());
+    AFL_VERIFY(owner.GetPortionInfo().HasEntityAddress(address))("address", address.DebugString());
     AFL_VERIFY(Chunks.emplace(address, chunk).second)("address", address.DebugString());
     ChunksOrdered.emplace_back(chunk);
 }
@@ -90,7 +90,7 @@ NKikimr::NOlap::TPortionInfoWithBlobs TPortionInfoWithBlobs::RestorePortion(cons
         for (auto&& i : recordsByBlob) {
             auto builder = result.StartBlob(storage);
             for (auto&& d : i.second) {
-                auto blobData = blobs.Extract(portion.GetColumnStorageId(d.GetAddress().GetEntityId(), indexInfo), portion.RestoreBlobRange(d.GetBlobRange()));
+                auto blobData = blobs.Extract(portion.GetEntityStorageId(d.GetAddress().GetEntityId(), indexInfo), portion.RestoreBlobRange(d.GetBlobRange()));
                 builder.RestoreChunk(std::make_shared<NIndexes::TPortionIndexChunk>(d.GetAddress(), d.GetRecordsCount(), d.GetRawBytes(), std::move(blobData)));
             }
         }
@@ -139,16 +139,6 @@ std::optional<NKikimr::NOlap::TPortionInfoWithBlobs> TPortionInfoWithBlobs::Chan
         const TString blobOriginal = GetBlobByRangeVerified(rec.ColumnId, rec.Chunk);
         {
             TString newBlob = blobOriginal;
-            if (!!saverContext.GetExternalSerializer()) {
-                auto rb = NArrow::TStatusValidator::GetValid(currentSchema->GetColumnLoaderVerified(rec.ColumnId)->Apply(blobOriginal));
-                Y_ABORT_UNLESS(rb);
-                Y_ABORT_UNLESS(rb->num_columns() == 1);
-                auto columnSaver = currentSchema->GetColumnSaver(rec.ColumnId, saverContext);
-                newBlob = columnSaver.Apply(rb);
-                if (newBlob.size() >= TPortionInfo::BLOB_BYTES_LIMIT) {
-                    return {};
-                }
-            }
             const TString& storageId = index.GetColumnStorageId(rec.GetColumnId(), PortionInfo.GetMeta().GetTierName());
             auto itBuilder = bBuilderByStorage.find(storageId);
             if (itBuilder == bBuilderByStorage.end()) {

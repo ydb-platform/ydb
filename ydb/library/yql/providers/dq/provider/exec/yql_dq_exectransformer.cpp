@@ -978,7 +978,7 @@ private:
                 auto executionPlanner = THolder<IDqsExecutionPlanner>(
                     new TDqsSingleExecutionPlanner(
                         lambda, NActors::TActorId(),
-                        NActors::TActorId(1, 0, 1, 0), State->FunctionRegistry,
+                        NActors::TActorId(1, 0, 1, 0),
                         result.Input().Ref().GetTypeAnn()));
                 auto& tasks = executionPlanner->GetTasks();
                 Yql::DqsProto::TTaskMeta taskMeta;

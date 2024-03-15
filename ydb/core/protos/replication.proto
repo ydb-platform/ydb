@@ -8,6 +8,16 @@ message TStaticCredentials {
     optional string Password = 2;
 }
 
+message TConnectionParams {
+    optional string Endpoint = 1;
+    optional string Database = 2;
+    // credentials
+    oneof Credentials {
+        TStaticCredentials StaticCredentials = 3;
+        string OAuthToken = 4;
+    }
+}
+
 message TReplicationConfig {
     message TTargetEverything {
         optional string DstPrefix = 1;
@@ -22,14 +32,7 @@ message TReplicationConfig {
         repeated TTarget Targets = 1;
     }
 
-    // endpoint (host + port) and database of source cluster
-    optional string SrcEndpoint = 1;
-    optional string SrcDatabase = 2;
-    // credentials
-    oneof Credentials {
-        TStaticCredentials StaticCredentials = 3;
-        string OAuthToken = 7;
-    }
+    optional TConnectionParams SrcConnectionParams = 1;
 
     // targets to be replicated
     // Currently, only OLTP tables are supported.

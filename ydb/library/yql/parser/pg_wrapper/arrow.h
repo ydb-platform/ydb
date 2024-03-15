@@ -33,6 +33,7 @@ struct TPgKernelState : arrow::compute::KernelState {
     bool IsFixedResult;
     i32 TypeLen;
     std::shared_ptr<void> FmgrDataHolder;
+    const NPg::TProcDesc* ProcDesc;
 };
 
 template <PGFunction PgFunc>
@@ -356,7 +357,7 @@ struct TGenericExec {
         fcinfo->context = state.context;
         fcinfo->resultinfo = state.resultinfo;
         fcinfo->fncollation = state.fncollation;
-        fcinfo->nargs = batch.values.size();    
+        fcinfo->nargs = batch.values.size();
 
         TInputArgsAccessor<TArgsPolicy> inputArgsAccessor;
         inputArgsAccessor.Bind(batch.values);
@@ -371,6 +372,7 @@ struct TGenericExec {
 
         for (size_t i = 0; i < length; ++i) {
             Datum ret;
+            bool needToFree = false;
             if constexpr (!TArgsPolicy::VarArgs) {
                 if (!constexpr_for_tuple([&](auto const& j, auto const& v) {
                     NullableDatum d;
@@ -438,7 +440,17 @@ struct TGenericExec {
             }
 
             fcinfo->isnull = false;
+            if constexpr (TArgsPolicy::VarArgs) {
+                needToFree = PrepareVariadicArray(*fcinfo, *state.ProcDesc);
+            }
+
             ret = Func(fcinfo);
+            if constexpr (TArgsPolicy::VarArgs) {
+                if (needToFree) {
+                    FreeVariadicArray(*fcinfo, batch.values.size());
+                }
+            }
+
             if constexpr (IsFixedResult) {
                 fixedResultData[i] = ui64(ret);
                 fixedResultValidMask[i] = !fcinfo->isnull;

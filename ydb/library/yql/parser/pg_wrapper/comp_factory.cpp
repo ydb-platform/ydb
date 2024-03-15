@@ -1117,14 +1117,20 @@ public:
             callInfo.args[i] = argDatum;
         }
 
+        const bool needToFree = PrepareVariadicArray(callInfo, this->ProcDesc);
+        NUdf::TUnboxedValuePod res;
         if constexpr (!UseContext) {
             TPAllocScope call;
-            return this->DoCall(callInfo);
+            res = this->DoCall(callInfo);
+        } else {
+            res = this->DoCall(callInfo);
         }
 
-        if constexpr (UseContext) {
-            return this->DoCall(callInfo);
+        if (needToFree) {
+            FreeVariadicArray(callInfo, this->ArgNodes.size());
         }
+
+        return res;
     }
 
 private:
@@ -2618,6 +2624,7 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakePgKernel(TVector<TType*> argTy
 
         state->flinfo.fn_expr = fmgrDataHolder->Build(procDesc);
         state->FmgrDataHolder = fmgrDataHolder;
+        state->ProcDesc = &procDesc;
 
         return arrow::Result(std::move(state));
     };

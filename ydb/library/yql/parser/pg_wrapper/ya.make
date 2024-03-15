@@ -38,6 +38,7 @@ SRCS(
     cost_mocks.cpp
     syscache.cpp
     pg_utils_wrappers.cpp
+    utils.cpp
 )
 
 IF (ARCH_X86_64)

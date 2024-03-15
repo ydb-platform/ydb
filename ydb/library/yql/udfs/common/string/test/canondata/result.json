@@ -34,6 +34,11 @@
             "uri": "file://test.test_BlockStringUDF_/results.txt"
         }
     ],
+    "test.test[BlockStringUnsafeUDF]": [
+        {
+            "uri": "file://test.test_BlockStringUnsafeUDF_/results.txt"
+        }
+    ],
     "test.test[BlockTo]": [
         {
             "uri": "file://test.test_BlockTo_/results.txt"
@@ -82,6 +87,11 @@
     "test.test[StringUDF]": [
         {
             "uri": "file://test.test_StringUDF_/results.txt"
+        }
+    ],
+    "test.test[StringUnsafeUDF]": [
+        {
+            "uri": "file://test.test_StringUnsafeUDF_/results.txt"
         }
     ],
     "test.test[To]": [

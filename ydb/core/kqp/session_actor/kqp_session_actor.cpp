@@ -1268,7 +1268,10 @@ public:
         ExecuterId = TActorId{};
 
         if (response->GetStatus() != Ydb::StatusIds::SUCCESS) {
-            LOG_D("TEvTxResponse has non-success status, CurrentTx: " << QueryState->CurrentTx);
+            const auto executionType = ev->ExecutionType;
+
+            LOG_D("TEvTxResponse has non-success status, CurrentTx: " << QueryState->CurrentTx
+                << " ExecutionType: " << executionType);
 
             auto status = response->GetStatus();
             TIssues issues;
@@ -1280,11 +1283,14 @@ public:
                 case Ydb::StatusIds::INTERNAL_ERROR:
                     InvalidateQuery();
                     issues.AddIssue(YqlIssue(TPosition(), TIssuesIds::KIKIMR_QUERY_INVALIDATED,
-                        TStringBuilder() << "Query invalidated on scheme/internal error."));
+                        TStringBuilder() << "Query invalidated on scheme/internal error during "
+                            << executionType << " execution"));
 
                     // SCHEME_ERROR during execution is a soft (retriable) error, we abort query execution,
                     // invalidate query cache, and return ABORTED as retriable status.
-                    if (status == Ydb::StatusIds::SCHEME_ERROR) {
+                    if (status == Ydb::StatusIds::SCHEME_ERROR &&
+                        executionType != TEvKqpExecuter::TEvTxResponse::EExecutionType::Scheme)
+                    {
                         status = Ydb::StatusIds::ABORTED;
                     }
 

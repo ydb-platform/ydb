@@ -617,8 +617,6 @@ void TQueryExecutionStats::AddDatashardStats(NKikimrQueryStats::TTxStats&& txSta
 
     if (CollectFullStats(StatsMode)) {
         DatashardStats.emplace_back(std::move(txStats));
-    } else {
-        DatashardStats.emplace_back(std::move(txStats));
     }
 }
 

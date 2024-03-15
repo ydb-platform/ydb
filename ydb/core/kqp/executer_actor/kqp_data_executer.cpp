@@ -184,7 +184,6 @@ public:
             !ImmediateTx &&
             !HasPersistentChannels &&
             !HasOlapTable &&
-            EvWriteTxs.empty() &&
             (!Database.empty() || AppData()->EnableMvccSnapshotWithLegacyDomainRoot)
         );
 
@@ -2188,9 +2187,6 @@ private:
             TDatashardTxs& datashardTxs,
             TEvWriteTxs& evWriteTxs,
             TTopicTabletTxs& topicTxs) {
-        std::vector<ui64> affectedShardsSet;
-        affectedShardsSet.reserve(datashardTasks.size());
-
         for (auto& [shardId, tasks]: datashardTasks) {
             auto [it, success] = datashardTxs.emplace(
                 shardId,
@@ -2287,7 +2283,7 @@ private:
             // Note: currently persistent channels are never used
             !HasPersistentChannels &&
             // Can't use volatile transactions for EvWrite at current time
-            UseEvWrite);
+            !UseEvWrite);
 
         const bool useGenericReadSets = (
             // Use generic readsets when feature is explicitly enabled

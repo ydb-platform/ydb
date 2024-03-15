@@ -35,6 +35,7 @@ public:
         sketch->Width = width;
         sketch->Depth = depth;
         sketch->ElementCount = 0;
+        std::memset((void*)(sketch + 1), 0, width * depth * sizeof(ui32));
         return sketch;
     }
 

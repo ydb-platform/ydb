@@ -1,0 +1,76 @@
+{
+  "post": {
+    "tags": [
+      "YDBC"
+    ],
+    "consumes": [
+      "application/json"
+    ],
+    "description": "create datastream",
+    "produces": [
+      "application/json"
+    ],
+    "summary": "create datastream",
+    "parameters": [
+      {
+        "description": "database location",
+        "in": "path",
+        "name": "location",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "database to create stream in",
+        "in": "query",
+        "name": "databaseId",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "stream name",
+        "in": "query",
+        "name": "name",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "shards count",
+        "in": "query",
+        "name": "shards",
+        "required": true,
+        "type": "integer"
+      },
+      {
+        "default": 0,
+        "description": "retention period in hours",
+        "in": "query",
+        "name": "retentionHours",
+        "required": true,
+        "type": "integer"
+      },
+      {
+        "default": 0,
+        "description": "storage limit in megabytes",
+        "in": "query",
+        "name": "storageLimitMb",
+        "required": true,
+        "type": "integer"
+      },
+      {
+        "description": "write quota in kb per sec",
+        "in": "query",
+        "name": "writeQuota",
+        "required": true,
+        "type": "integer"
+      }
+    ],
+    "responses": {
+      "200": {
+        "description": "successful operation"
+      },
+      "503": {
+        "description": "service unavailable (some errors occurred)"
+      }
+    }
+  }
+}

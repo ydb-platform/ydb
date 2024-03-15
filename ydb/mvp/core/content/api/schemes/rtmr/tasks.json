@@ -1,0 +1,181 @@
+{
+    "get": {
+        "tags": ["RTMR"],
+        "produces": ["application/json"],
+        "summary": "Lists tasks",
+        "parameters": [{
+            "name": "installation",
+            "in": "path",
+            "description": "RTMR installation",
+            "required": true,
+            "type": "string"
+        },{
+            "name": "location",
+            "in": "query",
+            "description": "RTMR location",
+            "required": false,
+            "type": "string"
+        },{
+            "name": "pool",
+            "in": "query",
+            "description": "list tasks for specified pool@account only (requires account parameter if set)",
+            "type": "string"
+        },{
+            "name": "account",
+            "in": "query",
+            "description": "list tasks for specified account only",
+            "type": "string"
+        },{
+            "name": "task",
+            "in": "query",
+            "description": "get data for specified task",
+            "type": "string"
+        }],
+        "responses": {
+            "200": {
+                "description": "OK",
+                "schema": {
+                    "type": "object",
+                    "title": "ListAccountsResult",
+                    "required": ["locations"],
+                    "properties": {
+                        "locations": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["location", "tasks"],
+                                "properties": {
+                                    "location": {
+                                        "type": "string"
+                                    },
+                                    "tasks": {
+                                        "title" : "TasksList",
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "title" : "Task",
+                                            "required": ["account", "pool", "task"],
+                                            "properties": {
+                                                "account": {
+                                                    "type": "string"
+                                                },
+                                                "pool": {
+                                                    "type": "string"
+                                                },
+                                                "task": {
+                                                    "type": "string"
+                                                },
+                                                "owner": {
+                                                    "type": "string"
+                                                },
+                                                "my": {
+                                                    "type": "boolean"
+                                                },
+                                                "inputBytes": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "inputBytesDiscarded": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "vcpuConsumed": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "vcpuConsumedRead": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "vcpuConsumedExec": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "vcpuConsumedLoadState": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "vcpuLimit": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "vcpuCurrentLimit": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "flowConsumed": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "flowLimit": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "flowCurrentLimit": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "storageConsumed": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "storageLimit": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "operations": {
+                                                    "type": "integer",
+                                                    "format": "int64"
+                                                },
+                                                "tables": {
+                                                    "type": "integer",
+                                                    "format": "int64"
+                                                },
+                                                "weight": {
+                                                    "type": "integer",
+                                                    "format": "int64"
+                                                },
+                                                "yqlOpId": {
+                                                    "type": "string"
+                                                },
+                                                "yqlUrl": {
+                                                    "type": "string"
+                                                },
+                                                "yqlUser": {
+                                                    "type": "string"
+                                                },
+                                                "acl": {
+                                                    "title" : "ACL",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "object",
+                                                        "title" : "ACE",
+                                                        "required": ["subject", "type", "permissions"],
+                                                        "properties": {
+                                                            "subject": {
+                                                                "type": "string"
+                                                            },
+                                                            "type": {
+                                                                "type": "string"
+                                                            },
+                                                            "permissions": {
+                                                                "type": "array",
+                                                                "items": {
+                                                                    "type": "string"
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

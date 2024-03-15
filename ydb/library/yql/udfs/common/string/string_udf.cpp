@@ -206,11 +206,24 @@ namespace {
 
 
 #define STRING_STREAM_HRSZ_FORMATTER_UDF(udfName, hrSize)                         \
-    SIMPLE_STRICT_UDF(T##udfName, char*(TAutoMap<ui64>)) {                        \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##udfName, char*(TAutoMap<ui64>)) {            \
         TStringStream result;                                                     \
         result << HumanReadableSize(args[0].Get<ui64>(), hrSize);                 \
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size())); \
-    }
+    }                                                                             \
+                                                                                  \
+    struct T##udfName##KernelExec                                                 \
+        : public TUnaryKernelExec<T##udfName##KernelExec>                         \
+    {                                                                             \
+        template <typename TSink>                                                 \
+        static void Process(TBlockItem arg1, const TSink& sink) {                 \
+            TStringStream result;                                                 \
+            result << HumanReadableSize(arg1.Get<ui64>(), hrSize);                \
+            sink(TBlockItem(TStringRef(result.Data(), result.Size())));           \
+        }                                                                         \
+    };                                                                            \
+                                                                                  \
+    END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)
 
 #define STRING_UDF_MAP(XX)           \
     XX(Base32Encode, Base32Encode)   \

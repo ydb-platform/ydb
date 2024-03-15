@@ -29,6 +29,7 @@ target_link_libraries(fq-libs-shared_resources PUBLIC
   ydb-library-db_pool
   ydb-library-logger
   ydb-library-security
+  client-extensions-solomon_stats
   cpp-client-ydb_driver
   cpp-client-ydb_extension
   cpp-client-ydb_table

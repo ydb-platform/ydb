@@ -1,3 +1,4 @@
+# KNN
 ## Introduction
 
 [Nearest Neighbor search](https://en.wikipedia.org/wiki/Nearest_neighbor_search) (NN) is an optimization task that consists in finding the closest point (or set of points) in a given dataset to a given query point. Closeness can be defined in terms of distance or similarity metrics.

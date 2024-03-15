@@ -47,6 +47,10 @@ NThreading::TFuture<void> TSchemePrinterBase::PrintDirectoryRecursive(const TStr
                 TString childFullPath = fullPath + "/" + child.Name;
                 if (IsDirectoryLike(child)) {
                     childFutures.push_back(PrintDirectoryRecursive(childFullPath, childRelativePath));
+                    if (!Settings.Multithread) {
+                        childFutures.back().Wait();
+                        childFutures.back().TryRethrow();
+                    }
                 } else {
                     std::lock_guard g(Lock);
                     PrintEntry(childRelativePath, child);

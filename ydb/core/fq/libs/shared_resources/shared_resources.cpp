@@ -65,8 +65,10 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
 
     NYdb::TDriver CreateDriver(const NFq::NConfig::TYdbDriverConfig& config) {
         NYdb::TDriver driver(GetYdbDriverConfig(config));
-        NSolomonStatExtension::TSolomonStatPullExtension::TParams params(TString{}, 8764, "yq", "sdk", TString{});
-        driver.AddExtension<NSolomonStatExtension::TSolomonStatPullExtension>(params);
+        if (config.GetMonitoringPort()) {
+            NSolomonStatExtension::TSolomonStatPullExtension::TParams params(TString{}, config.GetMonitoringPort(), "yq", "ydb_driver", TString{});
+            driver.AddExtension<NSolomonStatExtension::TSolomonStatPullExtension>(params);
+        }
         return driver;
     }
 

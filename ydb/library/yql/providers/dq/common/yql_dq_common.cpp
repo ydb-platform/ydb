@@ -20,16 +20,15 @@ namespace NCommon {
 
 using namespace NKikimr::NMiniKQL;
 
-TString GetSerializedTypeAnnotation(const NYql::TTypeAnnotationNode* typeAnn, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry) {
+TString GetSerializedTypeAnnotation(const NYql::TTypeAnnotationNode* typeAnn) {
     Y_ABORT_UNLESS(typeAnn);
-    Y_ABORT_UNLESS(functionRegistry);
 
     TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment typeEnv(alloc);
 
-    NKikimr::NMiniKQL::TProgramBuilder pgmBuilder(typeEnv, *functionRegistry);
+    NKikimr::NMiniKQL::TTypeBuilder typeBuilder(typeEnv);
     TStringStream errorStream;
-    auto type = NCommon::BuildType(*typeAnn, pgmBuilder, errorStream);
+    auto type = NCommon::BuildType(*typeAnn, typeBuilder, errorStream);
     Y_ENSURE(type, "Failed to compile type: " << errorStream.Str());
     return SerializeNode(type, typeEnv);
 }

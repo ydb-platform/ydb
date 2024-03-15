@@ -1,3 +1,4 @@
+#include "yql_generic_base_actor.h"
 #include "yql_generic_read_actor.h"
 #include "yql_generic_token_provider.h"
 
@@ -23,78 +24,6 @@ namespace NYql::NDq {
     using namespace NActors;
 
     namespace {
-
-        struct TEvPrivate {
-            // Event ids
-            enum EEv: ui32 {
-                EvBegin = EventSpaceBegin(TEvents::ES_PRIVATE),
-                EvListSplitsIterator = EvBegin,
-                EvListSplitsPart,
-                EvListSplitsFinished,
-                EvReadSplitsIterator,
-                EvReadSplitsPart,
-                EvReadSplitsFinished,
-                EvEnd
-            };
-
-            static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
-
-            // Events
-            struct TEvListSplitsIterator: public TEventLocal<TEvListSplitsIterator, EvListSplitsIterator> {
-                explicit TEvListSplitsIterator(NConnector::IListSplitsStreamIterator::TPtr&& iterator)
-                    : Iterator(std::move(iterator))
-                {
-                }
-
-                NConnector::IListSplitsStreamIterator::TPtr Iterator;
-            };
-
-            struct TEvListSplitsPart: public TEventLocal<TEvListSplitsPart, EvListSplitsPart> {
-                explicit TEvListSplitsPart(NConnector::NApi::TListSplitsResponse&& response)
-                    : Response(std::move(response))
-                {
-                }
-
-                NConnector::NApi::TListSplitsResponse Response;
-            };
-
-            struct TEvListSplitsFinished: public TEventLocal<TEvListSplitsFinished, EvListSplitsFinished> {
-                explicit TEvListSplitsFinished(NYdbGrpc::TGrpcStatus&& status)
-                    : Status(std::move(status))
-                {
-                }
-
-                NYdbGrpc::TGrpcStatus Status;
-            };
-
-            struct TEvReadSplitsIterator: public TEventLocal<TEvReadSplitsIterator, EvReadSplitsIterator> {
-                explicit TEvReadSplitsIterator(NConnector::IReadSplitsStreamIterator::TPtr&& iterator)
-                    : Iterator(std::move(iterator))
-                {
-                }
-
-                NConnector::IReadSplitsStreamIterator::TPtr Iterator;
-            };
-
-            struct TEvReadSplitsPart: public TEventLocal<TEvReadSplitsPart, EvReadSplitsPart> {
-                explicit TEvReadSplitsPart(NConnector::NApi::TReadSplitsResponse&& response)
-                    : Response(std::move(response))
-                {
-                }
-
-                NConnector::NApi::TReadSplitsResponse Response;
-            };
-
-            struct TEvReadSplitsFinished: public TEventLocal<TEvReadSplitsFinished, EvReadSplitsFinished> {
-                explicit TEvReadSplitsFinished(NYdbGrpc::TGrpcStatus&& status)
-                    : Status(std::move(status))
-                {
-                }
-
-                NYdbGrpc::TGrpcStatus Status;
-            };
-        };
-
         template <typename T>
         T ExtractFromConstFuture(const NThreading::TFuture<T>& f) {
             //We want to avoid making a copy of data stored in a future.
@@ -107,7 +36,7 @@ namespace NYql::NDq {
 
     } // namespace
 
-    class TGenericReadActor: public TActorBootstrapped<TGenericReadActor>, public IDqComputeActorAsyncInput {
+    class TGenericReadActor: public TGenericBaseActor<TGenericReadActor>, public IDqComputeActorAsyncInput {
     public:
         TGenericReadActor(
             ui64 inputIndex,
@@ -138,12 +67,12 @@ namespace NYql::NDq {
         // TODO: make two different states
         // clang-format off
         STRICT_STFUNC(StateFunc,
-                      hFunc(TEvPrivate::TEvListSplitsIterator, Handle);
-                      hFunc(TEvPrivate::TEvListSplitsPart, Handle);
-                      hFunc(TEvPrivate::TEvListSplitsFinished, Handle);
-                      hFunc(TEvPrivate::TEvReadSplitsIterator, Handle);
-                      hFunc(TEvPrivate::TEvReadSplitsPart, Handle);
-                      hFunc(TEvPrivate::TEvReadSplitsFinished, Handle);
+                      hFunc(TEvListSplitsIterator, Handle);
+                      hFunc(TEvListSplitsPart, Handle);
+                      hFunc(TEvListSplitsFinished, Handle);
+                      hFunc(TEvReadSplitsIterator, Handle);
+                      hFunc(TEvReadSplitsPart, Handle);
+                      hFunc(TEvReadSplitsFinished, Handle);
         )
         // clang-format on
 
@@ -167,20 +96,20 @@ namespace NYql::NDq {
                     const NConnector::TListSplitsStreamIteratorAsyncResult& future) {
                     AwaitIterator<
                         NConnector::TListSplitsStreamIteratorAsyncResult,
-                        TEvPrivate::TEvListSplitsIterator>(
+                        TEvListSplitsIterator>(
                         actorSystem, selfId, computeActorId, inputIndex, future);
                 });
         }
 
-        void Handle(TEvPrivate::TEvListSplitsIterator::TPtr& ev) {
+        void Handle(TEvListSplitsIterator::TPtr& ev) {
             ListSplitsIterator_ = std::move(ev->Get()->Iterator);
 
             AwaitNextStreamItem<NConnector::IListSplitsStreamIterator,
-                                TEvPrivate::TEvListSplitsPart,
-                                TEvPrivate::TEvListSplitsFinished>(ListSplitsIterator_);
+                                TEvListSplitsPart,
+                                TEvListSplitsFinished>(ListSplitsIterator_);
         }
 
-        void Handle(TEvPrivate::TEvListSplitsPart::TPtr& ev) {
+        void Handle(TEvListSplitsPart::TPtr& ev) {
             auto& response = ev->Get()->Response;
             YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvListSplitsPart :: event handling started"
                                              << ": splits_size=" << response.splits().size();
@@ -201,13 +130,13 @@ namespace NYql::NDq {
 
             // ask for next stream message
             AwaitNextStreamItem<NConnector::IListSplitsStreamIterator,
-                                TEvPrivate::TEvListSplitsPart,
-                                TEvPrivate::TEvListSplitsFinished>(ListSplitsIterator_);
+                                TEvListSplitsPart,
+                                TEvListSplitsFinished>(ListSplitsIterator_);
 
             YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvListSplitsPart :: event handling finished";
         }
 
-        void Handle(TEvPrivate::TEvListSplitsFinished::TPtr& ev) {
+        void Handle(TEvListSplitsFinished::TPtr& ev) {
             const auto& status = ev->Get()->Status;
 
             YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvListSplitsFinished :: event handling started: ";
@@ -264,20 +193,20 @@ namespace NYql::NDq {
                     const NConnector::TReadSplitsStreamIteratorAsyncResult& future) {
                     AwaitIterator<
                         NConnector::TReadSplitsStreamIteratorAsyncResult,
-                        TEvPrivate::TEvReadSplitsIterator>(
+                        TEvReadSplitsIterator>(
                         actorSystem, selfId, computeActorId, inputIndex, future);
                 });
         }
 
-        void Handle(TEvPrivate::TEvReadSplitsIterator::TPtr& ev) {
+        void Handle(TEvReadSplitsIterator::TPtr& ev) {
             ReadSplitsIterator_ = std::move(ev->Get()->Iterator);
 
             AwaitNextStreamItem<NConnector::IReadSplitsStreamIterator,
-                                TEvPrivate::TEvReadSplitsPart,
-                                TEvPrivate::TEvReadSplitsFinished>(ReadSplitsIterator_);
+                                TEvReadSplitsPart,
+                                TEvReadSplitsFinished>(ReadSplitsIterator_);
         }
 
-        void Handle(TEvPrivate::TEvReadSplitsPart::TPtr& ev) {
+        void Handle(TEvReadSplitsPart::TPtr& ev) {
             auto& response = ev->Get()->Response;
             YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvReadSplitsPart :: event handling started"
                                              << ": part_size=" << response.arrow_ipc_streaming().size();
@@ -300,7 +229,7 @@ namespace NYql::NDq {
             YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvReadSplitsPart :: event handling finished";
         }
 
-        void Handle(TEvPrivate::TEvReadSplitsFinished::TPtr& ev) {
+        void Handle(TEvReadSplitsFinished::TPtr& ev) {
             const auto& status = ev->Get()->Status;
 
             YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvReadSplitsFinished :: event handling started: " << status.ToDebugString();
@@ -456,8 +385,8 @@ namespace NYql::NDq {
 
             // Request server for the next data block
             AwaitNextStreamItem<NConnector::IReadSplitsStreamIterator,
-                                TEvPrivate::TEvReadSplitsPart,
-                                TEvPrivate::TEvReadSplitsFinished>(ReadSplitsIterator_);
+                                TEvReadSplitsPart,
+                                TEvReadSplitsFinished>(ReadSplitsIterator_);
             finished = false;
 
             YQL_CLOG(TRACE, ProviderGeneric) << "GetAsyncInputData :: bytes obtained = " << total;

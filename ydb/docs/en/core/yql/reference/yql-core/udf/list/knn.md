@@ -54,10 +54,10 @@ Distance functions:
 #### Function signatures
 
 ```sql
-Knn::InnerProductSimilarity(List<Float>?, List<Float>?)->Float?
-Knn::CosineSimilarity(List<Float>?, List<Float>?)->Float?
-Knn::EuclideanDistance(List<Float>?, List<Float>?)->Float?
-Knn::CosineDistance(List<Float>?, List<Float>?)->Float?
+Knn::InnerProductSimilarity(List<Float>{Flags:AutoMap}, List<Float>{Flags:AutoMap})->Float?
+Knn::CosineSimilarity(List<Float>{Flags:AutoMap}, List<Float>{Flags:AutoMap})->Float?
+Knn::EuclideanDistance(List<Float>{Flags:AutoMap}, List<Float>{Flags:AutoMap})->Float?
+Knn::CosineDistance(List<Float>{Flags:AutoMap}, List<Float>{Flags:AutoMap})->Float?
 ```
 
 In case of an error, these functions return `NULL`.

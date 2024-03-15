@@ -67,14 +67,11 @@ In case of an error, these functions return `NULL`.
 Conversion functions are needed to serialize the vector set into an internal binary representation and vice versa.
 The binary representation of a vector can be persisted in a {{ ydb-short-name }}  table column of the `String` type.
 
-#### Function signature
+#### Function signatures
 
 ```sql
-Knn::ToBinaryString(List<Float>)->String
+Knn::ToBinaryString(List<Float>{Flags:AutoMap})->String
 Knn::FromBinaryString(String)->List<Float>?
-```
-
-In case of deserialization error, the `FromBinaryString` function return NULL.
 
 ## Examples
 

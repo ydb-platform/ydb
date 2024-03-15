@@ -60,6 +60,7 @@
 #include <ydb/core/protos/datashard_config.pb.h>
 
 #include <ydb/core/mind/local.h>
+#include <ydb/core/mind/node_broker.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/base/hive.h>
 
@@ -1669,6 +1670,18 @@ void TKikimrRunner::KikimrStop(bool graceful) {
 
     if (EnabledGrpcService) {
         ActorSystem->Send(new IEventHandle(NGRpcService::CreateGrpcPublisherServiceActorId(), {}, new TEvents::TEvPoisonPill));
+    }
+
+    if (AppData->FeatureFlags.GetEnableReleaseSlotOnShutdown() && GracefulShutdownSupported && ActorSystem) {
+        Cerr << "Releasing slot" << Endl;
+        NTabletPipe::TClientConfig config(NTabletPipe::TClientRetryPolicy::WithRetries());
+        auto nodeBrokerPipe = ActorSystem->Register(NTabletPipe::CreateClient({}, MakeNodeBrokerID(), config));
+        auto request = std::make_unique<NNodeBroker::TEvNodeBroker::TEvReleaseSlot>();
+        request->Record.SetNodeId(ActorSystem->NodeId);
+        auto* ev = new IEventHandle(nodeBrokerPipe, {}, request.release());
+        ev->Rewrite(TEvTabletPipe::EvSend, nodeBrokerPipe);
+        ActorSystem->Send(ev);
+        Sleep(TDuration::MilliSeconds(100));
     }
 
     TIntrusivePtr<TDrainProgress> drainProgress(new TDrainProgress());

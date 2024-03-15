@@ -18,6 +18,7 @@ SRCS(
     node_broker.h
     node_broker_impl.h
     node_broker__extend_lease.cpp
+    node_broker__release_slot.cpp
     node_broker__init_scheme.cpp
     node_broker__load_state.cpp
     node_broker__register_node.cpp
@@ -25,6 +26,8 @@ SRCS(
     node_broker__update_config.cpp
     node_broker__update_config_subscription.cpp
     node_broker__update_epoch.cpp
+    slot_indexes_pool.cpp
+    slot_indexes_pool.h
     table_adapter.h
     tenant_node_enumeration.cpp
     tenant_node_enumeration.h

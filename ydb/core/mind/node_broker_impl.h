@@ -1,8 +1,10 @@
 #pragma once
 
 #include "node_broker.h"
+#include "slot_indexes_pool.h"
 
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/base/subdomain.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/tx_processor.h>
@@ -114,6 +116,8 @@ private:
         ui32 Lease;
         TInstant Expire;
         bool AuthorizedByCertificate = false;
+        std::optional<ui32> SlotIndex;
+        TSubDomainKey SubdomainKey;
     };
 
     // State changes to apply while moving to the next epoch.
@@ -130,15 +134,18 @@ private:
     class TTxUpdateConfig;
     class TTxUpdateConfigSubscription;
     class TTxUpdateEpoch;
+    class TTxReleaseSlot;
 
     ITransaction *CreateTxExtendLease(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev);
     ITransaction *CreateTxInitScheme();
     ITransaction *CreateTxLoadState();
-    ITransaction *CreateTxRegisterNode(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev, const NActors::TScopeId& scopeId);
+    ITransaction *CreateTxRegisterNode(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
+                                       const NActors::TScopeId& scopeId, const TSubDomainKey& subdomainKey);
     ITransaction *CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfig(TEvNodeBroker::TEvSetConfigRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfigSubscription(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev);
     ITransaction *CreateTxUpdateEpoch();
+    ITransaction *CreateTxReleaseSlot(TEvNodeBroker::TEvReleaseSlot::TPtr &ev);
 
     void OnActivateExecutor(const TActorContext &ctx) override;
     void OnDetach(const TActorContext &ctx) override;
@@ -185,6 +192,7 @@ private:
             HFuncTraced(TEvNodeBroker::TEvCompactTables, Handle);
             HFuncTraced(TEvNodeBroker::TEvGetConfigRequest, Handle);
             HFuncTraced(TEvNodeBroker::TEvSetConfigRequest, Handle);
+            HFuncTraced(TEvNodeBroker::TEvReleaseSlot, Handle);
             HFuncTraced(TEvPrivate::TEvUpdateEpoch, Handle);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
@@ -284,6 +292,8 @@ private:
                 const TActorContext &ctx);
     void Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev,
                 const TActorContext &ctx);
+    void Handle(TEvNodeBroker::TEvReleaseSlot::TPtr &ev,
+                const TActorContext &ctx);
 
     // All registered dynamic nodes.
     THashMap<ui32, TNodeInfo> Nodes;
@@ -292,6 +302,9 @@ private:
     THashMap<std::tuple<TString, TString, ui16>, ui32> Hosts;
     // Bitmap with free Node IDs (with no lower 5 bits).
     TDynBitMap FreeIds;
+    // Maps tenant to its slot indexes pool.
+    std::unordered_map<TSubDomainKey, TSlotIndexesPool, THash<TSubDomainKey>> SlotIndexesPools;
+    bool EnableGenerateSlotNames = false;
     // Epoch info.
     TEpochInfo Epoch;
     // Current config.

@@ -95,6 +95,8 @@ struct TEvNodeBroker {
         EvSetConfigRequest,
         EvSetConfigResponse,
 
+        EvReleaseSlot,
+
         // TODO: remove
         // internal
         //EvNodeExpire = EvListNodes + 512,
@@ -179,6 +181,11 @@ struct TEvNodeBroker {
     struct TEvSetConfigResponse : public TEventPB<TEvSetConfigResponse,
                                                   NKikimrNodeBroker::TSetConfigResponse,
                                                   EvSetConfigResponse> {
+    };
+
+    struct TEvReleaseSlot: public TEventPB<TEvReleaseSlot,
+                                           NKikimrNodeBroker::TReleaseSlot,
+                                           EvReleaseSlot> {
     };
 };
 

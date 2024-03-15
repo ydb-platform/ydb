@@ -21,6 +21,9 @@ message TStorageConfig { // contents of storage metadata
     uint64 Generation = 1; // stored generation
     bytes Fingerprint = 2; // hash for config validation (must be the same for all nodes with the same Generation)
     NKikimrConfig.TBlobStorageConfig BlobStorageConfig = 3; // NodeWardenServiceSet for static group is inside
+    NKikimrConfig.TDomainsConfig.TStateStorage StateStorageConfig = 9;
+    NKikimrConfig.TDomainsConfig.TStateStorage StateStorageBoardConfig = 10;
+    NKikimrConfig.TDomainsConfig.TStateStorage SchemeBoardConfig = 11;
     repeated TNodeIdentifier AllNodes = 5; // set of all known nodes
     string ClusterUUID = 6; // cluster GUID as provided in nameservice config
     string SelfAssemblyUUID = 7; // self-assembly UUID generated when config is first created

@@ -1,5 +1,7 @@
 Registering pre-existing tables
 	tenk1
+	tmp
+	student
 <sql-statement>
 --
 -- SELECT_DISTINCT
@@ -9,30 +11,18 @@ Registering pre-existing tables
 --
 SELECT DISTINCT two FROM tmp ORDER BY 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tmp
-    
 <sql-statement>
 --
 -- awk '{print $5;}' onek.data | sort -n | uniq
 --
 SELECT DISTINCT ten FROM tmp ORDER BY 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tmp
-    
 <sql-statement>
 --
 -- awk '{print $16;}' onek.data | sort -d | uniq
 --
 SELECT DISTINCT string4 FROM tmp ORDER BY 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tmp
-    
 <sql-statement>
 --
 -- awk '{print $3,$16,$5;}' onek.data | sort -d | uniq |

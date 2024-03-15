@@ -17,7 +17,7 @@ And then these normal Py3 imports work on both Py3 and Py2::
     import socketserver
     import winreg    # on Windows only
     import test.support
-    import html, html.parser, html.entites
+    import html, html.parser, html.entities
     import http, http.client, http.server
     import http.cookies, http.cookiejar
     import urllib.parse, urllib.request, urllib.response, urllib.error, urllib.robotparser
@@ -33,6 +33,7 @@ And then these normal Py3 imports work on both Py3 and Py2::
     from collections import OrderedDict, Counter, ChainMap     # even on Py2.6
     from subprocess import getoutput, getstatusoutput
     from subprocess import check_output              # even on Py2.6
+    from multiprocessing import SimpleQueue
 
 (The renamed modules and functions are still available under their old
 names on Python 2.)
@@ -62,9 +63,12 @@ from __future__ import absolute_import, division, print_function
 
 import sys
 import logging
-import importlib
+# imp was deprecated in python 3.6
+if sys.version_info >= (3, 6):
+    import importlib as imp
+else:
+    import imp
 import contextlib
-import types
 import copy
 import os
 
@@ -108,6 +112,7 @@ RENAMES = {
            'future.moves.socketserver': 'socketserver',
            'ConfigParser': 'configparser',
            'repr': 'reprlib',
+           'multiprocessing.queues': 'multiprocessing',
            # 'FileDialog': 'tkinter.filedialog',
            # 'tkFileDialog': 'tkinter.filedialog',
            # 'SimpleDialog': 'tkinter.simpledialog',
@@ -184,6 +189,7 @@ MOVES = [('collections', 'UserList', 'UserList', 'UserList'),
          ('itertools', 'filterfalse','itertools', 'ifilterfalse'),
          ('itertools', 'zip_longest','itertools', 'izip_longest'),
          ('sys', 'intern','__builtin__', 'intern'),
+         ('multiprocessing', 'SimpleQueue', 'multiprocessing.queues', 'SimpleQueue'),
          # The re module has no ASCII flag in Py2, but this is the default.
          # Set re.ASCII to a zero constant. stat.ST_MODE just happens to be one
          # (and it exists on Py2.6+).
@@ -297,7 +303,8 @@ class RenameImport(object):
                 flog.debug('What to do here?')
 
         name = bits[0]
-        return importlib.import_module(name, path)
+        module_info = imp.find_module(name, path)
+        return imp.load_module(name, *module_info)
 
 
 class hooks(object):

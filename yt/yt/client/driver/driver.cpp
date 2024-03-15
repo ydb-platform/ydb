@@ -316,6 +316,7 @@ public:
 
         REGISTER_ALL(TBuildSnapshotCommand,                "build_snapshot",                  Null,       Structured, true,  false);
         REGISTER_ALL(TBuildMasterSnapshotsCommand,         "build_master_snapshots",          Null,       Structured, true,  false);
+        REGISTER_ALL(TGetMasterConsistentStateCommand,     "get_master_consistent_state",     Null,       Structured, true,  false);
         REGISTER_ALL(TExitReadOnlyCommand,                 "exit_read_only",                  Null,       Structured, true,  false);
         REGISTER_ALL(TMasterExitReadOnlyCommand,           "master_exit_read_only",           Null,       Structured, true,  false);
         REGISTER_ALL(TDiscombobulateNonvotingPeersCommand, "discombobulate_nonvoting_peers",  Null,       Structured, true,  false);
@@ -332,8 +333,8 @@ public:
         REGISTER_ALL(TSuspendTabletCellsCommand,           "suspend_tablet_cells",            Null,       Structured, false,  false);
         REGISTER_ALL(TResumeTabletCellsCommand,            "resume_tablet_cells",             Null,       Structured, false,  false);
 
-        REGISTER_ALL(TAddMaintenanceCommand,               "add_maintenance",                 Null,       Structured, true,   false);
-        REGISTER_ALL(TRemoveMaintenanceCommand,            "remove_maintenance",              Null,       Structured, true,   false);
+        REGISTER    (TAddMaintenanceCommand,               "add_maintenance",                 Null,       Structured, true,   false, ApiVersion4);
+        REGISTER    (TRemoveMaintenanceCommand,            "remove_maintenance",              Null,       Structured, true,   false, ApiVersion4);
         REGISTER_ALL(TDisableChunkLocationsCommand,        "disable_chunk_locations",         Null,       Structured, false,  false);
         REGISTER_ALL(TDestroyChunkLocationsCommand,        "destroy_chunk_locations",         Null,       Structured, false,  false);
         REGISTER_ALL(TResurrectChunkLocationsCommand,      "resurrect_chunk_locations",       Null,       Structured, false,  false);

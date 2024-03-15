@@ -7,7 +7,7 @@
 #include <ydb/core/tx/columnshard/counters/indexation.h>
 #include <ydb/core/tx/columnshard/engines/scheme/column_features.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
-#include <ydb/core/tx/columnshard/engines/storage/granule.h>
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
@@ -52,12 +52,14 @@ using TVectorView = TArrayView<std::vector<TObject>>;
 class TDefaultSchemaDetails: public ISchemaDetailInfo {
 private:
     ISnapshotSchema::TPtr Schema;
-    const TSaverContext Context;
     std::shared_ptr<TSerializationStats> Stats;
+protected:
+    virtual TColumnSaver DoGetColumnSaver(const ui32 columnId) const override {
+        return Schema->GetColumnSaver(columnId);
+    }
 public:
-    TDefaultSchemaDetails(ISnapshotSchema::TPtr schema, const TSaverContext& context, const std::shared_ptr<TSerializationStats>& stats)
+    TDefaultSchemaDetails(ISnapshotSchema::TPtr schema, const std::shared_ptr<TSerializationStats>& stats)
         : Schema(schema)
-        , Context(context)
         , Stats(stats)
     {
         AFL_VERIFY(Stats);
@@ -85,9 +87,6 @@ public:
     virtual ui32 GetColumnId(const std::string& fieldName) const override {
         return Schema->GetColumnId(fieldName);
     }
-    virtual TColumnSaver GetColumnSaver(const ui32 columnId) const override {
-        return Schema->GetColumnSaver(columnId, Context);
-    }
 };
 
 class TGeneralSerializedSlice {
@@ -114,7 +113,15 @@ protected:
 
 public:
 
-    std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> GetPortionChunks() const {
+    THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> GetPortionChunksToHash() const {
+        THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> result;
+        for (auto&& i : Data) {
+            AFL_VERIFY(result.emplace(i.GetEntityId(), i.GetChunks()).second);
+        }
+        return result;
+    }
+
+    std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> GetPortionChunksToMap() const {
         std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> result;
         for (auto&& i : Data) {
             AFL_VERIFY(result.emplace(i.GetEntityId(), i.GetChunks()).second);
@@ -153,7 +160,7 @@ public:
             MergeSlice(std::move(objects[i]));
         }
     }
-    TGeneralSerializedSlice(const std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings);
+    TGeneralSerializedSlice(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings);
     TGeneralSerializedSlice(const ui32 recordsCount, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings);
 
     void MergeSlice(TGeneralSerializedSlice&& slice);

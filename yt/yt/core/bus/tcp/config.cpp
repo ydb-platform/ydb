@@ -108,6 +108,10 @@ void TBusConfig::Register(TRegistrar registrar)
         .Default(5);
     registrar.Parameter("bind_retry_backoff", &TThis::BindRetryBackoff)
         .Default(TDuration::Seconds(3));
+    registrar.Parameter("connection_start_delay", &TThis::ConnectionStartDelay)
+        .Default();
+    registrar.Parameter("packet_decoder_delay", &TThis::PacketDecoderDelay)
+        .Default();
     registrar.Parameter("read_stall_timeout", &TThis::ReadStallTimeout)
         .Default(TDuration::Minutes(1));
     registrar.Parameter("write_stall_timeout", &TThis::WriteStallTimeout)

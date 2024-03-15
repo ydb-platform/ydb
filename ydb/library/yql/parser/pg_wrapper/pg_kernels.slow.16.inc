@@ -63,7 +63,9 @@ TExecFunc arrow_inetor() { return MakeIndirectExec<true, false>(&inetor); }
 TExecFunc arrow_inetpl() { return MakeIndirectExec<true, false>(&inetpl); }
 TExecFunc arrow_json_agg_finalfn() { return MakeIndirectExec<false, false>(&json_agg_finalfn); }
 TExecFunc arrow_json_agg_transfn() { return MakeIndirectExec<false, true>(&json_agg_transfn); }
+TExecFunc arrow_json_build_array() { return MakeIndirectExec<false, false>(&json_build_array); }
 TExecFunc arrow_json_build_array_noargs() { return MakeIndirectExec<false, false>(&json_build_array_noargs); }
+TExecFunc arrow_json_build_object() { return MakeIndirectExec<false, false>(&json_build_object); }
 TExecFunc arrow_json_build_object_noargs() { return MakeIndirectExec<false, false>(&json_build_object_noargs); }
 TExecFunc arrow_json_in() { return MakeIndirectExec<true, false>(&json_in); }
 TExecFunc arrow_json_object() { return MakeIndirectExec<true, false>(&json_object); }

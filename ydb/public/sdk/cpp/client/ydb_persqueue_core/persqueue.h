@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/codecs/codecs.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -1501,6 +1502,8 @@ public:
 
     TPersQueueClient(const TDriver& driver, const TPersQueueClientSettings& settings = TPersQueueClientSettings());
 
+    void ProvideCodec(ECodec codecId, THolder<NTopic::ICodec>&& codecImpl);
+
     // Create a new topic.
     TAsyncStatus CreateTopic(const TString& path, const TCreateTopicSettings& = {});
 
@@ -1525,6 +1528,9 @@ public:
     //! Create write session.
     std::shared_ptr<ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TWriteSessionSettings& settings);
     std::shared_ptr<IWriteSession> CreateWriteSession(const TWriteSessionSettings& settings);
+
+protected:
+    void OverrideCodec(ECodec codecId, THolder<NTopic::ICodec>&& codecImpl);
 
 private:
     std::shared_ptr<TImpl> Impl_;

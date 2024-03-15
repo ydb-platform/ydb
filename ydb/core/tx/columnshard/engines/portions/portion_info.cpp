@@ -4,6 +4,8 @@
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/db_wrapper.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/formats/arrow/simple_arrays_cache.h>
@@ -69,8 +71,14 @@ TPortionInfo TPortionInfo::CopyWithFilteredColumns(const THashSet<ui32>& columnI
 
     for (auto& rec : Records) {
         Y_ABORT_UNLESS(rec.Valid());
-        if (columnIds.contains(rec.ColumnId)) {
+        if (columnIds.contains(rec.GetColumnId())) {
             result.Records.push_back(rec);
+        }
+    }
+
+    for (auto& rec : Indexes) {
+        if (columnIds.contains(rec.GetIndexId())) {
+            result.Indexes.push_back(rec);
         }
     }
     return result;
@@ -109,13 +117,16 @@ ui64 TPortionInfo::GetRawBytes(const std::set<ui32>& entityIds) const {
     return sum;
 }
 
-ui64 TPortionInfo::GetIndexBytes(const std::set<ui32>& entityIds) const {
+ui64 TPortionInfo::GetIndexRawBytes(const std::set<ui32>& entityIds) const {
     ui64 sum = 0;
+    std::set<ui32> readyIndexes;
     for (auto&& r : Indexes) {
         if (entityIds.contains(r.GetIndexId())) {
-            sum += r.GetBlobRange().Size;
+            sum += r.GetRawBytes();
+            readyIndexes.emplace(r.GetIndexId());
         }
     }
+    AFL_VERIFY(readyIndexes.size() == entityIds.size())("requested", JoinSeq(",", entityIds))("found", JoinSeq(",", readyIndexes));
     return sum;
 }
 
@@ -316,7 +327,7 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
         return TConclusionStatus::Fail("cannot parse meta");
     }
     for (auto&& i : proto.GetRecords()) {
-        auto parse = TColumnRecord::BuildFromProto(i, info);
+        auto parse = TColumnRecord::BuildFromProto(i, info.GetColumnFeaturesVerified(i.GetColumnId()));
         if (!parse) {
             return parse;
         }
@@ -387,6 +398,10 @@ const TString& TPortionInfo::GetColumnStorageId(const ui32 columnId, const TInde
     return indexInfo.GetColumnStorageId(columnId, GetMeta().GetTierName());
 }
 
+const TString& TPortionInfo::GetEntityStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const {
+    return indexInfo.GetEntityStorageId(columnId, GetMeta().GetTierName());
+}
+
 void TPortionInfo::FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TIndexInfo& indexInfo) const {
     for (auto&& i : Records) {
         const TString& storageId = GetColumnStorageId(i.GetColumnId(), indexInfo);
@@ -437,6 +452,23 @@ TBlobRangeLink16::TLinkId TPortionInfo::RegisterBlobId(const TUnifiedBlobId& blo
     }
     BlobIds.emplace_back(blobId);
     return idx;
+}
+
+THashMap<TString, THashMap<NKikimr::NOlap::TUnifiedBlobId, std::vector<NKikimr::NOlap::TEntityChunk>>> TPortionInfo::GetEntityChunks(const TIndexInfo& indexInfo) const {
+    THashMap<TString, THashMap<TUnifiedBlobId, std::vector<TEntityChunk>>> result;
+    for (auto&& c : GetRecords()) {
+        const TString& storageId = GetColumnStorageId(c.GetColumnId(), indexInfo);
+        auto& storageRecords = result[storageId];
+        auto& blobRecords = storageRecords[GetBlobId(c.GetBlobRange().GetBlobIdxVerified())];
+        blobRecords.emplace_back(TEntityChunk(c.GetAddress(), c.GetMeta().GetNumRowsVerified(), c.GetMeta().GetRawBytesVerified(), c.GetBlobRange()));
+    }
+    for (auto&& c : GetIndexes()) {
+        const TString& storageId = indexInfo.GetIndexStorageId(c.GetIndexId());
+        auto& storageRecords = result[storageId];
+        auto& blobRecords = storageRecords[GetBlobId(c.GetBlobRange().GetBlobIdxVerified())];
+        blobRecords.emplace_back(TEntityChunk(c.GetAddress(), c.GetRecordsCount(), c.GetRawBytes(), c.GetBlobRange()));
+    }
+    return result;
 }
 
 std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() const {

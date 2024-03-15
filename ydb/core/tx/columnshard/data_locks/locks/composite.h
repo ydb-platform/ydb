@@ -8,28 +8,28 @@ private:
     using TBase = ILock;
     std::vector<std::shared_ptr<ILock>> Locks;
 protected:
-    virtual bool DoIsLocked(const TPortionInfo& portion) const override {
+    virtual std::optional<TString> DoIsLocked(const TPortionInfo& portion) const override {
         for (auto&& i : Locks) {
-            if (i->IsLocked(portion)) {
-                return true;
+            if (auto lockName = i->IsLocked(portion)) {
+                return lockName;
             }
         }
-        return false;
+        return {};
     }
-    virtual bool DoIsLocked(const TGranuleMeta& granule) const override {
+    virtual std::optional<TString> DoIsLocked(const TGranuleMeta& granule) const override {
         for (auto&& i : Locks) {
-            if (i->IsLocked(granule)) {
-                return true;
+            if (auto lockName = i->IsLocked(granule)) {
+                return lockName;
             }
         }
-        return false;
+        return {};
     }
     bool DoIsEmpty() const override {
         return Locks.empty();
     }
 public:
-    TCompositeLock(const std::vector<std::shared_ptr<ILock>>& locks, const bool readOnly = false)
-        : TBase(readOnly)
+    TCompositeLock(const TString& lockName, const std::vector<std::shared_ptr<ILock>>& locks, const bool readOnly = false)
+        : TBase(lockName, readOnly)
     {
         for (auto&& l : locks) {
             if (!l || l->IsEmpty()) {
@@ -39,8 +39,8 @@ public:
         }
     }
 
-    TCompositeLock(std::initializer_list<std::shared_ptr<ILock>> locks, const bool readOnly = false)
-        : TBase(readOnly)
+    TCompositeLock(const TString& lockName, std::initializer_list<std::shared_ptr<ILock>> locks, const bool readOnly = false)
+        : TBase(lockName, readOnly)
     {
         for (auto&& l : locks) {
             if (!l || l->IsEmpty()) {

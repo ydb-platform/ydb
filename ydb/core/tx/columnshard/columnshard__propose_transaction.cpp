@@ -102,7 +102,7 @@ TTxController::TProposeResult TTxProposeTransaction::ProposeTtlDeprecated(const 
         const TInstant now = TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now();
         for (ui64 pathId : ttlBody.GetPathIds()) {
             NOlap::TTiering tiering;
-            tiering.Add(NOlap::TTierInfo::MakeTtl(now - unixTime, columnName));
+            AFL_VERIFY(tiering.Add(NOlap::TTierInfo::MakeTtl(now - unixTime, columnName)));
             pathTtls.emplace(pathId, std::move(tiering));
         }
     }

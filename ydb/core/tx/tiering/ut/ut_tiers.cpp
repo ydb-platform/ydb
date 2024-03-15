@@ -28,6 +28,13 @@ using namespace NColumnShard;
 
 class TFastTTLCompactionController: public NKikimr::NYDBTest::ICSController {
 public:
+    virtual TDuration GetLagForCompactionBeforeTierings(const TDuration /*def*/) const override {
+        return TDuration::Zero();
+    }
+    virtual bool DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) override {
+        changes = nullptr;
+        return true;
+    }
     virtual TDuration GetTTLDefaultWaitingDuration(const TDuration /*defaultValue*/) const override {
         return TDuration::Seconds(1);
     }

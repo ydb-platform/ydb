@@ -923,7 +923,7 @@ public:
         Option("naming-file", TCfg::TNameserviceConfigFieldTag{});
 
         CommonAppOptions.NodeId = CommonAppOptions.DeduceNodeId(AppConfig, Env);
-        Cout << "Determined node ID: " << CommonAppOptions.NodeId << Endl;
+        Logger.Out() << "Determined node ID: " << CommonAppOptions.NodeId << Endl;
 
         CommonAppOptions.ValidateTenant();
 
@@ -992,7 +992,7 @@ public:
 
         TenantName = FillTenantPoolConfig(CommonAppOptions);
 
-        Cout << "configured" << Endl;
+        Logger.Out() << "configured" << Endl;
 
         FillData(CommonAppOptions);
     }

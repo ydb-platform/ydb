@@ -80,7 +80,7 @@ private:
     const ESorting Sorting = ESorting::ASC; // Sorting inside returned batches
     std::optional<TPKRangesFilter> PKRangesFilter;
     TProgramContainer Program;
-    const TVersionedIndex* IndexVersionsPointer;
+    std::shared_ptr<TVersionedIndex> IndexVersionsPointer;
     TSnapshot RequestSnapshot;
 protected:
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
@@ -127,7 +127,7 @@ public:
         return ResultIndexSchema->GetIndexInfo();
     }
 
-    TReadMetadataBase(const TVersionedIndex* index, const ESorting sorting, const TProgramContainer& ssaProgram, const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot)
+    TReadMetadataBase(const std::shared_ptr<TVersionedIndex> index, const ESorting sorting, const TProgramContainer& ssaProgram, const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot)
         : Sorting(sorting)
         , Program(ssaProgram)
         , IndexVersionsPointer(index)
@@ -218,8 +218,8 @@ public:
     std::vector<TCommittedBlob> CommittedBlobs;
     std::shared_ptr<TReadStats> ReadStats;
 
-    TReadMetadata(const TVersionedIndex& info, const TSnapshot& snapshot, const ESorting sorting, const TProgramContainer& ssaProgram)
-        : TBase(&info, sorting, ssaProgram, info.GetSchema(snapshot), snapshot)
+    TReadMetadata(const std::shared_ptr<TVersionedIndex> info, const TSnapshot& snapshot, const ESorting sorting, const TProgramContainer& ssaProgram)
+        : TBase(info, sorting, ssaProgram, info->GetSchema(snapshot), snapshot)
         , ReadStats(std::make_shared<TReadStats>())
     {
     }
@@ -288,7 +288,7 @@ public:
     std::vector<ui32> ResultColumnIds;
     std::deque<std::shared_ptr<NOlap::TPortionInfo>> IndexPortions;
 
-    explicit TReadStatsMetadata(const TVersionedIndex* info, ui64 tabletId, const ESorting sorting, const TProgramContainer& ssaProgram, const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot)
+    explicit TReadStatsMetadata(const std::shared_ptr<TVersionedIndex>& info, ui64 tabletId, const ESorting sorting, const TProgramContainer& ssaProgram, const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot)
         : TBase(info, sorting, ssaProgram, schema, requestSnapshot)
         , TabletId(tabletId)
     {

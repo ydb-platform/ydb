@@ -82,6 +82,10 @@ SRCS(
     query/rpc_attach_session.cpp
     query/rpc_kqp_tx.cpp
     query/service_query.h
+
+    ydb_over_fq/create_session.cpp
+    ydb_over_fq/execute_data_query.cpp
+    ydb_over_fq/list_directory.cpp
 )
 
 PEERDIR(
@@ -106,6 +110,7 @@ PEERDIR(
     ydb/core/io_formats/ydb_dump
     ydb/core/kesus/tablet
     ydb/core/kqp/common
+    ydb/core/kqp/federated_query
     ydb/core/protos
     ydb/core/scheme
     ydb/core/sys_view

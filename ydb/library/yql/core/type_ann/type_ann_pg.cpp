@@ -298,7 +298,7 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
         }
 
         auto resultType = proc.ResultType;
-        AdjustReturnType(resultType, proc.ArgTypes, argTypes);
+        AdjustReturnType(resultType, proc.ArgTypes, proc.VariadicType, argTypes);
         if (resultType == NPg::AnyArrayOid && refinedType) {
             const auto& refinedDesc = NPg::LookupType(refinedType);
             YQL_ENSURE(refinedDesc.ArrayTypeId == refinedDesc.TypeId);
@@ -346,8 +346,9 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
 
                 const auto& fargTypes = (*procPtr)->ArgTypes;
                 for (size_t i = 0; i < argTypes.size(); ++i) {
-                    if (IsCastRequired(argTypes[i], fargTypes[i])) {
-                        children[i+3] = WrapWithPgCast(std::move(children[i+3]), fargTypes[i], ctx.Expr);
+                    auto targetType = (i >= fargTypes.size()) ? (*procPtr)->VariadicType : fargTypes[i];
+                    if (IsCastRequired(argTypes[i], targetType)) {
+                        children[i+3] = WrapWithPgCast(std::move(children[i+3]), targetType, ctx.Expr);
                     }
                 }
                 output = ctx.Expr.NewCallable(input->Pos(), "PgResolvedCall", std::move(children));
@@ -799,7 +800,7 @@ IGraphTransformer::TStatus PgAggWrapper(const TExprNode::TPtr& input, TExprNode:
         resultType = NPg::LookupProc(aggDesc.FinalFuncId).ResultType;
     }
 
-    AdjustReturnType(resultType, aggDesc.ArgTypes, argTypes);
+    AdjustReturnType(resultType, aggDesc.ArgTypes, 0, argTypes);
     auto result = ctx.Expr.MakeType<TPgExprType>(resultType);
     input->SetTypeAnn(result);
 
@@ -4909,7 +4910,7 @@ IGraphTransformer::TStatus PgLikeWrapper(const TExprNode::TPtr& input, TExprNode
         }
 
         if (argTypes[i] != textTypeId) {
-            if (argTypes[i] == NPg::UnknownOid) {
+            if (NPg::IsCoercible(argTypes[i], textTypeId, NPg::ECoercionCode::Implicit)) {
                 auto& argNode = input->ChildRef(i);
                 argNode = WrapWithPgCast(std::move(argNode), textTypeId, ctx.Expr);
                 return IGraphTransformer::TStatus::Repeat;

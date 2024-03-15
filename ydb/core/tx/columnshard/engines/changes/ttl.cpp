@@ -9,13 +9,14 @@ namespace NKikimr::NOlap {
 
 void TTTLColumnEngineChanges::DoDebugString(TStringOutput& out) const {
     TBase::DoDebugString(out);
-    out << "eviction=" << PortionsToEvict.size() << ";";
+    out << "eviction=" << PortionsToEvict.size() << ";address=" << RWAddress.DebugString() << ";";
 }
 
 void TTTLColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     Y_ABORT_UNLESS(PortionsToEvict.size() || PortionsToRemove.size());
     THashMap<TString, THashSet<TBlobRange>> blobRanges;
-    auto& index = self.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
+    auto& engine = self.MutableIndexAs<TColumnEngineForLogs>();
+    auto& index = engine.GetVersionedIndex();
     for (const auto& p : PortionsToEvict) {
         Y_ABORT_UNLESS(!p.GetPortionInfo().Empty());
         p.GetPortionInfo().FillBlobRangesByStorage(blobRanges, index);
@@ -26,30 +27,26 @@ void TTTLColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
             action->AddRange(b);
         }
     }
-    self.BackgroundController.StartTtl();
+    engine.GetActualizationController()->StartActualization(RWAddress);
 }
 
 void TTTLColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& /*context*/) {
-    self.BackgroundController.FinishTtl();
+    auto& engine = self.MutableIndexAs<TColumnEngineForLogs>();
+    engine.GetActualizationController()->FinishActualization(RWAddress);
 }
 
 std::optional<TPortionInfoWithBlobs> TTTLColumnEngineChanges::UpdateEvictedPortion(TPortionForEviction& info, NBlobOperations::NRead::TCompositeReadBlobs& srcBlobs,
     TConstructionContext& context) const {
     const TPortionInfo& portionInfo = info.GetPortionInfo();
     auto& evictFeatures = info.GetFeatures();
-    Y_ABORT_UNLESS(portionInfo.GetMeta().GetTierName() != evictFeatures.TargetTierName);
+    Y_ABORT_UNLESS(portionInfo.GetMeta().GetTierName() != evictFeatures.GetTargetTierName());
 
-    auto* tiering = Tiering.FindPtr(evictFeatures.PathId);
-    Y_ABORT_UNLESS(tiering);
-    auto serializer = tiering->GetSerializer(evictFeatures.TargetTierName);
     auto blobSchema = context.SchemaVersions.GetSchema(portionInfo.GetMinSnapshot());
     auto portionWithBlobs = TPortionInfoWithBlobs::RestorePortion(portionInfo, srcBlobs, blobSchema->GetIndexInfo(), SaverContext.GetStoragesManager());
-    portionWithBlobs.GetPortionInfo().MutableMeta().SetTierName(evictFeatures.TargetTierName);
+
+    portionWithBlobs.GetPortionInfo().MutableMeta().SetTierName(evictFeatures.GetTargetTierName());
     auto resultSchema = context.SchemaVersions.GetLastSchema();
     TSaverContext saverContext(SaverContext.GetStoragesManager());
-    if (serializer) {
-        saverContext.SetExternalSerializer(*serializer);
-    }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("portion_for_eviction", portionInfo.DebugString());
     return portionWithBlobs.ChangeSaver(resultSchema, saverContext);
 }

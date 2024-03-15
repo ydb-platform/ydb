@@ -21,7 +21,6 @@ struct TBucketDescription
 {
     std::vector<NProfiling::TTagSet> QueueTagSets;
     std::vector<NYTProf::TProfilerTagPtr> QueueProfilerTags;
-    NProfiling::TTagSet BucketTagSet;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -32,7 +31,8 @@ class TFairShareInvokerQueue
 public:
     TFairShareInvokerQueue(
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
-        const std::vector<TBucketDescription>& bucketDescriptions);
+        const std::vector<TBucketDescription>& bucketDescriptions,
+        NProfiling::IRegistryImplPtr registry = {});
 
     ~TFairShareInvokerQueue();
 

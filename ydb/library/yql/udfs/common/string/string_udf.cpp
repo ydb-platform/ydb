@@ -31,12 +31,26 @@ using namespace NUdf;
 
 namespace {
 
-#define STRING_UDF(udfName, function)                       \
-    SIMPLE_STRICT_UDF(T##udfName, char*(TAutoMap<char*>)) { \
-        const TString input(args[0].AsStringRef());         \
-        const auto& result = function(input);               \
-        return valueBuilder->NewString(result);             \
-    }
+#define STRING_UDF(udfName, function)                                   \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##udfName, char*(TAutoMap<char*>)) { \
+        const TString input(args[0].AsStringRef());                     \
+        const auto& result = function(input);                           \
+        return valueBuilder->NewString(result);                         \
+    }                                                                   \
+                                                                        \
+    struct T##udfName##KernelExec                                       \
+        : public TUnaryKernelExec<T##udfName##KernelExec>               \
+    {                                                                   \
+        template <typename TSink>                                       \
+        static void Process(TBlockItem arg1, const TSink& sink) {       \
+            const TString input(arg1.AsStringRef());                    \
+            const auto& result = function(input);                       \
+            sink(TBlockItem(result));                                   \
+        }                                                               \
+    };                                                                  \
+                                                                        \
+    END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)
+
 
 // 'unsafe' udf is actually strict - it returns null on any exception
 #define STRING_UNSAFE_UDF(udfName, function)                           \

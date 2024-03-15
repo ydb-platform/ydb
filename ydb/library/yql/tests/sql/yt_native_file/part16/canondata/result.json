@@ -970,9 +970,9 @@
     ],
     "test.test[join-join_comp_map_table--Debug]": [
         {
-            "checksum": "686f41aa5e5d7dcac8f4441e4e24bbfa",
-            "size": 7747,
-            "uri": "https://{canondata_backend}/1924537/d66bfe69aa802f6a81aadbac897621b721f31b4b/resource.tar.gz#test.test_join-join_comp_map_table--Debug_/opt.yql"
+            "checksum": "76ee8f42ea802a087bb5e40c00595072",
+            "size": 7853,
+            "uri": "https://{canondata_backend}/1936947/7a6a8cc892365cd704a9cb898353d0fd7f57edf6/resource.tar.gz#test.test_join-join_comp_map_table--Debug_/opt.yql"
         }
     ],
     "test.test[join-join_comp_map_table--Plan]": [

@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     init.h
     init.cpp
+    init_noop.cpp
     dummy.h
     dummy.cpp
 )

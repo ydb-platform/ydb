@@ -4,6 +4,11 @@
 {%- set kotlin_version = target.kotlin_version -%}
 {%- set hasJunit5Test = extra_targets|selectattr('junit5_test') -%}
 plugins {
+{%- for processor in target.annotation_processors -%}
+{%-     if processor == "lombok.launch.AnnotationProcessorHider$AnnotationProcessor" %}
+    id("io.freefair.lombok") version "8.6"
+{%-     endif -%}
+{%- endfor %}
 {%- if mainClass %}
     `application`
 {%- else %}
@@ -207,6 +212,25 @@ dependencies {
 {%-     endfor -%}
 {%- endfor %}
 }
+
+{%- for processor in target.annotation_processors -%}
+{%-     if processor == "lombok.launch.AnnotationProcessorHider$AnnotationProcessor" %}
+val confs: List<Configuration> = project.configurations.toList()
+
+confs.forEach { configuration ->
+    configuration.dependencies.forEach { dependency ->
+        if (dependency.name == "lombok") {
+            val lombok = dependency.group + ":" + dependency.name + ":" + dependency.version
+
+            dependencies {
+                annotationProcessor(lombok)
+                testAnnotationProcessor(lombok)
+            }
+        }
+    }
+}
+{%-     endif -%}
+{%- endfor %}
 
 {% if hasJunit5Test -%}
 tasks.named<Test>("test") {

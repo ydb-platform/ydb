@@ -42,6 +42,8 @@ TExecFunc arrow_initcap() { return MakeIndirectExec<true, false>(&initcap); }
 TExecFunc arrow_json_array_element() { return MakeIndirectExec<true, false>(&json_array_element); }
 TExecFunc arrow_json_array_element_text() { return MakeIndirectExec<true, false>(&json_array_element_text); }
 TExecFunc arrow_json_array_length() { return MakeIndirectExec<true, true>(&json_array_length); }
+TExecFunc arrow_json_extract_path() { return MakeIndirectExec<true, false>(&json_extract_path); }
+TExecFunc arrow_json_extract_path_text() { return MakeIndirectExec<true, false>(&json_extract_path_text); }
 TExecFunc arrow_json_object_field() { return MakeIndirectExec<true, false>(&json_object_field); }
 TExecFunc arrow_json_object_field_text() { return MakeIndirectExec<true, false>(&json_object_field_text); }
 TExecFunc arrow_json_populate_record() { return MakeIndirectExec<false, true>(&json_populate_record); }
@@ -52,8 +54,11 @@ TExecFunc arrow_jsonb_array_element_text() { return MakeIndirectExec<true, false
 TExecFunc arrow_jsonb_array_length() { return MakeIndirectExec<true, true>(&jsonb_array_length); }
 TExecFunc arrow_jsonb_concat() { return MakeIndirectExec<true, false>(&jsonb_concat); }
 TExecFunc arrow_jsonb_delete() { return MakeIndirectExec<true, false>(&jsonb_delete); }
+TExecFunc arrow_jsonb_delete_array() { return MakeIndirectExec<true, false>(&jsonb_delete_array); }
 TExecFunc arrow_jsonb_delete_idx() { return MakeIndirectExec<true, false>(&jsonb_delete_idx); }
 TExecFunc arrow_jsonb_delete_path() { return MakeIndirectExec<true, false>(&jsonb_delete_path); }
+TExecFunc arrow_jsonb_extract_path() { return MakeIndirectExec<true, false>(&jsonb_extract_path); }
+TExecFunc arrow_jsonb_extract_path_text() { return MakeIndirectExec<true, false>(&jsonb_extract_path_text); }
 TExecFunc arrow_jsonb_insert() { return MakeIndirectExec<true, false>(&jsonb_insert); }
 TExecFunc arrow_jsonb_object_field() { return MakeIndirectExec<true, false>(&jsonb_object_field); }
 TExecFunc arrow_jsonb_object_field_text() { return MakeIndirectExec<true, false>(&jsonb_object_field_text); }

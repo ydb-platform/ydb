@@ -18,7 +18,7 @@ protected:
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     std::vector<TPortionInfoWithBlobs> MakeAppendedPortions(const std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule,
-        const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context) const;
+        const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context, const std::optional<NArrow::NSerialization::TSerializerContainer>& overrideSaver) const;
 
     virtual void DoDebugString(TStringOutput& out) const override {
         out << "remove=" << PortionsToRemove.size() << ";append=" << AppendedPortions.size() << ";";
@@ -28,8 +28,13 @@ protected:
 
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const override final {
         auto actLock = DoBuildDataLockImpl();
-        auto selfLock = std::make_shared<NDataLocks::TListPortionsLock>(PortionsToRemove);
-        return std::make_shared<NDataLocks::TCompositeLock>(std::vector<std::shared_ptr<NDataLocks::ILock>>({actLock, selfLock}));
+        if (actLock) {
+            auto selfLock = std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier() + "::REMOVE", PortionsToRemove);
+            return std::make_shared<NDataLocks::TCompositeLock>(TypeString() + "::" + GetTaskIdentifier(), std::vector<std::shared_ptr<NDataLocks::ILock>>({actLock, selfLock}));
+        } else {
+            auto selfLock = std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier(), PortionsToRemove);
+            return selfLock;
+        }
     }
 
 public:

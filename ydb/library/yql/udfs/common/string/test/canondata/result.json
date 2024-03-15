@@ -14,6 +14,11 @@
             "uri": "file://test.test_BlockFind_/results.txt"
         }
     ],
+    "test.test[BlockStringUDF]": [
+        {
+            "uri": "file://test.test_BlockStringUDF_/results.txt"
+        }
+    ],
     "test.test[ExtendAndTake]": [
         {
             "uri": "file://test.test_ExtendAndTake_/results.txt"
@@ -52,6 +57,11 @@
     "test.test[StreamFormat]": [
         {
             "uri": "file://test.test_StreamFormat_/results.txt"
+        }
+    ],
+    "test.test[StringUDF]": [
+        {
+            "uri": "file://test.test_StringUDF_/results.txt"
         }
     ],
     "test.test[To]": [

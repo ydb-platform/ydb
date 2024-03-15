@@ -719,6 +719,42 @@ select value, json_typeof(value)
                       | 
 (11 rows)
 
+-- json_build_array, json_build_object, json_object_agg
+SELECT json_build_array('a',1,'b',1.2,'c',true,'d',null,'e',json '{"x": 3, "y": [1,2,3]}');
+                           json_build_array                            
+-----------------------------------------------------------------------
+ ["a", 1, "b", 1.2, "c", true, "d", null, "e", {"x": 3, "y": [1,2,3]}]
+(1 row)
+
+SELECT json_build_array('a', NULL); -- ok
+ json_build_array 
+------------------
+ ["a", null]
+(1 row)
+
+SELECT json_build_object('a',1,'b',1.2,'c',true,'d',null,'e',json '{"x": 3, "y": [1,2,3]}');
+                             json_build_object                              
+----------------------------------------------------------------------------
+ {"a" : 1, "b" : 1.2, "c" : true, "d" : null, "e" : {"x": 3, "y": [1,2,3]}}
+(1 row)
+
+SELECT json_build_object('{a,b,c}'::text[]); -- error
+ERROR:  argument list must have even number of elements
+HINT:  The arguments of json_build_object() must consist of alternating keys and values.
+SELECT json_build_object('{a,b,c}'::text[], '{d,e,f}'::text[]); -- error, key cannot be array
+ERROR:  key value must be scalar, not array, composite, or json
+SELECT json_build_object('a', 'b', 'c'); -- error
+ERROR:  argument list must have even number of elements
+HINT:  The arguments of json_build_object() must consist of alternating keys and values.
+SELECT json_build_object(NULL, 'a'); -- error, key cannot be NULL
+ERROR:  argument 1 cannot be null
+HINT:  Object keys should be text.
+SELECT json_build_object('a', NULL); -- ok
+ json_build_object 
+-------------------
+ {"a" : null}
+(1 row)
+
 -- empty objects/arrays
 SELECT json_build_array();
  json_build_array 
@@ -732,10 +768,34 @@ SELECT json_build_object();
  {}
 (1 row)
 
+-- make sure keys are quoted
+SELECT json_build_object(1,2);
+ json_build_object 
+-------------------
+ {"1" : 2}
+(1 row)
+
+-- keys must be scalar and not null
+SELECT json_build_object(null,2);
+ERROR:  argument 1 cannot be null
+HINT:  Object keys should be text.
+SELECT json_build_object(r,2) FROM (SELECT 1 AS a, 2 AS b) r;
+ERROR:  key value must be scalar, not array, composite, or json
+SELECT json_build_object(json '{"a":1,"b":2}', 3);
+ERROR:  key value must be scalar, not array, composite, or json
+SELECT json_build_object('{1,2,3}'::int[], 3);
+ERROR:  key value must be scalar, not array, composite, or json
 CREATE TEMP TABLE foo (serial_num int, name text, type text);
 INSERT INTO foo VALUES (847001,'t15','GE1043');
 INSERT INTO foo VALUES (847002,'t16','GE1043');
 INSERT INTO foo VALUES (847003,'sub-alpha','GESS90');
+SELECT json_build_object('turbines',json_object_agg(serial_num,json_build_object('name',name,'type',type)))
+FROM foo;
+                                                                            json_build_object                                                                            
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"turbines" : { "847001" : {"name" : "t15", "type" : "GE1043"}, "847002" : {"name" : "t16", "type" : "GE1043"}, "847003" : {"name" : "sub-alpha", "type" : "GESS90"} }}
+(1 row)
+
 SELECT json_object_agg(name, type) FROM foo;
                         json_object_agg                         
 ----------------------------------------------------------------

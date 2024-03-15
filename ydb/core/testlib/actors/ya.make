@@ -7,6 +7,7 @@ SRCS(
 PEERDIR(
     library/cpp/actors/testlib
     library/cpp/testing/unittest
+    ydb/apps/version
     ydb/core/base
     ydb/core/mon
     ydb/core/mon_alloc

@@ -17,6 +17,7 @@ PEERDIR(
     library/cpp/actors/interconnect
     library/cpp/getopt
     library/cpp/svnversion
+    ydb/apps/version
     ydb/core/testlib/actors
     ydb/core/testlib/basics/default
 )

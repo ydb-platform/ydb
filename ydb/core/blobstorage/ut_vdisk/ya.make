@@ -20,6 +20,7 @@ SRCS(
 PEERDIR(
     library/cpp/actors/protos
     library/cpp/codecs
+    ydb/apps/version
     ydb/core/base
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/ut_vdisk/lib

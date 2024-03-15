@@ -393,10 +393,6 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
                         .Done();
                 }
             }
-        } else if (buildResult.PointPrefixLen == tableDesc.Metadata->KeyColumnNames.size()) {
-            YQL_ENSURE(prefixPointsExpr);
-            residualLambda = pointsExtractionResult.PrunedLambda;
-            buildLookup(prefixPointsExpr, input);
         }
     }
 

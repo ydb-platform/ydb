@@ -34,7 +34,7 @@ void TFetcherCheckUserTieringPermissions::DoProcess(NSchemeShard::TSchemeShard& 
                     TSecurityObject sObject(path->Owner, path->ACL, path->IsContainer());
                     if (!sObject.CheckAccess(access, *UserToken)) {
                         denied = true;
-                        content.Deny("no alter permissions for affected table");
+                        content.Deny(TStringBuilder() << "no alter permissions for affected table, path_id=" << pathId);
                         break;
                     }
                 }

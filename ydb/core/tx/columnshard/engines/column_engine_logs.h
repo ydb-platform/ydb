@@ -84,15 +84,28 @@ private:
     std::shared_ptr<IStoragesManager> StoragesManager;
     TEvictionsController EvictionsController;
     class TTieringProcessContext {
+    private:
+        const ui64 MemoryUsageLimit;
+        ui64 MemoryUsage = 0;
+        std::shared_ptr<TTTLColumnEngineChanges::TMemoryPredictorSimplePolicy> MemoryPredictor;
     public:
         bool AllowEviction = true;
         bool AllowDrop = true;
         const TInstant Now;
-        const ui64 MaxEvictBytes;
         std::shared_ptr<TTTLColumnEngineChanges> Changes;
         std::map<ui64, TDuration> DurationsForced;
         const THashSet<TPortionAddress>& BusyPortions;
-        TTieringProcessContext(const ui64 maxEvictBytes, std::shared_ptr<TTTLColumnEngineChanges> changes, const THashSet<TPortionAddress>& busyPortions);
+
+        void AppPortionForCheckMemoryUsage(const TPortionInfo& info) {
+            MemoryUsage = MemoryPredictor->AddPortion(info);
+        }
+
+        bool HasMemoryForEviction() const {
+            return MemoryUsage < MemoryUsageLimit;
+        }
+
+        TTieringProcessContext(const ui64 memoryUsageLimit, std::shared_ptr<TTTLColumnEngineChanges> changes,
+            const THashSet<TPortionAddress>& busyPortions);
     };
 
     TDuration ProcessTiering(const ui64 pathId, const TTiering& tiering, TTieringProcessContext& context) const;
@@ -150,8 +163,8 @@ public:
     std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept override;
     std::shared_ptr<TColumnEngineChanges> StartCompaction(const TCompactionLimits& limits, const THashSet<TPortionAddress>& busyPortions) noexcept override;
     std::shared_ptr<TCleanupColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, THashSet<ui64>& pathsToDrop, ui32 maxRecords) noexcept override;
-    std::shared_ptr<TTTLColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction, const THashSet<TPortionAddress>& busyPortions,
-                                                   ui64 maxEvictBytes = TCompactionLimits::DEFAULT_EVICTION_BYTES) noexcept override;
+    std::shared_ptr<TTTLColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
+        const THashSet<TPortionAddress>& busyPortions, const ui64 memoryUsageLimit) noexcept override;
 
     bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges,
                       const TSnapshot& snapshot) noexcept override;

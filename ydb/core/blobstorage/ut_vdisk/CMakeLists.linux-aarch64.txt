@@ -23,6 +23,7 @@ target_link_libraries(ydb-core-blobstorage-ut_vdisk PUBLIC
   ydb-core-blobstorage
   cpp-actors-protos
   library-cpp-codecs
+  version_definition
   ydb-core-base
   core-blobstorage-groupinfo
   blobstorage-ut_vdisk-lib

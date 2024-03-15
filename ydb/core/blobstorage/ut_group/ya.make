@@ -18,6 +18,7 @@ ENDIF()
 PEERDIR(
     library/cpp/actors/interconnect/mock
     library/cpp/testing/unittest
+    ydb/apps/version
     ydb/core/blobstorage/crypto
     ydb/core/blobstorage/dsproxy
     ydb/core/blobstorage/groupinfo

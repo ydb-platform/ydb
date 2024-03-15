@@ -25,6 +25,7 @@ target_link_libraries(ydb-core-actorlib_impl-ut PUBLIC
   cpp-actors-interconnect
   library-cpp-getopt
   library-cpp-svnversion
+  version_definition
   core-testlib-actors
   testlib-basics-default
 )

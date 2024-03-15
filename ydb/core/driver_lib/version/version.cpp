@@ -15,22 +15,14 @@ using EComponentId = NKikimrConfig::TCompatibilityRule;
 using TComponentId = NKikimrConfig::TCompatibilityRule::EComponentId;
 
 TCompatibilityInfo::TCompatibilityInfo() {
-    using TCurrentConstructor = TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo;
     using TStoredConstructor = TCompatibilityInfo::TProtoConstructor::TStoredCompatibilityInfo;
-    // using TCompatibilityRuleConstructor = TCompatibilityInfo::TProtoConstructor::TCompatibilityRule;
     using TVersionConstructor = TCompatibilityInfo::TProtoConstructor::TVersion;
 
     /////////////////////////////////////////////////////////
     // Current CompatibilityInfo
     /////////////////////////////////////////////////////////
 
-    auto current = TCurrentConstructor{
-        .Application = "ydb",
-        .Version = TVersionConstructor{
-            .Year = 23,
-            .Major = 3,
-        }
-    }.ToPB();
+    auto current = MakeCurrent();
 
     bool success = CompleteFromTag(current);
     Y_UNUSED(success);

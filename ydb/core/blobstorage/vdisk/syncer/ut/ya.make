@@ -9,6 +9,7 @@ SIZE(MEDIUM)
 PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion
+    ydb/apps/version
     ydb/core/base
     ydb/core/blobstorage
 )

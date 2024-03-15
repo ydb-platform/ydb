@@ -1753,6 +1753,7 @@ message TColumnShardConfig {
     optional bool TTLEnabled = 6 [default = true];
     optional bool UseChunkedMergeOnCompaction = 9 [default = false];
     optional uint64 CompactionMemoryLimit = 10 [default = 536870912];
+    optional uint64 TieringsMemoryLimit = 11 [default = 536870912];
 }
 
 message TSchemeShardConfig {

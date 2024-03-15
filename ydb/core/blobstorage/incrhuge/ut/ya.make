@@ -13,6 +13,7 @@ ENDIF()
 
 PEERDIR(
     library/cpp/actors/protos
+    ydb/apps/version
     ydb/core/blobstorage
     ydb/core/blobstorage/incrhuge
     ydb/core/blobstorage/pdisk

@@ -338,7 +338,7 @@ bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, u
 
 bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db,
          const THashMap<ui64, NOlap::TTiering>& pathEviction, ui32 expectedToDrop) {
-    std::shared_ptr<TTTLColumnEngineChanges> changes = engine.StartTtl(pathEviction, {});
+    std::shared_ptr<TTTLColumnEngineChanges> changes = engine.StartTtl(pathEviction, {}, 512 * 1024 * 1024);
     UNIT_ASSERT(changes);
     UNIT_ASSERT_VALUES_EQUAL(changes->PortionsToRemove.size(), expectedToDrop);
 

@@ -734,7 +734,10 @@ namespace Tests {
             if (!initial.HasImmediateControlsConfig()) {
                 initial.MutableImmediateControlsConfig()->CopyFrom(Settings->Controls);
             }
-            auto *dispatcher = NConsole::CreateConfigsDispatcher(initial, {});
+            auto *dispatcher = NConsole::CreateConfigsDispatcher(
+                    NKikimr::NConsole::TConfigsDispatcherInitInfo {
+                        .InitialConfig = initial,
+                    });
             auto aid = Runtime->Register(dispatcher, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }

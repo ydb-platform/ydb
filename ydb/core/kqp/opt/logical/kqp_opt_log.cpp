@@ -190,8 +190,8 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> DeleteOverLookup(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpDeleteOverLookup(node, ctx, KqpCtx);
+    TMaybeNode<TExprBase> DeleteOverLookup(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        TExprBase output = KqpDeleteOverLookup(node, ctx, KqpCtx, *getParents());
         DumpAppliedRule("DeleteOverLookup", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

@@ -49,6 +49,11 @@ namespace NKikimr::NOlap {
     class TNormalizationContext {
         YDB_ACCESSOR_DEF(TActorId, ResourceSubscribeActor);
         YDB_ACCESSOR_DEF(TActorId, ColumnshardActor);
+        std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
+    public:
+        void SetResourcesGuard(std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> rg) {
+            ResourcesGuard = rg;
+        }
     };
 
     class TNormalizationController;
@@ -100,7 +105,7 @@ namespace NKikimr::NOlap {
     public:
         TNormalizationController(std::shared_ptr<IStoragesManager> storagesManager, const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>& counters)
             : StoragesManager(storagesManager)
-            , TaskSubscription("CS:NORMALIZER", counters) {}
+            , TaskSubscription("CS::NORMALIZER", counters) {}
 
         const NOlap::NResourceBroker::NSubscribe::TTaskContext& GetTaskSubscription() const {
             return TaskSubscription;

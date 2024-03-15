@@ -4,6 +4,7 @@
 #include <ydb/core/protos/config.pb.h>
 
 #include <util/generic/vector.h>
+#include <util/generic/map.h>
 
 namespace NKikimr::NConsole {
 
@@ -106,16 +107,33 @@ struct TEvConfigsDispatcher {
     };
 };
 
+struct TDenyList {
+    std::set<ui32> Items;
+};
+
+struct TAllowList {
+    std::set<ui32> Items;
+};
+
+struct TDebugInfo {
+    NKikimrConfig::TAppConfig StaticConfig;
+    NKikimrConfig::TAppConfig OldDynConfig;
+    NKikimrConfig::TAppConfig NewDynConfig;
+};
+
+struct TConfigsDispatcherInitInfo {
+    NKikimrConfig::TAppConfig InitialConfig;
+    TMap<TString, TString> Labels;
+    std::variant<std::monostate, TDenyList, TAllowList> ItemsServeRules;
+    std::optional<TDebugInfo> DebugInfo;
+};
+
 /**
  * Initial config is used to initilize Configs Dispatcher. All received configs
  * are compared to the current one and notifications are not sent to local
  * subscribers if there is no config modification detected.
  */
-IActor *CreateConfigsDispatcher(
-    const NKikimrConfig::TAppConfig &config,
-    const TMap<TString, TString> &labels,
-    const NKikimrConfig::TAppConfig &initialCmsConfig = {},
-    const NKikimrConfig::TAppConfig &initialCmsYamlConfig = {});
+IActor *CreateConfigsDispatcher(const TConfigsDispatcherInitInfo& initInfo);
 
 inline TActorId MakeConfigsDispatcherID(ui32 node = 0) {
     char x[12] = { 'c', 'o', 'n', 'f', 'i', 'g', 's', 'd', 'i', 's', 'p' };

@@ -554,7 +554,6 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], deletesCount);
         UNIT_ASSERT_VALUES_EQUAL(counter["FullScan"], fullScansCount);
         UNIT_ASSERT_VALUES_EQUAL(counter["Scan"], rangeScansCount);
-        UNIT_ASSERT_VALUES_EQUAL(counter["Lookup"], lookupsCount);
     }
 
     Y_UNIT_TEST(ExplainDataQueryWithParams) {

@@ -30,6 +30,7 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/testing/gmock_in_unittest
     library/cpp/testing/unittest
+    ydb/apps/version
     ydb/core/driver_lib/run
     ydb/core/base
     ydb/core/blobstorage/base

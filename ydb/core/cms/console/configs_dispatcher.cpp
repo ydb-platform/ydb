@@ -130,11 +130,7 @@ public:
         return NKikimrServices::TActivity::CONFIGS_DISPATCHER_ACTOR;
     }
 
-    TConfigsDispatcher(
-        const NKikimrConfig::TAppConfig &config,
-        const TMap<TString, TString> &labels,
-        const NKikimrConfig::TAppConfig &initialCmsConfig,
-        const NKikimrConfig::TAppConfig &initialCmsYamlConfig);
+    TConfigsDispatcher(const TConfigsDispatcherInitInfo& initInfo);
 
     void Bootstrap();
 
@@ -158,6 +154,8 @@ public:
     TCheckKindsResult CheckKinds(const TVector<ui32>& kinds, const char* errorContext) const;
 
     NKikimrConfig::TAppConfig ParseYamlProtoConfig();
+
+    TDynBitMap FilterKinds(const TDynBitMap& in);
         
     void Handle(NMon::TEvHttpInfo::TPtr &ev);
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev);
@@ -226,11 +224,11 @@ public:
 
 
 private:
-    TMap<TString, TString> Labels;
-    const NKikimrConfig::TAppConfig InitialConfig;
+    const TMap<TString, TString> Labels;
+    const std::variant<std::monostate, TDenyList, TAllowList> ItemsServeRules;
+    const NKikimrConfig::TAppConfig BaseConfig;
     NKikimrConfig::TAppConfig CurrentConfig;
-    const NKikimrConfig::TAppConfig InitialCmsConfig;
-    const NKikimrConfig::TAppConfig InitialCmsYamlConfig;
+    const std::optional<TDebugInfo> DebugInfo;
     ui64 NextRequestCookie;
     TVector<TActorId> HttpRequests;
     TActorId CommonSubscriptionClient;
@@ -250,19 +248,14 @@ private:
 
 };
 
-TConfigsDispatcher::TConfigsDispatcher(
-    const NKikimrConfig::TAppConfig &config,
-    const TMap<TString, TString> &labels,
-    const NKikimrConfig::TAppConfig &initialCmsConfig,
-    const NKikimrConfig::TAppConfig &initialCmsYamlConfig)
-        : Labels(labels)
-        , InitialConfig(config)
-        , CurrentConfig(config)
-        , InitialCmsConfig(initialCmsConfig)
-        , InitialCmsYamlConfig(initialCmsYamlConfig)
+TConfigsDispatcher::TConfigsDispatcher(const TConfigsDispatcherInitInfo& initInfo)
+        : Labels(initInfo.Labels)
+        , ItemsServeRules(initInfo.ItemsServeRules)
+        , BaseConfig(initInfo.InitialConfig)
+        , CurrentConfig(initInfo.InitialConfig)
+        , DebugInfo(initInfo.DebugInfo)
         , NextRequestCookie(Now().GetValue())
-{
-}
+{}
 
 void TConfigsDispatcher::Bootstrap()
 {
@@ -393,9 +386,12 @@ void TConfigsDispatcher::ReplyMonJson(TActorId mailbox) {
     response.InsertValue("yaml_config", YamlConfig);
     response.InsertValue("resolved_json_config", NJson::ReadJsonFastTree(ResolvedJsonConfig, true));
     response.InsertValue("current_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(CurrentConfig, NYamlConfig::GetProto2JsonConfig()), true));
-    response.InsertValue("initial_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(InitialConfig, NYamlConfig::GetProto2JsonConfig()), true));
-    response.InsertValue("initial_cms_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(InitialCmsConfig, NYamlConfig::GetProto2JsonConfig()), true));
-    response.InsertValue("initial_cms_yaml_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(InitialCmsYamlConfig, NYamlConfig::GetProto2JsonConfig()), true));
+
+    if (DebugInfo) {
+        response.InsertValue("initial_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(DebugInfo->StaticConfig, NYamlConfig::GetProto2JsonConfig()), true));
+        response.InsertValue("initial_cms_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(DebugInfo->OldDynConfig, NYamlConfig::GetProto2JsonConfig()), true));
+        response.InsertValue("initial_cms_yaml_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(DebugInfo->NewDynConfig, NYamlConfig::GetProto2JsonConfig()), true));
+    }
 
     NJson::WriteJson(&str, &response, {});
 
@@ -410,6 +406,29 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &
     BLOG_TRACE("Send TEvConfigNotificationResponse: " << resp->Record.ShortDebugString());
 
     Send(ev->Sender, resp.Release(), 0, ev->Cookie);
+}
+
+
+TDynBitMap TConfigsDispatcher::FilterKinds(const TDynBitMap& in) {
+    TDynBitMap out;
+
+    if (const auto* denyList = std::get_if<TDenyList>(&ItemsServeRules)) {
+        Y_FOR_EACH_BIT(kind, in) {
+            if (!denyList->Items.contains(kind)) {
+                out.Set(kind);
+            }
+        }
+    } else if (const auto* allowList = std::get_if<TAllowList>(&ItemsServeRules)) {
+        Y_FOR_EACH_BIT(kind, in) {
+            if (allowList->Items.contains(kind)) {
+                out.Set(kind);
+            }
+        }
+    } else {
+        out = in;
+    }
+
+    return out;
 }
 
 void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
@@ -605,15 +624,17 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                 }
                 str << "<br />" << Endl;
                 COLLAPSED_REF_CONTENT("initial-config", "Initial config") {
-                    NHttp::OutputConfigHTML(str, InitialConfig);
+                    NHttp::OutputConfigHTML(str, BaseConfig);
                 }
-                str << "<br />" << Endl;
-                COLLAPSED_REF_CONTENT("initial-cms-config", "Initial CMS config") {
-                    NHttp::OutputConfigHTML(str, InitialCmsConfig);
-                }
-                str << "<br />" << Endl;
-                COLLAPSED_REF_CONTENT("initial-cms-yaml-config", "Initial CMS YAML config") {
-                    NHttp::OutputConfigHTML(str, InitialCmsYamlConfig);
+                if (DebugInfo) {
+                    str << "<br />" << Endl;
+                    COLLAPSED_REF_CONTENT("initial-cms-config", "Initial CMS config") {
+                        NHttp::OutputConfigHTML(str, DebugInfo->OldDynConfig);
+                    }
+                    str << "<br />" << Endl;
+                    COLLAPSED_REF_CONTENT("initial-cms-yaml-config", "Initial CMS YAML config") {
+                        NHttp::OutputConfigHTML(str, DebugInfo->NewDynConfig);
+                    }
                 }
             }
         }
@@ -694,7 +715,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
         bool hasAffectedKinds = false;
 
         if (subscription->Yaml && YamlConfigEnabled) {
-            ReplaceConfigItems(YamlProtoConfig, trunc, subscription->Kinds, InitialConfig);
+            ReplaceConfigItems(YamlProtoConfig, trunc, FilterKinds(subscription->Kinds), BaseConfig);
         } else {
             Y_FOR_EACH_BIT(kind, kinds) {
                 if (affectedKinds.contains(kind)) {
@@ -707,7 +728,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
                 continue;
             }
 
-            ReplaceConfigItems(ev->Get()->Record.GetConfig(), trunc, kinds, InitialConfig);
+            ReplaceConfigItems(ev->Get()->Record.GetConfig(), trunc, FilterKinds(kinds), BaseConfig);
         }
 
         if (hasAffectedKinds || !CompareConfigs(subscription->CurrentConfig.Config, trunc) || CurrentStateFunc() == &TThis::StateInit) {
@@ -772,9 +793,9 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvGetConfigRequest::TPtr 
     auto trunc = std::make_shared<NKikimrConfig::TAppConfig>();
     auto kinds = KindsToBitMap(ev->Get()->ConfigItemKinds);
     if (YamlConfigEnabled && yamlKinds) {
-        ReplaceConfigItems(YamlProtoConfig, *trunc, kinds, InitialConfig);
+        ReplaceConfigItems(YamlProtoConfig, *trunc, FilterKinds(kinds), BaseConfig);
     } else {
-        ReplaceConfigItems(CurrentConfig, *trunc, kinds, InitialConfig);
+        ReplaceConfigItems(CurrentConfig, *trunc, FilterKinds(kinds), BaseConfig);
     }
     resp->Config = trunc;
 
@@ -845,9 +866,9 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
             subscription->UpdateInProcess = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
             NKikimrConfig::TAppConfig trunc;
             if (YamlConfigEnabled) {
-                ReplaceConfigItems(YamlProtoConfig, trunc, kinds, InitialConfig);
+                ReplaceConfigItems(YamlProtoConfig, trunc, FilterKinds(kinds), BaseConfig);
             } else {
-                ReplaceConfigItems(CurrentConfig, trunc, kinds, InitialConfig);
+                ReplaceConfigItems(CurrentConfig, trunc, FilterKinds(kinds), BaseConfig);
             }
             subscription->UpdateInProcess->Record.MutableConfig()->CopyFrom(trunc);
             Y_FOR_EACH_BIT(kind, kinds) {
@@ -949,13 +970,8 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvGetNodeLabelsRequest::TPtr &ev) {
     Send(ev->Sender, Response.Release());
 }
     
-IActor *CreateConfigsDispatcher(
-    const NKikimrConfig::TAppConfig &config,
-    const TMap<TString, TString> &labels,
-    const NKikimrConfig::TAppConfig &initialCmsConfig,
-    const NKikimrConfig::TAppConfig &initialCmsYamlConfig)
-{
-    return new TConfigsDispatcher(config, labels, initialCmsConfig, initialCmsYamlConfig);
+IActor *CreateConfigsDispatcher(const TConfigsDispatcherInitInfo& initInfo) {
+    return new TConfigsDispatcher(initInfo);
 }
 
 } // namespace NKikimr::NConsole

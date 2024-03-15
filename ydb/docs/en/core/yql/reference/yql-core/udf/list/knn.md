@@ -5,9 +5,9 @@
 A generalization of the NN problem is the [k-NN problem](https://en.wikipedia.org/wiki/K-nearest_neighbors_algorithm), where it's required to find the `k` nearest points to the query point. This can be useful in various applications such as image classification, recommendation systems, etc.
 https://en.wikipedia.org/wiki/Nearest_neighbor_search
 
-The solution of the problem is divided into two major subclasses of methods: exact and approximate. In this document, we will talk about the exact brute force method.
+The k-NN problem solution is divided into two major subclasses of methods: exact and approximate. In this document, we will talk about the exact brute force method.
 
-The method is based on calculating the distance from the query point to every other point in the database. This algorithm, also known as the naive approach, has a complexity of `O(dn)`, where `n` is the number of points in the dataset, and `d` is its dimension.
+This method is based on calculating the distance from the query point to every other point in the database. This algorithm, also known as the naive approach, has a complexity of `O(dn)`, where `n` is the number of points in the dataset, and `d` is its dimension.
 
 The advantage of the method is that there is no need for additional data structures, such as specialized vector indexes.
 The disadvantage is the need for a complete data search. But this disadvantage is insignificant in cases where data has been pre-filtered, for example, by user ID.

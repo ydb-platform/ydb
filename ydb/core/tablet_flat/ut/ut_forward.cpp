@@ -140,11 +140,19 @@ namespace {
         struct TTouchEnv : public NTest::TTestEnv {
             const TSharedData* TryGetPage(const TPart *part, TPageId pageId, TGroupId groupId) override
             {
-                // allow index only
-                Y_ABORT_UNLESS(part->GetPageType(pageId, groupId) != EPage::DataPage);
+                Y_ABORT_UNLESS(part->GetPageType(pageId, groupId) != EPage::DataPage, "Only index pages are allowed");
+                Y_ABORT_UNLESS(groupId.IsMain());
 
-                return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
+                Touched.insert(pageId);
+                if (!Faulty || Loaded.contains(pageId)) {
+                    return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
+                }
+                return nullptr;
             }
+
+            bool Faulty = false;
+            THashSet<TPageId> Loaded;
+            TSet<TPageId> Touched;
         };
 
         TPagesWrap(const TIntrusiveConstPtr<TPartStore> part, TIntrusiveConstPtr<TSlices> run, ui64 aLo, ui64 aHi)
@@ -157,7 +165,7 @@ namespace {
         }
 
         TPagesWrap(TIntrusiveConstPtr<TPartStore> part, ui64 aLo, ui64 aHi)
-            : TPagesWrap(std::move(part), TSlices::All(), aLo, aHi)
+            : TPagesWrap(std::move(part), nullptr, aLo, aHi)
         {
         }
 
@@ -235,6 +243,17 @@ namespace {
             return *this;
         }
 
+        void UseFaultyEnv(bool value = true) 
+        {
+            Env.Faulty = value;
+        }
+
+        void LoadTouched()
+        {
+            Env.Loaded.insert(Env.Touched.begin(), Env.Touched.end());
+            Env.Touched.clear();
+        }
+
     public:
         const TIntrusiveConstPtr<TPartStore> Part;
         TTouchEnv Env;
@@ -284,7 +303,7 @@ Y_UNIT_TEST_SUITE(NFwd) {
 
     TPartEggs CookPart() {
         NPage::TConf conf;
-            
+
         conf.WriteBTreeIndex = true;
         conf.Group(0).PageRows = 2;
         conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
@@ -734,6 +753,193 @@ Y_UNIT_TEST_SUITE(NFwd) {
             {7, 7, 2, 4, 0});
         wrap.To(3).Get(11, true, false, true, 
             {7, 7, 3, 4, 0});
+    }
+
+    /* B-Tree index:
+        {
+            {
+                {0, 1, 2},
+                {3, 4, 5},
+                {6, 7, 8}
+            },
+            {
+                {9, 10, 11},
+                {12, 13, 14},
+                {15, 16, 17, 18, 19}
+            }
+        }
+    */
+
+    Y_UNIT_TEST(Pages_PageFaults_SyncIndex_Start)
+    {
+        // 20 pages, 50 bytes each
+        const auto eggs = CookPart();
+
+        TPagesWrap wrap(eggs.Lone(), 200, 350);
+        wrap.UseFaultyEnv();
+        
+        for (ui32 attempt : xrange(3)) { // 3-leveled B-Tree
+            wrap.To(attempt).Get(1, false, false, true, 
+                {0, 0, 0, 0, 0});
+            wrap.LoadTouched();
+        }
+        
+        wrap.To(3).Get(1, false, true, true, 
+            {1, 0, 1, 0, 0});
+    }
+
+    Y_UNIT_TEST(Pages_PageFaults_SyncIndex_Next)
+    {
+        // 20 pages, 50 bytes each
+        const auto eggs = CookPart();
+
+        TPagesWrap wrap(eggs.Lone(), 200, 200);
+        wrap.UseFaultyEnv();
+        
+        // Seek(0):
+        for (ui32 attempt : xrange(3)) { // 3-leveled B-Tree
+            wrap.To(attempt).Get(6, false, false, true, 
+                {0, 0, 0, 0, 0});
+            wrap.LoadTouched();
+        }
+
+        // Next(4):
+        wrap.To(3).Get(4, false, false, true, 
+            {0, 0, 0, 0, 0});
+        wrap.LoadTouched();
+        wrap.To(4).Get(4, false, true, true, 
+            {1, 0, 1, 0, 0});
+    
+        wrap.To(6).Fill({4, 5},
+            {2, 2, 1, 0, 0});
+
+        // set Grow = true:
+        wrap.To(7).Get(4, true, true, true, 
+            {2, 2, 1, 0, 0});
+
+        // load {6, 7, 8} node:
+        wrap.To(8).Fill({},
+            {2, 2, 1, 0, 0});
+        wrap.LoadTouched();
+
+        // set Grow = true:
+        wrap.To(9).Get(4, true, true, true, 
+            {2, 2, 1, 0, 0});
+
+        wrap.To(10).Fill({6, 7},
+            {4, 4, 1, 0, 0});
+    }
+
+    Y_UNIT_TEST(Pages_PageFaults_SyncIndex_NextNext)
+    {
+        // 20 pages, 50 bytes each
+        const auto eggs = CookPart();
+
+        TPagesWrap wrap(eggs.Lone(), 200, 350);
+        wrap.UseFaultyEnv();
+        
+        // Seek(0):
+        for (ui32 attempt : xrange(3)) { // 3-leveled B-Tree
+            wrap.To(attempt).Get(5, false, false, true, 
+                {0, 0, 0, 0, 0});
+            wrap.LoadTouched();
+        }
+
+        // Next(5):
+        wrap.To(3).Get(5, false, false, true, 
+            {0, 0, 0, 0, 0});
+        wrap.LoadTouched();
+        wrap.To(4).Get(5, false, true, true, 
+            {1, 0, 1, 0, 0});
+    
+        wrap.To(6).Fill({5},
+            {1, 1, 1, 0, 0});
+
+        // set Grow = true:
+        wrap.To(7).Get(5, true, true, true, 
+            {1, 1, 1, 0, 0});
+
+        // load {6, 7, 8} node:
+        wrap.To(8).Fill({},
+            {1, 1, 1, 0, 0});
+        wrap.LoadTouched();
+
+        // set Grow = true:
+        wrap.To(9).Get(5, true, true, true, 
+            {1, 1, 1, 0, 0});
+
+        wrap.To(10).Fill({6, 7, 8},
+            {4, 4, 1, 0, 0});
+    }
+
+    Y_UNIT_TEST(Pages_PageFaults_SyncIndex_Forward)
+    {
+        // 20 pages, 50 bytes each
+        const auto eggs = CookPart();
+
+        TPagesWrap wrap(eggs.Lone(), 1000, 1000);
+        wrap.UseFaultyEnv();
+        
+        // Seek(0):
+        for (ui32 attempt : xrange(3)) { // 3-leveled B-Tree
+            wrap.To(attempt).Get(0, false, false, true, 
+                {0, 0, 0, 0, 0});
+            wrap.LoadTouched();
+        }
+
+        wrap.To(3).Get(0, false, true, true, 
+            {1, 0, 1, 0, 0});
+        wrap.To(4).Fill({0, 1, 2},
+            {3, 3, 1, 0, 0});
+
+        // ContinueNext = true but request further page
+        for (ui32 attempt : xrange(4)) {
+            wrap.To(5 + attempt).Get(9, false, false, true, 
+                {3, 3, 1, 2, 0});
+            wrap.LoadTouched();
+        }
+        wrap.To(9).Get(9, false, true, true, 
+            {4, 3, 2, 2, 0});
+
+        wrap.To(10).Fill({9, 10, 11},
+            {6, 6, 2, 2, 0});
+    }
+
+    Y_UNIT_TEST(Pages_PageFaults_Fill)
+    {
+        // 20 pages, 50 bytes each
+        const auto eggs = CookPart();
+
+        TPagesWrap wrap(eggs.Lone(), 500, 500);
+        wrap.UseFaultyEnv();
+        
+        // Seek(0):
+        for (ui32 attempt : xrange(3)) { // 3-leveled B-Tree
+            wrap.To(attempt).Get(0, false, false, true, 
+                {0, 0, 0, 0, 0});
+            wrap.LoadTouched();
+        }
+
+        wrap.To(3).Get(0, false, true, true, 
+            {1, 0, 1, 0, 0});
+        wrap.To(4).Fill({0, 1, 2},
+            {3, 3, 1, 0, 0});
+
+        // set Grow = true:
+        wrap.To(5).Get(0, true, true, true, 
+            {3, 3, 1, 0, 0});
+
+        // load {3, 4, 5} node:
+        wrap.To(6).Fill({},
+            {3, 3, 1, 0, 0});
+        wrap.LoadTouched();
+
+        // set Grow = true:
+        wrap.To(7).Get(0, true, true, true, 
+            {3, 3, 1, 0, 0});
+
+        wrap.To(8).Fill({3, 4, 5},
+            {6, 6, 1, 0, 0});
     }
 
     Y_UNIT_TEST(TLoadedPagesCircularBuffer) {

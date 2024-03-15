@@ -1,4 +1,4 @@
-Создайте [аккаунт](https://console.aws.amazon.com) в AWS можно по [ссылке] и пополните баланс на сумму достаточную для работы 9 ВМ. Рассчитать стоимость содержания инфраструктуры можно с помощью [калькулятора](https://calculator.aws/#/createCalculator/ec2-enhancement).
+Создайте [аккаунт](https://console.aws.amazon.com) в AWS и пополните баланс на сумму достаточную для работы 9 ВМ. Рассчитать стоимость содержания инфраструктуры можно с помощью [калькулятора](https://calculator.aws/#/createCalculator/ec2-enhancement).
 
 Создайте пользователя и ключ подключения в AWS Cloud для работы AWS CLI:
 * Пользователь создаётся в разделе Security credentials → Access management → [Users](https://console.aws.amazon.com/iam/home#/users) → Create User.

@@ -1,19 +1,22 @@
 # Управление инфраструктурой и {{ ydb-short-name }} с помощью Terraform
 
-**Terraform** – это программное обеспечение с открытым исходным кодом от компании [HashiCorp](https://www.hashicorp.com) для управления инфраструктурой по модели "инфраструктура как код" (Infrastructure as Code). Код инфраструктуры пишется на [HCL](https://github.com/hashicorp/hcl) (язык разметки, разработанный HashiCorp). Основной логической единицей записи в HCL является "блок". Блок состоит из ключевого слова, идентифицирующего его тип, названия и фигурных скобок, обозначающих тело блока:
+**Terraform** – это программное обеспечение с открытым исходным кодом от компании [HashiCorp](https://www.hashicorp.com) для управления инфраструктурой по модели "инфраструктура как код" (Infrastructure as Code). Такой же подход используется в Ansible, в системе управления конфигурациями. Terraform и Ansible работают на разных уровнях: Terraform управляет инфраструктурой, а Ansible настраивает окружения на ВМ:
+
+![AiC_scheme](./_includes/terraform/AiC_scheme.png)
+
+Конфигурация настройки окружения ВМ описывается в YAML формате, а инфраструктурный код пишется на [HCL](https://github.com/hashicorp/hcl) (язык разметки, разработанный HashiCorp). Основной логической единицей записи в HCL является "блок". Блок состоит из ключевого слова, идентифицирующего его тип, названия и фигурных скобок, обозначающих тело блока. Например, так может выглядеть блок управления виртуальным сервером в AWS: 
 ```hcl
 resource "aws_instance" "ydb-vm" {
-  count = var.instance_count
-
-  ami           = "ami-008fe2fc65df48dac"
-  instance_type = "t2.micro"
-  key_name      = var.req_key_pair
+  count                  = var.instance_count
+  ami                    = "ami-008fe2fc65df48dac"
+  instance_type          = "t2.micro"
+  key_name               = var.req_key_pair
   vpc_security_group_ids = [var.input_security_group_id]
   subnet_id              = element(var.input_subnet_ids, count.index % length(var.input_subnet_ids))
-
+  
   tags = {
-    Name = "ydb-node-${count.index +1}"
-    Username = "ubuntu"
+    Name                 = "ydb-node-${count.index +1}"
+    Username             = "ubuntu"
   }
 
 }
@@ -36,16 +39,14 @@ resource "aws_instance" "ydb-vm" {
 Модули подключаются к проекту в корневом файле `main.tf` следующим образом:
 ```
 module "vpc" {
-  source = "./modules/vpc"
-
-  # Global input data 
-  subnets_count = var.subnets_count
+  source                     = "./modules/vpc"
+  subnets_count              = var.subnets_count
   subnets_availability_zones = var.availability_zones
 }
 ```
 В примере подключается модуль `vpc` (имя модуля назначается при подключении). Обязательный параметр – это `source` – путь к директории, где располагается модуль. `subnets_count` и `subnets_availability_zones` – это переменные внутри модуля `vpc`, которые принимают значения из переменных глобального уровня `var.subnets_count`, `var.availability_zones`.
 
-Модули также как и блоки располагаются друг за другом в корневом `main.tf` проекта. Основное преимущество модульного подхода организации проекта – возможность легко управлять логически связанными наборами ресурсов. Поэтому наш [репозиторий](https://github.com/ydb-platform/ydb-terraform) с готовыми Terraform сценариями организован следующим образом: 
+Модули так же как и блоки располагаются друг за другом в корневом `main.tf` проекта. Основное преимущество модульного подхода организации проекта – возможность легко управлять логически связанными наборами ресурсов. Поэтому наш [репозиторий](https://github.com/ydb-platform/ydb-terraform) с готовыми Terraform сценариями организован следующим образом: 
 ```txt
 .
 ├── README.md
@@ -88,12 +89,12 @@ module "vpc" {
 ```
 provider_installation {
   network_mirror {
-    url = "https://terraform-mirror.yandexcloud.net/"
+    url     = "https://terraform-mirror.yandexcloud.net/"
     include = ["registry.terraform.io/*/*"]
   }
   direct {
     exclude = ["registry.terraform.io/*/*"]
-     exclude = ["terraform.storage.ydb.tech/*/*"]
+    exclude = ["terraform.storage.ydb.tech/*/*"]
   }
 
   filesystem_mirror {
@@ -104,19 +105,20 @@ provider_installation {
 
 Если уже используются Terraform провайдеры, представленные в [официальном репозитории](https://registry.terraform.io/browse/providers), они продолжат работать. 
 
-## Создание инфраструктуры в AWS для развертывания YDB кластера
+## Создание инфраструктуры в AWS для развертывания {{ ydb-short-name }} кластера
 
 {% include [aws](./_includes/terraform/aws.md) %} 
 
-## Создание инфраструктуры в Azure для развертывания YDB кластера
+## Создание инфраструктуры в Azure для развертывания {{ ydb-short-name }} кластера
 
 {% include [azure](./_includes/terraform/azure.md) %} 
 
-## Создание инфраструктуры в Google Cloud Platform для развертывания YDB кластера
+## Создание инфраструктуры в Google Cloud Platform для развертывания {{ ydb-short-name }} кластера
 
 {% include [gcp](./_includes/terraform/gcp.md) %} 
 
-## Создание инфраструктуры в Yandex Cloud для развертывания YDB кластера
+## Создание инфраструктуры в Yandex Cloud для развертывания {{ ydb-short-name }} кластера
 
 {% include [yc](./_includes/terraform/yc.md) %} 
 
+С помощью Yandex Cloud провайдера можно не только создавать инфраструктуру для дальнейшего развертывания на ней YDB кластера с помощью [Ansible](./ansible.md), но и управлять [serverless или dedicated](https://cloud.yandex.ru/ru/services/ydb) версией YDB прямо из Terraform. О возможностях работы с YDB в Yandex Cloud читайте в разделе [Работа с YDB через Terraform](https://cloud.yandex.ru/ru/docs/ydb/terraform/intro) документации Yandex Cloud.

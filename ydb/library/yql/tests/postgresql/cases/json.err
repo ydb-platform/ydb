@@ -1055,184 +1055,148 @@ select * from json_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6"
 -- extract_path, extract_path_as_text
 select json_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f4','f6');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	-- extract_path, extract_path_as_text
 	^
-        -stdin-:<main>:2:8: Error: At function: PgCall
-        	select json_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f4','f6');
-	       ^
-            -stdin-:<main>:2:8: Error: No such proc: json_extract_path
-            	select json_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f4','f6');
-	       ^
+        -stdin-:<main>:1:1: Fatal: ERROR:  array size exceeds the maximum allowed (134217727)
+
+        	-- extract_path, extract_path_as_text
+	^
 <sql-statement>
 select json_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f2');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	select json_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f2');
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  array size exceeds the maximum allowed (134217727)
+
         	select json_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f2');
-	       ^
-            -stdin-:<main>:1:8: Error: No such proc: json_extract_path
-            	select json_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f2');
-	       ^
+	^
 <sql-statement>
 select json_extract_path('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',0::text);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	select json_extract_path('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',0::text);
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  array size exceeds the maximum allowed (134217727)
+
         	select json_extract_path('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',0::text);
-	       ^
-            -stdin-:<main>:1:8: Error: No such proc: json_extract_path
-            	select json_extract_path('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',0::text);
-	       ^
+	^
 <sql-statement>
 select json_extract_path('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',1::text);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	select json_extract_path('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',1::text);
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  array size exceeds the maximum allowed (134217727)
+
         	select json_extract_path('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',1::text);
-	       ^
-            -stdin-:<main>:1:8: Error: No such proc: json_extract_path
-            	select json_extract_path('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',1::text);
-	       ^
+	^
 <sql-statement>
 select json_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f4','f6');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	select json_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f4','f6');
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  array size exceeds the maximum allowed (134217727)
+
         	select json_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f4','f6');
-	       ^
-            -stdin-:<main>:1:8: Error: No such proc: json_extract_path_text
-            	select json_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f4','f6');
-	       ^
+	^
 <sql-statement>
 select json_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f2');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	select json_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f2');
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  array size exceeds the maximum allowed (134217727)
+
         	select json_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f2');
-	       ^
-            -stdin-:<main>:1:8: Error: No such proc: json_extract_path_text
-            	select json_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f2');
-	       ^
+	^
 <sql-statement>
 select json_extract_path_text('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',0::text);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	select json_extract_path_text('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',0::text);
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  array size exceeds the maximum allowed (134217727)
+
         	select json_extract_path_text('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',0::text);
-	       ^
-            -stdin-:<main>:1:8: Error: No such proc: json_extract_path_text
-            	select json_extract_path_text('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',0::text);
-	       ^
+	^
 <sql-statement>
 select json_extract_path_text('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',1::text);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	select json_extract_path_text('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',1::text);
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  array size exceeds the maximum allowed (134217727)
+
         	select json_extract_path_text('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',1::text);
-	       ^
-            -stdin-:<main>:1:8: Error: No such proc: json_extract_path_text
-            	select json_extract_path_text('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',1::text);
-	       ^
+	^
 <sql-statement>
 -- extract_path nulls
 select json_extract_path('{"f2":{"f3":1},"f4":{"f5":null,"f6":"stringy"}}','f4','f5') is null as expect_false;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	-- extract_path nulls
 	^
-        -stdin-:<main>:2:87: Error: At function: ToPg, At function: Not, At function: Exists
-        	select json_extract_path('{"f2":{"f3":1},"f4":{"f5":null,"f6":"stringy"}}','f4','f5') is null as expect_false;
-	                                                                                      ^
-            -stdin-:<main>:2:8: Error: At function: PgCall
-            	select json_extract_path('{"f2":{"f3":1},"f4":{"f5":null,"f6":"stringy"}}','f4','f5') is null as expect_false;
-	       ^
-                -stdin-:<main>:2:8: Error: No such proc: json_extract_path
-                	select json_extract_path('{"f2":{"f3":1},"f4":{"f5":null,"f6":"stringy"}}','f4','f5') is null as expect_false;
-	       ^
+        -stdin-:<main>:1:1: Fatal: ERROR:  array size exceeds the maximum allowed (134217727)
+
+        	-- extract_path nulls
+	^
 <sql-statement>
 select json_extract_path_text('{"f2":{"f3":1},"f4":{"f5":null,"f6":"stringy"}}','f4','f5') is null as expect_true;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	select json_extract_path_text('{"f2":{"f3":1},"f4":{"f5":null,"f6":"stringy"}}','f4','f5') is null as expect_true;
 	^
-        -stdin-:<main>:1:92: Error: At function: ToPg, At function: Not, At function: Exists
+        -stdin-:<main>:1:1: Fatal: ERROR:  array size exceeds the maximum allowed (134217727)
+
         	select json_extract_path_text('{"f2":{"f3":1},"f4":{"f5":null,"f6":"stringy"}}','f4','f5') is null as expect_true;
-	                                                                                           ^
-            -stdin-:<main>:1:8: Error: At function: PgCall
-            	select json_extract_path_text('{"f2":{"f3":1},"f4":{"f5":null,"f6":"stringy"}}','f4','f5') is null as expect_true;
-	       ^
-                -stdin-:<main>:1:8: Error: No such proc: json_extract_path_text
-                	select json_extract_path_text('{"f2":{"f3":1},"f4":{"f5":null,"f6":"stringy"}}','f4','f5') is null as expect_true;
-	       ^
+	^
 <sql-statement>
 select json_extract_path('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') is null as expect_false;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	select json_extract_path('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') is null as expect_false;
 	^
-        -stdin-:<main>:1:72: Error: At function: ToPg, At function: Not, At function: Exists
+        -stdin-:<main>:1:1: Fatal: ERROR:  array size exceeds the maximum allowed (134217727)
+
         	select json_extract_path('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') is null as expect_false;
-	                                                                       ^
-            -stdin-:<main>:1:8: Error: At function: PgCall
-            	select json_extract_path('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') is null as expect_false;
-	       ^
-                -stdin-:<main>:1:8: Error: No such proc: json_extract_path
-                	select json_extract_path('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') is null as expect_false;
-	       ^
+	^
 <sql-statement>
 select json_extract_path_text('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') is null as expect_true;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	select json_extract_path_text('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') is null as expect_true;
 	^
-        -stdin-:<main>:1:77: Error: At function: ToPg, At function: Not, At function: Exists
+        -stdin-:<main>:1:1: Fatal: ERROR:  array size exceeds the maximum allowed (134217727)
+
         	select json_extract_path_text('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') is null as expect_true;
-	                                                                            ^
-            -stdin-:<main>:1:8: Error: At function: PgCall
-            	select json_extract_path_text('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') is null as expect_true;
-	       ^
-                -stdin-:<main>:1:8: Error: No such proc: json_extract_path_text
-                	select json_extract_path_text('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') is null as expect_true;
-	       ^
+	^
 <sql-statement>
 -- extract_path operators
 select '{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}'::json#>array['f4','f6'];
@@ -3029,31 +2993,9 @@ select value, json_typeof(value)
 -- json_build_array, json_build_object, json_object_agg
 SELECT json_build_array('a',1,'b',1.2,'c',true,'d',null,'e',json '{"x": 3, "y": [1,2,3]}');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	-- json_build_array, json_build_object, json_object_agg
-	^
-        -stdin-:<main>:2:8: Error: At function: PgCall
-        	SELECT json_build_array('a',1,'b',1.2,'c',true,'d',null,'e',json '{"x": 3, "y": [1,2,3]}');
-	       ^
-            -stdin-:<main>:2:8: Error: Unable to find an overload for proc json_build_array with given argument types: (unknown,int4,unknown,numeric,unknown,bool,unknown,unknown,unknown,json)
-            	SELECT json_build_array('a',1,'b',1.2,'c',true,'d',null,'e',json '{"x": 3, "y": [1,2,3]}');
-	       ^
 <sql-statement>
 SELECT json_build_array('a', NULL); -- ok
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT json_build_array('a', NULL); -- ok
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	SELECT json_build_array('a', NULL); -- ok
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc json_build_array with given argument types: (unknown,unknown)
-            	SELECT json_build_array('a', NULL); -- ok
-	       ^
 <sql-statement>
 SELECT json_build_array(VARIADIC NULL::text[]); -- ok
 </sql-statement>
@@ -3113,113 +3055,66 @@ SELECT json_build_array(VARIADIC '{{1,4},{2,5},{3,6}}'::int[][]); -- ok
 <sql-statement>
 SELECT json_build_object('a',1,'b',1.2,'c',true,'d',null,'e',json '{"x": 3, "y": [1,2,3]}');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT json_build_object('a',1,'b',1.2,'c',true,'d',null,'e',json '{"x": 3, "y": [1,2,3]}');
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	SELECT json_build_object('a',1,'b',1.2,'c',true,'d',null,'e',json '{"x": 3, "y": [1,2,3]}');
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc json_build_object with given argument types: (unknown,int4,unknown,numeric,unknown,bool,unknown,unknown,unknown,json)
-            	SELECT json_build_object('a',1,'b',1.2,'c',true,'d',null,'e',json '{"x": 3, "y": [1,2,3]}');
-	       ^
 <sql-statement>
 SELECT json_build_object(
        'a', json_build_object('b',false,'c',99),
        'd', json_build_object('e',array[9,8,7]::int[],
            'f', (select row_to_json(r) from ( select relkind, oid::regclass as name from pg_class where relname = 'pg_class') r)));
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT json_build_object(
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	SELECT json_build_object(
-	       ^
-            -stdin-:<main>:2:13: Error: At function: PgCall
-            	       'a', json_build_object('b',false,'c',99),
-	            ^
-                -stdin-:<main>:2:13: Error: Unable to find an overload for proc json_build_object with given argument types: (unknown,bool,unknown,int4)
-                	       'a', json_build_object('b',false,'c',99),
-	            ^
-            -stdin-:<main>:3:13: Error: At function: PgCall
-            	       'd', json_build_object('e',array[9,8,7]::int[],
-	            ^
-                -stdin-:<main>:3:13: Error: Unable to find an overload for proc json_build_object with given argument types: (unknown,_int4,unknown,json)
-                	       'd', json_build_object('e',array[9,8,7]::int[],
-	            ^
 <sql-statement>
 SELECT json_build_object('{a,b,c}'::text[]); -- error
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	SELECT json_build_object('{a,b,c}'::text[]); -- error
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  argument list must have even number of elements
+HINT:  The arguments of json_build_object() must consist of alternating keys and values.
+
         	SELECT json_build_object('{a,b,c}'::text[]); -- error
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc json_build_object with given argument types: (_text)
-            	SELECT json_build_object('{a,b,c}'::text[]); -- error
-	       ^
+	^
 <sql-statement>
 SELECT json_build_object('{a,b,c}'::text[], '{d,e,f}'::text[]); -- error, key cannot be array
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	SELECT json_build_object('{a,b,c}'::text[], '{d,e,f}'::text[]); -- error, key cannot be array
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  key value must be scalar, not array, composite, or json
+
         	SELECT json_build_object('{a,b,c}'::text[], '{d,e,f}'::text[]); -- error, key cannot be array
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc json_build_object with given argument types: (_text,_text)
-            	SELECT json_build_object('{a,b,c}'::text[], '{d,e,f}'::text[]); -- error, key cannot be array
-	       ^
+	^
 <sql-statement>
 SELECT json_build_object('a', 'b', 'c'); -- error
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	SELECT json_build_object('a', 'b', 'c'); -- error
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  argument list must have even number of elements
+HINT:  The arguments of json_build_object() must consist of alternating keys and values.
+
         	SELECT json_build_object('a', 'b', 'c'); -- error
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc json_build_object with given argument types: (unknown,unknown,unknown)
-            	SELECT json_build_object('a', 'b', 'c'); -- error
-	       ^
+	^
 <sql-statement>
 SELECT json_build_object(NULL, 'a'); -- error, key cannot be NULL
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	SELECT json_build_object(NULL, 'a'); -- error, key cannot be NULL
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  argument 1 cannot be null
+HINT:  Object keys should be text.
+
         	SELECT json_build_object(NULL, 'a'); -- error, key cannot be NULL
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc json_build_object with given argument types: (unknown,unknown)
-            	SELECT json_build_object(NULL, 'a'); -- error, key cannot be NULL
-	       ^
+	^
 <sql-statement>
 SELECT json_build_object('a', NULL); -- ok
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT json_build_object('a', NULL); -- ok
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	SELECT json_build_object('a', NULL); -- ok
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc json_build_object with given argument types: (unknown,unknown)
-            	SELECT json_build_object('a', NULL); -- ok
-	       ^
 <sql-statement>
 SELECT json_build_object(VARIADIC NULL::text[]); -- ok
 </sql-statement>
@@ -3295,74 +3190,56 @@ SELECT json_build_object();
 -- make sure keys are quoted
 SELECT json_build_object(1,2);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	-- make sure keys are quoted
-	^
-        -stdin-:<main>:2:8: Error: At function: PgCall
-        	SELECT json_build_object(1,2);
-	       ^
-            -stdin-:<main>:2:8: Error: Unable to find an overload for proc json_build_object with given argument types: (int4,int4)
-            	SELECT json_build_object(1,2);
-	       ^
 <sql-statement>
 -- keys must be scalar and not null
 SELECT json_build_object(null,2);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	-- keys must be scalar and not null
 	^
-        -stdin-:<main>:2:8: Error: At function: PgCall
-        	SELECT json_build_object(null,2);
-	       ^
-            -stdin-:<main>:2:8: Error: Unable to find an overload for proc json_build_object with given argument types: (unknown,int4)
-            	SELECT json_build_object(null,2);
-	       ^
+        -stdin-:<main>:1:1: Fatal: ERROR:  argument 1 cannot be null
+HINT:  Object keys should be text.
+
+        	-- keys must be scalar and not null
+	^
 <sql-statement>
 SELECT json_build_object(r,2) FROM (SELECT 1 AS a, 2 AS b) r;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	SELECT json_build_object(r,2) FROM (SELECT 1 AS a, 2 AS b) r;
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  key value must be scalar, not array, composite, or json
+
         	SELECT json_build_object(r,2) FROM (SELECT 1 AS a, 2 AS b) r;
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc json_build_object with given argument types: (record,int4)
-            	SELECT json_build_object(r,2) FROM (SELECT 1 AS a, 2 AS b) r;
-	       ^
+	^
 <sql-statement>
 SELECT json_build_object(json '{"a":1,"b":2}', 3);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	SELECT json_build_object(json '{"a":1,"b":2}', 3);
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  key value must be scalar, not array, composite, or json
+
         	SELECT json_build_object(json '{"a":1,"b":2}', 3);
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc json_build_object with given argument types: (json,int4)
-            	SELECT json_build_object(json '{"a":1,"b":2}', 3);
-	       ^
+	^
 <sql-statement>
 SELECT json_build_object('{1,2,3}'::int[], 3);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	SELECT json_build_object('{1,2,3}'::int[], 3);
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  key value must be scalar, not array, composite, or json
+
         	SELECT json_build_object('{1,2,3}'::int[], 3);
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc json_build_object with given argument types: (_int4,int4)
-            	SELECT json_build_object('{1,2,3}'::int[], 3);
-	       ^
+	^
 <sql-statement>
 CREATE TEMP TABLE foo (serial_num int, name text, type text);
 </sql-statement>
@@ -3379,23 +3256,6 @@ INSERT INTO foo VALUES (847003,'sub-alpha','GESS90');
 SELECT json_build_object('turbines',json_object_agg(serial_num,json_build_object('name',name,'type',type)))
 FROM foo;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT json_build_object('turbines',json_object_agg(serial_num,json_build_object('name',name,'type',type)))
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	SELECT json_build_object('turbines',json_object_agg(serial_num,json_build_object('name',name,'type',type)))
-	       ^
-            -stdin-:<main>:1:37: Error: At function: PgAgg
-            	SELECT json_build_object('turbines',json_object_agg(serial_num,json_build_object('name',name,'type',type)))
-	                                    ^
-                -stdin-:<main>:1:64: Error: At function: PgCall
-                	SELECT json_build_object('turbines',json_object_agg(serial_num,json_build_object('name',name,'type',type)))
-	                                                               ^
-                    -stdin-:<main>:1:64: Error: Unable to find an overload for proc json_build_object with given argument types: (unknown,text,unknown,text)
-                    	SELECT json_build_object('turbines',json_object_agg(serial_num,json_build_object('name',name,'type',type)))
-	                                                               ^
 <sql-statement>
 SELECT json_object_agg(name, type) FROM foo;
 </sql-statement>

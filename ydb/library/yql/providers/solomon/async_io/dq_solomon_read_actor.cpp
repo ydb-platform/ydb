@@ -1,10 +1,8 @@
 #include "dq_solomon_read_actor.h"
 
-#include <ydb/library/yql/providers/solomon/scheme/yql_solomon_scheme.h>
-
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
+#include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
 
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
@@ -56,14 +54,6 @@ using namespace NLog;
 using namespace NKikimr::NMiniKQL;
 
 namespace {
-
-enum ESystemColumn{
-    SC_KIND = 0,
-    SC_LABELS,
-    SC_VALUE,
-    SC_TYPE,
-    SC_TS
-};
 
 struct TDqSolomonReadParams {
     NSo::NProto::TDqSolomonSource Source;
@@ -137,21 +127,6 @@ public:
         Y_UNUSED(counters);
         SINK_LOG_D("Init");
         IngressStats.Level = statsLevel;
-
-        auto stringType = ProgramBuilder.NewDataType(NYql::NUdf::TDataType<char*>::Id);
-        DictType = ProgramBuilder.NewDictType(stringType, stringType, false);
-
-        FillSystemColumnPositionindex();
-    }
-
-    void FillSystemColumnPositionindex() {
-        std::vector<TString> names(ReadParams.Source.GetSystemColumns().begin(), ReadParams.Source.GetSystemColumns().end());
-        names.insert(names.end(), ReadParams.Source.GetLabelNames().begin(), ReadParams.Source.GetLabelNames().end());
-        std::sort(names.begin(), names.end());
-        size_t index = 0;
-        for (auto& n : names) {
-            Index[n] = index++;
-        }
     }
 
     void Bootstrap() {
@@ -164,8 +139,14 @@ public:
     )
 
     i64 GetAsyncInputData(TUnboxedValueBatch& buffer, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
+        Y_UNUSED(buffer);
+        Y_UNUSED(finished);
         Y_UNUSED(freeSpace);
+        Y_UNUSED(HolderFactory);
         YQL_ENSURE(!buffer.IsWide(), "Wide stream is not supported");
+
+        auto stringType = ProgramBuilder.NewDataType(NYql::NUdf::TDataType<char*>::Id);
+        auto dictType = ProgramBuilder.NewDictType(stringType,stringType, false);
 
         for (auto j : Batch) {
             auto& a = j["vector"].GetArray();
@@ -174,7 +155,7 @@ public:
                 auto& kind = series["kind"];
                 auto& type = series["type"];
                 auto& labels = series["labels"];
-                auto dictValueBuilder = HolderFactory.NewDict(DictType, 0);
+                auto dictValueBuilder = HolderFactory.NewDict(dictType, 0);
                 for (auto& [k, v]: labels.GetMap()) {
                     dictValueBuilder->Add(NKikimr::NMiniKQL::MakeString(k), NKikimr::NMiniKQL::MakeString(v.GetString()));
                 }                
@@ -185,51 +166,24 @@ public:
 
                 for (size_t i = 0; i < timestamps.size(); ++i){
                     NUdf::TUnboxedValue* items = nullptr;
-                    auto value = HolderFactory.CreateDirectArrayHolder(ReadParams.Source.GetSystemColumns().size() + ReadParams.Source.GetLabelNames().size(), items);
-                    if (auto it = Index.find(SOLOMON_SCHEME_KIND); it != Index.end()) {
-                        items[it->second] = NKikimr::NMiniKQL::MakeString(kind.GetString());
-                    }
-
-                    if (auto it = Index.find(SOLOMON_SCHEME_LABELS); it != Index.end()) {
-                        items[it->second] = dictValue;
-                    }
-
-                    if (auto it = Index.find(SOLOMON_SCHEME_VALUE); it != Index.end()) {
-                        items[it->second] = NUdf::TUnboxedValuePod(values[i].GetDouble());
-                    }
-
-                    if (auto it = Index.find(SOLOMON_SCHEME_TYPE); it != Index.end()) {
-                        items[it->second] = NKikimr::NMiniKQL::MakeString(type.GetString());
-                    }
-
-                    if (auto it = Index.find(SOLOMON_SCHEME_TS); it != Index.end()) {
-                        // convert ms to sec
-                        items[it->second] = NUdf::TUnboxedValuePod((ui64)timestamps[i].GetUInteger() / 1000);
-                    }
-
-                    for (const auto& c : ReadParams.Source.GetLabelNames()) {
-                        auto& v = items[Index[c]];
-                        auto it = labels.GetMap().find(c);
-                        if (it != labels.GetMap().end()) {
-                            v = NKikimr::NMiniKQL::MakeString(it->second.GetString());
-                        } else {
-                            // empty string
-                            v = NKikimr::NMiniKQL::MakeString("");
-                        }
-                    }
-
+                    auto value = HolderFactory.CreateDirectArrayHolder(5, items);
+                    items[0] = NUdf::TUnboxedValuePod(NKikimr::NMiniKQL::MakeString(kind.GetString()));
+                    items[1] = NUdf::TUnboxedValuePod(NKikimr::NMiniKQL::MakeString(type.GetString()));
+                    items[2] = NUdf::TUnboxedValuePod((ui64)timestamps[i].GetUInteger() / 1000);
+                    items[3] = NUdf::TUnboxedValuePod(values[i].GetDouble());
+                    items[4] = dictValue;
                     buffer.push_back(value);
                 }
             }
         }
 
-        finished = !Batch.empty();
         Batch.clear();
+        //finished = true;
         return 0;
     }
 
-    void SaveState(const NDqProto::TCheckpoint&, TSourceState&) final {}
-    void LoadState(const TSourceState&) override { }
+    void SaveState(const NDqProto::TCheckpoint&, NDqProto::TSourceState&) final {}
+    void LoadState(const NDqProto::TSourceState&) override { }
     void CommitState(const NDqProto::TCheckpoint&) override { }
 
     ui64 GetInputIndex() const override {
@@ -251,7 +205,7 @@ private:
     }
 
 private:
-    TSourceState BuildState() { return {}; }
+    NDqProto::TSourceState BuildState() { return {}; }
 
     void NotifyComputeActorWithData() {
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
@@ -324,25 +278,21 @@ private:
         //     "to": "2023-12-08T14:45:39Z"
         //     })";
 
-        // const TStringBuf body = w.Str();
-        //Cerr << "EX: Sending request: " << body << Endl;
+        const TStringBuf body = w.Str();
         const NHttp::THttpOutgoingRequestPtr httpRequest = BuildSolomonRequest(w.Str());
 
-        //const size_t bodySize = body.size();
+        const size_t bodySize = body.size();
         const TActorId httpSenderId = Register(CreateHttpSenderActor(SelfId(), HttpProxyId, RetryPolicy));
         ui8 cookie = 0;
         Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest), /*flags=*/0, cookie);
-        //SINK_LOG_T("Sent read to solomon, body size: " << bodySize);
-        //Cerr << "EX: RequestMetrics" << Endl;
+        SINK_LOG_T("Sent read to solomon, body size: " << bodySize);
     }
 
     void Handle(TEvHttpBase::TEvSendResult::TPtr& ev) {
-        //Cerr << "EX: Handle(TEvHttpBase::TEvSendResult::TPtr& ev)" << Endl;
         const auto* res = ev->Get();
         const TString& error = res->HttpIncomingResponse->Get()->GetError();
 
-        //Cerr << "EX: Handle(TEvHttpBase::TEvSendResult::TPtr& ev), error: " << error << Endl;
-        if (!error.empty() || (res->HttpIncomingResponse->Get()->Response && res->HttpIncomingResponse->Get()->Response->Status != "200")) {
+        if (!error.empty()) {
             TStringBuilder errorBuilder;
             errorBuilder << "Error while sending request to monitoring api: " << error;
             const auto& response = res->HttpIncomingResponse->Get()->Response;
@@ -352,7 +302,6 @@ private:
 
             TIssues issues { TIssue(errorBuilder) };
             SINK_LOG_W("Got " << (res->IsTerminal ? "terminal " : "") << "error response[" << ev->Cookie << "] from solomon: " << issues.ToOneLineString());
-            //Cerr << "Got " << (res->IsTerminal ? "terminal " : "") << "error response[" << ev->Cookie << "] from solomon: " << issues.ToOneLineString();
             return;
         }
 
@@ -360,17 +309,16 @@ private:
     }
 
     void HandleSuccessSolomonResponse(const NHttp::TEvHttpProxy::TEvHttpIncomingResponse& response, ui64 cookie) {
-        Y_UNUSED(cookie);
-        //SINK_LOG_E("Solomon response[" << cookie << "]: " << response.Response->GetObfuscatedData());
-        //Cerr << "EX:" << response.Response->Body << Endl;
+        SINK_LOG_E("Solomon response[" << cookie << "]: " << response.Response->GetObfuscatedData());
+        Cerr << "EX:" << response.Response->Body << Endl;
         NJson::TJsonValue json;
         if (!NJson::ReadJsonTree(response.Response->Body, &json, false)) {
-            // todo: improve
-            Y_ABORT_UNLESS(false, "Failed to parse json response");
+            Y_ABORT_UNLESS(false, "XXXXX");
             return;
         }
 
         Batch.push_back(json);
+
         NotifyComputeActorWithData();
     }
 
@@ -388,9 +336,6 @@ private:
 
     TString SourceId;
     std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
-    TType* DictType = nullptr;
-    std::vector<size_t> SystemColumnPositionIndex;
-    THashMap<TString, size_t> Index;
     std::vector<NJson::TJsonValue> Batch;
 };
 

@@ -113,114 +113,25 @@ public:
             const auto& soReadObject = maybeSoReadObject.Cast();
             YQL_ENSURE(soReadObject.Ref().GetTypeAnn(), "No type annotation for node " << soReadObject.Ref().Content());
 
+            const auto rowType = soReadObject.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()->GetItemType();
             const auto& clusterName = soReadObject.DataSource().Cluster().StringValue();
 
             const auto token = "cluster:default_" + clusterName;
             YQL_CLOG(INFO, ProviderS3) << "Wrap " << read->Content() << " with token: " << token;
 
             auto settings = soReadObject.Object().Settings();
-            auto& settingsRef = settings.Ref();
-            TString from;
-            TString to;
-            TString program;
-            bool downsamplingDisabled = false;
-            TString downsamplingAggregation = "AVG";
-            TString downsamplingFill = "PREVIOUS";
-            ui32 downsamplingGridSec = 15;
 
-            for (auto i = 0U; i < settingsRef.ChildrenSize(); ++i) {
-                if (settingsRef.Child(i)->Head().IsAtom("from"sv)) {
-                    TStringBuf value;
-                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), "from"sv, ctx, value)) {
-                        return {};
-                    }
-
-                    from = value;
-                    continue;
-                }
-                if (settingsRef.Child(i)->Head().IsAtom("to"sv)) {
-                    TStringBuf value;
-                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), "to"sv, ctx, value)) {
-                        return {};
-                    }
-
-                    to = value;
-                    continue;
-                }
-                if (settingsRef.Child(i)->Head().IsAtom("program"sv)) {
-                    TStringBuf value;
-                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), "program"sv, ctx, value)) {
-                        return {};
-                    }
-
-                    program = value;
-                    continue;
-                }
-                if (settingsRef.Child(i)->Head().IsAtom("downsampling.disabled"sv)) {
-                    TStringBuf value;
-                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), "downsampling.disabled"sv, ctx, value)) {
-                        return {};
-                    }
-                    downsamplingDisabled = FromString<bool>(value);
-                    continue;
-                }
-                if (settingsRef.Child(i)->Head().IsAtom("downsampling.gridaggregation"sv)) {
-                    TStringBuf value;
-                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), "downsampling.gridaggregation"sv, ctx, value)) {
-                        return {};
-                    }
-                    if (!IsIn({ "AVG"sv, "COUNT"sv, "DEFAULT_AGGREGATION"sv, "LAST"sv, "MAX"sv, "MIN"sv, "SUM"sv }, value)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), TStringBuilder() << "downsampling.grid_aggregation must be one of AVG, COUNT, DEFAULT_AGGREGATION, LAST, MAX, MIN, SUM, but has " << value));
-                        return {};
-                    }
-                    downsamplingAggregation = value;
-                    continue;
-                }
-                if (settingsRef.Child(i)->Head().IsAtom("downsampling.fill"sv)) {
-                    TStringBuf value;
-                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), "downsampling.fill"sv, ctx, value)) {
-                        return {};
-                    }
-                    if (!IsIn({ "NONE"sv, "NULL"sv, "PREVIOUS"sv }, value)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), TStringBuilder() << "downsampling.grid_fill must be one of NONE, NULL, PREVIOUS, but has " << value));
-                        return {};
-                    }
-                    downsamplingFill = value;
-                    continue;
-                }
-                if (settingsRef.Child(i)->Head().IsAtom("downsampling.gridinterval"sv)) {
-                    TStringBuf value;
-                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), "downsampling.gridinterval"sv, ctx, value)) {
-                        return {};
-                    }
-                    ui32 intValue = 0;
-                    if (!TryFromString(value, intValue)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), TStringBuilder() << "downsampling.grid_interval must be positive number, but has " << value));
-                        return {};
-                    }
-                    downsamplingGridSec = intValue;
-                    continue;
-                }
-            }
-
+            auto emptyNode = Build<TCoVoid>(ctx, read->Pos()).Done().Ptr();
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TSoSourceSettings>()
                     .Token<TCoSecureParam>()
                         .Name().Build(token)
                         .Build()
-                    .RowType(soReadObject.RowType())
-                    .SystemColumns(soReadObject.SystemColumns())
-                    .LabelNames(soReadObject.LabelNames())
-                    .From<TCoAtom>().Build(from)
-                    .To<TCoAtom>().Build(to)
-                    .Program<TCoAtom>().Build(program)
-                    .DownsamplingDisabled<TCoBool>().Literal().Build(downsamplingDisabled ? "true" : "false").Build()
-                    .DownsamplingAggregation<TCoAtom>().Build(downsamplingAggregation)
-                    .DownsamplingFill<TCoAtom>().Build(downsamplingFill)
-                    .DownsamplingGridSec<TCoUint32>().Literal().Build(ToString(downsamplingGridSec)).Build()
+                    .RowType(ExpandType(soReadObject.Pos(), *rowType, ctx))
+                    .Settings(settings)
                     .Build()
+                .RowType(ExpandType(soReadObject.Pos(), *rowType, ctx))
                 .DataSource(soReadObject.DataSource().Cast<TCoDataSource>())
-                .RowType(soReadObject.RowType())
                 .Settings(settings)
                 .Done().Ptr();
         }
@@ -231,54 +142,38 @@ public:
         return TSoWrite::Match(&write);
     }
 
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t) override {
-        const TDqSource dqSource(&node);
-        const auto maybeSettings = dqSource.Settings().Maybe<TSoSourceSettings>();
-        if (!maybeSettings) {
-            return;
+    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType) override {
+        const TDqSource source(&node);
+        if (const auto maySettings = source.Settings().Maybe<TSoSourceSettings>()) {
+            const auto settings = maySettings.Cast();
+            const auto& cluster = source.DataSource().Cast<TSoDataSource>().Cluster().StringValue();
+            const auto* clusterDesc = State_->Configuration->ClusterConfigs.FindPtr(cluster);
+            YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster);
+            NSo::NProto::TDqSolomonSource source;
+            source.SetEndpoint(clusterDesc->GetCluster());
+            source.SetProject("yq");
+
+            source.SetClusterType(
+                MapClusterType(clusterDesc->GetClusterType()));
+            source.SetUseSsl(clusterDesc->GetUseSsl());
+            source.SetFrom(TInstant::ParseIso8601("2023-12-08T14:40:39Z").Seconds());
+            source.SetTo(TInstant::ParseIso8601("2023-12-08T14:45:39Z").Seconds());
+            source.SetProgram("{execpool=User,activity=YQ_STORAGE_PROXY,sensor=ActorsAliveByActivity}");
+
+            auto& downsampling = *source.MutableDownsampling();
+            downsampling.SetDisabled(false);
+            downsampling.SetAggregation("MAX");
+            downsampling.SetFill("PREVIOUS");
+            downsampling.SetGridMs(15 * 1000);
+
+            const TStructExprType* rowType = settings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+            source.SetRowType(NCommon::WriteTypeToYson(rowType, NYT::NYson::EYsonFormat::Text));
+
+            source.MutableToken()->SetName(TString(settings.Token().Name().Value()));
+
+            protoSettings.PackFrom(source);
+            sourceType = "SolomonSource";
         }
-
-        const auto settings = maybeSettings.Cast();
-        const auto& cluster = dqSource.DataSource().Cast<TSoDataSource>().Cluster().StringValue();
-        const auto* clusterDesc = State_->Configuration->ClusterConfigs.FindPtr(cluster);
-        YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster);
-        NSo::NProto::TDqSolomonSource source;
-        source.SetEndpoint(clusterDesc->GetCluster());
-        source.SetProject("yq");
-
-        source.SetClusterType(MapClusterType(clusterDesc->GetClusterType()));
-        source.SetUseSsl(clusterDesc->GetUseSsl());
-        source.SetFrom(TInstant::ParseIso8601(settings.From().StringValue()).Seconds());
-        source.SetTo(TInstant::ParseIso8601(settings.To().StringValue()).Seconds());
-        source.SetProgram(settings.Program().StringValue());
-
-        auto& downsampling = *source.MutableDownsampling();
-        const bool isDisabled = FromString<bool>(settings.DownsamplingDisabled().Literal().Value());
-        downsampling.SetDisabled(isDisabled);
-        downsampling.SetAggregation(settings.DownsamplingAggregation().StringValue());
-        downsampling.SetFill(settings.DownsamplingFill().StringValue());
-        const ui32 gridIntervalSec = FromString<ui32>(settings.DownsamplingGridSec().Literal().Value());
-        downsampling.SetGridMs(gridIntervalSec * 1000);
-
-        source.MutableToken()->SetName(settings.Token().Name().StringValue());
-
-        THashSet<TString> uniqueColumns;
-        for (const auto& c : settings.SystemColumns()) {
-            const auto& columnAsString = c.StringValue();
-            uniqueColumns.insert(columnAsString);
-            source.AddSystemColumns(columnAsString);
-        }
-
-        for (const auto& c : settings.LabelNames()) {
-            const auto& columnAsString = c.StringValue();
-            if (!uniqueColumns.insert(columnAsString).second) {
-                throw yexception() << "Column " << columnAsString << " already registered";
-            }
-            source.AddLabelNames(columnAsString);
-        }
-
-        protoSettings.PackFrom(source);
-        sourceType = "SolomonSource";
     }
 
     void FillSinkSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sinkType) override {

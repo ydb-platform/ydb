@@ -34,7 +34,7 @@ public:
     }
 
     TStatus HandleSoSourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 11U, ctx)) {
+        if (!EnsureArgsCount(*input, 3U, ctx)) {
             return TStatus::Error;
         }
 
@@ -43,65 +43,15 @@ public:
             return TStatus::Error;
         }
 
-        const auto& rowType = *input->Child(TSoSourceSettings::idx_RowType);
-        if (!EnsureType(rowType, ctx)) {
-            return TStatus::Error;
-        }
-
-        auto& systemColumns = *input->Child(TSoSourceSettings::idx_SystemColumns);
-        if (!EnsureTupleOfAtoms(systemColumns, ctx)) {
-            return TStatus::Error;
-        }
-
-        auto& labelNames = *input->Child(TSoSourceSettings::idx_LabelNames);
-        if (!EnsureTupleOfAtoms(labelNames, ctx)) {
-            return TStatus::Error;
-        }
-        
-        auto& from = *input->Child(TSoSourceSettings::idx_From);
-        if (!EnsureAtom(from, ctx) || !ValidateDatetimeFormat("from"sv, from, ctx)) {
-            return TStatus::Error;
-        }
-
-        auto& to = *input->Child(TSoSourceSettings::idx_To);
-        if (!EnsureAtom(to, ctx) || !ValidateDatetimeFormat("to"sv, to, ctx)) {
-            return TStatus::Error;
-        }
-
-        auto& program = *input->Child(TSoSourceSettings::idx_Program);
-        if (!EnsureAtom(program, ctx)) {
-            return TStatus::Error;
-        }
-
-        if (program.Content().empty()) {
-            ctx.AddError(TIssue(ctx.GetPosition(program.Pos()), "program must be specified"));
-            return TStatus::Error;
-        }
-
-        auto& downsamplingDisabled = *input->Child(TSoSourceSettings::idx_DownsamplingDisabled);
-        if (!downsamplingDisabled.IsCallable("Bool")) {
-            ctx.AddError(TIssue(ctx.GetPosition(downsamplingDisabled.Pos()), "downsampling.disabled must be bool"));
-            return TStatus::Error;
-        }
-
-        auto& downsamplingAggregation = *input->Child(TSoSourceSettings::idx_DownsamplingAggregation);
-        if (!EnsureAtom(downsamplingAggregation, ctx)) {
-            return TStatus::Error;
-        }
-
-        auto& downsamplingFill = *input->Child(TSoSourceSettings::idx_DownsamplingFill);
-        if (!EnsureAtom(downsamplingFill, ctx)) {
-            return TStatus::Error;
-        }
-
-        auto& downsamplingGridSec = *input->Child(TSoSourceSettings::idx_DownsamplingGridSec);
-        if (!downsamplingGridSec.IsCallable("Uint32")) {
-            ctx.AddError(TIssue(ctx.GetPosition(downsamplingGridSec.Pos()), "downsampling.grid_interval must be uint32 in seconds"));
-            return TStatus::Error;
-        }
-
-        const auto type = rowType.GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-        input->SetTypeAnn(ctx.MakeType<TStreamExprType>(type));
+        // todo: remove this hardcode
+        const TTypeAnnotationNode* item1 = ctx.MakeType<TDataExprType>(EDataSlot::String);
+        const TTypeAnnotationNode* item2 = ctx.MakeType<TDataExprType>(EDataSlot::String);
+        const TTypeAnnotationNode* item3 = ctx.MakeType<TDataExprType>(EDataSlot::Datetime);
+        const TTypeAnnotationNode* item4 = ctx.MakeType<TDataExprType>(EDataSlot::Double);
+        const TTypeAnnotationNode* item5 = ctx.MakeType<TDictExprType>(item1, item1);
+        TVector<const TTypeAnnotationNode*> items = {item1, item2, item3, item4, item5};
+        const TTypeAnnotationNode* itemType = ctx.MakeType<TTupleExprType>(items);
+        input->SetTypeAnn(ctx.MakeType<TStreamExprType>(itemType));
         return TStatus::Ok;
     }
 
@@ -116,7 +66,7 @@ public:
     }
 
     TStatus HandleRead(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 6U, 7U, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 4U, 5U, ctx)) {
             return TStatus::Error;
         }
 
@@ -128,20 +78,20 @@ public:
             return TStatus::Error;
         }
 
-        auto& systemColumns = *input->Child(TSoReadObject::idx_SystemColumns);
-        if (!EnsureTupleOfAtoms(systemColumns, ctx)) {
+        const auto& rowTypeNode = *input->Child(TSoReadObject::idx_RowType);
+        if (!EnsureType(rowTypeNode, ctx)) {
             return TStatus::Error;
         }
 
-        auto& labelNames = *input->Child(TSoReadObject::idx_LabelNames);
-        if (!EnsureTupleOfAtoms(labelNames, ctx)) {
+        const TTypeAnnotationNode* rowType = rowTypeNode.GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        if (!EnsureStructType(rowTypeNode.Pos(), *rowType, ctx)) {
             return TStatus::Error;
         }
 
-        const auto& rowType = *input->Child(TSoReadObject::idx_RowType);
-        if (!EnsureType(rowType, ctx)) {
-            return TStatus::Error;
-        }
+        input->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
+            input->Child(TSoReadObject::idx_World)->GetTypeAnn(),
+            ctx.MakeType<TListExprType>(rowType)
+        }));
 
         if (input->ChildrenSize() > TSoReadObject::idx_ColumnOrder) {
             auto& order = *input->Child(TSoReadObject::idx_ColumnOrder);
@@ -156,19 +106,13 @@ public:
             for (auto& child : order.ChildrenList()) {
                 TStringBuf col = child->Content();
                 if (!uniqs.emplace(col).second) {
-                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Duplicate column '" << col << "' in column order list"));
+                    ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Duplicate column '" << col << "' in column order list"));
                     return TStatus::Error;
                 }
                 columnOrder.push_back(ToString(col));
             }
             return State_->Types->SetColumnOrder(*input, columnOrder, ctx);
         }
-
-        const auto type = rowType.GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-        input->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
-            input->Child(TSoReadObject::idx_World)->GetTypeAnn(),
-            ctx.MakeType<TListExprType>(type)
-        }));
 
         return TStatus::Ok;
     }

@@ -4039,7 +4039,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                         }
                                         lrNames[0] = groupInputs.size() > 2
                                                 ? ctx.Expr.NewList(inp->Pos(), {ctx.Expr.NewAtom(inp->Pos(), repeatedColumnsInUsing[to_lower(TString(name))])})
-                                                : ctx.Expr.NewAtom(inp->Pos(), MakeAliasedColumn(groupInputs[0].Alias, groupInputs[0].Type->GetItems()[*pos]->GetName()));
+                                                : ctx.Expr.NewAtom(inp->Pos(), MakeAliasedColumn(groupInputs[groupInpus.size() - 2].Alias, groupInputs[0].Type->GetItems()[*pos]->GetName()));
                                         pos = groupInputs[1].Type->FindItemI(name);
                                         if (!pos) {
                                             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Can't find column: " << name));

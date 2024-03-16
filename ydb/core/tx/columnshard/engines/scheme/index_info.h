@@ -173,6 +173,14 @@ public:
         return result;
     }
 
+    std::vector<std::shared_ptr<IPortionDataChunk>> ActualizeColumnData(const std::vector<std::shared_ptr<IPortionDataChunk>>& source, const TIndexInfo& sourceIndexInfo, const ui32 columnId) const {
+        auto itCurrent = ColumnFeatures.find(columnId);
+        auto itPred = sourceIndexInfo.ColumnFeatures.find(columnId);
+        AFL_VERIFY(itCurrent != ColumnFeatures.end());
+        AFL_VERIFY(itPred != sourceIndexInfo.ColumnFeatures.end());
+        return itCurrent->second.ActualizeColumnData(source, itPred->second);
+    }
+
     static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators);
 
     static const std::vector<std::string>& SnapshotColumnNames() {

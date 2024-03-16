@@ -186,6 +186,11 @@ public:
         ActualizationIndex->RefreshTiering(tiering, context);
     }
 
+    void RefreshScheme() {
+        NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
+        ActualizationIndex->RefreshScheme(context);
+    }
+
     void StartActualizationIndex() {
         ActualizationIndex->Start();
     }

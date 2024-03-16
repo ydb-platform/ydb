@@ -61,6 +61,7 @@ public:
     std::shared_ptr<IBlobsStorageOperator> GetOperator(const TString& storageIdExt);
     std::shared_ptr<IBlobsStorageOperator> GetOperatorGuarantee(const TString& storageIdExt);
     std::shared_ptr<IBlobsStorageOperator> GetOperatorVerified(const TString& storageIdExt);
+    std::shared_ptr<IBlobsStorageOperator> GetOperatorOptional(const TString& storageIdExt);
 };
 
 

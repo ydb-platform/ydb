@@ -15,15 +15,20 @@ class TestKillPqBill(TestYdsBase):
     def test_do_not_bill_pq(self, kikimr, client):
         self.init_topics("no_pq_bill")
 
+        data_1mb = ['1' * 1024 * 1024]
+        message_count = 15
+
         sql = R'''
             PRAGMA dq.MaxTasksPerStage="2";
 
             INSERT INTO yds.`{output_topic}`
             SELECT Data AS Data
-            FROM yds.`{input_topic}`;''' \
+            FROM yds.`{input_topic}`
+            LIMIT {message_count};''' \
             .format(
             input_topic=self.input_topic,
             output_topic=self.output_topic,
+            message_count=message_count
         )
 
         client.create_yds_connection(name="yds", database_id="FakeDatabaseId")
@@ -32,14 +37,11 @@ class TestKillPqBill(TestYdsBase):
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
         kikimr.compute_plane.wait_zero_checkpoint(query_id)
 
-        data_1mb = ['1' * 1024 * 1024]
-        message_count = 15
         for _ in range(0, message_count):
             self.write_stream(data_1mb)
         self.read_stream(message_count)
 
-        client.abort_query(query_id)
-        client.wait_query_status(query_id, fq.QueryMeta.ABORTED_BY_USER)
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
         stat = json.loads(client.describe_query(query_id).result.query.statistics.json)
 

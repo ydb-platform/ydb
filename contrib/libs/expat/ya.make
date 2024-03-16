@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(2.6.0)
+VERSION(2.6.2)
 
-ORIGINAL_SOURCE(https://github.com/libexpat/libexpat/releases/download/R_2_6_0/expat-2.6.0.tar.xz)
+ORIGINAL_SOURCE(https://github.com/libexpat/libexpat/releases/download/R_2_6_2/expat-2.6.2.tar.xz)
 
 LICENSE(
     CC0-1.0 AND

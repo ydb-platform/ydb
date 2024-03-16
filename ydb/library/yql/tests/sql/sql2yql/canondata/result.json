@@ -11080,6 +11080,13 @@
             "uri": "https://{canondata_backend}/1777230/1dbd9686602f9d78fffc85db08fced3180ab8411/resource.tar.gz#test_sql2yql.test_pg-insert_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-join_tree_order]": [
+        {
+            "checksum": "83d0aebd9d5b71d098db88d330b00061",
+            "size": 1191,
+            "uri": "https://{canondata_backend}/1937429/8a51c76061fab32bb68a19b366be595a0261047d/resource.tar.gz#test_sql2yql.test_pg-join_tree_order_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-join_using1]": [
         {
             "checksum": "9efeeed1b6987097e2d3fb841ab6ed9a",
@@ -11169,6 +11176,13 @@
             "checksum": "b6903bbde90ccaaaab5adadb69231f13",
             "size": 1041,
             "uri": "https://{canondata_backend}/1936273/97865d22f8aeec7ef66368d94a8138ab936ba8d6/resource.tar.gz#test_sql2yql.test_pg-join_using_multiple2_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[pg-join_using_multiple3]": [
+        {
+            "checksum": "a380a3ba6e228bbf4814d20d8870a43b",
+            "size": 1531,
+            "uri": "https://{canondata_backend}/1942671/2c99ceb374ef296593e4b1aec119c77277cf9af9/resource.tar.gz#test_sql2yql.test_pg-join_using_multiple3_/sql.yql"
         }
     ],
     "test_sql2yql.test[pg-join_using_tables1]": [

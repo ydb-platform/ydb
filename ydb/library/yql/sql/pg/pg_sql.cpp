@@ -876,20 +876,38 @@ public:
                     TTraverseNodeStack traverseNodeStack;
                     traverseNodeStack.push({ node, false });
                     TVector<TAstNode*> oneJoinGroup;
-                    TVector<TString> aliases;
+                    // Bucket sort
+                    TVector<int> prevEq;
+                    TVector<int> nextIdx;
+                    TVector<int> firstIdx;
+                    TVector<TAstNode*> currentOrder;
+                    int level = -1;
 
                     while (!traverseNodeStack.empty()) {
                         auto& top = traverseNodeStack.top();
+                        ++level;
+                        Y_ENSURE(level >= 0);
                         if (NodeTag(top.first) != T_JoinExpr) {
                             // leaf
                             auto p = ParseFromClause(top.first);
                             if (!p.Source) {
                                 return nullptr;
                             }
-
-                            AddFrom(p, fromList);
-                            aliases.push_back(p.Alias);
+                            while (static_cast<int>(prevEq.size()) <= level) {
+                                prevEq.push_back(-1);
+                                firstIdx.push_back(-1);
+                            }
+                            if (prevEq[level] != -1) {
+                                nextIdx[prevEq[level]] = static_cast<int>(currentOrder.size());
+                            }
+                            if (firstIdx[level] == -1) {
+                                firstIdx[level] = static_cast<int>(currentOrder.size());
+                            }
+                            prevEq[level] = static_cast<int>(currentOrder.size());
+                            nextIdx.push_back(-1);
+                            AddFrom(p, currentOrder);
                             traverseNodeStack.pop();
+                            --level;
                         } else {
                             auto join = CAST_NODE(JoinExpr, top.first);
                             if (!join->larg || !join->rarg) {
@@ -912,7 +930,6 @@ public:
                                 traverseNodeStack.push({ join->larg, false });
                                 top.second = true;
                             } else {
-                                
                                 TString op;
                                 switch (join->jointype) {
                                 case JOIN_INNER:
@@ -948,7 +965,6 @@ public:
                                         fields[i] = QAX(StrVal(node));
                                     }
                                     oneJoinGroup.push_back(QL(QA(op), QA("using"), QVL(fields)));
-                                    traverseNodeStack.pop();
                                 } else {
 
                                     if (op != "cross" && !join->quals) {
@@ -970,13 +986,19 @@ public:
                                         auto lambda = L(A("lambda"), QL(), quals);
                                         oneJoinGroup.push_back(QL(QA(op), L(A("PgWhere"), L(A("Void")), lambda)));
                                     }
-
-                                    traverseNodeStack.pop();
                                 }
+                                traverseNodeStack.pop();
+                                --level;
                             }
                         }
                     }
-
+                    for (size_t lvl = 0; lvl < firstIdx.size(); ++lvl) {
+                        int curr = firstIdx[firstIdx.size() - 1ull - lvl];
+                        while (curr != -1) {
+                            fromList.push_back(currentOrder[curr]);
+                            curr = nextIdx[curr];
+                        }
+                    }
                     joinOps.push_back(QVL(oneJoinGroup.data(), oneJoinGroup.size()));
                 }
             }

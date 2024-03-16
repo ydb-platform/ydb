@@ -61,7 +61,23 @@ private:
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
 public:
 
-    THashMap<TString, THashMap<TUnifiedBlobId, std::vector<TEntityChunk>>> GetEntityChunks(const TIndexInfo& info) const;
+    void FullValidation() const;
+
+    bool HasIndexes(const std::set<ui32>& ids) const {
+        auto idsCopy = ids;
+        for (auto&& i : Indexes) {
+            idsCopy.erase(i.GetIndexId());
+            if (idsCopy.empty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void ReorderChunks();
+
+    THashMap<TString, THashMap<TUnifiedBlobId, std::vector<std::shared_ptr<IPortionDataChunk>>>> RestoreEntityChunks(NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
+    THashMap<TString, THashMap<TUnifiedBlobId, std::vector<TEntityChunk>>> GetEntityChunks(const TIndexInfo & info) const;
 
     const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
         return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
@@ -274,7 +290,13 @@ public:
     bool CanIntersectOthers() const { return !Valid() || IsInserted() || IsEvicted(); }
     size_t NumChunks() const { return Records.size(); }
 
-    TPortionInfo CopyWithFilteredColumns(const THashSet<ui32>& columnIds) const;
+    TPortionInfo CopyBeforeChunksRebuild() const {
+        TPortionInfo result = *this;
+        result.Records.clear();
+        result.Indexes.clear();
+        result.BlobIds.clear();
+        return result;
+    }
 
     bool IsEqualWithSnapshots(const TPortionInfo& item) const;
 
@@ -486,7 +508,7 @@ public:
         return result;
     }
 
-    ui64 GetIndexBytes(const std::set<ui32>& columnIds) const;
+    ui64 GetIndexRawBytes(const std::set<ui32>& columnIds) const;
 
     ui64 GetRawBytes(const std::vector<ui32>& columnIds) const;
     ui64 GetRawBytes(const std::set<ui32>& columnIds) const;

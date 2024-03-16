@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     yql_generic_read_actor.cpp
+    yql_generic_lookup_actor.cpp
     yql_generic_source_factory.cpp
     yql_generic_token_provider.cpp
 )

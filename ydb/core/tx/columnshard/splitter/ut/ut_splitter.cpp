@@ -13,16 +13,17 @@ Y_UNIT_TEST_SUITE(Splitter) {
     class TTestSnapshotSchema: public NKikimr::NOlap::ISchemaDetailInfo {
     private:
         mutable std::map<std::string, ui32> Decoder;
+    protected:
+        virtual NKikimr::NOlap::TColumnSaver DoGetColumnSaver(const ui32 columnId) const override {
+            return NKikimr::NOlap::TColumnSaver(nullptr, std::make_shared<NSerialization::TNativeSerializer>(arrow::ipc::IpcOptions::Defaults()));
+        }
+
     public:
         virtual bool NeedMinMaxForColumn(const ui32 /*columnId*/) const override {
             return true;
         }
         virtual bool IsSortedColumn(const ui32 /*columnId*/) const override {
             return false;
-        }
-
-        virtual NKikimr::NOlap::TColumnSaver GetColumnSaver(const ui32 columnId) const override {
-            return NKikimr::NOlap::TColumnSaver(nullptr, std::make_shared<NSerialization::TNativeSerializer>(arrow::ipc::IpcOptions::Defaults()));
         }
 
         virtual std::optional<NKikimr::NOlap::TColumnSerializationStat> GetColumnSerializationStats(const ui32 /*columnId*/) const override {

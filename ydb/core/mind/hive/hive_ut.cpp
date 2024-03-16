@@ -1,4 +1,5 @@
 #include <math.h>
+#include <ranges>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/blobstorage/crypto/default.h>
@@ -297,7 +298,7 @@ namespace {
             &CreateFlatBsController);
     }
 
-    void SetupBoxAndStoragePool(TTestActorRuntime &runtime, ui32 numGroups = 1, const TString& storagePoolNamePrefix = STORAGE_POOL) {
+    void SetupBoxAndStoragePool(TTestActorRuntime &runtime, ui32 numGroups = 1, const TString& storagePoolNamePrefix = STORAGE_POOL, ui64 numPools = 3) {
         TActorId sender = runtime.AllocateEdgeActor();
         ui32 nodeIndex = 0;
         TString pDiskPath;
@@ -334,7 +335,7 @@ namespace {
         host.SetHostConfigId(hostConfig.GetHostConfigId());
         bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineBox()->CopyFrom(boxConfig);
 
-        for (int i = 1; i <= 3; ++i) {
+        for (ui64 i = 1; i <= numPools; ++i) {
             NKikimrBlobStorage::TDefineStoragePool storagePool;
             storagePool.SetBoxId(1);
             storagePool.SetStoragePoolId(i);
@@ -357,13 +358,13 @@ namespace {
         UNIT_ASSERT(configureResponse->Record.GetResponse().GetSuccess());
     }
 
-    void Setup(TTestActorRuntime& runtime, bool isLocalEnabled = true, ui32 numGroups = 1, const std::function<void(TAppPrepare&)> & appConfigSetup = nullptr) {
+    void Setup(TTestActorRuntime& runtime, bool isLocalEnabled = true, ui32 numGroups = 1, const std::function<void(TAppPrepare&)> & appConfigSetup = nullptr, ui64 numPools = 3) {
         using namespace NMalloc;
         TMallocInfo mallocInfo = MallocInfo();
         mallocInfo.SetParam("FillMemoryOnAllocation", "false");
         SetupLogging(runtime);
         SetupServices(runtime, isLocalEnabled, appConfigSetup);
-        SetupBoxAndStoragePool(runtime, numGroups);
+        SetupBoxAndStoragePool(runtime, numGroups, STORAGE_POOL, numPools);
     }
 
     class THiveInitialEventsFilter : TNonCopyable {
@@ -463,20 +464,24 @@ void InitSchemeRoot(TTestBasicRuntime& runtime, const TActorId& sender) {
 }
 
 Y_UNIT_TEST_SUITE(THiveTest) {
-    template <typename KeyType, typename ValueType>
-    static double GetStDev(const THashMap<KeyType, ValueType>& values) {
+    template <std::ranges::range TRange>
+    static double GetStDev(const TRange& values) {
         double sum = double();
-        if (values.empty())
+        size_t cnt = 0;
+        for (const auto& v : values) {
+            sum += v;
+            ++cnt;
+        }
+        if (cnt == 0) {
             return sum;
-        for (const auto& v : values)
-            sum += v.second;
-        double mean = sum / values.size();
+        }
+        double mean = sum / cnt;
         sum = double();
         for (const auto& v : values) {
-            auto diff = (double)v.second - mean;
+            auto diff = (double)v - mean;
             sum += diff * diff;
         }
-        auto div = sum / values.size();
+        auto div = sum / cnt;
         auto st_dev = ::sqrt(div);
         return st_dev;
     }
@@ -6215,4 +6220,271 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TStorageBalanceTest) {
+    static constexpr i64 DEFAULT_BIND_SIZE = 100'000'000;
+    const std::vector<TString> STORAGE_POOLS = {"def1"};
+
+    class TMockBSController {
+    protected:
+        std::unordered_map<TString, std::vector<NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters>> GroupsByPool;
+        std::unordered_map<ui32, std::pair<TString, size_t>> GroupIdToIdx;
+        std::unordered_map<ui64, std::vector<ui32>> TabletToGroups;
+        ui64 NoChangesCounter = 0;
+
+        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters& FindGroup(ui32 groupId) {
+            const auto& [pool, idx] = GroupIdToIdx[groupId];
+            return GroupsByPool[pool][idx];
+        }
+
+        void UpdateSpace(const std::vector<ui32>& groups, i64 diff) {
+            for (ui32 groupId : groups) {
+                auto& group = FindGroup(groupId);
+                group.SetAllocatedSize(group.GetAllocatedSize() + diff);
+                auto* resources = group.MutableCurrentResources();
+                resources->SetSpace(resources->GetSpace() + diff);
+                resources->SetOccupancy(static_cast<double>(group.GetAllocatedSize()) / group.GetAssuredResources().GetSpace());
+            }
+        }
+
+    public:
+        void AddGroup(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters&& group) {
+            NoChangesCounter = 0;
+            const auto& name = group.GetStoragePoolName();
+            auto& groups = GroupsByPool[name];
+            GroupIdToIdx[group.GetGroupID()] = {name, groups.size()};
+            groups.emplace_back(group);
+            PrintState();
+        }
+
+        void OnBootTablet(const NKikimrTabletBase::TTabletStorageInfo& storageInfo) {
+            NoChangesCounter = 0;
+            auto tabletId = storageInfo.GetTabletID();
+            auto it = TabletToGroups.find(tabletId);
+            if (it != TabletToGroups.end()) {
+                UpdateSpace(it->second, -DEFAULT_BIND_SIZE);
+            }
+            std::vector<ui32> channelGroups;
+            for (const auto& channel : storageInfo.GetChannels()) {
+                channelGroups.push_back(channel.GetHistory().rbegin()->GetGroupID());
+            }
+            UpdateSpace(channelGroups, +DEFAULT_BIND_SIZE);
+            TabletToGroups.insert_or_assign(tabletId, channelGroups);
+            PrintState();
+        }
+
+        NKikimrBlobStorage::TEvControllerSelectGroupsResult SelectGroups(const NKikimrBlobStorage::TEvControllerSelectGroups& request) {
+            ++NoChangesCounter;
+            NKikimrBlobStorage::TEvControllerSelectGroupsResult response;
+            response.SetStatus(NKikimrProto::OK);
+            for (const auto& gp : request.GetGroupParameters()) {
+                const auto& name = gp.GetStoragePoolSpecifier().GetName();
+                auto* matchingGroups = response.AddMatchingGroups();
+                for (const auto& groupParams : GroupsByPool[name]) {
+                    matchingGroups->MutableGroups()->Add()->CopyFrom(groupParams);
+                }
+            }
+            PrintState();
+            return response;
+        }
+
+        void PrintState() const {
+            Cerr << "\033c";
+            for (const auto& [pool, groups] : GroupsByPool) {
+                Cerr << "[" << pool << "]" << Endl;
+                for (const auto& group : groups) {
+                    unsigned lineSize = std::min(std::round(group.GetAssuredResources().GetSpace() / DEFAULT_BIND_SIZE), 100.0);
+                    unsigned taken = std::round(group.GetCurrentResources().GetOccupancy() * lineSize);
+                    for (unsigned i = 0; i < lineSize; ++i) {
+                        if (i < taken) {
+                            Cerr << "*";
+                        } else {
+                            Cerr << "-";
+                        }
+                    }
+                    Cerr << " (" << group.GetCurrentResources().GetOccupancy() << ")";
+                    Cerr << Endl;
+                }
+                Cerr << Endl;
+            }
+            Sleep(TDuration::Seconds(.1));
+        }
+
+        auto GetObserver(TTestActorRuntime& runtime, TActorId edgeActor) {
+            return [this, &runtime, edgeActor](TAutoPtr<IEventHandle>& ev) {
+                switch (ev->GetTypeRewrite()) {
+                    case TEvBlobStorage::EvControllerSelectGroups: {
+                        const auto& record = ev->Get<TEvBlobStorage::TEvControllerSelectGroups>()->Record;
+                        auto response = std::make_unique<TEvBlobStorage::TEvControllerSelectGroupsResult>();
+                        response->Record.CopyFrom(SelectGroups(record));
+                        runtime.Send(new IEventHandle(ev->Sender, edgeActor, response.release()));
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    case TEvLocal::EvBootTablet: {
+                        const auto& info = ev->Get<TEvLocal::TEvBootTablet>()->Record.GetInfo();
+                        OnBootTablet(info);
+                        return TTestActorRuntime::EEventAction::PROCESS;
+                    }
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+        }
+
+        bool IsStable() const {
+            return NoChangesCounter >= 5;
+        }
+
+        double GetOccupancyStDev(const TString& pool) {
+            auto getOccupancy = [](auto&& g) {
+                return g.GetCurrentResources().GetOccupancy();
+            };
+            return NTestSuiteTHiveTest::GetStDev(GroupsByPool[pool] | std::views::transform(getOccupancy));
+        }
+    };
+
+    TChannelBind GetChannelBindForMock(const TString& storagePool) {
+        TChannelBind bind;
+        bind.SetStoragePoolName(storagePool);
+        bind.SetSize(2 * DEFAULT_BIND_SIZE);
+        return bind;
+    }
+
+    const TChannelsBindings BINDED_CHANNELS_FOR_MOCK(3, GetChannelBindForMock("def1"));
+
+    Y_UNIT_TEST(TestScenario1) {
+        TMockBSController bsc;
+        ui32 groupId = 0x80000000;
+        for (const auto& pool : STORAGE_POOLS) {
+            NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters group;
+            group.SetGroupID(++groupId);
+            group.SetStoragePoolName(pool);
+            ui64 size = DEFAULT_BIND_SIZE * 300;
+            group.MutableAssuredResources()->SetSpace(size);
+            group.MutableAssuredResources()->SetOccupancy(0.0);
+            bsc.AddGroup(std::move(group));
+        }
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 8, [](TAppPrepare& app) {
+            app.HiveConfig.SetMinPeriodBetweenReassign(0);
+            app.HiveConfig.SetMinPeriodBetweenBalance(0);
+            app.HiveConfig.SetStorageInfoRefreshFrequency(100);
+            app.HiveConfig.SetMinStorageScatterToBalance(0.5);
+        }, 1);
+        TActorId actor = runtime.AllocateEdgeActor();
+        runtime.SetObserverFunc(bsc.GetObserver(runtime, actor));
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        NTestSuiteTHiveTest::MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        for (unsigned i = 0; i < 50; ++i) {
+            ui64 tabletId = NTestSuiteTHiveTest::SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, i, tabletType, BINDED_CHANNELS_FOR_MOCK), 0, true);
+            NTestSuiteTHiveTest::MakeSureTabletIsUp(runtime, tabletId, 0);
+        }
+        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters group;
+        group.SetGroupID(++groupId);
+        group.SetStoragePoolName("def1");
+        ui64 size = DEFAULT_BIND_SIZE * 300;
+        group.MutableAssuredResources()->SetSpace(size);
+        group.MutableAssuredResources()->SetOccupancy(0.0);
+        bsc.AddGroup(std::move(group));
+        while (!bsc.IsStable()) {
+            runtime.DispatchEvents({.CustomFinalCondition = [&bsc] { return bsc.IsStable(); }});
+        }
+        UNIT_ASSERT_LE(bsc.GetOccupancyStDev("def1"), 0.01);
+    }
+
+    Y_UNIT_TEST(TestScenario2) {
+        TMockBSController bsc;
+        ui32 groupId = 0x80000000;
+        for (const auto& pool : STORAGE_POOLS) {
+            for (unsigned i = 0; i < 10; ++i) {
+                NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters group;
+                group.SetGroupID(++groupId);
+                group.SetStoragePoolName(pool);
+                ui64 size = DEFAULT_BIND_SIZE * 30;
+                group.MutableAssuredResources()->SetSpace(size);
+                group.MutableAssuredResources()->SetOccupancy(0.0);
+                bsc.AddGroup(std::move(group));
+            }
+        }
+        TTestBasicRuntime runtime(10, false);
+        Setup(runtime, true, 13, [](TAppPrepare& app) {
+            app.HiveConfig.SetMinPeriodBetweenReassign(0);
+            app.HiveConfig.SetMinPeriodBetweenBalance(0);
+            app.HiveConfig.SetStorageInfoRefreshFrequency(10);
+            app.HiveConfig.SetMinStorageScatterToBalance(0.5);
+        }, 1);
+        TActorId actor = runtime.AllocateEdgeActor();
+        runtime.SetObserverFunc(bsc.GetObserver(runtime, actor));
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        NTestSuiteTHiveTest::MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        for (unsigned i = 0; i < 100; ++i) {
+            ui64 tabletId = NTestSuiteTHiveTest::SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, i, tabletType, BINDED_CHANNELS_FOR_MOCK), 0, true);
+            NTestSuiteTHiveTest::MakeSureTabletIsUp(runtime, tabletId, 0);
+        }
+        for (unsigned i = 0; i < 2; ++i) {
+            NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters group;
+            group.SetGroupID(++groupId);
+            group.SetStoragePoolName("def1");
+            ui64 size = DEFAULT_BIND_SIZE * 10;
+            group.MutableAssuredResources()->SetSpace(size);
+            group.MutableAssuredResources()->SetOccupancy(0.0);
+            bsc.AddGroup(std::move(group));
+        }
+        while (!bsc.IsStable()) {
+            runtime.DispatchEvents({.CustomFinalCondition = [&bsc] { return bsc.IsStable(); }});
+        }
+        UNIT_ASSERT_LE(bsc.GetOccupancyStDev("def1"), 0.1);
+    }
+
+    Y_UNIT_TEST(TestScenario3) {
+        TMockBSController bsc;
+        ui32 groupId = 0x80000000;
+        for (const auto& pool : STORAGE_POOLS) {
+            for (unsigned i = 0; i < 1; ++i) {
+                NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters group;
+                group.SetGroupID(++groupId);
+                group.SetStoragePoolName(pool);
+                ui64 size = DEFAULT_BIND_SIZE * 500;
+                group.MutableAssuredResources()->SetSpace(size);
+                group.MutableAssuredResources()->SetOccupancy(0.0);
+                bsc.AddGroup(std::move(group));
+            }
+        }
+        TTestBasicRuntime runtime(10, false);
+        Setup(runtime, true, 13, [](TAppPrepare& app) {
+            app.HiveConfig.SetMinPeriodBetweenReassign(0);
+            app.HiveConfig.SetStorageInfoRefreshFrequency(10);
+            app.HiveConfig.SetMinPeriodBetweenBalance(0);
+            app.HiveConfig.SetMinStorageScatterToBalance(0.5);
+        }, 1);
+        TActorId actor = runtime.AllocateEdgeActor();
+        runtime.SetObserverFunc(bsc.GetObserver(runtime, actor));
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        NTestSuiteTHiveTest::MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        for (unsigned i = 0; i < 100; ++i) {
+            ui64 tabletId = NTestSuiteTHiveTest::SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, i, tabletType, BINDED_CHANNELS_FOR_MOCK), 0, true);
+            NTestSuiteTHiveTest::MakeSureTabletIsUp(runtime, tabletId, 0);
+        }
+        for (unsigned i = 0; i < 10; ++i) {
+            NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters group;
+            group.SetGroupID(++groupId);
+            group.SetStoragePoolName("def1");
+            ui64 size = DEFAULT_BIND_SIZE * 500;
+            group.MutableAssuredResources()->SetSpace(size);
+            group.MutableAssuredResources()->SetOccupancy(0.0);
+            bsc.AddGroup(std::move(group));
+        }
+        while (!bsc.IsStable()) {
+            runtime.DispatchEvents({.CustomFinalCondition = [&bsc] { return bsc.IsStable(); }});
+        }
+        UNIT_ASSERT_LE(bsc.GetOccupancyStDev("def1"), 0.1);
+    }
+}
 }

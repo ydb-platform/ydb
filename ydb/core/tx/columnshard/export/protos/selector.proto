@@ -1,0 +1,15 @@
+import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
+
+package NKikimrColumnShardExportProto;
+
+message TSnapshotSelector {
+    optional NKikimrColumnShardProto.TSnapshot Snapshot = 1;
+}
+
+message TSelectorContainer {
+    optional string ClassName = 1;
+
+    oneof Implementation {
+        TSnapshotSelector Snapshot = 40;
+    }
+}

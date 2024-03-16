@@ -36,20 +36,19 @@ void TTTLColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChan
 }
 
 std::optional<TPortionInfoWithBlobs> TTTLColumnEngineChanges::UpdateEvictedPortion(TPortionForEviction& info, NBlobOperations::NRead::TCompositeReadBlobs& srcBlobs,
-    TConstructionContext& context) const {
+    TConstructionContext& context) const
+{
     const TPortionInfo& portionInfo = info.GetPortionInfo();
     auto& evictFeatures = info.GetFeatures();
-    Y_ABORT_UNLESS(portionInfo.GetMeta().GetTierName() != evictFeatures.GetTargetTierName());
-
     auto blobSchema = context.SchemaVersions.GetSchema(portionInfo.GetMinSnapshot());
-    auto portionWithBlobs = TPortionInfoWithBlobs::RestorePortion(portionInfo, srcBlobs, blobSchema->GetIndexInfo(), SaverContext.GetStoragesManager());
+    Y_ABORT_UNLESS(portionInfo.GetMeta().GetTierName() != evictFeatures.GetTargetTierName() || blobSchema->GetVersion() < evictFeatures.GetTargetScheme()->GetVersion());
 
-    portionWithBlobs.GetPortionInfo().MutableMeta().SetTierName(evictFeatures.GetTargetTierName());
-    auto resultSchema = context.SchemaVersions.GetLastSchema();
-    TSaverContext saverContext(SaverContext.GetStoragesManager());
-    saverContext.SetExternalSerializer(evictFeatures.GetCustomTierSerializer());
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("portion_for_eviction", portionInfo.DebugString());
-    return portionWithBlobs.ChangeSaver(resultSchema, saverContext);
+    auto portionWithBlobs = TPortionInfoWithBlobs::RestorePortion(portionInfo, srcBlobs, blobSchema->GetIndexInfo(), SaverContext.GetStoragesManager());
+    TPortionInfoWithBlobs result = TPortionInfoWithBlobs::SyncPortion(
+        std::move(portionWithBlobs), blobSchema, evictFeatures.GetTargetScheme(), evictFeatures.GetTargetTierName(), SaverContext.GetStoragesManager(), context.Counters.SplitterCounters);
+
+    result.GetPortionInfo().MutableMeta().SetTierName(evictFeatures.GetTargetTierName());
+    return std::move(result);
 }
 
 NKikimr::TConclusionStatus TTTLColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {

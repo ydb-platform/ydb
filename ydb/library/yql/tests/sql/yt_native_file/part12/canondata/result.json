@@ -2409,6 +2409,27 @@
             "uri": "https://{canondata_backend}/1942415/14c2050022adcb6379d90c4a2a09abf0847e7643/resource.tar.gz#test.test_pg-tpch-q16-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[pg-variadic_array_arg-default.txt-Debug]": [
+        {
+            "checksum": "8ca7d22107f6a514104e3669b8015871",
+            "size": 511,
+            "uri": "https://{canondata_backend}/1937150/18f6be1226f90a509c838f8303749f0e053d2e45/resource.tar.gz#test.test_pg-variadic_array_arg-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[pg-variadic_array_arg-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1937150/18f6be1226f90a509c838f8303749f0e053d2e45/resource.tar.gz#test.test_pg-variadic_array_arg-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-variadic_array_arg-default.txt-Results]": [
+        {
+            "checksum": "64d4e5a10ce4702fb690e678b070597f",
+            "size": 678,
+            "uri": "https://{canondata_backend}/1937150/18f6be1226f90a509c838f8303749f0e053d2e45/resource.tar.gz#test.test_pg-variadic_array_arg-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[pg_catalog-pg_class-default.txt-Debug]": [
         {
             "checksum": "99f6276f6794cfca07f55964603dacfe",
@@ -2446,9 +2467,9 @@
     ],
     "test.test[pg_catalog-pg_description_pg_syntax-default.txt-Results]": [
         {
-            "checksum": "d72766a7bbd6292b814d9480e960499a",
+            "checksum": "106a27931c923ab31820f99011121428",
             "size": 2451,
-            "uri": "https://{canondata_backend}/1871182/f42651a4c8505a845b01023d9d7e8e03f2e50c2d/resource.tar.gz#test.test_pg_catalog-pg_description_pg_syntax-default.txt-Results_/results.txt"
+            "uri": "https://{canondata_backend}/1773845/cf0dac17abc767343cda66f3318ef71aebeb2424/resource.tar.gz#test.test_pg_catalog-pg_description_pg_syntax-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pg_catalog-pg_timezone_abbrevs-default.txt-Debug]": [

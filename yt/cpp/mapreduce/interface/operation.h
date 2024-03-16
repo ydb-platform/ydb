@@ -1202,7 +1202,7 @@ struct TRawMapReduceOperationSpec
 ///
 /// @brief Schema inference mode.
 ///
-/// @see https://ytsaurus.tech/docs/en/user-guide/storage/static_schema.html#schema_inference
+/// @see https://ytsaurus.tech/docs/en/user-guide/storage/static-schema.html#schema_inference
 enum class ESchemaInferenceMode : int
 {
     FromInput   /* "from_input" */,
@@ -1258,7 +1258,7 @@ struct TSortOperationSpec
     ///
     /// @brief Inference mode for output table schema.
     ///
-    /// @see https://ytsaurus.tech/docs/en/user-guide/storage/static_schema.html#schema_inference
+    /// @see https://ytsaurus.tech/docs/en/user-guide/storage/static-schema.html#schema_inference
     FLUENT_FIELD_OPTION(ESchemaInferenceMode, SchemaInferenceMode);
 
     ///
@@ -1332,7 +1332,7 @@ struct TMergeOperationSpec
     ///
     /// @brief Inference mode for output table schema.
     ///
-    /// @see https://ytsaurus.tech/docs/en/user-guide/storage/static_schema.html#schema_inference
+    /// @see https://ytsaurus.tech/docs/en/user-guide/storage/static-schema.html#schema_inference
     FLUENT_FIELD_OPTION(ESchemaInferenceMode, SchemaInferenceMode);
 };
 
@@ -1358,7 +1358,7 @@ struct TEraseOperationSpec
     ///
     /// @brief Inference mode for output table schema.
     ///
-    /// @see https://ytsaurus.tech/docs/en/user-guide/storage/static_schema.html#schema_inference
+    /// @see https://ytsaurus.tech/docs/en/user-guide/storage/static-schema.html#schema_inference
     FLUENT_FIELD_OPTION(ESchemaInferenceMode, SchemaInferenceMode);
 };
 
@@ -1392,7 +1392,7 @@ struct TRemoteCopyOperationSpec
     ///
     /// @brief Inference mode for output table schema.
     ///
-    /// @see https://ytsaurus.tech/docs/en/user-guide/storage/static_schema.html#schema_inference
+    /// @see https://ytsaurus.tech/docs/en/user-guide/storage/static-schema.html#schema_inference
     FLUENT_FIELD_OPTION(ESchemaInferenceMode, SchemaInferenceMode);
 
     ///

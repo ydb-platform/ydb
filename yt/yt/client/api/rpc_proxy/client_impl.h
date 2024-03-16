@@ -323,6 +323,9 @@ public:
     TFuture<TCellIdToSnapshotIdMap> BuildMasterSnapshots(
         const TBuildMasterSnapshotsOptions& options) override;
 
+    TFuture<TCellIdToSequenceNumberMap> GetMasterConsistentState(
+        const TGetMasterConsistentStateOptions& options) override;
+
     TFuture<void> ExitReadOnly(
         NHydra::TCellId cellId,
         const TExitReadOnlyOptions& options) override;

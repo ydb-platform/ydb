@@ -108,57 +108,6 @@ namespace NKikimr {
         }
     };
 
-    struct TEvBlobStorage::TEvControllerGroupReconfigureWipe : public TEventPB<
-        TEvBlobStorage::TEvControllerGroupReconfigureWipe,
-        NKikimrBlobStorage::TEvControllerGroupReconfigureWipe,
-        TEvBlobStorage::EvControllerGroupReconfigureWipe>
-    {
-        TEvControllerGroupReconfigureWipe()
-        {}
-
-        TEvControllerGroupReconfigureWipe(ui32 nodeId, ui32 pDiskId, ui32 vSlotId) {
-            auto *id = Record.MutableVSlotId();
-            id->SetNodeId(nodeId);
-            id->SetPDiskId(pDiskId);
-            id->SetVSlotId(vSlotId);
-        }
-
-        TString ToString() const override {
-            TStringStream str;
-            str << "{TEvControllerGroupReconfigureWipe";
-            str << " Record# " << Record.DebugString();
-            str << "}";
-            return str.Str();
-        }
-    };
-
-    struct TEvBlobStorage::TEvControllerGroupReconfigureWipeResult : public TEventPB<
-        TEvBlobStorage::TEvControllerGroupReconfigureWipeResult,
-        NKikimrBlobStorage::TEvControllerGroupReconfigureWipeResult,
-        TEvBlobStorage::EvControllerGroupReconfigureWipeResult>
-    {
-        TEvControllerGroupReconfigureWipeResult()
-        {}
-
-        TEvControllerGroupReconfigureWipeResult(NKikimrProto::EReplyStatus status) {
-            Record.SetStatus(status);
-        }
-
-        TEvControllerGroupReconfigureWipeResult(NKikimrProto::EReplyStatus status, TString errorReason) {
-            Record.SetStatus(status);
-            Record.SetErrorReason(errorReason);
-        }
-
-        TString ToString() const override {
-            TStringStream str;
-            str << "{TEvControllerGroupReconfigureWipeResult";
-            str << " Status# " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
-            str << " ErrorReason# \"" << (Record.HasErrorReason() ? Record.GetErrorReason().c_str() : "") << "\"";
-            str << "}";
-            return str.Str();
-        }
-    };
-
     struct TEvBlobStorage::TEvControllerGetGroup : public TEventPB<
         TEvBlobStorage::TEvControllerGetGroup,
         NKikimrBlobStorage::TEvControllerGetGroup,

@@ -1,3 +1,5 @@
+Registering pre-existing tables
+	emp
 <sql-statement>
 CREATE TABLE xmltest (
     id int,

@@ -12,11 +12,6 @@
 
 namespace NYdb::NTopic {
 
-TTopicClient::TTopicClient(const TDriver& driver, const TTopicClientSettings& settings)
-    : Impl_(std::make_shared<TImpl>(CreateInternalInterface(driver), settings))
-{
-}
-
 TDescribeTopicResult::TDescribeTopicResult(TStatus&& status, Ydb::Topic::DescribeTopicResult&& result)
     : TStatus(std::move(status))
     , TopicDescription_(std::move(result))
@@ -409,6 +404,20 @@ ui64 TPartitionInfo::GetPartitionId() const {
     return PartitionId_;
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TTopicClient
+
+TTopicClient::TTopicClient(const TDriver& driver, const TTopicClientSettings& settings)
+    : Impl_(std::make_shared<TImpl>(CreateInternalInterface(driver), settings))
+{
+    ProvideCodec(ECodec::GZIP, MakeHolder<TGzipCodec>());
+    ProvideCodec(ECodec::LZOP, MakeHolder<TUnsupportedCodec>());
+    ProvideCodec(ECodec::ZSTD, MakeHolder<TZstdCodec>());
+}
+
+void TTopicClient::ProvideCodec(ECodec codecId, THolder<ICodec>&& codecImpl) {
+    return Impl_->ProvideCodec(codecId, std::move(codecImpl));
+}
 
 TAsyncStatus TTopicClient::CreateTopic(const TString& path, const TCreateTopicSettings& settings) {
     return Impl_->CreateTopic(path, settings);
@@ -477,6 +486,10 @@ std::shared_ptr<IWriteSession> TTopicClient::CreateWriteSession(const TWriteSess
 TAsyncStatus TTopicClient::CommitOffset(const TString& path, ui64 partitionId, const TString& consumerName, ui64 offset,
     const TCommitOffsetSettings& settings) {
     return Impl_->CommitOffset(path, partitionId, consumerName, offset, settings);
+}
+
+void TTopicClient::OverrideCodec(ECodec codecId, THolder<ICodec>&& codecImpl) {
+    return Impl_->OverrideCodec(codecId, std::move(codecImpl));
 }
 
 } // namespace NYdb::NTopic

@@ -1105,16 +1105,6 @@ message TEvControllerNodeServiceSetUpdate {
     optional uint64 AvailDomain = 7; // availability domain of the controller
 }
 
-message TEvControllerGroupReconfigureWipe {
-    reserved 1;
-    optional NKikimrBlobStorage.TVSlotId VSlotId = 2;
-}
-
-message TEvControllerGroupReconfigureWipeResult {
-    optional NKikimrProto.EReplyStatus Status = 1;
-    optional string ErrorReason = 2;
-}
-
 message TEvControllerConfigRequest {
     reserved 1;
     optional NKikimrBlobStorage.TConfigRequest Request = 2;

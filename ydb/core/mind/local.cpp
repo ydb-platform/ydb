@@ -278,7 +278,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         if (!record.GetResourceMaximum().HasCPU()) {
             TExecutorPoolStats poolStats;
             TVector<TExecutorThreadStats> statsCopy;
-            ctx.ExecutorThread.ActorSystem->GetPoolStats(AppData()->UserPoolId, poolStats, statsCopy);
+            TVector<TExecutorThreadStats> sharedStatsCopy;
+            ctx.ExecutorThread.ActorSystem->GetPoolStats(AppData()->UserPoolId, poolStats, statsCopy, sharedStatsCopy);
             if (!statsCopy.empty()) {
                 record.MutableResourceMaximum()->SetCPU(poolStats.CurrentThreadCount * 1000000);
             }

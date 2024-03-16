@@ -35,10 +35,6 @@ namespace NYdb::NPersQueue::NCompressionDetails {
     extern TString Decompress(const Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::MessageData& data);
 }
 
-namespace NYdb::NTopic::NCompressionDetails {
-    extern TString Decompress(const Ydb::Topic::StreamReadMessage::ReadResponse::MessageData& data, Ydb::Topic::Codec codec);
-}
-
 namespace NYdb::NPersQueue {
 
 static const bool RangesMode = !GetEnv("PQ_OFFSET_RANGES_MODE").empty();
@@ -2568,23 +2564,28 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
             maxOffset = Max(maxOffset, static_cast<i64>(data.offset()));
 
             try {
-
                 if constexpr (UseMigrationProtocol) {
                     if (Parent->DoDecompress
                         && data.codec() != Ydb::PersQueue::V1::CODEC_RAW
                         && data.codec() != Ydb::PersQueue::V1::CODEC_UNSPECIFIED
                     ) {
-                        TString decompressed = NCompressionDetails::Decompress(data);
-                        data.set_data(decompressed);
-                        data.set_codec(Ydb::PersQueue::V1::CODEC_RAW);
+                        if (auto session = Parent->CbContext->LockShared()) {
+                            const NYdb::NTopic::ICodec* codecImpl = session->GetCodecImplOrThrow(static_cast<ECodec>(data.codec()));
+                            TString decompressed = codecImpl->Decompress(data.data());
+                            data.set_data(decompressed);
+                            data.set_codec(Ydb::PersQueue::V1::CODEC_RAW);
+                        }
                     }
                 } else {
                     if (Parent->DoDecompress
                         && static_cast<Ydb::Topic::Codec>(batch.codec()) != Ydb::Topic::CODEC_RAW
                         && static_cast<Ydb::Topic::Codec>(batch.codec()) != Ydb::Topic::CODEC_UNSPECIFIED
                     ) {
-                        TString decompressed = ::NYdb::NTopic::NCompressionDetails::Decompress(data, static_cast<Ydb::Topic::Codec>(batch.codec()));
-                        data.set_data(decompressed);
+                        if (auto session = Parent->CbContext->LockShared()) {
+                            const NYdb::NTopic::ICodec* codecImpl = session->GetCodecImplOrThrow(static_cast<NTopic::ECodec>(batch.codec()));
+                            TString decompressed = codecImpl->Decompress(data.data());
+                            data.set_data(decompressed);
+                        }
                     }
                 }
 

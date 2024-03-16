@@ -80,6 +80,8 @@ message TActorSystemConfig {
         optional uint32 MaxThreads = 13; // Higher balancing bound, should be not lower than `Threads`
         optional int32 Priority = 16;
         optional int32 MaxAvgPingDeviation = 17;
+
+        optional bool HasSharedThread = 18;
     }
 
     message TScheduler {
@@ -114,6 +116,7 @@ message TActorSystemConfig {
     optional uint32 CpuCount = 13;
     optional ENodeType NodeType = 14 [default = COMPUTE];
     optional uint32 ForceIOPoolThreads = 17;
+    optional bool UseSharedThreads = 18;
 
     optional bool MonitorStuckActors = 15;
     optional EActorSystemProfile ActorSystemProfile = 16;
@@ -1370,6 +1373,7 @@ message THiveConfig {
     optional double MinStorageScatterToBalance = 71 [default = 999]; // storage balancer trigger is disabled by default
     optional double MinGroupUsageToBalance = 72 [default = 0.1];
     optional uint64 StorageBalancerInflight = 73 [default = 1];
+    optional bool EnableDestroyOperations = 74 [default = false];
 }
 
 message TColumnShardConfig {
@@ -1558,7 +1562,8 @@ message TTracingConfig {
     }
 
     message TSelectors {
-        optional string RequestType = 1;
+        reserved 1;
+        repeated string RequestTypes = 3;
         optional string Database = 2;
     }
 

@@ -44,7 +44,7 @@ struct IYsonStructParameter
 
     virtual void Save(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const = 0;
 
-    virtual void Postprocess(const TYsonStructBase* self, const NYPath::TYPath& path) const = 0;
+    virtual void PostprocessParameter(const TYsonStructBase* self, const NYPath::TYPath& path) const = 0;
 
     virtual void SetDefaultsInitialized(TYsonStructBase* self) = 0;
 
@@ -69,7 +69,7 @@ struct IYsonStructMeta
     virtual const std::vector<std::pair<TString, IYsonStructParameterPtr>>& GetParameterSortedList() const = 0;
     virtual void SetDefaultsOfInitializedStruct(TYsonStructBase* target) const = 0;
     virtual const THashSet<TString>& GetRegisteredKeys() const = 0;
-    virtual void Postprocess(TYsonStructBase* target, const TYPath& path) const = 0;
+    virtual void PostprocessStruct(TYsonStructBase* target, const TYPath& path) const = 0;
     virtual IYsonStructParameterPtr GetParameter(const TString& keyOrAlias) const = 0;
     virtual void LoadParameter(TYsonStructBase* target, const TString& key, const NYTree::INodePtr& node) const = 0;
 
@@ -114,7 +114,7 @@ public:
     IYsonStructParameterPtr GetParameter(const TString& keyOrAlias) const override;
     void LoadParameter(TYsonStructBase* target, const TString& key, const NYTree::INodePtr& node) const override;
 
-    void Postprocess(TYsonStructBase* target, const TYPath& path) const override;
+    void PostprocessStruct(TYsonStructBase* target, const TYPath& path) const override;
 
     void LoadStruct(
         TYsonStructBase* target,
@@ -205,7 +205,7 @@ class TYsonStructParameter
     : public IYsonStructParameter
 {
 public:
-    using TPostprocessor = std::function<void(const TValue&)>;
+    using TValidator = std::function<void(const TValue&)>;
     using TValueType = typename TOptionalTraits<TValue>::TValue;
 
     TYsonStructParameter(
@@ -228,7 +228,7 @@ public:
         const TLoadParameterOptions& options,
         const std::function<void()>& validate) override;
 
-    void Postprocess(const TYsonStructBase* self, const NYPath::TYPath& path) const override;
+    void PostprocessParameter(const TYsonStructBase* self, const NYPath::TYPath& path) const override;
     void SetDefaultsInitialized(TYsonStructBase* self) override;
     void Save(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const override;
     bool CanOmitValue(const TYsonStructBase* self) const override;
@@ -251,7 +251,7 @@ public:
     TYsonStructParameter& DontSerializeDefault();
     // Register general purpose validator for parameter. Used by other validators.
     // It is called after deserialization.
-    TYsonStructParameter& CheckThat(TPostprocessor validator);
+    TYsonStructParameter& CheckThat(TValidator validator);
     // Register validator that checks value to be greater than given value.
     TYsonStructParameter& GreaterThan(TValueType value);
     // Register validator that checks value to be greater than or equal to given value.
@@ -279,7 +279,7 @@ private:
     std::unique_ptr<IYsonFieldAccessor<TValue>> FieldAccessor_;
     std::optional<std::function<TValue()>> DefaultCtor_;
     bool SerializeDefault_ = true;
-    std::vector<TPostprocessor> Postprocessors_;
+    std::vector<TValidator> Validators_;
     std::vector<TString> Aliases_;
     bool TriviallyInitializedIntrusivePtr_ = false;
     bool Optional_ = false;

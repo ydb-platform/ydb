@@ -2158,17 +2158,13 @@ public:
         LOG_CORO_D("RunCoroBlockArrowParserOverFile - FINISHED");
     }
 
-    STRICT_STFUNC_EXC(StateFunc,
+    STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvReadStarted, Handle);
         hFunc(TEvPrivate::TEvDataPart, Handle);
         hFunc(TEvPrivate::TEvReadFinished, Handle);
         hFunc(TEvPrivate::TEvContinue, Handle);
         hFunc(TEvPrivate::TEvReadResult2, Handle);
         hFunc(NActors::TEvents::TEvPoison, Handle);
-        , catch (const std::exception& e) {
-            TIssues issues{TIssue{TStringBuilder() << "An unknown exception has occurred: '" << e.what() << "'"}};
-            Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::INTERNAL_ERROR));
-        }
     )
 
     void ProcessOneEvent() {

@@ -75,6 +75,7 @@ PEERDIR(
     ydb/library/yql/providers/common/activation
     ydb/library/yql/providers/common/provider
     ydb/library/yql/providers/common/schema/expr
+    ydb/library/yql/providers/common/structured_token
     ydb/library/yql/providers/common/transform
     ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/expr_nodes

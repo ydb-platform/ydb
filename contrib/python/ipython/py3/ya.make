@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(8.21.0)
+VERSION(8.22.2)
 
 LICENSE(BSD-3-Clause)
 
@@ -174,6 +174,7 @@ PY_SRCS(
     IPython/utils/__init__.py
     IPython/utils/_process_cli.py
     IPython/utils/_process_common.py
+    IPython/utils/_process_emscripten.py
     IPython/utils/_process_posix.py
     IPython/utils/_process_win32.py
     IPython/utils/_process_win32_controller.py

@@ -7,9 +7,8 @@
 
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
-#include <ydb/library/yverify_stream/yverify_stream.h>
-
 #include <ydb/library/actors/core/events.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
@@ -23,7 +22,7 @@ class TReplication::TImpl {
     ITarget* CreateTarget(ui64 id, ETargetKind kind, Args&&... args) const {
         switch (kind) {
         case ETargetKind::Table:
-            return new TTableTarget(ReplicationId, id, std::forward<Args>(args)...);
+            return new TTableTarget(id, std::forward<Args>(args)...);
         }
     }
 
@@ -51,9 +50,9 @@ class TReplication::TImpl {
         }
     }
 
-    void ProgressTargets(const TActorContext& ctx) {
+    void ProgressTargets(TReplication::TPtr self, const TActorContext& ctx) {
         for (auto& [_, target] : Targets) {
-            target->Progress(PathId.OwnerId, YdbProxy, ctx);
+            target->Progress(self, ctx);
         }
     }
 
@@ -89,7 +88,7 @@ public:
         Targets.erase(id);
     }
 
-    void Progress(const TActorContext& ctx) {
+    void Progress(TReplication::TPtr self, const TActorContext& ctx) {
         if (!YdbProxy) {
             THolder<IActor> ydbProxy;
             switch (Config.GetCredentialsCase()) {
@@ -118,13 +117,13 @@ public:
             if (!Targets) {
                 return DiscoverTargets(ctx);
             } else {
-                return ProgressTargets(ctx);
+                return ProgressTargets(self, ctx);
             }
         case EState::Removing:
             if (!Targets) {
                 return (void)ctx.Send(ctx.SelfID, new TEvPrivate::TEvDropReplication(ReplicationId));
             } else {
-                return ProgressTargets(ctx);
+                return ProgressTargets(self, ctx);
             }
         case EState::Error:
             return;
@@ -211,7 +210,7 @@ void TReplication::RemoveTarget(ui64 id) {
 }
 
 void TReplication::Progress(const TActorContext& ctx) {
-    Impl->Progress(ctx);
+    Impl->Progress(this, ctx);
 }
 
 void TReplication::Shutdown(const TActorContext& ctx) {
@@ -224,6 +223,14 @@ ui64 TReplication::GetId() const {
 
 const TPathId& TReplication::GetPathId() const {
     return Impl->PathId;
+}
+
+const TActorId& TReplication::GetYdbProxy() const {
+    return Impl->YdbProxy;
+}
+
+ui64 TReplication::GetSchemeShardId() const {
+    return GetPathId().OwnerId;
 }
 
 void TReplication::SetState(EState state, TString issue) {

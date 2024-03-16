@@ -4,6 +4,7 @@ Registering pre-existing tables
 	INT4_TBL
 	tenk1
 	text_tbl
+	road
 	TEXT_TBL
 	int8_tbl
 <sql-statement>

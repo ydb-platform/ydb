@@ -1,6 +1,7 @@
 #include "executor_pool_shared.h"
 
 #include "actorsystem.h"
+#include "config.h"
 #include "executor_pool_basic.h"
 #include "executor_thread.h"
 #include "executor_thread_ctx.h"
@@ -120,6 +121,19 @@ void TSharedExecutorPool::ReturnBorrowedHalfThread(i16 pool) {
 }
 
 void TSharedExecutorPool::GiveHalfThread(i16 from, i16 to) {
+    if (from == to) {
+        return;
+    }
+    i16 borrowedThreadIdx = State.BorrowedThreadByPool[from];
+    if (borrowedThreadIdx != -1) {
+        i16 originalPool = State.PoolByThread[borrowedThreadIdx];
+        if (originalPool == to) {
+            return ReturnOwnHalfThread(to);
+        } else {
+            ReturnOwnHalfThread(originalPool);
+        }
+        from = originalPool;
+    }
     i16 threadIdx = State.ThreadByPool[from];
     TBasicExecutorPool* borrowingPool = Pools[to];
     Threads[threadIdx].ExecutorPools[1].store(borrowingPool, std::memory_order_release);

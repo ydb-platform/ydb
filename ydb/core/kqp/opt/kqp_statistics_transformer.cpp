@@ -68,6 +68,27 @@ void InferStatisticsForKqpTable(const TExprNode::TPtr& input, TTypeAnnotationCon
 }
 
 /**
+ * Infer statistic for Kqp steam lookup operator
+ * 
+ * In reality we want to compute the number of rows and cost that the lookyup actually performed.
+ * But currently we just take the data from the base table, and join cardinality will still work correctly,
+ * because it considers joins on PK.
+ * 
+ * In the future it would be better to compute the actual cardinality
+*/
+void InferStatisticsForSteamLookup(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto inputNode = TExprBase(input);
+    auto streamLookup = inputNode.Cast<TKqpCnStreamLookup>();
+
+    int nAttrs = streamLookup.Columns().Size();
+    auto inputStats = typeCtx->GetStats(streamLookup.Table().Raw());
+    auto byteSize = inputStats->ByteSize * (nAttrs / (double) inputStats->Ncols);
+
+    auto outputStats = TOptimizerStatistics(EStatisticsType::BaseTable, inputStats->Nrows, nAttrs, byteSize, 0, inputStats->KeyColumns);
+    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats));
+}
+
+/**
  * Infer statistics for TableLookup
  *
  * Table lookup can be done with an Iterator, in which case we treat it as a full scan
@@ -223,6 +244,9 @@ bool TKqpStatisticsTransformer::BeforeLambdasSpecific(const TExprNode::TPtr& inp
     }
     else if (TKqpReadRangesSourceSettings::Match(input.Get())) {
         InferStatisticsForRowsSourceSettings(input, TypeCtx);
+    }
+    else if (TKqpCnStreamLookup::Match(input.Get())) {
+        InferStatisticsForSteamLookup(input, TypeCtx);
     }
 
     // Match a result binding atom and connect it to a stage

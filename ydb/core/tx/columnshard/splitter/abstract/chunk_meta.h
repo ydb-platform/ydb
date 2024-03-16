@@ -19,7 +19,6 @@ protected:
 public:
     TSimpleChunkMeta(const std::shared_ptr<arrow::Array>& column, const bool needMinMax, const bool isSortedColumn);
 
-
     ui64 GetMetadataSize() const {
         return sizeof(ui32) + sizeof(ui32) + 8 * 3 * 2;
     }

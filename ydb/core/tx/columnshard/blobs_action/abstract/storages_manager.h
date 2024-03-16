@@ -1,5 +1,6 @@
 #pragma once
 #include "storage.h"
+#include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 
 namespace NKikimr::NOlap {
 
@@ -20,8 +21,8 @@ protected:
     virtual const std::shared_ptr<NDataSharing::TSharedBlobsManager>& DoGetSharedBlobsManager() const = 0;
 
 public:
-    static const inline TString DefaultStorageId = "__DEFAULT";
-    static const inline TString MemoryStorageId = "__MEMORY";
+    static const inline TString DefaultStorageId = NBlobOperations::TGlobal::DefaultStorageId;
+    static const inline TString MemoryStorageId = NBlobOperations::TGlobal::MemoryStorageId;
     virtual ~IStoragesManager() = default;
 
     void Initialize() {
@@ -60,6 +61,7 @@ public:
     std::shared_ptr<IBlobsStorageOperator> GetOperator(const TString& storageIdExt);
     std::shared_ptr<IBlobsStorageOperator> GetOperatorGuarantee(const TString& storageIdExt);
     std::shared_ptr<IBlobsStorageOperator> GetOperatorVerified(const TString& storageIdExt);
+    std::shared_ptr<IBlobsStorageOperator> GetOperatorOptional(const TString& storageIdExt);
 };
 
 

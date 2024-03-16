@@ -59,8 +59,11 @@ bool TTieringProcessContext::AddPortion(const TPortionInfo& info, TPortionEvicti
         it->second.back().GetTask()->PortionsToRemove.emplace(info.GetAddress(), info);
         AFL_VERIFY(!it->second.back().GetTask()->GetPortionsToEvictCount())("rw", features.GetRWAddress().DebugString())("f", it->first.DebugString());
     } else {
-        AFL_VERIFY(dWait);
-        Counters.OnPortionToEvict(info.GetBlobBytes(), *dWait);
+        if (!dWait) {
+            AFL_VERIFY(features.GetCurrentScheme()->GetVersion() < features.GetTargetScheme()->GetVersion());
+        } else {
+            Counters.OnPortionToEvict(info.GetBlobBytes(), *dWait);
+        }
         it->second.back().GetTask()->AddPortionToEvict(info, std::move(features));
         AFL_VERIFY(it->second.back().GetTask()->PortionsToRemove.empty())("rw", features.GetRWAddress().DebugString())("f", it->first.DebugString());
     }

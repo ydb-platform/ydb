@@ -87,20 +87,19 @@ void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
 }
 
 std::vector<TPortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions(const std::shared_ptr<arrow::RecordBatch> batch,
-    const ui64 pathId, const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context) const {
+    const ui64 pathId, const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context, const std::optional<NArrow::NSerialization::TSerializerContainer>& overrideSaver) const {
     Y_ABORT_UNLESS(batch->num_rows());
 
     auto resultSchema = context.SchemaVersions.GetSchema(snapshot);
-    TEntityGroups groups(IStoragesManager::DefaultStorageId);
-    for (auto&& i : resultSchema->GetIndexInfo().GetEntityIds()) {
-        groups.Add(i, resultSchema->GetIndexInfo().GetEntityStorageId(i, IStoragesManager::DefaultStorageId));
-    }
 
     std::shared_ptr<NOlap::TSerializationStats> stats = std::make_shared<NOlap::TSerializationStats>();
     if (granuleMeta) {
         stats = granuleMeta->BuildSerializationStats(resultSchema);
     }
-    auto schema = std::make_shared<TDefaultSchemaDetails>(resultSchema, SaverContext, stats);
+    auto schema = std::make_shared<TDefaultSchemaDetails>(resultSchema, stats);
+    if (overrideSaver) {
+        schema->SetOverrideSerializer(*overrideSaver);
+    }
     std::vector<TPortionInfoWithBlobs> out;
     {
         std::vector<TBatchSerializedSlice> pages = TRBSplitLimiter::BuildSimpleSlices(batch, SplitSettings, context.Counters.SplitterCounters, schema);
@@ -114,11 +113,13 @@ std::vector<TPortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions(cons
         TSimilarSlicer slicer(SplitSettings.GetExpectedPortionSize());
         auto packs = slicer.Split(generalPages);
 
+        const TEntityGroups groups = resultSchema->GetIndexInfo().GetEntityGroupsByStorageId(IStoragesManager::DefaultStorageId);
         ui32 recordIdx = 0;
         for (auto&& i : packs) {
             TGeneralSerializedSlice slice(std::move(i), GetSplitSettings());
             auto b = batch->Slice(recordIdx, slice.GetRecordsCount());
-            out.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), nullptr, pathId, snapshot, SaverContext.GetStoragesManager(), resultSchema));
+            out.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), nullptr, pathId, snapshot, SaverContext.GetStoragesManager()));
+            out.back().FillStatistics(resultSchema->GetIndexInfo());
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultSchema->GetIndexInfo().GetReplaceKey()));
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
             out.back().GetPortionInfo().AddMetadata(*resultSchema, primaryKeys, snapshotKeys, IStoragesManager::DefaultStorageId);

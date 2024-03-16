@@ -5,6 +5,7 @@
 #include "engines/writer/buffer/actor.h"
 #include "engines/column_engine_logs.h"
 
+#include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/protos/table_stats.pb.h>
 
 namespace NKikimr {

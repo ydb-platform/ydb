@@ -31,12 +31,26 @@ using namespace NUdf;
 
 namespace {
 
-#define STRING_UDF(udfName, function)                       \
-    SIMPLE_STRICT_UDF(T##udfName, char*(TAutoMap<char*>)) { \
-        const TString input(args[0].AsStringRef());         \
-        const auto& result = function(input);               \
-        return valueBuilder->NewString(result);             \
-    }
+#define STRING_UDF(udfName, function)                                   \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##udfName, char*(TAutoMap<char*>)) { \
+        const TString input(args[0].AsStringRef());                     \
+        const auto& result = function(input);                           \
+        return valueBuilder->NewString(result);                         \
+    }                                                                   \
+                                                                        \
+    struct T##udfName##KernelExec                                       \
+        : public TUnaryKernelExec<T##udfName##KernelExec>               \
+    {                                                                   \
+        template <typename TSink>                                       \
+        static void Process(TBlockItem arg1, const TSink& sink) {       \
+            const TString input(arg1.AsStringRef());                    \
+            const auto& result = function(input);                       \
+            sink(TBlockItem(result));                                   \
+        }                                                               \
+    };                                                                  \
+                                                                        \
+    END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)
+
 
 // 'unsafe' udf is actually strict - it returns null on any exception
 #define STRING_UNSAFE_UDF(udfName, function)                           \
@@ -160,19 +174,27 @@ namespace {
     XX(AsciiToUpper, to_upper)        \
     XX(AsciiToTitle, to_title)
 
+// NOTE: The functions below are marked as deprecated, so block implementation
+// is not required for them. Hence, STROKA_FIND_UDF provides only the scalar
+// one at the moment.
 #define STROKA_FIND_UDF_MAP(XX) \
-    XX(Contains, Contains)      \
     XX(StartsWith, StartsWith)  \
     XX(EndsWith, EndsWith)      \
     XX(HasPrefix, StartsWith)   \
     XX(HasSuffix, EndsWith)
 
+// NOTE: The functions below are marked as deprecated, so block implementation
+// is not required for them. Hence, STRING_TWO_ARGS_UDF provides only the
+// scalar one at the moment.
 #define STRING_TWO_ARGS_UDF_MAP(XX)                    \
     XX(StartsWithIgnoreCase, AsciiHasPrefixIgnoreCase) \
     XX(EndsWithIgnoreCase, AsciiHasSuffixIgnoreCase)   \
     XX(HasPrefixIgnoreCase, AsciiHasPrefixIgnoreCase)  \
     XX(HasSuffixIgnoreCase, AsciiHasSuffixIgnoreCase)
 
+// NOTE: The functions below are marked as deprecated, so block implementation
+// is not required for them. Hence, STROKA_UDF provides only the scalar one at
+// the moment.
 #define STROKA_UDF_MAP(XX) \
     XX(Reverse, ReverseInPlace)
 
@@ -192,6 +214,30 @@ namespace {
         CollapseText(input, maxLength);
         return valueBuilder->NewString(input);
     }
+
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TContains, bool(TOptional<char*>, char*)) {
+        Y_UNUSED(valueBuilder);
+        if (!args[0])
+            return TUnboxedValuePod(false);
+
+        const TString haystack(args[0].AsStringRef());
+        const TString needle(args[1].AsStringRef());
+        return TUnboxedValuePod(haystack.Contains(needle));
+    }
+
+    struct TContainsKernelExec : public TBinaryKernelExec<TContainsKernelExec> {
+        template <typename TSink>
+        static void Process(TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
+            if (!arg1)
+                return sink(TBlockItem(false));
+
+            const TString haystack(arg1.AsStringRef());
+            const TString needle(arg2.AsStringRef());
+            sink(TBlockItem(haystack.Contains(needle)));
+        }
+    };
+
+    END_SIMPLE_ARROW_UDF(TContains, TContainsKernelExec::Do);
 
     SIMPLE_STRICT_UDF(TReplaceAll, char*(TAutoMap<char*>, char*, char*)) {
         if (TString result(args[0].AsStringRef()); SubstGlobal(result, args[1].AsStringRef(), args[2].AsStringRef()))
@@ -263,6 +309,8 @@ namespace {
         return args[0];
     }
 
+    // NOTE: String::Find is marked as deprecated, so block implementation is
+    // not required for them. Hence, only the scalar one is provided.
     SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TFind, i64(TAutoMap<char*>, char*, TOptional<ui64>), 1) {
         Y_UNUSED(valueBuilder);
         const TString haystack(args[0].AsStringRef());
@@ -271,6 +319,9 @@ namespace {
         return TUnboxedValuePod(haystack.find(needle, pos));
     }
 
+    // NOTE: String::ReverseFind is marked as deprecated, so block
+    // implementation is not required for them. Hence, only the scalar one is
+    // provided.
     SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TReverseFind, i64(TAutoMap<char*>, char*, TOptional<ui64>), 1) {
         Y_UNUSED(valueBuilder);
         const TString haystack(args[0].AsStringRef());
@@ -279,6 +330,8 @@ namespace {
         return TUnboxedValuePod(haystack.rfind(needle, pos));
     }
 
+    // NOTE: String::Substring is marked as deprecated, so block implementation
+    // is not required for them. Hence, only the scalar one is provided.
     SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TSubstring, char*(TAutoMap<char*>, TOptional<ui64>, TOptional<ui64>), 1) {
         const TString input(args[0].AsStringRef());
         const ui64 from = args[1].GetOrDefault<ui64>(0);

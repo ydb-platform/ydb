@@ -27,7 +27,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     if xfail and what != 'Results':
         pytest.skip('SKIP')
 
-    (res, tables_res) = run_file('hybrid', suite, case, cfg, config, yql_http_file_server, DQRUN_PATH, extra_args=["--emulate-yt", "--analyze-query"])
+    (res, tables_res) = run_file('hybrid', suite, case, cfg, config, yql_http_file_server, DQRUN_PATH, extra_args=["--emulate-yt", "--no-force-dq"])
 
     to_canonize = []
 

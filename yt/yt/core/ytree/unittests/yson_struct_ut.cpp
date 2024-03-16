@@ -2115,13 +2115,11 @@ public:
 
 TEST(TYsonStructTest, NestedListWithCustomDefault)
 {
-    {
-        auto testInput = TYsonString(TStringBuf("{}"));
-        auto deserialized = ConvertTo<TIntrusivePtr<TTestingNestedListWithCustomDefault>>(testInput);
+    auto testInput = TYsonString(TStringBuf("{}"));
+    auto deserialized = ConvertTo<TIntrusivePtr<TTestingNestedListWithCustomDefault>>(testInput);
 
-        EXPECT_EQ(deserialized->NestedList.size(), 1u);
-        EXPECT_EQ(deserialized->NestedList[0]->IntValue, 5);
-    }
+    EXPECT_EQ(deserialized->NestedList.size(), 1u);
+    EXPECT_EQ(deserialized->NestedList[0]->IntValue, 5);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2148,34 +2146,32 @@ public:
 
 TEST(TYsonStructTest, NestedMapWithCustomDefault)
 {
-    {
-        auto testInput = TYsonString(TStringBuf("{}"));
-        auto deserialized = ConvertTo<TIntrusivePtr<TTestingNestedMapWithCustomDefault>>(testInput);
+    auto testInput = TYsonString(TStringBuf("{}"));
+    auto deserialized = ConvertTo<TIntrusivePtr<TTestingNestedMapWithCustomDefault>>(testInput);
 
-        EXPECT_EQ(deserialized->NestedMap.size(), 2u);
-        EXPECT_EQ(deserialized->NestedMap["foo"]->IntValue, 42);
-        EXPECT_EQ(deserialized->NestedMap["bar"]->IntValue, 7);
+    EXPECT_EQ(deserialized->NestedMap.size(), 2u);
+    EXPECT_EQ(deserialized->NestedMap["foo"]->IntValue, 42);
+    EXPECT_EQ(deserialized->NestedMap["bar"]->IntValue, 7);
 
-        auto testNode = BuildYsonNodeFluently()
-            .BeginMap()
-                .Item("nested_map")
-                    .BeginMap()
-                        .Item("baz")
-                            .BeginMap()
-                                .Item("int_value").Value(33)
-                            .EndMap()
-                        .Item("foo")
-                            .BeginMap()
-                                .Item("int_value").Value(88)
-                            .EndMap()
-                    .EndMap()
-            .EndMap();
-        Deserialize(deserialized, testNode->AsMap());
-        EXPECT_EQ(deserialized->NestedMap.size(), 3u);
-        EXPECT_EQ(deserialized->NestedMap["baz"]->IntValue, 33);
-        EXPECT_EQ(deserialized->NestedMap["foo"]->IntValue, 88);
-        EXPECT_EQ(deserialized->NestedMap["bar"]->IntValue, 7);
-    }
+    auto testNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("nested_map")
+                .BeginMap()
+                    .Item("baz")
+                        .BeginMap()
+                            .Item("int_value").Value(33)
+                        .EndMap()
+                    .Item("foo")
+                        .BeginMap()
+                            .Item("int_value").Value(88)
+                        .EndMap()
+                .EndMap()
+        .EndMap();
+    Deserialize(deserialized, testNode->AsMap());
+    EXPECT_EQ(deserialized->NestedMap.size(), 3u);
+    EXPECT_EQ(deserialized->NestedMap["baz"]->IntValue, 33);
+    EXPECT_EQ(deserialized->NestedMap["foo"]->IntValue, 88);
+    EXPECT_EQ(deserialized->NestedMap["bar"]->IntValue, 7);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2203,33 +2199,99 @@ public:
 
 TEST(TYsonStructTest, NestedMapWithCustomDefaultAndResetOnLoad)
 {
+    auto testInput = TYsonString(TStringBuf("{}"));
+    auto deserialized = ConvertTo<TIntrusivePtr<TTestingNestedMapWithCustomDefaultResetOnLoad>>(testInput);
+
+    EXPECT_EQ(deserialized->NestedMap.size(), 2u);
+    EXPECT_EQ(deserialized->NestedMap["foo"]->IntValue, 42);
+    EXPECT_EQ(deserialized->NestedMap["bar"]->IntValue, 7);
+
+    auto testNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("nested_map")
+                .BeginMap()
+                    .Item("baz")
+                        .BeginMap()
+                            .Item("int_value").Value(33)
+                        .EndMap()
+                    .Item("foo")
+                        .BeginMap()
+                            .Item("int_value").Value(88)
+                        .EndMap()
+                .EndMap()
+        .EndMap();
+    Deserialize(deserialized, testNode->AsMap());
+    EXPECT_EQ(deserialized->NestedMap.size(), 2u);
+    EXPECT_EQ(deserialized->NestedMap["baz"]->IntValue, 33);
+    EXPECT_EQ(deserialized->NestedMap["foo"]->IntValue, 88);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TInnerYsonStruct
+    : public TYsonStruct
+{
+    int MyInt;
+
+    REGISTER_YSON_STRUCT(TInnerYsonStruct);
+
+    static void Register(TRegistrar registrar)
     {
-        auto testInput = TYsonString(TStringBuf("{}"));
-        auto deserialized = ConvertTo<TIntrusivePtr<TTestingNestedMapWithCustomDefaultResetOnLoad>>(testInput);
+        registrar.Parameter("my_int", &TThis::MyInt)
+            .Default(1);
 
-        EXPECT_EQ(deserialized->NestedMap.size(), 2u);
-        EXPECT_EQ(deserialized->NestedMap["foo"]->IntValue, 42);
-        EXPECT_EQ(deserialized->NestedMap["bar"]->IntValue, 7);
-
-        auto testNode = BuildYsonNodeFluently()
-            .BeginMap()
-                .Item("nested_map")
-                    .BeginMap()
-                        .Item("baz")
-                            .BeginMap()
-                                .Item("int_value").Value(33)
-                            .EndMap()
-                        .Item("foo")
-                            .BeginMap()
-                                .Item("int_value").Value(88)
-                            .EndMap()
-                    .EndMap()
-            .EndMap();
-        Deserialize(deserialized, testNode->AsMap());
-        EXPECT_EQ(deserialized->NestedMap.size(), 2u);
-        EXPECT_EQ(deserialized->NestedMap["baz"]->IntValue, 33);
-        EXPECT_EQ(deserialized->NestedMap["foo"]->IntValue, 88);
+        registrar.Postprocessor([] (TThis* self) {
+            self->MyInt = 42;
+        });
     }
+};
+
+struct TOuterYsonStructWithNull
+    : public TYsonStruct
+{
+    TIntrusivePtr<TInnerYsonStruct> Inner;
+
+    REGISTER_YSON_STRUCT(TOuterYsonStructWithNull);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("inner", &TThis::Inner)
+            // Make sure postprocessor doesn't cause sigsegv in case of nullptr
+            .Default();
+    }
+};
+
+struct TOuterYsonStructWithValidation
+    : public TYsonStruct
+{
+    TIntrusivePtr<TInnerYsonStruct> Inner;
+
+    REGISTER_YSON_STRUCT(TOuterYsonStructWithValidation);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("inner", &TThis::Inner)
+            .DefaultNew()
+            // Will be true only if postprocessor is called and is called before this check.
+            .CheckThat([] (const TIntrusivePtr<TInnerYsonStruct>& inner) {
+                EXPECT_EQ(inner->MyInt % 2, 0);
+            });
+    }
+};
+
+TEST(TYsonStructTest, OuterYsonStructWithNull)
+{
+    auto testInput = TYsonString(TStringBuf("{}"));
+    auto deserialized = ConvertTo<TIntrusivePtr<TOuterYsonStructWithNull>>(testInput);
+}
+
+TEST(TYsonStructTest, OuterYsonStructWithValidation)
+{
+    auto testInput = TYsonString(TStringBuf("{}"));
+    auto deserialized = ConvertTo<TIntrusivePtr<TOuterYsonStructWithValidation>>(testInput);
+
+    EXPECT_TRUE(deserialized->Inner);
+    EXPECT_EQ(deserialized->Inner->MyInt, 42);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

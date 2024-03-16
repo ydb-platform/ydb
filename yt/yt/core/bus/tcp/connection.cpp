@@ -63,8 +63,11 @@ static constexpr i64 PendingOutBytesFlushThreshold = 1_MBs;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TTcpConnectionReadBufferTag { };
-struct TTcpConnectionWriteBufferTag { };
+struct TTcpServerConnectionReadBufferTag { };
+struct TTcpServerConnectionWriteBufferTag { };
+
+struct TTcpClientConnectionReadBufferTag { };
+struct TTcpClientConnectionWriteBufferTag { };
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -110,7 +113,8 @@ TTcpConnection::TTcpConnection(
     const std::optional<TString>& unixDomainSocketPath,
     IMessageHandlerPtr handler,
     IPollerPtr poller,
-    IPacketTranscoderFactory* packetTranscoderFactory)
+    IPacketTranscoderFactory* packetTranscoderFactory,
+    IMemoryUsageTrackerPtr memoryUsageTracker)
     : Config_(std::move(config))
     , ConnectionType_(connectionType)
     , Id_(id)
@@ -137,6 +141,7 @@ TTcpConnection::TTcpConnection(
     , WriteStallTimeout_(NProfiling::DurationToCpuDuration(Config_->WriteStallTimeout))
     , EncryptionMode_(Config_->EncryptionMode)
     , VerificationMode_(Config_->VerificationMode)
+    , MemoryUsageTracker_(std::move(memoryUsageTracker))
 { }
 
 TTcpConnection::~TTcpConnection()
@@ -211,7 +216,19 @@ void TTcpConnection::Start()
     }
 
     TTcpDispatcher::TImpl::Get()->RegisterConnection(this);
-    InitBuffers();
+
+    try {
+        InitBuffers();
+    } catch (const std::exception& ex) {
+        Abort(TError(NBus::EErrorCode::TransportError, "I/O buffers allocation error")
+            << ex);
+        return;
+    }
+
+    if (Config_->ConnectionStartDelay) {
+        YT_LOG_WARNING("Delay in opening activation of the test connection (Delay: %v)", Config_->ConnectionStartDelay);
+        TDelayedExecutor::WaitForDuration(Config_->ConnectionStartDelay.value());
+    }
 
     switch (ConnectionType_) {
         case EConnectionType::Client:
@@ -225,8 +242,7 @@ void TTcpConnection::Start()
             YT_VERIFY(Socket_ != INVALID_SOCKET);
             State_ = EState::Opening;
             SetupNetwork(EndpointNetworkAddress_);
-            Open();
-            guard.Release();
+            Open(guard);
             break;
         }
 
@@ -395,7 +411,7 @@ TConnectionId TTcpConnection::GetId() const
     return Id_;
 }
 
-void TTcpConnection::Open()
+void TTcpConnection::Open(TGuard<NThreading::TSpinLock>& guard)
 {
     State_ = EState::Open;
 
@@ -413,6 +429,8 @@ void TTcpConnection::Open()
     auto previousPendingControl = static_cast<EPollControl>(PendingControl_.fetch_and(~static_cast<ui64>(EPollControl::Offline)));
 
     ArmPoller();
+
+    guard.Release();
 
     // Something might be pending already, for example Terminate.
     if (Any(previousPendingControl & ~EPollControl::Offline)) {
@@ -550,10 +568,26 @@ bool TTcpConnection::AbortIfNetworkingDisabled()
 
 void TTcpConnection::InitBuffers()
 {
-    ReadBuffer_ = TBlob(GetRefCountedTypeCookie<TTcpConnectionReadBufferTag>(), ReadBufferSize, /*initializeStorage*/ false);
+    ReadBuffer_ = TMemoryTrackedBlob::Build(
+        MemoryUsageTracker_,
+        ConnectionType_ == EConnectionType::Server
+            ? GetRefCountedTypeCookie<TTcpServerConnectionReadBufferTag>()
+            : GetRefCountedTypeCookie<TTcpClientConnectionReadBufferTag>());
+    ReadBuffer_
+        .TryResize(
+            ReadBufferSize,
+            /*initializeStorage*/ false)
+        .ThrowOnError();
 
-    WriteBuffers_.push_back(std::make_unique<TBlob>(GetRefCountedTypeCookie<TTcpConnectionWriteBufferTag>()));
-    WriteBuffers_[0]->Reserve(WriteBufferSize);
+    auto trackedBlob = TMemoryTrackedBlob::Build(
+        MemoryUsageTracker_,
+        ConnectionType_ == EConnectionType::Server
+            ? GetRefCountedTypeCookie<TTcpServerConnectionWriteBufferTag>()
+            : GetRefCountedTypeCookie<TTcpClientConnectionWriteBufferTag>());
+    trackedBlob
+        .TryReserve(WriteBufferSize)
+        .ThrowOnError();
+    WriteBuffers_.push_back(std::move(trackedBlob));
 }
 
 int TTcpConnection::GetSocketPort()
@@ -619,7 +653,7 @@ void TTcpConnection::OnDialerFinished(const TErrorOr<SOCKET>& socketOrError)
             InitSocketTosLevel(tosLevel);
         }
 
-        Open();
+        Open(guard);
     }
 }
 
@@ -781,6 +815,8 @@ void TTcpConnection::Terminate(const TError& error)
 
     // Arm calling OnTerminate() from OnEvent().
     auto previousPendingControl = static_cast<EPollControl>(PendingControl_.fetch_or(static_cast<ui64>(EPollControl::Terminate)));
+
+    guard.Release();
 
     // To recover from bogus state always retry processing unless socket is offline
     if (None(previousPendingControl & EPollControl::Offline)) {
@@ -1090,6 +1126,11 @@ bool TTcpConnection::AdvanceDecoder(size_t size)
         UpdateBusCounter(&TBusNetworkBandCounters::DecoderErrors, 1);
         Abort(TError(NBus::EErrorCode::TransportError, "Error decoding incoming packet"));
         return false;
+    }
+
+    if (Config_->PacketDecoderDelay) {
+        YT_LOG_WARNING("Test delay in tcp connection packet decoder (Delay: %v)", Config_->PacketDecoderDelay);
+        TDelayedExecutor::WaitForDuration(Config_->PacketDecoderDelay.value());
     }
 
     if (Decoder_->IsFinished()) {
@@ -1428,7 +1469,7 @@ bool TTcpConnection::MaybeEncodeFragments()
 
     // Discard all buffers except for a single one.
     WriteBuffers_.resize(1);
-    auto* buffer = WriteBuffers_.back().get();
+    auto* buffer = &WriteBuffers_.back();
     buffer->Clear();
 
     size_t encodedSize = 0;
@@ -1445,10 +1486,20 @@ bool TTcpConnection::MaybeEncodeFragments()
         if (buffer->Size() + fragment.Size() > buffer->Capacity()) {
             // Make sure we never reallocate.
             flushCoalesced();
-            WriteBuffers_.push_back(std::make_unique<TBlob>(GetRefCountedTypeCookie<TTcpConnectionWriteBufferTag>()));
-            buffer = WriteBuffers_.back().get();
-            buffer->Reserve(std::max(WriteBufferSize, fragment.Size()));
+
+            auto size = std::max(WriteBufferSize, fragment.Size());
+
+            auto trackedBlob = TMemoryTrackedBlob::Build(
+                MemoryUsageTracker_,
+                ConnectionType_ == EConnectionType::Server
+                    ? GetRefCountedTypeCookie<TTcpServerConnectionWriteBufferTag>()
+                    : GetRefCountedTypeCookie<TTcpClientConnectionWriteBufferTag>());
+            trackedBlob.Reserve(size);
+
+            WriteBuffers_.push_back(std::move(trackedBlob));
+            buffer = &WriteBuffers_.back();
         }
+
         buffer->Append(fragment);
         coalescedSize += fragment.Size();
     };

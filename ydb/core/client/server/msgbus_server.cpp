@@ -90,7 +90,6 @@ public:
             MTYPE(TBusResponse)
             MTYPE(TBusFakeConfigDummy)
             MTYPE(TBusSchemeInitRoot)
-            MTYPE(TBusBSAdm)
             MTYPE(TBusTypesRequest)
             MTYPE(TBusTypesResponse)
             MTYPE(TBusHiveCreateTablet)
@@ -503,8 +502,6 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientProxyRequest<TEvBusProxy::TEvRequest>(msg);
     case MTYPE_CLIENT_SCHEME_INITROOT:
         return ClientProxyRequest<TEvBusProxy::TEvInitRoot>(msg);
-    case MTYPE_CLIENT_BSADM:
-        return ClientActorRequest(CreateMessageBusBSAdm, msg);
     case MTYPE_CLIENT_SCHEME_NAVIGATE:
         return ClientProxyRequest<TEvBusProxy::TEvNavigate>(msg);
     case MTYPE_CLIENT_TYPES_REQUEST:

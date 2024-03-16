@@ -105,6 +105,12 @@ TString FillAuthProperties(THashMap<TString, TString>& properties, const TExtern
             properties["awsRegion"] = externalSource.DataSourceAuth.GetAws().GetAwsRegion();
             return {};
 
+        case NKikimrSchemeOp::TAuth::kToken:
+            properties["authMethod"] = "TOKEN";
+            properties["token"] = externalSource.Token;
+            properties["tokenReference"] = externalSource.DataSourceAuth.GetToken().GetTokenSecretName();
+            return {};
+
         case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
             return {"Identity case is not specified"};
     }

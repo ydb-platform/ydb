@@ -23,6 +23,8 @@ namespace {
 
 using namespace NProfiling;
 
+////////////////////////////////////////////////////////////////////////////////
+
 class TTestFairShareActionQueue
     : public ::testing::Test
 {
@@ -161,6 +163,8 @@ TEST_F(TTestFairShareActionQueue, TestProfiling)
 
     VerifyJson(*json, std::move(bucketToQueues));
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
 } // namespace NYT::NConcurrency

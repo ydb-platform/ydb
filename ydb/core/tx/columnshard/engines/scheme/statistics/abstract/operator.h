@@ -25,6 +25,7 @@ protected:
     virtual void DoShiftCursor(TPortionStorageCursor& cursor) const = 0;
     virtual bool DoDeserializeFromProto(const NKikimrColumnShardStatisticsProto::TOperatorContainer& proto) = 0;
     virtual void DoSerializeToProto(NKikimrColumnShardStatisticsProto::TOperatorContainer& proto) const = 0;
+    virtual void DoCopyData(const TPortionStorageCursor& cursor, const TPortionStorage& portionStatsFrom, TPortionStorage& portionStatsTo) const = 0;
 public:
     using TProto = NKikimrColumnShardStatisticsProto::TOperatorContainer;
     using TFactory = NObjectFactory::TObjectFactory<IOperator, TString>;
@@ -40,6 +41,10 @@ public:
 
     void ShiftCursor(TPortionStorageCursor& cursor) const {
         DoShiftCursor(cursor);
+    }
+
+    void CopyData(const TPortionStorageCursor& cursor, const TPortionStorage& portionStatsFrom, TPortionStorage& portionStatsTo) const {
+        return DoCopyData(cursor, portionStatsFrom, portionStatsTo);
     }
 
     void FillStatisticsData(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, TPortionStorage& portionStats, const IIndexInfo& index) const {

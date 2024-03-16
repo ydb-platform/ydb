@@ -2,14 +2,16 @@ import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
 
 package NKikimrColumnShardExportProto;
 
-message TSnapshotSelector {
+message TBackupSelector {
     optional NKikimrColumnShardProto.TSnapshot Snapshot = 1;
+    optional string TableName = 2;
+    optional uint64 TablePathId = 3;
 }
 
 message TSelectorContainer {
     optional string ClassName = 1;
 
     oneof Implementation {
-        TSnapshotSelector Snapshot = 40;
+        TBackupSelector Backup = 40;
     }
 }

@@ -13,6 +13,7 @@ namespace NKikimr::NOlap::NExport {
         THashMap<TIdentifier, std::shared_ptr<TSession>> Sessions;
     public:
         void Start(const NColumnShard::TColumnShard* shard);
+        void Stop();
 
         TConclusionStatus ProposeTask(const std::shared_ptr<TExportTask>& exportTask) {
             auto it = Sessions.find(exportTask->GetIdentifier());

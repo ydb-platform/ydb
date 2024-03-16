@@ -313,7 +313,8 @@ private:
         Cerr << "EX:" << response.Response->Body << Endl;
         NJson::TJsonValue json;
         if (!NJson::ReadJsonTree(response.Response->Body, &json, false)) {
-            Y_ABORT_UNLESS(false, "XXXXX");
+            // todo: improve
+            Y_ABORT_UNLESS(false, "Failed to parse json response");
             return;
         }
 

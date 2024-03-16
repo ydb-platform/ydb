@@ -8,9 +8,11 @@ class TVersionedIndex {
     std::shared_ptr<arrow::Schema> PrimaryKey;
     std::map<ui64, ISnapshotSchema::TPtr> SnapshotByVersion;
     ui64 LastSchemaVersion = 0;
+    std::optional<ui64> SchemeVersionForActualization;
+    ISnapshotSchema::TPtr SchemeForActualization;
 public:
     ISnapshotSchema::TPtr GetLastCriticalSchema() const {
-        return nullptr;
+        return SchemeForActualization;
     }
 
     ISnapshotSchema::TPtr GetLastCriticalSchemaDef(const ISnapshotSchema::TPtr defaultSchema) const {

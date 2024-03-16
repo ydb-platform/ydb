@@ -94,7 +94,7 @@ public:
         }
         auto it = data.find(portion.GetPortion());
         if (it == data.end()) {
-            it = data.emplace(portion.GetPortion(), portion.CopyWithFilteredColumns({})).first;
+            it = data.emplace(portion.GetPortion(), portion.CopyBeforeChunksRebuild()).first;
         } else {
             Y_ABORT_UNLESS(portion.GetPathId() == it->second.GetPathId() && portion.GetPortion() == it->second.GetPortion());
         }

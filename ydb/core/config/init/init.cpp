@@ -1,4 +1,5 @@
 #include "init_impl.h"
+#include "mock.h"
 
 namespace NKikimr::NConfig {
 
@@ -31,11 +32,6 @@ public:
     void Fatal(TString error) override {
         ythrow yexception() << error;
     }
-};
-
-struct TFileConfigOptions {
-    TString Description;
-    TMaybe<TString> ParsedOption;
 };
 
 class TDefaultProtoConfigFileProvider
@@ -72,7 +68,9 @@ public:
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) const override {
         for (const auto& [name, opt] : Opts) {
-            opts.AddLongOption(name, opt->Description).OptionalArgument("PATH").StoreResult(&opt->ParsedOption);
+            opts.AddLongOption(name, opt->Description)
+                .OptionalArgument("PATH")
+                .StoreResult(&opt->ParsedOption);
         }
     }
 
@@ -369,7 +367,7 @@ class TDefaultNodeBrokerClient
     }
 
 public:
-    std::unique_ptr<INodeRegistrationResult> RegisterDynamicNode(
+    std::shared_ptr<INodeRegistrationResult> RegisterDynamicNode(
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const TNodeRegistrationSettings& regSettings,
@@ -396,7 +394,7 @@ public:
                 logger);
         }
 
-        return std::make_unique<TResult>(std::move(result));
+        return std::make_shared<TResult>(std::move(result));
     }
 };
 
@@ -780,6 +778,54 @@ NKikimrConfig::TAppConfig GetActualDynConfig(
 
 std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(TInitialConfiguratorDependencies deps) {
     return std::make_unique<TInitialConfiguratorImpl>(deps);
+}
+
+class TInitlaConfiguratorDepsRecorder
+    : public IInitialConfiguratorDepsRecorder
+{
+    TInitialConfiguratorDependencies Impls;
+    TProtoConfigFileProviderRecorder ProtoConfigFileProvider;
+    TNodeBrokerClientRecorder NodeBrokerClient;
+    TDynConfigClientRecorder DynConfigClient;
+    TEnvRecorder Env;
+public:
+    TInitlaConfiguratorDepsRecorder(TInitialConfiguratorDependencies deps)
+        : Impls(deps)
+        , ProtoConfigFileProvider(deps.ProtoConfigFileProvider)
+        , NodeBrokerClient(deps.NodeBrokerClient)
+        , DynConfigClient(deps.DynConfigClient)
+        , Env(deps.Env)
+    {}
+
+    TInitialConfiguratorDependencies GetDeps() override {
+        return TInitialConfiguratorDependencies {
+            .ErrorCollector = Impls.ErrorCollector,
+            .ProtoConfigFileProvider = ProtoConfigFileProvider,
+            .ConfigUpdateTracer = Impls.ConfigUpdateTracer,
+            .MemLogInit = Impls.MemLogInit,
+            .NodeBrokerClient = NodeBrokerClient,
+            .DynConfigClient = DynConfigClient,
+            .Env = Env,
+            .Logger = Impls.Logger,
+        };
+    }
+
+    TRecordedInitialConfiguratorDeps GetRecordedDeps() const override {
+        return TRecordedInitialConfiguratorDeps {
+            .ErrorCollector = MakeDefaultErrorCollector(),
+            .ProtoConfigFileProvider = std::make_unique<TProtoConfigFileProviderMock>(ProtoConfigFileProvider.GetMock()),
+            .ConfigUpdateTracer = MakeDefaultConfigUpdateTracer(),
+            .MemLogInit = MakeNoopMemLogInitializer(),
+            .NodeBrokerClient = std::make_unique<TNodeBrokerClientMock>(NodeBrokerClient.GetMock()),
+            .DynConfigClient = std::make_unique<TDynConfigClientMock>(DynConfigClient.GetMock()),
+            .Env = std::make_unique<TEnvMock>(Env.GetMock()),
+            .Logger = MakeNoopInitLogger(),
+        };
+    }
+};
+
+std::unique_ptr<IInitialConfiguratorDepsRecorder> MakeDefaultInitialConfiguratorDepsRecorder(TInitialConfiguratorDependencies deps) {
+    return std::make_unique<TInitlaConfiguratorDepsRecorder>(deps);
 }
 
 } // namespace NKikimr::NConfig

@@ -18,11 +18,11 @@ class TNoopInitLogger
 public:
     IOutputStream& Out() const noexcept override {
         return NullStream;
-    };
+    }
 
     IOutputStream& Err() const noexcept override {
         return NullStream;
-    };
+    }
 };
 
 class TNoopDynConfigClient
@@ -37,14 +37,14 @@ public:
         IInitLogger&) const override
     {
         return {};
-    };
+    }
 };
 
 class TNoopNodeBrokerClient
     : public INodeBrokerClient
 {
 public:
-    std::unique_ptr<INodeRegistrationResult> RegisterDynamicNode(
+    std::shared_ptr<INodeRegistrationResult> RegisterDynamicNode(
         const TGrpcSslSettings&,
         const TVector<TString>&,
         const TNodeRegistrationSettings&,
@@ -52,14 +52,14 @@ public:
         IInitLogger&) const override
     {
         return nullptr;
-    };
+    }
 };
 
 class TNoopMemLogInitializer
     : public IMemLogInitializer
 {
 public:
-    void Init(const NKikimrConfig::TMemoryLogConfig&) const override {};
+    void Init(const NKikimrConfig::TMemoryLogConfig&) const override {}
 };
 
 std::unique_ptr<IMemLogInitializer> MakeNoopMemLogInitializer() {

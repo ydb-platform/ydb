@@ -22,6 +22,8 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_driver
 )
 
+GENERATE_ENUM_SERIALIZATION(init.h)
+
 YQL_LAST_ABI_VERSION()
 
 END()

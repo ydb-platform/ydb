@@ -10,6 +10,7 @@
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/config/init/mock.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -17,6 +18,7 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
+#include <ydb/core/config/init/init.h>
 
 #include <util/generic/bitmap.h>
 #include <util/generic/ptr.h>
@@ -34,6 +36,8 @@
 #define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream)
 
 namespace NKikimr::NConsole {
+
+using namespace NConfig;
 
 const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem,
@@ -233,6 +237,7 @@ private:
     const NKikimrConfig::TAppConfig BaseConfig;
     NKikimrConfig::TAppConfig CurrentConfig;
     const std::optional<TDebugInfo> DebugInfo;
+    std::shared_ptr<NConfig::TRecordedInitialConfiguratorDeps> RecordedInitialConfiguratorDeps;
     ui64 NextRequestCookie;
     TVector<TActorId> HttpRequests;
     TActorId CommonSubscriptionClient;
@@ -258,6 +263,7 @@ TConfigsDispatcher::TConfigsDispatcher(const TConfigsDispatcherInitInfo& initInf
         , BaseConfig(initInfo.InitialConfig)
         , CurrentConfig(initInfo.InitialConfig)
         , DebugInfo(initInfo.DebugInfo)
+        , RecordedInitialConfiguratorDeps(std::move(initInfo.RecordedInitialConfiguratorDeps))
         , NextRequestCookie(Now().GetValue())
 {}
 
@@ -703,6 +709,8 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
 void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev)
 {
     auto &rec = ev->Get()->Record;
+
+    NConfig::TInitialConfigurator initCfg(RecordedInitialConfiguratorDeps->GetDeps());
 
     CurrentConfig = rec.GetConfig();
 

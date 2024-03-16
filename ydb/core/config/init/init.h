@@ -1,9 +1,8 @@
 #pragma once
 
+#include <ydb/core/driver_lib/run/service_mask.h>
 #include <ydb/core/base/event_filter.h>
-#include <ydb/core/cms/console/config_item_info.h>
 #include <ydb/core/config/init/source_location.h>
-#include <ydb/core/driver_lib/run/config.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
@@ -16,6 +15,28 @@
 #include <util/datetime/base.h>
 
 namespace NKikimr::NConfig {
+
+struct TConfigItemInfo {
+    enum class EUpdateKind {
+        MutableConfigPartFromFile,
+        MutableConfigPartFromBaseConfig,
+        MutableConfigPartMergeFromFile,
+        ReplaceConfigWithConsoleYaml,
+        ReplaceConfigWithConsoleProto,
+        ReplaceConfigWithBase,
+        LoadYamlConfigFromFile,
+        SetExplicitly,
+        UpdateExplicitly,
+    };
+
+    struct TUpdate {
+        const char* File;
+        ui32 Line;
+        EUpdateKind Kind;
+    };
+
+    TVector<TUpdate> Updates;
+};
 
 struct TCallContext {
     const char* File;
@@ -108,7 +129,7 @@ public:
 class INodeBrokerClient {
 public:
     virtual ~INodeBrokerClient() {}
-    virtual std::unique_ptr<INodeRegistrationResult> RegisterDynamicNode(
+    virtual std::shared_ptr<INodeRegistrationResult> RegisterDynamicNode(
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const TNodeRegistrationSettings& regSettings,
@@ -140,6 +161,64 @@ public:
 
 // ===
 
+struct TInitialConfiguratorDependencies {
+    NConfig::IErrorCollector& ErrorCollector;
+    NConfig::IProtoConfigFileProvider& ProtoConfigFileProvider;
+    NConfig::IConfigUpdateTracer& ConfigUpdateTracer;
+    NConfig::IMemLogInitializer& MemLogInit;
+    NConfig::INodeBrokerClient& NodeBrokerClient;
+    NConfig::IDynConfigClient& DynConfigClient;
+    NConfig::IEnv& Env;
+    NConfig::IInitLogger& Logger;
+};
+
+struct TRecordedInitialConfiguratorDeps {
+    TInitialConfiguratorDependencies GetDeps() {
+        return {
+            *ErrorCollector,
+            *ProtoConfigFileProvider,
+            *ConfigUpdateTracer,
+            *MemLogInit,
+            *NodeBrokerClient,
+            *DynConfigClient,
+            *Env,
+            *Logger
+        };
+    }
+
+    std::unique_ptr<NConfig::IErrorCollector> ErrorCollector;
+    std::unique_ptr<NConfig::IProtoConfigFileProvider> ProtoConfigFileProvider;
+    std::unique_ptr<NConfig::IConfigUpdateTracer> ConfigUpdateTracer;
+    std::unique_ptr<NConfig::IMemLogInitializer> MemLogInit;
+    std::unique_ptr<NConfig::INodeBrokerClient> NodeBrokerClient;
+    std::unique_ptr<NConfig::IDynConfigClient> DynConfigClient;
+    std::unique_ptr<NConfig::IEnv> Env;
+    std::unique_ptr<NConfig::IInitLogger> Logger;
+};
+
+struct TDenyList {
+    std::set<ui32> Items;
+};
+
+struct TAllowList {
+    std::set<ui32> Items;
+};
+
+struct TDebugInfo {
+    NKikimrConfig::TAppConfig StaticConfig;
+    NKikimrConfig::TAppConfig OldDynConfig;
+    NKikimrConfig::TAppConfig NewDynConfig;
+    THashMap<ui32, TConfigItemInfo> InitInfo;
+};
+
+struct TConfigsDispatcherInitInfo {
+    NKikimrConfig::TAppConfig InitialConfig;
+    TMap<TString, TString> Labels;
+    std::variant<std::monostate, TDenyList, TAllowList> ItemsServeRules;
+    std::optional<TDebugInfo> DebugInfo;
+    std::shared_ptr<NConfig::TRecordedInitialConfiguratorDeps> RecordedInitialConfiguratorDeps;
+};
+
 class IInitialConfigurator {
 public:
     virtual ~IInitialConfigurator() {};
@@ -152,22 +231,8 @@ public:
         TKikimrScopeId& scopeId,
         TString& tenantName,
         TBasicKikimrServicesMask& servicesMask,
-        TMap<TString, TString>& labels,
         TString& clusterName,
-        NKikimrConfig::TAppConfig& initialCmsConfig,
-        NKikimrConfig::TAppConfig& initialCmsYamlConfig,
-        THashMap<ui32, TConfigItemInfo>& configInitInfo) const = 0;
-};
-
-struct TInitialConfiguratorDependencies {
-    NConfig::IErrorCollector& ErrorCollector;
-    NConfig::IProtoConfigFileProvider& ProtoConfigFileProvider;
-    NConfig::IConfigUpdateTracer& ConfigUpdateTracer;
-    NConfig::IMemLogInitializer& MemLogInit;
-    NConfig::INodeBrokerClient& NodeBrokerClient;
-    NConfig::IDynConfigClient& DynConfigClient;
-    NConfig::IEnv& Env;
-    NConfig::IInitLogger& Logger;
+        NConfig::TConfigsDispatcherInitInfo& configsDispatcherInitInfo) const = 0;
 };
 
 std::unique_ptr<IConfigUpdateTracer> MakeDefaultConfigUpdateTracer();
@@ -186,10 +251,21 @@ std::unique_ptr<IInitLogger> MakeNoopInitLogger();
 
 std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(TInitialConfiguratorDependencies deps);
 
+class IInitialConfiguratorDepsRecorder {
+public:
+    virtual ~IInitialConfiguratorDepsRecorder() {}
+
+    virtual TInitialConfiguratorDependencies GetDeps() = 0;
+
+    virtual TRecordedInitialConfiguratorDeps GetRecordedDeps() const = 0;
+};
+
+std::unique_ptr<IInitialConfiguratorDepsRecorder> MakeDefaultInitialConfiguratorDepsRecorder(TInitialConfiguratorDependencies deps);
+
 class TInitialConfigurator {
 public:
     TInitialConfigurator(TInitialConfiguratorDependencies deps)
-            : Impl(MakeDefaultInitialConfigurator(deps))
+        : Impl(MakeDefaultInitialConfigurator(deps))
     {}
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {
@@ -210,11 +286,8 @@ public:
         TKikimrScopeId& scopeId,
         TString& tenantName,
         TBasicKikimrServicesMask& servicesMask,
-        TMap<TString, TString>& labels,
         TString& clusterName,
-        NKikimrConfig::TAppConfig& initialCmsConfig,
-        NKikimrConfig::TAppConfig& initialCmsYamlConfig,
-        THashMap<ui32, TConfigItemInfo>& configInitInfo) const
+        TConfigsDispatcherInitInfo& configsDispatcherInitInfo) const
     {
         Impl->Apply(
             appConfig,
@@ -222,11 +295,8 @@ public:
             scopeId,
             tenantName,
             servicesMask,
-            labels,
             clusterName,
-            initialCmsConfig,
-            initialCmsYamlConfig,
-            configInitInfo);
+            configsDispatcherInitInfo);
     }
 
 private:

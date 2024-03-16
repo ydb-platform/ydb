@@ -7,7 +7,6 @@
 
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/cms/console/config_item_info.h>
 #include <ydb/core/driver_lib/run/config.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
@@ -72,6 +71,10 @@ struct TConfigRefs {
     IProtoConfigFileProvider& ProtoConfigFileProvider;
 };
 
+struct TFileConfigOptions {
+    TString Description;
+    TMaybe<TString> ParsedOption;
+};
 
 template <class TProto>
 using TAccessors = std::tuple<
@@ -1211,22 +1214,25 @@ public:
         TKikimrScopeId& scopeId,
         TString& tenantName,
         TBasicKikimrServicesMask& servicesMask,
-        TMap<TString, TString>& labels,
         TString& clusterName,
-        NKikimrConfig::TAppConfig& initialCmsConfig,
-        NKikimrConfig::TAppConfig& initialCmsYamlConfig,
-        THashMap<ui32, TConfigItemInfo>& configInitInfo) const override
+        TConfigsDispatcherInitInfo& configsDispatcherInitInfo) const override
     {
         appConfig = AppConfig;
         nodeId = NodeId;
         scopeId = ScopeId;
         tenantName = TenantName;
         servicesMask = ServicesMask;
-        labels = Labels;
         clusterName = ClusterName;
-        initialCmsConfig.CopyFrom(InitDebug.OldConfig);
-        initialCmsYamlConfig.CopyFrom(InitDebug.YamlConfig);
-        configInitInfo = InitDebug.ConfigTransformInfo;
+        configsDispatcherInitInfo.InitialConfig = appConfig;
+        configsDispatcherInitInfo.ItemsServeRules = std::monostate{},
+        configsDispatcherInitInfo.Labels = Labels;
+        configsDispatcherInitInfo.DebugInfo = TDebugInfo {
+            .InitInfo = InitDebug.ConfigTransformInfo,
+        };
+        auto& debugInfo = *configsDispatcherInitInfo.DebugInfo;
+        debugInfo.StaticConfig.CopyFrom(appConfig); // FIXME it's not static config
+        debugInfo.OldDynConfig.CopyFrom(InitDebug.OldConfig);
+        debugInfo.NewDynConfig.CopyFrom(InitDebug.YamlConfig);
     }
 };
 

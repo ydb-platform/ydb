@@ -13,6 +13,7 @@ target_link_libraries(columnshard-transactions-operators INTERFACE
   yutil
   tx-columnshard-transactions
   data_sharing-destination-events
+  columnshard-export-manager
 )
 
 add_global_library_for(columnshard-transactions-operators.global columnshard-transactions-operators)
@@ -21,6 +22,7 @@ target_link_libraries(columnshard-transactions-operators.global PUBLIC
   yutil
   tx-columnshard-transactions
   data_sharing-destination-events
+  columnshard-export-manager
 )
 target_sources(columnshard-transactions-operators.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/operators/schema.cpp

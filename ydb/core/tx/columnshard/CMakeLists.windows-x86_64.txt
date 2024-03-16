@@ -13,6 +13,7 @@ add_subdirectory(counters)
 add_subdirectory(data_locks)
 add_subdirectory(data_sharing)
 add_subdirectory(engines)
+add_subdirectory(export)
 add_subdirectory(hooks)
 add_subdirectory(normalizer)
 add_subdirectory(operations)
@@ -67,6 +68,7 @@ target_link_libraries(core-tx-columnshard PUBLIC
   tx-columnshard-blobs_action
   tx-columnshard-data_locks
   tx-columnshard-data_sharing
+  tx-columnshard-export
   tx-columnshard-resource_subscriber
   columnshard-normalizer-granule
   columnshard-normalizer-portion

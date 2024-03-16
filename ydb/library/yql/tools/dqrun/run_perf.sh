@@ -1,0 +1,1 @@
+perf record -v -g -o profdata-all -- ./dqrun -p clickbench_q0.sql -s --gateways-cfg gw.conf --udfs-dir ~/arcadia/ydb/library/yql/udfs/common -R

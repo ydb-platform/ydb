@@ -49,8 +49,9 @@
             "Match": {"Type": "Callable", "Name": "SoSourceSettings"},
             "Children": [
                 {"Index": 0, "Name": "Token", "Type": "TCoSecureParam"},
-                {"Index": 1, "Name": "RowType", "Type": "TExprBase"},
-                {"Index": 2, "Name": "Settings", "Type": "TExprBase"}
+                {"Index": 1, "Name": "SystemColumns", "Type": "TCoAtomList"},
+                {"Index": 2, "Name": "LabelNames", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "Settings", "Type": "TExprBase"}
             ]
         },
         {
@@ -69,8 +70,9 @@
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSource", "Type": "TSoDataSource"},
                 {"Index": 2, "Name": "Object", "Type": "TSoObject"},
-                {"Index": 3, "Name": "RowType", "Type": "TExprBase"},
-                {"Index": 4, "Name": "ColumnOrder", "Type": "TExprBase", "Optional": true}
+                {"Index": 3, "Name": "SystemColumns", "Type": "TCoAtomList"},
+                {"Index": 4, "Name": "LabelNames", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "ColumnOrder", "Type": "TExprBase", "Optional": true}
             ]
         },
         {

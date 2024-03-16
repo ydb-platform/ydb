@@ -99,7 +99,6 @@ public:
             const auto& soReadObject = maybeSoReadObject.Cast();
             YQL_ENSURE(soReadObject.Ref().GetTypeAnn(), "No type annotation for node " << soReadObject.Ref().Content());
 
-            const auto rowType = soReadObject.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()->GetItemType();
             const auto& clusterName = soReadObject.DataSource().Cluster().StringValue();
 
             const auto token = "cluster:default_" + clusterName;
@@ -113,10 +112,10 @@ public:
                     .Token<TCoSecureParam>()
                         .Name().Build(token)
                         .Build()
-                    .RowType(ExpandType(soReadObject.Pos(), *rowType, ctx))
+                    .SystemColumns(soReadObject.SystemColumns())
+                    .LabelNames(soReadObject.LabelNames())
                     .Settings(settings)
                     .Build()
-                .RowType(ExpandType(soReadObject.Pos(), *rowType, ctx))
                 .DataSource(soReadObject.DataSource().Cast<TCoDataSource>())
                 .Settings(settings)
                 .Done().Ptr();
@@ -152,10 +151,15 @@ public:
             downsampling.SetFill("PREVIOUS");
             downsampling.SetGridMs(15 * 1000);
 
-            const TStructExprType* rowType = settings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-            source.SetRowType(NCommon::WriteTypeToYson(rowType, NYT::NYson::EYsonFormat::Text));
-
             source.MutableToken()->SetName(TString(settings.Token().Name().Value()));
+
+            for (auto& c : settings.SystemColumns()) {
+                source.AddSystemColumns(c.Cast<TCoAtom>().Value());
+            }
+
+            for (auto& c : settings.LabelNames()) {
+                source.AddLabelNames(c.Cast<TCoAtom>().Value());
+            }
 
             protoSettings.PackFrom(source);
             sourceType = "SolomonSource";

@@ -63,5 +63,6 @@ message TDqSolomonSource {
     int64 From = 9;
     int64 To = 10;
     TDownsampling Downsampling = 11;
-    string RowType = 12;
+    repeated string SystemColumns = 12;
+    repeated string LabelNames = 13;
 }

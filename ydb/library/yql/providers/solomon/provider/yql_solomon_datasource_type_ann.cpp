@@ -53,7 +53,7 @@ public:
     }
 
     TStatus HandleRead(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 4U, 5U, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 5U, 6U, ctx)) {
             return TStatus::Error;
         }
 
@@ -65,20 +65,15 @@ public:
             return TStatus::Error;
         }
 
-        const auto& rowTypeNode = *input->Child(TSoReadObject::idx_RowType);
-        if (!EnsureType(rowTypeNode, ctx)) {
+        const auto& systemColumns = *input->Child(TSoReadObject::idx_SystemColumns);
+        if (!EnsureTupleOfAtoms(systemColumns, ctx)) {
             return TStatus::Error;
         }
 
-        const TTypeAnnotationNode* rowType = rowTypeNode.GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-        if (!EnsureStructType(rowTypeNode.Pos(), *rowType, ctx)) {
+        const auto& labelNames = *input->Child(TSoReadObject::idx_LabelNames);
+        if (!EnsureTupleOfAtoms(labelNames, ctx)) {
             return TStatus::Error;
         }
-
-        input->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
-            input->Child(TSoReadObject::idx_World)->GetTypeAnn(),
-            ctx.MakeType<TListExprType>(rowType)
-        }));
 
         if (input->ChildrenSize() > TSoReadObject::idx_ColumnOrder) {
             auto& order = *input->Child(TSoReadObject::idx_ColumnOrder);
@@ -100,6 +95,43 @@ public:
             }
             return State_->Types->SetColumnOrder(*input, columnOrder, ctx);
         }
+
+        TVector<const TItemExprType*> columnTypes;
+        auto stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
+        for (auto& atom : systemColumns.ChildrenList()) {
+            const TOptionalExprType* type = nullptr;
+            auto v = atom.Value();
+            if (v == "ts"sv) {
+                type = ctx.MakeType<TDataExprType>(EDataSlot::Datetime);
+            } else if (v == "value") {
+                type = ctx.MakeType<TDataExprType>(EDataSlot::Double);
+            } else if (v == "labels"sv) {
+                type = ctx.MakeType<NYql::TDictExprType>(stringType, stringType);
+            } else if (IsIn({"kind"sv, "type"sv}, v)) {
+                type = ctx.MakeType<TOptionalExprType>(stringType);
+            } else {
+                ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Unknown system column " << v));
+                return TStatus::Error;
+            }
+
+            columnTypes.push_back(ctx.MakeType<TItemExprType>(v, type));
+        }
+
+        for (auto& atom : labelNames.ChildrenList()) {
+            auto v = atom.Value();
+            if (IsIn({"ts"sv, "kind"sv, "type"sv, "labels"sv, "value"sv}, atom.Value())) {
+                // tmp constraint
+                ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "System column should not be used as label name: " << v));
+                return TStatus::Error;
+            }
+            const TOptionalExprType* type = ctx.MakeType<TOptionalExprType>(stringType);
+            columnTypes.push_back(ctx.MakeType<TItemExprType>(v, type));
+        }
+
+        input->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
+            input->Child(TSoReadObject::idx_World)->GetTypeAnn(),
+            ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(columnTypes))
+        }));
 
         return TStatus::Ok;
     }

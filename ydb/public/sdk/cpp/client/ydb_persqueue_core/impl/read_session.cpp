@@ -196,7 +196,7 @@ void TReadSession::CreateClusterSessionsImpl(TDeferredActions<true>& deferred) {
             sessionSettings.MaxMemoryUsageBytes_ /= clusterSessionsCount;
         }
         LOG_LAZY(Log,
-            TLOG_DEBUG,
+            TLOG_INFO,
             GetLogPrefix() << "Starting session to cluster " << clusterName
                 << " (" << clusterSessionInfo.ClusterEndpoint << ")"
         );
@@ -250,7 +250,7 @@ void TReadSession::OnClusterDiscovery(const TStatus& status, const Ydb::PersQueu
             return;
         }
 
-        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Cluster discovery request succeeded");
+        LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Cluster discovery request succeeded");
         ClusterDiscoveryRetryState = nullptr;
 
         // Init ClusterSessions.

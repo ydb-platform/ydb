@@ -283,7 +283,7 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
         ServerMessage = std::make_shared<TServerMessage<UseMigrationProtocol>>();
         ++ConnectionGeneration;
 
-        LOG_LAZY(Log, TLOG_DEBUG,
+        LOG_LAZY(Log, TLOG_INFO,
                  GetLogPrefix() << "In Reconnect, ReadSizeBudget = " << ReadSizeBudget
                                 << ", ReadSizeServerDelta = " << ReadSizeServerDelta);
 
@@ -309,7 +309,7 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
             }
         }
 
-        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Reconnecting session to cluster " << ClusterName << " in " << delay);
+        LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Reconnecting session to cluster " << ClusterName << " in " << delay);
 
         ++ConnectionAttemptsDone;
 
@@ -447,7 +447,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnConnect(
 template<>
 inline void TSingleClusterReadSessionImpl<true>::InitImpl(TDeferredActions<true>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
-    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Successfully connected. Initializing session");
+    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Successfully connected. Initializing session");
     TClientMessage<true> req;
     auto& init = *req.mutable_init_request();
     init.set_ranges_mode(GetRangesMode());
@@ -478,7 +478,7 @@ inline void TSingleClusterReadSessionImpl<true>::InitImpl(TDeferredActions<true>
 template<>
 inline void TSingleClusterReadSessionImpl<false>::InitImpl(TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
-    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Successfully connected. Initializing session");
+    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Successfully connected. Initializing session");
     TClientMessage<false> req;
     auto& init = *req.mutable_init_request();
 

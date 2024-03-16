@@ -49,10 +49,6 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
     static const std::shared_ptr<arrow::Field> portionRecordIndexField = std::make_shared<arrow::Field>(portionRecordIndexFieldName, std::make_shared<arrow::UInt32Type>());
 
     auto resultSchema = context.SchemaVersions.GetLastSchema();
-    TEntityGroups groups(IStoragesManager::DefaultStorageId);
-    for (auto&& i : resultSchema->GetIndexInfo().GetEntityIds()) {
-        groups.Add(i, resultSchema->GetIndexInfo().GetEntityStorageId(i, ""));
-    }
 
     std::vector<std::string> pkFieldNames = resultSchema->GetIndexInfo().GetReplaceKey()->field_names();
     std::set<std::string> pkFieldNamesSet(pkFieldNames.begin(), pkFieldNames.end());
@@ -164,6 +160,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
     }
     ui32 batchIdx = 0;
 
+    const TEntityGroups groups = resultSchema->GetIndexInfo().GetEntityGroupsByStorageId(IStoragesManager::DefaultStorageId);
     for (auto&& columnChunks : chunkGroups) {
         auto batchResult = batchResults[batchIdx];
         ++batchIdx;
@@ -197,7 +194,8 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
             TGeneralSerializedSlice slice(std::move(i), GetSplitSettings());
             auto b = batchResult->Slice(recordIdx, slice.GetRecordsCount());
             AppendedPortions.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), nullptr, GranuleMeta->GetPathId(), 
-                resultSchema->GetSnapshot(), SaverContext.GetStoragesManager(), resultSchema));
+                resultSchema->GetSnapshot(), SaverContext.GetStoragesManager()));
+            AppendedPortions.back().FillStatistics(resultSchema->GetIndexInfo());
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultSchema->GetIndexInfo().GetReplaceKey()));
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
             AppendedPortions.back().GetPortionInfo().AddMetadata(*resultSchema, primaryKeys, snapshotKeys, IStoragesManager::DefaultStorageId);

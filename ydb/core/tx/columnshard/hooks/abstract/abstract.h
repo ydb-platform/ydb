@@ -19,6 +19,7 @@ class TColumnShard;
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;
 class IBlobsGCAction;
+class TPortionInfo;
 namespace NStatistics {
 class TOperatorContainer;
 }
@@ -86,7 +87,10 @@ public:
         return DoOnDataSharingStarted(tabletId, sessionId);
     }
     virtual void OnStatisticsUsage(const NOlap::NStatistics::TOperatorContainer& /*statOperator*/) {
-        
+
+    }
+    virtual void OnPortionActualization(const NOlap::TPortionInfo& /*info*/) {
+
     }
     virtual void OnMaxValueUsage() {
     }

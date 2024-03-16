@@ -138,7 +138,13 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
         const NOlap::TIndexInfo& lastIndexInfo = VersionedIndex.GetLastSchema()->GetIndexInfo();
         Y_ABORT_UNLESS(lastIndexInfo.CheckCompatible(indexInfo));
     }
+    const bool isCriticalScheme = indexInfo.GetSchemeNeedActualization();
     VersionedIndex.AddIndex(snapshot, std::move(indexInfo));
+    if (isCriticalScheme) {
+        for (auto&& i : Tables) {
+            i.second->RefreshScheme();
+        }
+    }
 }
 
 bool TColumnEngineForLogs::Load(IDbWrapper& db) {
@@ -257,9 +263,11 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(cons
 }
 
 std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCleanupTables(THashSet<ui64>& pathsToDrop) noexcept {
+    if (pathsToDrop.empty()) {
+        return nullptr;
+    }
     auto changes = std::make_shared<TCleanupTablesColumnEngineChanges>(StoragesManager);
 
-    // Add all portions from dropped paths
     ui64 txSize = 0;
     const ui64 txSizeLimit = TGlobalLimits::TxWriteLimitBytes / 4;
     THashSet<ui64> pathsToRemove;

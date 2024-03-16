@@ -1,0 +1,6 @@
+package NKikimrColumnShardExportProto;
+
+message TCursor {
+    optional string LastKey = 1;
+    optional bool Finished = 2;
+}

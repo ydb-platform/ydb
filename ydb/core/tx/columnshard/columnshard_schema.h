@@ -50,7 +50,7 @@ struct Schema : NIceDb::Schema {
         SourceSessionsTableId,
         DestinationSessionsTableId,
         OperationTxIdsId,
-        BackupsId
+        ExportSessionsId
     };
 
     enum class ETierTables: ui32 {
@@ -323,12 +323,14 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<TxId, LockId>;
     };
 
-    struct Backups : NIceDb::Schema::Table<BackupsId> {
-        struct PathId : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct Status : Column<2, NScheme::NTypeIds::Uint64> {};
+    struct ExportSessions : NIceDb::Schema::Table<ExportSessionsId> {
+        struct Identifier : Column<1, NScheme::NTypeIds::String> {};
+        struct Status: Column<2, NScheme::NTypeIds::String> {};
+        struct Task: Column<3, NScheme::NTypeIds::String> {};
+        struct Cursor: Column<4, NScheme::NTypeIds::String> {};
 
-        using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, Status>;
+        using TKey = TableKey<Identifier>;
+        using TColumns = TableColumns<Identifier, Status, Task, Cursor>;
     };
 
     struct TierBlobsDraft: NIceDb::Schema::Table<(ui32)ETierTables::TierBlobsDraft> {
@@ -477,7 +479,7 @@ struct Schema : NIceDb::Schema {
         SourceSessions,
         DestinationSessions,
         OperationTxIds,
-        Backups
+        ExportSessions
         >;
 
     //

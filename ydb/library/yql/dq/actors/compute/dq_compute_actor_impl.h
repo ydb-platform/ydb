@@ -1256,6 +1256,7 @@ protected:
             const auto& inputDesc = Task.GetInputs(inputIndex);
             Y_ABORT_UNLESS(inputDesc.HasSource());
             source.Type = inputDesc.GetSource().GetType();
+            source.ProgramBuilder.ConstructInPlace(typeEnv, *FunctionRegistry);
             const auto& settings = Task.GetSourceSettings();
             Y_ABORT_UNLESS(settings.empty() || inputIndex < settings.size());
             CA_LOG_D("Create source for input " << inputIndex << " " << inputDesc);
@@ -1273,6 +1274,7 @@ protected:
                         .ComputeActorId = this->SelfId(),
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
+                        .ProgramBuilder = *source.ProgramBuilder,
                         .TaskCounters = TaskCounters,
                         .Alloc = Alloc,
                         .MemoryQuotaManager = MemoryLimits.MemoryQuotaManager,

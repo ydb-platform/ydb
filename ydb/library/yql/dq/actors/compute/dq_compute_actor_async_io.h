@@ -13,6 +13,10 @@
 #include <memory>
 #include <utility>
 
+namespace  NKikimr::NMiniKQL {
+class TProgramBuilder;
+}
+
 namespace NYql::NDqProto {
 class TCheckpoint;
 class TTaskInput;
@@ -27,10 +31,6 @@ struct TSinkState;
 namespace NActors {
 class IActor;
 } // namespace NActors
-
-namespace NKikimr::NMiniKQL {
-class TProgramBuilder;
-} // namespace NKikimr::NMiniKQL
 
 namespace NYql::NDq {
 
@@ -256,6 +256,7 @@ public:
         const NActors::TActorId& ComputeActorId;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+         NKikimr::NMiniKQL::TProgramBuilder& ProgramBuilder;
         ::NMonitoring::TDynamicCounterPtr TaskCounters;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         IMemoryQuotaManager::TPtr MemoryQuotaManager;

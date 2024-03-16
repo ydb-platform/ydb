@@ -1,10 +1,11 @@
 #include "yql_solomon_dq_integration.h"
-
+#include "yql_solomon_mkql_compiler.h"
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
@@ -59,7 +60,7 @@ void FillScheme(const TTypeAnnotationNode& itemType, NSo::NProto::TDqSolomonShar
         schemeItem.SetDataTypeId(dataType.TypeId);
 
         if (dataType.Features & NUdf::DateType || dataType.Features & NUdf::TzDateType) {
-            *scheme.MutableTimestamp() = schemeItem;
+            *scheme.MutableTimestamp() = std::move(schemeItem);
         } else if (dataType.Features & NUdf::NumericType) {
             scheme.MutableSensors()->Add(std::move(schemeItem));
         } else if (dataType.Features & NUdf::StringType) {
@@ -72,30 +73,93 @@ void FillScheme(const TTypeAnnotationNode& itemType, NSo::NProto::TDqSolomonShar
 
 class TSolomonDqIntegration: public TDqIntegrationBase {
 public:
-    TSolomonDqIntegration(const TSolomonState::TPtr& state)
+    explicit TSolomonDqIntegration(const TSolomonState::TPtr& state)
         : State_(state.Get())
     {
     }
 
-    bool CanRead(const TExprNode&, TExprContext&, bool) override {
-        YQL_ENSURE(false, "Unimplemented");
+    ui64 Partition(const TDqSettings&, size_t maxPartitions, const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, bool) override {
+        Y_UNUSED(maxPartitions);
+        Y_UNUSED(node);
+        Y_UNUSED(partitions);
+        partitions.push_back("zz_partition");
+        return 0;
+    }
+
+    bool CanRead(const TExprNode& read, TExprContext&, bool) override {
+        return TSoReadObject::Match(&read);
     }
 
     TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TVector<const TExprNode*>&, TExprContext&) override {
         YQL_ENSURE(false, "Unimplemented");
     }
 
+    TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
+        if (const auto& maybeSoReadObject = TMaybeNode<TSoReadObject>(read)) {
+            const auto& soReadObject = maybeSoReadObject.Cast();
+            YQL_ENSURE(soReadObject.Ref().GetTypeAnn(), "No type annotation for node " << soReadObject.Ref().Content());
 
-    TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr&, TExprContext&) override {
-        YQL_ENSURE(false, "Unimplemented");
+            const auto rowType = soReadObject.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()->GetItemType();
+            const auto& clusterName = soReadObject.DataSource().Cluster().StringValue();
+
+            const auto token = "cluster:default_" + clusterName;
+            YQL_CLOG(INFO, ProviderS3) << "Wrap " << read->Content() << " with token: " << token;
+
+            auto settings = soReadObject.Object().Settings();
+
+            auto emptyNode = Build<TCoVoid>(ctx, read->Pos()).Done().Ptr();
+            return Build<TDqSourceWrap>(ctx, read->Pos())
+                .Input<TSoSourceSettings>()
+                    .Token<TCoSecureParam>()
+                        .Name().Build(token)
+                        .Build()
+                    .RowType(ExpandType(soReadObject.Pos(), *rowType, ctx))
+                    .Settings(settings)
+                    .Build()
+                .RowType(ExpandType(soReadObject.Pos(), *rowType, ctx))
+                .DataSource(soReadObject.DataSource().Cast<TCoDataSource>())
+                .Settings(settings)
+                .Done().Ptr();
+        }
+        return read;
     }
 
-    TMaybe<bool> CanWrite(const TExprNode&, TExprContext&) override {
-        YQL_ENSURE(false, "Unimplemented");
+    TMaybe<bool> CanWrite(const TExprNode& write, TExprContext&) override {
+        return TSoWrite::Match(&write);
     }
 
-    void FillSourceSettings(const TExprNode&, ::google::protobuf::Any&, TString&, size_t) override {
-        YQL_ENSURE(false, "Unimplemented");
+    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType) override {
+        const TDqSource source(&node);
+        if (const auto maySettings = source.Settings().Maybe<TSoSourceSettings>()) {
+            const auto settings = maySettings.Cast();
+            const auto& cluster = source.DataSource().Cast<TSoDataSource>().Cluster().StringValue();
+            const auto* clusterDesc = State_->Configuration->ClusterConfigs.FindPtr(cluster);
+            YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster);
+            NSo::NProto::TDqSolomonSource source;
+            source.SetEndpoint(clusterDesc->GetCluster());
+            source.SetProject("yq");
+
+            source.SetClusterType(
+                MapClusterType(clusterDesc->GetClusterType()));
+            source.SetUseSsl(clusterDesc->GetUseSsl());
+            source.SetFrom(TInstant::ParseIso8601("2023-12-08T14:40:39Z").Seconds());
+            source.SetTo(TInstant::ParseIso8601("2023-12-08T14:45:39Z").Seconds());
+            source.SetProgram("{execpool=User,activity=YQ_STORAGE_PROXY,sensor=ActorsAliveByActivity}");
+
+            auto& downsampling = *source.MutableDownsampling();
+            downsampling.SetDisabled(false);
+            downsampling.SetAggregation("MAX");
+            downsampling.SetFill("PREVIOUS");
+            downsampling.SetGridMs(15 * 1000);
+
+            const TStructExprType* rowType = settings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+            source.SetRowType(NCommon::WriteTypeToYson(rowType, NYT::NYson::EYsonFormat::Text));
+
+            source.MutableToken()->SetName(TString(settings.Token().Name().Value()));
+
+            protoSettings.PackFrom(source);
+            sourceType = "SolomonSource";
+        }
     }
 
     void FillSinkSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sinkType) override {
@@ -135,6 +199,10 @@ public:
 
         protoSettings.PackFrom(shardDesc);
         sinkType = "SolomonSink";
+    }
+
+    void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {
+        RegisterDqSolomonMkqlCompilers(compiler);
     }
 
 private:

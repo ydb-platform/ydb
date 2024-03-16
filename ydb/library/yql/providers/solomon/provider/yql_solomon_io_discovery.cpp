@@ -12,7 +12,21 @@
 
 namespace NYql {
 
+namespace {
 using namespace NNodes;
+
+std::array<TExprNode::TPtr, 2U> ExtractSchema(TExprNode::TListType& settings) {
+    for (auto it = settings.cbegin(); settings.cend() != it; ++it) {
+        if (const auto item = *it; item->Head().IsAtom("userschema")) {
+            settings.erase(it);
+            return {item->ChildPtr(1), item->ChildrenSize() > 2 ? item->TailPtr() : TExprNode::TPtr()};
+        }
+    }
+
+    return {};
+}
+
+}
 
 class TSolomonIODiscoveryTransformer : public TSyncTransformerBase {
 public:
@@ -51,10 +65,41 @@ public:
                         .Add(write.Arg(3))
                     .Build()
                     .Done().Ptr();
-
-            } else if (TMaybeNode<TSoRead>(node).DataSource()) {
-                return node;
             }
+
+            if (auto maybeRead = TMaybeNode<TSoRead>(node)) {
+                auto read = maybeRead.Cast();
+                if (read.DataSource().Category().Value() != SolomonProviderName) {
+                    return node;
+                }
+
+                const auto& object = read.Arg(2).Ref();
+                YQL_ENSURE(object.IsCallable("MrTableConcat"));
+
+                auto settings = read.Ref().Child(4);
+                auto settingsList = read.Ref().Child(4)->ChildrenList();
+                auto userSchema = ExtractSchema(settingsList);
+
+                auto soObject = Build<TSoObject>(ctx, read.Pos())
+                                  .Settings(settings)
+                                .Done();
+
+                return userSchema.back()
+                    ? Build<TSoReadObject>(ctx, read.Pos())
+                        .World(read.World())
+                        .DataSource(read.DataSource())
+                        .RowType(std::move(userSchema.front()))
+                        .Object(soObject)
+                        .ColumnOrder(std::move(userSchema.back()))
+                      .Done().Ptr()
+                    : Build<TSoReadObject>(ctx, read.Pos())
+                        .World(read.World())
+                        .DataSource(read.DataSource())
+                        .RowType(std::move(userSchema.front()))
+                        .Object(soObject)
+                      .Done().Ptr();
+            }
+
             return node;
         }, ctx, TOptimizeExprSettings {nullptr});
 
@@ -70,6 +115,7 @@ public:
 
     void Rewind() final {
     }
+
 private:
     TSolomonState::TPtr State_;
 };

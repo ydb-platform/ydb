@@ -1,4 +1,9 @@
 {
+    "test.test[AsciiChecks]": [
+        {
+            "uri": "file://test.test_AsciiChecks_/results.txt"
+        }
+    ],
     "test.test[Base32Decode]": [
         {
             "uri": "file://test.test_Base32Decode_/results.txt"
@@ -7,6 +12,11 @@
     "test.test[Base32Encode]": [
         {
             "uri": "file://test.test_Base32Encode_/results.txt"
+        }
+    ],
+    "test.test[BlockAsciiChecks]": [
+        {
+            "uri": "file://test.test_BlockAsciiChecks_/results.txt"
         }
     ],
     "test.test[BlockFind]": [

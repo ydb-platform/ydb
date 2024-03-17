@@ -10,7 +10,7 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
     CurrentData = data;
     CurrentDataBlob = Serializer->SerializeFull(CurrentData);
     if (data) {
-        auto controller = std::make_shared<TWriteController>(SelfId(), std::vector<TString>({CurrentDataBlob}), BlobsOperator->StartWritingAction("EXPORT"), Cursor, ShardTabletId);
+        auto controller = std::make_shared<TWriteController>(SelfId(), std::vector<TString>({CurrentDataBlob}), BlobsOperator->StartWritingAction("EXPORT"), Cursor, ShardTabletId, Selector->GetPathId());
         Register(CreateWriteActor((ui64)ShardTabletId, controller, TInstant::Max()));
     }
     TOwnedCellVec lastKey = ev->Get()->LastKey;
@@ -20,7 +20,7 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
 
 void TActor::HandleExecute(NEvents::TEvExportWritingFailed::TPtr& /*ev*/) {
     SwitchStage(EStage::WaitWriting, EStage::WaitWriting);
-    auto controller = std::make_shared<TWriteController>(SelfId(), std::vector<TString>({CurrentDataBlob}), BlobsOperator->StartWritingAction("EXPORT"), Cursor, ShardTabletId);
+    auto controller = std::make_shared<TWriteController>(SelfId(), std::vector<TString>({CurrentDataBlob}), BlobsOperator->StartWritingAction("EXPORT"), Cursor, ShardTabletId, Selector->GetPathId());
     Register(CreateWriteActor((ui64)ShardTabletId, controller, TInstant::Max()));
 }
 

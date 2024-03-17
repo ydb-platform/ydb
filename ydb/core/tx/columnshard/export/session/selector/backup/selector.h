@@ -60,6 +60,10 @@ public:
 
     }
 
+    virtual ui64 GetPathId() const override {
+        return TablePathId;
+    }
+
     static TConclusion<TBackupSelector> BuildFromProto(const NKikimrSchemeOp::TBackupTask& proto) {
         TBackupSelector result;
         auto parsed = result.DeserializeFromProto(proto);

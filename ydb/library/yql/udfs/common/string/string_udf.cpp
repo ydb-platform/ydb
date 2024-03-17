@@ -206,6 +206,9 @@ namespace {
     XX(Base64StrictDecode, Base64StrictDecode)         \
     XX(HexDecode, HexDecode)
 
+// NOTE: The functions below are marked as deprecated, so block implementation
+// is not required for them. Hence, STROKA_CASE_UDF provides only the scalar
+// one at the moment.
 #define STROKA_CASE_UDF_MAP(XX) \
     XX(ToLower, ToLower)        \
     XX(ToUpper, ToUpper)        \

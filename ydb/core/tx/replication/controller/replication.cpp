@@ -91,15 +91,17 @@ public:
     void Progress(TReplication::TPtr self, const TActorContext& ctx) {
         if (!YdbProxy) {
             THolder<IActor> ydbProxy;
-            switch (Config.GetCredentialsCase()) {
-            case NKikimrReplication::TReplicationConfig::kStaticCredentials:
-                ydbProxy.Reset(CreateYdbProxy(Config.GetSrcEndpoint(), Config.GetSrcDatabase(), Config.GetStaticCredentials()));
+            const auto& params = Config.GetSrcConnectionParams();
+
+            switch (params.GetCredentialsCase()) {
+            case NKikimrReplication::TConnectionParams::kStaticCredentials:
+                ydbProxy.Reset(CreateYdbProxy(params.GetEndpoint(), params.GetDatabase(), params.GetStaticCredentials()));
                 break;
-            case NKikimrReplication::TReplicationConfig::kOAuthToken:
-                ydbProxy.Reset(CreateYdbProxy(Config.GetSrcEndpoint(), Config.GetSrcDatabase(), Config.GetOAuthToken()));
+            case NKikimrReplication::TConnectionParams::kOAuthToken:
+                ydbProxy.Reset(CreateYdbProxy(params.GetEndpoint(), params.GetDatabase(), params.GetOAuthToken()));
                 break;
             default:
-                ErrorState(TStringBuilder() << "Unexpected credentials: " << Config.GetCredentialsCase());
+                ErrorState(TStringBuilder() << "Unexpected credentials: " << params.GetCredentialsCase());
                 break;
             }
 
@@ -276,6 +278,6 @@ Y_DECLARE_OUT_SPEC(, NKikimrReplication::TReplicationConfig::TargetCase, stream,
     stream << static_cast<int>(value);
 }
 
-Y_DECLARE_OUT_SPEC(, NKikimrReplication::TReplicationConfig::CredentialsCase, stream, value) {
+Y_DECLARE_OUT_SPEC(, NKikimrReplication::TConnectionParams::CredentialsCase, stream, value) {
     stream << static_cast<int>(value);
 }

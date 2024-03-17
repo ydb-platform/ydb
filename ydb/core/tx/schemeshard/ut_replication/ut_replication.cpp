@@ -7,9 +7,11 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         return Sprintf(R"(
             Name: "%s"
             Config {
-              StaticCredentials {
-                User: "user"
-                Password: "pwd"
+              SrcConnectionParams {
+                StaticCredentials {
+                  User: "user"
+                  Password: "pwd"
+                }
               }
               Specific {
                 Targets {

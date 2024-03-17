@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         TestWaitCondition(runtime, "export",
             []() {return Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize(); });
         TestWaitCondition(runtime, "finish",
-            []() {return csControllerGuard->GetFinishedExportsCount() == 1; });
+            [&]() {return csControllerGuard->GetFinishedExportsCount() == 1; });
     }
 }
 

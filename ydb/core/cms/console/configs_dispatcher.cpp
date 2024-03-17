@@ -236,8 +236,10 @@ private:
     const std::variant<std::monostate, TDenyList, TAllowList> ItemsServeRules;
     const NKikimrConfig::TAppConfig BaseConfig;
     NKikimrConfig::TAppConfig CurrentConfig;
+    NKikimrConfig::TAppConfig CandidateStartupConfig;
     const std::optional<TDebugInfo> DebugInfo;
     std::shared_ptr<NConfig::TRecordedInitialConfiguratorDeps> RecordedInitialConfiguratorDeps;
+    std::vector<TString> Args;
     ui64 NextRequestCookie;
     TVector<TActorId> HttpRequests;
     TActorId CommonSubscriptionClient;
@@ -262,8 +264,10 @@ TConfigsDispatcher::TConfigsDispatcher(const TConfigsDispatcherInitInfo& initInf
         , ItemsServeRules(initInfo.ItemsServeRules)
         , BaseConfig(initInfo.InitialConfig)
         , CurrentConfig(initInfo.InitialConfig)
+        , CandidateStartupConfig(initInfo.InitialConfig)
         , DebugInfo(initInfo.DebugInfo)
         , RecordedInitialConfiguratorDeps(std::move(initInfo.RecordedInitialConfiguratorDeps))
+        , Args(initInfo.Args)
         , NextRequestCookie(Now().GetValue())
 {}
 
@@ -542,6 +546,33 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                 str << "<br />" << Endl;
                 COLLAPSED_REF_CONTENT("debug-info", "Debug info") {
                     DIV_CLASS("tab-left") {
+                        COLLAPSED_REF_CONTENT("args", "Startup process args") {
+                            PRE() {
+                                for (auto& arg : Args) {
+                                    str << "\"" << arg << "\" ";
+                                }
+                            }
+                        }
+                        str << "<br />" << Endl;
+                        COLLAPSED_REF_CONTENT("candidate-startup-config", "Candidate startup config") {
+                            str << "<div class=\"alert alert-primary tab-left\" role=\"alert\">" << Endl;
+                            google::protobuf::util::MessageDifferencer md;
+                            auto field_comparator = google::protobuf::util::DefaultFieldComparator();
+                            md.set_field_comparator(&field_comparator);
+                            TString diff;
+                            md.ReportDifferencesToString(&diff);
+                            if (!md.Compare(BaseConfig, CandidateStartupConfig)) {
+                                str << "<b>Configs are different: </b>" << Endl;
+                                PRE() {
+                                    str << diff;
+                                }
+                            } else {
+                                str << "<b>Configs are same.</b>" << Endl;
+                            }
+                            str << "</div>" << Endl;
+                            NHttp::OutputConfigHTML(str, CandidateStartupConfig);
+                        }
+                        str << "<br />" << Endl;
                         COLLAPSED_REF_CONTENT("effective-config-debug-info", "Effective config debug info") {
                             NHttp::OutputConfigDebugInfoHTML(
                                 str,
@@ -706,11 +737,82 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
     HttpRequests.clear();
 }
 
+class TConfigurationResult
+    : public IConfigurationResult
+{
+public:
+    // TODO make ref
+    const NKikimrConfig::TAppConfig& GetConfig() const {
+        return Config;
+    }
+
+    bool HasYamlConfig() const {
+        return !YamlConfig.empty();
+    }
+
+    const TString& GetYamlConfig() const {
+        return YamlConfig;
+    }
+
+    TMap<ui64, TString> GetVolatileYamlConfigs() const {
+        return VolatileYamlConfigs;
+    }
+
+    NKikimrConfig::TAppConfig Config;
+    TString YamlConfig;
+    TMap<ui64, TString> VolatileYamlConfigs;
+};
+
+
 void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev)
 {
     auto &rec = ev->Get()->Record;
 
-    NConfig::TInitialConfigurator initCfg(RecordedInitialConfiguratorDeps->GetDeps());
+    {
+        auto dcClient = std::make_unique<TDynConfigClientMock>();
+        auto configs = std::make_shared<TConfigurationResult>();
+        dcClient->SavedResult = configs;
+        configs->Config = rec.GetRawConsoleConfig();
+        configs->YamlConfig = rec.GetYamlConfig();
+        // TODO volatile
+        RecordedInitialConfiguratorDeps->DynConfigClient = std::move(dcClient);
+        auto deps = RecordedInitialConfiguratorDeps->GetDeps();
+        NConfig::TInitialConfigurator initCfg(deps);
+
+        std::vector<const char*> argv;
+
+        for (const auto& arg : Args) {
+            argv.push_back(arg.data());
+        }
+
+        NLastGetopt::TOpts opts;
+        initCfg.RegisterCliOptions(opts);
+        deps.ProtoConfigFileProvider.RegisterCliOptions(opts);
+
+        NLastGetopt::TOptsParseResult parseResult(&opts, argv.size(), argv.data());
+
+        initCfg.ValidateOptions(opts, parseResult);
+        initCfg.Parse(parseResult.GetFreeArgs());
+
+        NKikimrConfig::TAppConfig appConfig;
+        ui32 nodeId;
+        TKikimrScopeId scopeId;
+        TString tenantName;
+        TBasicKikimrServicesMask servicesMask;
+        TString clusterName;
+        NConfig::TConfigsDispatcherInitInfo configsDispatcherInitInfo;
+
+        initCfg.Apply(
+            appConfig,
+            nodeId,
+            scopeId,
+            tenantName,
+            servicesMask,
+            clusterName,
+            configsDispatcherInitInfo);
+
+        CandidateStartupConfig = appConfig;
+    }
 
     CurrentConfig = rec.GetConfig();
 

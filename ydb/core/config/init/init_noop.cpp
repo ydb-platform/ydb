@@ -29,14 +29,14 @@ class TNoopDynConfigClient
     : public IDynConfigClient
 {
 public:
-    TMaybe<NKikimr::NClient::TConfigurationResult> GetConfig(
+    std::shared_ptr<IConfigurationResult> GetConfig(
         const TGrpcSslSettings&,
         const TVector<TString>&,
         const TDynConfigSettings&,
         const IEnv&,
         IInitLogger&) const override
     {
-        return {};
+        return nullptr;
     }
 };
 

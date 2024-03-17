@@ -398,6 +398,32 @@ public:
     }
 };
 
+class TDynConfigResultWrapper
+    : public IConfigurationResult
+{
+    NKikimr::NClient::TConfigurationResult Result;
+public:
+    TDynConfigResultWrapper(NKikimr::NClient::TConfigurationResult&& result)
+        : Result(std::move(result))
+    {}
+
+    const NKikimrConfig::TAppConfig& GetConfig() const {
+        return Result.GetConfig();
+    }
+
+    bool HasYamlConfig() const {
+        return Result.HasYamlConfig();
+    }
+
+    const TString& GetYamlConfig() const {
+        return Result.GetYamlConfig();
+    }
+
+    TMap<ui64, TString> GetVolatileYamlConfigs() const {
+        return Result.GetVolatileYamlConfigs();
+    }
+};
+
 class TDefaultDynConfigClient
     : public IDynConfigClient
 {
@@ -407,7 +433,7 @@ class TDefaultDynConfigClient
         const TDynConfigSettings& settings,
         const IEnv& env,
         IInitLogger& logger,
-        TMaybe<NKikimr::NClient::TConfigurationResult>& res,
+        std::shared_ptr<IConfigurationResult>& res,
         TString &error)
     {
         NClient::TKikimr kikimr(GetKikimr(
@@ -428,6 +454,7 @@ class TDefaultDynConfigClient
                                                      1);
 
         if (!result.IsSuccess()) {
+            res = nullptr;
             error = result.GetErrorMessage();
             logger.Err() << "Configuration error: " << error << Endl;
             return false;
@@ -435,19 +462,19 @@ class TDefaultDynConfigClient
 
         logger.Out() << "Success." << Endl;
 
-        res = result;
+        res = std::make_shared<TDynConfigResultWrapper>(std::move(result));
 
         return true;
     }
 public:
-    TMaybe<NKikimr::NClient::TConfigurationResult> GetConfig(
+    std::shared_ptr<IConfigurationResult> GetConfig(
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const TDynConfigSettings& settings,
         const IEnv& env,
         IInitLogger& logger) const override
     {
-        TMaybe<NKikimr::NClient::TConfigurationResult> res;
+        std::shared_ptr<IConfigurationResult> res;
         bool success = false;
         TString error;
 
@@ -740,7 +767,7 @@ NClient::TKikimr GetKikimr(const TGrpcSslSettings& cf, const TString& addr, cons
     return NClient::TKikimr(grpcConfig);
 }
 
-NKikimrConfig::TAppConfig GetYamlConfigFromResult(const NKikimr::NClient::TConfigurationResult& result, const TMap<TString, TString>& labels) {
+NKikimrConfig::TAppConfig GetYamlConfigFromResult(const IConfigurationResult& result, const TMap<TString, TString>& labels) {
     NKikimrConfig::TAppConfig yamlConfig;
     if (result.HasYamlConfig() && !result.GetYamlConfig().empty()) {
         NYamlConfig::ResolveAndParseYamlConfig(

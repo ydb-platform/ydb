@@ -148,10 +148,19 @@ struct TDynConfigSettings {
     TString StaffApiUserToken;
 };
 
+class IConfigurationResult {
+public:
+    virtual ~IConfigurationResult() {}
+    virtual const NKikimrConfig::TAppConfig& GetConfig() const = 0;
+    virtual bool HasYamlConfig() const = 0;
+    virtual const TString& GetYamlConfig() const = 0;
+    virtual TMap<ui64, TString> GetVolatileYamlConfigs() const = 0;
+};
+
 class IDynConfigClient {
 public:
     virtual ~IDynConfigClient() {}
-    virtual TMaybe<NKikimr::NClient::TConfigurationResult> GetConfig(
+    virtual std::shared_ptr<IConfigurationResult> GetConfig(
         const TGrpcSslSettings& gs,
         const TVector<TString>& addrs,
         const TDynConfigSettings& settings,
@@ -217,6 +226,7 @@ struct TConfigsDispatcherInitInfo {
     std::variant<std::monostate, TDenyList, TAllowList> ItemsServeRules;
     std::optional<TDebugInfo> DebugInfo;
     std::shared_ptr<NConfig::TRecordedInitialConfiguratorDeps> RecordedInitialConfiguratorDeps;
+    std::vector<TString> Args;
 };
 
 class IInitialConfigurator {

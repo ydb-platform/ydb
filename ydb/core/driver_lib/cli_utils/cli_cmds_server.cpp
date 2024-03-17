@@ -26,7 +26,7 @@ TClientCommandServer::TClientCommandServer(std::shared_ptr<TModuleFactories> fac
     , InitCfg(DepsRecorder->GetDeps())
 {}
 
-int TClientCommandServer::Run(TConfig& /*config*/) {
+int TClientCommandServer::Run(TConfig& config) {
     NKikimrConfig::TAppConfig appConfig;
 
     TKikimrRunConfig runConfig(appConfig);
@@ -42,6 +42,10 @@ int TClientCommandServer::Run(TConfig& /*config*/) {
 
     runConfig.ConfigsDispatcherInitInfo.RecordedInitialConfiguratorDeps =
         std::make_shared<NConfig::TRecordedInitialConfiguratorDeps>(DepsRecorder->GetRecordedDeps());
+
+    for (int i = 0; i < config.ArgC; ++i) {
+        runConfig.ConfigsDispatcherInitInfo.Args.push_back(config.ArgV[i]);
+    }
 
     Y_ABORT_UNLESS(runConfig.NodeId);
     return MainRun(runConfig, Factories);

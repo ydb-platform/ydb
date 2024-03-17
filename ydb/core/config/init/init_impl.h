@@ -868,7 +868,7 @@ TString DeduceNodeDomain(const NConfig::TCommonAppOptions& cf, const NKikimrConf
 ui32 NextValidKind(ui32 kind);
 bool HasCorrespondingManagedKind(ui32 kind, const NKikimrConfig::TAppConfig& appConfig);
 NClient::TKikimr GetKikimr(const TGrpcSslSettings& cf, const TString& addr, const IEnv& env);
-NKikimrConfig::TAppConfig GetYamlConfigFromResult(const NKikimr::NClient::TConfigurationResult& result, const TMap<TString, TString>& labels);
+NKikimrConfig::TAppConfig GetYamlConfigFromResult(const IConfigurationResult& result, const TMap<TString, TString>& labels);
 NKikimrConfig::TAppConfig GetActualDynConfig(
     const NKikimrConfig::TAppConfig& yamlConfig,
     const NKikimrConfig::TAppConfig& regularConfig,
@@ -1179,7 +1179,7 @@ public:
             AppConfig.GetAuthConfig().GetStaffApiUserToken(),
         };
 
-        TMaybe<NKikimr::NClient::TConfigurationResult> result = DynConfigClient.GetConfig(CommonAppOptions.GrpcSslSettings, addrs, settings, Env, Logger);
+        auto result = DynConfigClient.GetConfig(CommonAppOptions.GrpcSslSettings, addrs, settings, Env, Logger);
 
         if (!result) {
             return;

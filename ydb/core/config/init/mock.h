@@ -73,7 +73,7 @@ class TDynConfigClientMock
     : public IDynConfigClient
 {
 public:
-    TMaybe<NKikimr::NClient::TConfigurationResult> GetConfig(
+    std::shared_ptr<IConfigurationResult> GetConfig(
         const TGrpcSslSettings& gs,
         const TVector<TString>& addrs,
         const TDynConfigSettings& settings,
@@ -84,7 +84,7 @@ public:
         return SavedResult;
     }
 
-    TMaybe<NKikimr::NClient::TConfigurationResult> SavedResult;
+    std::shared_ptr<IConfigurationResult> SavedResult;
 };
 
 class TDynConfigClientRecorder
@@ -97,7 +97,7 @@ public:
         : Impl(impl)
     {}
 
-    TMaybe<NKikimr::NClient::TConfigurationResult> GetConfig(
+    std::shared_ptr<IConfigurationResult> GetConfig(
         const TGrpcSslSettings& gs,
         const TVector<TString>& addrs,
         const TDynConfigSettings& settings,
@@ -162,7 +162,7 @@ class TProtoConfigFileProviderMock
 {
 public:
     void AddConfigFile(TString optName, TString description) override {
-        Y_UNUSED(optName, description);
+        SavedOpts[optName] = MakeSimpleShared<TFileConfigOptions>(TFileConfigOptions{.Description = description});
     }
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) const override {

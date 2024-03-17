@@ -71,12 +71,14 @@ namespace NInterconnect {
     {}
 
     TAddress::TAddress(in_addr addr, ui16 port) {
+        memset(&Addr, 0, sizeof(Addr));
         Addr.Ipv4.sin_family = AF_INET;
         Addr.Ipv4.sin_port = htons(port);
         Addr.Ipv4.sin_addr = addr;
     }
 
     TAddress::TAddress(in6_addr addr, ui16 port) {
+        memset(&Addr, 0, sizeof(Addr));
         Addr.Ipv6.sin6_family = AF_INET6;
         Addr.Ipv6.sin6_port = htons(port);
         Addr.Ipv6.sin6_addr = addr;

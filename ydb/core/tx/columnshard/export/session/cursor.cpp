@@ -10,6 +10,7 @@ NKikimr::TConclusionStatus TCursor::DeserializeFromProto(const NKikimrColumnShar
     if (proto.HasFinished()) {
         Finished = proto.GetFinished();
     }
+    ChunkIdx = proto.GetChunkIdx();
     return TConclusionStatus::Success();
 }
 
@@ -28,6 +29,7 @@ NKikimrColumnShardExportProto::TCursor TCursor::SerializeToProto() const {
         result.SetLastKey(TSerializedCellVec::Serialize(*LastKey));
     }
     result.SetFinished(Finished);
+    result.SetChunkIdx(ChunkIdx);
     return result;
 }
 

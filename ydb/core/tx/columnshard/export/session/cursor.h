@@ -11,6 +11,7 @@ namespace NKikimr::NOlap::NExport {
 
 class TCursor {
 private:
+    ui32 ChunkIdx = 1;
     std::optional<TOwnedCellVec> LastKey;
     bool Finished = false;
 
@@ -24,8 +25,26 @@ public:
 
     }
 
+    const std::optional<TOwnedCellVec>& GetLastKey() const {
+        return LastKey;
+    }
+
+    ui32 GetChunkIdx() const {
+        return ChunkIdx;
+    }
+
+    bool HasLastKey() const {
+        return !!LastKey;
+    }
+
     bool IsFinished() const {
         return Finished;
+    }
+
+    void InitNext(const TOwnedCellVec& lastKey, const bool finished) {
+        ++ChunkIdx;
+        LastKey = lastKey;
+        Finished = finished;
     }
 
     static TConclusion<TCursor> BuildFromProto(const NKikimrColumnShardExportProto::TCursor& proto);

@@ -66,6 +66,10 @@ public:
     TUnifiedBlobId(TUnifiedBlobId&& other) = default;
     TUnifiedBlobId& operator = (TUnifiedBlobId&& logoBlobId) = default;
 
+    static TUnifiedBlobId BuildRaw(const ui32 groupId, const ui64 tabletId, const ui64 r1, const ui64 r2) {
+        return TUnifiedBlobId(groupId, TLogoBlobID(tabletId, r1, r2));
+    }
+
     NKikimrColumnShardProto::TUnifiedBlobId SerializeToProto() const;
 
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardProto::TUnifiedBlobId& proto);

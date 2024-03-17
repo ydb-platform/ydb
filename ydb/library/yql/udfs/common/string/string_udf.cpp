@@ -582,7 +582,7 @@ namespace {
     END_SIMPLE_ARROW_UDF(TRemoveFirst, TRemoveFirstKernelExec::Do)
 
 
-    SIMPLE_STRICT_UDF(TRemoveLast, char*(TAutoMap<char*>, char*)) {
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TRemoveLast, char*(TAutoMap<char*>, char*)) {
         std::string input(args[0].AsStringRef());
         const std::string_view remove(args[1].AsStringRef());
         std::unordered_set<char> chars(remove.cbegin(), remove.cend());
@@ -594,6 +594,27 @@ namespace {
         }
         return args[0];
     }
+
+    struct TRemoveLastKernelExec
+        : public TBinaryKernelExec<TRemoveLastKernelExec>
+    {
+        template <typename TSink>
+        static void Process(TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
+            std::string input(arg1.AsStringRef());
+            const std::string_view remove(arg2.AsStringRef());
+            std::unordered_set<char> chars(remove.cbegin(), remove.cend());
+            for (auto it = input.crbegin(); it != input.crend(); ++it) {
+                if (chars.contains(*it)) {
+                    input.erase(input.crend() - it - 1, 1);
+                    return sink(TBlockItem(input));
+                }
+            }
+            sink(arg1);
+        }
+    };
+
+    END_SIMPLE_ARROW_UDF(TRemoveLast, TRemoveLastKernelExec::Do)
+
 
     // NOTE: String::Find is marked as deprecated, so block implementation is
     // not required for them. Hence, only the scalar one is provided.

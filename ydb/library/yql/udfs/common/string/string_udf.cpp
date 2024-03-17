@@ -125,23 +125,48 @@ namespace {
         }                                                               \
     }
 
-#define IS_ASCII_UDF(function)                                    \
-    SIMPLE_STRICT_UDF(T##function, bool(TOptional<char*>)) {      \
-        Y_UNUSED(valueBuilder);                                   \
-        if (args[0]) {                                            \
-            const TStringBuf input(args[0].AsStringRef());        \
-            bool result = true;                                   \
-            for (auto c : input) {                                \
-                if (!function(c)) {                               \
-                    result = false;                               \
-                    break;                                        \
-                }                                                 \
-            }                                                     \
-            return TUnboxedValuePod(result);                      \
-        } else {                                                  \
-            return TUnboxedValuePod(false);                       \
-        }                                                         \
-    }
+#define IS_ASCII_UDF(function)                                           \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##function, bool(TOptional<char*>)) { \
+        Y_UNUSED(valueBuilder);                                          \
+        if (args[0]) {                                                   \
+            const TStringBuf input(args[0].AsStringRef());               \
+            bool result = true;                                          \
+            for (auto c : input) {                                       \
+                if (!function(c)) {                                      \
+                    result = false;                                      \
+                    break;                                               \
+                }                                                        \
+            }                                                            \
+            return TUnboxedValuePod(result);                             \
+        } else {                                                         \
+            return TUnboxedValuePod(false);                              \
+        }                                                                \
+    }                                                                    \
+                                                                         \
+    struct T##function##KernelExec                                       \
+        : public TUnaryKernelExec<T##function##KernelExec>               \
+    {                                                                    \
+        template <typename TSink>                                        \
+        static void Process(TBlockItem arg1, const TSink& sink) {        \
+            if (arg1) {                                                  \
+                const TStringBuf input(arg1.AsStringRef());              \
+                bool result = true;                                      \
+                for (auto c : input) {                                   \
+                    if (!function(c)) {                                  \
+                        result = false;                                  \
+                        break;                                           \
+                    }                                                    \
+                }                                                        \
+                sink(TBlockItem(result));                                \
+            } else {                                                     \
+                sink(TBlockItem(false));                                 \
+            }                                                            \
+        }                                                                \
+    };                                                                   \
+                                                                         \
+    END_SIMPLE_ARROW_UDF(T##function, T##function##KernelExec::Do)
+
+
 
 #define STRING_UDF_MAP(XX)           \
     XX(Base32Encode, Base32Encode)   \

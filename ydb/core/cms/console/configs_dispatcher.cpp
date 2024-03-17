@@ -11,6 +11,7 @@
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/config/init/mock.h>
+#include <ydb/core/base/counters.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -165,6 +166,8 @@ public:
 
     TDynBitMap FilterKinds(const TDynBitMap& in);
 
+    void UpdateCandidateStartupConfig(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev);
+
     void Handle(NMon::TEvHttpInfo::TPtr &ev);
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev);
     void Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev);
@@ -237,6 +240,10 @@ private:
     const NKikimrConfig::TAppConfig BaseConfig;
     NKikimrConfig::TAppConfig CurrentConfig;
     NKikimrConfig::TAppConfig CandidateStartupConfig;
+    bool StartupConfigProcessError = false;
+    bool StartupConfigProcessDiff = false;
+    TString StartupConfigInfo;
+    ::NMonitoring::TDynamicCounters::TCounterPtr StartupConfigChanged;
     const std::optional<TDebugInfo> DebugInfo;
     std::shared_ptr<NConfig::TRecordedInitialConfiguratorDeps> RecordedInitialConfiguratorDeps;
     std::vector<TString> Args;
@@ -280,6 +287,10 @@ void TConfigsDispatcher::Bootstrap()
         NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
         mon->RegisterActorPage(actorsMonPage, "configs_dispatcher", "Configs Dispatcher", false, TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
     }
+    TIntrusivePtr<NMonitoring::TDynamicCounters> rootCounters = AppData()->Counters;
+    TIntrusivePtr<NMonitoring::TDynamicCounters> authCounters = GetServiceCounters(rootCounters, "config");
+    NMonitoring::TDynamicCounterPtr counters = authCounters->GetSubgroup("subsystem", "ConfigsDispatcher");
+    StartupConfigChanged = counters->GetCounter("StartupConfigChanged", true);
 
     auto commonClient = CreateConfigsSubscriber(
         SelfId(),
@@ -556,15 +567,15 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                         str << "<br />" << Endl;
                         COLLAPSED_REF_CONTENT("candidate-startup-config", "Candidate startup config") {
                             str << "<div class=\"alert alert-primary tab-left\" role=\"alert\">" << Endl;
-                            google::protobuf::util::MessageDifferencer md;
-                            auto field_comparator = google::protobuf::util::DefaultFieldComparator();
-                            md.set_field_comparator(&field_comparator);
-                            TString diff;
-                            md.ReportDifferencesToString(&diff);
-                            if (!md.Compare(BaseConfig, CandidateStartupConfig)) {
+                            if (StartupConfigProcessError) {
+                                str << "<b>Error: </b>" << Endl;
+                                PRE() {
+                                    str << StartupConfigInfo;
+                                }
+                            } else if (StartupConfigProcessDiff) {
                                 str << "<b>Configs are different: </b>" << Endl;
                                 PRE() {
-                                    str << diff;
+                                    str << StartupConfigInfo;
                                 }
                             } else {
                                 str << "<b>Configs are same.</b>" << Endl;
@@ -763,56 +774,76 @@ public:
     TMap<ui64, TString> VolatileYamlConfigs;
 };
 
+void TConfigsDispatcher::UpdateCandidateStartupConfig(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev)
+try {
+    auto &rec = ev->Get()->Record;
+
+    auto dcClient = std::make_unique<TDynConfigClientMock>();
+    auto configs = std::make_shared<TConfigurationResult>();
+    dcClient->SavedResult = configs;
+    configs->Config = rec.GetRawConsoleConfig();
+    configs->YamlConfig = rec.GetYamlConfig();
+    // TODO volatile
+    RecordedInitialConfiguratorDeps->DynConfigClient = std::move(dcClient);
+    auto deps = RecordedInitialConfiguratorDeps->GetDeps();
+    NConfig::TInitialConfigurator initCfg(deps);
+
+    std::vector<const char*> argv;
+
+    for (const auto& arg : Args) {
+        argv.push_back(arg.data());
+    }
+
+    NLastGetopt::TOpts opts;
+    initCfg.RegisterCliOptions(opts);
+    deps.ProtoConfigFileProvider.RegisterCliOptions(opts);
+
+    NLastGetopt::TOptsParseResult parseResult(&opts, argv.size(), argv.data());
+
+    initCfg.ValidateOptions(opts, parseResult);
+    initCfg.Parse(parseResult.GetFreeArgs());
+
+    NKikimrConfig::TAppConfig appConfig;
+    ui32 nodeId;
+    TKikimrScopeId scopeId;
+    TString tenantName;
+    TBasicKikimrServicesMask servicesMask;
+    TString clusterName;
+    NConfig::TConfigsDispatcherInitInfo configsDispatcherInitInfo;
+
+    initCfg.Apply(
+        appConfig,
+        nodeId,
+        scopeId,
+        tenantName,
+        servicesMask,
+        clusterName,
+        configsDispatcherInitInfo);
+
+    CandidateStartupConfig = appConfig;
+    StartupConfigProcessError = false;
+    StartupConfigProcessDiff = false;
+    StartupConfigInfo.clear();
+    google::protobuf::util::MessageDifferencer md;
+    auto fieldComparator = google::protobuf::util::DefaultFieldComparator();
+    md.set_field_comparator(&fieldComparator);
+    md.ReportDifferencesToString(&StartupConfigInfo);
+    StartupConfigProcessDiff = !md.Compare(BaseConfig, CandidateStartupConfig);
+    *StartupConfigChanged = StartupConfigProcessDiff ? 1 : 0;
+}
+catch (...) {
+    CandidateStartupConfig = {};
+    StartupConfigProcessError = true;
+    StartupConfigProcessDiff = false;
+    StartupConfigInfo = "Got exception while processing candidate config.";
+    *StartupConfigChanged = 1;
+}
 
 void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev)
 {
     auto &rec = ev->Get()->Record;
 
-    {
-        auto dcClient = std::make_unique<TDynConfigClientMock>();
-        auto configs = std::make_shared<TConfigurationResult>();
-        dcClient->SavedResult = configs;
-        configs->Config = rec.GetRawConsoleConfig();
-        configs->YamlConfig = rec.GetYamlConfig();
-        // TODO volatile
-        RecordedInitialConfiguratorDeps->DynConfigClient = std::move(dcClient);
-        auto deps = RecordedInitialConfiguratorDeps->GetDeps();
-        NConfig::TInitialConfigurator initCfg(deps);
-
-        std::vector<const char*> argv;
-
-        for (const auto& arg : Args) {
-            argv.push_back(arg.data());
-        }
-
-        NLastGetopt::TOpts opts;
-        initCfg.RegisterCliOptions(opts);
-        deps.ProtoConfigFileProvider.RegisterCliOptions(opts);
-
-        NLastGetopt::TOptsParseResult parseResult(&opts, argv.size(), argv.data());
-
-        initCfg.ValidateOptions(opts, parseResult);
-        initCfg.Parse(parseResult.GetFreeArgs());
-
-        NKikimrConfig::TAppConfig appConfig;
-        ui32 nodeId;
-        TKikimrScopeId scopeId;
-        TString tenantName;
-        TBasicKikimrServicesMask servicesMask;
-        TString clusterName;
-        NConfig::TConfigsDispatcherInitInfo configsDispatcherInitInfo;
-
-        initCfg.Apply(
-            appConfig,
-            nodeId,
-            scopeId,
-            tenantName,
-            servicesMask,
-            clusterName,
-            configsDispatcherInitInfo);
-
-        CandidateStartupConfig = appConfig;
-    }
+    UpdateCandidateStartupConfig(ev);
 
     CurrentConfig = rec.GetConfig();
 

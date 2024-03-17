@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    GLOBAL selector.cpp
+    GLOBAL storage.cpp
 )
 
 PEERDIR(

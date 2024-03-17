@@ -29,6 +29,7 @@ std::shared_ptr<IBlobsReadingAction> TOperator::DoStartReadingAction() {
 
 std::shared_ptr<IBlobsGCAction> TOperator::DoStartGCAction(const std::shared_ptr<TRemoveGCCounters>& counters) const {
     std::deque<TUnifiedBlobId> draftBlobIds;
+    AFL_VERIFY(!!TabletActorId);
     TBlobsCategories categories(TTabletId(0));
     {
         TTabletsByBlob deleteBlobIds;

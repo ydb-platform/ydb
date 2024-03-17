@@ -29,6 +29,11 @@
             "uri": "file://test.test_BlockStringUDF_/results.txt"
         }
     ],
+    "test.test[BlockTo]": [
+        {
+            "uri": "file://test.test_BlockTo_/results.txt"
+        }
+    ],
     "test.test[ExtendAndTake]": [
         {
             "uri": "file://test.test_ExtendAndTake_/results.txt"

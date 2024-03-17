@@ -91,15 +91,32 @@ namespace {
         }                                                               \
     }
 
-#define STROKA_ASCII_CASE_UDF(udfName, function)                 \
-    SIMPLE_STRICT_UDF(T##udfName, char*(TAutoMap<char*>)) {      \
-        TString input(args[0].AsStringRef());                    \
-        if (input.function()) {                                  \
-            return valueBuilder->NewString(input);               \
-        } else {                                                 \
-            return args[0];                                      \
-        }                                                        \
-    }
+#define STROKA_ASCII_CASE_UDF(udfName, function)                        \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##udfName, char*(TAutoMap<char*>)) { \
+        TString input(args[0].AsStringRef());                           \
+        if (input.function()) {                                         \
+            return valueBuilder->NewString(input);                      \
+        } else {                                                        \
+            return args[0];                                             \
+        }                                                               \
+    }                                                                   \
+                                                                        \
+    struct T##udfName##KernelExec                                       \
+        : public TUnaryKernelExec<T##udfName##KernelExec>               \
+    {                                                                   \
+        template <typename TSink>                                       \
+        static void Process(TBlockItem arg1, const TSink& sink) {       \
+            TString input(arg1.AsStringRef());                          \
+            if (input.function()) {                                     \
+                sink(TBlockItem(input));                                \
+            } else {                                                    \
+                sink(arg1);                                             \
+            }                                                           \
+        }                                                               \
+    };                                                                  \
+                                                                        \
+    END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)
+
 
 #define STROKA_FIND_UDF(udfName, function)                             \
     SIMPLE_STRICT_UDF(T##udfName, bool(TOptional<char*>, char*)) {     \

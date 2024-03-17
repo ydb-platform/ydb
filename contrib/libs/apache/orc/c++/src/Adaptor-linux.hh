@@ -19,20 +19,15 @@
 #ifndef ADAPTER_HH
 #define ADAPTER_HH
 
-/* #undef INT64_IS_LL */
-#define HAS_CONSTEXPR
 #define HAS_PREAD
 #define HAS_STRPTIME
-#define HAS_STOLL
 #define HAS_DIAGNOSTIC_PUSH
 #define HAS_DOUBLE_TO_STRING
 #define HAS_INT64_TO_STRING
 #define HAS_PRE_1970
 #define HAS_POST_2038
 #define HAS_STD_ISNAN
-#define HAS_STD_MUTEX
 #define HAS_BUILTIN_OVERFLOW_CHECK
-/* #undef NEEDS_REDUNDANT_MOVE */
 /* #undef NEEDS_Z_PREFIX */
 
 #include "orc/orc-config.hh"
@@ -46,33 +41,12 @@ typedef SSIZE_T ssize_t;
 #define asctime_r(tm, buf) (asctime_s(buf, 26, tm) ? NULL : buf)
 #endif
 
-#ifndef HAS_STOLL
-  // A poor man's stoll that converts str to a long long int base 10
-  namespace std {
-    int64_t stoll(std::string str);
-  }
-#endif
-
 #ifndef HAS_STRPTIME
   char* strptime(const char* buf, const char* format, struct tm* tm);
 #endif
 
 #ifndef HAS_PREAD
   ssize_t pread(int fd, void* buf, size_t count, off_t offset);
-#endif
-
-#ifdef INT64_IS_LL
-  #define INT64_FORMAT_STRING "ll"
-#else
-  #define INT64_FORMAT_STRING "l"
-#endif
-
-#ifndef ORC_CXX_HAS_NOEXCEPT
-  #define noexcept ORC_NOEXCEPT
-#endif
-
-#ifndef ORC_CXX_HAS_OVERRIDE
-  #define override ORC_OVERRIDE
 #endif
 
 #ifdef HAS_DIAGNOSTIC_PUSH
@@ -105,10 +79,6 @@ typedef SSIZE_T ssize_t;
   #define DIAGNOSTIC_IGNORE(XXX)
 #endif
 
-#ifndef ORC_CXX_HAS_UNIQUE_PTR
-  #define unique_ptr auto_ptr
-#endif
-
 #ifndef UINT32_MAX
   #define UINT32_MAX 0xffffffff
 #endif
@@ -123,12 +93,6 @@ typedef SSIZE_T ssize_t;
 
 #define GTEST_LANG_CXX11 0
 
-#ifdef NEEDS_REDUNDANT_MOVE
-  #define REDUNDANT_MOVE(XXX) std::move(XXX)
-#else
-  #define REDUNDANT_MOVE(XXX) XXX
-#endif
-
 #ifndef HAS_STD_ISNAN
   #include <math.h>
   #define std::isnan(XXX) isnan(XXX)
@@ -136,34 +100,7 @@ typedef SSIZE_T ssize_t;
   #include <cmath>
 #endif
 
-#ifndef HAS_STD_MUTEX
-  #include <pthread.h>
-  namespace orc {
-    /**
-     * Lock guard for pthread_mutex_t object using RAII
-     * The Lock is automatically release when exiting current scope.
-     */
-    class LockORC {
-      public:
-        explicit LockORC(pthread_mutex_t& mutex) : mutex_ref_(mutex) {
-          pthread_mutex_lock(&mutex_ref_);
-        }
-        ~LockORC() { pthread_mutex_unlock(&mutex_ref_); }
-      private:
-        // no default constructor
-        LockORC();
-        // prohibit copying
-        LockORC(const LockORC&);
-        LockORC& operator=(const LockORC&);
-
-        pthread_mutex_t& mutex_ref_;
-    };
-  }
-  #define std::mutex pthread_mutex_t
-  #define std::lock_guard<std::mutex> LockORC
-#else
-  #include <mutex>
-#endif
+#include <mutex>
 
 #ifdef NEEDS_Z_PREFIX
 #define Z_PREFIX 1
@@ -206,10 +143,6 @@ namespace orc {
     return true;
   }
 }
-#endif
-
-#ifndef HAS_CONSTEXPR
-#define constexpr const
 #endif
 
 #endif /* ADAPTER_HH */

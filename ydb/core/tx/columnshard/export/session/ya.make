@@ -8,6 +8,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/tx/columnshard/export/session/selector
+    ydb/core/tx/columnshard/export/session/storage
     ydb/core/scheme
     ydb/core/tx/columnshard/export/protos
     ydb/core/tablet_flat

@@ -8,7 +8,7 @@ namespace NKikimr::NOlap::NExport {
 void TExportsManager::Start(const NColumnShard::TColumnShard* shard) {
     for (auto&& i : Sessions) {
         if (i.second->IsConfirmed()) {
-            AFL_VERIFY(i.second->Start(shard->GetStoragesManager()));
+            AFL_VERIFY(i.second->Start(shard->GetStoragesManager(), (TTabletId)shard->TabletID(), shard->SelfId()));
         }
     }
 }
@@ -56,6 +56,12 @@ void TExportsManager::RemoveSession(const NExport::TIdentifier& id, NTabletFlatE
     Sessions.erase(id);
     NIceDb::TNiceDb db(txc.DB);
     db.Table<NColumnShard::Schema::ExportSessions>().Key(id.ToString()).Delete();
+}
+
+void TExportsManager::Stop() {
+    for (auto&& i : Sessions) {
+        i.second->Stop();
+    }
 }
 
 }

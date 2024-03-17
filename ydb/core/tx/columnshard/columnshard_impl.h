@@ -386,6 +386,7 @@ private:
     std::unique_ptr<TOperationsManager> OperationsManager;
     std::shared_ptr<NOlap::NDataSharing::TSessionsManager> SharingSessionsManager;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
+    std::shared_ptr<NOlap::NExport::TExportsManager> ExportsManager;
     std::shared_ptr<NOlap::NDataLocks::TManager> DataLocksManager;
 
     using TSchemaPreset = TSchemaPreset;
@@ -493,8 +494,6 @@ private:
 
     const TCSCounters CSCounters;
     TWritesMonitor WritesMonitor;
-    std::shared_ptr<NOlap::NExport::TExportsManager> ExportsManager;
-
     bool ProgressTxInFlight = false;
     THashMap<ui64, TInstant> ScanTxInFlight;
     THashMap<TWriteId, TLongTxWriteInfo> LongTxWrites;

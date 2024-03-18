@@ -437,9 +437,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
         // load
-        TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
         TSnapshot indexSnaphot(1, 1);
-        engine.RegisterSchemaVersion(indexSnaphot, TIndexInfo(tableInfo));
+        TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager, indexSnaphot, TIndexInfo(tableInfo));
         for (auto&& i : paths) {
             engine.RegisterTable(i);
         }
@@ -527,8 +526,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         ui32 step = 1000;
 
         TSnapshot indexSnapshot(1, 1);
-        TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
-        engine.RegisterSchemaVersion(indexSnapshot, TIndexInfo(tableInfo));
+        TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
         engine.RegisterTable(pathId);
         engine.Load(db);
 
@@ -627,9 +625,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // inserts
         ui64 planStep = 1;
 
-        TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
         TSnapshot indexSnapshot(1, 1);
-        engine.RegisterSchemaVersion(indexSnapshot, TIndexInfo(tableInfo));
+        TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
         engine.RegisterTable(pathId);
         engine.Load(db);
 
@@ -653,8 +650,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
 
         { // check it's overloaded after reload
-            TColumnEngineForLogs tmpEngine(0, TestLimits(), CommonStoragesManager);
-            tmpEngine.RegisterSchemaVersion(TSnapshot::Zero(), TIndexInfo(tableInfo));
+            TColumnEngineForLogs tmpEngine(0, TestLimits(), CommonStoragesManager, TSnapshot::Zero(), TIndexInfo(tableInfo));
             tmpEngine.RegisterTable(pathId);
             tmpEngine.Load(db);
         }
@@ -684,8 +680,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
 
         { // check it's not overloaded after reload
-            TColumnEngineForLogs tmpEngine(0, TestLimits(), CommonStoragesManager);
-            tmpEngine.RegisterSchemaVersion(TSnapshot::Zero(), TIndexInfo(tableInfo));
+            TColumnEngineForLogs tmpEngine(0, TestLimits(), CommonStoragesManager, TSnapshot::Zero(), TIndexInfo(tableInfo));
             tmpEngine.RegisterTable(pathId);
             tmpEngine.Load(db);
         }
@@ -702,8 +697,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         ui64 planStep = 1;
         TSnapshot indexSnapshot(1, 1);
         {
-            TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
-            engine.RegisterSchemaVersion(indexSnapshot, TIndexInfo(tableInfo));
+            TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
             engine.RegisterTable(pathId);
             engine.Load(db);
 
@@ -770,8 +764,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
         {
             // load
-            TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
-            engine.RegisterSchemaVersion(indexSnapshot, TIndexInfo(tableInfo));
+            TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
             engine.RegisterTable(pathId);
             engine.Load(db);
 

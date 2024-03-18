@@ -717,6 +717,10 @@ private:
                 auto nextState = parsedKey.GetWalkFolderImplArgs()->UserStateExpr;
                 walkFoldersStatus = walkFoldersImpl.GetNextStateExpr(ctx, std::move(parsedKey.GetWalkFolderImplArgs().GetRef()), nextState);
 
+                if (walkFoldersStatus == TStatus::Error) {
+                    return {};
+                }
+
                 if (walkFoldersImpl.IsFinished()) {
                     YQL_CLOG(INFO, ProviderYt) << "Building result expr for WalkFolders with key: " << instanceKey;
                     PendingWalkFolders_.erase(currImplKey);

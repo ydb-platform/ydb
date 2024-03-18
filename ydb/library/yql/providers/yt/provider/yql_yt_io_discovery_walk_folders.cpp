@@ -444,7 +444,7 @@ IGraphTransformer::TStatus TWalkFoldersImpl::HandleAfterResolveFuture(TExprConte
     YQL_CLOG(INFO, ProviderYt) << "After resolve future result";
 
     if (!BatchResolveFuture_) {
-        YQL_CLOG(ERROR, ProviderYt) << "Resolve future not set";
+        ctx.AddError(TIssue(Pos_, TStringBuilder() << "Resolve future not set for WalkFolders in: " << folder.Folder.Prefix));
         return IGraphTransformer::TStatus::Error;
     }
     if (!BatchResolveFuture_->HasValue() && !BatchResolveFuture_->HasException()) {

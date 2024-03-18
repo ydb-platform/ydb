@@ -45,14 +45,14 @@ bool operator < (const TJoinColumn& c1, const TJoinColumn& c2);
 
 }
 
-enum EJoinAlgoType {
+enum class EJoinAlgoType {
     Undefined,
     LookupJoin,
     MapJoin,
     GraceJoin
 };
 
-static const EJoinAlgoType AllJoinAlgos[] = { MapJoin, GraceJoin, LookupJoin };
+static constexpr auto AllJoinAlgos = { EJoinAlgoType::MapJoin, EJoinAlgoType::GraceJoin, EJoinAlgoType::LookupJoin };
 
 TOptimizerStatistics ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, 
     const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, EJoinAlgoType joinAlgo, const IProviderContext& ctx);

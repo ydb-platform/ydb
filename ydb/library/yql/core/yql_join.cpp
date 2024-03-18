@@ -1340,7 +1340,7 @@ TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings) {
 
     if (auto algo = GetSetting(linkSettings, "join_algo")) {
         YQL_ENSURE(algo->Child(1)->IsAtom());
-        result.JoinAlgo = EJoinAlgoType(std::stoi(TString(algo->Child(1)->Content())));
+        result.JoinAlgo = FromString<EJoinAlgoType>(algo->Child(1)->Content());
     }
 
     result.ForceSortedMerge = HasSetting(linkSettings, "forceSortedMerge");

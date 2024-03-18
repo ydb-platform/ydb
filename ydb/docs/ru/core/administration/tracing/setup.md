@@ -55,7 +55,9 @@ tracing_config:
       max_traces_per_minute: 5
       max_traces_burst: 2
     - scope:
-        request_type: KeyValue.ExecuteTransaction
+        request_types:
+          - KeyValue.ExecuteTransaction
+          - KeyValue.Read
       fraction: 0.1
       level: 15
       max_traces_per_minute: 5
@@ -135,9 +137,9 @@ Uploader – локальный для узла компонент, как сл
 
 Каждое правило включает в себя опциональное поле `scope` с набором селекторов, которые определяют, к каким запросам применяется данное правило. На данный момент поддерживаются селекторы:
 
-* `request_type`
+* `request_types`
     
-    Фильтрует запросы указанного типа.
+    Принимает список типов запросов. Запрос подходит под данный селектор если его тип содержится в списке.
 
     Возможные значения:
     * KeyValue.AcquireLock
@@ -149,7 +151,7 @@ Uploader – локальный для узла компонент, как сл
 
 {% note info %}
 
-Трассировка поддерживается не только для типов запросов, приведенных выше. В этом списке перечислены типы запросов, которые поддерживатюся селектором `request_type`.
+Трассировка поддерживается не только для типов запросов, приведенных выше. В этом списке перечислены типы запросов, которые поддерживатюся селектором `request_types`.
 
 {% endnote %}
 
@@ -222,7 +224,8 @@ tracing_config:
   external_throttling:
     - max_traces_per_minute: 60
     - scope:
-        request_type: KeyValue.ReadRange
+        request_types:
+          - KeyValue.ReadRange
       max_traces_per_minute: 20
 ```
 

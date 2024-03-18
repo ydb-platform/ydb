@@ -39,6 +39,17 @@ TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const TCompactionLimit
     RegisterSchemaVersion(snapshot, schema);
 }
 
+TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const TCompactionLimits& limits, const std::shared_ptr<IStoragesManager>& storagesManager,
+    const TSnapshot& snapshot, TIndexInfo&& schema)
+    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, limits, storagesManager))
+    , StoragesManager(storagesManager)
+    , TabletId(tabletId)
+    , LastPortion(0)
+    , LastGranule(0) {
+    ActualizationController = std::make_shared<NActualizer::TController>();
+    RegisterSchemaVersion(snapshot, std::move(schema));
+}
+
 ui64 TColumnEngineForLogs::MemoryUsage() const {
     auto numPortions = Counters.GetPortionsCount();
 

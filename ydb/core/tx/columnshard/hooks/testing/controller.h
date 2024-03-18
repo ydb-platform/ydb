@@ -17,6 +17,8 @@ private:
     YDB_READONLY(TAtomicCounter, IndexesSkippedNoData, 0);
     YDB_READONLY(TAtomicCounter, TieringUpdates, 0);
     YDB_READONLY(TAtomicCounter, ActualizationsCount, 0);
+    YDB_READONLY(TAtomicCounter, ActualizationRefreshSchemeCount, 0);
+    YDB_READONLY(TAtomicCounter, ActualizationRefreshTieringCount, 0);
     YDB_ACCESSOR(std::optional<TDuration>, GuaranteeIndexationInterval, TDuration::Zero());
     YDB_ACCESSOR(std::optional<TDuration>, PeriodicWakeupActivationPeriod, std::nullopt);
     YDB_ACCESSOR(std::optional<TDuration>, StatsReportInterval, std::nullopt);
@@ -121,6 +123,12 @@ private:
 protected:
     virtual void OnPortionActualization(const NOlap::TPortionInfo& /*info*/) override {
         ActualizationsCount.Inc();
+    }
+    virtual void OnActualizationRefreshScheme() override {
+        ActualizationRefreshSchemeCount.Inc();
+    }
+    virtual void OnActualizationRefreshTiering() override {
+        ActualizationRefreshTieringCount.Inc();
     }
     virtual void DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumnShard& shard) override;
     virtual void DoOnTabletStopped(const ::NKikimr::NColumnShard::TColumnShard& shard) override;

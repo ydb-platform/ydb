@@ -83,6 +83,12 @@ public:
     virtual void OnExportFinished() {
 
     }
+    virtual void OnActualizationRefreshScheme() {
+
+    }
+    virtual void OnActualizationRefreshTiering() {
+
+    }
 
     void OnDataSharingFinished(const ui64 tabletId, const TString& sessionId) {
         return DoOnDataSharingFinished(tabletId, sessionId);

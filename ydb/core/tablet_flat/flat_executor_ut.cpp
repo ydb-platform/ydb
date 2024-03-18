@@ -5020,17 +5020,22 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         }
     };
 
-    Y_UNIT_TEST(TestPrechargeAndSeek) {
+    Y_UNIT_TEST(TestPrechargeAndSeek_FlatIndex) {
         TMyEnvBase env;
         TRowsModel rows;
 
         auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+        appData.FeatureFlags.SetEnableLocalDBFlatIndex(true);
+
         appData.ResourceProfiles = new TResourceProfiles;
         TResourceProfiles::TResourceProfile profile;
         profile.SetTabletType(NKikimrTabletBase::TTabletTypes::Unknown);
         profile.SetName("zero");
-        // fits two pages without index:
         profile.SetInitialTxMemory(0);
+
+        // 2 data pages ~2*10*1024 bytes
+        // flat index size is ~256*1024 bytes shouldn't be included
         profile.SetTxMemoryLimit(22*1024);
 
         appData.ResourceProfiles->AddProfile(profile);
@@ -5041,7 +5046,52 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
 
         env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
 
-        env.SendSync(rows.MakeRows(512, 10*1024));
+        env.SendSync(rows.MakeRows(10*1024, 10*1024));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        env.SendSync(new NFake::TEvExecute(new NTestSuiteTFlatTableExecutorResourceProfile::TTxSetResourceProfile("zero")));
+        env.SendSync(new NFake::TEvExecute{ new TTxPrechargeAndSeek() });
+
+        // restart tablet
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        // should have the same behaviour
+        env.SendSync(new NFake::TEvExecute{ new TTxPrechargeAndSeek() }, true);
+
+        // If we didn't crash, then assume the test succeeded
+        env.SendSync(new TEvents::TEvPoison, false, true);
+    }
+
+    Y_UNIT_TEST(TestPrechargeAndSeek_BTreeIndex) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+        appData.FeatureFlags.SetEnableLocalDBFlatIndex(false);
+
+        appData.ResourceProfiles = new TResourceProfiles;
+        TResourceProfiles::TResourceProfile profile;
+        profile.SetTabletType(NKikimrTabletBase::TTabletTypes::Unknown);
+        profile.SetName("zero");
+        profile.SetInitialTxMemory(0);
+
+        // 2 data pages ~2*10*1024 bytes
+        // 3 b-tree index nodes ~3*7*1024 bytes
+        profile.SetTxMemoryLimit((20 + 21)*1024);
+
+        appData.ResourceProfiles->AddProfile(profile);
+
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+
+        env.SendSync(rows.MakeRows(10*1024, 10*1024));
         
         env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
         env.WaitFor<NFake::TEvCompacted>();

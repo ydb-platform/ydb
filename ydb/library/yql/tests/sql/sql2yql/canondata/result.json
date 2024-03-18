@@ -11248,6 +11248,13 @@
             "uri": "https://{canondata_backend}/1817427/5ebfc414781230f90b896d4ed143ea00cf4c7aaa/resource.tar.gz#test_sql2yql.test_pg-pg_column_case_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-pg_corr_count]": [
+        {
+            "checksum": "f00ab698b55ffaf7954edda1a6b26de6",
+            "size": 1193,
+            "uri": "https://{canondata_backend}/1942173/ecd084687ae5760c5e06e044ba0475f6a397ad72/resource.tar.gz#test_sql2yql.test_pg-pg_corr_count_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-pg_in_dict_key_with_stable_pickle]": [
         {
             "checksum": "6a6eee65e3a6d24460e366d794c5ae6a",

@@ -21,6 +21,7 @@ public:
 public:
     bool HasTenant(const TString& tenant) const;
     const THashSet<ui32>& GetNodes(const TString& tenant) const;
+    ui32 GetRandomNode(const TString& tenant) const;
 
     void DiscoverNodes(const TString& tenant, const TActorId& cache, const TActorContext& ctx);
     TProcessResult ProcessResponse(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx);

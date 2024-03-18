@@ -67,6 +67,7 @@ namespace NKqp {
 using EExecType = TEvKqpExecuter::TEvTxResponse::EExecutionType;
 
 const ui64 MaxTaskSize = 48_MB;
+constexpr ui64 PotentialUnsigned64OverflowLimit = (std::numeric_limits<ui64>::max() >> 1);
 
 std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo& stageInfo, const TTask& task);
 
@@ -795,6 +796,9 @@ protected:
         }
 
         auto ru = NRuCalc::CalcRequestUnit(consumption);
+
+        YQL_ENSURE(consumption.ReadIOStat.Rows < PotentialUnsigned64OverflowLimit);
+        YQL_ENSURE(ru < PotentialUnsigned64OverflowLimit);
 
         // Some heuristic to reduce overprice due to round part stats
         if (ru <= 100 && !force)
@@ -1659,6 +1663,10 @@ protected:
     }
 
     void AbortExecutionAndDie(TActorId abortSender, NYql::NDqProto::StatusIds::StatusCode status, const TString& message) {
+        if (AlreadyReplied) {
+            return;
+        }
+
         LOG_E("Abort execution: " << NYql::NDqProto::StatusIds_StatusCode_Name(status) << "," << message);
         if (ExecuterSpan) {
             ExecuterSpan.EndError(TStringBuilder() << NYql::NDqProto::StatusIds_StatusCode_Name(status));
@@ -1672,6 +1680,7 @@ protected:
             this->Send(Target, abortEv.Release());
         }
 
+        AlreadyReplied = true;
         LOG_E("Sending timeout response to: " << Target);
         this->Send(Target, ResponseEv.release());
 
@@ -1683,6 +1692,10 @@ protected:
     virtual void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status,
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues)
     {
+        if (AlreadyReplied) {
+            return;
+        }
+
         if (Planner) {
             for (auto computeActor : Planner->GetPendingComputeActors()) {
                 LOG_D("terminate compute actor " << computeActor.first);
@@ -1692,6 +1705,7 @@ protected:
             }
         }
 
+        AlreadyReplied = true;
         auto& response = *ResponseEv->Record.MutableResponse();
 
         response.SetStatus(status);
@@ -1904,6 +1918,8 @@ protected:
 
     THashMap<ui64, TActorId> ResultChannelToComputeActor;
     THashMap<NYql::NDq::TStageId, THashMap<ui64, TShardInfo>> SourceScanStageIdToParititions;
+
+    bool AlreadyReplied = false;
 
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);

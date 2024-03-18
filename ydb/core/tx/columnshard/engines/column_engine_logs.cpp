@@ -27,7 +27,8 @@
 
 namespace NKikimr::NOlap {
 
-TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const TCompactionLimits& limits, const std::shared_ptr<IStoragesManager>& storagesManager)
+TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const TCompactionLimits& limits, const std::shared_ptr<IStoragesManager>& storagesManager,
+    const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, limits, storagesManager))
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
@@ -35,6 +36,18 @@ TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const TCompactionLimit
     , LastGranule(0)
 {
     ActualizationController = std::make_shared<NActualizer::TController>();
+    RegisterSchemaVersion(snapshot, schema);
+}
+
+TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const TCompactionLimits& limits, const std::shared_ptr<IStoragesManager>& storagesManager,
+    const TSnapshot& snapshot, TIndexInfo&& schema)
+    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, limits, storagesManager))
+    , StoragesManager(storagesManager)
+    , TabletId(tabletId)
+    , LastPortion(0)
+    , LastGranule(0) {
+    ActualizationController = std::make_shared<NActualizer::TController>();
+    RegisterSchemaVersion(snapshot, std::move(schema));
 }
 
 ui64 TColumnEngineForLogs::MemoryUsage() const {
@@ -141,10 +154,24 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
     const bool isCriticalScheme = indexInfo.GetSchemeNeedActualization();
     VersionedIndex.AddIndex(snapshot, std::move(indexInfo));
     if (isCriticalScheme) {
+        if (!ActualizationStarted) {
+            ActualizationStarted = true;
+            for (auto&& i : Tables) {
+                i.second->StartActualizationIndex();
+            }
+        }
         for (auto&& i : Tables) {
             i.second->RefreshScheme();
         }
     }
+}
+
+void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema) {
+    std::optional<NOlap::TIndexInfo> indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema, StoragesManager);
+    AFL_VERIFY(indexInfoOptional);
+    NOlap::TIndexInfo indexInfo = std::move(*indexInfoOptional);
+    indexInfo.SetAllKeys(StoragesManager);
+    RegisterSchemaVersion(snapshot, std::move(indexInfo));
 }
 
 bool TColumnEngineForLogs::Load(IDbWrapper& db) {
@@ -376,7 +403,7 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
     for (auto&& i : pathEviction) {
         auto g = GetGranuleOptional(i.first);
         if (g) {
-            if (!TiersInitialized) {
+            if (!ActualizationStarted) {
                 g->StartActualizationIndex();
             }
             g->RefreshTiering(i.second);
@@ -384,7 +411,7 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
         }
     }
 
-    if (TiersInitialized) {
+    if (ActualizationStarted) {
         TLogContextGuard lGuard(TLogContextBuilder::Build()("queue", "ttl")("external_count", pathEviction.size()));
         for (auto&& i : Tables) {
             if (pathEviction.contains(i.first)) {
@@ -486,13 +513,13 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
 }
 
 void TColumnEngineForLogs::OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) {
-    if (!TiersInitialized) {
+    if (!ActualizationStarted) {
         for (auto&& i : Tables) {
             i.second->StartActualizationIndex();
         }
     }
 
-    TiersInitialized = true;
+    ActualizationStarted = true;
     AFL_VERIFY(manager);
     THashMap<ui64, TTiering> tierings = manager->GetTiering();
     ttl.AddTtls(tierings);
@@ -525,11 +552,11 @@ void TColumnEngineForLogs::OnTieringModified(const std::shared_ptr<NColumnShard:
 }
 
 void TColumnEngineForLogs::DoRegisterTable(const ui64 pathId) {
-    AFL_VERIFY(Tables.emplace(pathId, std::make_shared<TGranuleMeta>(pathId, GranulesStorage, SignalCounters.RegisterGranuleDataCounters(), VersionedIndex)).second);
-    if (TiersInitialized) {
-        auto it = Tables.find(pathId);
-        AFL_VERIFY(it != Tables.end());
-        it->second->StartActualizationIndex();
+    auto infoEmplace = Tables.emplace(pathId, std::make_shared<TGranuleMeta>(pathId, GranulesStorage, SignalCounters.RegisterGranuleDataCounters(), VersionedIndex));
+    AFL_VERIFY(infoEmplace.second);
+    if (ActualizationStarted) {
+        infoEmplace.first->second->StartActualizationIndex();
+        infoEmplace.first->second->RefreshScheme();
     }
 }
 

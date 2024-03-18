@@ -1345,6 +1345,71 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(IndexesActualizationRebuildScheme) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        //        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        std::vector<TString> uids;
+        std::vector<TString> resourceIds;
+        std::vector<ui32> levels;
+
+        {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
+
+            const auto filler = [&](const ui32 startRes, const ui32 startUid, const ui32 count) {
+                for (ui32 i = 0; i < count; ++i) {
+                    uids.emplace_back("uid_" + ::ToString(startUid + i));
+                    resourceIds.emplace_back(::ToString(startRes + i));
+                    levels.emplace_back(i % 5);
+                }
+            };
+
+            filler(1000000, 300000000, 10000);
+            filler(1100000, 300100000, 10000);
+
+        }
+
+        for (ui32 i = 0; i < 10; ++i) {
+            auto alterQuery = TStringBuilder() <<
+                "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        const ui64 startCount = csController->GetActualizationRefreshSchemeCount().Val();
+        AFL_VERIFY(startCount == 30);
+
+        for (auto&& i : csController->GetShardActualIds()) {
+            kikimr.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+                new TEvents::TEvPoisonPill(), i, false));
+        }
+
+        {
+            auto it = tableClient.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT
+                    COUNT(*)
+                FROM `/Root/olapStore/olapTable`
+            )").GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson(result, R"([[20000u;]])");
+        }
+
+        AFL_VERIFY(startCount + 3 /*tables count*/ * 2 /*normalizers + main_load*/ == 
+            (ui64)csController->GetActualizationRefreshSchemeCount().Val())("start", startCount)("count", csController->GetActualizationRefreshSchemeCount().Val());
+    }
+
     Y_UNIT_TEST(Indexes) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);

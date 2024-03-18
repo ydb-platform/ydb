@@ -176,7 +176,7 @@ void TFederatedReadSessionImpl::OnFederatedStateUpdateImpl() {
         for (auto const& db : FederationState->DbInfos) {
             if (db->status() == Ydb::FederationDiscovery::DatabaseInfo_Status_AVAILABLE) {
                 if (first) first = false; else issue << ",";
-                issue << "{ name: " << db->name()
+                issue << " { name: " << db->name()
                       << ", endpoint: " << db->endpoint()
                       << ", path: " << db->path() << " }";
             }

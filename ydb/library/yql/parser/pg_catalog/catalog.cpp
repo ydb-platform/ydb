@@ -1538,7 +1538,7 @@ struct TCatalog {
         if ( GetEnv("YDB_EXPERIMENTAL_PG") == "1"){
             // zabbix config
             StaticTables.push_back(
-                {{"public", "config"}, ERelKind::Relation, 10001}
+                {{"public", "config"}, ERelKind::Relation, 100001}
             );
             AllStaticColumns.push_back(
                 {"public", "config", "configid", "bigint"}
@@ -1553,7 +1553,7 @@ struct TCatalog {
 
             // zabbix dbversion
             StaticTables.push_back(
-                {{"public", "dbversion"}, ERelKind::Relation, 10001}
+                {{"public", "dbversion"}, ERelKind::Relation, 100002}
             );
             AllStaticColumns.push_back(
                 {"public", "dbversion", "dbversionid", "bigint"}

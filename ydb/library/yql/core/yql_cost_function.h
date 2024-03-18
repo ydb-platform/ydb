@@ -49,10 +49,11 @@ enum class EJoinAlgoType {
     Undefined,
     LookupJoin,
     MapJoin,
-    GraceJoin
+    GraceJoin,
+    StreamLookupJoin //Right part can be updated during an operation. Used mainly for joining streams with lookup tables. Currently impplemented in Dq by LookupInputTransform
 };
 
-static constexpr auto AllJoinAlgos = { EJoinAlgoType::MapJoin, EJoinAlgoType::GraceJoin, EJoinAlgoType::LookupJoin };
+static constexpr auto AllJoinAlgos = { EJoinAlgoType::MapJoin, EJoinAlgoType::GraceJoin, EJoinAlgoType::LookupJoin, EJoinAlgoType::StreamLookupJoin};
 
 TOptimizerStatistics ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, 
     const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, EJoinAlgoType joinAlgo, const IProviderContext& ctx);

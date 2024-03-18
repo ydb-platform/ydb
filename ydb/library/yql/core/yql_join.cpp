@@ -329,6 +329,9 @@ namespace {
                 }
                 forceSortedMerge = true;
             }
+            else if (option.IsAtom("forceStreamLookup")) {
+                //do nothing
+            }
             else if (option.IsAtom("join_algo")) {
                 //do nothing
             }
@@ -1344,6 +1347,11 @@ TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings) {
     }
 
     result.ForceSortedMerge = HasSetting(linkSettings, "forceSortedMerge");
+    
+    if(HasSetting(linkSettings, "forceStreamLookup")) {
+        result.JoinAlgo = EJoinAlgoType::StreamLookupJoin;
+    }
+
     return result;
 }
 

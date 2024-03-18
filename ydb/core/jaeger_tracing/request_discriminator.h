@@ -57,6 +57,10 @@ enum class ERequestType: size_t {
     QUERY_COMMITTRANSACTION,
     QUERY_ROLLBACKTRANSACTION,
 
+    DISCOVERY_WHOAMI,
+    DISCOVERY_NODEREGISTRATION,
+    DISCOVERY_LISTENDPOINTS,
+
     REQUEST_TYPES_CNT, // Add new types above this line
 };
 
@@ -107,6 +111,10 @@ static const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"Query.BeginTransaction", ERequestType::QUERY_BEGINTRANSACTION},
     {"Query.CommitTransaction", ERequestType::QUERY_COMMITTRANSACTION},
     {"Query.RollbackTransaction", ERequestType::QUERY_ROLLBACKTRANSACTION},
+
+    {"Discovery.WhoAmI", ERequestType::DISCOVERY_WHOAMI},
+    {"Discovery.NodeRegistration", ERequestType::DISCOVERY_NODEREGISTRATION},
+    {"Discovery.ListEndpoints", ERequestType::DISCOVERY_LISTENDPOINTS},
 };
 
 struct TRequestDiscriminator {

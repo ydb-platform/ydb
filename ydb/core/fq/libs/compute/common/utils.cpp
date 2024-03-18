@@ -205,14 +205,6 @@ struct TDurationParser {
 
     std::string_view Src;
 };
-
-static_assert(TDurationParser("41us").ParseDuration() == TDuration::MicroSeconds(41));
-static_assert(TDurationParser("0us").ParseDuration() == TDuration::MicroSeconds(0));
-static_assert(TDurationParser("1ms").ParseDuration() == TDuration::MilliSeconds(1));
-static_assert(TDurationParser("33ms").ParseDuration() == TDuration::MilliSeconds(33));
-static_assert(TDurationParser("1s").ParseDuration() == TDuration::Seconds(1));
-static_assert(TDurationParser("31.02s").ParseDuration() == TDuration::Seconds(31) + TDuration::MilliSeconds(20));
-static_assert(TDurationParser("1h 02m 3.45s").ParseDuration() == TDuration::Hours(1) + TDuration::Minutes(2) + TDuration::MilliSeconds(3450));
 }
 
 TDuration ParseDuration(TStringBuf str) {

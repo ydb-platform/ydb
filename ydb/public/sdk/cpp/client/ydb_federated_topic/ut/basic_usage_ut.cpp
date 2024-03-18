@@ -757,12 +757,11 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TAtomic check = 1;
 
         // Create read session.
-        NYdb::NFederatedTopic::TFederatedReadSessionSettings readSettings;
-        readSettings
-            .ReadMirrored("dc1")
+        auto readSettings = NYdb::NFederatedTopic::TFederatedReadSessionSettings()
             .ConsumerName("shared/user")
             .MaxMemoryUsageBytes(16_MB)
-            .AppendTopics(setup->GetTestTopic());
+            .AppendTopics(setup->GetTestTopic())
+            .ReadMirrored("dc1");
 
         readSettings.FederatedEventHandlers_.SimpleDataHandlers([&](TReadSessionEvent::TDataReceivedEvent& ev) mutable {
             Cerr << ">>> event from dataHandler: " << DebugString(ev) << Endl;

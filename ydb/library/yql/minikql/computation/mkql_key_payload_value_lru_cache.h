@@ -20,9 +20,9 @@ namespace NKikimr::NMiniKQL {
 class TUnboxedKeyValueLruCacheWithTtl {
     struct TEntry {
 	TEntry(NUdf::TUnboxedValue key, NUdf::TUnboxedValue value, std::chrono::time_point<std::chrono::steady_clock> expiration)
-            : Key(key)
-            , Value(value)
-            , Expiration(expiration)
+            : Key(std::move(key))
+            , Value(std::move(value))
+            , Expiration(std::move(expiration))
         {}
         NUdf::TUnboxedValue Key;
         NUdf::TUnboxedValue Value;

@@ -1136,7 +1136,7 @@ public:
                         NMiniKQL::WriteColumnValuesFromArrow(editAccessors, NMiniKQL::TBatchDataAccessor(result->Get()->GetArrowBatch()), columnIndex, resultColumnIndex, column.TypeInfo)
                     );
                     if (column.NotNull) {
-                        std::shared_ptr<arrow::Array> columnSharedPtr = result->Get()->GetArrowBatch()->column(columnIndex);       
+                        std::shared_ptr<arrow::Array> columnSharedPtr = result->Get()->GetArrowBatch()->column(columnIndex);
                         bool gotNullValue = false;
                         for (ui64 rowIndex = 0; rowIndex < result->Get()->GetRowsCount(); ++rowIndex) {
                             if (columnSharedPtr->IsNull(rowIndex)) {
@@ -1181,9 +1181,14 @@ public:
     }
 
     NMiniKQL::TBytesStatistics PackCells(TResult& handle, i64& freeSpace) {
-        auto& [shardId, result, batch, _, packed] = handle;
+        auto& [shardId, result, batch, processedRows, packed] = handle;
         NMiniKQL::TBytesStatistics stats;
         batch->reserve(batch->size());
+        CA_LOG_D(TStringBuilder() << "enter pack cells method "
+            << " shardId: " << shardId
+            << " processedRows: " << processedRows
+            << " packed rows: " << packed
+            << " freeSpace: " << freeSpace);
 
         for (size_t rowIndex = packed; rowIndex < result->Get()->GetRowsCount(); ++rowIndex) {
             const auto& row = result->Get()->GetCells(rowIndex);
@@ -1225,6 +1230,12 @@ public:
                 break;
             }
         }
+
+        CA_LOG_D(TStringBuilder() << "exit pack cells method "
+            << " shardId: " << shardId
+            << " processedRows: " << processedRows
+            << " packed rows: " << packed
+            << " freeSpace: " << freeSpace);
         return stats;
     }
 
@@ -1246,7 +1257,9 @@ public:
 
         YQL_ENSURE(!resultBatch.IsWide(), "Wide stream is not supported");
 
-        CA_LOG_D(TStringBuilder() << " enter getasyncinputdata results size " << Results.size());
+        CA_LOG_D(TStringBuilder() << " enter getasyncinputdata results size " << Results.size()
+            << ", freeSpace " << freeSpace);
+
         ui64 bytes = 0;
         while (!Results.empty()) {
             auto& result = Results.front();
@@ -1255,14 +1268,15 @@ public:
             auto& msg = *result.ReadResult->Get();
             if (!batch.Defined()) {
                 batch.ConstructInPlace();
-                switch (msg.Record.GetResultFormat()) {
-                    case NKikimrDataEvents::FORMAT_ARROW:
-                        BytesStats.AddStatistics(PackArrow(result, freeSpace));
-                        break;
-                    case NKikimrDataEvents::FORMAT_UNSPECIFIED:
-                    case NKikimrDataEvents::FORMAT_CELLVEC:
-                        BytesStats.AddStatistics(PackCells(result, freeSpace));
-                }
+            }
+
+            switch (msg.Record.GetResultFormat()) {
+                case NKikimrDataEvents::FORMAT_ARROW:
+                    BytesStats.AddStatistics(PackArrow(result, freeSpace));
+                    break;
+                case NKikimrDataEvents::FORMAT_UNSPECIFIED:
+                case NKikimrDataEvents::FORMAT_CELLVEC:
+                    BytesStats.AddStatistics(PackCells(result, freeSpace));
             }
 
             auto id = result.ReadResult->Get()->Record.GetReadId();
@@ -1334,6 +1348,7 @@ public:
 
         CA_LOG_D(TStringBuilder() << "returned async data"
             << " processed rows " << ProcessedRowCount
+            << " left freeSpace " << freeSpace
             << " received rows " << ReceivedRowCount
             << " running reads " << RunningReads()
             << " pending shards " << PendingShards.Size()

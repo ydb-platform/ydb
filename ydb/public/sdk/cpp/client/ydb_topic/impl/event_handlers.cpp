@@ -1,6 +1,4 @@
-#ifndef EVENT_HANDLERS_IMPL
-#error "Do not include this file directly"
-#endif
+#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
@@ -94,9 +92,8 @@ private:
     THashMap<ui64, TReadSessionEvent::TStopPartitionSessionEvent> UnconfirmedDestroys; // Partition stream id -> destroy events.
 };
 
-template <typename TDerived>
-typename TReadSessionSettingsBase<TDerived>::TEventHandlers&
-TReadSessionSettingsBase<TDerived>::TEventHandlers::SimpleDataHandlers(
+TReadSessionSettings::TEventHandlers&
+TReadSessionSettings::TEventHandlers::SimpleDataHandlers(
     std::function<void(TReadSessionEvent::TDataReceivedEvent&)> dataHandler, bool commitDataAfterProcessing,
     bool gracefulReleaseAfterCommit) {
     Y_ASSERT(dataHandler);

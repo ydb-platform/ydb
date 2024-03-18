@@ -270,10 +270,6 @@ struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettingsBase<TF
 
     using TReadSessionSettingsBase<TFederatedReadSessionSettings>::TReadSessionSettingsBase;
 
-    NTopic::TReadSessionSettings& EventHandlers(const TEventHandlers&) {
-        ythrow yexception() << "EventHandlers can not be set for federated session, use FederatedEventHandlers instead";
-    }
-
     // Each handler, if set, is wrapped up and passed down to each subsession
     struct TFederatedEventHandlers {
         using TSelf = TFederatedEventHandlers;

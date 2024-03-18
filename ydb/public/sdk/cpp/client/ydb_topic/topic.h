@@ -1463,6 +1463,79 @@ template <typename TDerived>
 struct TReadSessionSettingsBase: public TRequestSettings<TReadSessionSettingsBase<TDerived>> {
     using TSelf = TDerived;
 
+    TString ConsumerName_ = "";
+    //! Consumer.
+    TSelf& ConsumerName(const TString& name) {
+        ConsumerName_ = name;
+        WithoutConsumer_ = false;
+        return static_cast<TSelf&>(*this);
+    }
+
+    bool WithoutConsumer_ = false;
+    //! Read without consumer.
+    TSelf& WithoutConsumer() {
+        WithoutConsumer_ = true;
+        ConsumerName_ = "";
+        return static_cast<TSelf&>(*this);
+    }
+
+    //! Topics.
+    FLUENT_SETTING_VECTOR(TTopicReadSettings, Topics);
+
+    //! Maximum memory usage for read session.
+    FLUENT_SETTING_DEFAULT(size_t, MaxMemoryUsageBytes, 100_MB);
+
+    //! Max message time lag. All messages older that now - MaxLag will be ignored.
+    FLUENT_SETTING_OPTIONAL(TDuration, MaxLag);
+
+    //! Start reading from this timestamp.
+    FLUENT_SETTING_OPTIONAL(TInstant, ReadFromTimestamp);
+
+    //! Policy for reconnections.
+    //! IRetryPolicy::GetDefaultPolicy() if null (not set).
+    FLUENT_SETTING(IRetryPolicy::TPtr, RetryPolicy);
+
+    //! Decompress messages
+    FLUENT_SETTING_DEFAULT(bool, Decompress, true);
+
+    //! Executor for decompression tasks.
+    //! If not set, default executor will be used.
+    FLUENT_SETTING(IExecutor::TPtr, DecompressionExecutor);
+
+    //! Counters.
+    //! If counters are not provided explicitly,
+    //! they will be created inside session (without link with parent counters).
+    FLUENT_SETTING(TReaderCounters::TPtr, Counters);
+
+    FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Seconds(30));
+
+    //! Log.
+    FLUENT_SETTING_OPTIONAL(TLog, Log);
+
+    TReadSessionSettingsBase() = default;
+
+    template <typename T>
+    explicit TReadSessionSettingsBase(const TReadSessionSettingsBase<T>& other)
+        : TRequestSettings<TReadSessionSettingsBase<TDerived>>(other)
+        , ConsumerName_(other.ConsumerName_)
+        , WithoutConsumer_(other.WithoutConsumer_)
+        , Topics_(other.Topics_)
+        , MaxMemoryUsageBytes_(other.MaxMemoryUsageBytes_)
+        , MaxLag_(other.MaxLag_)
+        , ReadFromTimestamp_(other.ReadFromTimestamp_)
+        , RetryPolicy_(other.RetryPolicy_)
+        , Decompress_(other.Decompress_)
+        , DecompressionExecutor_(other.DecompressionExecutor_)
+        , Counters_(other.Counters_)
+        , ConnectTimeout_(other.ConnectTimeout_)
+        , Log_(other.Log_)
+    {}
+};
+
+//! Settings for read session.
+struct TReadSessionSettings: public TReadSessionSettingsBase<TReadSessionSettings> {
+    using TReadSessionSettingsBase<TReadSessionSettings>::TReadSessionSettingsBase;
+
     struct TEventHandlers {
         using TSelf = TEventHandlers;
 
@@ -1547,95 +1620,9 @@ struct TReadSessionSettingsBase: public TRequestSettings<TReadSessionSettingsBas
         FLUENT_SETTING(IExecutor::TPtr, HandlersExecutor);
     };
 
-
-    TString ConsumerName_ = "";
-    //! Consumer.
-    TSelf& ConsumerName(const TString& name) {
-        ConsumerName_ = name;
-        WithoutConsumer_ = false;
-        return static_cast<TSelf&>(*this);
-    }
-
-    bool WithoutConsumer_ = false;
-    //! Read without consumer.
-    TSelf& WithoutConsumer() {
-        WithoutConsumer_ = true;
-        ConsumerName_ = "";
-        return static_cast<TSelf&>(*this);
-    }
-
-    //! Topics.
-    FLUENT_SETTING_VECTOR(TTopicReadSettings, Topics);
-
-    //! Maximum memory usage for read session.
-    FLUENT_SETTING_DEFAULT(size_t, MaxMemoryUsageBytes, 100_MB);
-
-    //! Max message time lag. All messages older that now - MaxLag will be ignored.
-    FLUENT_SETTING_OPTIONAL(TDuration, MaxLag);
-
-    //! Start reading from this timestamp.
-    FLUENT_SETTING_OPTIONAL(TInstant, ReadFromTimestamp);
-
-    //! Policy for reconnections.
-    //! IRetryPolicy::GetDefaultPolicy() if null (not set).
-    FLUENT_SETTING(IRetryPolicy::TPtr, RetryPolicy);
-
     //! Event handlers.
     //! See description in TEventHandlers class.
     FLUENT_SETTING(TEventHandlers, EventHandlers);
-
-    //! Decompress messages
-    FLUENT_SETTING_DEFAULT(bool, Decompress, true);
-
-    //! Executor for decompression tasks.
-    //! If not set, default executor will be used.
-    FLUENT_SETTING(IExecutor::TPtr, DecompressionExecutor);
-
-    //! Counters.
-    //! If counters are not provided explicitly,
-    //! they will be created inside session (without link with parent counters).
-    FLUENT_SETTING(TReaderCounters::TPtr, Counters);
-
-    FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Seconds(30));
-
-    //! Log.
-    FLUENT_SETTING_OPTIONAL(TLog, Log);
-
-    TReadSessionSettingsBase() = default;
-
-    template <typename T>
-    explicit TReadSessionSettingsBase(const TReadSessionSettingsBase<T>& other)
-        : TRequestSettings<TReadSessionSettingsBase<TDerived>>(other)
-        , ConsumerName_(other.ConsumerName_)
-        , WithoutConsumer_(other.WithoutConsumer_)
-        , Topics_(other.Topics_)
-        , MaxMemoryUsageBytes_(other.MaxMemoryUsageBytes_)
-        , MaxLag_(other.MaxLag_)
-        , ReadFromTimestamp_(other.ReadFromTimestamp_)
-        , RetryPolicy_(other.RetryPolicy_)
-        , EventHandlers_(TEventHandlers()
-            .MaxMessagesBytes(other.EventHandlers_.MaxMessagesBytes_)
-            .DataReceivedHandler(other.EventHandlers_.DataReceivedHandler_)
-            .CommitOffsetAcknowledgementHandler(other.EventHandlers_.CommitOffsetAcknowledgementHandler_)
-            .StartPartitionSessionHandler(other.EventHandlers_.StartPartitionSessionHandler_)
-            .StopPartitionSessionHandler(other.EventHandlers_.StopPartitionSessionHandler_)
-            .PartitionSessionStatusHandler(other.EventHandlers_.PartitionSessionStatusHandler_)
-            .PartitionSessionClosedHandler(other.EventHandlers_.PartitionSessionClosedHandler_)
-            .SessionClosedHandler(other.EventHandlers_.SessionClosedHandler_)
-            .CommonHandler(other.EventHandlers_.CommonHandler_)
-            .HandlersExecutor(other.EventHandlers_.HandlersExecutor_)
-        )
-        , Decompress_(other.Decompress_)
-        , DecompressionExecutor_(other.DecompressionExecutor_)
-        , Counters_(other.Counters_)
-        , ConnectTimeout_(other.ConnectTimeout_)
-        , Log_(other.Log_)
-    {}
-};
-
-//! Settings for read session.
-struct TReadSessionSettings: public TReadSessionSettingsBase<TReadSessionSettings> {
-    using TReadSessionSettingsBase<TReadSessionSettings>::TReadSessionSettingsBase;
 };
 
 //! Contains the message to write and all the options.
@@ -1875,9 +1862,3 @@ private:
 };
 
 } // namespace NYdb::NTopic
-
-/////////////////////////////////////////
-// Templates implementation
-#define EVENT_HANDLERS_IMPL
-#include "impl/event_handlers.h"
-#undef EVENT_HANDLERS_IMPL

@@ -74,7 +74,7 @@ public:
     void ReplyAndPassAway() {
         NKikimrViewer::TQueryAutocomplete Result;
 
-        auto fuzzy = FuzzySearcher(Tenants);
+        auto fuzzy = FuzzySearcher<TString>(Tenants);
         auto autocomplete = fuzzy.Search(Prefix, Limit);
         for (TString& name: autocomplete) {
             Result.MutableResult()->MutableDatabasesResult()->AddEntities()->set_name(name);
@@ -96,7 +96,7 @@ template <>
 struct TJsonRequestSchema<TJsonQueryAutocompleteTenants> {
     static TString GetSchema() {
         TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<NConsole::TEvConsole::TEvListTenantsResponse::ProtoRecordType>(stream);
+        TProtoToJson::ProtoToJsonSchema<NKikimrViewer::TQueryAutocomplete>(stream);
         return stream.Str();
     }
 };

@@ -29,14 +29,15 @@ inline ui32 LevenshteinDistance(TString word1, TString word2) {
     return dist[size1][size2];
 }
 
+template<typename Type>
 class FuzzySearcher {
     struct WordHit {
         ui32 Distance;
-        TString Word;
+        Type Data;
 
-        WordHit(ui32 dist, TString word)
+        WordHit(ui32 dist, Type data)
             : Distance(dist)
-            , Word(word)
+            , Data(data)
         {}
 
         bool operator<(const WordHit& other) const {
@@ -49,18 +50,25 @@ class FuzzySearcher {
     };
 
 public:
-    TVector<TString> Tenants;
-    FuzzySearcher(const TVector<TString>& tenants)
-        : Tenants(tenants) {}
+    THashMap<TString, Type> Dictionary;
 
-    TVector<TString> Search(const TString& prefix, ui32 limit = 10) {
+    FuzzySearcher(const THashMap<TString, Type>& dictionary)
+        : Dictionary(dictionary) {}
+
+    FuzzySearcher(const TVector<TString>& words) {
+        for (const auto& word : words) {
+            Dictionary[word] = word;
+        }
+    }
+
+    TVector<Type> Search(const TString& prefix, ui32 limit = 10) {
         auto cmp = [](const WordHit& left, const WordHit& right) {
             return left.Distance > right.Distance;
         };
         std::priority_queue<WordHit, TVector<WordHit>, decltype(cmp)> queue(cmp);
 
-        for (const auto& word : Tenants) {
-            auto wordHit = WordHit(LevenshteinDistance(prefix, word), word);
+        for (const auto& [word, data]: Dictionary) {
+            auto wordHit = WordHit(LevenshteinDistance(prefix, word), data);
             if (queue.size() < limit) {
                 queue.emplace(wordHit);
             } else if (wordHit.Distance < queue.top().Distance) {
@@ -69,9 +77,9 @@ public:
             }
         }
 
-        TVector<TString> results;
+        TVector<Type> results;
         while (!queue.empty()) {
-            results.emplace_back(queue.top().Word);
+            results.emplace_back(queue.top().Data);
             queue.pop();
         }
 

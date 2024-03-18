@@ -12,6 +12,7 @@ target_link_libraries(pdiskfit PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  version_definition
   library-cpp-getopt
   cpp-string_utils-parse_size
   ydb-core-blobstorage

@@ -6,7 +6,13 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(pgwire)
-add_subdirectory(version)
-add_subdirectory(ydb)
-add_subdirectory(ydbd)
+
+add_library(version_definition)
+target_link_libraries(version_definition PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  version
+)
+target_sources(version_definition PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/apps/version/version_definition.cpp
+)

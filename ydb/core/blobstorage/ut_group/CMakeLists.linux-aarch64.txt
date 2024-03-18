@@ -13,6 +13,7 @@ target_link_libraries(ydb-core-blobstorage-ut_group PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-testing-unittest_main
+  version_definition
   actors-interconnect-mock
   cpp-testing-unittest
   core-blobstorage-crypto

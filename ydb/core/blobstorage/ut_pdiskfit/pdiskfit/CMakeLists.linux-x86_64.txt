@@ -13,6 +13,7 @@ target_link_libraries(pdiskfit PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-cpuid_check
+  version_definition
   library-cpp-getopt
   cpp-string_utils-parse_size
   ydb-core-blobstorage

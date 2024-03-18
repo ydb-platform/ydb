@@ -71,8 +71,6 @@ public:
 protected:
     IComputationWideFlowNode* const SourceFlow;
     const ui32 InWidth, OutWidth;
-
-private:
     const TMethPtrTable PtrTable;
 };
 

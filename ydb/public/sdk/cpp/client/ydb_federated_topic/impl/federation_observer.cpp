@@ -1,3 +1,4 @@
+#include "ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/log_lazy.h"
 #include <ydb/public/api/grpc/ydb_federation_discovery_v1.grpc.pb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/impl/federation_observer.h>
@@ -129,22 +130,27 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
             return;
         }
 
+        LOG_LAZY(DbDriverState_->Log, TLOG_INFO, TStringBuilder()
+            << "OnFederationDiscovery status=" << status.GetStatus()
+            << " issues=" << status.GetIssues().ToOneLineString()
+            << " result=" << result.ShortDebugString());
+
         // BAD_REQUEST may be returned from FederationDiscovery:
         //   1) The request was meant for a non-federated topic: fall back to single db mode.
         //   2) The database path in the request is simply wrong: the client should get the BAD_REQUEST status.
         if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED || status.GetStatus() == EStatus::BAD_REQUEST) {
+            LOG_LAZY(DbDriverState_->Log, TLOG_INFO, TStringBuilder()
+                << "OnFederationDiscovery fall back to single mode, database=" << DbDriverState_->Database);
             // fall back to single db mode
             FederatedDbState->Status = TPlainStatus{};  // SUCCESS
-            auto dbState = Connections_->GetDriverState(Nothing(),Nothing(),Nothing(),Nothing(),Nothing());
-            FederatedDbState->ControlPlaneEndpoint = dbState->DiscoveryEndpoint;
+            FederatedDbState->ControlPlaneEndpoint = DbDriverState_->DiscoveryEndpoint;
             // FederatedDbState->SelfLocation = ???;
             auto db = std::make_shared<Ydb::FederationDiscovery::DatabaseInfo>();
-            db->set_path(dbState->Database);
-            db->set_endpoint(dbState->DiscoveryEndpoint);
+            db->set_path(DbDriverState_->Database);
+            db->set_endpoint(DbDriverState_->DiscoveryEndpoint);
             db->set_status(Ydb::FederationDiscovery::DatabaseInfo_Status_AVAILABLE);
             db->set_weight(100);
             FederatedDbState->DbInfos.emplace_back(std::move(db));
-
         } else {
             if (!status.IsSuccess()) {
                 if (!FederationDiscoveryRetryState) {

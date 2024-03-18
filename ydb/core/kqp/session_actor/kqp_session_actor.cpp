@@ -1655,7 +1655,7 @@ public:
             size_t trailingResultsCount = 0;
             for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
                 if (QueryState->IsStreamResult()) {
-                    auto ydbResult = QueryState->QueryData->GetTrailingTxResult(
+                    auto ydbResult = QueryState->QueryData->ExtractTrailingTxResult(
                         phyQuery.GetResultBindings(i), response->GetArena());
 
                     if (ydbResult) {

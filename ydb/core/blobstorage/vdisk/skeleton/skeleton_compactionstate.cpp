@@ -56,7 +56,7 @@ namespace NKikimr {
             i64 reqId,
             EHullDbType dbType,
             const TString& vDiskLogPrefix,
-            std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup) {
+            const std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup) {
         auto it = Requests.find(reqId);
         Y_ABORT_UNLESS(it != Requests.end());
         auto &req = it->second;

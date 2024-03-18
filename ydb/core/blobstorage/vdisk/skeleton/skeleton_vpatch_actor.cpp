@@ -137,7 +137,7 @@ namespace NKikimr::NPrivate {
                 const ::NMonitoring::TDynamicCounters::TCounterPtr &vPatchResMsgsPtr,
                 const NVDiskMon::TLtcHistoPtr &getHistogram, const NVDiskMon::TLtcHistoPtr &putHistogram,
                 const TIntrusivePtr<TVPatchCtx> &vPatchCtx, const TString &vDiskLogPrefix, ui64 incarnationGuid,
-                std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup)
+                std::shared_ptr<NMonGroup::TOutOfSpaceGroup> monGroup)
             : TActorBootstrapped()
             , Sender(ev->Sender)
             , Cookie(ev->Cookie)
@@ -148,7 +148,7 @@ namespace NKikimr::NPrivate {
             , PutHistogram(putHistogram)
             , VPatchCtx(vPatchCtx)
             , VDiskLogPrefix(vDiskLogPrefix)
-            , MonGroup(monGroup)
+            , MonGroup(std::move(monGroup))
             , LeaderId(leaderId)
             , IncarnationGuid(incarnationGuid)
             , GType(gType)
@@ -826,7 +826,7 @@ namespace NKikimr {
             const ::NMonitoring::TDynamicCounters::TCounterPtr &vPatchResMsgsPtr,
             const NVDiskMon::TLtcHistoPtr &getHistogram, const NVDiskMon::TLtcHistoPtr &putHistogram,
             const TIntrusivePtr<TVPatchCtx> &vPatchCtx, const TString &vDiskLogPrefix, ui64 incarnationGuid,
-            std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup)
+            const std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup)
     {
         return new NPrivate::TSkeletonVPatchActor(leaderId, gType, ev, now, skeletonFrontIDPtr,
                 vPatchFoundPartsMsgsPtr, vPatchResMsgsPtr, getHistogram, putHistogram,

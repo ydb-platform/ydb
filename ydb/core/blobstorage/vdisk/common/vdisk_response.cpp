@@ -7,9 +7,9 @@
 namespace NKikimr {
 
 void LogOOSStatus(ui32 flags, const TLogoBlobID& blobId, const TString& vDiskLogPrefix);
-void UpdateMonOOSStatus(ui32 flags, std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup);
+void UpdateMonOOSStatus(ui32 flags, const std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup);
 
-void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEventBase *ev, ui64 cookie, const TString& vDiskLogPrefix, std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup) {
+void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEventBase *ev, ui64 cookie, const TString& vDiskLogPrefix, const std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup) {
     ui32 channel = TInterconnectChannels::IC_BLOBSTORAGE;
     if (TEvVResultBase *base = dynamic_cast<TEvVResultBase *>(ev)) {
         channel = base->GetChannelToSend();
@@ -17,7 +17,7 @@ void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEve
     SendVDiskResponse(ctx, recipient, ev, cookie, channel, vDiskLogPrefix, monGroup);
 }
 
-void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEventBase *ev, ui64 cookie, ui32 channel, const TString& vDiskLogPrefix, std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup) {
+void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEventBase *ev, ui64 cookie, ui32 channel, const TString& vDiskLogPrefix, const std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup) {
     switch(ev->Type()) {
         case TEvBlobStorage::TEvVPutResult::EventType: {
             TEvBlobStorage::TEvVPutResult* event = static_cast<TEvBlobStorage::TEvVPutResult *>(ev);
@@ -76,7 +76,7 @@ void LogOOSStatus(ui32 flags, const TLogoBlobID& blobId, const TString& vDiskLog
         TPDiskSpaceColor_Name(StatusFlagToSpaceColor(flags)) << " on blob " << blobId.ToString());
 }
 
-void UpdateMonOOSStatus(ui32 flags, std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup) {
+void UpdateMonOOSStatus(ui32 flags, const std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup) {
     if (!monGroup) {
         return;
     }

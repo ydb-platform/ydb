@@ -384,45 +384,18 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         ui64 txId = 100;
 
-        Cout << "========= Set observer for capture EvDelayedProposeTransaction =========\n";
-        TVector<THolder<IEventHandle>> delayedProposes;
-        auto observer = [&](TAutoPtr<IEventHandle> & ev) -> auto{
-            switch (ev->GetTypeRewrite()) {
-                case EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 2 /* EvDelayedProposeTransaction */: {
-                    delayedProposes.emplace_back(std::move(ev));
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-        auto prevObserverFunc = runtime.SetObserverFunc(observer);
+        TActorId shardActorId = ResolveTablet( runtime, shard, 0, false);
 
         Cout << "========= Send immediate =========\n";
         {
             auto request = MakeWriteRequest(txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, opts.Columns_, rowCount);
-            runtime.SendToPipe(shard, sender, request.release(), 0, GetPipeConfigWithRetries(), TActorId(), 0, {});
+            runtime.Send(new IEventHandle(shardActorId, sender, request.release()), 0, true);
         }
 
         Cout << "========= Send cancel to tablet =========\n";
         {
-            auto cancel = new TEvDataShard::TEvCancelTransactionProposal(txId);
-            runtime.SendToPipe(shard, sender, cancel);
-        }
-
-        Cout << "========= Wait until we captured capture EvDelayedProposeTransaction =========\n";
-        {
-            const size_t expectedDelayedProposes = 1;
-            WaitFor(runtime, [&delayedProposes] { return delayedProposes.size() >= expectedDelayedProposes; }, "EvDelayedProposeTransactions");
-            UNIT_ASSERT_VALUES_EQUAL(delayedProposes.size(), expectedDelayedProposes);
-        }
-
-        Cout << "========= Resend EvDelayedProposeTransaction =========\n";
-        {
-            runtime.SetObserverFunc(prevObserverFunc);
-            for (auto& ev : delayedProposes) {
-                runtime.Send(ev.Release(), 0, /* via actor system */ true);
-            }
-            delayedProposes.clear();
+            auto request = std::make_unique<TEvDataShard::TEvCancelTransactionProposal>(txId);
+            runtime.Send(new IEventHandle(shardActorId, sender, request.release()), 0, true);
         }
 
         Cout << "========= Wait for STATUS_CANCELLED result =========\n";

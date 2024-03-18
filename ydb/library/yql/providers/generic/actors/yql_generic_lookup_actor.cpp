@@ -8,6 +8,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
@@ -27,19 +28,6 @@ namespace NYql::NDq {
     using namespace NActors;
 
     namespace {
-
-        Ydb::Type ConvertType(const NKikimr::NMiniKQL::TType* type, bool enableOptional) {
-            Ydb::Type result;
-            if (type->IsData()) {
-                auto data = static_cast<const NKikimr::NMiniKQL::TDataType*>(type);
-                result.Settype_id(static_cast<Ydb::Type_PrimitiveTypeId>(data->GetSchemeType())); //???
-                return result;
-            } else if (enableOptional && type->IsOptional()) {
-                auto optional = static_cast<const NKikimr::NMiniKQL::TOptionalType*>(type);
-                return ConvertType(optional->GetItemType(), false);
-            }
-            Y_ABORT();
-        }
 
         const NKikimr::NMiniKQL::TStructType* MergeStructTypes(const NKikimr::NMiniKQL::TTypeEnvironment& env, const NKikimr::NMiniKQL::TStructType* t1, const NKikimr::NMiniKQL::TStructType* t2) {
             Y_ABORT_UNLESS(t1);
@@ -226,7 +214,7 @@ namespace NYql::NDq {
 
         void ProcessReceivedData(const NConnector::NApi::TReadSplitsResponse& resp) {
             if (resp.Haserror()) {
-                std::cerr << "ERRRRR: " << resp.error().message() << "\n";
+                YQL_CLOG(FATAL, ProviderGeneric) << "ActorId=" << SelfId() << " Received unexpected error:" << resp.Geterror().Getmessage();
                 Y_ABORT();
             }
             Y_ABORT_UNLESS(resp.payload_case() == NConnector::NApi::TReadSplitsResponse::PayloadCase::kArrowIpcStreaming);
@@ -313,20 +301,26 @@ namespace NYql::NDq {
             for (ui32 i = 0; i != SelectResultType->GetMembersCount(); ++i) {
                 auto c = select.mutable_what()->add_items()->mutable_column();
                 c->Setname((TString(SelectResultType->GetMemberName(i))));
-                *c->mutable_type() = ConvertType(SelectResultType->GetMemberType(i), true);
+                ExportTypeToProto(SelectResultType->GetMemberType(i), *c->mutable_type());
             }
 
             select.mutable_from()->Settable(Table);
 
-            //TODO use predicate after YQ-2710
-            Y_UNUSED(keys);
-            // NConnector::NApi::TPredicate_TComparison eq;
-            // eq.Setoperation(NConnector::NApi::TPredicate_TComparison_EOperation::TPredicate_TComparison_EOperation_EQ);
-            // eq.mutable_left_value()->Setcolumn("id");
-            // eq.mutable_right_value()->mutable_typed_value()->mutable_type()->Settype_id(Ydb::Type::UINT64);
-            // eq.mutable_right_value()->mutable_typed_value()->mutable_value()->set_uint64_value(1);
-            // *select.mutable_where()->mutable_filter_typed()->mutable_comparison() = eq;
-
+            NConnector::NApi::TPredicate_TDisjunction disjunction;
+            for (const auto& k: keys) {
+                NConnector::NApi::TPredicate_TConjunction conjunction;
+                for (ui32 c = 0; c != KeyType->GetMembersCount(); ++c) {
+                    NConnector::NApi::TPredicate_TComparison eq;        
+                    eq.Setoperation(NConnector::NApi::TPredicate_TComparison_EOperation::TPredicate_TComparison_EOperation_EQ);
+                    eq.mutable_left_value()->Setcolumn(TString(KeyType->GetMemberName(c)));
+                    auto rightTypedValue = eq.mutable_right_value()->mutable_typed_value();
+                    ExportTypeToProto(KeyType->GetMemberType(c), *rightTypedValue->mutable_type());
+                    ExportValueToProto(KeyType->GetMemberType(c), k.GetElement(c), *rightTypedValue->mutable_value());
+                    *conjunction.mutable_operands()->Add()->mutable_comparison() = eq;
+                }
+                *disjunction.mutable_operands()->Add()->mutable_conjunction() = conjunction;
+            }
+            *select.mutable_where()->mutable_filter_typed()->mutable_disjunction() = disjunction;
             return select;
         }
 

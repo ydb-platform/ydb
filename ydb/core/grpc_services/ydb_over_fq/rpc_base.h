@@ -37,19 +37,19 @@ protected:
         HFunc(TEvFqCreateQueryResponse, HandleResponse<FederatedQuery::CreateQueryRequest>);
     )
 
-    void CreateQuery(TStringBuf text, FederatedQuery::ExecuteMode executeMode, const TActorContext& ctx) {
+    void CreateQuery(const TString& text, FederatedQuery::ExecuteMode executeMode, const TActorContext& ctx) {
         FederatedQuery::CreateQueryRequest req;
         req.set_execute_mode(executeMode);
         auto& queryContent = *req.mutable_content();
         queryContent.set_type(FederatedQuery::QueryContent_QueryType_ANALYTICS);
-        queryContent.set_name("Generated query from within");
-        queryContent.mutable_text()->assign(text);
+        queryContent.set_name("Query by YdbOverFq");
+        queryContent.set_text(text);
         queryContent.set_automatic(true);
         auto& acl = *queryContent.mutable_acl();
         acl.set_visibility(FederatedQuery::Acl_Visibility::Acl_Visibility_SCOPE);
 
         LOG_TRACE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-                        "pseudo " << TDerived::RpcName << " actorId: " << SelfId().ToString() << ", creating query");
+                        "YdbOverFq::" << TDerived::RpcName << " actorId: " << SelfId().ToString() << ", creating query");
 
         Become(&TRpcBase::CreateQueryState);
         MakeLocalCall(std::move(req), ctx);
@@ -70,14 +70,14 @@ protected:
         }, TDuration::MilliSeconds(10), TDuration::Seconds(1), TDuration::Seconds(5))->CreateRetryState();
     }
 
-    TEvFqGetQueryStatusRequest* CreateStatusRequest(TStringBuf queryId) {
+    TEvFqGetQueryStatusRequest* CreateStatusRequest(const TString& queryId) {
         FederatedQuery::GetQueryStatusRequest req;
-        req.mutable_query_id()->assign(queryId);
+        req.set_query_id(queryId);
         return new TEvFqGetQueryStatusRequest(std::move(req));
     }
 
-    // will call TDerived::OnQueryTermination(TStringBuf queryId, FederatedQuery::QueryMeta_ComputeStatus, const TActorContext&)
-    void WaitForTermination(TStringBuf queryId, const TActorContext& ctx) {
+    // will call TDerived::OnQueryTermination(const TString& queryId, FederatedQuery::QueryMeta_ComputeStatus, const TActorContext&)
+    void WaitForTermination(const TString& queryId, const TActorContext& ctx) {
         WaitRetryState_ = CreateRetryState();
         QueryId_ = queryId;
         Become(&TRpcBase::WaitForTerminationState);
@@ -90,7 +90,7 @@ protected:
 
     void HandleStatusResponse(typename TEvFqGetQueryStatusResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& resp = ev->Get()->Message;
-        if (HandleFailure(resp.operation(), FederatedQuery::GetQueryStatusResponse::GetDescriptor()->name(), ctx)) [[unlikely]] {
+        if (HandleFailure(resp.operation(), FederatedQuery::GetQueryStatusResponse::GetDescriptor()->name(), ctx)) {
             return;
         }
 
@@ -99,10 +99,10 @@ protected:
 
         if (!NFq::IsTerminalStatus(result.status())) {
             LOG_TRACE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-                "pseudo ExecuteDataQuery actorId: " << SelfId().ToString() << ", still waiting for query: " << QueryId_ <<
+                "YdbOverFq::" << TDerived::RpcName << " actorId: " << SelfId().ToString() << ", still waiting for query: " << QueryId_ <<
                 ", current status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(result.status()));
             auto delay = WaitRetryState_->GetNextRetryDelay(result.status());
-            if (!delay) [[unlikely]] {
+            if (!delay) {
                 TBase::Reply(Ydb::StatusIds_StatusCode_INTERNAL_ERROR,
                     TStringBuilder{} << "Created query " << QueryId_ << ", couldn't wait for finish, final status: " <<
                     FederatedQuery::QueryMeta::ComputeStatus_Name(result.status()), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
@@ -121,9 +121,9 @@ protected:
         HFunc(TEvFqDescribeQueryResponse, HandleResponse<FederatedQuery::DescribeQueryRequest>);
     )
 
-    void DescribeQuery(TStringBuf queryId, const TActorContext& ctx) {
+    void DescribeQuery(const TString& queryId, const TActorContext& ctx) {
         FederatedQuery::DescribeQueryRequest req;
-        req.mutable_query_id()->assign(queryId);
+        req.set_query_id(queryId);
 
         Become(&TRpcBase::DescribeQueryState);
         MakeLocalCall(std::move(req), ctx);
@@ -140,7 +140,7 @@ protected:
         NYql::TIssues issues;
         NYql::IssuesFromMessage(operation.issues(), issues);
 
-        TString errorMsg = TStringBuilder{} << "pseudo " << TDerived::RpcName << " actorId: " << SelfId().ToString() <<
+        TString errorMsg = TStringBuilder{} << "YdbOverFq::" << TDerived::RpcName << " actorId: " << SelfId().ToString() <<
             " failed to " << opName << " with status: " << Ydb::StatusIds::StatusCode_Name(operation.status());
         LOG_INFO_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
             errorMsg << ", issues: " << issues.ToOneLineString());
@@ -157,7 +157,7 @@ protected:
         using TResult = typename TCall::TResult;
 
         const TResponse& resp = ev->Get()->Message;
-        if (HandleFailure(resp.operation(), TResponse::GetDescriptor()->name(), ctx)) [[unlikely]] {
+        if (HandleFailure(resp.operation(), TResponse::GetDescriptor()->name(), ctx)) {
             return;
         }
 

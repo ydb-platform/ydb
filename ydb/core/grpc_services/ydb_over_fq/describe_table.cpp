@@ -42,7 +42,7 @@ public:
         filter.set_name(BindingName_);
 
         LOG_TRACE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-            "pseudo DescribeTable actorId: " << SelfId().ToString() << ", listing bindings");
+            "YdbOverFq::DescribeTable actorId: " << SelfId().ToString() << ", listing bindings");
 
         Become(&DescribeTableRPC::ListBindingsState);
         MakeLocalCall(std::move(req), ctx);
@@ -59,7 +59,7 @@ public:
         if (result.next_page_token().empty()) {
             TString errorMsg = TStringBuilder{} << "couldn't find binding with matching name for " << BindingName_;
             LOG_INFO_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-                "pseudo DescribeTable actorId: " << SelfId().ToString() << " failed: " << errorMsg);
+                "YdbOverFq::DescribeTable actorId: " << SelfId().ToString() << " failed: " << errorMsg);
             Reply(
                 Ydb::StatusIds_StatusCode_INTERNAL_ERROR, errorMsg, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             return;
@@ -77,7 +77,7 @@ public:
         req.set_binding_id(bindingId);
 
         LOG_TRACE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-            "pseudo DescribeTable actorId: " << SelfId().ToString() << ", describing binding " << bindingId);
+            "YdbOverFq::DescribeTable actorId: " << SelfId().ToString() << ", describing binding " << bindingId);
 
         Become(&DescribeTableRPC::DescribeBindingState);
         MakeLocalCall(std::move(req), ctx);
@@ -109,7 +109,7 @@ public:
             TString errorMsg = TStringBuilder{} << "binding " << result.binding().meta().id() << " got unexpected type: " <<
                 static_cast<int>(settings.binding_case());
             LOG_INFO_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-                "pseudo DescribeTable actorId: " << SelfId().ToString() << " failed: " << errorMsg);
+                "YdbOverFq::DescribeTable actorId: " << SelfId().ToString() << " failed: " << errorMsg);
             Reply(
                 Ydb::StatusIds_StatusCode_INTERNAL_ERROR, errorMsg, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             return;
@@ -138,7 +138,7 @@ private:
 };
 
 std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> GetDescribeTableExecutor(NActors::TActorId grpcProxyId) {
-    return [grpcProxyId = std::move(grpcProxyId)](std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    return [grpcProxyId](std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
         f.RegisterActor(new DescribeTableRPC(p.release(), grpcProxyId));
     };
 }

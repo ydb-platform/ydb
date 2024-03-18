@@ -32,7 +32,7 @@ public:
     void CreateQuery(const TActorContext& ctx) {
         if (!GetProtoRequest()->query().has_yql_text()) {
             LOG_INFO_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-                            "pseudo ExecuteDataQuery actorId: " << SelfId().ToString() << ", got request with id instead of text");
+                            "YdbOverFq::ExecuteDataQuery actorId: " << SelfId().ToString() << ", got request with id instead of text");
             Reply(
                 Ydb::StatusIds::BAD_REQUEST,
                 "query id in ExecuteDataQuery is not supported",
@@ -47,25 +47,25 @@ public:
 
     void Handle(const FederatedQuery::CreateQueryResult& result, const TActorContext& ctx) {
         LOG_TRACE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-            "pseudo ExecuteDataQuery actorId: " << SelfId().ToString() << ", created query: " << result.query_id());
+            "YdbOverFq::ExecuteDataQuery actorId: " << SelfId().ToString() << ", created query: " << result.query_id());
 
         WaitForTermination(result.query_id(), ctx);
     }
 
     // WaitForExecutionImpl
 
-    void OnQueryTermination(TStringBuf queryId, FederatedQuery::QueryMeta_ComputeStatus status, const TActorContext& ctx) {
+    void OnQueryTermination(const TString& queryId, FederatedQuery::QueryMeta_ComputeStatus status, const TActorContext& ctx) {
         if (status != FederatedQuery::QueryMeta_ComputeStatus_COMPLETED) {
             TString errorMsg = TStringBuilder{} << "created query " << queryId << " finished with non-success status: " <<
                     FederatedQuery::QueryMeta::ComputeStatus_Name(status);
             LOG_INFO_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-                "pseudo ExecuteDataQuery actorId: " << SelfId().ToString() << ", error: " << errorMsg);
+                "YdbOverFq::ExecuteDataQuery actorId: " << SelfId().ToString() << ", error: " << errorMsg);
             Reply(Ydb::StatusIds_StatusCode_INTERNAL_ERROR, errorMsg, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             return;
         }
 
         LOG_INFO_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-            "pseudo ExecuteDataQuery actorId: " << SelfId().ToString() << ", queryId: " << queryId <<
+            "YdbOverFq::ExecuteDataQuery actorId: " << SelfId().ToString() << ", queryId: " << queryId <<
             ", finished query execution");
 
         TBase::DescribeQuery(queryId, ctx);
@@ -90,18 +90,18 @@ public:
         HFunc(TEvFqGetResultDataResponse, TBase::HandleResponse<FederatedQuery::GetResultDataRequest>);
     )
 
-    void GatherResultSets(TStringBuf queryId, const TActorContext& ctx) {
+    void GatherResultSets(const TString& queryId, const TActorContext& ctx) {
         Become(&ExecuteDataQueryRPC::GatherResultSetsState);
         QueryId_ = queryId;
         MakeLocalCall(CreateResultSetRequest(queryId, 0, 0), ctx);
     }
 
-    FederatedQuery::GetResultDataRequest CreateResultSetRequest(TStringBuf queryId, i32 index, i64 offset) {
+    FederatedQuery::GetResultDataRequest CreateResultSetRequest(const TString& queryId, i32 index, i64 offset) {
         FederatedQuery::GetResultDataRequest msg;
 
         constexpr i64 RowsLimit = 1000;
 
-        msg.mutable_query_id()->assign(queryId);
+        msg.set_query_id(queryId);
         msg.set_result_set_index(index);
         msg.set_offset(offset);
         msg.set_limit(RowsLimit);
@@ -157,7 +157,7 @@ private:
 };
 
 std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> GetExecuteDataQueryExecutor(NActors::TActorId grpcProxyId) {
-    return [grpcProxyId = std::move(grpcProxyId)](std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    return [grpcProxyId](std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
         f.RegisterActor(new ExecuteDataQueryRPC(p.release(), grpcProxyId));
     };
 }

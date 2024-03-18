@@ -19,6 +19,11 @@ namespace NKikimr::NMiniKQL {
 //  Never requests system time, expects monotonically increased time points in methods argument
 class TUnboxedKeyValueLruCacheWithTtl {
     struct TEntry {
+	TEntry(NUdf::TUnboxedValue key, NUdf::TUnboxedValue value, std::chrono::time_point<std::chrono::steady_clock> expiration)
+            : Key(std::move(key))
+            , Value(std::move(value))
+            , Expiration(std::move(expiration))
+        {}
         NUdf::TUnboxedValue Key;
         NUdf::TUnboxedValue Value;
         std::chrono::time_point<std::chrono::steady_clock> Expiration;

@@ -1264,3 +1264,129 @@ Banana,3,100'''
         assert result_set.rows[1].items[2].int32_value == 2
         assert result_set.rows[2].items[2].int32_value == 1
         assert result_set.rows[3].items[2].int32_value == 2
+
+    def attach_sql(self, yq_version, runtime_listing, where):
+        sql = f'''
+            pragma s3.UseRuntimeListing="{runtime_listing}";
+            ''' + R'''
+            $projection = @@ {
+                "projection.enabled" : "true",
+                "storage.location.template" : "/${ts}",
+                "projection.ts.type" : "date",
+                "projection.ts.min" : "2023-01-14",
+                "projection.ts.max" : "2023-01-14",
+                "projection.ts.interval" : "1",
+                "projection.ts.format" : "year=%Y/month=%m/day=%d",
+                "projection.ts.unit" : "DAYS",
+                "projection.ts.attach" : "true"
+            }
+            @@;
+
+            SELECT
+                Fruit,
+                ts
+            FROM
+                `attached`.`attached_columns`
+            WITH
+            (
+                format="csv_with_names",
+                schema=(
+                    `Fruit` String NOT NULL,
+                    `ts` Datetime NOT NULL
+                ),
+                partitioned_by=(`ts`),
+                projection=$projection
+            )
+        ''' + where
+
+        # temporary fix for dynamic listing
+        if yq_version == "v1":
+            sql = 'pragma dq.MaxTasksPerStage="10"; ' + sql
+        
+        return sql
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    @pytest.mark.parametrize("runtime_listing", ["false", "true"])
+    def test_attached_columns(self, kikimr, s3, client, runtime_listing, yq_version):
+
+        resource = boto3.resource(
+            "s3",
+            endpoint_url=s3.s3_url,
+            aws_access_key_id="key",
+            aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("test_attached_columns")
+        bucket.create(ACL='public-read')
+
+        s3_client = boto3.client(
+            "s3",
+            endpoint_url=s3.s3_url,
+            aws_access_key_id="key",
+            aws_secret_access_key="secret_key"
+        )
+
+        fruits = R'''Fruit,Price,Duration,ts
+Banana,3,100,2023-01-10 03:57:00'''
+        s3_client.put_object(Body=fruits,
+                             Bucket='test_attached_columns',
+                             Key='attached_columns/year=2023/month=01/day=14/file1.csv',
+                             ContentType='text/plain')
+
+        kikimr.control_plane.wait_bootstrap(1)
+        client.create_storage_connection("attached", "test_attached_columns")
+
+        query_id = client.create_query("simple", self.attach_sql(yq_version, runtime_listing, ""), type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        describe_result = client.describe_query(query_id).result
+        logging.info("AST: {}".format(describe_result.query.ast.data))
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+
+        assert len(result_set.columns) == 2
+        assert result_set.columns[0].name == "Fruit"
+        assert result_set.columns[0].type.type_id == ydb.Type.STRING
+        assert result_set.columns[1].name == "ts"
+        assert result_set.columns[1].type.type_id == ydb.Type.DATETIME
+        assert len(result_set.rows) == 1
+        assert result_set.rows[0].items[0].bytes_value == b"Banana"
+        assert result_set.rows[0].items[1].uint32_value == 1673323020
+
+
+        query_id = client.create_query("simple", self.attach_sql(yq_version, runtime_listing, 'where ts = CAST("2023-01-14" AS Datetime)'), type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        describe_result = client.describe_query(query_id).result
+        logging.info("AST: {}".format(describe_result.query.ast.data))
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+
+        assert len(result_set.columns) == 2
+        assert result_set.columns[0].name == "Fruit"
+        assert result_set.columns[0].type.type_id == ydb.Type.STRING
+        assert result_set.columns[1].name == "ts"
+        assert result_set.columns[1].type.type_id == ydb.Type.DATETIME
+        assert len(result_set.rows) == 0
+
+        query_id = client.create_query("simple", self.attach_sql(yq_version, runtime_listing, 'where ts = CAST("2023-01-10 03:57:00" AS Datetime)'), type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        describe_result = client.describe_query(query_id).result
+        logging.info("AST: {}".format(describe_result.query.ast.data))
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+
+        assert len(result_set.columns) == 2
+        assert result_set.columns[0].name == "Fruit"
+        assert result_set.columns[0].type.type_id == ydb.Type.STRING
+        assert result_set.columns[1].name == "ts"
+        assert result_set.columns[1].type.type_id == ydb.Type.DATETIME
+        assert len(result_set.rows) == 0

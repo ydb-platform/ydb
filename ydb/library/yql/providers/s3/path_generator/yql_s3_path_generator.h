@@ -42,6 +42,7 @@ struct IPathGenerator {
         i64 Interval = 1;
         i32 Digits = 0;
         std::vector<TString> Values;
+        bool Attach = false;
     };
 
     struct TExplicitPartitioningConfig {
@@ -54,6 +55,7 @@ struct IPathGenerator {
         TString Name;
         NUdf::EDataSlot Type;
         TString Value;
+        bool Attach = false;
     };
 
     struct TExpandedPartitioningRule {

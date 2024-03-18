@@ -41,7 +41,8 @@ struct TKeeperParams {
     // Small disk
     bool SeparateCommonLog = true;
 
-    ui32 CyanLimit = 130;
+    // Free chunk percent that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
+    ui32 ChunkBaseLimit = 130;
 };
 
 } // NPDisk

@@ -20,7 +20,7 @@ public:
 
     TRpcBase(IRequestOpCtx* request, TActorId grpcProxyId)
         : TBase{request}
-        , TCaller{std::move(grpcProxyId)}
+        , TCaller{grpcProxyId}
     {}
 
     using TBase::Become;

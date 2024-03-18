@@ -32,6 +32,7 @@ TFederatedWriteSession::TFederatedWriteSession(const TFederatedWriteSessionSetti
     , Observer(std::move(observer))
     , AsyncInit(Observer->WaitForFirstState())
     , FederationState(nullptr)
+    , Log(Connections->GetLog())
     , ClientEventsQueue(std::make_shared<NTopic::TWriteSessionEventsQueue>(Settings))
     , BufferFreeSpace(Settings.MaxMemoryUsage_)
 {
@@ -167,6 +168,10 @@ void TFederatedWriteSession::OnFederatedStateUpdateImpl() {
     }
 
     if (!DatabasesAreSame(preferrableDb, CurrentDatabase)) {
+        LOG_LAZY(Log, TLOG_INFO, TStringBuilder()
+            << "Start federated write session to database '" << preferrableDb->name()
+            << "' (previous was " << (CurrentDatabase ? CurrentDatabase->name() : "<empty>") << ")"
+            << " FederationState: " << *FederationState);
         OpenSubSessionImpl(preferrableDb);
     }
 

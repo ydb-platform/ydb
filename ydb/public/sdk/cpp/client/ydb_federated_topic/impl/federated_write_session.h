@@ -88,6 +88,8 @@ private:
     std::shared_ptr<TFederatedDbState> FederationState;
     NYdbGrpc::IQueueClientContextPtr UpdateStateDelayContext;
 
+    TLog Log;
+
     std::shared_ptr<TDbInfo> CurrentDatabase;
 
     TString SessionId;

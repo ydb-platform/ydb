@@ -130,18 +130,12 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
             return;
         }
 
-        LOG_LAZY(DbDriverState_->Log, TLOG_INFO, TStringBuilder()
-            << "OnFederationDiscovery status=" << status.GetStatus()
-            << " issues=" << status.GetIssues().ToOneLineString()
-            << " result=" << result.ShortDebugString());
-
         // BAD_REQUEST may be returned from FederationDiscovery:
         //   1) The request was meant for a non-federated topic: fall back to single db mode.
         //   2) The database path in the request is simply wrong: the client should get the BAD_REQUEST status.
         if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED || status.GetStatus() == EStatus::BAD_REQUEST) {
             LOG_LAZY(DbDriverState_->Log, TLOG_INFO, TStringBuilder()
                 << "OnFederationDiscovery fall back to single mode, database=" << DbDriverState_->Database);
-            // fall back to single db mode
             FederatedDbState->Status = TPlainStatus{};  // SUCCESS
             FederatedDbState->ControlPlaneEndpoint = DbDriverState_->DiscoveryEndpoint;
             // FederatedDbState->SelfLocation = ???;
@@ -176,6 +170,27 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
     if (!PromiseToInitState.HasValue()) {
         PromiseToInitState.SetValue();
     }
+}
+
+IOutputStream& operator<<(IOutputStream& out, TFederatedDbState const& state) {
+    out << "{ Status: " << state.Status.GetStatus();
+    if (auto const& issues = state.Status.GetIssues(); !issues.Empty()) {
+        out << ", Issues: { " << issues.ToOneLineString() << " }";
+    }
+    if (!state.DbInfos.empty()) {
+        out << ", DbInfos: { ";
+        bool first = true;
+        for (auto const& info : state.DbInfos) {
+            if (first) {
+                first = false;
+            } else {
+                out << ", ";
+            }
+            out << "{ " << info->ShortDebugString() << " }";
+        }
+        out << " }";
+    }
+    return out << " }";
 }
 
 } // namespace NYdb::NFederatedTopic

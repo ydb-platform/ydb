@@ -103,6 +103,7 @@ public:
         if (rec.HasScopePathId()) {
             Result.set_scope_path_id(rec.GetScopePathId());
         }
+        Result.set_slot_name(rec.GetNode().GetSlotName());
 
         const TActorId nameserviceId = GetNameserviceActorId();
         ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());

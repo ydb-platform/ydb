@@ -117,7 +117,7 @@ private:
         TInstant Expire;
         bool AuthorizedByCertificate = false;
         std::optional<ui32> SlotIndex;
-        TSubDomainKey SubdomainKey;
+        TSubDomainKey ServicedSubDomain;
     };
 
     // State changes to apply while moving to the next epoch.
@@ -140,7 +140,8 @@ private:
     ITransaction *CreateTxInitScheme();
     ITransaction *CreateTxLoadState();
     ITransaction *CreateTxRegisterNode(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
-                                       const NActors::TScopeId& scopeId, const TSubDomainKey& subdomainKey);
+                                       const NActors::TScopeId& scopeId,
+                                       const TSubDomainKey& servicedDomain);
     ITransaction *CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfig(TEvNodeBroker::TEvSetConfigRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfigSubscription(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev);

@@ -11,11 +11,11 @@ using namespace NKikimrNodeBroker;
 class TNodeBroker::TTxRegisterNode : public TTransactionBase<TNodeBroker> {
 public:
     TTxRegisterNode(TNodeBroker *self, TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
-                    const NActors::TScopeId& scopeId, const TSubDomainKey& subdomainKey)
+                    const NActors::TScopeId& scopeId, const TSubDomainKey& servicedSubDomain)
         : TBase(self)
         , Event(ev)
         , ScopeId(scopeId)
-        , SubdomainKey(subdomainKey)
+        , ServicedSubDomain(servicedSubDomain)
         , NodeId(0)
         , ExtendLease(false)
         , FixNodeId(false)
@@ -62,7 +62,7 @@ public:
                          ctx);
         }
 
-        if (Self->EnableGenerateSlotNames && rec.HasPath() && SubdomainKey == InvalidSubDomainKey) {
+        if (Self->EnableGenerateSlotNames && rec.HasPath() && ServicedSubDomain == InvalidSubDomainKey) {
             return Error(TStatus::ERROR,
                          TStringBuilder() << "Cannot resolve subdomain key for path " << rec.GetPath(),
                          ctx);
@@ -101,15 +101,15 @@ public:
             node.AuthorizedByCertificate = rec.GetAuthorizedByCertificate();
             
             if (Self->EnableGenerateSlotNames) {
-                if (SubdomainKey != node.SubdomainKey) {
+                if (ServicedSubDomain != node.ServicedSubDomain) {
                     if (node.SlotIndex.has_value()) {
-                        Self->SlotIndexesPools[node.SubdomainKey].Release(node.SlotIndex.value());
+                        Self->SlotIndexesPools[node.ServicedSubDomain].Release(node.SlotIndex.value());
                     }
-                    node.SlotIndex = Self->SlotIndexesPools[SubdomainKey].AcquireLowestFreeIndex();
-                    node.SubdomainKey = SubdomainKey;
+                    node.ServicedSubDomain = ServicedSubDomain;
+                    node.SlotIndex = Self->SlotIndexesPools[node.ServicedSubDomain].AcquireLowestFreeIndex();
                     Self->DbAddNode(node, txc);
                 } else if (!node.SlotIndex.has_value()) {    
-                    node.SlotIndex = Self->SlotIndexesPools[SubdomainKey].AcquireLowestFreeIndex();
+                    node.SlotIndex = Self->SlotIndexesPools[node.ServicedSubDomain].AcquireLowestFreeIndex();
                     Self->DbAddNode(node, txc);
                 }
             }
@@ -132,8 +132,8 @@ public:
         Node->Expire = expire;
 
         if (Self->EnableGenerateSlotNames) {
-            Node->SubdomainKey = SubdomainKey;
-            Node->SlotIndex = Self->SlotIndexesPools[SubdomainKey].AcquireLowestFreeIndex();
+            Node->ServicedSubDomain = ServicedSubDomain;
+            Node->SlotIndex = Self->SlotIndexesPools[Node->ServicedSubDomain].AcquireLowestFreeIndex();
         }
 
         Response->Record.MutableStatus()->SetCode(TStatus::OK);
@@ -178,7 +178,7 @@ public:
 private:
     TEvNodeBroker::TEvRegistrationRequest::TPtr Event;
     const NActors::TScopeId ScopeId;
-    const TSubDomainKey SubdomainKey;
+    const TSubDomainKey ServicedSubDomain;
     TAutoPtr<TEvNodeBroker::TEvRegistrationResponse> Response;
     THolder<TNodeInfo> Node;
     ui32 NodeId;
@@ -187,9 +187,10 @@ private:
 };
 
 ITransaction *TNodeBroker::CreateTxRegisterNode(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
-                                                const NActors::TScopeId& scopeId, const TSubDomainKey& subdomainKey)
+                                                const NActors::TScopeId& scopeId,
+                                                const TSubDomainKey& servicedSubDomain)
 {
-    return new TTxRegisterNode(this, ev, scopeId, subdomainKey);
+    return new TTxRegisterNode(this, ev, scopeId, servicedSubDomain);
 }
 
 } // NNodeBroker

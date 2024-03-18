@@ -24,6 +24,7 @@ public:
         
         ReleaseSlot = DbTryReleaseSlot(Self->Nodes, txc) || DbTryReleaseSlot(Self->ExpiredNodes, txc);
 
+        // TODO: remove?
         if (!ReleaseSlot) {
             LOG_ERROR_S(ctx, NKikimrServices::NODE_BROKER,
                         "Cannot release slot for node #" << NodeId << ": unknown node");
@@ -39,6 +40,9 @@ public:
         if (ReleaseSlot) {
             TryReleaseSlot(Self->Nodes);
             TryReleaseSlot(Self->ExpiredNodes);
+            // TODO: return OK
+        } else {
+            // TODO: return error status
         }
         
         Self->TxCompleted(NodeId, this, ctx);
@@ -48,6 +52,7 @@ public:
         auto it = nodes.find(NodeId);
         if (it != nodes.end()) {
             const auto& node = it->second;
+            // TODO: check cookie? and make idempotent?
             if (node.SlotIndex.has_value()) {
                 NIceDb::TNiceDb db(txc.DB);
                 db.Table<Schema::Nodes>().Key(node.NodeId)
@@ -62,7 +67,7 @@ public:
         auto it = nodes.find(NodeId);
         if (it != nodes.end()) {
             auto& node = it->second;
-            Self->SlotIndexesPools[node.SubdomainKey].Release(node.SlotIndex.value());
+            Self->SlotIndexesPools[node.ServicedSubDomain].Release(node.SlotIndex.value());
             node.SlotIndex = std::nullopt;
         }
     }

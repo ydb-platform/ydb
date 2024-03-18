@@ -23,7 +23,7 @@ struct Schema : NIceDb::Schema {
         struct Lease : Column<10, NScheme::NTypeIds::Uint32> {};
         struct Expire : Column<11, NScheme::NTypeIds::Uint64> {};
         struct Location : Column<12, NScheme::NTypeIds::String> {};
-        struct SubDomainKey : Column<13, NScheme::NTypeIds::String> { using Type = NKikimrSubDomains::TDomainKey; };
+        struct ServicedSubDomain : Column<13, NScheme::NTypeIds::String> { using Type = NKikimrSubDomains::TDomainKey; };
         struct SlotIndex : Column<14, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<ID>;
@@ -36,7 +36,7 @@ struct Schema : NIceDb::Schema {
             Lease,
             Expire,
             Location,
-            SubDomainKey,
+            ServicedSubDomain,
             SlotIndex
         >;
     };

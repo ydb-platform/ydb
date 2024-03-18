@@ -128,7 +128,7 @@ bool TNodeBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                     << "   Lease: " << node.Lease << Endl
                     << "   Expire: " << node.ExpirationString() << Endl
                     << "   AuthorizedByCertificate: " << (node.AuthorizedByCertificate ? "true" : "false") << Endl
-                    << "   SubDomainKey: " << node.SubdomainKey << Endl
+                    << "   ServicedSubDomain: " << node.ServicedSubDomain << Endl
                     << "   SlotIndex: " << node.SlotIndex << Endl;
             }
             str << Endl;
@@ -136,7 +136,7 @@ bool TNodeBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
             str << "Free Node IDs count: " << FreeIds.Count() << Endl;
 
             str << Endl;
-            str << "Slot Indexes Pools fullness: " << Endl;
+            str << "Slot Indexes Pools usage: " << Endl;
             size_t totalSize = 0;
             size_t totalCapacity = 0;
             for (const auto &[subdomainKey, slotIndexesPool] : SlotIndexesPools) {
@@ -144,17 +144,17 @@ bool TNodeBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                 totalSize += size;
                 const size_t capacity = slotIndexesPool.Capacity();
                 totalCapacity += capacity;
-                const double fullnessPercent = floor(size * 100.0 / capacity);
+                const double usagePercent = floor(size * 100.0 / capacity);
                 str << "   " << subdomainKey
-                    << " - " << fullnessPercent << "% (" <<  size << " of " << capacity << " )"
+                    << " = " << usagePercent << "% (" << size << " of " << capacity << ")"
                     << Endl;
             }
             str << Endl;
 
             if (totalCapacity > 0) {
-                const double totalFullnessPercent = floor(totalSize * 100.0 / totalCapacity);
+                const double totalUsagePercent = floor(totalSize * 100.0 / totalCapacity);
                 str << "   Total"
-                    << " - " << totalFullnessPercent << "% (" <<  totalSize << " of " << totalCapacity << " )"
+                    << " = " << totalUsagePercent << "% (" << totalSize << " of " << totalCapacity << ")"
                     << Endl;
             } else {
                 str << "   No Slot Indexes Pools" << Endl;
@@ -194,7 +194,7 @@ void TNodeBroker::AddNode(const TNodeInfo &info)
 {
     FreeIds.Reset(info.NodeId);
     if (info.SlotIndex.has_value()) {
-        SlotIndexesPools[info.SubdomainKey].Acquire(info.SlotIndex.value());
+        SlotIndexesPools[info.ServicedSubDomain].Acquire(info.SlotIndex.value());
     }    
 
     if (info.Expire > Epoch.Start) {
@@ -252,12 +252,12 @@ void TNodeBroker::RecomputeFreeIds()
 
     for (const auto &[_, node] : Nodes) {
         if (node.SlotIndex.has_value()) {
-            SlotIndexesPools[node.SubdomainKey].Acquire(node.SlotIndex.value());
+            SlotIndexesPools[node.ServicedSubDomain].Acquire(node.SlotIndex.value());
         }
     }
     for (const auto &[_, node] : ExpiredNodes) {
         if (node.SlotIndex.has_value()) {
-            SlotIndexesPools[node.SubdomainKey].Acquire(node.SlotIndex.value());
+            SlotIndexesPools[node.ServicedSubDomain].Acquire(node.SlotIndex.value());
         }
     }
 }
@@ -383,7 +383,7 @@ void TNodeBroker::ApplyStateDiff(const TStateDiff &diff)
             FreeIds.Set(id);
         }
         if (it->second.SlotIndex.has_value()) {
-            SlotIndexesPools[it->second.SubdomainKey].Release(it->second.SlotIndex.value());
+            SlotIndexesPools[it->second.ServicedSubDomain].Release(it->second.SlotIndex.value());
         }
         ExpiredNodes.erase(it);
     }
@@ -493,7 +493,7 @@ void TNodeBroker::DbAddNode(const TNodeInfo &node,
                 << " location=" << node.Location.ToString()
                 << " lease=" << node.Lease
                 << " expire=" << node.ExpirationString()
-                << " subdomainkey=" << node.SubdomainKey
+                << " serviceddomain=" << node.ServicedSubDomain
                 << " slotindex= " << node.SlotIndex);
 
     NIceDb::TNiceDb db(txc.DB);
@@ -506,7 +506,7 @@ void TNodeBroker::DbAddNode(const TNodeInfo &node,
         .Update<T::Lease>(node.Lease)
         .Update<T::Expire>(node.Expire.GetValue())
         .Update<T::Location>(node.Location.GetSerializedLocation())
-        .Update<T::SubDomainKey>(node.SubdomainKey);
+        .Update<T::ServicedSubDomain>(node.ServicedSubDomain);
 
     if (node.SlotIndex.has_value()) {
         db.Table<T>().Key(node.NodeId)
@@ -656,7 +656,7 @@ bool TNodeBroker::DbLoadState(TTransactionContext &txc,
 
             info.Lease = nodesRowset.GetValue<T::Lease>();
             info.Expire = expire;
-            info.SubdomainKey = TSubDomainKey(nodesRowset.GetValue<T::SubDomainKey>());
+            info.ServicedSubDomain = TSubDomainKey(nodesRowset.GetValue<T::ServicedSubDomain>());
             if (nodesRowset.HaveValue<T::SlotIndex>()) {
                 info.SlotIndex = nodesRowset.GetValue<T::SlotIndex>();
             } 
@@ -778,7 +778,6 @@ void TNodeBroker::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
 {
     if (ev->Get()->Record.HasLocal() && ev->Get()->Record.GetLocal()) {
         ProcessTx(CreateTxUpdateConfig(ev), ctx);
-
     } else {
         // ignore and immediately ack messages from old persistent console subscriptions
         auto response = MakeHolder<TEvConsole::TEvConfigNotificationResponse>();
@@ -846,7 +845,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
         TEvNodeBroker::TEvRegistrationRequest::TPtr Ev;
         TNodeBroker *Self;
         NActors::TScopeId ScopeId;
-        TSubDomainKey SubdomainKey;
+        TSubDomainKey ServicedSubDomain;
 
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -892,7 +891,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                 } else {
                     ScopeId = {response.DomainInfo->DomainKey.OwnerId, response.DomainInfo->DomainKey.LocalPathId};
                 }
-                SubdomainKey = TSubDomainKey(response.DomainInfo->DomainKey.OwnerId, response.DomainInfo->DomainKey.LocalPathId);
+                ServicedSubDomain = TSubDomainKey(response.DomainInfo->DomainKey.OwnerId, response.DomainInfo->DomainKey.LocalPathId);
             } else {
                 LOG_WARN_S(ctx, NKikimrServices::NODE_BROKER, "Cannot resolve tenant"
                     << ": request# " << Ev->Get()->Record.ShortDebugString()
@@ -910,9 +909,9 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
             LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER, "Finished resolving tenant"
                 << ": request# " << Ev->Get()->Record.ShortDebugString()
                 << ": scope id# " << ScopeIdToString(ScopeId)
-                << ": subdomain key# " << SubdomainKey);
+                << ": serviced domain# " << ServicedSubDomain);
 
-            Self->ProcessTx(Self->CreateTxRegisterNode(Ev, ScopeId, SubdomainKey), ctx);
+            Self->ProcessTx(Self->CreateTxRegisterNode(Ev, ScopeId, ServicedSubDomain), ctx);
             Die(ctx);
         }
 

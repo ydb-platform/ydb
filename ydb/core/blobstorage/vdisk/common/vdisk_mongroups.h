@@ -568,20 +568,20 @@ public:                                                                         
         public:
             GROUP_CONSTRUCTOR(TOutOfSpaceGroup)
             {
-                COUNTER_INIT(StatusDiskSpaceRed, true);
-                COUNTER_INIT(StatusDiskSpaceOrange, true);
-                COUNTER_INIT(StatusDiskSpacePreOrange, true);
-                COUNTER_INIT(StatusDiskSpaceLightOrange, true);
-                COUNTER_INIT(StatusDiskSpaceYellowStop, true);
-                COUNTER_INIT(StatusDiskSpaceLightYellowMove, true);
+                COUNTER_INIT(ResponsesWithDiskSpaceRed, true);
+                COUNTER_INIT(ResponsesWithDiskSpaceOrange, true);
+                COUNTER_INIT(ResponsesWithDiskSpacePreOrange, true);
+                COUNTER_INIT(ResponsesWithDiskSpaceLightOrange, true);
+                COUNTER_INIT(ResponsesWithDiskSpaceYellowStop, true);
+                COUNTER_INIT(ResponsesWithDiskSpaceLightYellowMove, true);
             }
 
-            COUNTER_DEF(StatusDiskSpaceRed);
-            COUNTER_DEF(StatusDiskSpaceOrange);
-            COUNTER_DEF(StatusDiskSpacePreOrange);
-            COUNTER_DEF(StatusDiskSpaceLightOrange);
-            COUNTER_DEF(StatusDiskSpaceYellowStop);
-            COUNTER_DEF(StatusDiskSpaceLightYellowMove);
+            COUNTER_DEF(ResponsesWithDiskSpaceRed);
+            COUNTER_DEF(ResponsesWithDiskSpaceOrange);
+            COUNTER_DEF(ResponsesWithDiskSpacePreOrange);
+            COUNTER_DEF(ResponsesWithDiskSpaceLightOrange);
+            COUNTER_DEF(ResponsesWithDiskSpaceYellowStop);
+            COUNTER_DEF(ResponsesWithDiskSpaceLightYellowMove);
         };
 
     } // NMonGroup

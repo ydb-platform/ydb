@@ -7,9 +7,9 @@
 namespace NKikimr {
 
 void LogOOSStatus(ui32 flags, const TLogoBlobID& blobId, const TString& vDiskLogPrefix);
-void UpdateMonOOSStatus(ui32 flags, std::shared_ptr<NMonGroup::TOutOfSpaceGroup> monGroup);
+void UpdateMonOOSStatus(ui32 flags, std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup);
 
-void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEventBase *ev, ui64 cookie, const TString& vDiskLogPrefix, std::shared_ptr<NMonGroup::TOutOfSpaceGroup> monGroup) {
+void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEventBase *ev, ui64 cookie, const TString& vDiskLogPrefix, std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup) {
     ui32 channel = TInterconnectChannels::IC_BLOBSTORAGE;
     if (TEvVResultBase *base = dynamic_cast<TEvVResultBase *>(ev)) {
         channel = base->GetChannelToSend();
@@ -17,18 +17,21 @@ void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEve
     SendVDiskResponse(ctx, recipient, ev, cookie, channel, vDiskLogPrefix, monGroup);
 }
 
-void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEventBase *ev, ui64 cookie, ui32 channel, const TString& vDiskLogPrefix, std::shared_ptr<NMonGroup::TOutOfSpaceGroup> monGroup) {
-    if (ev->Type() == TEvBlobStorage::TEvVPutResult::EventType) {
-        TEvBlobStorage::TEvVPutResult* event = static_cast<TEvBlobStorage::TEvVPutResult *>(ev);
-        LogOOSStatus(event->Record.GetStatusFlags(), LogoBlobIDFromLogoBlobID(event->Record.GetBlobID()), vDiskLogPrefix);
-        UpdateMonOOSStatus(event->Record.GetStatusFlags(), monGroup);
-    }
-    if (ev->Type() == TEvBlobStorage::TEvVMultiPutResult::EventType) {
-        TEvBlobStorage::TEvVMultiPutResult *event = static_cast<TEvBlobStorage::TEvVMultiPutResult *>(ev);
-        for (ui64 i = 0; i < event->Record.ItemsSize(); ++i) {
-            const auto& item = event->Record.GetItems(i);
-            LogOOSStatus(item.GetStatusFlags(), LogoBlobIDFromLogoBlobID(item.GetBlobID()), vDiskLogPrefix);
-            UpdateMonOOSStatus(item.GetStatusFlags(), monGroup);
+void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEventBase *ev, ui64 cookie, ui32 channel, const TString& vDiskLogPrefix, std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup) {
+    switch(ev->Type()) {
+        case TEvBlobStorage::TEvVPutResult::EventType: {
+            TEvBlobStorage::TEvVPutResult* event = static_cast<TEvBlobStorage::TEvVPutResult *>(ev);
+            LogOOSStatus(event->Record.GetStatusFlags(), LogoBlobIDFromLogoBlobID(event->Record.GetBlobID()), vDiskLogPrefix);
+            UpdateMonOOSStatus(event->Record.GetStatusFlags(), monGroup);
+            break;
+        }
+        case TEvBlobStorage::TEvVMultiPutResult::EventType: {
+            TEvBlobStorage::TEvVMultiPutResult *event = static_cast<TEvBlobStorage::TEvVMultiPutResult *>(ev);
+            for (ui64 i = 0; i < event->Record.ItemsSize(); ++i) {
+                const auto& item = event->Record.GetItems(i);
+                LogOOSStatus(item.GetStatusFlags(), LogoBlobIDFromLogoBlobID(item.GetBlobID()), vDiskLogPrefix);
+                UpdateMonOOSStatus(item.GetStatusFlags(), monGroup);
+            }
         }
     }
 
@@ -73,23 +76,23 @@ void LogOOSStatus(ui32 flags, const TLogoBlobID& blobId, const TString& vDiskLog
         TPDiskSpaceColor_Name(StatusFlagToSpaceColor(flags)) << " on blob " << blobId.ToString());
 }
 
-void UpdateMonOOSStatus(ui32 flags, std::shared_ptr<NMonGroup::TOutOfSpaceGroup> monGroup) {
+void UpdateMonOOSStatus(ui32 flags, std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup) {
     if (!monGroup) {
         return;
     }
 
     if (flags & NKikimrBlobStorage::StatusDiskSpaceRed) {
-        monGroup->StatusDiskSpaceRed().Inc();
+        monGroup->ResponsesWithDiskSpaceRed().Inc();
     } else if (flags & NKikimrBlobStorage::StatusDiskSpaceOrange) {
-        monGroup->StatusDiskSpaceOrange().Inc();
+        monGroup->ResponsesWithDiskSpaceOrange().Inc();
     } else if (flags & NKikimrBlobStorage::StatusDiskSpaceLightOrange) {
-        monGroup->StatusDiskSpaceLightOrange().Inc();
+        monGroup->ResponsesWithDiskSpaceLightOrange().Inc();
     } else if (flags & NKikimrBlobStorage::StatusDiskSpacePreOrange) {
-        monGroup->StatusDiskSpacePreOrange().Inc();
+        monGroup->ResponsesWithDiskSpacePreOrange().Inc();
     } else if (flags & NKikimrBlobStorage::StatusDiskSpaceYellowStop) {
-        monGroup->StatusDiskSpaceYellowStop().Inc();
+        monGroup->ResponsesWithDiskSpaceYellowStop().Inc();
     } else if (flags & NKikimrBlobStorage::StatusDiskSpaceLightYellowMove) {
-        monGroup->StatusDiskSpaceLightYellowMove().Inc();
+        monGroup->ResponsesWithDiskSpaceLightYellowMove().Inc();
     }
 }
 

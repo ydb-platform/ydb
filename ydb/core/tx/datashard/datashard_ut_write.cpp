@@ -403,6 +403,12 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             const auto writeResult = WaitForWriteCompleted(runtime, sender, NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED);
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxId(), txId);
         }
+
+        Cout << "========= Send immediate upserts =========\n";
+        {
+            ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 1);"));
+            Upsert(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        }
     }
 
     Y_UNIT_TEST_TWIN(UpsertPreparedManyTables, Volatile) {

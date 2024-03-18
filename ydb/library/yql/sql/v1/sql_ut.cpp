@@ -507,6 +507,34 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(res.Root);
     }
 
+    Y_UNIT_TEST(JoinStreamLookupStrategyHint) {
+        {
+            NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a JOIN /*+ StreamLookup() */ plato.Input AS b USING(key);");
+            UNIT_ASSERT(res.Root);
+        }
+        //case insensitive
+        {
+            NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a JOIN /*+ streamlookup() */ plato.Input AS b USING(key);");
+            UNIT_ASSERT(res.Root);
+        }
+    }
+
+    Y_UNIT_TEST(JoinConflictingStrategyHint) {
+        {
+            NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a JOIN /*+ StreamLookup() */ /*+ Merge() */   plato.Input AS b USING(key);");
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:91: Error: Conflicting join strategy hints\n");
+        }
+    }
+
+    Y_UNIT_TEST(JoinDuplicatingStrategyHint) {
+        {
+            NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a JOIN /*+ StreamLookup() */ /*+ StreamLookup() */   plato.Input AS b USING(key);");
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:98: Error: Duplicate join strategy hint\n");
+        }
+    }
+
     Y_UNIT_TEST(ReverseLabels) {
         NYql::TAstParseResult res = SqlToYql("select in.key as subkey, subkey as key from plato.Input as in;");
         UNIT_ASSERT(res.Root);

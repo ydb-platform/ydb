@@ -162,7 +162,12 @@ namespace NSQLTranslationV1 {
     }
 
     struct TJoinLinkSettings {
-        bool ForceSortedMerge = false;
+        enum class EStrategy {
+            Default,
+            SortedMerge,
+            StreamLookup
+        };
+        EStrategy Strategy = EStrategy::Default;
     };
 
     class IJoin: public ISource {

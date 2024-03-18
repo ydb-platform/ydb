@@ -8,6 +8,9 @@ class TTableTarget: public TTargetWithStream {
 public:
     explicit TTableTarget(ui64 id, const TString& srcPath, const TString& dstPath);
 
+protected:
+    IActor* CreateWorkerRegistar(TReplication::TPtr replication, const TActorContext& ctx) const override;
+
 }; // TTableTarget
 
 }

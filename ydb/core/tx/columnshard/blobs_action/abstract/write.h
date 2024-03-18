@@ -63,7 +63,7 @@ public:
     void Abort() {
         Aborted = true;
     }
-    TUnifiedBlobId AddDataForWrite(const TString& data);
+    TUnifiedBlobId AddDataForWrite(const TString& data, const std::optional<TUnifiedBlobId>& externalBlobId = {});
     void OnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status);
 
     void OnExecuteTxBeforeWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) {

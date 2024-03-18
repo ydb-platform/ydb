@@ -34,10 +34,11 @@ public:
         return Identifier;
     }
 
-    TExportTask(const TIdentifier& id, const TSelectorContainer& selector, const TStorageInitializerContainer& storageInitializer)
+    TExportTask(const TIdentifier& id, const TSelectorContainer& selector, const TStorageInitializerContainer& storageInitializer, const NArrow::NSerialization::TSerializerContainer& serializer)
         : Identifier(id)
         , Selector(selector)
         , StorageInitializer(storageInitializer)
+        , Serializer(serializer)
     {
     }
 

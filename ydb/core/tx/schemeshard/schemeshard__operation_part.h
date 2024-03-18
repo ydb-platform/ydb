@@ -50,6 +50,7 @@
     action(NSequenceShard::TEvSequenceShard::TEvFreezeSequenceResult,   NSchemeShard::TXTYPE_SEQUENCESHARD_FREEZE_SEQUENCE_RESULT)   \
     action(NSequenceShard::TEvSequenceShard::TEvRestoreSequenceResult,  NSchemeShard::TXTYPE_SEQUENCESHARD_RESTORE_SEQUENCE_RESULT)  \
     action(NSequenceShard::TEvSequenceShard::TEvRedirectSequenceResult, NSchemeShard::TXTYPE_SEQUENCESHARD_REDIRECT_SEQUENCE_RESULT) \
+    action(NSequenceShard::TEvSequenceShard::TEvGetSequenceResult, NSchemeShard::TXTYPE_SEQUENCESHARD_GET_SEQUENCE_RESULT) \
 \
     action(NReplication::TEvController::TEvCreateReplicationResult, NSchemeShard::TXTYPE_CREATE_REPLICATION_RESULT) \
     action(NReplication::TEvController::TEvDropReplicationResult,   NSchemeShard::TXTYPE_DROP_REPLICATION_RESULT)   \

@@ -244,6 +244,7 @@ TString DebugString(const TReadSessionEvent::TEvent& event);
 //! Settings for federated write session.
 struct TFederatedWriteSessionSettings : public NTopic::TWriteSessionSettings {
     using TSelf = TFederatedWriteSessionSettings;
+    using TBase = NTopic::TWriteSessionSettings;
 
     //! Preferred database
     //! If specified database is unavailable, session will write to other database.
@@ -254,14 +255,6 @@ struct TFederatedWriteSessionSettings : public NTopic::TWriteSessionSettings {
     FLUENT_SETTING_DEFAULT(bool, AllowFallback, true);
 
     TFederatedWriteSessionSettings() = default;
-    TFederatedWriteSessionSettings(const TFederatedWriteSessionSettings&) = default;
-    TFederatedWriteSessionSettings(TFederatedWriteSessionSettings&&) = default;
-    TFederatedWriteSessionSettings& operator=(const TFederatedWriteSessionSettings&) = default;
-    TFederatedWriteSessionSettings& operator=(TFederatedWriteSessionSettings&&) = default;
-
-    TFederatedWriteSessionSettings(const TString& path, const TString& producerId, const TString& messageGroupId)
-        : NTopic::TWriteSessionSettings(path, producerId, messageGroupId) {
-    }
 
     TFederatedWriteSessionSettings(const NTopic::TWriteSessionSettings& settings)
         : NTopic::TWriteSessionSettings(settings) {
@@ -269,13 +262,35 @@ struct TFederatedWriteSessionSettings : public NTopic::TWriteSessionSettings {
     TFederatedWriteSessionSettings(NTopic::TWriteSessionSettings&& settings)
         : NTopic::TWriteSessionSettings(std::move(settings)) {
     }
-    // TFederatedWriteSessionSettings& operator=(const NTopic::TWriteSessionSettings&);
-    // TFederatedWriteSessionSettings& operator=(NTopic::TWriteSessionSettings&&);
+
+    FLUENT_SETTING_FOR_DERIVED(Path);
+    FLUENT_SETTING_FOR_DERIVED(ProducerId);
+    FLUENT_SETTING_FOR_DERIVED(MessageGroupId);
+    FLUENT_SETTING_FOR_DERIVED(DeduplicationEnabled);
+    FLUENT_SETTING_FOR_DERIVED(PartitionId);
+    FLUENT_SETTING_FOR_DERIVED(DirectWriteToPartition);
+    FLUENT_SETTING_FOR_DERIVED(Codec);
+    FLUENT_SETTING_FOR_DERIVED(CompressionLevel);
+    FLUENT_SETTING_FOR_DERIVED(MaxMemoryUsage);
+    FLUENT_SETTING_FOR_DERIVED(MaxInflightCount);
+    FLUENT_SETTING_FOR_DERIVED(RetryPolicy);
+    TSelf& AppendSessionMeta(const TString& key, const TString& value) {
+        Meta_.Fields[key] = value;
+        return static_cast<TSelf&>(*this);
+    };
+    FLUENT_SETTING_FOR_DERIVED(BatchFlushInterval);
+    FLUENT_SETTING_FOR_DERIVED(BatchFlushSizeBytes);
+    FLUENT_SETTING_FOR_DERIVED(ConnectTimeout);
+    FLUENT_SETTING_FOR_DERIVED(Counters);
+    FLUENT_SETTING_FOR_DERIVED(CompressionExecutor);
+    FLUENT_SETTING_FOR_DERIVED(EventHandlers);
+    FLUENT_SETTING_FOR_DERIVED(ValidateSeqNo);
 };
 
 //! Settings for read session.
 struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettings {
     using TSelf = TFederatedReadSessionSettings;
+    using TBase = NTopic::TReadSessionSettings;
 
     NTopic::TReadSessionSettings& EventHandlers(const TEventHandlers&) {
         ythrow yexception() << "EventHandlers can not be set for federated session, use FederatedEventHandlers instead";
@@ -420,6 +435,19 @@ struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettings {
     auto GetDatabasesToReadFrom() {
         return DatabasesToReadFrom;
     }
+
+    FLUENT_SETTING_FOR_DERIVED(ConsumerName);
+    FLUENT_SETTING_FOR_DERIVED(WithoutConsumer);
+    FLUENT_SETTING_VECTOR_FOR_DERIVED(Topics);
+    FLUENT_SETTING_FOR_DERIVED(MaxMemoryUsageBytes);
+    FLUENT_SETTING_FOR_DERIVED(MaxLag);
+    FLUENT_SETTING_FOR_DERIVED(ReadFromTimestamp);
+    FLUENT_SETTING_FOR_DERIVED(RetryPolicy);
+    FLUENT_SETTING_FOR_DERIVED(Decompress);
+    FLUENT_SETTING_FOR_DERIVED(DecompressionExecutor);
+    FLUENT_SETTING_FOR_DERIVED(Counters);
+    FLUENT_SETTING_FOR_DERIVED(ConnectTimeout);
+    FLUENT_SETTING_FOR_DERIVED(Log);
 
 private:
     // Read policy settings, set via helpers above

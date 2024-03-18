@@ -1274,16 +1274,11 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     using TSelf = TWriteSessionSettings;
 
     TWriteSessionSettings() = default;
-    TWriteSessionSettings(const TWriteSessionSettings&) = default;
-    TWriteSessionSettings(TWriteSessionSettings&&) = default;
     TWriteSessionSettings(const TString& path, const TString& producerId, const TString& messageGroupId) {
         Path(path);
         ProducerId(producerId);
         MessageGroupId(messageGroupId);
     }
-
-    TWriteSessionSettings& operator=(const TWriteSessionSettings&) = default;
-    TWriteSessionSettings& operator=(TWriteSessionSettings&&) = default;
 
     //! Path of topic to write.
     FLUENT_SETTING(TString, Path);
@@ -1380,8 +1375,8 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
         //! this handler (if specified) will be used.
         //! If this handler is not specified, event can be received with TWriteSession::GetEvent() method.
         std::function<void(TWriteSessionEvent::TEvent&)> CommonHandler_;
-        TSelf& CommonHandler(std::function<void(TWriteSessionEvent::TEvent&)>&& handler) {
-            CommonHandler_ = std::move(handler);
+        TSelf& CommonHandler(std::function<void(TWriteSessionEvent::TEvent&)> handler) {
+            CommonHandler_ = handler;
             return static_cast<TSelf&>(*this);
         }
 
@@ -1402,14 +1397,9 @@ struct TTopicReadSettings {
     using TSelf = TTopicReadSettings;
 
     TTopicReadSettings() = default;
-    TTopicReadSettings(const TTopicReadSettings&) = default;
-    TTopicReadSettings(TTopicReadSettings&&) = default;
     TTopicReadSettings(const TString& path) {
         Path(path);
     }
-
-    TTopicReadSettings& operator=(const TTopicReadSettings&) = default;
-    TTopicReadSettings& operator=(TTopicReadSettings&&) = default;
 
     //! Path of topic to read.
     FLUENT_SETTING(TString, Path);

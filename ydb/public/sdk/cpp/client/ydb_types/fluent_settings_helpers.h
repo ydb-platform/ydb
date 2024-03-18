@@ -50,3 +50,15 @@
         name##_->push_back(value); \
         return static_cast<TSelf&>(*this); \
     }
+
+#define FLUENT_SETTING_FOR_DERIVED(name) \
+    TSelf& name(const auto& value) { \
+        TBase::name(value); \
+        return static_cast<TSelf&>(*this); \
+    }
+
+#define FLUENT_SETTING_VECTOR_FOR_DERIVED(name) \
+    TSelf& Append##name(const auto& value) { \
+        TBase::Append##name(value); \
+        return static_cast<TSelf&>(*this); \
+    }

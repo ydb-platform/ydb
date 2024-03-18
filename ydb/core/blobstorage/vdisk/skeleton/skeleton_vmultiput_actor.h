@@ -30,6 +30,6 @@ struct TEvVMultiPutItemResult : TEventLocal<TEvVMultiPutItemResult, TEvBlobStora
 IActor* CreateSkeletonVMultiPutActor(TActorId leaderId, const TBatchedVec<NKikimrProto::EReplyStatus> &statuses,
         TOutOfSpaceStatus oosStatus, TEvBlobStorage::TEvVMultiPut::TPtr &ev,
         TActorIDPtr skeletonFrontIDPtr, ::NMonitoring::TDynamicCounters::TCounterPtr multiPutResMsgsPtr,
-        ui64 incarnationGuid, TIntrusivePtr<TVDiskContext> vCtx);
+        ui64 incarnationGuid, TIntrusivePtr<TVDiskContext>& vCtx);
 
 } // NKikimr

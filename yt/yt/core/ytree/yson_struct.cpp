@@ -22,6 +22,11 @@ TYsonStructFinalClassHolder::TYsonStructFinalClassHolder(std::type_index typeInd
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TYsonStructBase::TYsonStructBase()
+{
+    TYsonStructRegistry::Get()->OnBaseCtorCalled();
+}
+
 IMapNodePtr TYsonStructBase::GetLocalUnrecognized() const
 {
     return LocalUnrecognized_;
@@ -144,6 +149,7 @@ void TYsonStructBase::WriteSchema(IYsonConsumer* consumer) const
 
 void TYsonStruct::InitializeRefCounted()
 {
+    TYsonStructRegistry::Get()->OnFinalCtorCalled();
     if (!TYsonStructRegistry::InitializationInProgress()) {
         SetDefaults();
     }
@@ -159,6 +165,20 @@ TYsonStructRegistry* TYsonStructRegistry::Get()
 bool TYsonStructRegistry::InitializationInProgress()
 {
     return CurrentlyInitializingMeta_ != nullptr;
+}
+
+void TYsonStructRegistry::OnBaseCtorCalled()
+{
+    if (CurrentlyInitializingMeta_ != nullptr) {
+        ++RegistryDepth_;
+    }
+}
+
+void TYsonStructRegistry::OnFinalCtorCalled()
+{
+    if (CurrentlyInitializingMeta_ != nullptr) {
+        --RegistryDepth_;
+    }
 }
 
 TYsonStructRegistry::TForbidCachedDynamicCastGuard::TForbidCachedDynamicCastGuard(TYsonStructBase* target)

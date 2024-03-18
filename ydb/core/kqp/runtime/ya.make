@@ -21,6 +21,7 @@ SRCS(
     kqp_tasks_runner.cpp
     kqp_transport.cpp
     kqp_write_actor.cpp
+    kqp_write_table.cpp
 )
 
 PEERDIR(

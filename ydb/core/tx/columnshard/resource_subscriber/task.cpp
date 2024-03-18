@@ -40,6 +40,9 @@ TResourcesGuard::TResourcesGuard(const ui64 taskId, const TString& externalTaskI
 }
 
 void TResourcesGuard::Update(const ui64 memNew) {
+    if (!TaskId) {
+        return;
+    }
     AFL_VERIFY(Memory);
     Context.GetCounters()->GetBytesAllocated()->Remove(Memory);
     AFL_VERIFY(NActors::TlsActivationContext);

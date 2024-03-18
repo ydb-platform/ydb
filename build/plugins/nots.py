@@ -2,7 +2,7 @@ import os
 
 import ymake
 import ytest
-from _common import get_norm_unit_path, rootrel_arc_src, to_yesno
+from _common import resolve_common_const, get_norm_unit_path, rootrel_arc_src, to_yesno
 
 
 # 1 is 60 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
@@ -32,7 +32,7 @@ class PluginLogger(object):
                 parts.append(m if isinstance(m, str) else repr(m))
 
         # cyan color (code 36) for messages
-        return "\033[0;32m{}\033[0;49m \033[0;36m{}\033[0;49m".format(self.prefix, " ".join(parts))
+        return "\033[0;32m{}\033[0;49m\n\033[0;36m{}\033[0;49m".format(self.prefix, " ".join(parts))
 
     def info(self, *messages):
         if self.unit:
@@ -251,6 +251,7 @@ def on_ts_configure(unit, *tsconfig_paths):
         _filter_inputs_by_rules_from_tsconfig(unit, tsconfig)
 
     _setup_eslint(unit)
+    _setup_tsc_typecheck(unit, tsconfig_paths)
 
 
 def __set_append(unit, var_name, value):
@@ -362,6 +363,8 @@ def _setup_eslint(unit):
         return
 
     unit.on_peerdir_ts_resource("eslint")
+    user_recipes = unit.get("TEST_RECIPES_VALUE")
+    unit.on_setup_extract_node_modules_recipe(unit.get("MODDIR"))
 
     mod_dir = unit.get("MODDIR")
     lint_files = _resolve_module_files(unit, mod_dir, lint_files)
@@ -372,15 +375,54 @@ def _setup_eslint(unit):
     }
 
     _add_test(unit, "eslint", lint_files, deps, test_record, mod_dir)
+    unit.set(["TEST_RECIPES_VALUE", user_recipes])
+
+
+def _setup_tsc_typecheck(unit, tsconfig_paths: list[str]):
+    if not _is_tests_enabled(unit):
+        return
+
+    if unit.get("_TS_TYPECHECK_VALUE") == "none":
+        return
+
+    typecheck_files = ytest.get_values_list(unit, "TS_INPUT_FILES")
+    if not typecheck_files:
+        return
+
+    tsconfig_path = tsconfig_paths[0]
+
+    if len(tsconfig_paths) > 1:
+        tsconfig_path = unit.get("_TS_TYPECHECK_TSCONFIG")
+        if not tsconfig_path:
+            macros = " or ".join([f"TS_TYPECHECK({p})" for p in tsconfig_paths])
+            raise Exception(f"Module uses several tsconfig files, specify which one to use for typecheck: {macros}")
+        abs_tsconfig_path = unit.resolve(unit.resolve_arc_path(tsconfig_path))
+        if not abs_tsconfig_path:
+            raise Exception(f"tsconfig for typecheck not found: {tsconfig_path}")
+
+    unit.on_peerdir_ts_resource("typescript")
+    user_recipes = unit.get("TEST_RECIPES_VALUE")
+    unit.on_setup_install_node_modules_recipe()
+    unit.on_setup_extract_output_tars_recipe([unit.get("MODDIR")])
+
+    _add_test(
+        unit,
+        test_type="tsc_typecheck",
+        test_files=[resolve_common_const(f) for f in typecheck_files],
+        deps=_create_pm(unit).get_peers_from_package_json(),
+        test_record={"TS_CONFIG_PATH": tsconfig_path},
+        test_cwd=unit.get("MODDIR"),
+    )
+    unit.set(["TEST_RECIPES_VALUE", user_recipes])
 
 
 def _resolve_module_files(unit, mod_dir, file_paths):
+    mod_dir_with_sep_len = len(mod_dir) + 1
     resolved_files = []
 
     for path in file_paths:
         resolved = rootrel_arc_src(path, unit)
         if resolved.startswith(mod_dir):
-            mod_dir_with_sep_len = len(mod_dir) + 1
             resolved = resolved[mod_dir_with_sep_len:]
         resolved_files.append(resolved)
 
@@ -393,17 +435,26 @@ def _add_test(unit, test_type, test_files, deps=None, test_record=None, test_cwd
     def sort_uniq(text):
         return sorted(set(text))
 
+    recipes_lines = ytest.format_recipes(unit.get("TEST_RECIPES_VALUE")).strip().splitlines()
+    if recipes_lines:
+        deps = deps or []
+        deps.extend([os.path.dirname(r.strip().split(" ")[0]) for r in recipes_lines])
+
     if deps:
-        unit.ondepends(sort_uniq(deps))
+        joined_deps = "\n".join(deps)
+        logger.info(f"{test_type} deps: \n{joined_deps}")
+        unit.ondepends(deps)
 
     test_dir = get_norm_unit_path(unit)
     full_test_record = {
+        # Key to discover suite (see devtools/ya/test/explore/__init__.py#gen_suite)
+        "SCRIPT-REL-PATH": test_type,
+        # Test name as shown in PR check, should be unique inside one module
         "TEST-NAME": test_type.lower(),
         "TEST-TIMEOUT": unit.get("TEST_TIMEOUT") or "",
         "TEST-ENV": ytest.prepare_env(unit.get("TEST_ENV_VALUE")),
         "TESTED-PROJECT-NAME": os.path.splitext(unit.filename())[0],
         "TEST-RECIPES": ytest.prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
-        "SCRIPT-REL-PATH": test_type,
         "SOURCE-FOLDER-PATH": test_dir,
         "BUILD-FOLDER-PATH": test_dir,
         "BINARY-PATH": os.path.join(test_dir, unit.filename()),

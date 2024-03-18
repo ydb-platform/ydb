@@ -153,7 +153,7 @@ Uploader – локальный для узла компонент, как сл
     * KeyValue.AlterVolume
     * KeyValue.DescribeVolume
     * KeyValue.ListLocalPartitions
-    * Table.Createsession
+    * Table.CreateSession
     * Table.KeepAlive
     * Table.AlterTable
     * Table.CreateTable

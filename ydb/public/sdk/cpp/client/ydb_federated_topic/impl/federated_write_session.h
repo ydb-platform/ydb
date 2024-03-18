@@ -76,6 +76,8 @@ private:
 
     void CloseImpl(EStatus statusCode, NYql::TIssues&& issues);
 
+    TStringBuilder GetLogPrefix() const;
+
 private:
     // For subsession creation
     const NTopic::TFederatedWriteSessionSettings Settings;

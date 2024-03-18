@@ -28,9 +28,9 @@ public:
         return std::move(Cursor);
     }
 
-    TEvExportSaveCursor(const TIdentifier& id, TCursor&& cursor)
+    TEvExportSaveCursor(const TIdentifier& id, const TCursor& cursor)
         : Identifier(id)
-        , Cursor(std::move(cursor)) {
+        , Cursor(cursor) {
 
     }
 };

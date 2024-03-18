@@ -52,8 +52,15 @@ public:
         settings.ExecMode(event.ExecMode);
         settings.StatsMode(event.StatsMode);
         settings.TraceId(event.TraceId);
+
+        NYdb::TParamsBuilder paramsBuilder;
+        for (const auto& [k, v] : event.QueryParameters) {
+            paramsBuilder.AddParam(k, NYdb::TValue(NYdb::TType(v.type()), v.value()));
+        }
+
+        const NYdb::TParams params = paramsBuilder.Build();
         QueryClient
-            ->ExecuteScript(event.Sql, settings)
+            ->ExecuteScript(event.Sql, params, settings)
             .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), recipient = ev->Sender, cookie = ev->Cookie, database = ComputeConnection.database()](auto future) {
                 try {
                     auto response = future.ExtractValueSync();

@@ -1,7 +1,10 @@
 #pragma once
 #include "selector/abstract/selector.h"
+#include "storage/abstract/storage.h"
 
 #include <ydb/core/tx/columnshard/export/common/identifier.h>
+#include <ydb/core/formats/arrow/serializer/abstract.h>
+
 #include <ydb/library/conclusion/status.h>
 #include <ydb/library/conclusion/result.h>
 
@@ -10,31 +13,37 @@ class TExportTask;
 }
 
 namespace NKikimr::NOlap::NExport {
-    class TExportTask {
-    private:
-        TIdentifier Identifier = TIdentifier(0);
-        YDB_READONLY_DEF(TSelectorContainer, Selector);
 
-        TExportTask() = default;
+class TExportTask {
+private:
+    TIdentifier Identifier = TIdentifier(0);
+    YDB_READONLY_DEF(TSelectorContainer, Selector);
+    YDB_READONLY_DEF(TStorageInitializerContainer, StorageInitializer);
+    YDB_READONLY_DEF(NArrow::NSerialization::TSerializerContainer, Serializer);
 
-        TConclusionStatus DeserializeFromProto(const NKikimrColumnShardExportProto::TExportTask& proto);
+    TExportTask() = default;
 
-    public:
-        NKikimrColumnShardExportProto::TExportTask SerializeToProto() const;
+    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardExportProto::TExportTask& proto);
 
-        static TConclusion<TExportTask> BuildFromProto(const NKikimrColumnShardExportProto::TExportTask& proto);
+public:
+    NKikimrColumnShardExportProto::TExportTask SerializeToProto() const;
 
-        const TIdentifier& GetIdentifier() const {
-            return Identifier;
-        }
+    static TConclusion<TExportTask> BuildFromProto(const NKikimrColumnShardExportProto::TExportTask& proto);
 
-        TExportTask(const TIdentifier& id, const TSelectorContainer& selector)
-            : Identifier(id)
-            , Selector(selector)
-        {}
+    const TIdentifier& GetIdentifier() const {
+        return Identifier;
+    }
 
-        TString DebugString() const {
-            return TStringBuilder() << "{task_id=" << Identifier.DebugString() << ";selector=" << Selector.DebugString() << ";}";
-        }
-    };
+    TExportTask(const TIdentifier& id, const TSelectorContainer& selector, const TStorageInitializerContainer& storageInitializer, const NArrow::NSerialization::TSerializerContainer& serializer)
+        : Identifier(id)
+        , Selector(selector)
+        , StorageInitializer(storageInitializer)
+        , Serializer(serializer)
+    {
+    }
+
+    TString DebugString() const {
+        return TStringBuilder() << "{task_id=" << Identifier.DebugString() << ";selector=" << Selector.DebugString() << ";}";
+    }
+};
 }

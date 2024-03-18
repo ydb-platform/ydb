@@ -158,6 +158,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         job.set_query_name(query.mutable_content()->name());
         *job.mutable_acl() = content.acl();
         job.set_automatic(content.automatic());
+        *job.mutable_parameters() = content.parameters();
     }
 
     std::shared_ptr<std::pair<FederatedQuery::CreateQueryResult, TAuditDetails<FederatedQuery::Query>>> response = std::make_shared<std::pair<FederatedQuery::CreateQueryResult, TAuditDetails<FederatedQuery::Query>>>();
@@ -979,6 +980,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             job.set_query_name(query.mutable_content()->name());
             *job.mutable_acl() = request.content().acl();
             job.set_automatic(request.content().automatic());
+            *job.mutable_parameters() = request.content().parameters();
         }
 
         response->second.After.ConstructInPlace().CopyFrom(query);

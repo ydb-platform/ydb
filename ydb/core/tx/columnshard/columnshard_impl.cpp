@@ -71,6 +71,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , TTabletExecutedFlat(info, tablet, nullptr)
     , ProgressTxController(std::make_unique<TTxController>(*this))
     , StoragesManager(std::make_shared<NOlap::TStoragesManager>(*this))
+    , ExportsManager(std::make_shared<NOlap::NExport::TExportsManager>())
     , DataLocksManager(std::make_shared<NOlap::NDataLocks::TManager>())
     , PeriodicWakeupActivationPeriod(GetControllerPeriodicWakeupActivationPeriod())
     , StatsReportInterval(GetControllerStatsReportInterval())
@@ -746,7 +747,6 @@ bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls) {
         ACFL_DEBUG("background", "ttl")("need_writes", needWrites);
         i->Start(*this);
         auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(actualIndexInfo, i, false);
-        NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexStart(TabletID(), i->TypeString());
         if (needWrites) {
             NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
                 ResourceSubscribeActor, std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(

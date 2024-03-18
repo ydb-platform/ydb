@@ -213,10 +213,6 @@ namespace NYql::NDq {
         }
 
         void ProcessReceivedData(const NConnector::NApi::TReadSplitsResponse& resp) {
-            if (resp.Haserror()) {
-                YQL_CLOG(FATAL, ProviderGeneric) << "ActorId=" << SelfId() << " Received unexpected error:" << resp.Geterror().Getmessage();
-                Y_ABORT();
-            }
             Y_ABORT_UNLESS(resp.payload_case() == NConnector::NApi::TReadSplitsResponse::PayloadCase::kArrowIpcStreaming);
             auto guard = Guard(*Alloc);
             NKikimr::NArrow::NSerialization::TSerializerContainer deser = NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer(); //todo move to class' member

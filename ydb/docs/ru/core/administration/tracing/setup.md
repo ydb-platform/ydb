@@ -148,6 +148,45 @@ Uploader – локальный для узла компонент, как сл
     * KeyValue.ReadRange
     * KeyValue.ListRange
     * KeyValue.GetStorageChannelStatus
+    * KeyValue.CreateVolume
+    * KeyValue.DropVolume
+    * KeyValue.AlterVolume
+    * KeyValue.DescribeVolume
+    * KeyValue.ListLocalPartitions
+    * Table.Createsession
+    * Table.KeepAlive
+    * Table.AlterTable
+    * Table.CreateTable
+    * Table.DropTable
+    * Table.DescribeTable
+    * Table.CopyTable
+    * Table.CopyTables
+    * Table.RenameTables
+    * Table.ExplainDataQuery
+    * Table.ExecuteSchemeQuery
+    * Table.BeginTransaction
+    * Table.DescribeTableOptions
+    * Table.DeleteSession
+    * Table.CommitTransaction
+    * Table.RollbackTransaction
+    * Table.PrepareDataQuery
+    * Table.ExecuteDataQuery
+    * Table.BulkUpsert
+    * Table.StreamExecuteScanQuery
+    * Table.StreamReadTable
+    * Table.ReadRows
+    * Query.ExecuteQuery
+    * Query.ExecuteScript
+    * Query.FetchScriptResults
+    * Query.CreateSession
+    * Query.DeleteSession
+    * Query.AttachSession
+    * Query.BeginTransaction
+    * Query.CommitTransaction
+    * Query.RollbackTransaction
+    * Discovery.WhoAmI
+    * Discovery.NodeRegistration
+    * Discovery.ListEndpoints
 
 {% note info %}
 

@@ -11,7 +11,10 @@ PEERDIR(
 
 SRCS(
     helper.cpp
+    controllers.cpp
 )
+
+YQL_LAST_ABI_VERSION()
 
 END()
 

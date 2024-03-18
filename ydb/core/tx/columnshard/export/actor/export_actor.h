@@ -16,7 +16,6 @@ class TActor: public NActors::TActorBootstrapped<TActor> {
 private:
     enum class EStage {
         Initialization,
-        Initialized,
         WaitData,
         WaitWriting,
         WaitSaveCursor,
@@ -38,13 +37,13 @@ private:
     TString CurrentDataBlob;
     static inline const ui64 FreeSpace = ((ui64)8) << 20;
     void SwitchStage(const EStage from, const EStage to) {
-        AFL_VERIFY(Stage == from);
+        AFL_VERIFY(Stage == from)("from", (ui32)from)("real", (ui32)Stage)("to", (ui32)to);
         Stage = to;
     }
 
 protected:
     void HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
-        SwitchStage(EStage::Initialization, EStage::Initialized);
+        SwitchStage(EStage::Initialization, EStage::WaitData);
         AFL_VERIFY(!ScanActorId);
         auto& msg = ev->Get()->Record;
         ScanActorId = ActorIdFromProto(msg.GetScanActorId());
@@ -91,7 +90,9 @@ public:
 
     void Bootstrap() {
         auto evStart = Selector->BuildRequestInitiator(Cursor);
+        evStart->Record.SetGeneration((ui64)ShardTabletId);
         Send(ShardActorId, evStart.release());
+        Become(&TActor::StateFunc);
     }
 
     STATEFN(StateFunc) {

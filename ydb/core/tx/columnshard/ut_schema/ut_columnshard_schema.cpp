@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
+#include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
@@ -26,82 +27,6 @@ enum class EInitialEviction {
     None,
     Ttl,
     Tiering
-};
-
-class TWaitCompactionController: public NKikimr::NYDBTest::NColumnShard::TController {
-private:
-    using TBase = NKikimr::NYDBTest::ICSController;
-    TAtomic TTLFinishedCounter = 0;
-    TAtomic TTLStartedCounter = 0;
-    NMetadata::NFetcher::ISnapshot::TPtr CurrentConfig;
-    bool CompactionEnabledFlag = true;
-    YDB_ACCESSOR(bool, TTLEnabled, true);
-    ui32 TiersModificationsCount = 0;
-    YDB_READONLY(TAtomicCounter, StatisticsUsageCount, 0);
-    YDB_READONLY(TAtomicCounter, MaxValueUsageCount, 0);
-protected:
-    virtual void OnTieringModified(const std::shared_ptr<TTiersManager>& /*tiers*/) override {
-        ++TiersModificationsCount;
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "OnTieringModified")("count", TiersModificationsCount);
-    }
-    virtual bool DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) override {
-        if (!CompactionEnabledFlag) {
-            changes = nullptr;
-        }
-        if (!TTLEnabled && dynamic_pointer_cast<NOlap::TTTLColumnEngineChanges>(changes)) {
-            changes = nullptr;
-        }
-        return true;
-    }
-    virtual bool DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& changes, const NColumnShard::TColumnShard& /*shard*/) override {
-        if (changes.TypeString() == NOlap::TTTLColumnEngineChanges::StaticTypeName()) {
-            AtomicIncrement(TTLFinishedCounter);
-        }
-        return true;
-    }
-    virtual bool DoOnWriteIndexStart(const ui64 /*tabletId*/, const TString& changeClassName) override {
-        if (changeClassName.find(NOlap::TTTLColumnEngineChanges::StaticTypeName()) != TString::npos) {
-            AtomicIncrement(TTLStartedCounter);
-        }
-        return true;
-    }
-public:
-    virtual void OnStatisticsUsage(const NOlap::NStatistics::TOperatorContainer& /*statOperator*/) override {
-        StatisticsUsageCount.Inc();
-    }
-    virtual void OnMaxValueUsage() override {
-        MaxValueUsageCount.Inc();
-    }
-    void SetCompactionEnabled(const bool value) {
-        CompactionEnabledFlag = value;
-    }
-    virtual bool IsTTLEnabled() const override {
-        return TTLEnabled;
-    }
-    void SetTiersSnapshot(TTestBasicRuntime& runtime, const TActorId& tabletActorId, const NMetadata::NFetcher::ISnapshot::TPtr& snapshot) {
-        CurrentConfig = snapshot;
-        ui32 startCount = TiersModificationsCount;
-        ProvideTieringSnapshot(runtime, tabletActorId, snapshot);
-        while (TiersModificationsCount == startCount) {
-            runtime.SimulateSleep(TDuration::Seconds(1));
-        }
-    }
-
-    virtual NMetadata::NFetcher::ISnapshot::TPtr GetFallbackTiersSnapshot() const override {
-        if (CurrentConfig) {
-            return CurrentConfig;
-        } else {
-            return TBase::GetFallbackTiersSnapshot();
-        }
-    }
-    i64 GetTTLFinishedCounter() const {
-        return AtomicGet(TTLFinishedCounter);
-    }
-
-    i64 GetTTLStartedCounter() const {
-        return AtomicGet(TTLStartedCounter);
-    }
-
 };
 
 namespace {
@@ -250,7 +175,7 @@ static constexpr ui32 PORTION_ROWS = 80 * 1000;
 void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema = testYdbSchema)
 {
-    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TWaitCompactionController>();
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
     csControllerGuard->SetCompactionEnabled(false);
     std::vector<ui64> ts = {1600000000, 1620000000};
 
@@ -605,7 +530,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         Cerr << s.DebugString() << Endl;
     }
 
-    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TWaitCompactionController>();
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
     csControllerGuard->SetTTLEnabled(false);
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);

@@ -747,7 +747,6 @@ bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls) {
         ACFL_DEBUG("background", "ttl")("need_writes", needWrites);
         i->Start(*this);
         auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(actualIndexInfo, i, false);
-        NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexStart(TabletID(), i->TypeString());
         if (needWrites) {
             NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
                 ResourceSubscribeActor, std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(

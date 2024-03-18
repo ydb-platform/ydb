@@ -80,6 +80,10 @@ public:
     virtual bool IsTTLEnabled() const {
         return true;
     }
+    virtual void OnExportFinished() {
+
+    }
+
     void OnDataSharingFinished(const ui64 tabletId, const TString& sessionId) {
         return DoOnDataSharingFinished(tabletId, sessionId);
     }

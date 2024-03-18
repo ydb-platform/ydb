@@ -74,8 +74,9 @@ public:
 
         auto fuzzy = FuzzySearcher<TString>(Tenants);
         auto autocomplete = fuzzy.Search(Prefix, Limit);
+        Result.MutableResult()->SetTotal(autocomplete.size());
         for (TString& name: autocomplete) {
-            Result.MutableResult()->MutableDatabasesResult()->AddEntities()->set_name(name);
+            Result.MutableResult()->AddEntities()->set_name(name);
         }
         Result.set_success(true);
         TStringStream json;

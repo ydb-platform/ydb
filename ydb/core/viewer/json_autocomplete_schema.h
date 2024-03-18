@@ -111,8 +111,9 @@ public:
                 FillSchemaDictionary();
                 auto fuzzy = FuzzySearcher(Dictionary);
                 auto autocomplete = fuzzy.Search(Prefix, Limit);
+                Result.MutableResult()->SetTotal(autocomplete.size());
                 for (SchemaWordData& wordData: autocomplete) {
-                    auto entity = Result.MutableResult()->MutableSchemaResult()->AddEntities();
+                    auto entity = Result.MutableResult()->AddEntities();
                     entity->SetName(wordData.Name);
                     entity->SetType(wordData.Type);
                     entity->SetTableName(wordData.Table);

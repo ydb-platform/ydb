@@ -22,11 +22,11 @@ class TJsonQueryAutocompleteTables : public TViewerPipeClient<TJsonQueryAutocomp
 
     TAutoPtr<TEvTxProxySchemeCache::TEvNavigateKeySetResult> CacheResult;
 
-    struct NavigateChild {
+    struct SchemaWordData {
         TString Name;
         NSchemeCache::TSchemeCacheNavigate::EKind Kind;
     };
-    THashMap<TString, NavigateChild> Children;
+    THashMap<TString, SchemaWordData> Children;
     TString Database;
     TString Prefix;
     TString Path;
@@ -129,11 +129,11 @@ public:
         }
     }
 
-    void GetTablesDictionaryChildren() {
+    void GetTablesDictionary() {
         const auto& entry = CacheResult->Request.Get()->ResultSet.front();
         if (entry.ListNodeEntry) {
             for (const auto& child : entry.ListNodeEntry->Children) {
-                Children[child.Name] = NavigateChild(child.Name, child.Kind);
+                Dictionary[child.Name] = SchemaWordData(child.Name, child.Kind);
             }
         };
     }
@@ -153,13 +153,14 @@ public:
                 Result.set_success(false);
                 Result.add_error("Inner errors while collected information");
             } else {
-                GetTablesDictionaryChildren();
-                auto fuzzy = FuzzySearcher(Children);
+                GetTablesDictionary();
+                auto fuzzy = FuzzySearcher(Dictionary);
                 auto autocomplete = fuzzy.Search(Prefix, Limit);
-                for (NavigateChild& child: autocomplete) {
-                    auto entity = Result.MutableResult()->MutableTablesResult()->AddEntities();
-                    entity->set_name(child.Name);
-                    entity->set_type(ConvertType(child.Kind));
+                Result.MutableResult()->SetTotal(autocomplete.size());
+                for (SchemaWordData& wordData: autocomplete) {
+                    auto entity = Result.MutableResult()->AddEntities();
+                    entity->set_name(wordData.Name);
+                    entity->set_type(ConvertType(wordData.Kind));
                 }
                 Result.set_success(true);
             }

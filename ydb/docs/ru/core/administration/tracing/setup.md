@@ -194,6 +194,12 @@ Uploader – локальный для узла компонент, как сл
 
 {% endnote %}
 
+{% note warning %}
+
+Обратите внимание, что QueryService API [экспериментальное](https://github.com/ydb-platform/ydb/blob/e3af273efaef7dfa21205278f17cd164e247820d/ydb/public/api/grpc/ydb_query_v1.proto#L9) и может быть изменено в будущем.
+
+{% endnote %}
+
 * `database`
 
     Фильтрует запросы к указанной базе данных.

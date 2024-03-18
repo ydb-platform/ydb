@@ -4,11 +4,8 @@
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/core/cms/console/console.h>
 #include <ydb/core/viewer/json/json.h>
 #include "viewer.h"
-#include "json_pipe_req.h"
-#include "wb_aggregate.h"
 #include "query_autocomplete_helper.h"
 
 namespace NKikimr {
@@ -150,7 +147,7 @@ struct TJsonRequestParameters<TJsonQueryAutocompleteSchema> {
     static TString GetParameters() {
         return R"___([{"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
                       {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"database","in":"query","description":"database context","required":false,"type":"string"},
+                      {"name":"table","in":"query","description":"table list","required":false,"type":"string"},
                       {"name":"prefix","in":"query","description":"known part of the word","required":false,"type":"string"},
                       {"name":"limit","in":"query","description":"limit of entities","required":false,"type":"integer"},
                       {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";

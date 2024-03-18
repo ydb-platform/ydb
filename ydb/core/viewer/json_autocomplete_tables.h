@@ -4,11 +4,8 @@
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/core/cms/console/console.h>
 #include <ydb/core/viewer/json/json.h>
 #include "viewer.h"
-#include "json_pipe_req.h"
-#include "wb_aggregate.h"
 #include "query_autocomplete_helper.h"
 
 namespace NKikimr {

@@ -21,6 +21,7 @@
 namespace NKikimr {
 
 using namespace NKikimr::NDataShard;
+using namespace NKikimr::NDataShard::NKqpHelpers;
 using namespace NSchemeShard;
 using namespace Tests;
 
@@ -348,7 +349,7 @@ struct TTestHelper {
         auto &runtime = *Server->GetRuntime();
         Sender = runtime.AllocateEdgeActor();
 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_INFO);
 
         InitRoot(Server, Sender);
@@ -818,7 +819,11 @@ struct TTestHelper {
                     break;
                 }
                 case TEvTxProcessing::EvReadSet: {
-                    if (dropRS) {
+                    auto* msg = event->Get<TEvTxProcessing::TEvReadSet>();
+                    auto flags = msg->Record.GetFlags();
+                    auto isExpect = flags & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET;
+                    auto isNoData = flags & NKikimrTx::TEvReadSet::FLAG_NO_DATA;
+                    if (dropRS && !(isExpect && isNoData)) {
                         result.ReadSets.push_back(std::move(event));
                         return TTestActorRuntime::EEventAction::DROP;
                     }
@@ -852,7 +857,10 @@ struct TTestHelper {
             )"));
         }
 
-        waitFor([&]{ return result.ReadSets.size() == 1; }, "intercepted RS");
+        const bool usesVolatileTxs = runtime.GetAppData(0).FeatureFlags.GetEnableDataShardVolatileTransactions();
+        const size_t expectedReadSets = 1 + (finalUpserts && usesVolatileTxs ? 2 : 0);
+
+        waitFor([&]{ return result.ReadSets.size() == expectedReadSets; }, "intercepted RS");
 
         // restore original observer (note we used lambda function and stack variables)
         Server->GetRuntime()->SetObserverFunc(prevObserverFunc);
@@ -2576,7 +2584,9 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+            .SetUseRealThreads(false)
+            // Blocked volatile transactions block reads, disable
+            .SetEnableDataShardVolatileTransactions(false);
 
         const ui64 shardCount = 1;
         TTestHelper helper(serverSettings, shardCount);
@@ -3600,7 +3610,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
         auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_INFO);
         // runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_DEBUG);
 
@@ -3679,6 +3689,83 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
 
         // We should be able to drop table
         WaitTxNotification(server, AsyncDropTable(server, sender, "/Root", "table-1"));
+    }
+
+    Y_UNIT_TEST(LocksNotLostOnPageFault) {
+        TPortManager pm;
+        NFake::TCaches caches;
+        caches.Shared = 1 /* bytes */;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetCacheParams(caches);
+        TServer::TPtr server = new TServer(serverSettings);
+
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        // Use a policy that forces very small page sizes, effectively making each row on its own page
+        NLocalDb::TCompactionPolicyPtr policy = NLocalDb::CreateDefaultTablePolicy();
+        policy->MinDataPageSize = 1;
+
+        auto opts = TShardedTableOptions()
+                .Columns({{"key", "Int32", true, false},
+                          {"index", "Int32", true, false},
+                          {"value", "Int32", false, false}})
+                .Policy(policy.Get())
+                .ExecutorCacheSize(1 /* byte */);
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, index, value) VALUES (1, 0, 10), (3, 0, 30), (5, 0, 50), (7, 0, 70), (9, 0, 90);");
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        const auto shard1 = shards.at(0);
+        CompactTable(runtime, shard1, tableId, false);
+        RebootTablet(runtime, shard1, sender);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Start a write transaction that has uncommitted write to key (2, 0)
+        // This is because read iterator measures "work" in processed/skipped rows, so we have to give it something
+        TString writeSessionId, writeTxId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, writeSessionId, writeTxId, R"(
+                UPSERT INTO `/Root/table-1` (key, index, value) VALUES (2, 0, 20), (4, 0, 40);
+
+                SELECT key, index, value FROM `/Root/table-1`
+                WHERE key = 2
+                ORDER BY key, index;
+                )"),
+            "{ items { int32_value: 2 } items { int32_value: 0 } items { int32_value: 20 } }");
+
+        // Start a read transaction with several range read in a specific order
+        // The first two prefixes don't exist (nothing committed yet)
+        // The other two prefixes are supposed to page fault
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                SELECT key, index, value FROM `/Root/table-1`
+                WHERE key IN (2, 4, 7, 9)
+                ORDER BY key, index;
+                )"),
+            "{ items { int32_value: 7 } items { int32_value: 0 } items { int32_value: 70 } }, "
+            "{ items { int32_value: 9 } items { int32_value: 0 } items { int32_value: 90 } }");
+
+        // Commit the first transaction, it must succeed
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, writeSessionId, writeTxId, "SELECT 1;"),
+            "{ items { int32_value: 1 } }");
+
+        // Commit the second transaction with a new upsert, it must not succeed
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId,
+                "UPSERT INTO `/Root/table-1` (key, index, value) VALUES (2, 0, 22);"),
+            "ERROR: ABORTED");
     }
 }
 

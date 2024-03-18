@@ -665,6 +665,10 @@ public:
             }
         }
 
+        if (record.TxLocksSize() > 0 || record.BrokenTxLocksSize() > 0) {
+            useful = true;
+        }
+
         Self->IncCounter(COUNTER_READ_ITERATOR_ROWS_READ, RowsRead);
         if (!isKeysRequest) {
             Self->IncCounter(COUNTER_ENGINE_HOST_SELECT_RANGE_ROW_SKIPS, DeletedRowSkips);
@@ -2490,9 +2494,9 @@ public:
         if (record.HasStatus()) {
             record.SetSeqNo(state.SeqNo + 1);
             record.SetReadId(readId.ReadId);
-            Self->SendImmediateReadResult(request->Reader, Result.release(), 0, state.SessionId);
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
                 << " TTxReadContinue::Execute() finished with error, aborting: " << record.DebugString());
+            Self->SendImmediateReadResult(request->Reader, Result.release(), 0, state.SessionId);
 
             state.Request->ReadSpan.EndError("Finished with error");
             Self->DeleteReadIterator(it);

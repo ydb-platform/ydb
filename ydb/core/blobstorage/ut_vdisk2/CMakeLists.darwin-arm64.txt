@@ -12,6 +12,7 @@ target_link_libraries(ydb-core-blobstorage-ut_vdisk2 PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-testing-unittest_main
+  version_definition
   cpp-testing-unittest
   core-blobstorage-backpressure
   core-blobstorage-groupinfo

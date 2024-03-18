@@ -3,7 +3,15 @@ items:
   href: index.md
 - name: Access management
   href: access-management.md
-- name: Audit log
-  href: audit-log.md
+- name: Audit logging
+  items:
+    - name: General info and setup
+      href: audit-log.md
+    - name: Schema operations
+      href: audit-log-scheme.md
+    - name: DML operations
+      href: audit-log-dml.md
+    - name: Client connections
+      href: audit-log-conn.md
 - name: Short access control notation
   href: short-access-control-notation.md

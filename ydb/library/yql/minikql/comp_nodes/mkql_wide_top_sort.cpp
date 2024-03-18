@@ -339,11 +339,15 @@ public:
     }
 
     EFetchResult DoCalculateWithSpilling(TComputationContext& ctx) {
-        return EFetchResult::Finish;
+        if (!SpillState()) {
+            return EFetchResult::Yield;
+        }
+        SwitchMode(EOperatingMode::InMemory, ctx);
+        return EFetchResult::Yield;
     }
 
     EFetchResult ProcessSpilledData(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
-        return EFetchResult::Finish;
+        return EFetchResult::Yield;
     }
 
     virtual EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) override {
@@ -429,6 +433,10 @@ private:
                 break;
         }
         Mode = mode;
+    }
+
+    bool SpillState() {
+        return true;
     }
 
     const ui64 Count;

@@ -79,7 +79,7 @@ static const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"KeyValue.ListRange", ERequestType::KEYVALUE_LISTRANGE},
     {"KeyValue.GetStorageChannelStatus", ERequestType::KEYVALUE_GETSTORAGECHANNELSTATUS},
 
-    {"Table.Createsession", ERequestType::TABLE_CREATESESSION},
+    {"Table.CreateSession", ERequestType::TABLE_CREATESESSION},
     {"Table.KeepAlive", ERequestType::TABLE_KEEPALIVE},
     {"Table.AlterTable", ERequestType::TABLE_ALTERTABLE},
     {"Table.CreateTable", ERequestType::TABLE_CREATETABLE},

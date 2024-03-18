@@ -776,6 +776,15 @@ public:
 
 void TConfigsDispatcher::UpdateCandidateStartupConfig(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev)
 try {
+    if (!RecordedInitialConfiguratorDeps) {
+        CandidateStartupConfig = {};
+        StartupConfigProcessError = true;
+        StartupConfigProcessDiff = false;
+        StartupConfigInfo = "Startup params not recorded. Corresponding functionality won't work.";
+        *StartupConfigChanged = 0;
+        return;
+    }
+
     auto &rec = ev->Get()->Record;
 
     auto dcClient = std::make_unique<TDynConfigClientMock>();

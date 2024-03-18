@@ -200,7 +200,7 @@ class TestBindings:
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("kikimr_settings", [{"is_replace_if_exists": True}, {"is_replace_if_exists": False}], indirect=True)
     def test_modify_connection_with_a_lot_of_bindings(self, kikimr, s3, client: FederatedQueryClient, yq_version, unique_prefix):
-        pytest.skip("Tiket: ")
+        pytest.skip("Tiket: YQ-2972")
 
         resource = boto3.resource(
             "s3",

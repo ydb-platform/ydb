@@ -99,7 +99,7 @@ public:
     ui64 MemoryUsage() const override;
     TSnapshot LastUpdate() const override { return LastSnapshot; }
 
-    virtual void DoRegisterTable(const ui64 pathId, const TString& consumer) override;
+    virtual void DoRegisterTable(const ui64 pathId) override;
 public:
     bool Load(IDbWrapper& db) override;
 

@@ -62,7 +62,8 @@ IChannelPtr CreateFailureDetectingChannel(
     IChannelPtr underlyingChannel,
     std::optional<TDuration> acknowledgementTimeout,
     TCallback<void(const IChannelPtr&, const TError& error)> onFailure,
-    TCallback<bool(const TError&)> isError = BIND(IsChannelFailureError));
+    TCallback<bool(const TError&)> isError = BIND(IsChannelFailureError),
+    TCallback<TError(TError)> maybeTransformError = {});
 
 NTracing::TTraceContextPtr GetOrCreateHandlerTraceContext(
     const NProto::TRequestHeader& header,
@@ -117,8 +118,8 @@ std::vector<TSharedRef> DecompressAttachments(
 template <class E>
 int FeatureIdToInt(E featureId);
 
-std::optional<TError> TryEnrichClientRequestError(
-    const TError& error,
+void EnrichClientRequestError(
+    TError* error,
     TFeatureIdFormatter featureIdFormatter);
 
 ////////////////////////////////////////////////////////////////////////////////

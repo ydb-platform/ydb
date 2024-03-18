@@ -1,7 +1,7 @@
 #include "mkql_wide_filter.h"
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen_impl.h>
+#include <ydb/library/yql/minikql/comp_nodes/mkql_simple_codegen.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/utils/cast.h>
 
@@ -170,12 +170,6 @@ public:
         return fetchRes;
     }
 
-#ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult GenFetchProcess(Value*, const TCodegenContext&, const TResultCodegenerator&, BasicBlock*&) const {
-        return {nullptr, {}};
-    }
-#endif
-
 private:
     void RegisterDependencies() const final {
         if (const auto flow = FlowDependsOn(Flow)) {
@@ -223,12 +217,6 @@ public:
         return fetchRes;
     }
 
-#ifndef MKQL_DISABLE_CODEGEN
-    typename TBaseComputation::TGenerateResult GenFetchProcess(Value*, const TCodegenContext&, const TResultCodegenerator&, BasicBlock*&) const {
-        return {nullptr, {}};
-    }
-#endif
-
 private:
     void RegisterDependencies() const final {
         if (const auto flow = this->FlowDependsOn(Flow)) {
@@ -269,12 +257,6 @@ public:
         }
         return fetchRes;
     }
-
-#ifndef MKQL_DISABLE_CODEGEN
-    typename TBaseComputation::TGenerateResult GenFetchProcess(Value*, const TCodegenContext&, const TResultCodegenerator&, BasicBlock*&) const {
-        return {nullptr, {}};
-    }
-#endif
 
 private:
     void RegisterDependencies() const final {

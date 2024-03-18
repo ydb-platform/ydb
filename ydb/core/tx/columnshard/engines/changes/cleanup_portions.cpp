@@ -1,4 +1,4 @@
-#include "cleanup.h"
+#include "cleanup_portions.h"
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
@@ -6,7 +6,7 @@
 
 namespace NKikimr::NOlap {
 
-void TCleanupColumnEngineChanges::DoDebugString(TStringOutput& out) const {
+void TCleanupPortionsColumnEngineChanges::DoDebugString(TStringOutput& out) const {
     if (ui32 dropped = PortionsToDrop.size()) {
         out << "drop " << dropped << " portions";
         for (auto& portionInfo : PortionsToDrop) {
@@ -15,7 +15,7 @@ void TCleanupColumnEngineChanges::DoDebugString(TStringOutput& out) const {
     }
 }
 
-void TCleanupColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
+void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
     THashSet<ui64> pathIds;
     if (self) {
         THashMap<TString, THashSet<TUnifiedBlobId>> blobIdsByStorage;
@@ -31,22 +31,15 @@ void TCleanupColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnSha
                 action->DeclareRemove((TTabletId)self->TabletID(), b);
             }
         }
-
-        if (context.DB) {
-            for (auto&& p : pathIds) {
-                self->TablesManager.TryFinalizeDropPath(*context.DB, p);
-            }
-        }
     }
 }
 
-void TCleanupColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
+void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
     for (auto& portionInfo : PortionsToDrop) {
         if (!context.EngineLogs.ErasePortion(portionInfo)) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot erase portion")("portion", portionInfo.DebugString());
         }
     }
-    context.TriggerActivity = NeedRepeat ? NColumnShard::TBackgroundActivity::Cleanup() : NColumnShard::TBackgroundActivity::None();
     if (self) {
         self->IncCounter(NColumnShard::COUNTER_PORTIONS_ERASED, PortionsToDrop.size());
         for (auto&& p : PortionsToDrop) {
@@ -55,15 +48,15 @@ void TCleanupColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnSh
     }
 }
 
-void TCleanupColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
-    self.BackgroundController.StartCleanup();
+void TCleanupPortionsColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
+    self.BackgroundController.StartCleanupPortions();
 }
 
-void TCleanupColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& /*context*/) {
-    self.BackgroundController.FinishCleanup();
+void TCleanupPortionsColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& /*context*/) {
+    self.BackgroundController.FinishCleanupPortions();
 }
 
-NColumnShard::ECumulativeCounters TCleanupColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {
+NColumnShard::ECumulativeCounters TCleanupPortionsColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {
     return isSuccess ? NColumnShard::COUNTER_CLEANUP_SUCCESS : NColumnShard::COUNTER_CLEANUP_FAIL;
 }
 

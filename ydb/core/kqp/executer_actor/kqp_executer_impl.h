@@ -64,10 +64,7 @@ namespace NKqp {
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
 #define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
 
-enum class EExecType {
-    Data,
-    Scan
-};
+using EExecType = TEvKqpExecuter::TEvTxResponse::EExecutionType;
 
 const ui64 MaxTaskSize = 48_MB;
 
@@ -114,6 +111,7 @@ struct TEvPrivate {
 
 template <class TDerived, EExecType ExecType>
 class TKqpExecuterBase : public TActorBootstrapped<TDerived> {
+    static_assert(ExecType == EExecType::Data || ExecType == EExecType::Scan);
 public:
     TKqpExecuterBase(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
@@ -141,7 +139,7 @@ public:
         TasksGraph.GetMeta().Database = Database;
         TasksGraph.GetMeta().ChannelTransportVersion = chanTransportVersion;
         TasksGraph.GetMeta().UserRequestContext = userRequestContext;
-        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc);
+        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, ExecType);
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());

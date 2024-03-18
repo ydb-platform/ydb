@@ -243,6 +243,7 @@ protected:
 
     friend struct TStoragePoolInfo;
 
+    bool IsSafeOperation(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     bool IsItPossibleToStartBalancer(EBalancerType balancerType);
     void StartHiveBalancer(TBalancerSettings&& settings);
     void StartHiveDrain(TNodeId nodeId, TDrainSettings settings);
@@ -859,6 +860,10 @@ public:
         } else {
             return std::numeric_limits<ui64>::max();
         }
+    }
+
+    bool GetEnableDestroyOperations() {
+        return CurrentConfig.GetEnableDestroyOperations();
     }
 
     const std::unordered_map<TTabletTypes::EType, NKikimrConfig::THiveTabletLimit>& GetTabletLimit() const {

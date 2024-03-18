@@ -2376,8 +2376,9 @@ void THive::Handle(TEvPrivate::TEvProcessStorageBalancer::TPtr&) {
     });
     StorageScatter = stats.Scatter;
     TabletCounters->Simple()[NHive::COUNTER_STORAGE_SCATTER].Set(StorageScatter * 100);
+    BLOG_D("StorageScatter = " << StorageScatter << ": " << stats.MaxUsage << " at " << stats.MaxUsageGroupId << " vs " << stats.MinUsage << " at " << stats.MinUsageGroupId);
     if (StorageScatter > GetMinStorageScatterToBalance()) {
-        BLOG_D("Storage Scatter = " << stats.Scatter << " in pool " << pool.Name << ", starting StorageBalancer");
+        BLOG_D("Starting StorageBalancer");
         ui64 numReassigns = 1;
         auto it = pool.Groups.find(stats.MaxUsageGroupId);
         if (it != pool.Groups.end()) {

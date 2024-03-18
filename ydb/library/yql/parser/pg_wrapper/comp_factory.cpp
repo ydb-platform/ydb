@@ -961,6 +961,45 @@ private:
     ExprContext* Ptr;
 };
 
+class TPgArgsExprBuilder {
+public:
+    TPgArgsExprBuilder()
+        : PgFuncArgsList(nullptr, &free)
+    {}
+
+    void Add(ui32 argOid)
+    {
+        PgArgNodes.emplace_back();
+        auto& v = PgArgNodes.back();
+        Zero(v);
+        v.xpr.type = T_Var;
+        v.vartype = argOid;
+        v.vartypmod = -1;
+    }
+
+    Node* Build(const NPg::TProcDesc& procDesc) {
+        PgFuncArgsList.reset((List*)malloc(offsetof(List, initial_elements) + PgArgNodes.size() * sizeof(ListCell)));
+        PgFuncArgsList->type = T_List;
+        PgFuncArgsList->elements = PgFuncArgsList->initial_elements;
+        PgFuncArgsList->length = PgFuncArgsList->max_length = PgArgNodes.size();
+        for (size_t i = 0; i < PgArgNodes.size(); ++i) {
+            PgFuncArgsList->elements[i].ptr_value = &PgArgNodes[i];
+        }
+
+        Zero(PgFuncNode);
+        PgFuncNode.xpr.type = T_FuncExpr;
+        PgFuncNode.funcid = procDesc.ProcId;
+        PgFuncNode.funcresulttype = procDesc.ResultType;
+        PgFuncNode.funcretset = procDesc.ReturnSet;
+        PgFuncNode.args = PgFuncArgsList.get();
+        return (Node*)&PgFuncNode;
+    }
+
+private:
+    TVector<Var> PgArgNodes;
+    std::unique_ptr<List, decltype(&free)> PgFuncArgsList;
+    FuncExpr PgFuncNode;
+};
 
 template <typename TDerived>
 class TPgResolvedCallBase : public TMutableComputationNode<TDerived> {
@@ -976,7 +1015,6 @@ public:
         , ArgNodes(std::move(argNodes))
         , ArgTypes(std::move(argTypes))
         , StructType(structType)
-        , PgFuncArgsList(nullptr, &free)
     {
         Zero(FInfo);
         Y_ENSURE(Id);
@@ -1000,30 +1038,11 @@ public:
         }
 
         Y_ENSURE(ArgDesc.size() == ArgNodes.size());
-        Zero(PgFuncNode);
-        PgArgNodes.resize(ArgDesc.size());
         for (size_t i = 0; i < ArgDesc.size(); ++i) {
-            auto& v = PgArgNodes[i];
-            Zero(v);
-            v.xpr.type = T_Var;
-            v.vartype = ArgDesc[i].TypeId;
-            v.vartypmod = -1;
+            ArgsExprBuilder.Add(ArgDesc[i].TypeId);
         }
 
-        PgFuncArgsList.reset((List*)malloc(offsetof(List, initial_elements) + ArgDesc.size() * sizeof(ListCell)));
-        PgFuncArgsList->type = T_List;
-        PgFuncArgsList->elements = PgFuncArgsList->initial_elements;
-        PgFuncArgsList->length = PgFuncArgsList->max_length = ArgDesc.size();
-        for (size_t i = 0; i < ArgDesc.size(); ++i) {
-            PgFuncArgsList->elements[i].ptr_value = &PgArgNodes[i];
-        }
-
-        PgFuncNode.xpr.type = T_FuncExpr;
-        PgFuncNode.funcid = ProcDesc.ProcId;
-        PgFuncNode.funcresulttype = ProcDesc.ResultType;
-        PgFuncNode.funcretset = ProcDesc.ReturnSet;
-        PgFuncNode.args = PgFuncArgsList.get();
-        FInfo.fn_expr = (Node*)&PgFuncNode;
+        FInfo.fn_expr = ArgsExprBuilder.Build(ProcDesc);
     }
 
 private:
@@ -1044,9 +1063,7 @@ protected:
     const TStructType* StructType;
     TVector<NPg::TTypeDesc> ArgDesc;
     
-    TVector<Var> PgArgNodes;
-    std::unique_ptr<List, decltype(&free)> PgFuncArgsList;
-    FuncExpr PgFuncNode;
+    TPgArgsExprBuilder ArgsExprBuilder;
 };
 
 struct TPgResolvedCallState : public TComputationValue<TPgResolvedCallState> {
@@ -1100,14 +1117,20 @@ public:
             callInfo.args[i] = argDatum;
         }
 
+        const bool needToFree = PrepareVariadicArray(callInfo, this->ProcDesc);
+        NUdf::TUnboxedValuePod res;
         if constexpr (!UseContext) {
             TPAllocScope call;
-            return this->DoCall(callInfo);
+            res = this->DoCall(callInfo);
+        } else {
+            res = this->DoCall(callInfo);
         }
 
-        if constexpr (UseContext) {
-            return this->DoCall(callInfo);
+        if (needToFree) {
+            FreeVariadicArray(callInfo, this->ArgNodes.size());
         }
+
+        return res;
     }
 
 private:
@@ -2566,8 +2589,20 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakePgKernel(TVector<TType*> argTy
         return execFunc(ctx, batch, res);
     });
 
+    TVector<ui32> pgArgTypes;
+    for (const auto& t : argTypes) {
+        auto itemType = AS_TYPE(TBlockType, t)->GetItemType();
+        ui32 oid;
+        if (itemType->IsNull()) {
+            oid = UNKNOWNOID;
+        } else {
+            oid = AS_TYPE(TPgType, itemType)->GetTypeId();
+        }
+        pgArgTypes.push_back(oid);
+    }
+
     kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
-    kernel->init = [procId](arrow::compute::KernelContext*, const arrow::compute::KernelInitArgs&) {
+    kernel->init = [procId, pgArgTypes](arrow::compute::KernelContext*, const arrow::compute::KernelInitArgs&) {
         auto state = std::make_unique<TPgKernelState>();
         Zero(state->flinfo);
         fmgr_info(procId, &state->flinfo);
@@ -2580,10 +2615,16 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakePgKernel(TVector<TType*> argTy
         state->Name = procDesc.Name;
         state->IsFixedResult = retTypeDesc.PassByValue;
         state->TypeLen = retTypeDesc.TypeLen;
-        for (const auto& argTypeId : procDesc.ArgTypes) {
+        auto fmgrDataHolder = std::make_shared<TPgArgsExprBuilder>();
+        for (const auto& argTypeId : pgArgTypes) {
             const auto& argTypeDesc = NPg::LookupType(argTypeId);
             state->IsFixedArg.push_back(argTypeDesc.PassByValue);
+            fmgrDataHolder->Add(argTypeId);
         }
+
+        state->flinfo.fn_expr = fmgrDataHolder->Build(procDesc);
+        state->FmgrDataHolder = fmgrDataHolder;
+        state->ProcDesc = &procDesc;
 
         return arrow::Result(std::move(state));
     };

@@ -6,6 +6,8 @@
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/tiering/snapshot.h>
+#include <ydb/core/tx/tiering/tier/object.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NTxUT {

@@ -4,8 +4,6 @@
 #include "common/tablet_id.h"
 #include "blobs_reader/task.h"
 #include "blobs_reader/events.h"
-#include "engines/changes/ttl.h"
-#include "engines/changes/cleanup.h"
 #include "blobs_action/bs/storage.h"
 #include "resource_subscriber/task.h"
 
@@ -22,6 +20,13 @@
 #include "data_sharing/destination/session/destination.h"
 #include "data_sharing/source/session/source.h"
 #include "data_sharing/common/transactions/tx_extension.h"
+
+#include "engines/changes/indexation.h"
+#include "engines/changes/cleanup_portions.h"
+#include "engines/changes/cleanup_tables.h"
+#include "engines/changes/ttl.h"
+
+#include "export/manager/manager.h"
 
 #include "resource_subscriber/counters.h"
 
@@ -66,6 +71,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , TTabletExecutedFlat(info, tablet, nullptr)
     , ProgressTxController(std::make_unique<TTxController>(*this))
     , StoragesManager(std::make_shared<NOlap::TStoragesManager>(*this))
+    , ExportsManager(std::make_shared<NOlap::NExport::TExportsManager>())
     , DataLocksManager(std::make_shared<NOlap::NDataLocks::TManager>())
     , PeriodicWakeupActivationPeriod(GetControllerPeriodicWakeupActivationPeriod())
     , StatsReportInterval(GetControllerStatsReportInterval())
@@ -522,24 +528,14 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivit
 //  !!!!!! MUST BE FIRST THROUGH DATA HAVE TO BE SAME IN SESSIONS AFTER TABLET RESTART
     SharingSessionsManager->Start(*this);
 
-    if (activity.HasIndexation()) {
-        SetupIndexation();
-    }
+    ExportsManager->Start(this);
 
-    if (activity.HasCompaction()) {
-        SetupCompaction();
-    }
-
-    if (activity.HasCleanup()) {
-        SetupCleanup();
-    }
-
-    if (activity.HasTtl()) {
-        SetupTtl();
-    }
-
+    SetupIndexation();
+    SetupCompaction();
+    SetupCleanupPortions();
+    SetupCleanupTables();
+    SetupTtl();
     SetupGC();
-
     SetupCleanupInsertTable();
 }
 
@@ -751,7 +747,6 @@ bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls) {
         ACFL_DEBUG("background", "ttl")("need_writes", needWrites);
         i->Start(*this);
         auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(actualIndexInfo, i, false);
-        NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexStart(TabletID(), i->TypeString());
         if (needWrites) {
             NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
                 ResourceSubscribeActor, std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(
@@ -764,16 +759,39 @@ bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls) {
     return true;
 }
 
-void TColumnShard::SetupCleanup() {
+void TColumnShard::SetupCleanupPortions() {
     CSCounters.OnSetupCleanup();
-    if (BackgroundController.IsCleanupActive()) {
+    if (BackgroundController.IsCleanupPortionsActive()) {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "in_progress");
         return;
     }
 
     NOlap::TSnapshot cleanupSnapshot{GetMinReadStep(), 0};
 
-    auto changes = TablesManager.MutablePrimaryIndex().StartCleanup(cleanupSnapshot, TablesManager.MutablePathsToDrop(), DataLocksManager);
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(cleanupSnapshot, TablesManager.GetPathsToDrop(), DataLocksManager);
+    if (!changes) {
+        ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
+        return;
+    }
+
+    ACFL_DEBUG("background", "cleanup")("changes_info", changes->DebugString());
+    auto actualIndexInfo = std::make_shared<NOlap::TVersionedIndex>(TablesManager.GetPrimaryIndex()->GetVersionedIndex());
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(actualIndexInfo, changes, false);
+    ev->SetPutStatus(NKikimrProto::OK); // No new blobs to write
+
+    changes->Start(*this);
+
+    Send(SelfId(), ev.release());
+}
+
+void TColumnShard::SetupCleanupTables() {
+    CSCounters.OnSetupCleanup();
+    if (BackgroundController.IsCleanupTablesActive()) {
+        ACFL_DEBUG("background", "cleanup")("skip_reason", "in_progress");
+        return;
+    }
+
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(TablesManager.MutablePathsToDrop());
     if (!changes) {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
         return;
@@ -964,6 +982,20 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvFinishedFromSource::T
     }
 };
 
+void TColumnShard::Handle(NOlap::NExport::NEvents::TEvExportSaveCursor::TPtr& ev, const TActorContext& ctx) {
+    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "Export")("event", "NExport::NEvents::TEvExportSaveCursor");
+    auto currentSession = ExportsManager->GetSessionOptional(ev->Get()->GetIdentifier());
+    if (!currentSession) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "ignore_inactual_export_session")("sesion_id", ev->Get()->GetIdentifier().ToString());
+        return;
+    }
+
+    auto txConclusion = currentSession->SaveCursorTx(this, ev->Get()->DetachCursor(), currentSession);
+    AFL_VERIFY(txConclusion)("error", txConclusion.GetErrorMessage());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "on_save_cursor")("id", ev->Get()->GetIdentifier().ToString());
+    Execute(txConclusion->release(), ctx);
+}
+
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx) {
     AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "BlobsSharing")("event", "TEvAckFinishFromInitiator");
     auto currentSession = SharingSessionsManager->GetDestinationSession(ev->Get()->Record.GetSessionId());
@@ -1062,6 +1094,11 @@ void TColumnShard::OnTieringModified(const std::optional<ui64> pathId) {
             TablesManager.MutablePrimaryIndex().OnTieringModified(Tiers, TablesManager.GetTtl(), pathId);
         }
     }
+}
+
+const NKikimr::NColumnShard::NTiers::TManager* TColumnShard::GetTierManagerPointer(const TString& tierId) const {
+    Y_ABORT_UNLESS(!!Tiers);
+    return Tiers->GetManagerOptional(tierId);
 }
 
 }

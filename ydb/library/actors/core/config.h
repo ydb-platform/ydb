@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include <ydb/library/actors/util/cpumask.h>
+#include <ydb/library/actors/util/datetime.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/datetime/base.h>
 #include <util/generic/ptr.h>
@@ -9,12 +10,6 @@
 #include <util/generic/vector.h>
 
 namespace NActors {
-
-    enum class EASProfile {
-        Default,
-        LowCpuConsumption,
-        LowLatency,
-    };
 
     struct TBasicExecutorPoolConfig {
         static constexpr TDuration DEFAULT_TIME_PER_MAILBOX = TDuration::MilliSeconds(10);
@@ -44,7 +39,7 @@ namespace NActors {
         TCpuMask Affinity; // Executor thread affinity
         TDuration TimePerMailbox = TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX;
         ui32 EventsPerMailbox = TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
-        i16 SoftProcessingDurationTs = 0;
+        i16 SoftProcessingDurationTs = Us2Ts(500);
     };
 
     struct TIOExecutorPoolConfig {

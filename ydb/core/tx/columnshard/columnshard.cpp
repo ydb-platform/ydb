@@ -4,7 +4,9 @@
 #include "resource_subscriber/actor.h"
 #include "engines/writer/buffer/actor.h"
 #include "engines/column_engine_logs.h"
+#include "export/manager/manager.h"
 
+#include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/protos/table_stats.pb.h>
 
 namespace NKikimr {
@@ -22,6 +24,7 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     ctx.Send(BufferizationWriteActorId, new TEvents::TEvPoisonPill);
 
     StoragesManager->Stop();
+    ExportsManager->Stop();
     if (Tiers) {
         Tiers->Stop(true);
     }

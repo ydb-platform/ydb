@@ -2,7 +2,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/predicate/predicate.h>
-#include <ydb/core/tx/columnshard/engines/changes/cleanup.h>
+#include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
+#include <ydb/core/tx/columnshard/engines/changes/indexation.h>
+#include <ydb/core/tx/columnshard/engines/changes/ttl.h>
 
 #include <ydb/core/tx/columnshard/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
@@ -92,7 +94,7 @@ public:
         }
         auto it = data.find(portion.GetPortion());
         if (it == data.end()) {
-            it = data.emplace(portion.GetPortion(), portion.CopyWithFilteredColumns({})).first;
+            it = data.emplace(portion.GetPortion(), portion.CopyBeforeChunksRebuild()).first;
         } else {
             Y_ABORT_UNLESS(portion.GetPathId() == it->second.GetPathId() && portion.GetPortion() == it->second.GetPortion());
         }
@@ -350,7 +352,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, N
 
 bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, ui32 expectedToDrop) {
     THashSet<ui64> pathsToDrop;
-    std::shared_ptr<TCleanupColumnEngineChanges> changes = engine.StartCleanup(snap, pathsToDrop, EmptyDataLocksManager);
+    std::shared_ptr<TCleanupPortionsColumnEngineChanges> changes = engine.StartCleanupPortions(snap, pathsToDrop, EmptyDataLocksManager);
     UNIT_ASSERT(changes || !expectedToDrop);
     if (!expectedToDrop && !changes) {
         return true;

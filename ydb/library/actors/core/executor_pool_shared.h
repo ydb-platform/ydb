@@ -1,6 +1,5 @@
 #pragma once
 
-#include "config.h"
 #include "executor_pool.h"
 #include "executor_thread_ctx.h"
 
@@ -8,6 +7,7 @@
 namespace NActors {
 
     struct TExecutorThreadCtx;
+    struct TSharedExecutorPoolConfig;
     class TBasicExecutorPool;
 
     struct TSharedPoolState {

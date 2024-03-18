@@ -38,7 +38,9 @@ LLVM_BC(
     arrow_jsonb_agg_finalfn
     arrow_jsonb_agg_transfn
     arrow_jsonb_bool
+    arrow_jsonb_build_array
     arrow_jsonb_build_array_noargs
+    arrow_jsonb_build_object
     arrow_jsonb_build_object_noargs
     arrow_jsonb_float4
     arrow_jsonb_float8

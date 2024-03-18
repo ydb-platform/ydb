@@ -4,7 +4,6 @@
 #include "flat_fwd_iface.h"
 #include "flat_fwd_misc.h"
 #include "flat_fwd_page.h"
-#include "flat_part_index_iter.h"
 #include "flat_part_index_iter_iface.h"
 #include "flat_table_part.h"
 #include "flat_part_slice.h"
@@ -55,17 +54,24 @@ namespace NFwd {
     };
 
     class TCache : public IPageLoadingLogic {
+        enum EIndexState {
+            DoStart,
+            Valid,
+            DoNext,
+            Exhausted
+        };
+
     public:
         using TGroupId = NPage::TGroupId;
 
         TCache() = delete;
 
-        TCache(const TPart* part, IPages* env, TGroupId groupId, const TIntrusiveConstPtr<TSlices>& bounds = nullptr)
-            : Index(MakeHolder<TPartIndexIt>(part, env, groupId)) // TODO: use CreateIndexIter(part, env, groupId)
+        TCache(const TPart* part, IPages* env, TGroupId groupId, const TIntrusiveConstPtr<TSlices>& slices = nullptr)
+            : Index(CreateIndexIter(part, env, groupId))
         { 
-            if (bounds && !bounds->empty()) {
-                BeginRowId = bounds->front().BeginRowId();
-                EndRowId = bounds->back().EndRowId();
+            if (slices && !slices->empty()) {
+                BeginRowId = slices->front().BeginRowId();
+                EndRowId = slices->back().EndRowId();
             } else {
                 BeginRowId = 0;
                 EndRowId = Index->GetEndRowId();
@@ -93,22 +99,37 @@ namespace NFwd {
             bool grow = OnHold + OnFetch <= lower;
 
             if (Offset == Pages.size()) { // isn't processed yet
-                SyncIndex(pageId);
+                if (!SyncIndex(pageId)) {
+                    return {nullptr, false, true};
+                }
                 AddToQueue(head, pageId);
             }
 
-            grow &= Index->IsValid() && Index->GetRowId() < EndRowId;
+            grow &= IndexState != Exhausted;
 
             return {Pages.at(Offset).Touch(pageId, Stat), grow, true};
         }
 
+        // IndexState: {DoNext, Valid} -> {DoNext, Valid, Exhausted}
         void Forward(IPageLoadingQueue *head, ui64 upper) noexcept override
         {
-            Y_ABORT_UNLESS(Started, "Couldn't be called before Handle returns grow");
+            if (IndexState == DoNext) {
+                if (!IndexDoNext()) {
+                    return;
+                }
+            }
 
-            while (OnHold + OnFetch < upper && Index->IsValid() && Index->GetRowId() < EndRowId) {
+            Y_DEBUG_ABORT_UNLESS(IndexState == Valid, "Index state is invalid");
+
+            // Note: not an effective implementation, each Index->Next() page fault stops Forward
+            // and it continues only with a new Handle call that return Grow = true
+            // some index forward loading mechanism is needed here
+
+            while (IndexState == Valid && OnHold + OnFetch < upper) {
                 AddToQueue(head, Index->GetPageId());
-                Y_ABORT_UNLESS(Index->Next() != EReady::Page);
+                if (IndexState = DoNext; !IndexDoNext()) {
+                    return;
+                }
             }
         }
 
@@ -170,23 +191,6 @@ namespace NFwd {
             }
         }
 
-        void SyncIndex(TPageId pageId) noexcept
-        {
-            if (!Started) {
-                Y_ABORT_UNLESS(Index->Seek(BeginRowId) == EReady::Data);
-                Y_ABORT_UNLESS(Index->GetPageId() <= pageId, "Requested page is out of slice bounds");
-                Started = true;
-            }
-
-            while (Index->IsValid() && Index->GetPageId() < pageId) {
-                Y_ABORT_UNLESS(Index->Next() == EReady::Data);
-                Y_ABORT_UNLESS(Index->GetRowId() < EndRowId, "Requested page is out of slice bounds");
-            }
-
-            Y_ABORT_UNLESS(Index->GetPageId() == pageId, "Requested page doesn't belong to the part");
-            Y_ABORT_UNLESS(Index->Next() != EReady::Page);
-        }
-
         void AddToQueue(IPageLoadingQueue *head, TPageId pageId) noexcept
         {
             auto size = head->AddToQueue(pageId, EPage::DataPage);
@@ -199,9 +203,70 @@ namespace NFwd {
             Pages.back().Fetch = EFetch::Wait;
         }
 
+        // IndexState: {DoStart, Valid, DoNext} -> {DoStart, DoNext} (returns false) | {Valid, DoNext} (returns true)
+        bool SyncIndex(TPageId pageId) noexcept
+        {
+            if (IndexState == DoStart) {
+                if (!IndexDoStart()) {
+                    return false;
+                }
+            }
+
+            while (IndexState == DoNext || IndexState == Valid && Index->GetPageId() < pageId) {
+                if (IndexState = DoNext; !IndexDoNext()) {
+                    return false;
+                }
+
+                Y_ABORT_UNLESS(IndexState == Valid, "Requested page is outside of slices");
+                Y_ABORT_UNLESS(Index->GetPageId() <= pageId, "Index is out of sync");
+            }
+
+            Y_ABORT_UNLESS(IndexState == Valid, "Requested page is outside of slices");
+            Y_ABORT_UNLESS(Index->GetPageId() == pageId, "Index is out of sync");
+            
+            IndexState = DoNext; // point to the next page
+            IndexDoNext(); // ignore result
+            
+            return true;
+        }
+
+        // IndexState: DoStart -> DoStart (returns false) | Valid (returns true)
+        bool IndexDoStart() noexcept
+        {
+            Y_ABORT_UNLESS(IndexState == DoStart);
+
+            if (auto ready = Index->Seek(BeginRowId); ready != EReady::Data) {
+                Y_ABORT_UNLESS(ready == EReady::Page, "Slices are invalid");
+                return false;
+            }
+
+            IndexState = Valid;
+            return true;
+        }
+
+        // IndexState: DoNext -> DoNext (returns false) | Valid (returns true) | Exhausted (returns true)
+        bool IndexDoNext() noexcept
+        {
+            Y_ABORT_UNLESS(IndexState == DoNext);
+
+            auto ready = Index->Next();
+
+            if (ready == EReady::Page) {
+                return false;
+            }
+
+            if (ready == EReady::Data && Index->GetRowId() < EndRowId) {
+                IndexState = Valid;
+                return true;
+            }
+
+            IndexState = Exhausted;
+            return true;
+        }
+
     private:
         THolder<IIndexIter> Index; /* Points on next to load page */
-        bool Started = false;
+        EIndexState IndexState = DoStart;
         TRowId BeginRowId, EndRowId;
         TLoadedPagesCircularBuffer<TPart::Trace> Trace;
 

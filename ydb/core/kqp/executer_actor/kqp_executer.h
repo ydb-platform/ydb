@@ -30,8 +30,16 @@ struct TEvKqpExecuter {
         ui64 ResultRowsCount = 0;
         ui64 ResultRowsBytes = 0;
 
-        explicit TEvTxResponse(TTxAllocatorState::TPtr allocState)
+        enum class EExecutionType {
+            Data,
+            Scan,
+            Scheme,
+            Literal,
+        } ExecutionType;
+
+        TEvTxResponse(TTxAllocatorState::TPtr allocState, EExecutionType type)
             : AllocState(std::move(allocState))
+            , ExecutionType(type)
         {}
 
         ~TEvTxResponse();

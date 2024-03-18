@@ -187,13 +187,31 @@ select value, json_typeof(value)
                (json '{}'),
                (NULL::json))
       as data(value);
+-- json_build_array, json_build_object, json_object_agg
+SELECT json_build_array('a',1,'b',1.2,'c',true,'d',null,'e',json '{"x": 3, "y": [1,2,3]}');
+SELECT json_build_array('a', NULL); -- ok
+SELECT json_build_object('a',1,'b',1.2,'c',true,'d',null,'e',json '{"x": 3, "y": [1,2,3]}');
+SELECT json_build_object('{a,b,c}'::text[]); -- error
+SELECT json_build_object('{a,b,c}'::text[], '{d,e,f}'::text[]); -- error, key cannot be array
+SELECT json_build_object('a', 'b', 'c'); -- error
+SELECT json_build_object(NULL, 'a'); -- error, key cannot be NULL
+SELECT json_build_object('a', NULL); -- ok
 -- empty objects/arrays
 SELECT json_build_array();
 SELECT json_build_object();
+-- make sure keys are quoted
+SELECT json_build_object(1,2);
+-- keys must be scalar and not null
+SELECT json_build_object(null,2);
+SELECT json_build_object(r,2) FROM (SELECT 1 AS a, 2 AS b) r;
+SELECT json_build_object(json '{"a":1,"b":2}', 3);
+SELECT json_build_object('{1,2,3}'::int[], 3);
 CREATE TEMP TABLE foo (serial_num int, name text, type text);
 INSERT INTO foo VALUES (847001,'t15','GE1043');
 INSERT INTO foo VALUES (847002,'t16','GE1043');
 INSERT INTO foo VALUES (847003,'sub-alpha','GESS90');
+SELECT json_build_object('turbines',json_object_agg(serial_num,json_build_object('name',name,'type',type)))
+FROM foo;
 SELECT json_object_agg(name, type) FROM foo;
 INSERT INTO foo VALUES (999999, NULL, 'bar');
 SELECT json_object_agg(name, type) FROM foo;

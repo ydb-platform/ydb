@@ -11,13 +11,20 @@ using ETargetKind = TReplication::ETargetKind;
 using EDstState = TReplication::EDstState;
 using EStreamState = TReplication::EStreamState;
 
-TTargetBase::TTargetBase(ETargetKind kind, ui64 rid, ui64 tid, const TString& srcPath, const TString& dstPath)
-    : Kind(kind)
-    , ReplicationId(rid)
-    , TargetId(tid)
+TTargetBase::TTargetBase(ETargetKind kind, ui64 id, const TString& srcPath, const TString& dstPath)
+    : Id(id)
+    , Kind(kind)
     , SrcPath(srcPath)
     , DstPath(dstPath)
 {
+}
+
+ui64 TTargetBase::GetId() const {
+    return Id;
+}
+
+ETargetKind TTargetBase::GetKind() const {
+    return Kind;
 }
 
 const TString& TTargetBase::GetSrcPath() const {
@@ -69,24 +76,11 @@ void TTargetBase::SetIssue(const TString& value) {
     TruncatedIssue(Issue);
 }
 
-ui64 TTargetBase::GetReplicationId() const {
-    return ReplicationId;
-}
-
-ui64 TTargetBase::GetTargetId() const {
-    return TargetId;
-}
-
-ETargetKind TTargetBase::GetTargetKind() const {
-    return Kind;
-}
-
-void TTargetBase::Progress(ui64 schemeShardId, const TActorId& proxy, const TActorContext& ctx) {
+void TTargetBase::Progress(TReplication::TPtr replication, const TActorContext& ctx) {
     switch (DstState) {
     case EDstState::Creating:
         if (!DstCreator) {
-            DstCreator = ctx.Register(CreateDstCreator(ctx.SelfID, schemeShardId, proxy,
-                ReplicationId, TargetId, Kind, SrcPath, DstPath));
+            DstCreator = ctx.Register(CreateDstCreator(replication, Id, ctx));
         }
         break;
     case EDstState::Syncing:
@@ -95,8 +89,7 @@ void TTargetBase::Progress(ui64 schemeShardId, const TActorId& proxy, const TAct
         break; // TODO
     case EDstState::Removing:
         if (!DstRemover) {
-            DstRemover = ctx.Register(CreateDstRemover(ctx.SelfID, schemeShardId, proxy,
-                ReplicationId, TargetId, Kind, DstPathId));
+            DstRemover = ctx.Register(CreateDstRemover(replication, Id, ctx));
         }
         break;
     case EDstState::Error:

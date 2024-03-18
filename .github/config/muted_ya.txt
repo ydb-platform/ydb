@@ -4,7 +4,6 @@ ydb/core/client/ut TClientTest.PromoteFollower
 ydb/core/client/ut TClientTest.ReadFromFollower
 ydb/core/client/ut TFlatTest.AutoSplitMergeQueue
 ydb/core/cms/ut_sentinel TSentinelTests.BSControllerCantChangeStatus
-ydb/core/debug_tools/ut OperationLog.ConcurrentWrites
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/kafka_proxy/ut KafkaProtocol.CreatePartitionsScenario
 ydb/core/kafka_proxy/ut KafkaProtocol.ProduceScenario
@@ -29,6 +28,7 @@ ydb/core/tx/columnshard/ut_schema TColumnShardTestSchema.RebootForgetAfterFail
 ydb/core/tx/columnshard/engines/ut *
 ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
 ydb/core/tx/datashard/ut_change_exchange Cdc.InitialScanDebezium
+ydb/core/tx/schemeshard/ut_export TExportToS3Tests.CorruptedDyNumber
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_split_merge TSchemeShardSplitBySizeTest.Merge1KShards
 ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst*
@@ -54,6 +54,7 @@ ydb/services/datastreams/ut DataStreams.TestReservedConsumersMetering
 ydb/services/datastreams/ut DataStreams.TestReservedStorageMetering
 ydb/services/fq/ut_integration Yq_1.*
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleWriteRead
+ydb/services/keyvalue/ut KeyValueGRPCService.SimpleCopyUnexistedKey
 ydb/services/keyvalue/ut sole*
 ydb/services/persqueue_v1/ut/describes_ut TTopicApiDescribes.DescribeTopic
 ydb/services/persqueue_v1/ut TPersQueueTest.CheckACLForGrpcWrite
@@ -97,8 +98,6 @@ ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/restarts test_restarts.py.*
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--*]
 ydb/tests/functional/sqs/cloud test_common.py.TestCommonSqsYandexCloudMode.test_private_create_queue[tables_format_v0-std]
-ydb/tests/functional/sqs/merge_split_common_table/fifo *
-ydb/tests/functional/sqs/merge_split_common_table/std *
 ydb/tests/functional/tenants test_dynamic_tenants.py.*
 ydb/tests/functional/tenants test_storage_config.py.TestStorageConfig.*
 ydb/tests/functional/tenants test_tenants.py.*

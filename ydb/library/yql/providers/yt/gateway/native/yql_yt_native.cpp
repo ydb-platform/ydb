@@ -2485,6 +2485,13 @@ private:
                 if (attrs.AsMap().contains("optimize_for") && attrs["optimize_for"].AsString() != "scan") {
                     metaInfo->Attrs["optimize_for"] = attrs["optimize_for"].AsString();
                 }
+                if (attrs.AsMap().contains(SecurityTagsName)) {
+                    TVector<TString> securityTags;
+                    for (const auto& tag : attrs[SecurityTagsName].AsList()) {
+                        securityTags.push_back(tag.AsString());
+                    }
+                    metaInfo->Attrs[SecurityTagsName] = JoinSeq(',', securityTags);
+                }
 
                 NYT::TNode schemaAttrs;
                 if (tables[idx.first].ForceInferSchema() && tables[idx.first].InferSchemaRows() > 0) {

@@ -231,30 +231,21 @@ public:
 
                 if (HasReadIntents(tableDesc.Intents)) {
                     if (auto securityTagsAttr = tableDesc.Meta->Attrs.FindPtr(SecurityTagsName)) {
-                        try {
-                            auto node = NYT::NodeFromYsonString(*securityTagsAttr);
-                            auto queryCacheMode = State_->Configuration->QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable);
-                            if (!node.AsList().empty() &&
-                                queryCacheMode != EQueryCacheMode::Disable && queryCacheMode != EQueryCacheMode::Readonly &&
-                                !State_->Configuration->TmpFolder.Get() && !State_->Configuration->TablesTmpFolder.Get()) {
-
-                                TStringBuilder msg;
-                                msg << "Table " << cluster << "." << tableName
-                                    << " contains sensitive data, but uses default cache folder."
-                                    << " This may lead to sensitive data being leaked, consider using a protected cache folder with the TmpFolder pragma.";
-                                auto issue = YqlIssue(TPosition(), EYqlIssueCode::TIssuesIds_EIssueCode_YT_SECURE_DATA_IN_DEFAULT_CACHE, msg);
-                                if (State_->Configuration->ForceCacheSecurity.Get().GetOrElse(false)) {
-                                    ctx.AddError(issue);
+                        const TString tmpFolder = GetTablesTmpFolder(*State_->Configuration);
+                        if (!securityTagsAttr->empty() && tmpFolder.empty()) {
+                            TStringBuilder msg;
+                            msg << "Table " << cluster << "." << tableName
+                                << " contains sensitive data, but is used with the default tmp folder."
+                                << " This may lead to sensitive data being leaked, consider using a protected tmp folder with the TmpFolder pragma.";
+                            auto issue = YqlIssue(TPosition(), EYqlIssueCode::TIssuesIds_EIssueCode_YT_SECURE_DATA_IN_COMMON_TMP, msg);
+                            if (State_->Configuration->ForceTmpSecurity.Get().GetOrElse(false)) {
+                                ctx.AddError(issue);
+                                return TStatus::Error;
+                            } else {
+                                if (!ctx.AddWarning(issue)) {
                                     return TStatus::Error;
-                                } else {
-                                    if (!ctx.AddWarning(issue)) {
-                                        return TStatus::Error;
-                                    }
                                 }
                             }
-                        } catch (const std::exception& e) {
-                            ctx.AddError(TIssue(TPosition(), TStringBuilder() << "Failed to parse security tags: " << e.what()));
-                            return TStatus::Error;
                         }
                     }
                 }

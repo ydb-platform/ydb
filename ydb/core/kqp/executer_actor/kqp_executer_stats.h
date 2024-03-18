@@ -194,6 +194,7 @@ struct TTableStat {
 struct TProgressStatEntry {
     TDuration ComputeTime;
     TTableStat ReadIOStat;
+    bool Defined = false;
 
     TProgressStatEntry& operator+=(const TProgressStatEntry& rhs);
 

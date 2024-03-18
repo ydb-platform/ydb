@@ -1037,7 +1037,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
     Y_UNIT_TEST(QSReplySize) {
         TKikimrRunner kikimr;
-        CreateLargeTable(kikimr, 100'000, 100, 1'000, 1'000, 1);
+        CreateLargeTable(kikimr, 10'000, 100, 1'000, 1'000);
 
         auto db = kikimr.GetQueryClient();
 

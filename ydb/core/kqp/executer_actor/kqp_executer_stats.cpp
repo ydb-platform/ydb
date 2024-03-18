@@ -762,7 +762,7 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
         for (auto& p2 : p.second.Egress) {
             ExportAggAsyncBufferStats(p2.second, (*stageStats.MutableEgress())[p2.first]);
         }
-    }    
+    }
 }
 
 void TQueryExecutionStats::Finish() {
@@ -777,7 +777,7 @@ void TQueryExecutionStats::Finish() {
     Result->SetDurationUs(FinishTs.MicroSeconds() - StartTs.MicroSeconds());
 
     // Result->Result* feilds are (temporary?) commented out in proto due to lack of use
-    // 
+    //
     // Result->SetResultBytes(ResultBytes);
     // Result->SetResultRows(ResultRows);
 
@@ -854,6 +854,11 @@ void TProgressStatEntry::Out(IOutputStream& o) const {
 }
 
 void TProgressStat::Set(const NDqProto::TDqComputeActorStats& stats) {
+    if (Cur.Defined) {
+        Cur = TEntry();
+    }
+
+    Cur.Defined = true;
     Cur.ComputeTime += TDuration::MicroSeconds(stats.GetCpuTimeUs());
     for (auto& task : stats.GetTasks()) {
         for (auto& table: task.GetTables()) {
@@ -864,7 +869,7 @@ void TProgressStat::Set(const NDqProto::TDqComputeActorStats& stats) {
 }
 
 TProgressStat::TEntry TProgressStat::GetLastUsage() const {
-    return Cur - Total;
+    return Cur.Defined ? Cur - Total : Cur;
 }
 
 void TProgressStat::Update() {

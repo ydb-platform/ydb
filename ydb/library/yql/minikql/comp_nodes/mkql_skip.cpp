@@ -1,7 +1,7 @@
 #include "mkql_skip.h"
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen_impl.h>
+#include <ydb/library/yql/minikql/comp_nodes/mkql_simple_codegen.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 
 namespace NKikimr {
@@ -145,7 +145,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult GenFetchProcess(Value* cntToSkipPtrVal, const TCodegenContext& ctx, const TResultCodegenerator& fetchGenerator, BasicBlock*& block) const {
+    TGenerateResult GenFetchProcess(Value* cntToSkipPtrVal, const TCodegenContext& ctx, const TResultCodegenerator& fetchGenerator, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         const auto decr = BasicBlock::Create(context, "decr", ctx.Func);
         const auto end = BasicBlock::Create(context, "end", ctx.Func);

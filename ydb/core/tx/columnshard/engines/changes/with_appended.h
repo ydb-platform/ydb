@@ -11,7 +11,6 @@ private:
     using TBase = TColumnEngineChanges;
 
 protected:
-    TSplitSettings SplitSettings;
     TSaverContext SaverContext;
     virtual void DoCompile(TFinalizationContext& context) override;
     virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) override;
@@ -38,13 +37,8 @@ protected:
     }
 
 public:
-    const TSplitSettings& GetSplitSettings() const {
-        return SplitSettings;
-    }
-
-    TChangesWithAppend(const TSplitSettings& splitSettings, const TSaverContext& saverContext, const TString& consumerId)
+    TChangesWithAppend(const TSaverContext& saverContext, const TString& consumerId)
         : TBase(saverContext.GetStoragesManager(), consumerId)
-        , SplitSettings(splitSettings)
         , SaverContext(saverContext)
     {
 

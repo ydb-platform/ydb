@@ -26,7 +26,7 @@ bool TTieringProcessContext::AddPortion(const TPortionInfo& info, TPortionEvicti
     }
 
     const auto buildNewTask = [&]() {
-        return TTaskConstructor(TTTLColumnEngineChanges::BuildMemoryPredictor(), std::make_shared<TTTLColumnEngineChanges>(features.GetRWAddress(), TSplitSettings(), SaverContext));
+        return TTaskConstructor(TTTLColumnEngineChanges::BuildMemoryPredictor(), std::make_shared<TTTLColumnEngineChanges>(features.GetRWAddress(), SaverContext));
     };
     auto it = Tasks.find(features.GetRWAddress());
     if (it == Tasks.end()) {

@@ -13,7 +13,7 @@
 #include <ydb/core/tx/columnshard/engines/portions/with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/null_column.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
-#include <ydb/core/tx/columnshard/splitter/rb_splitter.h>
+#include <ydb/core/tx/columnshard/splitter/settings.h>
 
 namespace NKikimr::NOlap::NCompaction {
 
@@ -118,8 +118,8 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
         std::map<std::string, std::vector<TColumnPortionResult>> columnChunks;
         ui32 batchIdx = 0;
         for (auto&& batchResult : batchResults) {
-            const ui32 portionRecordsCountLimit = batchResult->num_rows() / (batchResult->num_rows() / GetSplitSettings().GetExpectedRecordsCountOnPage() + 1) + 1;
-            TColumnMergeContext context(columnId, resultSchema, portionRecordsCountLimit, GetSplitSettings().GetExpectedUnpackColumnChunkRawSize(), columnInfo);
+            const ui32 portionRecordsCountLimit = batchResult->num_rows() / (batchResult->num_rows() / NSplitter::TSplitSettings().GetExpectedRecordsCountOnPage() + 1) + 1;
+            TColumnMergeContext context(columnId, resultSchema, portionRecordsCountLimit, NSplitter::TSplitSettings().GetExpectedUnpackColumnChunkRawSize(), columnInfo);
             TMergedColumn mColumn(context);
 
             auto columnPortionIdx = batchResult->GetColumnByName(portionIdFieldName);
@@ -160,7 +160,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
     }
     ui32 batchIdx = 0;
 
-    const TEntityGroups groups = resultSchema->GetIndexInfo().GetEntityGroupsByStorageId(IStoragesManager::DefaultStorageId);
+    const auto groups = resultSchema->GetIndexInfo().GetEntityGroupsByStorageId(IStoragesManager::DefaultStorageId, *SaverContext.GetStoragesManager());
     for (auto&& columnChunks : chunkGroups) {
         auto batchResult = batchResults[batchIdx];
         ++batchIdx;
@@ -184,14 +184,14 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
                 portionColumns.emplace(p.first, p.second[i].GetChunks());
             }
             resultSchema->GetIndexInfo().AppendIndexes(portionColumns);
-            batchSlices.emplace_back(portionColumns, schemaDetails, context.Counters.SplitterCounters, GetSplitSettings());
+            batchSlices.emplace_back(portionColumns, schemaDetails, context.Counters.SplitterCounters);
         }
-        TSimilarSlicer slicer(GetSplitSettings().GetExpectedPortionSize());
+        TSimilarPacker slicer(NSplitter::TSplitSettings().GetExpectedPortionSize());
         auto packs = slicer.Split(batchSlices);
 
         ui32 recordIdx = 0;
         for (auto&& i : packs) {
-            TGeneralSerializedSlice slice(std::move(i), GetSplitSettings());
+            TGeneralSerializedSlice slice(std::move(i));
             auto b = batchResult->Slice(recordIdx, slice.GetRecordsCount());
             AppendedPortions.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), nullptr, GranuleMeta->GetPathId(), 
                 resultSchema->GetSnapshot(), SaverContext.GetStoragesManager()));

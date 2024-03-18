@@ -218,8 +218,8 @@ TPortionInfoWithBlobs TPortionInfoWithBlobs::SyncPortion(TPortionInfoWithBlobs&&
     }
 
     auto schemaTo = std::make_shared<TDefaultSchemaDetails>(to, std::make_shared<TSerializationStats>());
-    TGeneralSerializedSlice slice(entityChunksNew, schemaTo, counters, storages->GetOperatorVerified(targetTier)->GetBlobSplitSettings());
-    const TEntityGroups groups = to->GetIndexInfo().GetEntityGroupsByStorageId(targetTier);
+    TGeneralSerializedSlice slice(entityChunksNew, schemaTo, counters);
+    const NSplitter::TEntityGroups groups = to->GetIndexInfo().GetEntityGroupsByStorageId(targetTier, *storages);
     TPortionInfoWithBlobs result = TPortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), source.PortionInfo, storages);
     result.GetPortionInfo().SetMinSnapshot(to->GetSnapshot());
     result.GetPortionInfo().MutableMeta().SetTierName(targetTier);

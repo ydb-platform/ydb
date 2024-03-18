@@ -2845,10 +2845,6 @@ bool ValidateSort(TInputs& inputs, TInputs& subLinkInputs, const THashSet<TStrin
 
         TVector<const TItemExprType*> items;
         AddColumns(needRebuildSubLinks ? subLinkInputs : inputs, nullptr, refs, &qualifiedRefs, items, ctx.Expr);
-/*        if (items.empty()) {
-            newSorts.push_back(data.ChildPtr(index));
-            continue;
-        }*/
 
         auto effectiveType = ctx.Expr.MakeType<TStructExprType>(items);
         if (!effectiveType->Validate(oneSort->Pos(), ctx.Expr)) {
@@ -2926,7 +2922,7 @@ bool ValidateSort(TInputs& inputs, TInputs& subLinkInputs, const THashSet<TStrin
                     if (lambda.Head().ChildrenSize() == 1) {
                         if (lambda.Tail().IsCallable() && lambda.Tail().Content() == "Member") {
                             auto lcase = lambda.Tail().Tail().Content();
-                            if (usedInUsing.contains(lcase)){
+                            if (usedInUsing.contains(lcase)) {
                                 // skip select ..., key, ... join ... using(key) order by key. since there is no
                                 // explicit `key` like expression (but contains in the output projection, because of autogeneration)
                                 // it just (Member 'row 'key). But the lambda in sort by key is absolutely the same (in non-using variants

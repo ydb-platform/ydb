@@ -876,38 +876,17 @@ public:
                     TTraverseNodeStack traverseNodeStack;
                     traverseNodeStack.push({ node, false });
                     TVector<TAstNode*> oneJoinGroup;
-                    // Bucket sort
-                    TVector<int> prevEq;
-                    TVector<int> nextIdx;
-                    TVector<int> firstIdx;
-                    TVector<TAstNode*> currentOrder;
-                    int level = -1;
 
                     while (!traverseNodeStack.empty()) {
                         auto& top = traverseNodeStack.top();
-                        ++level;
-                        Y_ENSURE(level >= 0);
                         if (NodeTag(top.first) != T_JoinExpr) {
                             // leaf
                             auto p = ParseFromClause(top.first);
                             if (!p.Source) {
                                 return nullptr;
                             }
-                            while (static_cast<int>(prevEq.size()) <= level) {
-                                prevEq.push_back(-1);
-                                firstIdx.push_back(-1);
-                            }
-                            if (prevEq[level] != -1) {
-                                nextIdx[prevEq[level]] = static_cast<int>(currentOrder.size());
-                            }
-                            if (firstIdx[level] == -1) {
-                                firstIdx[level] = static_cast<int>(currentOrder.size());
-                            }
-                            prevEq[level] = static_cast<int>(currentOrder.size());
-                            nextIdx.push_back(-1);
-                            AddFrom(p, currentOrder);
+                            AddFrom(p, fromList);
                             traverseNodeStack.pop();
-                            --level;
                         } else {
                             auto join = CAST_NODE(JoinExpr, top.first);
                             if (!join->larg || !join->rarg) {
@@ -926,8 +905,18 @@ public:
                             }
 
                             if (!top.second) {
-                                traverseNodeStack.push({ join->rarg, false });
-                                traverseNodeStack.push({ join->larg, false });
+                                if (NodeTag(join->rarg) != T_JoinExpr) {
+                                    traverseNodeStack.push({ join->rarg, false });
+                                }
+                                if (NodeTag(join->larg) != T_JoinExpr) {
+                                    traverseNodeStack.push({ join->larg, false });
+                                }
+                                if (NodeTag(join->rarg) == T_JoinExpr) {
+                                    traverseNodeStack.push({ join->rarg, false });
+                                }
+                                if (NodeTag(join->larg) == T_JoinExpr) {
+                                    traverseNodeStack.push({ join->larg, false });
+                                }
                                 top.second = true;
                             } else {
                                 TString op;
@@ -988,17 +977,10 @@ public:
                                     }
                                 }
                                 traverseNodeStack.pop();
-                                --level;
                             }
                         }
                     }
-                    for (size_t lvl = 0; lvl < firstIdx.size(); ++lvl) {
-                        int curr = firstIdx[firstIdx.size() - 1ull - lvl];
-                        while (curr != -1) {
-                            fromList.push_back(currentOrder[curr]);
-                            curr = nextIdx[curr];
-                        }
-                    }
+
                     joinOps.push_back(QVL(oneJoinGroup.data(), oneJoinGroup.size()));
                 }
             }

@@ -243,6 +243,7 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
             TypesCtx.Get(),
             FunctionRegistry.Get(),
             DatabaseResolver,
+            nullptr,
             GenericClient,
             GatewaysCfg.GetGeneric());
 

@@ -31,6 +31,7 @@ namespace NKikimr::NKqp {
     enum class EProviderType {
         PostgreSQL,
         ClickHouse,
+        Ydb,
     };
 
     NApi::TDataSourceInstance MakeDataSourceInstance(EProviderType providerType) {
@@ -39,6 +40,8 @@ namespace NKikimr::NKqp {
                 return TConnectorClientMock::TPostgreSQLDataSourceInstanceBuilder<>().GetResult();
             case EProviderType::ClickHouse:
                 return TConnectorClientMock::TClickHouseDataSourceInstanceBuilder<>().GetResult();
+            case EProviderType::Ydb:
+                return TConnectorClientMock::TYdbDataSourceInstanceBuilder<>().GetResult();
         }
     }
 
@@ -48,6 +51,8 @@ namespace NKikimr::NKqp {
                 return CreatePostgreSQLExternalDataSource(kikimr);
             case EProviderType::ClickHouse:
                 return CreateClickHouseExternalDataSource(kikimr);
+            case EProviderType::Ydb:
+                return CreateYdbExternalDataSource(kikimr);
         }
     }
 
@@ -67,6 +72,22 @@ namespace NKikimr::NKqp {
         NApi::TTypeMappingSettings settings;
         settings.set_date_time_format(dateTimeFormat);
         return settings;
+    }
+
+    std::shared_ptr<TDatabaseAsyncResolverMock> MakeDatabaseAsyncResolver(EProviderType providerType) {
+        std::shared_ptr<TDatabaseAsyncResolverMock> databaseAsyncResolverMock;
+
+        switch (providerType) {
+            case EProviderType::ClickHouse:
+                // We test access to managed databases only on the example of ClickHouse
+                databaseAsyncResolverMock = std::make_shared<TDatabaseAsyncResolverMock>();
+                databaseAsyncResolverMock->AddClickHouseCluster();
+                break;
+            default:
+                break;
+        }
+
+        return databaseAsyncResolverMock;
     }
 
     Y_UNIT_TEST_SUITE(GenericFederatedQuery) {
@@ -103,7 +124,6 @@ namespace NKikimr::NKqp {
             // step 3: ReadSplits
             std::vector<ui16> colData = {10, 20, 30, 40, 50};
             clientMock->ExpectReadSplits()
-                .DataSourceInstance(dataSourceInstance)
                 .Split()
                     .Description("some binary description")
                     .Select()
@@ -120,11 +140,7 @@ namespace NKikimr::NKqp {
             // clang-format on
 
             // prepare database resolver mock
-            std::shared_ptr<TDatabaseAsyncResolverMock> databaseAsyncResolverMock;
-            if (providerType == EProviderType::ClickHouse) {
-                databaseAsyncResolverMock = std::make_shared<TDatabaseAsyncResolverMock>();
-                databaseAsyncResolverMock->AddClickHouseCluster();
-            }
+            auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(providerType);
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
@@ -157,12 +173,16 @@ namespace NKikimr::NKqp {
             MATCH_RESULT_WITH_INPUT(colData, resultSet, GetUint16);
         }
 
-        Y_UNIT_TEST(PostgreSQLLocal) {
+        Y_UNIT_TEST(PostgreSQLOnPremSelectAll) {
             TestSelectAllFields(EProviderType::PostgreSQL);
         }
 
-        Y_UNIT_TEST(ClickHouseManaged) {
+        Y_UNIT_TEST(ClickHouseManagedSelectAll) {
             TestSelectAllFields(EProviderType::ClickHouse);
+        }
+
+        Y_UNIT_TEST(YdbManagedSelectAll) {
+            TestSelectAllFields(EProviderType::Ydb);
         }
 
         void TestSelectConstant(EProviderType providerType) {
@@ -199,7 +219,6 @@ namespace NKikimr::NKqp {
 
             // step 3: ReadSplits
             clientMock->ExpectReadSplits()
-                .DataSourceInstance(dataSourceInstance)
                 .Split()
                     .Description("some binary description")
                     .Select()
@@ -213,11 +232,7 @@ namespace NKikimr::NKqp {
             // clang-format on
 
             // prepare database resolver mock
-            std::shared_ptr<TDatabaseAsyncResolverMock> databaseAsyncResolverMock;
-            if (providerType == EProviderType::ClickHouse) {
-                databaseAsyncResolverMock = std::make_shared<TDatabaseAsyncResolverMock>();
-                databaseAsyncResolverMock->AddClickHouseCluster();
-            }
+            auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(providerType);
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
@@ -249,12 +264,16 @@ namespace NKikimr::NKqp {
             }
         }
 
-        Y_UNIT_TEST(PostgreSQLSelectConstant) {
+        Y_UNIT_TEST(PostgreSQLOnPremSelectConstant) {
             TestSelectConstant(EProviderType::PostgreSQL);
         }
 
         Y_UNIT_TEST(ClickHouseManagedSelectConstant) {
             TestSelectConstant(EProviderType::ClickHouse);
+        }
+
+        Y_UNIT_TEST(YdbManagedSelectConstant) {
+            TestSelectConstant(EProviderType::Ydb);
         }
 
         void TestSelectCount(EProviderType providerType) {
@@ -291,7 +310,6 @@ namespace NKikimr::NKqp {
 
             // step 3: ReadSplits
             clientMock->ExpectReadSplits()
-                .DataSourceInstance(dataSourceInstance)
                 .Split()
                     .Description("some binary description")
                     .Select()
@@ -305,11 +323,7 @@ namespace NKikimr::NKqp {
             // clang-format on
 
             // prepare database resolver mock
-            std::shared_ptr<TDatabaseAsyncResolverMock> databaseAsyncResolverMock;
-            if (providerType == EProviderType::ClickHouse) {
-                databaseAsyncResolverMock = std::make_shared<TDatabaseAsyncResolverMock>();
-                databaseAsyncResolverMock->AddClickHouseCluster();
-            }
+            auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(providerType);
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
@@ -343,6 +357,10 @@ namespace NKikimr::NKqp {
 
         Y_UNIT_TEST(ClickHouseSelectCount) {
             TestSelectCount(EProviderType::ClickHouse);
+        }
+
+        Y_UNIT_TEST(YdbSelectCount) {
+            TestSelectCount(EProviderType::Ydb);
         }
 
         void TestFilterPushdown(EProviderType providerType) {
@@ -396,7 +414,6 @@ namespace NKikimr::NKqp {
             std::vector<i32> filterColumnData = {42, 24};
             // clang-format off
             clientMock->ExpectReadSplits()
-                .DataSourceInstance(dataSourceInstance)
                 .Split()
                     .Description("some binary description")
                     .Select(select)
@@ -409,11 +426,7 @@ namespace NKikimr::NKqp {
             // clang-format on
 
             // prepare database resolver mock
-            std::shared_ptr<TDatabaseAsyncResolverMock> databaseAsyncResolverMock;
-            if (providerType == EProviderType::ClickHouse) {
-                databaseAsyncResolverMock = std::make_shared<TDatabaseAsyncResolverMock>();
-                databaseAsyncResolverMock->AddClickHouseCluster();
-            }
+            auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(providerType);
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
@@ -449,6 +462,10 @@ namespace NKikimr::NKqp {
 
         Y_UNIT_TEST(ClickHouseFilterPushdown) {
             TestFilterPushdown(EProviderType::ClickHouse);
+        }
+
+        Y_UNIT_TEST(YdbFilterPushdown) {
+            TestFilterPushdown(EProviderType::Ydb);
         }
     }
 }

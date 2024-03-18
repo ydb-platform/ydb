@@ -13,8 +13,14 @@ message TCredentials {
         string password = 2;
     }
 
+    message TToken {
+        string type = 1;
+        string value = 2;
+    }
+
     oneof payload {
         TBasic basic = 1;
+        TToken token = 2;
     }
 }
 

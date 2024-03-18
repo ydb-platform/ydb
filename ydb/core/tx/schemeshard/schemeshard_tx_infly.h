@@ -194,6 +194,7 @@ struct TTxState {
         item(WaitShadowPathPublication, 136, "") \
         item(DeletePathBarrier, 137, "") \
         item(SyncHive, 138, "") \
+        item(CopyTableBarrier, 139, "") \
         item(Done, 240, "") \
         item(Aborted, 250, "")
 

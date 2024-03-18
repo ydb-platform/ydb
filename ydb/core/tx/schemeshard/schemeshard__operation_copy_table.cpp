@@ -1,6 +1,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_tx_infly.h"
 
 #include <ydb/core/base/subdomain.h>
 
@@ -225,6 +226,149 @@ public:
     }
 };
 
+class TProposedWaitParts: public TSubOperationState {
+private:
+    TOperationId OperationId;
+
+    TString DebugHint() const override {
+        return TStringBuilder()
+                << "TCopyTable TProposedWaitParts"
+                << " operationId#" << OperationId;
+    }
+
+public:
+    TProposedWaitParts(TOperationId id)
+        : OperationId(id)
+    {
+        IgnoreMessages(DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType,
+             TEvColumnShard::TEvProposeTransactionResult::EventType,
+             TEvPrivate::TEvOperationPlan::EventType});
+    }
+
+    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
+        TTabletId ssId = context.SS->SelfTabletId();
+        const auto& evRecord = ev->Get()->Record;
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply TEvSchemaChanged"
+                               << " at tablet: " << ssId);
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    DebugHint() << " HandleReply TEvSchemaChanged"
+                                << " at tablet: " << ssId
+                                << " message: " << evRecord.ShortDebugString());
+
+        if (!NTableState::CollectSchemaChanged(OperationId, ev, context)) {
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        DebugHint() << " HandleReply TEvSchemaChanged"
+                                    << " CollectSchemaChanged: false");
+            return false;
+        }
+
+        Y_ABORT_UNLESS(context.SS->FindTx(OperationId));
+        TTxState& txState = *context.SS->FindTx(OperationId);
+
+        if (!txState.ReadyForNotifications) {
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        DebugHint() << " HandleReply TEvSchemaChanged"
+                                    << " ReadyForNotifications: false");
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        TTabletId ssId = context.SS->SelfTabletId();
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     DebugHint() << " ProgressState"
+                     << " at tablet: " << ssId);
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCopyTable);
+
+        NIceDb::TNiceDb db(context.GetDB());
+
+        txState->ClearShardsInProgress();
+
+        for (auto& shard : txState->Shards) {
+            if (shard.Operation < TTxState::ProposedWaitParts) {
+                shard.Operation = TTxState::ProposedWaitParts;
+                context.SS->PersistUpdateTxShard(db, OperationId, shard.Idx, shard.Operation);
+            }
+
+            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.Idx));
+            context.OnComplete.RouteByTablet(OperationId, context.SS->ShardInfos.at(shard.Idx).TabletID);
+        }
+
+        txState->UpdateShardsInProgress(TTxState::ProposedWaitParts);
+
+        txState->AcceptPendingSchemeNotification();
+
+        if (txState->ShardsInProgress.empty()) {
+            NTableState::AckAllSchemaChanges(OperationId, *txState, context);
+            context.SS->ChangeTxState(db, OperationId, TTxState::CopyTableBarrier);
+            return true;
+        }
+
+        return false;
+    }
+};
+
+class TCopyTableBarrier: public TSubOperationState {
+private:
+    TOperationId OperationId;
+
+    TString DebugHint() const override {
+        return TStringBuilder()
+                << "TCopyTable TCopyTableBarrier"
+                << " operationId: " << OperationId;
+    }
+
+public:
+    TCopyTableBarrier(TOperationId id)
+        : OperationId(id)
+    {
+        IgnoreMessages(DebugHint(),
+            { TEvHive::TEvCreateTabletReply::EventType
+            , TEvDataShard::TEvProposeTransactionResult::EventType
+            , TEvPrivate::TEvOperationPlan::EventType
+            , TEvDataShard::TEvSchemaChanged::EventType }
+        );
+    }
+
+    bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
+        TTabletId ssId = context.SS->SelfTabletId();
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply TEvPrivate::TEvCompleteBarrier"
+                               << ", msg: " << ev->Get()->ToString()
+                               << ", at tablet" << ssId);
+
+        NIceDb::TNiceDb db(context.GetDB());
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+
+        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+        return true;
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                DebugHint() << "ProgressState, operation type "
+                            << TTxState::TypeName(txState->TxType));
+
+        context.OnComplete.Barrier(OperationId, "CopyTableBarrier");
+        return false;
+    }
+};
+
 class TCopyTable: public TSubOperation {
 
     THashSet<TString> LocalSequences;
@@ -243,6 +387,8 @@ class TCopyTable: public TSubOperation {
         case TTxState::Propose:
             return TTxState::ProposedWaitParts;
         case TTxState::ProposedWaitParts:
+            return TTxState::CopyTableBarrier;
+        case TTxState::CopyTableBarrier:
             return TTxState::Done;
         default:
             return TTxState::Invalid;
@@ -259,7 +405,9 @@ class TCopyTable: public TSubOperation {
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::ProposedWaitParts:
-            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+            return MakeHolder<TProposedWaitParts>(OperationId);
+        case TTxState::CopyTableBarrier:
+            return MakeHolder<TCopyTableBarrier>(OperationId);
         case TTxState::Done:
             return MakeHolder<TDone>(OperationId);
         default:

@@ -142,17 +142,17 @@ Uploader – локальный для узла компонент, как сл
     Принимает список типов запросов. Запрос подходит под данный селектор если его тип содержится в списке.
 
     Возможные значения:
+    * KeyValue.CreateVolume
+    * KeyValue.DropVolume
+    * KeyValue.AlterVolume
+    * KeyValue.DescribeVolume
+    * KeyValue.ListLocalPartitions
     * KeyValue.AcquireLock
     * KeyValue.ExecuteTransaction
     * KeyValue.Read
     * KeyValue.ReadRange
     * KeyValue.ListRange
     * KeyValue.GetStorageChannelStatus
-    * KeyValue.CreateVolume
-    * KeyValue.DropVolume
-    * KeyValue.AlterVolume
-    * KeyValue.DescribeVolume
-    * KeyValue.ListLocalPartitions
     * Table.CreateSession
     * Table.KeepAlive
     * Table.AlterTable

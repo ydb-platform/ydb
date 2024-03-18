@@ -36,6 +36,10 @@ ELSEIF (USE_ICONV == "dynamic")
 ELSEIF (USE_ICONV == "local")
     GLOBAL_CFLAGS(${USE_LOCAL_ICONV_CFLAGS})
 
+    IF (OS_DARWIN)
+        LDFLAGS(-liconv)
+    ENDIF()
+
     # Opensource code is compatible with libc provided iconv API on major linux distributions and macos.
 ELSE()
     PEERDIR(

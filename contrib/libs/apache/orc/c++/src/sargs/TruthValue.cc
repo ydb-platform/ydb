@@ -122,4 +122,4 @@ namespace orc {
     }
   }
 
-}
+}  // namespace orc

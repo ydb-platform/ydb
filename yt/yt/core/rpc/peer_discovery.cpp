@@ -14,7 +14,7 @@ class TDefaultPeerDiscovery
     : public IPeerDiscovery
 {
 public:
-    explicit TDefaultPeerDiscovery(TDiscoverRequestHook hook)
+    explicit TDefaultPeerDiscovery(IDiscoverRequestHookPtr hook)
         : Hook_(std::move(hook))
     { }
 
@@ -30,18 +30,22 @@ public:
         TGenericProxy proxy(std::move(channel), serviceDescriptor);
         auto req = proxy.Discover();
         if (Hook_) {
-            Hook_(req.Get());
+            Hook_->EnrichRequest(req.Get());
         }
         req->SetTimeout(timeout);
         req->set_reply_delay(replyDelay.GetValue());
-        return req->Invoke().Apply(BIND(&TDefaultPeerDiscovery::ConvertResponse));
+        return req->Invoke().Apply(BIND(&TDefaultPeerDiscovery::ConvertResponse, MakeStrong(this)));
     }
 
 private:
-    const TDiscoverRequestHook Hook_;
+    const IDiscoverRequestHookPtr Hook_;
 
-    static TPeerDiscoveryResponse ConvertResponse(const TIntrusivePtr<TTypedClientResponse<NProto::TRspDiscover>>& rsp)
+    TPeerDiscoveryResponse ConvertResponse(const TIntrusivePtr<TTypedClientResponse<NProto::TRspDiscover>>& rsp)
     {
+        if (Hook_) {
+            Hook_->OnResponse(rsp.Get());
+        }
+
         return TPeerDiscoveryResponse{
             .IsUp = rsp->up(),
             .Addresses = FromProto<std::vector<TString>>(rsp->suggested_addresses()),
@@ -51,7 +55,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IPeerDiscoveryPtr CreateDefaultPeerDiscovery(TDiscoverRequestHook hook)
+IPeerDiscoveryPtr CreateDefaultPeerDiscovery(IDiscoverRequestHookPtr hook)
 {
     return New<TDefaultPeerDiscovery>(std::move(hook));
 }

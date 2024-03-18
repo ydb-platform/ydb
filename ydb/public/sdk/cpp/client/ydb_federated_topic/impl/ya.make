@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    deferred_commit.cpp
     federated_read_session.h
     federated_read_session.cpp
     federated_read_session_event.cpp

@@ -849,19 +849,9 @@ private:
     THashMap<TPartitionStream::TPtr, TDisjointIntervalTree<ui64>> Offsets; // Partition stream -> offsets set.
 };
 
-TDeferredCommit::TDeferredCommit() {
-}
-
-TDeferredCommit::TDeferredCommit(TDeferredCommit&&) = default;
-
-TDeferredCommit& TDeferredCommit::operator=(TDeferredCommit&&) = default;
-
-TDeferredCommit::~TDeferredCommit() {
-}
-
 #define GET_IMPL()                              \
     if (!Impl) {                                \
-        Impl = MakeHolder<TImpl>();             \
+        Impl = std::make_shared<TImpl>();       \
     }                                           \
     Impl
 
@@ -928,7 +918,7 @@ void TDeferredCommit::TImpl::Add(const TReadSessionEvent::TDataReceivedEvent& da
     for (size_t i = 1; i < dataReceivedEvent.GetMessagesCount(); ++i) {
         auto msgOffsetRange = GetMessageOffsetRange(dataReceivedEvent, i);
         if (msgOffsetRange.first == endOffset) {
-            endOffset= msgOffsetRange.second;
+            endOffset = msgOffsetRange.second;
         } else {
             Add(partitionStream, offsetSet, startOffset, endOffset);
             startOffset = msgOffsetRange.first;

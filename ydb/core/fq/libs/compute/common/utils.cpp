@@ -127,6 +127,93 @@ TString FormatDurationUs(ui64 durationUs) {
     return FormatDurationMs(durationUs / 1000);
 }
 
+namespace detail {
+
+struct TDurationParser {
+    constexpr static bool IsDigit(char c) noexcept {
+        return '0' <= c && c <= '9';
+    }
+
+    constexpr std::string_view ConsumeLastFraction() noexcept {
+        ConsumeWhitespace();
+        if (Src.empty()) {
+            return Src;
+        }
+
+        auto it = Src.end() - 1;
+        while (true) {
+            // we rely on non-empty number before fraction
+            if (IsDigit(*it) || it == Src.begin()) {
+                ++it;
+                break;
+            }
+            --it;
+        }
+        auto start = it - Src.begin();
+        auto res = Src.substr(start);
+        Src = Src.substr(0, start);
+        return res;
+    }
+
+    constexpr ui32 ConsumeNumberPortion() noexcept {
+        ui32 dec = 1;
+        ui32 res = 0;
+        while (!Src.empty() && IsDigit(Src.back())) {
+            res += (Src.back() - '0') * dec;
+            dec *= 10;
+            Src.remove_suffix(1);
+        }
+        return res;
+    }
+
+    constexpr void ConsumeWhitespace() noexcept {
+        while (!Src.empty() && Src.back() == ' ') {
+            Src.remove_suffix(1);
+        }
+    }
+
+    constexpr std::chrono::microseconds ParseDuration() {
+        auto fraction = ConsumeLastFraction();
+        if (fraction == "us") {
+            return std::chrono::microseconds{ConsumeNumberPortion()};
+        } else if (fraction == "ms") {
+            return std::chrono::milliseconds{ConsumeNumberPortion()};
+        }
+
+        std::chrono::microseconds result{};
+        if (fraction == "s") {
+            auto part = ConsumeNumberPortion();
+            if (!Src.empty() && Src.back() == '.') {
+                // parsed milliseconds (cantiseconds actually)
+                part *= 10;
+                result += std::chrono::milliseconds(part);
+
+                Src.remove_suffix(1);
+                result += std::chrono::seconds(ConsumeNumberPortion());
+            } else {
+                result += std::chrono::seconds{part};
+            }
+            fraction = ConsumeLastFraction();
+        }
+        if (fraction == "m") {
+            result += std::chrono::minutes{ConsumeNumberPortion()};
+            fraction = ConsumeLastFraction();
+        }
+
+        if (fraction == "h") {
+            result += std::chrono::hours{ConsumeNumberPortion()};
+        }
+        return result;
+    }
+
+    std::string_view Src;
+};
+}
+
+TDuration ParseDuration(TStringBuf str) {
+    return detail::TDurationParser{.Src = str}.ParseDuration();
+}
+
 TString FormatInstant(TInstant instant) {
     TStringBuilder builder;
     builder << instant.FormatLocalTime("%H:%M:%S.");

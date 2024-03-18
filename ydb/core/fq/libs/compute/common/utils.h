@@ -34,6 +34,7 @@ TString GetV1StatFromV2PlanV2(const TString& plan);
 TString FormatDurationMs(ui64 durationMs);
 TString FormatDurationUs(ui64 durationUs);
 TString FormatInstant(TInstant instant);
+TDuration ParseDuration(TStringBuf str);
 
 struct TPublicStat {
     std::optional<int> MemoryUsageBytes = 0;

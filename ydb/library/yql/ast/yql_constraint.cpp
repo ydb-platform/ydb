@@ -1283,7 +1283,6 @@ TPartOfConstraintNode<TOriginalConstraintNode>::TPartOfConstraintNode(TExprConte
 {
     YQL_ENSURE(!Mapping_.empty());
     for (const auto& part : Mapping_) {
-        YQL_ENSURE(!part.second.empty());
         const auto hash = part.first->GetHash();
         TBase::Hash_ = MurmurHash<ui64>(&hash, sizeof(hash), TBase::Hash_);
         for (const auto& item: part.second) {

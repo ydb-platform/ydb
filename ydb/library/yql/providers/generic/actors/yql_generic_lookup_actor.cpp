@@ -66,7 +66,9 @@ namespace NYql::NDq {
 
     } // namespace
 
-    class TGenericLookupActor: public TGenericBaseActor<TGenericLookupActor> {
+    class TGenericLookupActor
+        : public NYql::NDq::IDqAsyncLookupSource,
+          public TGenericBaseActor<TGenericLookupActor> {
         using TBase = TGenericBaseActor<TGenericLookupActor>;
 
     public:
@@ -110,19 +112,22 @@ namespace NYql::NDq {
 
         static constexpr char ActorName[] = "GENERIC_PROVIDER_LOOKUP_ACTOR";
 
+    private: //IDqAsyncLookupSource
+        size_t GetMaxSupportedKeysInRequest() const override {
+            return MaxKeysInRequest;
+        }
+        void AsyncLookup(const NKikimr::NMiniKQL::TUnboxedValueVector& keys) override {
+            CreateRequest(keys);
+        }
+
     private: //events
         STRICT_STFUNC(StateFunc,
-                      hFunc(NGenericProviderLookupActorEvents::TEvLookupRequest, Handle);
                       hFunc(TEvListSplitsIterator, Handle);
                       hFunc(TEvListSplitsPart, Handle);
                       hFunc(TEvReadSplitsIterator, Handle);
                       hFunc(TEvReadSplitsPart, Handle);
                       hFunc(TEvReadSplitsFinished, Handle);
                       hFunc(TEvError, Handle);)
-
-        void Handle(NGenericProviderLookupActorEvents::TEvLookupRequest::TPtr& ev) {
-            CreateRequest(ev->Get()->Keys);
-        }
 
         void Handle(TEvListSplitsIterator::TPtr ev) {
             auto& iterator = ev->Get()->Iterator;
@@ -258,7 +263,7 @@ namespace NYql::NDq {
         void FinalizeRequest() {
             if (!LookupResult.empty()) {
                 YQL_CLOG(INFO, ProviderGeneric) << "Sending lookup results with " << LookupResult.size() << " rows";
-                auto ev = new NGenericProviderLookupActorEvents::TEvLookupResult(Alloc, std::move(LookupResult));
+                auto ev = new IDqAsyncLookupSource::TEvLookupResult(Alloc, std::move(LookupResult));
                 TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
             }
             LookupResult = {};
@@ -348,7 +353,7 @@ namespace NYql::NDq {
         NKikimr::NMiniKQL::TKeyPayloadPairVector LookupResult;
     };
 
-    IActor* CreateGenericLookupActor(
+    std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateGenericLookupActor(
         NConnector::IClient::TPtr connectorClient,
         const TString& serviceAccountId,
         const TString& serviceAccountSignature,
@@ -378,7 +383,7 @@ namespace NYql::NDq {
             typeEnv,
             holderFactory,
             maxKeysInRequest);
-        return actor;
+        return {actor, actor};
     }
 
 } // namespace NYql::NDq

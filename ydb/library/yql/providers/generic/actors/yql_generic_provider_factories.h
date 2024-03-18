@@ -6,7 +6,7 @@
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 
 namespace NYql::NDq {
-    void RegisterGenericReadActorFactory(TDqAsyncIoFactory& factory,
-                                         ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-                                         NYql::NConnector::IClient::TPtr genericClient);
+    void RegisterGenericProviderFactories(TDqAsyncIoFactory& factory,
+                                          ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+                                          NYql::NConnector::IClient::TPtr genericClient);
 }

@@ -26,7 +26,7 @@ class TJsonQueryAutocompleteTables : public TViewerPipeClient<TJsonQueryAutocomp
         TString Name;
         NSchemeCache::TSchemeCacheNavigate::EKind Kind;
     };
-    THashMap<TString, SchemaWordData> Children;
+    THashMap<TString, SchemaWordData> Dictionary;
     TString Database;
     TString Prefix;
     TString Path;

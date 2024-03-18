@@ -130,7 +130,7 @@
 |\* environ|?|?|\+|\+|\+|\-|\-|\+|
 |\* metadata|?|?|\+|\+|\+|\+|\+|\+|
 |\* service_account|?|?|\+|\+|\+|\-|\-|\+|
-|\* static (username \+ password)|?|?|\+|\+|\+|\+|\-|\+|
+|\* static (username \+ password)|?|?|\+|\+|\+|\+|\+|\+|
 |Basic (series)|\+|?|\+|\+|\+|\+|\+|\+|
 |Bulk Upsert|\+/-|?|\+|\+|\+|\-|\-|\+|
 |Containers (Struct,Variant,List,Tuple)|\-|?|\+|\-|\-|\-|\+|\-|

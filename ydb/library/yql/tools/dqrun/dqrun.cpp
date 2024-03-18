@@ -24,7 +24,7 @@
 #include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/providers/clickhouse/actors/yql_ch_source_factory.h>
 #include <ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider.h>
-#include <ydb/library/yql/providers/generic/actors/yql_generic_source_factory.h>
+#include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
@@ -242,7 +242,7 @@ NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(
     RegisterS3ReadActorFactory(*factory, nullptr, httpGateway, GetHTTPDefaultRetryPolicy(TDuration::Seconds(HTTPmaxTimeSeconds), maxRetriesCount), {}, nullptr);
     RegisterS3WriteActorFactory(*factory, nullptr, httpGateway);
     RegisterClickHouseReadActorFactory(*factory, nullptr, httpGateway);
-    RegisterGenericReadActorFactory(*factory, credentialsFactory, genericClient);
+    RegisterGenericProviderFactories(*factory, credentialsFactory, genericClient);
 
     RegisterDqPqWriteActorFactory(*factory, driver, nullptr);
 

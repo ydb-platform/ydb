@@ -196,6 +196,31 @@ struct IDqComputeActorAsyncOutput {
     virtual ~IDqComputeActorAsyncOutput() = default;
 };
 
+struct IDqAsyncLookupSource {
+    struct TEvLookupResult: NActors::TEventLocal<TEvLookupResult, TDqComputeEvents::EvLookupResult> {
+        TEvLookupResult(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, NKikimr::NMiniKQL::TKeyPayloadPairVector&& data)
+            : Alloc(alloc)
+            , Data(std::move(data))
+        {
+        }
+        ~TEvLookupResult() {
+            auto guard = Guard(*Alloc.get());
+            Data = NKikimr::NMiniKQL::TKeyPayloadPairVector{};
+        }
+
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+        NKikimr::NMiniKQL::TKeyPayloadPairVector Data;
+    };
+
+    virtual size_t GetMaxSupportedKeysInRequest() const = 0;
+    //Initiate lookup for requested keys
+    //Only one request at a time is allowed. Request must contain no more than GetMaxSupportedKeysInRequest() keys
+    //Upon completion, results are sent in a TEvLookupResult to the preconfigured actor
+    virtual void AsyncLookup(const NKikimr::NMiniKQL::TUnboxedValueVector& keys) = 0;
+protected:
+    ~IDqAsyncLookupSource() {}
+};
+
 struct IDqAsyncIoFactory : public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<IDqAsyncIoFactory>;
@@ -218,6 +243,20 @@ public:
         const google::protobuf::Message* SourceSettings = nullptr;  // used only in case if we execute compute actor locally
         TIntrusivePtr<NActors::TProtoArenaHolder> Arena;  // Arena for SourceSettings
         NWilson::TTraceId TraceId;
+    };
+
+    struct TLookupSourceArguments {
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+        NActors::TActorId ParentId;
+        google::protobuf::Any DataSource; //provider specific data source
+        TString ServiceAccountId;
+        TString ServiceAccountSignature;
+        TString Table;
+        const NKikimr::NMiniKQL::TStructType* KeyType;
+        const NKikimr::NMiniKQL::TStructType* PayloadType;
+        const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
+        const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+        size_t MaxKeysInRequest;
     };
 
     struct TSinkArguments {
@@ -268,6 +307,11 @@ public:
     // Could throw YQL errors.
     // IActor* and IDqComputeActorAsyncInput* returned by method must point to the objects with consistent lifetime.
     virtual std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSource(TSourceArguments&& args) const = 0;
+
+    // Creates Lookup source.
+    // Could throw YQL errors.
+    // IActor* and IDqAsyncLookupSource* returned by method must point to the objects with consistent lifetime.
+    virtual std::pair<IDqAsyncLookupSource*, NActors::IActor*> CreateDqLookupSource(TStringBuf type, TLookupSourceArguments&& args) const = 0;
 
     // Creates sink.
     // Could throw YQL errors.

@@ -577,40 +577,27 @@ message TEvDescribeSchemeInfo {
 
 message TQueryAutocomplete {
     message TDatabasesResult {
-        message TDatabase {
+        message TEntity {
             string Name = 1;
         }
-        repeated TDatabase Entities = 1;
+        repeated TEntity Entities = 1;
     }
 
     message TTablesResult {
-        message TTable {
+        message TEntity {
             string Name = 1;
             string Type = 2;
         }
-        repeated TTable Entities = 1;
+        repeated TEntity Entities = 1;
     }
 
     message TSchemaResult {
-        message TSchema {
+        message TEntity {
             string Name = 1;
             string Type = 2;
             string TableName = 3;
         }
-        repeated TSchemaResult Entities = 1;
-    }
-
-    message TFunctionsResult {
-        message TFunction {
-            enum EType {
-                Global = 0;
-                Table = 1;
-                Udf = 2;
-            }
-            string Name = 1;
-            TFunctionsResult Type = 2;
-        }
-        repeated TFunction Entities = 1;
+        repeated TEntity Entities = 1;
     }
 
     message TResult {
@@ -619,10 +606,9 @@ message TQueryAutocomplete {
             TDatabasesResult DatabasesResult = 11;
             TTablesResult TablesResult = 12;
             TSchemaResult SchemaResult = 13;
-            TFunctionsResult FunctionsResult = 14;
+            bytes Reserved14 = 14;
             bytes Reserved15 = 15;
             bytes Reserved16 = 16;
-            bytes Reserved17 = 17;
         }
     }
 

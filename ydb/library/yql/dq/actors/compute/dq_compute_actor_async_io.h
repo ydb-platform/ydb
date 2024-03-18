@@ -191,6 +191,8 @@ struct IDqComputeActorAsyncOutput {
     virtual void CommitState(const NDqProto::TCheckpoint& checkpoint) = 0; // Apply side effects related to this checkpoint.
     virtual void LoadState(const NDqProto::TSinkState& state) = 0;
 
+    virtual TMaybe<google::protobuf::Any> ExtraData() { return {}; }
+
     virtual void PassAway() = 0; // The same signature as IActor::PassAway()
 
     virtual ~IDqComputeActorAsyncOutput() = default;

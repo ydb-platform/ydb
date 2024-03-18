@@ -910,7 +910,20 @@ protected:
         auto& output = task.Outputs[sink.GetOutputIndex()];
         output.Type = TTaskOutputType::Sink;
         output.SinkType = intSink.GetType();
-        output.SinkSettings = intSink.GetSettings();
+
+        if (intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+            NKikimrKqp::TKqpTableSinkSettings settings;
+            YQL_ENSURE(intSink.GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+            auto& lockTxId = TasksGraph.GetMeta().LockTxId;
+            if (lockTxId) {
+                settings.SetLockTxId(*lockTxId);
+                settings.SetLockNodeId(SelfId().NodeId());
+            }
+            output.SinkSettings.ConstructInPlace();
+            output.SinkSettings->PackFrom(settings);
+        } else {
+            output.SinkSettings = intSink.GetSettings();
+        }
     }
 
     void BuildSinks(const NKqpProto::TKqpPhyStage& stage, TKqpTasksGraph::TTaskType& task) {
@@ -1949,7 +1962,8 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
     TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-    const bool enableOlapSink, ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup);
+    const bool enableOlapSink, const bool useEvWrite, ui32 statementResultIndex,
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,

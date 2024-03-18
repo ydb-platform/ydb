@@ -126,6 +126,7 @@ struct TTaskInputMeta {
 };
 
 struct TTaskOutputMeta {
+    NKikimrKqp::TKqpTableSinkSettings* SinkSettings = nullptr;
     THashMap<ui64, const TKeyDesc::TPartitionInfo*> ShardPartitions;
 };
 

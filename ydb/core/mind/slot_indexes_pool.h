@@ -2,8 +2,7 @@
 
 #include "defs.h"
 
-namespace NKikimr {
-namespace NNodeBroker {
+namespace NKikimr::NNodeBroker {
 
 class TSlotIndexesPool {
 public:
@@ -20,5 +19,4 @@ private:
     TDynBitMap FreeIndexes;
 };
 
-} // NNodeBroker
-} // NKikimr
+} // NKikimr::NNodeBroker

@@ -1,7 +1,6 @@
 #include "slot_indexes_pool.h"
 
-namespace NKikimr {
-namespace NNodeBroker {
+namespace NKikimr::NNodeBroker {
 
 static constexpr size_t EXPAND_SIZE = 128;
 
@@ -52,5 +51,4 @@ size_t TSlotIndexesPool::Size() const {
     return FreeIndexes.Size() - FreeIndexes.Count();
 }
 
-} // NNodeBroker
-} // NKikimr
+} // NKikimr::NNodeBroker

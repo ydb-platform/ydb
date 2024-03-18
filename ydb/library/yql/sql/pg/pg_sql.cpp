@@ -456,6 +456,8 @@ public:
                     "escape_string_warning",               // zabbix
                     "bytea_output",                        // zabbix
                     "datestyle",                           // pgadmin 4
+                    "timezone",                            // mediawiki
+                    "search_path",                         // mediawiki
                     NULL,
                 };
 
@@ -2404,6 +2406,10 @@ public:
         }
         if (varName == "standard_conforming_strings"){
             return "on";
+        }
+
+        if (varName == "search_path"){
+            return "public"; // mediawiki
         }
         return {};
     }

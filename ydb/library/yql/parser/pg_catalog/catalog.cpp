@@ -5,6 +5,7 @@
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/split.h>
+#include <util/system/env.h>
 #include <library/cpp/resource/resource.h>
 
 namespace NYql::NPg {
@@ -1534,6 +1535,36 @@ struct TCatalog {
 #include "columns.generated.h"
         })
     {
+        if ( GetEnv("YDB_EXPERIMENTAL_PG") == "1"){
+            // zabbix config
+            StaticTables.push_back(
+                {{"public", "config"}, ERelKind::Relation, 10001}
+            );
+            AllStaticColumns.push_back(
+                {"public", "config", "configid", "bigint"}
+            );
+            AllStaticColumns.push_back(
+                {"public", "config", "server_check_interval", "integer"}
+            );
+
+            AllStaticColumns.push_back(
+                {"public", "config", "dbversion_status", "text"}
+            );
+
+            // zabbix dbversion
+            StaticTables.push_back(
+                {{"public", "dbversion"}, ERelKind::Relation, 10001}
+            );
+            AllStaticColumns.push_back(
+                {"public", "dbversion", "dbversionid", "bigint"}
+            );
+            AllStaticColumns.push_back(
+                {"public", "dbversion", "mandatory", "integer"}
+            );
+            AllStaticColumns.push_back(
+                {"public", "dbversion", "mandatory", "optional"}
+            );
+        }
         THashSet<ui32> usedTableOids;
         for (const auto& t : StaticTables) {
             StaticColumns.insert(std::make_pair(t, TVector<TColumnInfo>()));

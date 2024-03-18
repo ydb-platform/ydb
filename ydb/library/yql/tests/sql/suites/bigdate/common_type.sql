@@ -41,3 +41,10 @@ select 1, [$date_val, $datetime_val]
 select [$date_val, $datetime_val, $timestamp_val, $date32_val, $datetime64_val, $timestamp64_val];
 
 select [unwrap(cast(1 as interval)), unwrap(cast(-1 as interval64))];
+
+select row, [d32, dt64, ts64] from BigDates;
+
+select row, [d32, dt64, ts64, d, dt, ts] from BigDates join NarrowDates using (row);
+
+-- todo support ListMin/ListMax
+-- todo test intervals

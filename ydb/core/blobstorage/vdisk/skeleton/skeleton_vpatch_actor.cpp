@@ -826,7 +826,7 @@ namespace NKikimr {
             const ::NMonitoring::TDynamicCounters::TCounterPtr &vPatchResMsgsPtr,
             const NVDiskMon::TLtcHistoPtr &getHistogram, const NVDiskMon::TLtcHistoPtr &putHistogram,
             const TIntrusivePtr<TVPatchCtx> &vPatchCtx, const TString &vDiskLogPrefix, ui64 incarnationGuid,
-            std::shared_ptr<NMonGroup::TOutOfSpaceGroup> monGroup)
+            std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup)
     {
         return new NPrivate::TSkeletonVPatchActor(leaderId, gType, ev, now, skeletonFrontIDPtr,
                 vPatchFoundPartsMsgsPtr, vPatchResMsgsPtr, getHistogram, putHistogram,

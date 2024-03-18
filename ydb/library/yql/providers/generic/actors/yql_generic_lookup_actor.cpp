@@ -303,10 +303,10 @@ namespace NYql::NDq {
             select.mutable_from()->Settable(Table);
 
             NConnector::NApi::TPredicate_TDisjunction disjunction;
-            for (const auto& k: keys) {
+            for (const auto& k : keys) {
                 NConnector::NApi::TPredicate_TConjunction conjunction;
                 for (ui32 c = 0; c != KeyType->GetMembersCount(); ++c) {
-                    NConnector::NApi::TPredicate_TComparison eq;        
+                    NConnector::NApi::TPredicate_TComparison eq;
                     eq.Setoperation(NConnector::NApi::TPredicate_TComparison_EOperation::TPredicate_TComparison_EOperation_EQ);
                     eq.mutable_left_value()->Setcolumn(TString(KeyType->GetMemberName(c)));
                     auto rightTypedValue = eq.mutable_right_value()->mutable_typed_value();

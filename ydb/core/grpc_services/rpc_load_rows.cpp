@@ -4,7 +4,7 @@
 #include "service_table.h"
 #include "audit_dml_operations.h"
 
-#include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
+#include <ydb/core/tx/tx_proxy/upload_rows/upload_rows_common_impl.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <ydb/library/yql/public/udf/udf_types.h>

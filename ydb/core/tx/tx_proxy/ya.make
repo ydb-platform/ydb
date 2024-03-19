@@ -11,8 +11,6 @@ SRCS(
     resolvereq.cpp
     snapshotreq.cpp
     commitreq.cpp
-    upload_rows_common_impl.cpp
-    upload_rows.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(read_table_impl.h)
@@ -28,7 +26,6 @@ PEERDIR(
     ydb/core/docapi
     ydb/core/engine
     ydb/core/formats
-    ydb/core/grpc_services
     ydb/core/io_formats/arrow
     ydb/core/protos
     ydb/core/scheme
@@ -50,6 +47,10 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE(
+    upload_rows
+)
 
 RECURSE_FOR_TESTS(
     ut_base_tenant

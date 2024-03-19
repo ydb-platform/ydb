@@ -885,7 +885,6 @@ public:
                             if (!p.Source) {
                                 return nullptr;
                             }
-
                             AddFrom(p, fromList);
                             traverseNodeStack.pop();
                         } else {
@@ -905,14 +904,19 @@ public:
                                 return nullptr;
                             }
 
-                            if (ListLength(join->usingClause) > 0) {
-                                AddError("JoinExpr: unsupported using");
-                                return nullptr;
-                            }
-
                             if (!top.second) {
-                                traverseNodeStack.push({ join->rarg, false });
-                                traverseNodeStack.push({ join->larg, false });
+                                if (NodeTag(join->rarg) != T_JoinExpr) {
+                                    traverseNodeStack.push({ join->rarg, false });
+                                }
+                                if (NodeTag(join->larg) != T_JoinExpr) {
+                                    traverseNodeStack.push({ join->larg, false });
+                                }
+                                if (NodeTag(join->rarg) == T_JoinExpr) {
+                                    traverseNodeStack.push({ join->rarg, false });
+                                }
+                                if (NodeTag(join->larg) == T_JoinExpr) {
+                                    traverseNodeStack.push({ join->larg, false });
+                                }
                                 top.second = true;
                             } else {
                                 TString op;
@@ -930,26 +934,48 @@ public:
                                     return nullptr;
                                 }
 
-                                if (op != "cross" && !join->quals) {
-                                    AddError("join_expr: expected quals for non-cross join");
-                                    return nullptr;
-                                }
-
-                                if (op == "cross") {
-                                    oneJoinGroup.push_back(QL(QA(op)));
+                                if (ListLength(join->usingClause) > 0) {
+                                    if (op == "cross") {
+                                        op = "inner";
+                                    }
+                                    auto len = ListLength(join->usingClause);
+                                    TVector<TAstNode*> fields(len);
+                                    THashSet<TString> present;
+                                    for (decltype(len) i = 0; i < len; ++i) {
+                                        auto node = ListNodeNth(join->usingClause, i);
+                                        if (NodeTag(node) != T_String) {
+                                            AddError("JoinExpr: unexpected non-string constant");
+                                            return nullptr;
+                                        }
+                                        if (present.contains(StrVal(node))) {
+                                            AddError(TStringBuilder() << "USING clause: duplicated column " << StrVal(node));
+                                            return nullptr;
+                                        }
+                                        fields[i] = QAX(StrVal(node));
+                                    }
+                                    oneJoinGroup.push_back(QL(QA(op), QA("using"), QVL(fields)));
                                 } else {
-                                    TExprSettings settings;
-                                    settings.AllowColumns = true;
-                                    settings.Scope = "JOIN ON";
-                                    auto quals = ParseExpr(join->quals, settings);
-                                    if (!quals) {
+
+                                    if (op != "cross" && !join->quals) {
+                                        AddError("join_expr: expected quals for non-cross join");
                                         return nullptr;
                                     }
 
-                                    auto lambda = L(A("lambda"), QL(), quals);
-                                    oneJoinGroup.push_back(QL(QA(op), L(A("PgWhere"), L(A("Void")), lambda)));
-                                }
+                                    if (op == "cross") {
+                                        oneJoinGroup.push_back(QL(QA(op)));
+                                    } else {
+                                        TExprSettings settings;
+                                        settings.AllowColumns = true;
+                                        settings.Scope = "JOIN ON";
+                                        auto quals = ParseExpr(join->quals, settings);
+                                        if (!quals) {
+                                            return nullptr;
+                                        }
 
+                                        auto lambda = L(A("lambda"), QL(), quals);
+                                        oneJoinGroup.push_back(QL(QA(op), L(A("PgWhere"), L(A("Void")), lambda)));
+                                    }
+                                }
                                 traverseNodeStack.pop();
                             }
                         }

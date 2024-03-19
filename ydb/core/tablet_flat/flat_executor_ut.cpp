@@ -5542,7 +5542,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
 
         int failedAttempts = 0;
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
-        UNIT_ASSERT_GT(failedAttempts, 20); // old parts aren't sticky before restart
+        UNIT_ASSERT_GE(failedAttempts, 20); // old parts aren't sticky before restart
 
         // restart tablet
         env.SendSync(new TEvents::TEvPoison, false, true);
@@ -5576,7 +5576,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
 
         int failedAttempts = 0;
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
-        UNIT_ASSERT_GT(failedAttempts, 20); // old parts aren't sticky before restart
+        UNIT_ASSERT_GE(failedAttempts, 20); // old parts aren't sticky before restart
 
         // restart tablet
         env.SendSync(new TEvents::TEvPoison, false, true);

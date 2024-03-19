@@ -14,10 +14,11 @@ void TGCTask::DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, T
     for (auto&& i : KeepsToErase) {
         dbBlobs.EraseBlobToKeep(i);
     }
-    Manager->OnGCFinished(CollectGenStepInFlight, dbBlobs);
+    Manager->OnGCFinishedOnExecute(CollectGenStepInFlight, dbBlobs);
 }
 
 bool TGCTask::DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, const std::shared_ptr<IBlobsGCAction>& /*taskAction*/) {
+    Manager->OnGCFinishedOnComplete(CollectGenStepInFlight);
     return true;
 }
 

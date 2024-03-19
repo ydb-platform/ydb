@@ -268,7 +268,7 @@ struct THiveSharedSettings {
 
 struct TDrainSettings {
     bool Persist = true;
-    bool KeepDown = false;
+    bool KeepDown = true;
     ui32 DrainInFlight = 0;
 };
 

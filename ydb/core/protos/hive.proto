@@ -355,7 +355,7 @@ message TTabletOwner {
 message TEvDrainNode {
     optional uint32 NodeID = 1;
     optional bool Persist = 3 [default = true];
-    optional bool KeepDown = 4 [default = false];
+    optional bool KeepDown = 4 [default = true];
     optional uint32 DrainInFlight = 5;
 }
 

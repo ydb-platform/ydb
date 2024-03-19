@@ -1,3 +1,4 @@
+import datetime
 import logging
 import time
 import random
@@ -70,6 +71,9 @@ class ScaleController:
 
     resource_exhausted_pause = 300
 
+    # 10 minute limit for start VM and register github runner
+    stale_runner_threshold = datetime.timedelta(seconds=600)
+
     def __init__(self, cfg, ch: Clickhouse, gh: Github, yc: YandexCloudProvider, exit_event: Event):
         self.logger = logging.getLogger(__name__)
         self.cfg = cfg
@@ -85,8 +89,8 @@ class ScaleController:
     def tick(self):
         queues = get_jobs_summary(self.ch)
 
-        vm_count, vm_provisioning = self.yc.get_vm_count(self.prefix)
-
+        runner_vms, vm_count, vm_provisioning = self.yc.get_vm_list(self.prefix)
+        self.logger.info("runner_vms: %s", runner_vms)
         self.logger.info("vms: %s/%s (total/provisioning)", vm_count, vm_provisioning)
 
         do_check_idle_runners = True
@@ -118,9 +122,9 @@ class ScaleController:
 
         # remove idle github runners one per tick
         if do_check_idle_runners:
-            self.check_idle_runners()
+            self.check_idle_runners(runner_vms)
 
-    def check_idle_runners(self):
+    def check_idle_runners(self, runner_vms):
         # FIXME: too complex
         self.logger.info("check for idle and new runners")
 
@@ -137,9 +141,13 @@ class ScaleController:
             for runner_id in fresh_runners.items:
                 fresh_list[runner_id] = preset
 
+        runner_names = set()
+
         for runner in self.gh.get_runners():
             if not runner.has_tag(self.prefix):
                 continue
+
+            runner_names.add(runner.name)
 
             if runner.name in wait_list:
                 preset = wait_list[runner.name]
@@ -160,6 +168,14 @@ class ScaleController:
                     "remove offline GH runner: #%s %s (%s)", runner.id, runner.name, ", ".join(runner.tags)
                 )
                 self.delete_runner(runner)
+
+        stale_runners = set(runner_vms.keys()) - runner_names
+
+        for runner_name in stale_runners:
+            instance_id, created_at = runner_vms[runner_name]
+            if datetime.datetime.now() - created_at > self.stale_runner_threshold:
+                self.logger.warning("remove stale VM %s (%s), created_at=%s", runner_name, instance_id, created_at)
+                # self.delete_vm(instance_id)
 
     def start_runner(self, preset_name: str):
         runner_name = f"{self.prefix}-{generate_short_id()}"
@@ -191,14 +207,16 @@ class ScaleController:
         self.logger.info("remove runner %s from github", runner.full_name)
         self.gh.delete_runner(runner.id)
         self.logger.info("stop runner %s VM %s", runner.full_name, runner.instance_id)
+        self.delete_vm(runner.instance_id)
 
+    def delete_vm(self, instance_id):
         try:
-            self.yc.delete_vm(runner.instance_id, self.prefix)
+            self.yc.delete_vm(instance_id, self.prefix)
         except grpc.RpcError as rpc_error:
             # noinspection PyUnresolvedReferences
             error_code = rpc_error.code()
             if error_code == grpc.StatusCode.NOT_FOUND:
-                self.logger.info("vm %s has been already deleted (%s)", runner.instance_id, rpc_error)
+                self.logger.info("vm %s has been already deleted (%s)", instance_id, rpc_error)
             elif error_code == grpc.StatusCode.RESOURCE_EXHAUSTED:
                 self.logger.error("RESOURCE_EXHAUSTED while deleting VMs")
 

@@ -64,21 +64,27 @@ class YandexCloudProvider:
     def get_vm(self, instance_id):
         return self.sdk.client(InstanceServiceStub).Get(GetInstanceRequest(instance_id=instance_id))
 
-    def get_vm_count(self, prefix):
+    def get_vm_list(self, prefix):
         request = ListInstancesRequest(folder_id=self.cfg.yc_folder_id, page_size=1000)
         cnt = cnt_provisioning = 0
+        names = dict()
+
         while 1:
             response = self.sdk.client(InstanceServiceStub).List(request)
             for instance in response.instances:
                 if prefix in instance.labels:
+                    cnt += 1
+
                     if instance.status == Instance.Status.PROVISIONING:
                         cnt_provisioning += 1
-                    cnt += 1
+                    elif instance.status != Instance.Status.DELETING:
+                        names[instance.labels[prefix]] = (instance.id, instance.created_at.ToDatetime())
+
             request.page_token = response.next_page_token
             if not request.page_token:
                 break
 
-        return cnt, cnt_provisioning
+        return names, cnt, cnt_provisioning
 
     def start_vm(self, zone_id: str, subnet_id: str, instance_name: str, preset_name: str, user_data, vm_labels):
         metadata = {

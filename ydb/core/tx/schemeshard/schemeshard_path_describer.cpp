@@ -1158,6 +1158,7 @@ void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme
     }
 
     entry->SetIsBackup(tableInfo->IsBackup);
+    entry->SetTemporary(tableInfo->IsTemporary);
 }
 
 void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name,

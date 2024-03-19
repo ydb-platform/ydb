@@ -71,7 +71,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         return nullptr;
     }
 
-    if (!hasSchemaChanges && !copyAlter.HasPartitionConfig() && !copyAlter.HasTTLSettings()) {
+    if (!hasSchemaChanges && !copyAlter.HasPartitionConfig() && !copyAlter.HasTTLSettings() && !copyAlter.HasTemporary()) {
         errStr = Sprintf("No changes specified");
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;

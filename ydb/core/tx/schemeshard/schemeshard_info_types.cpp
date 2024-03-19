@@ -284,6 +284,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
     alterData->IsBackup = op.GetIsBackup();
 
+    if (op.HasTemporary()) {
+        alterData->TableDescriptionFull->SetTemporary(op.GetTemporary());
+    }
+
     if (source && op.KeyColumnNamesSize() == 0)
         return alterData;
 
@@ -1317,6 +1321,9 @@ void TTableInfo::FinishAlter() {
     if (AlterData->TableDescriptionFull.Defined() && AlterData->TableDescriptionFull->HasReplicationConfig()) {
         MutableReplicationConfig().Swap(AlterData->TableDescriptionFull->MutableReplicationConfig());
     }
+
+    IsTemporary = AlterData->TableDescriptionFull->GetTemporary();
+    TableDescription.SetTemporary(IsTemporary);
 
     // Force FillDescription to regenerate TableDescription
     ResetDescriptionCache();

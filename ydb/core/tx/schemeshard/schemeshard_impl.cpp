@@ -6405,7 +6405,9 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
     }
 
     proto->MutablePartitionConfig()->CopyFrom(alterData->PartitionConfigCompatible());
-    proto->SetTemporary(alterData->TableDescription().GetTemporary());
+    if (alterData->TableDescription().HasTemporary()) {
+        proto->SetTemporary(alterData->TableDescription().GetTemporary());
+    }
 
     if (auto* patch = tableInfo->PerShardPartitionConfig.FindPtr(shardIdx)) {
         ApplyPartitionConfigStoragePatch(

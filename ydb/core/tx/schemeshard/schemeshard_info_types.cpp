@@ -1322,8 +1322,10 @@ void TTableInfo::FinishAlter() {
         MutableReplicationConfig().Swap(AlterData->TableDescriptionFull->MutableReplicationConfig());
     }
 
-    IsTemporary = AlterData->TableDescriptionFull->GetTemporary();
-    TableDescription.SetTemporary(IsTemporary);
+    if (AlterData->TableDescriptionFull.Defined() && AlterData->TableDescriptionFull->HasTemporary()) {
+        IsTemporary = AlterData->TableDescriptionFull->GetTemporary();
+        TableDescription.SetTemporary(IsTemporary);
+    }
 
     // Force FillDescription to regenerate TableDescription
     ResetDescriptionCache();

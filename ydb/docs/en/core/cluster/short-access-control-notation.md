@@ -37,7 +37,7 @@ For example, `+R:subject` — permission to read.
 If no other option is available, the list of permissions will be provided in parentheses through the vertical bar `|` symbol.
 For example, `+(SR|UR):subject` — permission for reading and updating table records.
 
-Permission	Description
+| Permission | Description
 |:----:|:----|
 | `SR` | (select row) reading from the table
 | `UR` | (update row) updating table records
@@ -59,7 +59,7 @@ Permission	Description
 ## Inheritance Types {#inheritance-types}
 One or more inheritance flags can be used to describe the passing of inheritance to child objects.
 
-Flag	Description
+| Flag	| Description
 |:----:|:----|
 | `-`	| without inheritance
 | `O`	| this entry will be inherited by child objects

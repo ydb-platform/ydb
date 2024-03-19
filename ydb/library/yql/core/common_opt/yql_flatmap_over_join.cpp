@@ -1,4 +1,5 @@
 #include "yql_flatmap_over_join.h"
+#include "ydb/library/yql/providers/common/provider/yql_provider.h"
 #include "yql_co.h"
 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
@@ -123,6 +124,75 @@ bool IsRequiredAndFilteredSide(const TExprNode::TPtr& joinTree, const TJoinLabel
     return isFiltered.Defined() && *isFiltered;
 }
 
+[[maybe_unused]] TExprNode::TPtr ApplyJoinPredicate(const TExprNode::TPtr& predicate, const TExprNode::TPtr& filterInput, 
+    const TExprNode::TPtr& args, const TJoinLabels& labels, const THashMap<ui32, THashMap<TString, TString>>& aliasedKeys,
+    const TMap<TStringBuf, TVector<TStringBuf>>& renameMap, bool onlyKeys, 
+    ui32 firstCandidate, ui32 inputIndex, bool ordered, bool subsituteWithNulls, TExprContext& ctx
+) {
+    return ctx.Builder(predicate->Pos())
+    .Callable(ordered ? "OrderedFilter" : "Filter")
+        .Add(0, filterInput)
+        .Lambda(1)
+            .Param("row")
+            .ApplyPartial(args, predicate).With(0)
+                .Callable("AsStruct")
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        ui32 index = 0;
+                        const auto& label = labels.Inputs[inputIndex];
+                        for (auto column : label.EnumerateAllColumns()) {
+                            TVector<TString> targetColumns;
+                            targetColumns.push_back(column);
+                            if (onlyKeys && inputIndex != firstCandidate) {
+                                if (auto aliasedKey = aliasedKeys.at(inputIndex).FindPtr(column)) {
+                                    targetColumns[0] = *aliasedKey;
+                                } else {
+                                    continue;
+                                }
+                            }
+
+                            TStringBuf part1;
+                            TStringBuf part2;
+                            SplitTableName(column, part1, part2);
+                            auto memberName = label.MemberName(part1, part2);
+
+                            if (auto renamed = renameMap.FindPtr(targetColumns[0])) {
+                                if (renamed->empty()) {
+                                    continue;
+                                }
+
+                                targetColumns.clear();
+                                for (auto& r : *renamed) {
+                                    targetColumns.push_back(TString(r));
+                                }
+                            }
+
+                            for (auto targetColumn : targetColumns) {
+                                if (subsituteWithNulls) {
+                                    parent.List(index++)
+                                            .Atom(0, targetColumn)
+                                            .Callable(1, "Null")
+                                        .Seal();
+                                } else {
+                                    parent.List(index++)
+                                            .Atom(0, targetColumn)
+                                            .Callable(1, "Member")
+                                                .Arg(0, "row")
+                                                .Atom(1, memberName)
+                                            .Seal()
+                                        .Seal();
+                                }
+                            }
+                        }
+
+                        return parent;
+                    })
+                .Seal()
+            .Done().Seal()
+        .Seal()
+    .Seal()
+    .Build();
+}
+
 TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(TExprNode::TPtr equiJoin, TExprNode::TPtr predicate,
     const TSet<TStringBuf>& usedFields, TExprNode::TPtr args, const TJoinLabels& labels,
     ui32 firstCandidate, const TMap<TStringBuf, TVector<TStringBuf>>& renameMap, bool ordered, TExprContext& ctx)
@@ -207,68 +277,251 @@ TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(TExprNode::TPtr equiJoi
         }
 
         // then apply predicate
-        newInput = ctx.Builder(predicate->Pos())
-            .Callable(ordered ? "OrderedFilter" : "Filter")
-                .Add(0, newInput)
-                .Lambda(1)
-                    .Param("row")
-                    .ApplyPartial(args, predicate).With(0)
-                        .Callable("AsStruct")
-                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                                ui32 index = 0;
-                                const auto& label = labels.Inputs[inputIndex];
-                                for (auto column : label.EnumerateAllColumns()) {
-                                    TVector<TString> targetColumns;
-                                    targetColumns.push_back(column);
-                                    if (onlyKeys && inputIndex != firstCandidate) {
-                                        if (auto aliasedKey = aliasedKeys[inputIndex].FindPtr(column)) {
-                                            targetColumns[0] = *aliasedKey;
-                                        } else {
-                                            continue;
-                                        }
-                                    }
-
-                                    TStringBuf part1;
-                                    TStringBuf part2;
-                                    SplitTableName(column, part1, part2);
-                                    auto memberName = label.MemberName(part1, part2);
-
-                                    if (auto renamed = renameMap.FindPtr(targetColumns[0])) {
-                                        if (renamed->empty()) {
-                                            continue;
-                                        }
-
-                                        targetColumns.clear();
-                                        for (auto& r : *renamed) {
-                                            targetColumns.push_back(TString(r));
-                                        }
-                                    }
-
-                                    for (auto targetColumn : targetColumns) {
-                                        parent.List(index++)
-                                                .Atom(0, targetColumn)
-                                                .Callable(1, "Member")
-                                                    .Arg(0, "row")
-                                                    .Atom(1, memberName)
-                                                .Seal()
-                                            .Seal();
-                                    }
-                                }
-
-                                return parent;
-                            })
-                        .Seal()
-                    .Done().Seal()
-                .Seal()
-            .Seal()
-            .Build();
-
+        newInput = ApplyJoinPredicate(
+            predicate, /*filterInput=*/newInput, args, labels, aliasedKeys, renameMap, onlyKeys,
+            firstCandidate, inputIndex, ordered, /*subsituteWithNulls=*/false, ctx
+        );
+        
         // then return reassembled join
         ret->ChildRef(inputIndex) = ctx.ShallowCopy(*ret->Child(inputIndex));
         ret->Child(inputIndex)->ChildRef(0) = newInput;
     }
 
     return ret;
+}
+
+void CountLabelsInputUsage(TExprNode::TPtr joinTree, THashMap<TString, int>& counters) {
+    if (joinTree->IsAtom()) {
+        counters[joinTree->Content()]++;
+    } else {
+        CountLabelsInputUsage(joinTree->ChildPtr(1), counters);
+        CountLabelsInputUsage(joinTree->ChildPtr(2), counters);
+    }
+}
+
+[[maybe_unused]] TExprNode::TPtr RightSidePredicatePushdownOverLeftJoin(TExprNode::TPtr equiJoin, TExprNode::TPtr predicate,
+    const TSet<TStringBuf>& usedFields, TExprNode::TPtr args, const TJoinLabels& labels,
+    ui32 inputIndex, const TMap<TStringBuf, TVector<TStringBuf>>& renameMap, bool ordered, TExprContext& ctx,
+    const TPositionHandle& pos)
+{
+    auto inputsCount = equiJoin->ChildrenSize() - 2;
+    auto joinTree = equiJoin->Child(inputsCount);
+    
+    if (!IsRightSideForLeftJoin(joinTree, labels, inputIndex)) {
+        return equiJoin;
+    }
+
+    YQL_ENSURE(args->ChildrenSize() == 1);
+    YQL_ENSURE(args->Head().IsArgument());
+    if (HasDependsOn(predicate, args->HeadPtr())) {
+        return equiJoin;
+    }
+
+    //idk what IsStrict means and do not know whether my side is Filtered or not. Skip for now.
+    const bool isStrict = IsStrict(predicate);
+    if (!isStrict/* && IsRequiredAndFilteredSide(joinTree, labels, firstCandidate)*/) {
+        return equiJoin;
+    }
+
+    TMap<TString, TSet<TString>> aliases;
+    GatherKeyAliases(joinTree, aliases, labels);
+    MakeTransitiveClosure(aliases);
+
+    // check whether some used fields are not aliased
+    bool onlyKeys = true;
+    for (auto& x : usedFields) {
+        if (!aliases.contains(TString(x))) {
+            onlyKeys = false;
+            break;
+        }
+    }
+
+    if (onlyKeys) {
+        return equiJoin;
+    }
+
+    THashMap<TString, TExprNode::TPtr> equiJoinLabels;  
+    for (size_t i = 0; i < equiJoin->ChildrenSize() - 2; i++) {
+        auto label = equiJoin->Child(i);
+        equiJoinLabels.emplace(label->Child(1)->Content(), label->ChildPtr(0));
+    }
+
+    THashMap<TString, int> joinLabelCounters;
+    CountLabelsInputUsage(joinTree, joinLabelCounters);
+
+    auto leftJoinTreePtr = IsRightSideForLeftJoin(joinTree, labels, inputIndex);
+    YQL_ENSURE(leftJoinTreePtr);
+    joinLabelCounters[leftJoinTreePtr->Child(1)->Content()]--;
+    joinLabelCounters[leftJoinTreePtr->Child(2)->Content()]--;
+
+    auto leftJoinTree = ctx.ShallowCopy(*leftJoinTreePtr);
+
+    auto leftJoinSettings = ctx.ShallowCopy(*equiJoin->ChildPtr(equiJoin->ChildrenSize() - 1));
+
+    auto innerJoinTree = ctx.ShallowCopy(*leftJoinTree);
+    innerJoinTree->ChildRef(0) = ctx.Builder(innerJoinTree->Pos())
+        .Atom("Inner")
+    .Build();
+
+    auto leftOnlyJoinTree = ctx.ShallowCopy(*leftJoinTree);
+    leftOnlyJoinTree->ChildRef(0) = ctx.Builder(leftOnlyJoinTree->Pos())
+        .Atom("LeftOnly")
+    .Build();
+
+    THashMap<TString, int> leftSideJoinLabels;
+    CountLabelsInputUsage(leftJoinTree->Child(1), leftSideJoinLabels);
+
+    YQL_ENSURE(leftJoinTree->Child(2)->IsAtom());
+    auto rightSideInput = equiJoinLabels.at(leftJoinTree->Child(2)->Content());
+
+    // skip null key columns
+    TSet<TString> optionalKeyColumns;
+    GatherOptionalKeyColumns(joinTree, labels, inputIndex, optionalKeyColumns);
+    rightSideInput = FilterOutNullJoinColumns(predicate->Pos(),
+        rightSideInput, labels.Inputs[inputIndex], optionalKeyColumns, ctx);
+
+    // then apply predicate
+    auto filteredInput = ApplyJoinPredicate(
+        predicate, /*filterInput=*/rightSideInput, args, labels, {}, renameMap, onlyKeys,
+        inputIndex, inputIndex, ordered, /*subsituteWithNulls=*/false, ctx
+    );
+
+    // then create unionall of two joins.
+    //firstly, join same labels with inner join:
+
+    size_t i = 0;
+    auto innerJoin = ctx.Builder(pos)
+        .Callable("EquiJoin")
+            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                for (const auto& [labelName, _] : leftSideJoinLabels) {
+                    parent.List(i++)
+                        .Add(0, ctx.ShallowCopy(*equiJoinLabels.at(labelName)))
+                        .Atom(1, labelName)
+                    .Seal();
+                }
+                return parent;
+            })
+            .List(i++)
+                .Add(0, filteredInput)
+                .Atom(1, innerJoinTree->ChildRef(2)->Content())
+            .Seal()
+            .Add(i++, innerJoinTree)
+            .Add(i++, leftJoinSettings)
+        .Seal()
+    .Build();
+
+    //then, do leftOnly join:
+
+    i = 0;
+    auto leftOnlyJoin = ctx.Builder(pos)
+        .Callable("EquiJoin")
+            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                for (const auto& [labelName, _] : leftSideJoinLabels) {
+                    parent.List(i++)
+                        .Add(0, ctx.ShallowCopy(*equiJoinLabels.at(labelName)))
+                        .Atom(1, labelName)
+                    .Seal();
+                }
+                return parent;
+            })
+            .List(i++)
+                .Add(0, rightSideInput)
+                .Atom(1, leftOnlyJoinTree->ChildRef(2)->Content())
+            .Seal()
+            .Add(i++, leftOnlyJoinTree)
+            .Add(i++, leftJoinSettings)
+        .Seal()
+    .Build();
+
+    //then, apply predicate for left only:
+
+    auto nullPredicate = ctx.ShallowCopy(*predicate);
+    auto nullPredicateFilter = ApplyJoinPredicate(
+        nullPredicate, /*filterInput=*/leftOnlyJoin, args, labels, {}, renameMap, onlyKeys,
+        inputIndex, inputIndex, ordered, /*subsituteWithNulls=*/true, ctx
+    );
+
+    //then unite the results;
+
+    auto unionAll = ctx.Builder(pos)
+        .Callable("UnionAll")
+            .Add(0, innerJoin)
+            .Add(1, nullPredicateFilter)
+        .Seal()
+        .Build();
+
+    if (leftJoinTreePtr == equiJoin->ChildPtr(equiJoin->ChildrenSize() - 2)) {
+        return unionAll;
+    }
+
+    auto newJoinLabel = ctx.Builder(pos)
+        .Atom("__yql_right_side_pushdown_input_label")
+    .Build();
+
+    auto newJoinTree = ctx.ReplaceNode(std::move(joinTree), *leftJoinTreePtr, newJoinLabel);
+    
+    TVector <TString> joinColumns;
+    for (const auto& [labelName, _] : leftSideJoinLabels) {
+        auto tableName = labels.FindInputIndex(labelName);
+        YQL_ENSURE(tableName);
+        for (auto column : labels.Inputs[*tableName].EnumerateAllColumns()) {
+            joinColumns.emplace_back(std::move(column));
+        }
+    }    
+    auto rightSideTableName = labels.FindInputIndex(innerJoinTree->Child(2)->Content());
+    YQL_ENSURE(rightSideTableName);
+    for (auto column : labels.Inputs[*rightSideTableName].EnumerateAllColumns()) {
+        joinColumns.emplace_back(std::move(column));
+    }
+
+
+    i = 0;
+    auto newJoinSettings = ctx.Builder(pos)
+        .List()
+            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                for (const auto& child : equiJoin->TailPtr()->ChildrenList()) {
+                    parent.Add(i++, ctx.ShallowCopy(*child));
+                }
+                return parent;
+            })
+            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                for (const auto& column : joinColumns) {
+                    parent.List(i++)
+                        .Atom(0, "rename")
+                        .Atom(1, "__yql_right_side_pushdown_input_label." + column)
+                        .Atom(2, column)
+                    .Seal();
+                }
+                return parent;
+            })
+        .Seal()
+    .Build();
+
+    i = 0;
+    auto newEquiJoin = ctx.Builder(pos)
+        .Callable("EquiJoin")
+        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+            for (const auto& label : joinLabelCounters) {
+                if (label.second > 0) {
+                    auto equiJoinInput = ctx.ShallowCopy(*equiJoinLabels.at(TString(label.first)));
+                    parent.List(i++)
+                        .Add(0, equiJoinInput)
+                        .Atom(1, label.first)
+                    .Seal();
+                }
+            }
+            return parent;
+        })
+        .List(i++)
+            .Add(0, unionAll)
+            .Add(1, newJoinLabel)
+        .Seal()
+        .Add(i++, newJoinTree)
+        .Add(i++, newJoinSettings)
+        .Seal()
+    .Build();
+
+    return newEquiJoin;
 }
 
 class TJoinTreeRebuilder {
@@ -581,7 +834,13 @@ TExprNode::TPtr DecayCrossJoinIntoInner(TExprNode::TPtr equiJoin, const TExprNod
 
 } // namespace
 
-TExprBase FlatMapOverEquiJoin(const TCoFlatMapBase& node, TExprContext& ctx, const TParentsMap& parentsMap, bool multiUsage) {
+TExprBase FlatMapOverEquiJoin(
+    const TCoFlatMapBase& node, 
+    TExprContext& ctx, 
+    const TParentsMap& parentsMap, 
+    bool multiUsage, 
+    bool rightSidePushdownForLeftJoin
+) {
     auto equiJoin = node.Input();
     auto structType = equiJoin.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()
         ->Cast<TStructExprType>();
@@ -737,6 +996,15 @@ TExprBase FlatMapOverEquiJoin(const TCoFlatMapBase& node, TExprContext& ctx, con
                     ret = newJoin;
                     extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, isPg, ctx);
                     break;
+                } else if (rightSidePushdownForLeftJoin) {
+                    auto twoJoins = RightSidePredicatePushdownOverLeftJoin(equiJoin.Ptr(), andTerm, usedFields,
+                        node.Lambda().Args().Ptr(), labels, *inputs.begin(), renameMap, ordered, ctx, node.Pos());
+                    if (twoJoins != equiJoin.Ptr()) {
+                        YQL_CLOG(DEBUG, Core) << "RightSidePredicatePushdownOverLeftJoin";
+                        ret = twoJoins;
+                        extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, isPg, ctx);
+                        break;
+                    }
                 }
             }
 

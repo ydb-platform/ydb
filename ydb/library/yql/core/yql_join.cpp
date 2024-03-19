@@ -1152,12 +1152,43 @@ std::pair<bool, bool> IsRequiredSide(const TExprNode::TPtr& joinTree, const TJoi
         else {
             auto table = right->Content();
             if (*labels.FindInputIndex(table) == inputIndex) {
-                return{ true, joinType == "Inner" || joinType == "RightSemi" };
+                return{ true, joinType == "Inner" || joinType == "RightSemi"};
             }
         }
     }
 
     return{ false, false };
+}
+
+// returns the path to join child
+TExprNode::TPtr IsRightSideForLeftJoin(const TExprNode::TPtr& joinTree, const TJoinLabels& labels, ui32 inputIndex) {
+    auto joinType = joinTree->Child(0)->Content();
+    auto left = joinTree->ChildPtr(1);
+    auto right = joinTree->ChildPtr(2);
+    if (joinType == "Inner" || joinType == "Left" || joinType == "LeftOnly" || joinType == "LeftSemi" || joinType == "RightSemi" || joinType == "Cross") {
+        if (!left->IsAtom()) {
+            auto x = IsRightSideForLeftJoin(left, labels, inputIndex);
+            if (x) {
+                return x;
+            }
+        }
+    }
+
+    if (joinType == "Inner" || joinType == "Right" || joinType == "RightOnly" || joinType == "RightSemi" || joinType == "LeftSemi" || joinType == "Cross" || joinType == "Left") {
+        if (!right->IsAtom()) {
+            auto x = IsRightSideForLeftJoin(right, labels, inputIndex);
+            if (x) {
+                return x;
+            }
+        } else if (joinType == "Left") {
+            auto table = right->Content();
+            if (*labels.FindInputIndex(table) == inputIndex) {
+                return joinTree;
+            }
+        }
+    }
+
+    return nullptr;
 }
 
 TMaybe<bool> IsFilteredSide(const TExprNode::TPtr& joinTree, const TJoinLabels& labels, ui32 inputIndex) {

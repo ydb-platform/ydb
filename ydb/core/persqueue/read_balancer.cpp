@@ -1,4 +1,5 @@
 #include "read_balancer.h"
+#include "read_balancer_schema.h"
 
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/counters_pq.pb.h>
@@ -13,6 +14,7 @@ namespace NPQ {
 
 
 using namespace NTabletFlatExecutor;
+using namespace NPQRBPrivate;
 
 static constexpr TDuration ACL_SUCCESS_RETRY_TIMEOUT = TDuration::Seconds(30);
 static constexpr TDuration ACL_ERROR_RETRY_TIMEOUT = TDuration::Seconds(5);
@@ -1767,8 +1769,8 @@ struct TTxWriteSubDomainPathId : public ITransaction {
 
     bool Execute(TTransactionContext& txc, const TActorContext&) {
         NIceDb::TNiceDb db(txc.DB);
-        db.Table<TPersQueueReadBalancer::Schema::Data>().Key(1).Update(
-            NIceDb::TUpdate<TPersQueueReadBalancer::Schema::Data::SubDomainPathId>(Self->SubDomainPathId->LocalPathId));
+        db.Table<Schema::Data>().Key(1).Update(
+            NIceDb::TUpdate<Schema::Data::SubDomainPathId>(Self->SubDomainPathId->LocalPathId));
         return true;
     }
 

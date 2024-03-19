@@ -606,9 +606,23 @@ public:
             return false;
         }
 
-        auto call = dynamic_cast<TCallNode*>(Args[0].Get());
-        if (!call || call->GetOpName() != "PgType") {
-            ctx.Error(Args[0]->GetPos()) << "Expecting pg type name";
+        ui32 oid;
+        if (Args[0]->IsIntegerLiteral() && TryFromString<ui32>(Args[0]->GetLiteralValue(), oid)) {
+            if (!NPg::HasType(oid)) {
+                ctx.Error(Args[0]->GetPos()) << "Unknown pg type oid: " << oid;
+                return false;
+            } else {
+                Args[0] = BuildQuotedAtom(Args[0]->GetPos(), NPg::LookupType(oid).Name);
+            }
+        } else if (Args[0]->IsLiteral() && Args[0]->GetLiteralType() == "String") {
+            if (!NPg::HasType(Args[0]->GetLiteralValue())) {
+                ctx.Error(Args[0]->GetPos()) << "Unknown pg type: " << Args[0]->GetLiteralValue();
+                return false;
+            } else {
+                Args[0] = BuildQuotedAtom(Args[0]->GetPos(), Args[0]->GetLiteralValue());
+            }
+        } else {
+            ctx.Error(Args[0]->GetPos()) << "Expecting string literal with pg type name or integer literal with pg type oid";
             return false;
         }
 
@@ -618,12 +632,6 @@ public:
 
     TNodePtr DoClone() const final {
         return new TYqlPgType(Pos, CloneContainer(Args));
-    }
-
-    TAstNode* Translate(TContext& ctx) const final {
-        // argument is already a proper PgType callable - here we just return argument
-        YQL_ENSURE(Nodes.size() == 2);
-        return Nodes.back()->Translate(ctx);
     }
 };
 

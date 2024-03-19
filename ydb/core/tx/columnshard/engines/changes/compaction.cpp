@@ -68,8 +68,8 @@ void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, T
     NeedGranuleStatusProvide = false;
 }
 
-TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TSplitSettings& splitSettings, std::shared_ptr<TGranuleMeta> granule, const std::vector<std::shared_ptr<TPortionInfo>>& portions, const TSaverContext& saverContext)
-    : TBase(splitSettings, saverContext, StaticTypeName())
+TCompactColumnEngineChanges::TCompactColumnEngineChanges(std::shared_ptr<TGranuleMeta> granule, const std::vector<std::shared_ptr<TPortionInfo>>& portions, const TSaverContext& saverContext)
+    : TBase(saverContext, StaticTypeName())
     , GranuleMeta(granule) {
     Y_ABORT_UNLESS(GranuleMeta);
 

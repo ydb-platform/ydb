@@ -36,8 +36,8 @@ protected:
 public:
     THashMap<ui64, std::vector<NIndexedReader::TSortableBatchPosition>> PathToGranule; // pathId -> positions (sorted by pk)
 public:
-    TInsertColumnEngineChanges(std::vector<NOlap::TInsertedData>&& dataToIndex, const TSplitSettings& splitSettings, const TSaverContext& saverContext)
-        : TBase(splitSettings, saverContext, StaticTypeName())
+    TInsertColumnEngineChanges(std::vector<NOlap::TInsertedData>&& dataToIndex, const TSaverContext& saverContext)
+        : TBase(saverContext, StaticTypeName())
         , DataToIndex(std::move(dataToIndex))
     {
     }

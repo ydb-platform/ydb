@@ -724,7 +724,7 @@ private:
     TAsyncReadOperation AsyncReadOperation = std::nullopt;
     static constexpr size_t SpilledBucketCount = 128;
     std::deque<TSpilledBucket> SpilledBuckets;
-    EFetchResult InputDataFetchResult;
+    EFetchResult InputDataFetchResult = EFetchResult::One;
     // size_t CurrentAsyncOperationBucketId;
     ui64 BufferForUsedInputItemsBucketId;
     TUnboxedValueVector BufferForUsedInputItems;

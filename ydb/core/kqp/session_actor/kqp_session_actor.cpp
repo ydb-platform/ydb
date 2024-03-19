@@ -1585,6 +1585,10 @@ public:
 
         FillStats(record);
 
+        if (!QueryState->GetCommandTagName()) {
+            response->SetCommandTag(*QueryState->GetCommandTagName());
+        }
+
         if (QueryState->TxCtx) {
             QueryState->TxCtx->OnEndQuery();
         }

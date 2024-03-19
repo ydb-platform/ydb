@@ -1,5 +1,7 @@
 LIBRARY()
 
+CXXFLAGS(-DMKQL_DISABLE_CODEGEN)
+
 PROVIDES(
     yql_pg_sql_translator
 )

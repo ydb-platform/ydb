@@ -275,6 +275,7 @@ message TQueryResponse {
     repeated Ydb.ResultSet YdbResults = 13;
     optional TTopicOperationsResponse TopicOperations = 14;
     optional string QueryDiagnostics = 15;
+    optional string CommandTag = 16;
 }
 
 message TEvQueryResponse {

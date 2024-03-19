@@ -340,7 +340,7 @@ public:
 
     void OnResult(const List* raw) {
         if (!PerStatementResult) {
-             AstParseResults[StatementId].Pool = std::make_unique<TMemoryPool>(4096);
+            AstParseResults[StatementId].Pool = std::make_unique<TMemoryPool>(4096);
             AstParseResults[StatementId].Root = ParseResult(raw);
             if (!State.AutoParamValues.empty()) {
                 AstParseResults[StatementId].PgAutoParamValues = std::move(State.AutoParamValues);
@@ -431,6 +431,9 @@ public:
     bool ParseRawStmt(const RawStmt* value) {
         AT_LOCATION_EX(value, stmt_location);
         auto node = value->stmt;
+        if (StmtParseInfo) {
+            (*StmtParseInfo)[StatementId].CommandTagName = GetCommandName(node);
+        }
         switch (NodeTag(node)) {
         case T_SelectStmt:
             return ParseSelectStmt(CAST_NODE(SelectStmt, node), false) != nullptr;

@@ -87,7 +87,6 @@ protected:
         // HACK
         TString q(ToUpperASCII(query.substr(0, 20)));
         if (q.StartsWith("BEGIN")) {
-            Response_->Tag = "BEGIN";
             if (Connection_.Transaction.Status == 'I') {
                 auto event = MakeKqpRequest();
                 NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
@@ -104,7 +103,6 @@ protected:
                 return {};
             }
         } else if (q.StartsWith("COMMIT") || q.StartsWith("END")) {
-            Response_->Tag = "COMMIT";
             if (Connection_.Transaction.Status == 'T') {
                 // in transaction
                 auto event = MakeKqpRequest();
@@ -115,7 +113,6 @@ protected:
                 return event;
             } else if (Connection_.Transaction.Status == 'E') {
                 // in error transaction
-                Response_->Tag = "ROLLBACK";
                 // ignore, reset to I
                 Connection_.Transaction.Status = 'I';
                 return {};
@@ -125,7 +122,6 @@ protected:
                 return {};
             }
         } else if (q.StartsWith("ROLLBACK")) {
-            Response_->Tag = "ROLLBACK";
             if (Connection_.Transaction.Status == 'T') {
                 // in transaction
                 auto event = MakeKqpRequest();
@@ -148,17 +144,11 @@ protected:
                 Response_->ErrorFields.push_back({'M', "Current transaction is aborted, commands ignored until end of transaction block"});
                 return {};
             }
-            if (q.StartsWith("SELECT")) {
-                Response_->Tag = "SELECT";
-            }
             auto event = MakeKqpRequest();
             NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
             request.SetAction(QueryAction_ = NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
-            if (q.StartsWith("CREATE") || q.StartsWith("ALTER") || q.StartsWith("DROP")) {
-                TStringBuf tag(q);
-                Response_->Tag = TStringBuilder() << tag.NextTok(' ') << " " << tag.NextTok(' ');
-            } else {
+            if (!q.StartsWith("CREATE") && !q.StartsWith("ALTER") && !q.StartsWith("DROP")) {
                 request.SetUsePublicResponseDataFormat(true);
                 request.MutableQueryCachePolicy()->set_keep_in_cache(true);
                 if (Connection_.Transaction.Status == 'I') {
@@ -182,6 +172,12 @@ protected:
         TBase::Send(NKqp::MakeKqpProxyID(TBase::SelfId().NodeId()), event.Release());
     }
 
+    void OnErrorTransaction() {
+        if (Response_->Tag == "COMMIT") {
+            Response_->Tag = "ROLLBACK";
+        }
+    }
+
     void UpdateConnectionWithKqpResponse(const NKikimrKqp::TEvQueryResponse& record) {
         Connection_.SessionId = record.GetResponse().GetSessionId();
 
@@ -201,6 +197,8 @@ protected:
                     Connection_.Transaction.Status = 'I';
                 }
             }
+        } else {
+            OnErrorTransaction();
         }
     }
 
@@ -280,6 +278,9 @@ protected:
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         BLOG_D("Handling TEvKqp::TEvQueryResponse " << ev->Get()->Record.ShortDebugString());
         NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record.GetRef();
+        if (record.GetResponse().HasCommandTag()) {
+            Response_->Tag = record.GetResponse().GetCommandTag();
+        }
         UpdateConnectionWithKqpResponse(record);
         try {
             if (record.HasYdbStatus()) {

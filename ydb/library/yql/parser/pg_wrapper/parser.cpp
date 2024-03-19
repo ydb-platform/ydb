@@ -39,6 +39,7 @@ extern "C" {
 #include "storage/proc.h"
 #include "miscadmin.h"
 #include "tcop/tcopprot.h"
+#include "tcop/utility.h"
 #include "thread_inits.h"
 #undef Abs
 #undef Min
@@ -224,6 +225,10 @@ TString PrintPGTree(const List* raw) {
     };
 
     return TString(str);
+}
+
+TString GetCommandName(Node* node) {
+    return CreateCommandName(node);
 }
 
 }

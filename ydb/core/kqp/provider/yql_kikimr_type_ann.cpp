@@ -887,6 +887,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
                         columnMeta.DefaultFromSequence = "_serial_column_" + columnMeta.Name;
                         columnMeta.SetDefaultFromSequence();
+                        columnMeta.NotNull = true;
                     } else if (constraint.Name().Value() == "not_null") {
                         columnMeta.NotNull = true;
                     }

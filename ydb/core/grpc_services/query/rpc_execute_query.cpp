@@ -289,7 +289,7 @@ private:
             false, // keepSession
             false, // useCancelAfter
             syntax,
-            true);
+            true); // trailing support
 
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release())) {
             NYql::TIssues issues;

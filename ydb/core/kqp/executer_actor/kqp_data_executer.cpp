@@ -278,8 +278,16 @@ public:
 
         auto resultSize = ResponseEv->GetByteSize();
         if (resultSize > (int)ReplySizeLimit) {
-            TString message = TStringBuilder() << "Query result size limit exceeded. ("
-                << resultSize << " > " << ReplySizeLimit << ")";
+            TString message;
+            if (ResponseEv->TxResults.size() == 1 && !ResponseEv->TxResults[0].QueryResultIndex.Defined()) {
+                message = TStringBuilder() << "Intermediate data materialization exceeded size limit"
+                    << " (" << resultSize << " > " << ReplySizeLimit << ")."
+                    << " This usually happens when trying to write large amounts of data or to perform lookup"
+                    << " by big collection of keys in single query. Consider using smaller batches of data.";
+            } else {
+                message = TStringBuilder() << "Query result size limit exceeded. ("
+                    << resultSize << " > " << ReplySizeLimit << ")";
+            }
 
             auto issue = YqlIssue({}, TIssuesIds::KIKIMR_RESULT_UNAVAILABLE, message);
             ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, issue);

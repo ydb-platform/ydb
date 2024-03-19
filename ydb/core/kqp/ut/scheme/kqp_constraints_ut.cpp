@@ -256,7 +256,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                                        result.GetIssues().ToString());
             CompareYson(R"(
                     [
-                        [[1];["New"]]
+                        [1;["New"]]
                     ]
                 )",
                 NYdb::FormatResultSetYson(result.GetResultSet(0)));

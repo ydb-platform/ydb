@@ -5,14 +5,6 @@
 
 constexpr bool VERBOSE = false;
 
-TString MakeData(ui32 dataSize) {
-    TString data(dataSize, '\0');
-    for (ui32 i = 0; i < dataSize; ++i) {
-        data[i] = 'A' + (i % 26);
-    }
-    return data;
-}
-
 void SetupEnv(const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<TEnvironmentSetup>& env,
         ui32& groupSize, TBlobStorageGroupType& groupType, ui32& groupId, std::vector<ui32>& pdiskLayout,
         ui32 burstThresholdNs = 0, float diskTimeAvailableScale = 1) {

@@ -925,7 +925,7 @@ TUsedColumns GatherUsedColumns(const TExprNode::TPtr& result, const TExprNode::T
             auto join = groupTuple->Child(i);
             auto joinType = join->Child(0)->Content();
             if (join->ChildrenSize() > 2) {
-                Y_ENSURE(join->Child(1)->ChildrenSize() > 3, "Excepted at least 4 args there");
+                Y_ENSURE(join->ChildrenSize() > 3, "Excepted at least 4 args there");
                 Y_ENSURE(join->Child(1)->IsAtom(), "Supported only USING clause there");
                 Y_ENSURE(join->Child(1)->Content() == "using", "Supported only USING clause there");
                 for (ui32 col = 0; col < join->Child(3)->ChildrenSize(); ++col) {

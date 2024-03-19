@@ -1,0 +1,42 @@
+<tmp_path>/program.sql:<main>: Warning: Parse Sql
+
+    <tmp_path>/program.sql:<main>:13:1: Warning: Symbol $idTimestamp is not used
+    	$idTimestamp = Callable(Callable<(timestamp)->timestamp>, $identity);
+	^
+    <tmp_path>/program.sql:<main>:12:1: Warning: Symbol $idDatetime is not used
+    	$idDatetime = Callable(Callable<(datetime)->datetime>, $identity);
+	^
+    <tmp_path>/program.sql:<main>:11:1: Warning: Symbol $idDate is not used
+    	$idDate = Callable(Callable<(date)->date>, $identity);
+	^
+    <tmp_path>/program.sql:<main>:14:1: Warning: Symbol $idInterval is not used
+    	$idInterval = Callable(Callable<(interval)->interval>, $identity);
+	^
+<tmp_path>/program.sql:<main>: Warning: Parse Sql
+
+    <tmp_path>/program.sql:<main>:13:1: Warning: Symbol $idTimestamp is not used
+    	$idTimestamp = Callable(Callable<(timestamp)->timestamp>, $identity);
+	^
+    <tmp_path>/program.sql:<main>:12:1: Warning: Symbol $idDatetime is not used
+    	$idDatetime = Callable(Callable<(datetime)->datetime>, $identity);
+	^
+    <tmp_path>/program.sql:<main>:11:1: Warning: Symbol $idDate is not used
+    	$idDate = Callable(Callable<(date)->date>, $identity);
+	^
+    <tmp_path>/program.sql:<main>:14:1: Warning: Symbol $idInterval is not used
+    	$idInterval = Callable(Callable<(interval)->interval>, $identity);
+	^
+<tmp_path>/program.sql:<main>: Warning: Parse Sql
+
+    <tmp_path>/program.sql:<main>:13:1: Warning: Symbol $idTimestamp is not used
+    	$idTimestamp = Callable(Callable<(timestamp)->timestamp>, $identity);
+	^
+    <tmp_path>/program.sql:<main>:12:1: Warning: Symbol $idDatetime is not used
+    	$idDatetime = Callable(Callable<(datetime)->datetime>, $identity);
+	^
+    <tmp_path>/program.sql:<main>:11:1: Warning: Symbol $idDate is not used
+    	$idDate = Callable(Callable<(date)->date>, $identity);
+	^
+    <tmp_path>/program.sql:<main>:14:1: Warning: Symbol $idInterval is not used
+    	$idInterval = Callable(Callable<(interval)->interval>, $identity);
+	^

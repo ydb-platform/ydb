@@ -1,11 +1,8 @@
-/* syntax version 1 */
+/* XXX: Enable UseBlocks pragma and provide input to trigger block execution. */
+PRAGMA UseBlocks;
 
 SELECT
     value,
-    String::RightPad(value, 20) AS right_pad,
-    String::LeftPad(value, 20) AS left_pad,
-    String::RightPad(value, 20, "0") AS right_pad_zero,
-    String::LeftPad(value, 20, "0") AS left_pad_zero,
     String::Hex(biguint) AS hex,
     String::SHex(negint) AS shex,
     String::Bin(biguint) AS bin,

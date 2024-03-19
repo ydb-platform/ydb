@@ -35,12 +35,14 @@ select row
 , 2, $idTimestamp64(dt64), $idDatetime64(dt64)
 , 3, $idTimestamp64(ts64)
 , 4, $idInterval64(i64)
-from BigDates;
+from BigDates
+order by row;
 
 select row
 , 1, $idTimestamp64(d), $idDatetime64(d), $idDate32(d)
 , 2, $idTimestamp64(dt), $idDatetime64(dt)
 , 3, $idTimestamp64(ts)
-from NarrowDates;
+from NarrowDates
+order by row;
 
-select row, $idInterval64(i) from NarrowInterval;
+select row, $idInterval64(i) from NarrowInterval order by row;

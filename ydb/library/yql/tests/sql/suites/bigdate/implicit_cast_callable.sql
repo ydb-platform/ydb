@@ -8,11 +8,6 @@ $idDatetime64 = Callable(Callable<(datetime64)->datetime64>, $identity);
 $idTimestamp64 = Callable(Callable<(timestamp64)->timestamp64>, $identity);
 $idInterval64 = Callable(Callable<(interval64)->interval64>, $identity);
 
-$idDate = Callable(Callable<(date)->date>, $identity);
-$idDatetime = Callable(Callable<(datetime)->datetime>, $identity);
-$idTimestamp = Callable(Callable<(timestamp)->timestamp>, $identity);
-$idInterval = Callable(Callable<(interval)->interval>, $identity);
-
 $valDate = unwrap(cast(1 as date));
 $valDate32 = unwrap(cast(-1 as date32));
 $valDatetime = unwrap(cast(86400 as datetime));

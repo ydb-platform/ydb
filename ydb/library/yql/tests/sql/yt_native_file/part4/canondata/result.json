@@ -409,9 +409,6 @@
             "checksum": "6d6a3145661c2f6d0ebfb33d8aacc62a",
             "size": 32368,
             "uri": "https://{canondata_backend}/1936842/bca567d011b535ed157a29d116aa0c03a876f699/resource.tar.gz#test.test_bigdate-implicit_cast_callable-default.txt-Results_/results.txt"
-        },
-        {
-            "uri": "file://test.test_bigdate-implicit_cast_callable-default.txt-Results_/extracted"
         }
     ],
     "test.test[bigdate-output_timestamp64-default.txt-Debug]": [

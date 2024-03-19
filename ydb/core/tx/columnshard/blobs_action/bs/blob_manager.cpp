@@ -352,7 +352,7 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
     auto removeCategories = sharedBlobsInfo->BuildRemoveCategories(std::move(extractedToRemoveFromDB));
 
     auto result = std::make_shared<NBlobOperations::NBlobStorage::TGCTask>(storageId, std::move(perGroupGCListsInFlight), *CollectGenStepInFlight,
-        std::move(keepsToErase), manager, std::move(removeCategories), counters);
+        std::move(keepsToErase), manager, std::move(removeCategories), counters, TabletInfo->TabletID, CurrentGen);
     if (result->IsEmpty()) {
         CollectGenStepInFlight = {};
         return nullptr;

@@ -127,7 +127,7 @@ struct TPDiskConfig : public TThrRefBase {
 
     ui64 ExpectedSlotCount = 0;
 
-    // Free chunk percent that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
+    // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
     ui32 ChunkBaseLimit = 130;
 
     NKikimrConfig::TFeatureFlags FeatureFlags;

@@ -99,7 +99,9 @@ public:
         const TString& token = properties.Value("token", "");
 
         State_->Configuration->AddValidCluster(name);
-        State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
+        if (token) {
+            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
+        }
 
         TYtClusterConfig cluster;
         cluster.SetName(name);

@@ -401,14 +401,7 @@ std::shared_ptr<TPredicate> MakeStrPredicate(const std::string& key, NArrow::EOp
 } // namespace
 
 std::shared_ptr<NKikimr::NOlap::IStoragesManager> InitializeStorageManager() {
-    static auto result = std::make_shared<NKikimr::NOlap::TTestStoragesManager>();
-    static TMutex mutex;
-    static bool initialized = false;
-    TGuard<TMutex> g(mutex);
-    if (!initialized) {
-        result->Initialize();
-    }
-    return result;
+    return NKikimr::NOlap::TTestStoragesManager::GetInstance();
 }
 
 std::shared_ptr<NKikimr::NOlap::IStoragesManager> CommonStoragesManager = InitializeStorageManager();

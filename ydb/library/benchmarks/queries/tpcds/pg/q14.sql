@@ -99,7 +99,7 @@ with  cross_items as
        having sum(ws_quantity::numeric*ws_list_price) > (select average_sales from avg_sales)
  ) y
  group by rollup (channel, i_brand_id,i_class_id,i_category_id)
- order by channel,i_brand_id,i_class_id,i_category_id
+ order by channel nulls first,i_brand_id nulls first,i_class_id nulls first,i_category_id nulls first
  limit 100;
 with  cross_items as
  (select i_item_sk ss_item_sk
@@ -205,7 +205,7 @@ with  cross_items as
  where this_year.i_brand_id= last_year.i_brand_id
    and this_year.i_class_id = last_year.i_class_id
    and this_year.i_category_id = last_year.i_category_id
- order by this_year.channel, this_year.i_brand_id, this_year.i_class_id, this_year.i_category_id
+ order by this_year.channel nulls first, this_year.i_brand_id nulls first, this_year.i_class_id nulls first, this_year.i_category_id nulls first
  limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query14.tpl

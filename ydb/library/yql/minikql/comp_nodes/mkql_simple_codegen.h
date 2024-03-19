@@ -51,6 +51,7 @@ using TResultCodegenerator = std::function<ICodegeneratorInlineWideNode::TGenera
 class TSimpleStatefulWideFlowCodegeneratorNodeLLVMBase {
 public:
     struct TMethPtrTable {
+        uintptr_t ThisPtr;
         uintptr_t InitStateMethPtr;
         uintptr_t PrepareInputMethPtr;
         uintptr_t DoProcessMethPtr;
@@ -85,6 +86,7 @@ protected:
     TSimpleStatefulWideFlowCodegeneratorNode(TComputationMutables& mutables, IComputationWideFlowNode* source, ui32 inWidth, ui32 outWidth)
             : TBase(mutables, source, StateKind)
             , TLLVMBase(source, inWidth, outWidth, {
+                .ThisPtr = reinterpret_cast<uintptr_t>(this),
                 .InitStateMethPtr = GetMethodPtr(&TDerived::InitState),
                 .PrepareInputMethPtr = GetMethodPtr(&TDerived::PrepareInput),
                 .DoProcessMethPtr = GetMethodPtr(&TDerived::DoProcess)

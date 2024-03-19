@@ -98,6 +98,18 @@ void TFederatedReadSessionImpl::Start() {
 }
 
 void TFederatedReadSessionImpl::OpenSubSessionsImpl(const std::vector<std::shared_ptr<TDbInfo>>& dbInfos) {
+    {
+        TStringBuilder log(GetLogPrefix());
+        log << "Open read subsessions to databases: ";
+        bool first = true;
+        for (const auto& db : dbInfos) {
+            if (first) first = false; else log << ", ";
+            log << "{ name: " << db->name()
+                << ", endpoint: " << db->endpoint()
+                << ", path: " << db->path() << " }";
+        }
+        LOG_LAZY(Log, TLOG_INFO, log);
+    }
     for (const auto& db : dbInfos) {
         NTopic::TTopicClientSettings settings = SubClientSetttings;
         settings
@@ -113,7 +125,7 @@ void TFederatedReadSessionImpl::OpenSubSessionsImpl(const std::vector<std::share
 
 void TFederatedReadSessionImpl::OnFederatedStateUpdateImpl() {
     if (!FederationState->Status.IsSuccess()) {
-        LOG_LAZY(Log, TLOG_ERR, GetLogPrefix() << "Federated state update failed.");
+        LOG_LAZY(Log, TLOG_ERR, GetLogPrefix() << "Federated state update failed. FederationState: " << *FederationState);
         CloseImpl();
         return;
     }
@@ -151,6 +163,27 @@ void TFederatedReadSessionImpl::OnFederatedStateUpdateImpl() {
         // TODO: investigate here, why empty list?
         // Reason (and returned status) could be BAD_REQUEST or UNAVAILABLE.
         LOG_LAZY(Log, TLOG_ERR, GetLogPrefix() << "No available databases to read.");
+        auto issues = FederationState->Status.GetIssues();
+        TStringBuilder issue;
+        issue << "Requested databases {";
+        bool first = true;
+        for (auto const& dbFromSettings : Settings.GetDatabasesToReadFrom()) {
+            if (first) first = false; else issue << ",";
+            issue << " " << dbFromSettings;
+        }
+        issue << " } not found. Available databases {";
+        first = true;
+        for (auto const& db : FederationState->DbInfos) {
+            if (db->status() == Ydb::FederationDiscovery::DatabaseInfo_Status_AVAILABLE) {
+                if (first) first = false; else issue << ",";
+                issue << " { name: " << db->name()
+                      << ", endpoint: " << db->endpoint()
+                      << ", path: " << db->path() << " }";
+            }
+        }
+        issue << " }";
+        issues.AddIssue(issue);
+        FederationState->Status = TStatus(EStatus::BAD_REQUEST, std::move(issues));
         CloseImpl();
         return;
     }

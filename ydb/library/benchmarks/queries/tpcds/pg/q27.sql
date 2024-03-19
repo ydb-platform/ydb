@@ -17,8 +17,8 @@ select  i_item_id,
        d_year = 2000 and
        s_state in ('AL','IN', 'SC', 'NY', 'OH', 'FL')
  group by rollup (i_item_id, s_state)
- order by i_item_id
-         ,s_state
+ order by i_item_id nulls first
+         ,s_state nulls first
  limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query27.tpl

@@ -22,7 +22,7 @@ Please note that Grafana does not validate that queries are safe. Queries can co
 
 ### Data transfer protocol support
 
-The plugin supports [gRPC and gRPCS](https://grpc.io/) transport protocols. A TLS/SSL certificate needs to be provided when using `grpcs://`.
+The plugin supports [gRPC and gRPCS](https://grpc.io/) transport protocols. If self-signed certificates are used on your {{ ydb-short-name }} cluster, specify the [Certificate Authority](https://en.wikipedia.org/wiki/Certificate_authority) certificate, through which they were released.
 
 ### Configuration via UI
 
@@ -50,7 +50,8 @@ datasources:
       user: '<username>'
     secureJsonData:
       password: '<userpassword>'
-      certificate: '<content of *.pem file>'
+      certificate: |
+        <overall content of *.pem file>
 ```
 
 Here are fields that are supported in connection configuration:
@@ -64,7 +65,7 @@ Here are fields that are supported in connection configuration:
 | serviceAccAuthAccessKey | Service account access key  | `string` (secured) |
 | accessToken | OAuth access token  | `string` (secured) |
 | password | User password  | `string` (secured) |
-| certificate | If self-signed certificates are used on your {{ydb-short-name }} cluster, specify the [Certificate Authority] certificate(https://en.wikipedia.org/wiki/Certificate_authority ), through which they were released.  | `string` (secured) |
+| certificate | If self-signed certificates are used on your {{ ydb-short-name }} cluster, specify the [Certificate Authority](https://en.wikipedia.org/wiki/Certificate_authority) certificate, through which they were released.  | `string` (secured) |
 
 ## Building queries
 

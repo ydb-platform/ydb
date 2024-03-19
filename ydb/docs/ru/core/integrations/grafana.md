@@ -1,10 +1,10 @@
 # Плагин-источник данных Grafana для интеграции с YDB
 
-Плагин позволяет выводить на графики Grafana данных полученные из YDB. Для работы плагина понадобится [Grafana](https://grafana.com/grafana/download?pg=get&plcmt=selfmanaged-box1-cta1) версии не ниже `9.2`, рабочий и доступный экземпляр [YDB](../downloads/index.md).
+Плагин позволяет выводить на графики Grafana данныe, полученные из YDB. Для работы плагина понадобится [Grafana](https://grafana.com/grafana/download?pg=get&plcmt=selfmanaged-box1-cta1) версии не ниже `9.2`, рабочий и доступный экземпляр [YDB](../downloads/index.md).
 
-О том как [установить](https://grafana.com/docs/grafana/latest/getting-started/build-first-dashboard/) графану и [плагин](https://grafana.com/docs/grafana/latest/plugins/installation/) можно узнать из [официальной документации](https://grafana.com/docs/grafana/latest/).  
+О том как [установить](https://grafana.com/docs/grafana/latest/getting-started/build-first-dashboard/) Grafana и [плагин](https://grafana.com/docs/grafana/latest/plugins/installation/) можно узнать из [официальной документации](https://grafana.com/docs/grafana/latest/).  
 
-Плагин поддерживает протоколы соединения `GRPCS` и `GRPC`. При использовании `grpcs` соединения с YDB необходимо указать TLS/SSL сертификат. Подробнее о концепциях соединения с YDB и корневых TLS сертификатах можно узнать из статьи [{#T}](../concepts/connect.md).
+Плагин поддерживает протоколы соединения `gRPCS` и `gRPC`. Если на вашем кластере {{ ydb-short-name }} используются самоподписанные сертификаты TLS, то для соединения с YDB необходимо указать сертификат [Certificate Authority](https://en.wikipedia.org/wiki/Certificate_authority). Подробнее о концепциях соединения с YDB и корневых TLS сертификатах можно узнать из статьи [{#T}](../concepts/connect.md).
 
 
 ## Настройка источника данных { #source-setup }
@@ -25,7 +25,8 @@ datasources:
       user: '<username>'
     secureJsonData:
       password: '<userpassword>'
-      certificate: '<content of *.pem file>'
+      certificate: |
+        <overall content of *.pem file>
 ```
 
 Поддерживаемые поля для создания соединения:

@@ -23,10 +23,13 @@ bool TGCTask::DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, 
 }
 
 TGCTask::TGCTask(const TString& storageId, TGCListsByGroup&& listsByGroupId, const TGenStep& collectGenStepInFlight, std::deque<TUnifiedBlobId>&& keepsToErase,
-    const std::shared_ptr<TBlobManager>& manager, TBlobsCategories&& blobsToRemove, const std::shared_ptr<TRemoveGCCounters>& counters)
+    const std::shared_ptr<TBlobManager>& manager, TBlobsCategories&& blobsToRemove, const std::shared_ptr<TRemoveGCCounters>& counters,
+    const ui64 tabletId, const ui64 currentGen)
     : TBase(storageId, std::move(blobsToRemove), counters)
     , ListsByGroupId(std::move(listsByGroupId))
     , CollectGenStepInFlight(collectGenStepInFlight)
+    , TabletId(tabletId)
+    , CurrentGen(currentGen)
     , KeepsToErase(std::move(keepsToErase))
     , Manager(manager)
 {
@@ -34,37 +37,29 @@ TGCTask::TGCTask(const TString& storageId, TGCListsByGroup&& listsByGroupId, con
 
 void TGCTask::OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev) {
     AFL_VERIFY(ev->Get()->Status == NKikimrProto::OK)("status", ev->Get()->Status)("details", ev->Get()->ToString())("action_id", GetActionGuid());
-
-    // Find the group for this result
-    ui64 counterFromRequest = ev->Get()->PerGenerationCounter;
-    auto itCounter = CounterToGroupInFlight.find(counterFromRequest);
-    Y_ABORT_UNLESS(itCounter != CounterToGroupInFlight.end());
-    const ui32 group = itCounter->second;
-
-    auto itGroup = ListsByGroupId.find(group);
+    auto itGroup = ListsByGroupId.find(ev->Cookie);
     Y_ABORT_UNLESS(itGroup != ListsByGroupId.end());
-
     ListsByGroupId.erase(itGroup);
-    CounterToGroupInFlight.erase(itCounter);
 }
 
-THashMap<ui32, std::unique_ptr<NKikimr::TEvBlobStorage::TEvCollectGarbage>> TGCTask::BuildRequests(ui64& perGenerationCounter, const ui64 tabletId, const ui64 currentGen) {
+namespace {
+static TAtomicCounter PerGenerationCounter = 1;
+}
+
+std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> TGCTask::BuildRequest(const ui64 groupId) const {
     const ui32 channelIdx = IBlobManager::BLOB_CHANNEL;
-    // Make per group requests
-    THashMap<ui32, std::unique_ptr<TEvBlobStorage::TEvCollectGarbage>> requests;
-    for (const auto& gl : ListsByGroupId) {
-        ui32 group = gl.first;
-        requests[group] = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(
-            tabletId, currentGen, perGenerationCounter,
-            channelIdx, true,
-            std::get<0>(CollectGenStepInFlight), std::get<1>(CollectGenStepInFlight),
-            new TVector<TLogoBlobID>(gl.second.KeepList.begin(), gl.second.KeepList.end()),
-            new TVector<TLogoBlobID>(gl.second.DontKeepList.begin(), gl.second.DontKeepList.end()),
-            TInstant::Max(), true);
-        Y_ABORT_UNLESS(CounterToGroupInFlight.emplace(perGenerationCounter, group).second);
-        perGenerationCounter += requests[group]->PerGenerationCounterStepSize();
-    }
-    return std::move(requests);
+    auto it = ListsByGroupId.find(groupId);
+    AFL_VERIFY(it != ListsByGroupId.end());
+    AFL_VERIFY(++it->second.RequestsCount < 10);
+    auto result = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(
+        TabletId, CurrentGen, PerGenerationCounter.Val(),
+        channelIdx, true,
+        std::get<0>(CollectGenStepInFlight), std::get<1>(CollectGenStepInFlight),
+        new TVector<TLogoBlobID>(it->second.KeepList.begin(), it->second.KeepList.end()),
+        new TVector<TLogoBlobID>(it->second.DontKeepList.begin(), it->second.DontKeepList.end()),
+        TInstant::Max(), true);
+    result->PerGenerationCounter = PerGenerationCounter.Add(result->PerGenerationCounterStepSize());
+    return std::move(result);
 }
 
 }

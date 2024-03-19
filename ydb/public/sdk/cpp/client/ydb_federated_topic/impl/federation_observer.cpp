@@ -1,3 +1,4 @@
+#include "ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/log_lazy.h"
 #include <ydb/public/api/grpc/ydb_federation_discovery_v1.grpc.pb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/impl/federation_observer.h>
@@ -133,18 +134,17 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
         //   1) The request was meant for a non-federated topic: fall back to single db mode.
         //   2) The database path in the request is simply wrong: the client should get the BAD_REQUEST status.
         if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED || status.GetStatus() == EStatus::BAD_REQUEST) {
-            // fall back to single db mode
+            LOG_LAZY(DbDriverState_->Log, TLOG_INFO, TStringBuilder()
+                << "OnFederationDiscovery fall back to single mode, database=" << DbDriverState_->Database);
             FederatedDbState->Status = TPlainStatus{};  // SUCCESS
-            auto dbState = Connections_->GetDriverState(Nothing(),Nothing(),Nothing(),Nothing(),Nothing());
-            FederatedDbState->ControlPlaneEndpoint = dbState->DiscoveryEndpoint;
+            FederatedDbState->ControlPlaneEndpoint = DbDriverState_->DiscoveryEndpoint;
             // FederatedDbState->SelfLocation = ???;
             auto db = std::make_shared<Ydb::FederationDiscovery::DatabaseInfo>();
-            db->set_path(dbState->Database);
-            db->set_endpoint(dbState->DiscoveryEndpoint);
+            db->set_path(DbDriverState_->Database);
+            db->set_endpoint(DbDriverState_->DiscoveryEndpoint);
             db->set_status(Ydb::FederationDiscovery::DatabaseInfo_Status_AVAILABLE);
             db->set_weight(100);
             FederatedDbState->DbInfos.emplace_back(std::move(db));
-
         } else {
             if (!status.IsSuccess()) {
                 if (!FederationDiscoveryRetryState) {
@@ -170,6 +170,27 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
     if (!PromiseToInitState.HasValue()) {
         PromiseToInitState.SetValue();
     }
+}
+
+IOutputStream& operator<<(IOutputStream& out, TFederatedDbState const& state) {
+    out << "{ Status: " << state.Status.GetStatus();
+    if (auto const& issues = state.Status.GetIssues(); !issues.Empty()) {
+        out << ", Issues: { " << issues.ToOneLineString() << " }";
+    }
+    if (!state.DbInfos.empty()) {
+        out << ", DbInfos: { ";
+        bool first = true;
+        for (auto const& info : state.DbInfos) {
+            if (first) {
+                first = false;
+            } else {
+                out << ", ";
+            }
+            out << "{ " << info->ShortDebugString() << " }";
+        }
+        out << " }";
+    }
+    return out << " }";
 }
 
 } // namespace NYdb::NFederatedTopic

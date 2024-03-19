@@ -1,4 +1,9 @@
 {
+    "test.test[AsciiChecks]": [
+        {
+            "uri": "file://test.test_AsciiChecks_/results.txt"
+        }
+    ],
     "test.test[Base32Decode]": [
         {
             "uri": "file://test.test_Base32Decode_/results.txt"
@@ -9,14 +14,29 @@
             "uri": "file://test.test_Base32Encode_/results.txt"
         }
     ],
+    "test.test[BlockAsciiChecks]": [
+        {
+            "uri": "file://test.test_BlockAsciiChecks_/results.txt"
+        }
+    ],
     "test.test[BlockFind]": [
         {
             "uri": "file://test.test_BlockFind_/results.txt"
         }
     ],
+    "test.test[BlockStreamFormat]": [
+        {
+            "uri": "file://test.test_BlockStreamFormat_/results.txt"
+        }
+    ],
     "test.test[BlockStringUDF]": [
         {
             "uri": "file://test.test_BlockStringUDF_/results.txt"
+        }
+    ],
+    "test.test[BlockTo]": [
+        {
+            "uri": "file://test.test_BlockTo_/results.txt"
         }
     ],
     "test.test[ExtendAndTake]": [

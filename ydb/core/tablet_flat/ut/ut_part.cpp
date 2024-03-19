@@ -402,7 +402,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         /*_ Ensure that produced part has enough pages for code coverage and
             index grow algorithm in data pages writer has been triggered. */
 
-        UNIT_ASSERT(pages > 100 && part.GetPageSize(part.IndexPages.Groups[0], { }) >= minIndex);
+        UNIT_ASSERT(pages > 100 && part.GetPageSize(part.IndexPages.GetFlat({}), { }) >= minIndex);
 
         { /*_ Ensure that part has some external blobs written to room 1 */
             auto one = Eggs0().Lone()->Blobs->Total();

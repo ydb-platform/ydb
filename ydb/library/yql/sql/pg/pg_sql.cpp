@@ -3495,6 +3495,10 @@ public:
         }
 
         auto name = names.back();
+        if (name == "shobj_description" || name == "obj_description") {
+            AddWarning(TIssuesIds::PG_COMPAT, name + " function forced to NULL");
+            return L(A("Null"));
+        }
 
         const bool isAggregateFunc = NYql::NPg::HasAggregation(name, NYql::NPg::EAggKind::Normal);
         const bool hasReturnSet = NYql::NPg::HasReturnSetProc(name);

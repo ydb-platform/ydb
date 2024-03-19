@@ -3,6 +3,10 @@
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/log_lazy.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
 
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
+#undef INCLUDE_YDB_INTERNAL_H
+
 #include <library/cpp/threading/future/future.h>
 
 #include <algorithm>
@@ -32,9 +36,14 @@ TFederatedWriteSession::TFederatedWriteSession(const TFederatedWriteSessionSetti
     , Observer(std::move(observer))
     , AsyncInit(Observer->WaitForFirstState())
     , FederationState(nullptr)
+    , Log(Connections->GetLog())
     , ClientEventsQueue(std::make_shared<NTopic::TWriteSessionEventsQueue>(Settings))
     , BufferFreeSpace(Settings.MaxMemoryUsage_)
 {
+}
+
+TStringBuilder TFederatedWriteSession::GetLogPrefix() const {
+     return TStringBuilder() << GetDatabaseLogPrefix(SubClientSetttings.Database_.GetOrElse("")) << "[" << SessionId << "] ";
 }
 
 void TFederatedWriteSession::Start() {
@@ -167,6 +176,10 @@ void TFederatedWriteSession::OnFederatedStateUpdateImpl() {
     }
 
     if (!DatabasesAreSame(preferrableDb, CurrentDatabase)) {
+        LOG_LAZY(Log, TLOG_INFO, GetLogPrefix()
+            << "Start federated write session to database '" << preferrableDb->name()
+            << "' (previous was " << (CurrentDatabase ? CurrentDatabase->name() : "<empty>") << ")"
+            << " FederationState: " << *FederationState);
         OpenSubSessionImpl(preferrableDb);
     }
 

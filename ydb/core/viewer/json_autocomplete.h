@@ -50,7 +50,6 @@ public:
         : Viewer(viewer)
         , Event(ev)
     {
-        Cerr << "iiiiii TJsonAutocomplete 1 " << Endl;
         const auto& params(Event->Get()->Request.GetParams());
         InitConfig(params);
         ParseCgiParameters(params);
@@ -64,7 +63,6 @@ public:
     TJsonAutocomplete(TEvViewer::TEvViewerRequest::TPtr& ev)
         : ViewerRequest(ev)
     {
-        Cerr << "iiiiii TJsonAutocomplete 2 " << Endl;
         auto& request = ViewerRequest->Get()->Record.GetAutocompleteRequest();
 
         Database = request.GetDatabase();
@@ -141,9 +139,6 @@ public:
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
 
         for (TString& path: Paths) {
-            Cerr << "iiiiiiii path " << path << Endl;
-            Cerr << "iiiiiiii Prefix " << Prefix << Endl;
-
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
             entry.SyncVersion = false;
@@ -155,7 +150,6 @@ public:
     }
 
     void Bootstrap() {
-        Cerr << "iiiiii Bootstrap " << Endl;
         if (ViewerRequest) {
             // proxied request
             PreparePaths();
@@ -206,12 +200,10 @@ public:
     }
 
     void SendSchemeCacheRequest() {
-        Cerr << "iiiiii SendSchemeCacheRequest " << Endl;
         SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(MakeSchemeCacheRequest()));
     }
 
     void SendDynamicNodeAutocompleteRequest() {
-        Cerr << "iiiiii SendDynamicNodeAutocompleteRequest " << Endl;
         ui64 hash = std::hash<TString>()(Event->Get()->Request.GetRemoteAddr());
 
         auto itPos = std::next(TenantDynamicNodes.begin(), hash % TenantDynamicNodes.size());
@@ -221,7 +213,6 @@ public:
         SubscribedNodeId = nodeId;
         TActorId viewerServiceId = MakeViewerID(nodeId);
 
-        Cerr << "iiiiii SendDynamicNodeAutocompleteRequest nodeId " << nodeId << Endl;
         THolder<TEvViewer::TEvViewerRequest> request = MakeHolder<TEvViewer::TEvViewerRequest>();
         request->Record.SetTimeout(Timeout);
         auto autocompleteRequest = request->Record.MutableAutocompleteRequest();
@@ -393,7 +384,9 @@ public:
     }
 
     void Handle(TEvViewer::TEvViewerResponse::TPtr& ev) {
-        Result = ev.Get()->Get()->Record.GetAutocompleteResponse();
+        if (ev.Get()->Get()->Record.HasAutocompleteResponse()) {
+            Result = ev.Get()->Get()->Record.GetAutocompleteResponse();
+        }
         SendAutocompleteResponse();
     }
 

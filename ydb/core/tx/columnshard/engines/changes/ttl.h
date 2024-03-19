@@ -109,8 +109,8 @@ public:
         return StaticTypeName();
     }
 
-    TTTLColumnEngineChanges(const NActualizer::TRWAddress& address, const TSplitSettings& splitSettings, const TSaverContext& saverContext)
-        : TBase(splitSettings, saverContext, StaticTypeName())
+    TTTLColumnEngineChanges(const NActualizer::TRWAddress& address, const TSaverContext& saverContext)
+        : TBase(saverContext, StaticTypeName())
         , RWAddress(address)
     {
 

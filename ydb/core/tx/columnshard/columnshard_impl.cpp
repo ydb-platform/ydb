@@ -700,8 +700,7 @@ void TColumnShard::SetupCompaction() {
 
     BackgroundController.CheckDeadlines();
     while (BackgroundController.GetCompactionsCount() < TSettings::MAX_ACTIVE_COMPACTIONS) {
-        auto limits = CompactionLimits.Get();
-        auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(limits, DataLocksManager);
+        auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(DataLocksManager);
         if (!indexChanges) {
             LOG_S_DEBUG("Compaction not started: cannot prepare compaction at tablet " << TabletID());
             break;

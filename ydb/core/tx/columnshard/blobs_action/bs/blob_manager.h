@@ -155,8 +155,6 @@ private:
     // Then the counters are reset and start accumulating new delta
     TBlobManagerCounters CountersUpdate;
 
-    ui64 PerGenerationCounter = 1;
-
     TInstant PreviousGCTime; // Used for delaying next GC if there are too few blobs to collect
 
     virtual void DoSaveBlobBatch(TBlobBatch&& blobBatch, IBlobManagerDb& db) override;

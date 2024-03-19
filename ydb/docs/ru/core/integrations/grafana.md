@@ -33,7 +33,7 @@ datasources:
 
 | Имя  | Описание         |         Тип          |
 | :---- | :------------------ | :-------------------: |
-| authKind | Тип аутентификации |       `"Anonymous" \| "ServiceAccountKey" \| "AccessToken" \| "UserPassword" \| "MetaData"`        |
+| authKind | Тип аутентификации |        `"Anonymous"`, `"ServiceAccountKey"`, `"AccessToken"`, `"UserPassword"`, `"MetaData"`        |
 | endpoint | Эндпоинт  | `string` |
 | dbLocation | Путь к базе  | `string` |
 | user | Имя пользователя  | `string` |

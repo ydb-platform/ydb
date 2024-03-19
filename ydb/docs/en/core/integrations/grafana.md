@@ -58,7 +58,7 @@ Here are fields that are supported in connection configuration:
 
 | Name  | Description         |         Type          |
 | :---- | :------------------ | :-------------------: |
-| authKind | Authentication type |       `"Anonymous" \| "ServiceAccountKey" \| "AccessToken" \| "UserPassword" \| "MetaData"`        |
+| authKind | Authentication type |       `"Anonymous"`, `"ServiceAccountKey"`, `"AccessToken"`, `"UserPassword"`, `"MetaData"`        |
 | endpoint | Database endpoint  | `string` |
 | dbLocation | Database location  | `string` |
 | user | User name  | `string` |

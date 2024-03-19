@@ -182,6 +182,11 @@ class ScaleController:
         new_runner_token = self.gh.get_new_runner_token()
         # FIXME: auto-provisioned defined twice
         labels = [self.prefix, "auto-provisioned", f"build-preset-{preset_name}"]
+
+        preset = self.cfg.vm_presets.get(preset_name, {})
+        if 'additional_labels' in preset:
+            labels.extend(preset['additional_labels'])
+
         vm_labels = {self.prefix: runner_name}
         user_data = create_userdata(self.gh.html_url, new_runner_token, runner_name, labels, self.cfg.ssh_keys)
 

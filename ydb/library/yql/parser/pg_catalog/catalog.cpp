@@ -1858,6 +1858,11 @@ const TTypeDesc& LookupType(const TString& name) {
     return *typePtr;
 }
 
+bool HasType(ui32 typeId) {
+    const auto& catalog = TCatalog::Instance();
+    return catalog.Types.contains(typeId);
+}
+
 const TTypeDesc& LookupType(ui32 typeId) {
     const auto& catalog = TCatalog::Instance();
     const auto typePtr = catalog.Types.FindPtr(typeId);

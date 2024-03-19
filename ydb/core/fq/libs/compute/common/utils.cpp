@@ -795,7 +795,7 @@ struct TFullStatProcessor : IPlanStatProcessor {
     }
 
     TPublicStat GetPublicStat(TString& stat) override {
-        return NFq::GetPublicStat(stat);
+        return ::NFq::GetPublicStat(stat);
     }
 };
 

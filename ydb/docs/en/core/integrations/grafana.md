@@ -64,7 +64,7 @@ Here are fields that are supported in connection configuration:
 | serviceAccAuthAccessKey | Service account access key  | `string` (secured) |
 | accessToken | OAuth access token  | `string` (secured) |
 | password | User password  | `string` (secured) |
-| certificate | Content of *.pem file. It is required if a grpcs connection is used and if the YDB cluster uses self-signed certificates.  | `string` (secured) |
+| certificate | If self-signed certificates are used on your {{ydb-short-name }} cluster, specify the [Certificate Authority] certificate(https://en.wikipedia.org/wiki/Certificate_authority ), through which they were released.  | `string` (secured) |
 
 ## Building queries
 

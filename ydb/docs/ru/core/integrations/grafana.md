@@ -39,7 +39,7 @@ datasources:
 | serviceAccAuthAccessKey | Ключ доступа для сервисного аккаунта  | `string` (защищенное поле) |
 | accessToken | OAuth-токен  | `string` (защищенное поле) |
 | password | Пароль  | `string` (защищенное поле) |
-| certificate | Содержимое *.pem файла. Необходим в случае использования соединения grpcs, если кластер YDB использует самоподписанные сертификаты.  | `string` (защищенное поле) |
+| certificate | Если на вашем кластере {{ ydb-short-name }} используются самоподписанные сертификаты, укажите сертификат [Certificate Authority](https://en.wikipedia.org/wiki/Certificate_authority), через который они были выпущены. | `string` (защищенное поле) |
 
 ### Пользователь YDB для источника данных { #ydb-user-setup }
 

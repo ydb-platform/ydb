@@ -53,19 +53,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     struct TTxPreInit;
     friend struct TTxPreInit;
 
-
-    struct TTxInit : public ITransaction {
-        TPersQueueReadBalancer * const Self;
-
-        TTxInit(TPersQueueReadBalancer *self)
-            : Self(self)
-        {}
-
-        bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-
-        void Complete(const TActorContext& ctx) override;
-    };
-
+    struct TTxInit;
     friend struct TTxInit;
 
     struct TPartInfo {
@@ -499,6 +487,8 @@ public:
     }
 
 };
+
+NKikimrPQ::EConsumerScalingSupport DefaultScalingSupport();
 
 }
 }

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "read_balancer.h"
-#include "read_balancer_schema.h"
+#include "read_balancer__schema.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 

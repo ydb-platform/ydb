@@ -243,7 +243,7 @@ Uploader – локальный для узла компонент, как сл
 
 Ниже приведено распределение уровней детализации слоев системы по уровням детализации трассы:
 
-| Уровен детализации трассы | gRPC Proxies | Query Processor | Distributed Transactions | Tablets | Distributed Storage |
+| Уровень детализации трассы | gRPC Proxies | Query Processor | Distributed Transactions | Tablets | Distributed Storage |
 | ------------------------- | ------------ | --------------- | ------------------------ | ------- | ------------------- |
 |  0 | `TopLevel` | `Off` | `Off` | `Off` | `Off` |
 |  1 | `TopLevel` | **`TopLevel`** | `Off` | `Off` | `Off` |

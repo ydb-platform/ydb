@@ -6,13 +6,14 @@
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 
 namespace NKikimr {
 namespace NKqp {
+
+struct TKqpFederatedQuerySetup;
 
 struct TEvKqpExecuter {
     struct TEvTxRequest : public TEventPB<TEvTxRequest, NKikimrKqp::TEvExecuterTxRequest,

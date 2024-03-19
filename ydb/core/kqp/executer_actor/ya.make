@@ -27,7 +27,6 @@ PEERDIR(
     ydb/core/formats
     ydb/core/kqp/common
     ydb/core/kqp/compute_actor
-    ydb/core/kqp/federated_query
     ydb/core/kqp/query_compiler
     ydb/core/kqp/rm_service
     ydb/core/kqp/topics

@@ -849,26 +849,26 @@ private:
     THashMap<TPartitionStream::TPtr, TDisjointIntervalTree<ui64>> Offsets; // Partition stream -> offsets set.
 };
 
-#define GET_IMPL()                              \
-    if (!Impl) {                                \
-        Impl = std::make_shared<TImpl>();       \
-    }                                           \
-    Impl
+TDeferredCommit::TDeferredCommit() = default;
+
+TDeferredCommit::TDeferredCommit(TDeferredCommit&&) = default;
+TDeferredCommit& TDeferredCommit::operator=(TDeferredCommit&&) = default;
+TDeferredCommit::~TDeferredCommit() = default;
 
 void TDeferredCommit::Add(const TPartitionStream::TPtr& partitionStream, ui64 startOffset, ui64 endOffset) {
-    GET_IMPL()->Add(partitionStream, startOffset, endOffset);
+    GetImpl().Add(partitionStream, startOffset, endOffset);
 }
 
 void TDeferredCommit::Add(const TPartitionStream::TPtr& partitionStream, ui64 offset) {
-    GET_IMPL()->Add(partitionStream, offset);
+    GetImpl().Add(partitionStream, offset);
 }
 
 void TDeferredCommit::Add(const TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
-    GET_IMPL()->Add(message);
+    GetImpl().Add(message);
 }
 
 void TDeferredCommit::Add(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent) {
-    GET_IMPL()->Add(dataReceivedEvent);
+    GetImpl().Add(dataReceivedEvent);
 }
 
 #undef GET_IMPL
@@ -877,6 +877,13 @@ void TDeferredCommit::Commit() {
     if (Impl) {
         Impl->Commit();
     }
+}
+
+TDeferredCommit::TImpl& TDeferredCommit::GetImpl() {
+    if (!Impl) {
+        Impl = std::make_unique<TImpl>();
+    }
+    return *Impl;
 }
 
 void TDeferredCommit::TImpl::Add(const TReadSessionEvent::TDataReceivedEvent::TMessage& message) {

@@ -1093,8 +1093,14 @@ struct TReadSessionEvent {
 //! Set of offsets to commit.
 //! Class that could store offsets in order to commit them later.
 //! This class is not thread safe.
-class TDeferredCommit : public TMoveOnly {
+class TDeferredCommit : private TMoveOnly {
 public:
+    TDeferredCommit();
+    ~TDeferredCommit();
+
+    TDeferredCommit(TDeferredCommit&&);
+    TDeferredCommit& operator=(TDeferredCommit&&);
+
     //! Add message to set.
     void Add(const TReadSessionEvent::TDataReceivedEvent::TMessage& message);
 
@@ -1112,7 +1118,10 @@ public:
 
 private:
     class TImpl;
-    std::shared_ptr<TImpl> Impl;
+    TImpl& GetImpl();
+
+private:
+    std::unique_ptr<TImpl> Impl;
 };
 
 //! Events debug strings.
@@ -1368,11 +1377,7 @@ struct TWriteSessionSettingsBase : public TRequestSettings<TWriteSessionSettings
         //! If event with current type has no handler for this type of event,
         //! this handler (if specified) will be used.
         //! If this handler is not specified, event can be received with TWriteSession::GetEvent() method.
-        std::function<void(TWriteSessionEvent::TEvent&)> CommonHandler_;
-        TSelf& CommonHandler(std::function<void(TWriteSessionEvent::TEvent&)> handler) {
-            CommonHandler_ = handler;
-            return static_cast<TSelf&>(*this);
-        }
+        FLUENT_SETTING(std::function<void(TWriteSessionEvent::TEvent&)>, CommonHandler);
 
         //! Executor for handlers.
         //! If not set, default single threaded executor will be used.

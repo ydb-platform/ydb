@@ -807,7 +807,7 @@ try {
     initCfg.RegisterCliOptions(opts);
     deps.ProtoConfigFileProvider.RegisterCliOptions(opts);
 
-    NLastGetopt::TOptsParseResult parseResult(&opts, argv.size(), argv.data());
+    NLastGetopt::TOptsParseResultException parseResult(&opts, argv.size(), argv.data());
 
     initCfg.ValidateOptions(opts, parseResult);
     initCfg.Parse(parseResult.GetFreeArgs());

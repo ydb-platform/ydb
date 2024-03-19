@@ -138,7 +138,7 @@ runs:
       shell: bash
       run: |
         if [ "${{ steps.build.outputs.status }}" == "failed" ]; then
-          echo "Build failed. see the [build log]($LOG_URL). Skipping tests run." | .github/scripts/tests/comment-pr.py --fail
+          echo "Build failed. see the [build logs]($LOG_URL)." | .github/scripts/tests/comment-pr.py --fail
         else
           echo "Build successful." | .github/scripts/tests/comment-pr.py --ok
         fi

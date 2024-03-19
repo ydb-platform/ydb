@@ -112,11 +112,16 @@ runs:
         link_threads: ${{ inputs.link_threads }}
         test_threads: ${{ inputs.test_threads }}
         
-    - name: Notify about fail build
-      if: ${{ steps.build.outputs.success != 'true' }}
+    - name: Notify about failed build
+      if: ${{ steps.build.outputs.success != 'true' && inputs.run_tests == 'true' && inputs.run_tests_if_build_fails == 'false' }}
       shell: bash
       run: |
         echo 'Build failed. See the [build log](${{ steps.build.outputs.log_url }}).' >> $GITHUB_STEP_SUMMARY
+        
+        if [[ "$GITHUB_EVENT_NAME" =~ ^pull_request ]]; then
+          echo "Tests run skipped." | .github/scripts/tests/comment-pr.py --fail
+        fi
+        
         exit 1
     
     - name: comment-if-cancel

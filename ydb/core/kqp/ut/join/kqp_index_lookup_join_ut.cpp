@@ -528,7 +528,7 @@ Y_UNIT_TEST_TWIN(LeftJoinSkipNullFilter, StreamLookup) {
             LEFT JOIN `/Root/Right` AS r
                 ON l.Fk = r.Key
             WHERE r.Value IS NOT NULL
-            ORDER BY l.Value
+            ORDER BY l.Value, r.Value
         )",
         R"([
             [["Value1"];["Value21"]];

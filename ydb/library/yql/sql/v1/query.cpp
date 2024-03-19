@@ -2744,6 +2744,11 @@ public:
                         BuildQuotedAtom(Pos, "DisablePullUpFlatMapOverJoin"))));
                 }
 
+                if (ctx.FilterPushdownOverJoinOptionalSide) {
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                        BuildQuotedAtom(Pos, "FilterPushdownOverJoinOptionalSide"))));
+                }
+
                 if (ctx.DiscoveryMode) {
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                         BuildQuotedAtom(Pos, "DiscoveryMode"))));

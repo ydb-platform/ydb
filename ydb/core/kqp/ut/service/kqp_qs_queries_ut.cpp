@@ -140,26 +140,55 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
-        auto it = db.StreamExecuteQuery(R"(
-            SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        {
+            auto it = db.StreamExecuteQuery(R"(
+                SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
-        ui64 count = 0;
-        for (;;) {
-            auto streamPart = it.ReadNext().GetValueSync();
-            if (!streamPart.IsSuccess()) {
-                UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
-                break;
+            ui64 count = 0;
+            for (;;) {
+                auto streamPart = it.ReadNext().GetValueSync();
+                if (!streamPart.IsSuccess()) {
+                    UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                    break;
+                }
+
+                if (streamPart.HasResultSet()) {
+                    auto resultSet = streamPart.ExtractResultSet();
+                    count += resultSet.RowsCount();
+                }
             }
 
-            if (streamPart.HasResultSet()) {
-                auto resultSet = streamPart.ExtractResultSet();
-                count += resultSet.RowsCount();
-            }
+            UNIT_ASSERT_VALUES_EQUAL(count, 2);
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(count, 2);
+        {
+            auto it = db.StreamExecuteQuery(R"(
+                SELECT Key, Value2 FROM TwoShard WHERE false ORDER BY Key > 0;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+            ui32 rsCount = 0;
+            ui32 columns = 0;
+            for (;;) {
+                auto streamPart = it.ReadNext().GetValueSync();
+                if (!streamPart.IsSuccess()) {
+                    UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                    break;
+                }
+
+                if (streamPart.HasResultSet()) {
+                    auto resultSet = streamPart.ExtractResultSet();
+                    columns = resultSet.ColumnsCount();
+                    CompareYson(R"([])", FormatResultSetYson(resultSet));
+                    rsCount++;
+                }
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(rsCount, 1);
+            UNIT_ASSERT_VALUES_EQUAL(columns, 2);
+        }
     }
 
     void CheckQueryResult(TExecuteQueryResult result) {

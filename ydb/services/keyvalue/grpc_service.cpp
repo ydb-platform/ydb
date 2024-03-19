@@ -56,7 +56,7 @@ void TKeyValueGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 Ydb::KeyValue::Y_CAT(methodName, Request),                                          \
                 Ydb::KeyValue::Y_CAT(methodName, Response)>(reqCtx, &method,                        \
                     TRequestAuxSettings {                                                           \
-                        .RlMode = rlMode,                                                           \
+                        .RlMode = TRateLimiterMode::rlMode,                                                           \
                         .RequestType = NJaegerTracing::ERequestType::requestType,                   \
                     }));                                                  \
         },                                                                                                   \
@@ -66,18 +66,18 @@ void TKeyValueGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         getCounterBlock("keyvalue", Y_STRINGIZE(methodName))                                             \
     )->Run()
 
-    SETUP_METHOD(CreateVolume, DoCreateVolumeKeyValue, TRateLimiterMode::Rps, UNSPECIFIED);
-    SETUP_METHOD(DropVolume, DoDropVolumeKeyValue, TRateLimiterMode::Rps, UNSPECIFIED);
-    SETUP_METHOD(AlterVolume, DoAlterVolumeKeyValue, TRateLimiterMode::Rps, UNSPECIFIED);
-    SETUP_METHOD(DescribeVolume, DoDescribeVolumeKeyValue, TRateLimiterMode::Rps, UNSPECIFIED);
-    SETUP_METHOD(ListLocalPartitions, DoListLocalPartitionsKeyValue, TRateLimiterMode::Rps, UNSPECIFIED);
+    SETUP_METHOD(CreateVolume, DoCreateVolumeKeyValue, Rps, KEYVALUE_CREATEVOLUME);
+    SETUP_METHOD(DropVolume, DoDropVolumeKeyValue, Rps, KEYVALUE_DROPVOLUME);
+    SETUP_METHOD(AlterVolume, DoAlterVolumeKeyValue, Rps, KEYVALUE_ALTERVOLUME);
+    SETUP_METHOD(DescribeVolume, DoDescribeVolumeKeyValue, Rps, KEYVALUE_DESCRIBEVOLUME);
+    SETUP_METHOD(ListLocalPartitions, DoListLocalPartitionsKeyValue, Rps, KEYVALUE_LISTLOCALPARTITIONS);
 
-    SETUP_METHOD(AcquireLock, DoAcquireLockKeyValue, TRateLimiterMode::Rps, KEYVALUE_ACQUIRELOCK);
-    SETUP_METHOD(ExecuteTransaction, DoExecuteTransactionKeyValue, TRateLimiterMode::Rps, KEYVALUE_EXECUTETRANSACTION);
-    SETUP_METHOD(Read, DoReadKeyValue, TRateLimiterMode::Rps, KEYVALUE_READ);
-    SETUP_METHOD(ReadRange, DoReadRangeKeyValue, TRateLimiterMode::Rps, KEYVALUE_READRANGE);
-    SETUP_METHOD(ListRange, DoListRangeKeyValue, TRateLimiterMode::Rps, KEYVALUE_LISTRANGE);
-    SETUP_METHOD(GetStorageChannelStatus, DoGetStorageChannelStatusKeyValue, TRateLimiterMode::Rps, KEYVALUE_GETSTORAGECHANNELSTATUS);
+    SETUP_METHOD(AcquireLock, DoAcquireLockKeyValue, Rps, KEYVALUE_ACQUIRELOCK);
+    SETUP_METHOD(ExecuteTransaction, DoExecuteTransactionKeyValue, Rps, KEYVALUE_EXECUTETRANSACTION);
+    SETUP_METHOD(Read, DoReadKeyValue, Rps, KEYVALUE_READ);
+    SETUP_METHOD(ReadRange, DoReadRangeKeyValue, Rps, KEYVALUE_READRANGE);
+    SETUP_METHOD(ListRange, DoListRangeKeyValue, Rps, KEYVALUE_LISTRANGE);
+    SETUP_METHOD(GetStorageChannelStatus, DoGetStorageChannelStatusKeyValue, Rps, KEYVALUE_GETSTORAGECHANNELSTATUS);
 
 #undef SETUP_METHOD
 }

@@ -9,10 +9,17 @@ select row
 from Signed;
 
 select row
-, 1, cast(d32 as int8), cast(dt64 as int8), cast(ts64 as int8), cast(i64 as int8)
-, 2, cast(d32 as int16), cast(dt64 as int16), cast(ts64 as int16), cast(i64 as int16)
-, 3, cast(d32 as int32), cast(dt64 as int32), cast(ts64 as int32), cast(i64 as int32)
-, 4, cast(d32 as int64), cast(dt64 as int64), cast(ts64 as int64), cast(i64 as int64)
+, 1, cast(d32 as int8), cast(d32 as int16), cast(d32 as int32), cast(d32 as int64)
+, 2, cast(dt64 as int8), cast(dt64 as int16), cast(dt64 as int32), cast(dt64 as int64)
+, 3, cast(ts64 as int8), cast(ts64 as int16), cast(ts64 as int32), cast(ts64 as int64)
+, 4, cast(i64 as int8), cast(i64 as int16), cast(i64 as int32), cast(i64 as int64)
+from BigDates;
+
+select row
+, 1, cast(d32 as uint8), cast(d32 as uint16), cast(d32 as uint32), cast(d32 as uint64)
+, 2, cast(dt64 as uint8), cast(dt64 as uint16), cast(dt64 as uint32), cast(dt64 as uint64)
+, 3, cast(ts64 as uint8), cast(ts64 as uint16), cast(ts64 as uint32), cast(ts64 as uint64)
+, 4, cast(i64 as uint8), cast(i64 as uint16), cast(i64 as uint32), cast(i64 as uint64)
 from BigDates;
 
 select row
@@ -21,10 +28,3 @@ select row
 , 3, cast(ui32 as date32), cast(ui32 as datetime64), cast(ui32 as timestamp64), cast(ui32 as interval64)
 , 4, cast(ui64 as date32), cast(ui64 as datetime64), cast(ui64 as timestamp64), cast(ui64 as interval64)
 from Unsigned;
-
-select row
-, 1, cast(d32 as uint8), cast(dt64 as uint8), cast(ts64 as uint8), cast(i64 as uint8)
-, 2, cast(d32 as uint16), cast(dt64 as uint16), cast(ts64 as uint16), cast(i64 as uint16)
-, 3, cast(d32 as uint32), cast(dt64 as uint32), cast(ts64 as uint32), cast(i64 as uint32)
-, 4, cast(d32 as uint64), cast(dt64 as uint64), cast(ts64 as uint64), cast(i64 as uint64)
-from BigDates;

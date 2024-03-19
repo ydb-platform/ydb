@@ -373,14 +373,14 @@ void Serialize(const TCompactVector<T, N>& items, NYson::IYsonConsumer* consumer
 
 // RepeatedPtrField
 template <class T>
-void Serialize(const NProtoBuf::RepeatedPtrField<T>& items, NYson::IYsonConsumer* consumer)
+void Serialize(const google::protobuf::RepeatedPtrField<T>& items, NYson::IYsonConsumer* consumer)
 {
     NDetail::SerializeVector(items, consumer);
 }
 
 // RepeatedField
 template <class T>
-void Serialize(const NProtoBuf::RepeatedField<T>& items, NYson::IYsonConsumer* consumer)
+void Serialize(const google::protobuf::RepeatedField<T>& items, NYson::IYsonConsumer* consumer)
 {
     NDetail::SerializeVector(items, consumer);
 }

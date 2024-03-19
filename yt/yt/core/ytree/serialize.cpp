@@ -1,8 +1,9 @@
 #include "serialize.h"
 
-#include <yt/yt/core/ytree/tree_visitor.h>
+#include "tree_visitor.h"
 
 #include <yt/yt/core/misc/blob.h>
+#include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <library/cpp/yt/misc/cast.h>
 
@@ -342,7 +343,7 @@ void DeserializeProtobufMessage(
     const INodePtr& node,
     const NYson::TProtobufWriterOptions& options)
 {
-    TString wireBytes;
+    TProtobufString wireBytes;
     StringOutputStream outputStream(&wireBytes);
     auto protobufWriter = CreateProtobufWriter(&outputStream, type, options);
     VisitTree(node, protobufWriter.get(), true);

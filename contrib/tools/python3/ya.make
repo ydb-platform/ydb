@@ -16,7 +16,6 @@ PEERDIR(
     contrib/libs/openssl
     contrib/libs/zlib
     contrib/restricted/libffi
-    contrib/tools/python3/Modules/_decimal
     library/cpp/sanitizer/include
 )
 
@@ -27,6 +26,7 @@ ADDINCL(
     contrib/tools/python3/Include
     contrib/tools/python3/Include/internal
     contrib/tools/python3/Modules
+    contrib/tools/python3/Modules/_decimal/libmpdec
     contrib/tools/python3/Modules/_hacl/include
     contrib/tools/python3/PC
 )
@@ -83,6 +83,22 @@ SRCS(
     Modules/_ctypes/cfield.c
     Modules/_ctypes/stgdict.c
     Modules/_datetimemodule.c
+    Modules/_decimal/_decimal.c
+    Modules/_decimal/libmpdec/basearith.c
+    Modules/_decimal/libmpdec/constants.c
+    Modules/_decimal/libmpdec/context.c
+    Modules/_decimal/libmpdec/convolute.c
+    Modules/_decimal/libmpdec/crt.c
+    Modules/_decimal/libmpdec/difradix2.c
+    Modules/_decimal/libmpdec/fnt.c
+    Modules/_decimal/libmpdec/fourstep.c
+    Modules/_decimal/libmpdec/io.c
+    Modules/_decimal/libmpdec/mpalloc.c
+    Modules/_decimal/libmpdec/mpdecimal.c
+    Modules/_decimal/libmpdec/mpsignal.c
+    Modules/_decimal/libmpdec/numbertheory.c
+    Modules/_decimal/libmpdec/sixstep.c
+    Modules/_decimal/libmpdec/transpose.c
     Modules/_elementtree.c
     Modules/_functoolsmodule.c
     Modules/_hacl/Hacl_Hash_MD5.c
@@ -330,7 +346,6 @@ END()
 
 RECURSE(
     Lib
-    Modules/_decimal
     Modules/_sqlite
     bin
 )

@@ -77,6 +77,12 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         return nullptr;
     }
 
+    if (copyAlter.HasTemporary() && copyAlter.GetTemporary()) {
+        errStr = Sprintf("Can't make existing table temporary");
+        status = NKikimrScheme::StatusInvalidParameter;
+        return nullptr;
+    }
+
     if (copyAlter.HasPartitionConfig() && copyAlter.GetPartitionConfig().HasFreezeState()) {
         if (hasSchemaChanges) {
             errStr = Sprintf("Mix freeze cmd with other options is forbidden");

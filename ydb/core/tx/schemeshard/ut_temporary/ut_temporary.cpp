@@ -57,4 +57,48 @@ Y_UNIT_TEST_SUITE(TSchemeShardTemporaryTests) {
             UNIT_ASSERT(!record.GetPathDescription().GetTable().GetTemporary());
         });
     }
+
+    Y_UNIT_TEST(AlterTableDontChangeTemporary) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        NKikimrConfig::TFeatureFlags features;
+        features.SetEnableTempTables(true);
+        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        *request->Record.MutableConfig()->MutableFeatureFlags() = features;
+        SetConfig(runtime, TTestTxConfig::SchemeShard, std::move(request));
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "modified_at" Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+            Temporary: True
+        )");
+
+        env.TestWaitNotification(runtime, txId);
+
+        Check(runtime, [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            UNIT_ASSERT(record.GetPathDescription().GetTable().GetTemporary());
+        });
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTable"
+            TTLSettings {
+              Enabled {
+                ColumnName: "modified_at"
+                ExpireAfterSeconds: 3600
+              }
+            }
+        )");
+
+        env.TestWaitNotification(runtime, txId);
+
+        Check(runtime, [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            UNIT_ASSERT(record.GetPathDescription().GetTable().GetTemporary());
+        });
+
+        // TODO: check not deleted after alter
+    }
 }

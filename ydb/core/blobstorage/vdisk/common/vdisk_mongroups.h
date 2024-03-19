@@ -563,6 +563,29 @@ public:                                                                         
             }
         };
 
+        ///////////////////////////////////////////////////////////////////////////////////
+        // TOutOfSpaceGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TOutOfSpaceGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TOutOfSpaceGroup)
+            {
+                COUNTER_INIT(ResponsesWithDiskSpaceRed, true);
+                COUNTER_INIT(ResponsesWithDiskSpaceOrange, true);
+                COUNTER_INIT(ResponsesWithDiskSpacePreOrange, true);
+                COUNTER_INIT(ResponsesWithDiskSpaceLightOrange, true);
+                COUNTER_INIT(ResponsesWithDiskSpaceYellowStop, true);
+                COUNTER_INIT(ResponsesWithDiskSpaceLightYellowMove, true);
+            }
+
+            COUNTER_DEF(ResponsesWithDiskSpaceRed);
+            COUNTER_DEF(ResponsesWithDiskSpaceOrange);
+            COUNTER_DEF(ResponsesWithDiskSpacePreOrange);
+            COUNTER_DEF(ResponsesWithDiskSpaceLightOrange);
+            COUNTER_DEF(ResponsesWithDiskSpaceYellowStop);
+            COUNTER_DEF(ResponsesWithDiskSpaceLightYellowMove);
+        };
+
     } // NMonGroup
 } // NKikimr
 

@@ -616,7 +616,7 @@
             {
                 "ColumnId": 2,
                 "ColumnName": "Down",
-                "ColumnType": "Bool"
+                "ColumnType": "Byte"
             },
             {
                 "ColumnId": 3,

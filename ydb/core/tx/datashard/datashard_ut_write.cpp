@@ -373,6 +373,44 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
+    Y_UNIT_TEST(CancelImmediate) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const TString tableName = "table-1";
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", tableName, opts);
+        const ui64 shard = shards[0];
+        const ui32 rowCount = 3;
+
+        ui64 txId = 100;
+
+        TActorId shardActorId = ResolveTablet( runtime, shard, 0, false);
+
+        Cout << "========= Send immediate =========\n";
+        {
+            auto request = MakeWriteRequest(txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, opts.Columns_, rowCount);
+            runtime.Send(new IEventHandle(shardActorId, sender, request.release()), 0, true);
+        }
+
+        Cout << "========= Send cancel to tablet =========\n";
+        {
+            auto request = std::make_unique<TEvDataShard::TEvCancelTransactionProposal>(txId);
+            runtime.Send(new IEventHandle(shardActorId, sender, request.release()), 0, true);
+        }
+
+        Cout << "========= Wait for STATUS_CANCELLED result =========\n";
+        {
+            const auto writeResult = WaitForWriteCompleted(runtime, sender, NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxId(), txId);
+        }
+
+        Cout << "========= Send immediate upserts =========\n";
+        {
+            ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 1);"));
+            Upsert(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        }
+    }
+
     Y_UNIT_TEST_TWIN(UpsertPreparedManyTables, Volatile) {
         auto [runtime, server, sender] = TestCreateServer();
 

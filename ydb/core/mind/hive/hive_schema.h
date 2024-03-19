@@ -185,7 +185,7 @@ struct Schema : NIceDb::Schema {
     struct Node : Table<4> {
         struct ID : Column<0, NScheme::NTypeIds::Uint64> {};
         struct Local : Column<1, NScheme::NTypeIds::ActorId> {};
-        struct Down : Column<2, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
+        struct Down : Column<2, NScheme::NTypeIds::Uint8> { using Type = ENodeAvailability; static constexpr Type Default = ENodeAvailability::Up; };
         struct Freeze : Column<3, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
         struct ServicedDomains : Column<4, NScheme::NTypeIds::String> { using Type = TVector<TSubDomainKey>; };
         struct Statistics : Column<5, NScheme::NTypeIds::String> { using Type = NKikimrHive::TNodeStatistics; };

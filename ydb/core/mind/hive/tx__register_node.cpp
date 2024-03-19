@@ -45,9 +45,12 @@ public:
             node.BecomeDisconnected();
             if (node.LastSeenServicedDomains != servicedDomains) {
                 // new tenant - new rules
-                node.Down = false;
+                node.SetDown(false);
                 node.Freeze = false;
-                db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Down, Schema::Node::Freeze>(false, false);
+                db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Down, Schema::Node::Freeze>(ENodeAvailability::Up, false);
+            }
+            if (node.Availability == ENodeAvailability::DownUntilRestart) {
+                node.SetAvailability(ENodeAvailability::Up);
             }
             node.Local = Local;
             node.ServicedDomains.swap(servicedDomains);

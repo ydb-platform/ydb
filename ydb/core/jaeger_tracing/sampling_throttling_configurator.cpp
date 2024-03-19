@@ -64,11 +64,11 @@ TSettings<double, TIntrusivePtr<TThrottler>> TSamplingThrottlingConfigurator::Ge
     TSettings<double, TWithTag<TThrottlingSettings>> settings) {
     THashMap<size_t, TIntrusivePtr<TThrottler>> throttlers;
     return settings.MapThrottler([this, &throttlers](const TWithTag<TThrottlingSettings>& settings) {
-        if (auto it = throttlers.FindPtr(settings.tag)) {
+        if (auto it = throttlers.FindPtr(settings.Tag)) {
             return *it;
         }
-        auto throttler = MakeIntrusive<TThrottler>(settings.value.MaxTracesPerMinute, settings.value.MaxTracesBurst, TimeProvider);
-        throttlers[settings.tag] = throttler;
+        auto throttler = MakeIntrusive<TThrottler>(settings.Value.MaxTracesPerMinute, settings.Value.MaxTracesBurst, TimeProvider);
+        throttlers[settings.Tag] = throttler;
         return throttler;
     });
 }

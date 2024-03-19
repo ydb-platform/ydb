@@ -50,20 +50,7 @@ enum EPartitionState {
 
 class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTabletExecutedFlat {
 
-
-
-    struct TTxPreInit : public ITransaction {
-        TPersQueueReadBalancer * const Self;
-
-        TTxPreInit(TPersQueueReadBalancer *self)
-            : Self(self)
-        {}
-
-        bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-
-        void Complete(const TActorContext& ctx) override;
-    };
-
+    struct TTxPreInit;
     friend struct TTxPreInit;
 
 
@@ -101,87 +88,16 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     struct TTxWrite;
     friend struct TTxWrite;
 
-    void HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext &ctx) {
-        LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, TStringBuilder() << "TPersQueueReadBalancer::HandleWakeup");
+    void HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext &ctx);
+    void HandleUpdateACL(TEvPersQueue::TEvUpdateACL::TPtr&, const TActorContext &ctx);
 
-        GetStat(ctx); //TODO: do it only on signals from outerspace right now
+    void Die(const TActorContext& ctx) override;
+    void OnActivateExecutor(const TActorContext &ctx) override;
+    void OnDetach(const TActorContext &ctx) override;
+    void OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext &ctx) override;
+    void DefaultSignalTabletActive(const TActorContext &) override;
 
-        auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
-        ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
-    }
-
-    void HandleUpdateACL(TEvPersQueue::TEvUpdateACL::TPtr&, const TActorContext &ctx) {
-        GetACL(ctx);
-    }
-
-    void Die(const TActorContext& ctx) override {
-        StopFindSubDomainPathId();
-        StopWatchingSubDomainPathId();
-
-        for (auto& pipe : TabletPipes) {
-            NTabletPipe::CloseClient(ctx, pipe.second.PipeActor);
-        }
-        TabletPipes.clear();
-        TActor<TPersQueueReadBalancer>::Die(ctx);
-    }
-
-    void OnActivateExecutor(const TActorContext &ctx) override {
-        ResourceMetrics = Executor()->GetResourceMetrics();
-        Become(&TThis::StateWork);
-        if (Executor()->GetStats().IsFollower)
-            Y_ABORT("is follower works well with Balancer?");
-        else
-            Execute(new TTxPreInit(this), ctx);
-    }
-
-    void OnDetach(const TActorContext &ctx) override {
-        Die(ctx);
-    }
-
-    void OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext &ctx) override {
-        Die(ctx);
-    }
-
-    void DefaultSignalTabletActive(const TActorContext &) override {
-        // must be empty
-    }
-
-    void InitDone(const TActorContext &ctx) {
-        if (SubDomainPathId) {
-            StartWatchingSubDomainPathId();
-        } else {
-            StartFindSubDomainPathId(true);
-        }
-
-        StartPartitionIdForWrite = NextPartitionIdForWrite = rand() % TotalGroups;
-
-        TStringBuilder s;
-        s << "BALANCER INIT DONE for " << Topic << ": ";
-        for (auto& p : PartitionsInfo) {
-            s << "(" << p.first << ", " << p.second.TabletId << ") ";
-        }
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, s);
-        for (auto& [_, clientInfo] : ClientsInfo) {
-            for (auto& [_, groupInfo] : clientInfo.ClientGroupsInfo) {
-                groupInfo.Balance(ctx);
-            }
-        }
-
-        for (auto &ev : UpdateEvents) {
-            ctx.Send(ctx.SelfID, ev.Release());
-        }
-        UpdateEvents.clear();
-
-        for (auto &ev : RegisterEvents) {
-            ctx.Send(ctx.SelfID, ev.Release());
-        }
-        RegisterEvents.clear();
-
-        auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
-        ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
-
-        ctx.Send(ctx.SelfID, new TEvPersQueue::TEvUpdateACL());
-    }
+    void InitDone(const TActorContext &ctx);
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
     TString GenerateStat();

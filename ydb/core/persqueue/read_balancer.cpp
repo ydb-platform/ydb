@@ -1,5 +1,6 @@
 #include "read_balancer.h"
 #include "read_balancer_txwrite.h"
+#include "read_balancer_txpreinit.h"
 
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/counters_pq.pb.h>
@@ -23,15 +24,6 @@ NKikimrPQ::EConsumerScalingSupport DefaultScalingSupport() {
                                                               : NKikimrPQ::EConsumerScalingSupport::NOT_SUPPORT;
 }
 
-bool TPersQueueReadBalancer::TTxPreInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
-    Y_UNUSED(ctx);
-    NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
-    return true;
-}
-
-void TPersQueueReadBalancer::TTxPreInit::Complete(const TActorContext& ctx) {
-    Self->Execute(new TTxInit(Self), ctx);
-}
 
 bool TPersQueueReadBalancer::TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     try {
@@ -176,6 +168,89 @@ struct TPersQueueReadBalancer::TTxWritePartitionStats : public ITransaction {
 
     void Complete(const TActorContext&) override {};
 };
+
+void TPersQueueReadBalancer::Die(const TActorContext& ctx) {
+    StopFindSubDomainPathId();
+    StopWatchingSubDomainPathId();
+
+    for (auto& pipe : TabletPipes) {
+        NTabletPipe::CloseClient(ctx, pipe.second.PipeActor);
+    }
+    TabletPipes.clear();
+    TActor<TPersQueueReadBalancer>::Die(ctx);
+}
+
+void TPersQueueReadBalancer::OnActivateExecutor(const TActorContext &ctx) {
+    ResourceMetrics = Executor()->GetResourceMetrics();
+    Become(&TThis::StateWork);
+    if (Executor()->GetStats().IsFollower)
+        Y_ABORT("is follower works well with Balancer?");
+    else
+        Execute(new TTxPreInit(this), ctx);
+}
+
+void TPersQueueReadBalancer::OnDetach(const TActorContext &ctx) {
+    Die(ctx);
+}
+
+void TPersQueueReadBalancer::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext &ctx) {
+    Die(ctx);
+}
+
+void TPersQueueReadBalancer::DefaultSignalTabletActive(const TActorContext &) {
+    // must be empty
+}
+
+void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
+    if (SubDomainPathId) {
+        StartWatchingSubDomainPathId();
+    } else {
+        StartFindSubDomainPathId(true);
+    }
+
+    StartPartitionIdForWrite = NextPartitionIdForWrite = rand() % TotalGroups;
+
+    TStringBuilder s;
+    s << "BALANCER INIT DONE for " << Topic << ": ";
+    for (auto& p : PartitionsInfo) {
+        s << "(" << p.first << ", " << p.second.TabletId << ") ";
+    }
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, s);
+    for (auto& [_, clientInfo] : ClientsInfo) {
+        for (auto& [_, groupInfo] : clientInfo.ClientGroupsInfo) {
+            groupInfo.Balance(ctx);
+        }
+    }
+
+    for (auto &ev : UpdateEvents) {
+        ctx.Send(ctx.SelfID, ev.Release());
+    }
+    UpdateEvents.clear();
+
+    for (auto &ev : RegisterEvents) {
+        ctx.Send(ctx.SelfID, ev.Release());
+    }
+    RegisterEvents.clear();
+
+    auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
+    ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
+
+    ctx.Send(ctx.SelfID, new TEvPersQueue::TEvUpdateACL());
+}
+
+void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext &ctx) {
+    LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, TStringBuilder() << "TPersQueueReadBalancer::HandleWakeup");
+
+    GetStat(ctx); //TODO: do it only on signals from outerspace right now
+
+    auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
+    ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
+}
+
+void TPersQueueReadBalancer::HandleUpdateACL(TEvPersQueue::TEvUpdateACL::TPtr&, const TActorContext &ctx) {
+    GetACL(ctx);
+}
+
 
 bool TPersQueueReadBalancer::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) {
     if (!ev) {

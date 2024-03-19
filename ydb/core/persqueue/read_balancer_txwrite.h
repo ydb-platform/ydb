@@ -8,8 +8,6 @@
 namespace NKikimr {
 namespace NPQ {
 
-class TPersQueueReadBalancer;
-
 using namespace NTabletFlatExecutor;
 using namespace NPQRBPrivate;
 

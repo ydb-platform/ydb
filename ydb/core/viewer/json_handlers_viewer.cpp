@@ -38,9 +38,7 @@
 #include "json_acl.h"
 #include "json_graph.h"
 #include "json_render.h"
-#include "json_autocomplete_tenants.h"
-#include "json_autocomplete_tables.h"
-#include "json_autocomplete_schema.h"
+#include "json_autocomplete.h"
 
 namespace NKikimr::NViewer {
 
@@ -83,7 +81,5 @@ void TViewerJsonHandlers::Init() {
     JsonHandlers["/json/acl"] = new TJsonHandler<TJsonACL>;
     JsonHandlers["/json/graph"] = new TJsonHandler<TJsonGraph>;
     JsonHandlers["/json/render"] = new TJsonHandler<TJsonRender>;
-    JsonHandlers["/json/autocomplete/tenants"] = new TJsonHandler<TJsonQueryAutocompleteTenants>;
-    JsonHandlers["/json/autocomplete/tables"] = new TJsonHandler<TJsonQueryAutocompleteTables>;
-    JsonHandlers["/json/autocomplete/schema"] = new TJsonHandler<TJsonQueryAutocompleteSchema>;
+    JsonHandlers["/json/autocomplete"] = new TJsonHandler<TJsonAutocomplete>;
 }}

@@ -10,9 +10,7 @@ SRCS(
     browse.h
     counters_hosts.h
     json_acl.h
-    json_autocomplete_tenants.h
-    json_autocomplete_tables.h
-    json_autocomplete_schema.h
+    json_autocomplete.h
     json_blobindexstat.h
     json_browse.h
     json_bscontrollerinfo.h

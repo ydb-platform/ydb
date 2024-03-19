@@ -1,0 +1,67 @@
+# Short access control notation
+When describing or logging the permissions granted to users (e.g., in the recording of [audit logs](./audit-log.md)), a special short notation for access control may be used. The notation can vary slightly depending on the list of permissions and their inheritance from child objects.
+
+## Notation format
+
+Each entry begins with a `+` sign and consists of 2 or 3 attributes listed through the `:` symbol.
+These attributes are:
+- list of permissions. Mandatory.
+- SID of the subject granted permissions. Mandatory.
+- type of inheritance. Optional.
+
+#### Examples
+`+R:subject:O`
+`+W:subject`
+`+(SR|UR):subject`
+`+(SR|ConnDB):subject:OC+`
+
+## List of permissions {#access-rights}
+
+A short abbreviation is used to record each permission.
+
+#### Permission Groups
+Permission groups are unions of several permissions. Where possible, one of the groups will be indicated in the short notation.
+For example, `+R:subject` — permission to read.
+| Group	| Description |
+|:----:|:----|
+| `L` | (list) enumeration. Consists of permissions to read ACL attributes and describe objects.
+| `R` | (read) reading. Consists of permissions to read from the table and enumeration.
+| `W` | (write) writing. Consists of permissions to update and delete table records, write ACL attributes, create subdirectories, create tables, queues, modify and delete objects, change user attributes
+| `UL` | (use legacy) use (obsolete). Consists of permissions for reading, writing, and granting access rights
+| `U` | (use) use. Consists of permissions for reading, writing, granting access rights, and sending requests to the database
+| `M` | (manage) management. Consists of permissions to create and delete databases
+| `FL` | (full legacy) all rights (obsolete). Consists of permissions for use (obsolete) and management
+| `F` | (full) all rights. Consists of permissions for use and management
+
+#### Simple Permissions
+If no other option is available, the list of permissions will be provided in parentheses through the vertical bar `|` symbol.
+For example, `+(SR|UR):subject` — permission for reading and updating table records.
+
+Permission	Description
+|:----:|:----|
+| `SR` | (select row) reading from the table
+| `UR` | (update row) updating table records
+| `ER` | (erase row) deleting table records
+| `RA` | (read attributes) reading ACL attributes
+| `WA` | (write attributes) writing ACL attributes
+| `CD` | (create directory) creating subdirectory
+| `CT` | (create table) creating table
+| `CQ` | (create queue) creating queue
+| `RS` | (remove schema) deleting objects
+| `DS` | (describe schema) describing objects
+| `AS` | (alter schema) modifying objects
+| `CDB` | (create database) creating database
+| `DDB` | (drop database) deleting database
+| `GAR` | (grant access rights) granting access rights (from own list only)
+| `WUA` | (write user attributes) changing user attributes
+| `ConnDB` | (connect database) connecting and sending requests to the database
+
+## Inheritance Types {#inheritance-types}
+One or more inheritance flags can be used to describe the passing of inheritance to child objects.
+
+Flag	Description
+|:----:|:----|
+| `-`	| without inheritance
+| `O`	| this entry will be inherited by child objects
+| `C`	| this entry will be inherited by child containers
+| `+`	| this entry will be used only for inheritance and will not be used for access checking

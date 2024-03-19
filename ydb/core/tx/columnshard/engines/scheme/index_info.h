@@ -58,13 +58,7 @@ public:
         return it->second;
     }
 
-    TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier) const {
-        TEntityGroups groups(IStoragesManager::DefaultStorageId);
-        for (auto&& i : GetEntityIds()) {
-            groups.Add(i, GetEntityStorageId(i, specialTier));
-        }
-        return groups;
-    }
+    NSplitter::TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages) const;
 
     bool GetSchemeNeedActualization() const {
         return SchemeNeedActualization;

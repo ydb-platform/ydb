@@ -476,4 +476,17 @@ std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TIndexInfo::Make
     return result;
 }
 
+NSplitter::TEntityGroups TIndexInfo::GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages) const {
+    NSplitter::TEntityGroups groups(storages.GetDefaultOperator()->GetBlobSplitSettings(), IStoragesManager::DefaultStorageId);
+    for (auto&& i : GetEntityIds()) {
+        auto storageId = GetEntityStorageId(i, specialTier);
+        auto* group = groups.GetGroupOptional(storageId);
+        if (!group) {
+            group = &groups.RegisterGroup(storageId, storages.GetOperatorVerified(storageId)->GetBlobSplitSettings());
+        }
+        group->AddEntity(i);
+    }
+    return groups;
+}
+
 } // namespace NKikimr::NOlap

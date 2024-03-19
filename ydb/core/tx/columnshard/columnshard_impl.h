@@ -469,7 +469,6 @@ private:
     TBackgroundController BackgroundController;
     TSettings Settings;
     TLimits Limits;
-    TCompactionLimits CompactionLimits;
     NOlap::TNormalizationController NormalizerController;
 
     void TryRegisterMediatorTimeCast();

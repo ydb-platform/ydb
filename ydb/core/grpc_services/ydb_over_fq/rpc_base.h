@@ -42,7 +42,7 @@ protected:
         req.set_execute_mode(executeMode);
         auto& queryContent = *req.mutable_content();
         queryContent.set_type(FederatedQuery::QueryContent_QueryType_ANALYTICS);
-        queryContent.set_name("Query by YdbOverFq");
+        queryContent.set_name("Query from YDB SDK");
         queryContent.set_text(text);
         queryContent.set_automatic(true);
         auto& acl = *queryContent.mutable_acl();

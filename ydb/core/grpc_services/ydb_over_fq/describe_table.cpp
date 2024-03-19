@@ -23,8 +23,8 @@ public:
         ListBindings(ctx, "");
     }
 
-    static TString ExtractName(TString tablePath) {
-        return std::filesystem::path{std::string_view{tablePath}}.filename().c_str();
+    static TStringBuf ExtractName(const TString& tablePath) {
+        return TStringBuf{tablePath}.RNextTok('/');
     }
 
     // ListBindings
@@ -32,12 +32,12 @@ public:
         HFunc(TEvFqListBindingsResponse, TBase::HandleResponse<FederatedQuery::ListBindingsRequest>);
     )
 
-    void ListBindings(const TActorContext& ctx, TString continuationToken) {
+    void ListBindings(const TActorContext& ctx, const TString& continuationToken) {
         FederatedQuery::ListBindingsRequest req;
         constexpr i32 Limit = 100;
 
         req.set_limit(Limit);
-        req.set_page_token(std::move(continuationToken));
+        req.set_page_token(continuationToken);
         auto& filter = *req.mutable_filter();
         filter.set_name(BindingName_);
 
@@ -61,7 +61,7 @@ public:
             LOG_INFO_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
                 "YdbOverFq::DescribeTable actorId: " << SelfId().ToString() << " failed: " << errorMsg);
             Reply(
-                Ydb::StatusIds_StatusCode_INTERNAL_ERROR, errorMsg, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+                Ydb::StatusIds_StatusCode_NOT_FOUND, errorMsg, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             return;
         }
 
@@ -72,7 +72,7 @@ public:
         HFunc(TEvFqDescribeBindingResponse, TBase::HandleResponse<FederatedQuery::DescribeBindingRequest>);
     )
 
-    void DescribeBinding(const TActorContext& ctx, TString bindingId) {
+    void DescribeBinding(const TActorContext& ctx, const TString& bindingId) {
         FederatedQuery::DescribeBindingRequest req;
         req.set_binding_id(bindingId);
 
@@ -81,15 +81,6 @@ public:
 
         Become(&DescribeTableRPC::DescribeBindingState);
         MakeLocalCall(std::move(req), ctx);
-    }
-
-    void HandleDescribeBinding(typename TEvFqDescribeBindingResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& resp = ev->Get()->Message;
-        if (HandleFailure(resp.operation(), "DescribeBinding", ctx)) {
-            return;
-        }
-
-        FederatedQuery::DescribeBindingResponse::descriptor()->name();
     }
 
     void Handle(const FederatedQuery::DescribeBindingResult& result, const TActorContext& ctx) {

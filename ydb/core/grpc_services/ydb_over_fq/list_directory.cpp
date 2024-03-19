@@ -24,7 +24,7 @@ public:
         HFunc(TEvFqListBindingsResponse, TBase::HandleResponse<FederatedQuery::ListBindingsRequest>);
     )
 
-    void ListBindings(const TActorContext& ctx, TString continuationToken) {
+    void ListBindings(const TActorContext& ctx, const TString& continuationToken) {
         FederatedQuery::ListBindingsRequest req;
         constexpr i32 Limit = 100;
 

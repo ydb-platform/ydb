@@ -394,7 +394,7 @@ namespace NActors {
         ScheduleWriters.Reset(new NSchedulerQueue::TWriter[PoolThreads + 2]);
 
         for (i16 i = 0; i != PoolThreads; ++i) {
-            Threads[i].Thread.Reset(
+            Threads[i].Thread.reset(
                 new TExecutorThread(
                     i,
                     0, // CpuId is not used in BASIC pool

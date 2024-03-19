@@ -90,7 +90,6 @@ class ScaleController:
         queues = get_jobs_summary(self.ch)
 
         runner_vms, vm_count, vm_provisioning = self.yc.get_vm_list(self.prefix)
-        self.logger.info("runner_vms: %s", runner_vms)
         self.logger.info("vms: %s/%s (total/provisioning)", vm_count, vm_provisioning)
 
         do_check_idle_runners = True
@@ -141,9 +140,11 @@ class ScaleController:
             for runner_id in fresh_runners.items:
                 fresh_list[runner_id] = preset
 
-        runner_names = set()
+        runner_list = self.gh.get_runners()
 
-        for runner in self.gh.get_runners():
+        runner_names = {r.name for r in runner_list}
+
+        for runner in runner_list:
             if not runner.has_tag(self.prefix):
                 continue
 

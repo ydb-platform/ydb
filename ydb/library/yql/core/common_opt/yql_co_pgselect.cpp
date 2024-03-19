@@ -2011,7 +2011,7 @@ TExprNode::TPtr BuildGroup(TPositionHandle pos, TExprNode::TPtr list,
     TExprNode::TListType payloadItems;
     TVector<ui32> nonNullDefAggs;
     for (ui32 i = 0; i < aggs.size(); ++i) {
-        if (aggs[i].first->Head().Content() == "count" && aggs[i].first->ChildrenSize() == 2) {
+        if (aggs[i].first->Head().Content() == "count") {
             nonNullDefAggs.push_back(i);
         }
 
@@ -2135,7 +2135,7 @@ TExprNode::TPtr BuildGroup(TPositionHandle pos, TExprNode::TPtr list,
             .Seal()
             .Build();
 
-        if (!extKeysItems.empty() && !nonNullDefAggs.empty()) {
+        if (!extKeysItems.empty() && currentKeys.empty() && !nonNullDefAggs.empty()) {
             // restore aggregation keys
             auto joinColumns = ctx.NewList(pos, TExprNode::TListType(extKeysItems));
             auto joined = JoinColumns(pos, joinedUniqueExt, aggregate, joinColumns, {}, ctx);

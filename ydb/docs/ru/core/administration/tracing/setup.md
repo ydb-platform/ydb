@@ -141,7 +141,8 @@ Uploader – локальный для узла компонент, как сл
     
     Принимает список типов запросов. Запрос подходит под данный селектор если его тип содержится в списке.
 
-    Возможные значения:
+    
+{% cut "Возможные значения" %}
     * KeyValue.CreateVolume
     * KeyValue.DropVolume
     * KeyValue.AlterVolume
@@ -199,6 +200,8 @@ Uploader – локальный для узла компонент, как сл
 Обратите внимание, что QueryService API [экспериментальное](https://github.com/ydb-platform/ydb/blob/e3af273efaef7dfa21205278f17cd164e247820d/ydb/public/api/grpc/ydb_query_v1.proto#L9) и может быть изменено в будущем.
 
 {% endnote %}
+
+{% endcut %}
 
 * `database`
 

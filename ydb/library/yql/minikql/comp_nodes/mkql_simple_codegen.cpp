@@ -20,7 +20,7 @@ ICodegeneratorInlineWideNode::TGenerateResult TSimpleStatefulWideFlowCodegenerat
     const auto entryPos = &ctx.Func->getEntryBlock().back();
 
     const auto thisType = StructType::get(context)->getPointerTo();
-    const auto thisRawVal = ConstantInt::get(Type::getInt64Ty(context), reinterpret_cast<ui64>(this));
+    const auto thisRawVal = ConstantInt::get(Type::getInt64Ty(context), PtrTable.ThisPtr);
     const auto thisVal = CastInst::Create(Instruction::IntToPtr, thisRawVal, thisType, "this", entryPos);
     const auto valuePtrType = PointerType::getUnqual(valueType);
     const auto valuePtrsPtrType = PointerType::getUnqual(valuePtrType);

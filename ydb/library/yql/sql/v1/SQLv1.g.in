@@ -16,7 +16,9 @@ lambda_stmt:
   | import_stmt
 ;
 
-sql_stmt: (EXPLAIN (Q U E R Y PLAN)?)? sql_stmt_core;
+QUERY: Q U E R Y;
+
+sql_stmt: (EXPLAIN (QUERY PLAN)?)? sql_stmt_core;
 
 sql_stmt_core:
     pragma_stmt
@@ -2044,7 +2046,7 @@ fragment STRING_CORE_DOUBLE: @GRAMMAR_STRING_CORE_DOUBLE@;
 
 fragment STRING_SINGLE: (QUOTE_SINGLE STRING_CORE_SINGLE* QUOTE_SINGLE);
 fragment STRING_DOUBLE: (QUOTE_DOUBLE STRING_CORE_DOUBLE* QUOTE_DOUBLE);
-fragment STRING_MULTILINE: (DOUBLE_AT .* DOUBLE_AT)+ AT?;
+fragment STRING_MULTILINE: (DOUBLE_AT .*? DOUBLE_AT)+ AT?;
 
 STRING_VALUE: ((STRING_SINGLE | STRING_DOUBLE | STRING_MULTILINE) (S | U | Y | J | P (T | B | V)?)?);
 
@@ -2080,7 +2082,7 @@ BLOB: X QUOTE_SINGLE HEXDIGIT+ QUOTE_SINGLE;
 // ANSI Lexer:
 // GRAMMAR_MULTILINE_COMMENT_CORE = MULTILINE_COMMENT | .
 
-fragment MULTILINE_COMMENT: '/*' ( options {greedy=false;} : @GRAMMAR_MULTILINE_COMMENT_CORE@ )* '*/';
+fragment MULTILINE_COMMENT: '/*' ( @GRAMMAR_MULTILINE_COMMENT_CORE@ )*? '*/';
 fragment LINE_COMMENT: '--' ~('\n'|'\r')* ('\r' '\n'? | '\n' | EOF);
 WS: (' '|'\r'|'\t'|'\u000C'|'\n') -> channel(HIDDEN);
 COMMENT: (MULTILINE_COMMENT|LINE_COMMENT) -> channel(HIDDEN);

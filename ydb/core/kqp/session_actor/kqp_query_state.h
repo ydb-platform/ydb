@@ -405,6 +405,10 @@ public:
         return CurrentStatementId + 1 >= Statements.size();
     }
 
+    TMaybe<TString> GetCommandTagName() {
+        return Statements ? Statements[CurrentStatementId].CommandTagName : CompileResult->CommandTagName;
+    }
+
     void PrepareCurrentStatement() {
         QueryData = {};
         PreparedQuery = {};

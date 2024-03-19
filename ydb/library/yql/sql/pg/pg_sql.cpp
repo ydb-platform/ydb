@@ -344,7 +344,7 @@ public:
 
     void OnResult(const List* raw) {
         if (!PerStatementResult) {
-             AstParseResults[StatementId].Pool = std::make_unique<TMemoryPool>(4096);
+            AstParseResults[StatementId].Pool = std::make_unique<TMemoryPool>(4096);
             AstParseResults[StatementId].Root = ParseResult(raw);
             if (!State.AutoParamValues.empty()) {
                 AstParseResults[StatementId].PgAutoParamValues = std::move(State.AutoParamValues);
@@ -442,6 +442,8 @@ public:
                 AddError("Unsupported statement in LIMITED_VIEW mode");
                 return false;
             }
+        if (StmtParseInfo) {
+            (*StmtParseInfo)[StatementId].CommandTagName = GetCommandName(node);
         }
         switch (NodeTag(node)) {
         case T_SelectStmt:

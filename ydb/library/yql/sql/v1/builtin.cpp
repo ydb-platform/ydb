@@ -3032,6 +3032,8 @@ struct TBuiltinFuncData {
             {"callabletypecomponents", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CallableTypeComponents", 1, 1) },
             {"callableargument", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CallableArgument", 1, 3) },
             {"callabletypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CallableTypeHandle", 2, 4) },
+            {"pgtypename", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("PgTypeName", 1, 1) },
+            {"pgtypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("PgTypeHandle", 1, 1) },
             {"formatcode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FormatCode", 1, 1) },
             {"worldcode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("WorldCode", 0, 0) },
             {"atomcode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AtomCode", 1, 1) },

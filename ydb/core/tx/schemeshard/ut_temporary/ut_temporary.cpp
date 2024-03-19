@@ -98,7 +98,5 @@ Y_UNIT_TEST_SUITE(TSchemeShardTemporaryTests) {
         Check(runtime, [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
             UNIT_ASSERT(record.GetPathDescription().GetTable().GetTemporary());
         });
-
-        // TODO: check not deleted after alter
     }
 }

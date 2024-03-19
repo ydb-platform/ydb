@@ -2711,9 +2711,9 @@
     ],
     "test.test[udf-automap_null--Debug]": [
         {
-            "checksum": "c70d23c5b49a78d7a91095e48f5ae528",
-            "size": 637,
-            "uri": "https://{canondata_backend}/1847551/236011fa303dc9c115378482df01b6a80777a84f/resource.tar.gz#test.test_udf-automap_null--Debug_/opt.yql"
+            "checksum": "75fbfff4eae73732d850d5c8cc24f6fc",
+            "size": 650,
+            "uri": "https://{canondata_backend}/1031349/561c62f6383de6722bda744949d64145b04f4939/resource.tar.gz#test.test_udf-automap_null--Debug_/opt.yql"
         }
     ],
     "test.test[udf-automap_null--Plan]": [

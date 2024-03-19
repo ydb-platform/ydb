@@ -374,12 +374,28 @@ namespace {
     XX(HumanReadableQuantity, SF_QUANTITY)       \
     XX(HumanReadableBytes, SF_BYTES)
 
-    SIMPLE_STRICT_UDF(TCollapseText, char*(TAutoMap<char*>, ui64)) {
+
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TCollapseText, char*(TAutoMap<char*>, ui64)) {
         TString input(args[0].AsStringRef());
         ui64 maxLength = args[1].Get<ui64>();
         CollapseText(input, maxLength);
         return valueBuilder->NewString(input);
     }
+
+    struct TCollapseTextKernelExec
+        : public TBinaryKernelExec<TCollapseTextKernelExec>
+    {
+        template <typename TSink>
+        static void Process(TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
+            TString input(arg1.AsStringRef());
+            ui64 maxLength = arg2.Get<ui64>();
+            CollapseText(input, maxLength);
+            return sink(TBlockItem(input));
+        }
+    };
+
+    END_SIMPLE_ARROW_UDF(TCollapseText, TCollapseTextKernelExec::Do);
+
 
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TContains, bool(TOptional<char*>, char*)) {
         Y_UNUSED(valueBuilder);

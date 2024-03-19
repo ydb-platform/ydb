@@ -195,9 +195,10 @@ public:
     // Prepares Keep/DontKeep lists and GC barrier
     std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> BuildGCTask(const TString& storageId,
         const std::shared_ptr<TBlobManager>& manager, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobsInfo,
-        const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters);
+        const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters) noexcept;
 
-    void OnGCFinished(const TGenStep& genStep, IBlobManagerDb& db);
+    void OnGCFinishedOnExecute(const TGenStep& genStep, IBlobManagerDb& db);
+    void OnGCFinishedOnComplete(const TGenStep& genStep);
 
     TBlobManagerCounters GetCountersUpdate() {
         TBlobManagerCounters res = CountersUpdate;
@@ -210,7 +211,9 @@ public:
     virtual void DeleteBlobOnExecute(const TTabletId tabletId, const TUnifiedBlobId& blobId, IBlobManagerDb& db) override;
     virtual void DeleteBlobOnComplete(const TTabletId tabletId, const TUnifiedBlobId& blobId) override;
 private:
-    TGenStep FindNewGCBarrier();
+    std::vector<TGenStep> FindNewGCBarriers();
+    void PopGCBarriers(const TGenStep gs);
+    void PopGCBarriers(const ui32 count);
 
     bool ExtractEvicted(TEvictedBlob& evict, TEvictMetadata& meta, bool fromDropped = false);
 

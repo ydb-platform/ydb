@@ -1,8 +1,6 @@
 PY3TEST()
 
 FORK_TEST_FILES()
-FORK_SUBTESTS()
-SPLIT_FACTOR(2)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
@@ -46,8 +44,8 @@ PY_SRCS(
 
 DATA(arcadia/ydb/tests/fq/s3)
 
-IF (SANITIZER_TYPE == "thread")
-    TIMEOUT(2400)
+IF (SANITIZER_TYPE == "thread" OR SANITIZER_TYPE == "address")
+    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()

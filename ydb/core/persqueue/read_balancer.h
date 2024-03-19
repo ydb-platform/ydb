@@ -98,30 +98,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         ui64 Idx;
     };
 
-    struct TTxWrite : public ITransaction {
-        TPersQueueReadBalancer * const Self;
-        TVector<ui32> DeletedPartitions;
-        TVector<TPartInfo> NewPartitions;
-        TVector<std::pair<ui64, TTabletInfo>> NewTablets;
-        TVector<std::pair<ui32, ui32>> NewGroups;
-        TVector<std::pair<ui64, TTabletInfo>> ReallocatedTablets;
-
-        TTxWrite(TPersQueueReadBalancer *self, TVector<ui32>&& deletedPartitions, TVector<TPartInfo>&& newPartitions,
-                 TVector<std::pair<ui64, TTabletInfo>>&& newTablets, TVector<std::pair<ui32, ui32>>&& newGroups,
-                 TVector<std::pair<ui64, TTabletInfo>>&& reallocatedTablets)
-            : Self(self)
-            , DeletedPartitions(std::move(deletedPartitions))
-            , NewPartitions(std::move(newPartitions))
-            , NewTablets(std::move(newTablets))
-            , NewGroups(std::move(newGroups))
-            , ReallocatedTablets(std::move(reallocatedTablets))
-        {}
-
-        bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-
-        void Complete(const TActorContext &ctx) override;
-    };
-
+    struct TTxWrite;
     friend struct TTxWrite;
 
     void HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext &ctx) {

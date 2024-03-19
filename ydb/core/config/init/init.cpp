@@ -58,10 +58,6 @@ private:
         return false;
     }
 public:
-    TDefaultProtoConfigFileProvider() {
-        AddProtoConfigOptions(*this);
-    }
-
     void AddConfigFile(TString optName, TString description) override {
         Opts.emplace(optName, MakeSimpleShared<TFileConfigOptions>(TFileConfigOptions{.Description = description}));
     }
@@ -807,7 +803,7 @@ std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(TInitialCon
     return std::make_unique<TInitialConfiguratorImpl>(deps);
 }
 
-class TInitlaConfiguratorDepsRecorder
+class TInitialConfiguratorDepsRecorder
     : public IInitialConfiguratorDepsRecorder
 {
     TInitialConfiguratorDependencies Impls;
@@ -816,7 +812,7 @@ class TInitlaConfiguratorDepsRecorder
     TDynConfigClientRecorder DynConfigClient;
     TEnvRecorder Env;
 public:
-    TInitlaConfiguratorDepsRecorder(TInitialConfiguratorDependencies deps)
+    TInitialConfiguratorDepsRecorder(TInitialConfiguratorDependencies deps)
         : Impls(deps)
         , ProtoConfigFileProvider(deps.ProtoConfigFileProvider)
         , NodeBrokerClient(deps.NodeBrokerClient)
@@ -852,7 +848,7 @@ public:
 };
 
 std::unique_ptr<IInitialConfiguratorDepsRecorder> MakeDefaultInitialConfiguratorDepsRecorder(TInitialConfiguratorDependencies deps) {
-    return std::make_unique<TInitlaConfiguratorDepsRecorder>(deps);
+    return std::make_unique<TInitialConfiguratorDepsRecorder>(deps);
 }
 
 } // namespace NKikimr::NConfig

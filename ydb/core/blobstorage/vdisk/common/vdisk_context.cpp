@@ -38,6 +38,7 @@ namespace NKikimr {
         , VDiskMemCounters(vdiskCounters->GetSubgroup("subsystem", "memhull"))
         , Histograms(VDiskCounters, type)
         , IFaceMonGroup(std::make_shared<NMonGroup::TVDiskIFaceGroup>(VDiskCounters, "subsystem", "interface"))
+        , OOSMonGroup(std::make_shared<NMonGroup::TOutOfSpaceGroup>(VDiskCounters, "subsystem", "oos"))
         , GroupId(selfVDisk.GroupID)
         , ShortSelfVDisk(selfVDisk)
         , VDiskLogPrefix(GenerateVDiskLogPrefix(selfVDisk, donorMode))

@@ -61,7 +61,7 @@ public:
     THive& Hive;
     TNodeId Id;
     TActorId Local;
-    bool Down;
+    ENodeAvailability Availability;
     bool Freeze;
     bool Drain;
     TVector<TActorId> DrainInitiators;
@@ -231,6 +231,8 @@ public:
     void DeregisterInDomains();
     void Ping();
     void SendReconnect(const TActorId& local);
+    bool IsDown() const;
+    void SetAvailability(ENodeAvailability availability);
     void SetDown(bool down);
     void SetFreeze(bool freeze);
     void UpdateResourceMaximum(const NKikimrTabletBase::TMetrics& metrics);

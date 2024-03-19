@@ -104,6 +104,13 @@ enum class EResourceToBalance {
     Network,
 };
 
+enum ENodeAvailability : uint8_t {
+    Up,
+    Down,
+    DownUntilDrainEnds,
+    DownUntilRestart,
+};
+
 EResourceToBalance ToResourceToBalance(NMetrics::EResource resource);
 
 struct ISubActor {

@@ -993,7 +993,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             runtime.DispatchEvents(options);
         }
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
-        std::vector<TTabletId> tablets;
+        std::unordered_set<TTabletId> tablets;
         TActorId senderA = runtime.AllocateEdgeActor(0);
         auto createTablets = [&] {
             for (int i = 0; i < NUM_TABLETS; ++i) {
@@ -1004,7 +1004,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 TAutoPtr<IEventHandle> handle;
                 auto createTabletReply = runtime.GrabEdgeEventRethrow<TEvHive::TEvCreateTabletReply>(handle);
                 ui64 tabletId = createTabletReply->Record.GetTabletID();
-                tablets.push_back(tabletId);
+                tablets.insert(tabletId);
             }
             NTabletPipe::TClientConfig pipeConfig;
             pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
@@ -1031,19 +1031,26 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             runtime.Send(new IEventHandle(whiteboard, senderA, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest()));
             NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponse* wbResponse = runtime.GrabEdgeEventRethrow<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponse>(handle);
             for (const NKikimrWhiteboard::TTabletStateInfo& tabletInfo : wbResponse->Record.GetTabletStateInfo()) {
-                if (tabletInfo.GetState() != NKikimrWhiteboard::TTabletStateInfo::Dead) {
+                if (tablets.contains(tabletInfo.GetTabletId()) && tabletInfo.GetState() != NKikimrWhiteboard::TTabletStateInfo::Dead) {
+                    Ctest << "Tablet " << tabletInfo.GetTabletId() << "." << tabletInfo.GetFollowerId()
+                        << " is not dead yet (" << NKikimrWhiteboard::TTabletStateInfo::ETabletState_Name(tabletInfo.GetState()) << ")" << Endl;
                     empty = false;
                 }
             }
             return empty;
         };
 
-        createTablets(); 
+        createTablets();
 
         UNIT_ASSERT(isNodeEmpty(nodeId));
 
         SendKillLocal(runtime, 0);
         CreateLocal(runtime, 0);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, 2);
+            runtime.DispatchEvents(options);
+        }
 
         createTablets();
 

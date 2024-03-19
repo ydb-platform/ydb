@@ -308,7 +308,7 @@ public:
                 TNodeId nodeId = nodeRowset.GetValue<Schema::Node::ID>();
                 TNodeInfo& node = Self->Nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, *Self)).first->second;
                 node.Local = nodeRowset.GetValue<Schema::Node::Local>();
-                node.Down = nodeRowset.GetValue<Schema::Node::Down>();
+                node.Availability = nodeRowset.GetValue<Schema::Node::Down>();
                 node.Freeze = nodeRowset.GetValue<Schema::Node::Freeze>();
                 node.Drain = nodeRowset.GetValueOrDefault<Schema::Node::Drain>();
                 node.DrainInitiators = nodeRowset.GetValueOrDefault<Schema::Node::DrainInitiators>();

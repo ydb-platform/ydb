@@ -1696,7 +1696,7 @@ TResourceNormalizedValues THive::GetStDevResourceValues() const {
     TVector<TResourceNormalizedValues> values;
     values.reserve(Nodes.size());
     for (const auto& ni : Nodes) {
-        if (ni.second.IsAlive() && !ni.second.Down) {
+        if (ni.second.IsAlive() && !ni.second.IsDown()) {
             values.push_back(NormalizeRawValues(ni.second.GetResourceCurrentValues(), ni.second.GetResourceMaximumValues()));
         }
     }
@@ -1719,7 +1719,7 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
                    << " is not expedient because the target node is freezed");
         return false;
     }
-    if (tablet.Node->Down) {
+    if (tablet.Node->IsDown()) {
         BLOG_TRACE("[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
                    << " is expedient because the node is down");
         return true;
@@ -1756,7 +1756,7 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
     std::size_t newNode = std::numeric_limits<std::size_t>::max();
     values.reserve(Nodes.size());
     for (const auto& ni : Nodes) {
-        if (ni.second.IsAlive() && !ni.second.Down) {
+        if (ni.second.IsAlive() && !ni.second.IsDown()) {
             if (ni.first == node.Id)
                 newNode = values.size();
             if (ni.first == tablet.Node->Id)
@@ -2204,7 +2204,7 @@ THive::THiveStats THive::GetStats() const {
     THiveStats stats = {};
     stats.Values.reserve(Nodes.size());
     for (const auto& ni : Nodes) {
-        if (ni.second.IsAlive() && !ni.second.Down) {
+        if (ni.second.IsAlive() && !ni.second.IsDown()) {
             auto nodeValues = NormalizeRawValues(ni.second.ResourceValues, ni.second.GetResourceMaximumValues());
             stats.Values.emplace_back(ni.first, ni.second.GetNodeUsage(nodeValues), nodeValues);
         }
@@ -2303,7 +2303,7 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
     if (stats.MaxUsage >= GetMaxNodeUsageToKick()) {
         std::vector<TNodeId> overloadedNodes;
         for (const auto& [nodeId, nodeInfo] : Nodes) {
-            if (nodeInfo.IsAlive() && !nodeInfo.Down && nodeInfo.IsOverloaded()) {
+            if (nodeInfo.IsAlive() && !nodeInfo.IsDown() && nodeInfo.IsOverloaded()) {
                 overloadedNodes.emplace_back(nodeId);
             }
         }

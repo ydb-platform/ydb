@@ -304,7 +304,7 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
 
     CollectGenStepInFlight = newCollectGenStep;
     return std::make_shared<NBlobOperations::NBlobStorage::TGCTask>(storageId, std::move(perGroupGCListsInFlight), newCollectGenStep,
-        std::move(keepsToErase), manager, std::move(removeCategories), counters);
+        std::move(keepsToErase), manager, std::move(removeCategories), counters, TabletInfo->TabletID, CurrentGen);
 }
 
 TBlobBatch TBlobManager::StartBlobBatch(ui32 channel) {

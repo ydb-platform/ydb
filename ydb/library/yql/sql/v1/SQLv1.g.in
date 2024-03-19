@@ -106,7 +106,7 @@ double_question: QUESTION QUESTION;
 
 neq_subexpr: bit_subexpr ((SHIFT_LEFT | shift_right | ROT_LEFT | rot_right | AMPERSAND | PIPE | CARET) bit_subexpr)*
   // trailing QUESTIONs are used in optional simple types (String?) and optional lambda args: ($x, $y?) -> ($x)
-  ((double_question neq_subexpr) => double_question neq_subexpr | QUESTION+)?;
+  ((double_question neq_subexpr) | QUESTION+)?;
 
 bit_subexpr: add_subexpr ((PLUS | MINUS) add_subexpr)*;
 
@@ -427,11 +427,11 @@ row_pattern_common_syntax:
 ;
 
 row_pattern_skip_to:
-      SKIP TO NEXT ROW
-    | SKIP PAST LAST ROW
-    | SKIP TO FIRST row_pattern_skip_to_variable_name
-    | SKIP TO LAST row_pattern_skip_to_variable_name
-    | SKIP TO row_pattern_skip_to_variable_name
+      SKIP_RULE TO NEXT ROW
+    | SKIP_RULE PAST LAST ROW
+    | SKIP_RULE TO FIRST row_pattern_skip_to_variable_name
+    | SKIP_RULE TO LAST row_pattern_skip_to_variable_name
+    | SKIP_RULE TO row_pattern_skip_to_variable_name
 ;
 
 row_pattern_skip_to_variable_name: row_pattern_variable_name;
@@ -1401,7 +1401,7 @@ keyword_as_compat:
   // | SEMI
   | SETS
   | SHOW
-  | SKIP
+  | SKIP_RULE
   | SOURCE
   | SUBQUERY
   | SUBSET
@@ -1616,7 +1616,7 @@ keyword_compat: (
   | SEMI
   | SETS
   | SHOW
-  | SKIP
+  | SKIP_RULE
   | SOURCE
   | SUBQUERY
   | SUBSET
@@ -1980,7 +1980,7 @@ SEMI: S E M I;
 SET: S E T;
 SETS: S E T S;
 SHOW: S H O W;
-SKIP: S K I P;
+SKIP_RULE: S K I P;
 SOURCE: S O U R C E;
 STREAM: S T R E A M;
 STRUCT: S T R U C T;
@@ -2082,5 +2082,5 @@ BLOB: X QUOTE_SINGLE HEXDIGIT+ QUOTE_SINGLE;
 
 fragment MULTILINE_COMMENT: '/*' ( options {greedy=false;} : @GRAMMAR_MULTILINE_COMMENT_CORE@ )* '*/';
 fragment LINE_COMMENT: '--' ~('\n'|'\r')* ('\r' '\n'? | '\n' | EOF);
-WS: (' '|'\r'|'\t'|'\u000C'|'\n') {$channel=HIDDEN;};
-COMMENT: (MULTILINE_COMMENT|LINE_COMMENT) {$channel=HIDDEN;};
+WS: (' '|'\r'|'\t'|'\u000C'|'\n') -> channel(HIDDEN);
+COMMENT: (MULTILINE_COMMENT|LINE_COMMENT) -> channel(HIDDEN);

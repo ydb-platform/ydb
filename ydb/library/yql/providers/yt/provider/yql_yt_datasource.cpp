@@ -100,6 +100,7 @@ public:
 
         State_->Configuration->AddValidCluster(name);
         if (token) {
+            // Empty token is forbidden for yt reader
             State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
         }
 

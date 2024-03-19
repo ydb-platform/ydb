@@ -17,7 +17,6 @@
 #include <library/cpp/yt/misc/cast.h>
 
 #include <optional>
-#include <numeric>
 
 namespace NYT::NYTree {
 

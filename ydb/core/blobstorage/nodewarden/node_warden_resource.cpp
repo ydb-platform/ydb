@@ -95,7 +95,7 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     ev->Get()->Config->Swap(&StorageConfig);
     if (StorageConfig.HasBlobStorageConfig()) {
         if (const auto& bsConfig = StorageConfig.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
-            ApplyServiceSet(bsConfig.GetServiceSet(), true, false, true);
+            ApplyServiceSet(bsConfig.GetServiceSet(), true, false, false);
         }
     }
     for (const TActorId& subscriber : StorageConfigSubscribers) {

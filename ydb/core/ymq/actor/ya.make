@@ -89,6 +89,7 @@ PEERDIR(
     ydb/public/lib/value
     ydb/public/sdk/cpp/client/ydb_types/credentials
     ydb/library/yql/minikql
+    ydb/library/ycloud/api
     ydb/public/lib/deprecated/client
 )
 

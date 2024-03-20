@@ -1,5 +1,5 @@
 #include "add_index.h"
-#include <ydb/core/tx/tx_proxy/upload_rows.h>
+#include <ydb/core/tx/tx_proxy/upload_rows/upload_rows.h>
 #include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 

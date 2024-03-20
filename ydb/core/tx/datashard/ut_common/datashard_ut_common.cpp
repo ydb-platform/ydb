@@ -12,7 +12,7 @@
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/tx/tx_proxy/upload_rows.h>
+#include <ydb/core/tx/tx_proxy/upload_rows/upload_rows.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>

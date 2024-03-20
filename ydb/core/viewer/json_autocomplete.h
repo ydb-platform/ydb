@@ -29,6 +29,12 @@ class TJsonAutocomplete : public TViewerPipeClient<TJsonAutocomplete> {
         TString Name;
         TString Type;
         TString Table;
+        SchemaWordData() {}
+        SchemaWordData(const TString& name, const TString& type, const TString& table = "")
+            : Name(name)
+            , Type(type)
+            , Table(table)
+        {}
     };
     THashMap<TString, SchemaWordData> Dictionary;
     TString Database;
@@ -301,7 +307,7 @@ public:
         Ydb::Cms::ListDatabasesResult listTenantsResult;
         ConsoleResult->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
         for (const TString& path : listTenantsResult.paths()) {
-            Dictionary[path] = SchemaWordData(path, "database", "");
+            Dictionary[path] = SchemaWordData(path, "database");
         }
         RequestDone();
     }

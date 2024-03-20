@@ -215,7 +215,7 @@ namespace NKikimr {
             {}
 
             ::NMonitoring::TDynamicCounters::TCounterPtr MakeCounter(TIntrusivePtr<::NMonitoring::TDynamicCounters> skeletonFrontGroup, const TString& sensorType, bool derivative, bool reportOnlyIfExtendedSensors) {
-                if (reportOnlyIfExtendedSensors && !NMonGroup::IsExtendedVDiskSensors()) {
+                if (reportOnlyIfExtendedSensors && !NMonGroup::IsExtendedVDiskCounters()) {
                     return skeletonFrontGroup->GetCounter("SkeletonFront/" + Name + "/" + sensorType, derivative, NMonitoring::TCountableBase::EVisibility::Private);
                 }
                 return skeletonFrontGroup->GetCounter("SkeletonFront/" + Name + "/" + sensorType, derivative);

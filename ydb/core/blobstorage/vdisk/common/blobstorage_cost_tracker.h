@@ -353,52 +353,52 @@ public:
     void SetTimeAvailable(ui32 diskTimeAvailableNSec) {
         ui64 diskTimeAvailable = diskTimeAvailableNSec * DiskTimeAvailableScale;
         AtomicSet(DiskTimeAvailable, diskTimeAvailable);
-        MonGroup->DiskTimeAvailableCtr().Set(diskTimeAvailable);
+        MonGroup->DiskTimeAvailableCtr() = diskTimeAvailable;
     }
 
 public:
     template<class TEvent>
     void CountUserRequest(const TEvent& ev) {
         ui64 cost = GetCost(ev);
-        MonGroup->UserDiskCost().Add(cost);
+        MonGroup->UserDiskCost() += cost;
         CountRequest(cost);
     }
 
     void CountUserCost(ui64 cost) {
-        MonGroup->UserDiskCost().Add(cost);
+        MonGroup->UserDiskCost() += cost;
         CountRequest(cost);
     }
 
     template<class TEvent>
     void CountCompactionRequest(const TEvent& ev) {
         ui64 cost = GetCost(ev);
-        MonGroup->CompactionDiskCost().Add(cost);
+        MonGroup->CompactionDiskCost() += cost;
         CountRequest(cost);
     }
 
     template<class TEvent>
     void CountScrubRequest(const TEvent& ev) {
         ui64 cost = GetCost(ev);
-        MonGroup->UserDiskCost().Add(cost);
+        MonGroup->UserDiskCost() += cost;
         CountRequest(cost);
     }
 
     template<class TEvent>
     void CountDefragRequest(const TEvent& ev) {
         ui64 cost = GetCost(ev);
-        MonGroup->DefragDiskCost().Add(cost);
+        MonGroup->DefragDiskCost() += cost;
         CountRequest(cost);
     }
 
     template<class TEvent>
     void CountInternalRequest(const TEvent& ev) {
         ui64 cost = GetCost(ev);
-        MonGroup->InternalDiskCost().Add(cost);
+        MonGroup->InternalDiskCost() += cost;
         CountRequest(cost);
     }
 
     void CountInternalCost(ui64 cost) {
-        MonGroup->InternalDiskCost().Add(cost);
+        MonGroup->InternalDiskCost() += cost;
         CountRequest(cost);
     }
 

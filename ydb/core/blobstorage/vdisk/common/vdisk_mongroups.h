@@ -29,10 +29,10 @@ namespace NKikimr {
             TIntrusivePtr<::NMonitoring::TDynamicCounters> GroupCounters;
         };
 
-        static bool IsExtendedVDiskSensors() {
+        static bool IsExtendedVDiskCounters() {
             return NActors::TlsActivationContext
                 && NActors::TlsActivationContext->ExecutorThread.ActorSystem
-                && AppData()->FeatureFlags.GetExtendedVDiskSensors();
+                && AppData()->FeatureFlags.GetExtendedVDiskCounters();
         }
 
 #define COUNTER_DEF(name)                                                                   \
@@ -51,11 +51,8 @@ public:                                                                         
         NMonitoring::TCountableBase::EVisibility::Private)
 
 #define COUNTER_INIT_IF_EXTENDED(name, derivative)                                          \
-    if (IsExtendedVDiskSensors()) {                                                         \
-        COUNTER_INIT(name, derivative);                                                     \
-    } else {                                                                                \
-        COUNTER_INIT_PRIVATE(name, derivative);                                             \
-    }
+    name##_ = GroupCounters->GetCounter(#name, derivative,                                  \
+        IsExtendedVDiskCounters() ? NMonitoring::TCountableBase::EVisibility::Public : NMonitoring::TCountableBase::EVisibility::Private)
 
 #define GROUP_CONSTRUCTOR(name)                                                             \
     name(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,                    \
@@ -609,6 +606,7 @@ public:                                                                         
             COUNTER_DEF(ResponsesWithDiskSpaceLightOrange);
             COUNTER_DEF(ResponsesWithDiskSpaceYellowStop);
             COUNTER_DEF(ResponsesWithDiskSpaceLightYellowMove);
+        };
 
         ///////////////////////////////////////////////////////////////////////////////////
         // TCostTrackerGroup

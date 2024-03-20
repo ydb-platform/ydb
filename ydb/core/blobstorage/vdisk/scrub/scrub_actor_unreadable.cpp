@@ -8,7 +8,7 @@ namespace NKikimr {
         if (const auto it = UnreadableBlobs.find(fullId); it != UnreadableBlobs.end()) {
             STLOGX(GetActorContext(), PRI_NOTICE, BS_VDISK_SCRUB, VDS39, VDISKP(LogPrefix,
                 "dropped garbage unreadable blob"), (BlobId, it->first), (UnreadableParts, it->second.UnreadableParts));
-            MonGroup.UnreadableBlobsFound().Sub(it->second.UnreadableParts.CountBits());
+            MonGroup.UnreadableBlobsFound() -= it->second.UnreadableParts.CountBits();
             UnreadableBlobs.erase(it);
         }
     }
@@ -50,7 +50,7 @@ namespace NKikimr {
                 UnreadableBlobs.try_emplace(fullId, corrupted, corruptedPart);
             }
 
-            MonGroup.UnreadableBlobsFound().Add(corrupted.CountBits() - prevCorrupted.CountBits());
+            MonGroup.UnreadableBlobsFound() += corrupted.CountBits() - prevCorrupted.CountBits();
         }
     }
 
@@ -60,7 +60,7 @@ namespace NKikimr {
             STLOGX(GetActorContext(), PRI_NOTICE, BS_VDISK_SCRUB, VDS42, VDISKP(LogPrefix,
                 "read parts of previously unreadable blob"), (BlobId, it->first),
                 (UnreadablePartsBefore, it->second.UnreadableParts), (ReadableParts, readable));
-            MonGroup.UnreadableBlobsFound().Sub((it->second.UnreadableParts & readable).CountBits());
+            MonGroup.UnreadableBlobsFound() -= (it->second.UnreadableParts & readable).CountBits();
             if ((it->second.UnreadableParts &= ~readable).Empty()) {
                 UnreadableBlobs.erase(it);
             }
@@ -112,11 +112,11 @@ namespace NKikimr {
                         "recovered parts of previously unreadable blob"), (BlobId, it->first),
                         (UnreadablePartsBefore, data.UnreadableParts), (RecoveredParts, item.Needed));
 
-                    MonGroup.UnreadableBlobsFound().Sub((data.UnreadableParts & item.Needed).CountBits());
+                    MonGroup.UnreadableBlobsFound() -= (data.UnreadableParts & item.Needed).CountBits();
                     if ((data.UnreadableParts &= ~item.Needed).Empty()) {
                         UnreadableBlobs.erase(it);
                     }
-                    MonGroup.BlobsFixed().Inc();
+                    ++MonGroup.BlobsFixed();
                     
                 } else {
                     STLOG(PRI_WARN, BS_VDISK_SCRUB, VDS07, VDISKP(LogPrefix, "failed to restore corrupted blob"),

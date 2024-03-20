@@ -132,5 +132,5 @@ message TFeatureFlags {
     optional bool EnableCMSRequestPriorities = 117 [default = false];
     optional bool EnableKeyvalueLogBatching = 118 [default = false];
     optional bool EnableLocalDBFlatIndex = 119 [default = true];
-    optional bool ExtendedVDiskSensors = 120 [default = true];
+    optional bool ExtendedVDiskCounters = 120 [default = true];
 }

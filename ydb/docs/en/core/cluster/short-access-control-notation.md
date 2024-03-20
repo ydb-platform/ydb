@@ -65,11 +65,12 @@ For example, `+(SR|UR):subject` — permission for reading and updating table re
 | `ConnDB` | (connect database) connecting and sending requests to the database |
 
 ## Inheritance Types {#inheritance-types}
-One or more inheritance flags can be used to describe the passing of inheritance to child objects.
+
+One or more inheritance flags can be used to describe the passing of permissions to child objects.
 
 | Flag	| Description |
 |:----:|:----|
-| `-`	| without inheritance
-| `O`	| this entry will be inherited by child objects
-| `C`	| this entry will be inherited by child containers
-| `+`	| this entry will be used only for inheritance and will not be used for access checking
+| `-`	        | without inheritance |
+| `O`	| this entry will be inherited by child objects |
+| `C`	| this entry will be inherited by child containers |
+| `+`	| this entry will be used only for inheritance and will not be used for access checking on the current object |

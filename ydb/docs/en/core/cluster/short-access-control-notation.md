@@ -10,11 +10,12 @@ These attributes are:
 - SID of the subject granted permissions. Mandatory.
 - type of inheritance. Optional.
 
-#### Examples
-`+R:subject:O`
-`+W:subject`
-`+(SR|UR):subject`
-`+(SR|ConnDB):subject:OC+`
+### Examples
+
+* `+R:subject:O`
+* `+W:subject`
+* `+(SR|UR):subject`
+* `+(SR|ConnDB):subject:OC+`
 
 ## List of permissions {#access-rights}
 

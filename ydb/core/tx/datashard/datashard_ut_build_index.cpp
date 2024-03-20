@@ -5,6 +5,7 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/tx_proxy/upload_rows.h>
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 

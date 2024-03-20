@@ -7,6 +7,7 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/tx_proxy/upload_rows.h>
 #include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
 
 #include <library/cpp/testing/unittest/registar.h>

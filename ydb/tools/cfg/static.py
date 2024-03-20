@@ -385,6 +385,9 @@ class StaticConfigGenerator(object):
         if self.table_service_config:
             normalized_config["table_service_config"] = self.table_service_config
 
+        if self.__cluster_details.raw_host_configs is not None:
+            normalized_config["host_configs"] = self.__cluster_details.raw_host_configs
+
         if self.__cluster_details.blob_storage_config is not None:
             normalized_config["blob_storage_config"] = self.__cluster_details.blob_storage_config
         else:
@@ -454,6 +457,7 @@ class StaticConfigGenerator(object):
         if "hive_config" in normalized_config["domains_config"]:
             del normalized_config["domains_config"]["hive_config"]
 
+        hostname_to_host_config_id = {node.hostname: node.host_config_id for node in self.__cluster_details.hosts}
         normalized_config["hosts"] = []
         for node in normalized_config["nameservice_config"]["node"]:
             if "port" in node and int(node.get("port")) == 19001:
@@ -462,6 +466,7 @@ class StaticConfigGenerator(object):
             if "interconnect_host" in node and node["interconnect_host"] == node["host"]:
                 del node["interconnect_host"]
 
+            node["host_config_id"] = hostname_to_host_config_id[node["host"]]
             normalized_config["hosts"].append(node)
 
         del normalized_config["nameservice_config"]["node"]

@@ -498,26 +498,33 @@ private:
         void operator()(NYdb::NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent&) { }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
-            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " StartPartitionSessionEvent received");
+            const auto partitionKey = MakePartitionKey(event.GetPartitionSession());
+            const auto partitionKeyStr = ToString(partitionKey);
+
+            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " StartPartitionSessionEvent received");
 
             TMaybe<ui64> readOffset;
-            const auto offsetIt = Self.PartitionToOffset.find(MakePartitionKey(event.GetPartitionSession()));
+            const auto offsetIt = Self.PartitionToOffset.find(partitionKey);
             if (offsetIt != Self.PartitionToOffset.end()) {
                 readOffset = offsetIt->second;
             }
-            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Confirm StartPartitionSession with offset " << readOffset);
+            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " Confirm StartPartitionSession with offset " << readOffset);
             event.Confirm(readOffset);
         }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent& event) {
-            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " StopPartitionSessionEvent received");
+            const auto partitionKey = MakePartitionKey(event.GetPartitionSession());
+            const auto partitionKeyStr = ToString(partitionKey);
+            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " StopPartitionSessionEvent received");
             event.Confirm();
         }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent&) { }
 
-        void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent&) { 
-            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " PartitionSessionClosedEvent received");
+        void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent& event) {
+            const auto partitionKey = MakePartitionKey(event.GetPartitionSession());
+            const auto partitionKeyStr = ToString(partitionKey);
+            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " PartitionSessionClosedEvent received");
         }
 
         TReadyBatch& GetActiveBatch(const TPartitionKey& partitionKey, TInstant time) {

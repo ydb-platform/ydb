@@ -470,7 +470,7 @@ class ClusterDetailsProvider(object):
     @property
     def host_configs(self):
         converted_host_configs = []
-        for host_config in self.raw_host_configs:
+        for host_config in self.__cluster_description.get("host_configs", []):
             host_config_drives = host_config.get("drives", [])
             converted_host_configs.append(
                 HostConfig(
@@ -483,7 +483,12 @@ class ClusterDetailsProvider(object):
 
     @property
     def raw_host_configs(self):
-        return self.__cluster_description.get("host_configs", [])
+        raw_host_configs = self.__cluster_description.get("host_configs", [])
+        for host_config in raw_host_configs:
+            if 'drives' in host_config:
+                # inside config.yaml we should use field drive in host_configs section
+                host_config['drive'] = host_config.pop('drives')
+        return raw_host_configs
 
     @property
     def tablet_profiles(self):

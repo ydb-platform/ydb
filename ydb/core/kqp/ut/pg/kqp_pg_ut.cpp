@@ -2516,7 +2516,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             }
 
             {
-                auto result = session.ExecuteSchemeQuery(R"(
+                auto result = session.ExecuteQuery(R"(
                     ALTER TABLE PgTemp DROP COLUMN value;
                 )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -2576,7 +2576,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             }
 
             {
-                auto result = session.ExecuteSchemeQuery(R"(
+                auto result = session.ExecuteQuery(R"(
                     ALTER TABLE PgTemp DROP COLUMN value;
                 )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());

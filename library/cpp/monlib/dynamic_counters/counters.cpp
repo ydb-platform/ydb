@@ -66,6 +66,10 @@ TDynamicCounters::TCounterPtr TDynamicCounters::GetCounter(const TString& value,
     return GetNamedCounter("sensor", value, derivative, vis);
 }
 
+TDynamicCounters::TCounterPtr TDynamicCounters::GetCounter(const TString& value, EVisibility vis) {
+    return GetNamedCounter("sensor", value, false, vis);
+}
+
 TDynamicCounters::TCounterPtr TDynamicCounters::GetNamedCounter(const TString& name, const TString& value, bool derivative, EVisibility vis) {
     return AsCounterRef(GetNamedCounterImpl<false, TCounterForPtr>(name, value, derivative, vis));
 }

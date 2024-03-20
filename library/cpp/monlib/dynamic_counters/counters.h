@@ -275,6 +275,10 @@ namespace NMonitoring {
             bool derivative = false,
             TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
 
+        TCounterPtr GetCounter(
+            const TString& value,
+            TCountableBase::EVisibility visibility);
+
         TCounterPtr GetNamedCounter(
             const TString& name,
             const TString& value,

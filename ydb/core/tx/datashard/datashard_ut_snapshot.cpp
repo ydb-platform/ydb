@@ -5,7 +5,7 @@
 #include <ydb/core/formats/factory.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/tx/tx_proxy/upload_rows/upload_rows.h>
+#include <ydb/core/tx/tx_proxy/upload_rows.h>
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h> // Y_UNIT_TEST_(TWIN|QUAD)
 #include <ydb/core/mind/local.h>

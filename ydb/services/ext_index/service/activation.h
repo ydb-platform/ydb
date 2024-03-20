@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/services/ext_index/metadata/object.h>
 #include <ydb/services/metadata/ds_table/scheme_describe.h>
 

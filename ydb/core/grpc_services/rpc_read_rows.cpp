@@ -7,7 +7,7 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer_stats.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/tx/tx_proxy/upload_rows/upload_rows_common_impl.h>
+#include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>

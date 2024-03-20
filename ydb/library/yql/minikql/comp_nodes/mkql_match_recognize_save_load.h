@@ -98,9 +98,8 @@ public:
         }
     }
 
-    NUdf::TUnboxedValuePod MakeString() {
-        auto strRef = NUdf::TStringRef(Buf.data(), Buf.size());
-        return NKikimr::NMiniKQL::MakeString(strRef);
+    TString MakeString() {
+        return TString(Buf.data(), Buf.size());
     }
 
 private:
@@ -117,9 +116,9 @@ private:
     };
 
 public:
-    TInputSerializer(TSerializerContext& context, const NUdf::TStringRef& state)
+    TInputSerializer(TSerializerContext& context, const TStringBuf& state)
         : Context(context)
-        , Buf(state.Data(), state.Size())
+        , Buf(state)
     {}
 
     template <typename... Ts>

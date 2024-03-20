@@ -68,6 +68,7 @@ public:
                     break;
                     case NKikimr::NMiniKQL::TNodeStateHelper::EType::SNAPSHOT:
                     case NKikimr::NMiniKQL::TNodeStateHelper::EType::INCREMENT:
+                    {
                         reader.ReadItems(
                             [&](std::string_view key, std::string_view value) {
                                 nodeState.Items[TString(key)] = TString(value);
@@ -75,9 +76,9 @@ public:
                             [&](std::string_view key) {
                                 nodeState.Items.erase(TString(key));
                             });
-                        break;
+                    }
+                    break;
                 }        
-                buf.Skip(nodeStateSize);
                 ++nodeNum;
             }
             Y_ENSURE(buf.empty(), "State/buf is corrupted");
@@ -108,6 +109,7 @@ public:
     }
 
     static EStateType GetStateType(const NYql::NDqProto::TComputeActorState& state) {
+        std::cerr << "GetStateType()" << std::endl;
         if (!state.HasMiniKqlProgram()) {
             return EStateType::Snapshot;
         }
@@ -671,7 +673,7 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
                             auto& taskInfo = *taskIt;
                             TCheckpointId checkpointId(*coordinatorGeneration, *seqNo);
                             taskInfo.ListOfStatesForReading.push_back(TContext::TStateInfo{checkpointId, cnt});
-                            LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*context->ActorSystem, "  checkpoint id: " << checkpointId << ", rows count: " << cnt);
+                            LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*context->ActorSystem, " taskId " << taskId <<  " checkpoint id: " << checkpointId << ", rows count: " << cnt);
                         }
                     }
                     catch (const std::exception& e) {

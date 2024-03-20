@@ -3,6 +3,7 @@
 #include "mkql_match_recognize_measure_arg.h"
 #include "mkql_match_recognize_nfa.h"
 #include "mkql_match_recognize_save_load.h"
+#include "mkql_saveload.h"
 
 #include <ydb/library/yql/core/sql_types/match_recognize.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
@@ -285,11 +286,12 @@ public:
             serializer.Write(DelayedRow);
         }
         RowPatternConfiguration->Save(serializer);
-        return serializer.MakeString();
+        return TNodeStateHelper::MakeSimpleBlobState(serializer.MakeString());
     }
 
     void Load(const NUdf::TStringRef& state) override {
-        TInputSerializer serializer(SerializerContext, state);
+        TStringBuf in = TNodeStateHelper::Reader::GetSimpleSnapshot(state);
+        TInputSerializer serializer(SerializerContext, in);
         const auto stateVersion = serializer.Read<decltype(StateVersion)>();
         if (stateVersion == 1) {
             serializer.Read(CurPartitionPackedKey);
@@ -424,11 +426,12 @@ public:
         // HasReadyOutput is not packed because when loading we can recalculate HasReadyOutput from Partitions.
         serializer.Write(Terminating);
         NfaTransitionGraph->Save(serializer);
-        return serializer.MakeString();
+        return TNodeStateHelper::MakeSimpleBlobState(serializer.MakeString());
     }
 
     void Load(const NUdf::TStringRef& state) override {
-        TInputSerializer serializer(SerializerContext, state);
+        TStringBuf in = TNodeStateHelper::Reader::GetSimpleSnapshot(state);
+        TInputSerializer serializer(SerializerContext, in);
         const auto stateVersion = serializer.Read<decltype(StateVersion)>();
         if (stateVersion == 1) {
             Partitions.clear();

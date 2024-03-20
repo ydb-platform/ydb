@@ -39,6 +39,7 @@ tracing_config:
       collector_url: grpc://example.com:4317
       service_name: ydb
   uploader:
+    max_exported_spans_per_second: 30
     max_spans_in_batch: 100
     max_bytes_in_batch: 10485760 # 10 MiB
     max_export_requests_inflight: 3

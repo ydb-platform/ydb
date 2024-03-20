@@ -53,17 +53,38 @@ namespace {
 
 
 // 'unsafe' udf is actually strict - it returns null on any exception
-#define STRING_UNSAFE_UDF(udfName, function)                           \
-    SIMPLE_STRICT_UDF(T##udfName, TOptional<char*>(TOptional<char*>)) {\
-        EMPTY_RESULT_ON_EMPTY_ARG(0);                                  \
-        const TString input(args[0].AsStringRef());                    \
-        try {                                                          \
-            const auto& result = function(input);                      \
-            return valueBuilder->NewString(result);                    \
-        } catch (yexception&) {                                        \
-            return TUnboxedValue();                                    \
-        }                                                              \
-    }
+#define STRING_UNSAFE_UDF(udfName, function)                                        \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##udfName, TOptional<char*>(TOptional<char*>)) { \
+        EMPTY_RESULT_ON_EMPTY_ARG(0);                                               \
+        const TString input(args[0].AsStringRef());                                 \
+        try {                                                                       \
+            const auto& result = function(input);                                   \
+            return valueBuilder->NewString(result);                                 \
+        } catch (yexception&) {                                                     \
+            return TUnboxedValue();                                                 \
+        }                                                                           \
+    }                                                                               \
+                                                                                    \
+    struct T##udfName##KernelExec                                                   \
+        : public TUnaryKernelExec<T##udfName##KernelExec>                           \
+    {                                                                               \
+        template <typename TSink>                                                   \
+        static void Process(TBlockItem arg1, const TSink& sink) {                   \
+            if (!arg1) {                                                            \
+                return sink(TBlockItem());                                          \
+            }                                                                       \
+                                                                                    \
+            const TString input(arg1.AsStringRef());                                \
+            try {                                                                   \
+                const auto& result = function(input);                               \
+                sink(TBlockItem(result));                                           \
+            } catch (yexception&) {                                                 \
+                return sink(TBlockItem());                                          \
+            }                                                                       \
+        }                                                                           \
+    };                                                                              \
+                                                                                    \
+    END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)
 
 #define STROKA_UDF(udfName, function)                                   \
     SIMPLE_STRICT_UDF(T##udfName, TOptional<char*>(TOptional<char*>)) { \
@@ -353,12 +374,28 @@ namespace {
     XX(HumanReadableQuantity, SF_QUANTITY)       \
     XX(HumanReadableBytes, SF_BYTES)
 
-    SIMPLE_STRICT_UDF(TCollapseText, char*(TAutoMap<char*>, ui64)) {
+
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TCollapseText, char*(TAutoMap<char*>, ui64)) {
         TString input(args[0].AsStringRef());
         ui64 maxLength = args[1].Get<ui64>();
         CollapseText(input, maxLength);
         return valueBuilder->NewString(input);
     }
+
+    struct TCollapseTextKernelExec
+        : public TBinaryKernelExec<TCollapseTextKernelExec>
+    {
+        template <typename TSink>
+        static void Process(TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
+            TString input(arg1.AsStringRef());
+            ui64 maxLength = arg2.Get<ui64>();
+            CollapseText(input, maxLength);
+            return sink(TBlockItem(input));
+        }
+    };
+
+    END_SIMPLE_ARROW_UDF(TCollapseText, TCollapseTextKernelExec::Do);
+
 
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TContains, bool(TOptional<char*>, char*)) {
         Y_UNUSED(valueBuilder);
@@ -384,14 +421,34 @@ namespace {
 
     END_SIMPLE_ARROW_UDF(TContains, TContainsKernelExec::Do);
 
-    SIMPLE_STRICT_UDF(TReplaceAll, char*(TAutoMap<char*>, char*, char*)) {
+
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TReplaceAll, char*(TAutoMap<char*>, char*, char*)) {
         if (TString result(args[0].AsStringRef()); SubstGlobal(result, args[1].AsStringRef(), args[2].AsStringRef()))
             return valueBuilder->NewString(result);
         else
             return args[0];
     }
 
-    SIMPLE_STRICT_UDF(TReplaceFirst, char*(TAutoMap<char*>, char*, char*)) {
+    struct TReplaceAllKernelExec
+        : public TGenericKernelExec<TReplaceAllKernelExec, 3>
+    {
+        template <typename TSink>
+        static void Process(TBlockItem args, const TSink& sink) {
+            TString result(args.GetElement(0).AsStringRef());
+            const TStringBuf what(args.GetElement(1).AsStringRef());
+            const TStringBuf with(args.GetElement(2).AsStringRef());
+            if (SubstGlobal(result, what, with)) {
+                return sink(TBlockItem(result));
+            } else {
+                return sink(args.GetElement(0));
+            }
+        }
+    };
+
+    END_SIMPLE_ARROW_UDF(TReplaceAll, TReplaceAllKernelExec::Do)
+
+
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TReplaceFirst, char*(TAutoMap<char*>, char*, char*)) {
         std::string result(args[0].AsStringRef());
         const std::string_view what(args[1].AsStringRef());
         if (const auto index = result.find(what); index != std::string::npos) {
@@ -401,7 +458,26 @@ namespace {
         return args[0];
     }
 
-    SIMPLE_STRICT_UDF(TReplaceLast, char*(TAutoMap<char*>, char*, char*)) {
+    struct TReplaceFirstKernelExec
+        : public TGenericKernelExec<TReplaceFirstKernelExec, 3>
+    {
+        template <typename TSink>
+        static void Process(TBlockItem args, const TSink& sink) {
+            std::string result(args.GetElement(0).AsStringRef());
+            const std::string_view what(args.GetElement(1).AsStringRef());
+            const std::string_view with(args.GetElement(2).AsStringRef());
+            if (const auto index = result.find(what); index != std::string::npos) {
+                result.replace(index, what.size(), with);
+                return sink(TBlockItem(result));
+            }
+            return sink(args.GetElement(0));
+        }
+    };
+
+    END_SIMPLE_ARROW_UDF(TReplaceFirst, TReplaceFirstKernelExec::Do)
+
+
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TReplaceLast, char*(TAutoMap<char*>, char*, char*)) {
         std::string result(args[0].AsStringRef());
         const std::string_view what(args[1].AsStringRef());
         if (const auto index = result.rfind(what); index != std::string::npos) {
@@ -410,6 +486,25 @@ namespace {
         }
         return args[0];
     }
+
+    struct TReplaceLastKernelExec
+        : public TGenericKernelExec<TReplaceLastKernelExec, 3>
+    {
+        template <typename TSink>
+        static void Process(TBlockItem args, const TSink& sink) {
+            std::string result(args.GetElement(0).AsStringRef());
+            const std::string_view what(args.GetElement(1).AsStringRef());
+            const std::string_view with(args.GetElement(2).AsStringRef());
+            if (const auto index = result.rfind(what); index != std::string::npos) {
+                result.replace(index, what.size(), with);
+                return sink(TBlockItem(result));
+            }
+            return sink(args.GetElement(0));
+        }
+    };
+
+    END_SIMPLE_ARROW_UDF(TReplaceLast, TReplaceLastKernelExec::Do)
+
 
     SIMPLE_STRICT_UDF(TRemoveAll, char*(TAutoMap<char*>, char*)) {
         std::string input(args[0].AsStringRef());

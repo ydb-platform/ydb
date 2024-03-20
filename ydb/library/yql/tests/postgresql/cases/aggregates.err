@@ -1228,35 +1228,47 @@ create temp table t2(f1 bigint, f22 bigint);
 <sql-statement>
 select f1 from t1 left join t2 using (f1) group by f1;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
     	select f1 from t1 left join t2 using (f1) group by f1;
+	^
+        -stdin-:<main>:1:1: Error: Can't find column: f1
+        	select f1 from t1 left join t2 using (f1) group by f1;
 	^
 <sql-statement>
 select f1 from t1 left join t2 using (f1) group by t1.f1;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
     	select f1 from t1 left join t2 using (f1) group by t1.f1;
+	^
+        -stdin-:<main>:1:1: Error: Can't find column: f1
+        	select f1 from t1 left join t2 using (f1) group by t1.f1;
 	^
 <sql-statement>
 select t1.f1 from t1 left join t2 using (f1) group by t1.f1;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
     	select t1.f1 from t1 left join t2 using (f1) group by t1.f1;
+	^
+        -stdin-:<main>:1:1: Error: Can't find column: f1
+        	select t1.f1 from t1 left join t2 using (f1) group by t1.f1;
 	^
 <sql-statement>
 -- only this one should fail:
 select t1.f1 from t1 left join t2 using (f1) group by f1;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
     	-- only this one should fail:
+	^
+        -stdin-:<main>:1:1: Error: Can't find column: f1
+        	-- only this one should fail:
 	^
 <sql-statement>
 drop table t1, t2;

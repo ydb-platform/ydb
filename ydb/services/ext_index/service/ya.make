@@ -10,6 +10,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/actors/core
+    ydb/core/tx/tx_proxy/upload_rows
     ydb/services/ext_index/metadata
     ydb/services/ext_index/common
     ydb/library/yql/minikql/jsonpath

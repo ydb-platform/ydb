@@ -217,7 +217,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffec
     while (!BootQueue.BootQueue.empty() && processedItems < GetMaxBootBatchSize()) {
         TBootQueue::TBootQueueRecord record = BootQueue.PopFromBootQueue();
         ++processedItems;
-        TTabletInfo* tablet = FindTablet(record.TabletId);
+        TTabletInfo* tablet = FindTablet(record.TabletId, record.FollowerId);
         if (tablet == nullptr) {
             continue;
         }
@@ -226,7 +226,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffec
             continue;
         }
         if (tablet->IsReadyToStart(now)) {
-            TBestNodeResult bestNodeResult = FindBestNode(*tablet);
+            TBestNodeResult bestNodeResult = FindBestNode(*tablet, record.SuggestedNodeId);
             if (bestNodeResult.BestNode != nullptr) {
                 if (tablet->InitiateStart(bestNodeResult.BestNode)) {
                     ++tabletsStarted;
@@ -335,10 +335,10 @@ void THive::ProcessWaitQueue() {
     ProcessBootQueue();
 }
 
-void THive::AddToBootQueue(TTabletInfo* tablet) {
+void THive::AddToBootQueue(TTabletInfo* tablet, TNodeId node) {
     tablet->UpdateWeight();
     tablet->BootState = BootStateBooting;
-    BootQueue.AddToBootQueue(*tablet);
+    BootQueue.EmplaceToBootQueue(*tablet, node);
     UpdateCounterBootQueueSize(BootQueue.BootQueue.size());
 }
 
@@ -1145,7 +1145,7 @@ TVector<THive::TSelectedNode> THive::SelectMaxPriorityNodes(TVector<TSelectedNod
     return selectedNodes;
 }
 
-THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
+THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId) {
     BLOG_D("[FBN] Finding best node for tablet " << tablet.ToString());
     BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " family " << tablet.FamilyString());
 
@@ -1155,12 +1155,19 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
             if (node->IsAlive() && node->IsAllowedToRunTablet(tablet) && node->IsAbleToScheduleTablet() && node->IsAbleToRunTablet(tablet)) {
                 BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " choose node " << node->Id << " because of preferred node");
                 return TBestNodeResult(*node);
-            }
-            if (node->Freeze) {
-                BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " preferred to freezed node " << node->Id);
-                tablet.BootState = TStringBuilder() << "Preferred to freezed node " << node->Id;
+            } else {
+                BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " preferred unavailable node " << node->Id);
+                tablet.BootState = TStringBuilder() << "Preferred unavailable node " << node->Id;
                 return TBestNodeResult(true);
             }
+        }
+    }
+
+    if (suggestedNodeId != 0) {
+        TNodeInfo* node = FindNode(suggestedNodeId);
+        if (node && node->IsAlive() && node->IsAllowedToRunTablet(tablet) && node->IsAbleToScheduleTablet() && node->IsAbleToRunTablet(tablet)) {
+            BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " choose node " << node->Id << " because of suggested node");
+            return TBestNodeResult(*node);
         }
     }
 

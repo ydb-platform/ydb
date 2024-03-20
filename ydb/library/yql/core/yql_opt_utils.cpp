@@ -128,6 +128,13 @@ TExprNode::TPtr MakeOptionalBool(TPositionHandle position, bool value, TExprCont
     return ctx.NewCallable(position, "Just", { MakeBool(position, value, ctx)});
 }
 
+TExprNode::TPtr MakePgBool(TPositionHandle position, bool value, TExprContext& ctx) {
+    return ctx.NewCallable(position, "PgConst", {
+        ctx.NewAtom(position, value ? "t" : "f", TNodeFlags::Default),
+        ctx.NewCallable(position, "PgType", { ctx.NewAtom(position, "bool")})
+     });
+}
+
 TExprNode::TPtr MakeIdentityLambda(TPositionHandle position, TExprContext& ctx) {
     return ctx.Builder(position)
         .Lambda()

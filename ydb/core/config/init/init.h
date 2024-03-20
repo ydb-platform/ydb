@@ -259,6 +259,8 @@ std::unique_ptr<INodeBrokerClient> MakeNoopNodeBrokerClient();
 std::unique_ptr<IDynConfigClient> MakeNoopDynConfigClient();
 std::unique_ptr<IInitLogger> MakeNoopInitLogger();
 
+void AddProtoConfigOptions(IProtoConfigFileProvider& out);
+
 std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(TInitialConfiguratorDependencies deps);
 
 class IInitialConfiguratorDepsRecorder {

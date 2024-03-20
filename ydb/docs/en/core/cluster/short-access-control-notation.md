@@ -47,22 +47,22 @@ For example, `+(SR|UR):subject` — permission for reading and updating table re
 
 | Permission | Description |
 |:----:|:----|
-| `SR` | (select row) reading from the table
-| `UR` | (update row) updating table records
-| `ER` | (erase row) deleting table records
-| `RA` | (read attributes) reading ACL attributes
-| `WA` | (write attributes) writing ACL attributes
-| `CD` | (create directory) creating subdirectory
-| `CT` | (create table) creating table
-| `CQ` | (create queue) creating queue
-| `RS` | (remove schema) deleting objects
-| `DS` | (describe schema) describing objects
-| `AS` | (alter schema) modifying objects
-| `CDB` | (create database) creating database
-| `DDB` | (drop database) deleting database
-| `GAR` | (grant access rights) granting access rights (from own list only)
-| `WUA` | (write user attributes) changing user attributes
-| `ConnDB` | (connect database) connecting and sending requests to the database
+| `SR` | (select row) reading from the table |
+| `UR` | (update row) updating table records |
+| `ER` | (erase row) deleting table records |
+| `RA` | (read attributes) reading ACL attributes |
+| `WA` | (write attributes) writing ACL attributes |
+| `CD` | (create directory) creating subdirectory |
+| `CT` | (create table) creating table |
+| `CQ` | (create queue) creating queue |
+| `RS` | (remove schema) deleting objects |
+| `DS` | (describe schema) describing objects |
+| `AS` | (alter schema) modifying objects |
+| `CDB` | (create database) creating database |
+| `DDB` | (drop database) deleting database |
+| `GAR` | (grant access rights) granting access rights (not exceeding their own) |
+| `WUA` | (write user attributes) changing user attributes |
+| `ConnDB` | (connect database) connecting and sending requests to the database |
 
 ## Inheritance Types {#inheritance-types}
 One or more inheritance flags can be used to describe the passing of inheritance to child objects.

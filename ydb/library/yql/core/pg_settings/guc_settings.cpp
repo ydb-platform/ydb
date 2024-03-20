@@ -5,6 +5,15 @@ void TGUCSettings::Setup(const std::unordered_map<std::string, std::string>& run
     RollBack();
 }
 
+void TGUCSettings::Setup(const std::unordered_map<std::string, std::string>& settings,
+    const std::unordered_map<std::string, std::string>& rollbackSettings,
+    const std::unordered_map<std::string, std::string>& sessionSettings)
+{
+    Settings_ = settings;
+    RollbackSettings_ = rollbackSettings;
+    SessionSettings_ = sessionSettings;
+}
+
 std::optional<std::string> TGUCSettings::Get(const std::string& key) const {
     auto it = Settings_.find(key);
     if (it == Settings_.end()) {
@@ -28,6 +37,26 @@ void TGUCSettings::RollBack() {
     Settings_ = SessionSettings_ = RollbackSettings_;
 }
 
+void TGUCSettings::ExportToJson(NJson::TJsonValue& message) const {
+    NJson::TJsonValue settings(NJson::JSON_MAP);
+    for (const auto& setting : Settings_) {
+        settings[setting.first] = setting.second;
+    }
+    NJson::TJsonValue rollbackSettings(NJson::JSON_MAP);
+    for (const auto& setting : RollbackSettings_) {
+        rollbackSettings[setting.first] = setting.second;
+    }
+    NJson::TJsonValue sessionSettings(NJson::JSON_MAP);
+    for (const auto& setting : SessionSettings_) {
+        sessionSettings[setting.first] = setting.second;
+    }
+    NJson::TJsonValue gucSettings(NJson::JSON_MAP);
+    gucSettings.InsertValue("settings", std::move(settings));
+    gucSettings.InsertValue("rollback_settings", std::move(rollbackSettings));
+    gucSettings.InsertValue("session_settings", std::move(sessionSettings));
+    message.InsertValue("guc_settings", std::move(gucSettings));
+}
+
 bool TGUCSettings::operator==(const TGUCSettings& other) const {
     return Settings_ == other.Settings_ &&
         RollbackSettings_ == other.RollbackSettings_ &&
@@ -35,14 +64,21 @@ bool TGUCSettings::operator==(const TGUCSettings& other) const {
 }
 
 template <>
+struct THash<std::pair<std::string, std::string>> {
+    inline size_t operator()(const std::pair<std::string, std::string>& value) const {
+        size_t result = 0;
+        result = CombineHashes(THash<std::string>()(value.first), result);
+        result = CombineHashes(THash<std::string>()(value.second), result);
+        return result;
+    }
+};
+
+template <>
 struct THash<std::unordered_map<std::string, std::string>> {
     inline size_t operator()(const std::unordered_map<std::string, std::string>& values) const {
         size_t result = 0;
-        for (auto& value : values) {
-            auto tuple = std::make_tuple(
-                value.first,
-                value.second);
-            result = CombineHashes(THash<decltype(tuple)>()(tuple), result);
+        for (const auto& value : values) {
+            result = CombineHashes(THash<std::pair<std::string, std::string>>()(value), result);
         }
         return result;
     }

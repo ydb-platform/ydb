@@ -344,6 +344,8 @@ private:
         replayMessage.InsertValue("table_metadata", TString(NJson::WriteJson(tablesMeta, false)));
         replayMessage.InsertValue("table_meta_serialization_type", EMetaSerializationType::EncodedProto);
 
+        GUCSettings->ExportToJson(replayMessage);
+
         TString message(NJson::WriteJson(replayMessage, /*formatOutput*/ false));
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_ACTOR, "[" << SelfId() << "]: "
             << "Built the replay message " << message);

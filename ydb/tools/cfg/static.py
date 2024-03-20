@@ -280,6 +280,27 @@ class StaticConfigGenerator(object):
         return self.__proto_config("hive", config_pb2.THiveConfig, self.__cluster_details.get_service("hive_config"))
 
     @property
+    def host_configs(self):
+        drives_to_config_id = {}
+        host_config_id_iter = itertools.count(start=1)
+
+        for host_config in self._cluster_details.host_configs:
+            return self._cluster_details.raw_host_configs
+
+        host_configs = []
+        for host in self._cluster_details.hosts:
+            if host.drives not in drives_to_config_id:
+                drives_to_config_id[host.drives] = next(host_config_id_iter)
+                host_config = {
+                    "host_config_id": drives_to_config_id[host.drives],
+                    "drive": host.drives,
+                }
+                host_configs.append(host_config)
+            host["host_config_id"] = drives_to_config_id[host.drives]
+
+        return host_configs
+
+    @property
     def kikimr_cfg(self):
         if self.__is_dynamic_node:
             return kikimr_cfg_for_dynamic_node(
@@ -384,6 +405,9 @@ class StaticConfigGenerator(object):
 
         if self.table_service_config:
             normalized_config["table_service_config"] = self.table_service_config
+
+        if self.__cluster_details.host_configs is not None:
+            normalized_config["host_configs"] = self.host_configs
 
         if self.__cluster_details.blob_storage_config is not None:
             normalized_config["blob_storage_config"] = self.__cluster_details.blob_storage_config

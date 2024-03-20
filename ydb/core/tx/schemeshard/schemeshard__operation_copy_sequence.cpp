@@ -407,7 +407,6 @@ public:
         for (const auto& shardIdxProto : sequenceInfo->Sharding.GetSequenceShards()) {
             TShardIdx shardIdx = FromProto(shardIdxProto);
             auto currentTabletId = context.SS->ShardInfos.at(shardIdx).TabletID;
-            Y_ABORT_UNLESS(shard.TabletType == ETabletType::SequenceShard);
 
             if (currentTabletId == InvalidTabletId) {
                 LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

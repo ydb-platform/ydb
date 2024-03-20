@@ -360,12 +360,13 @@ Y_UNIT_TEST_SUITE(TSequence) {
                 Name: "myseq"
             }
         )");
+
         env.TestWaitNotification(runtime, txId);
 
         TestCopyTable(runtime, ++txId, "/MyRoot", "copy", "/MyRoot/Table");
+        env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/copy/myseq", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
-
         env.TestWaitNotification(runtime, txId);
     }
 

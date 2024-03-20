@@ -242,7 +242,7 @@ public:
     {
         IgnoreMessages(DebugHint(),
             {TEvHive::TEvCreateTabletReply::EventType,
-             TEvColumnShard::TEvProposeTransactionResult::EventType,
+             TEvDataShard::TEvProposeTransactionResult::EventType,
              TEvPrivate::TEvOperationPlan::EventType});
     }
 
@@ -923,8 +923,9 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
         scheme.SetFailOnExist(tx.GetFailOnExist());
 
-        sequenceDescription.SetCopyFromSequence(copying.GetCopyFromTable() + "/" + sequenceDescription.GetName());
-        *scheme.MutableSequence() = std::move(sequenceDescription);
+        auto* copySequence = scheme.MutableCopySequence();
+        copySequence->SetCopyFrom(copying.GetCopyFromTable() + "/" + sequenceDescription.GetName());
+        *copySequence->MutableSequence() = std::move(sequenceDescription);
 
         result.push_back(CreateCopySequence(NextPartId(nextId, result), scheme));
     }

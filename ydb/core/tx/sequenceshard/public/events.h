@@ -99,6 +99,11 @@ namespace NSequenceShard {
                     return std::move(*this);
                 }
 
+                TBuilder&& SetFrozen(bool frozen) && {
+                    Msg->Record.SetFrozen(frozen);
+                    return std::move(*this);
+                }
+
                 THolder<TEvCreateSequence> Done() && {
                     return std::move(Msg);
                 }

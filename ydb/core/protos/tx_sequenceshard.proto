@@ -39,6 +39,9 @@ message TEvCreateSequence {
     oneof OptionalCycle {
         bool Cycle = 9;
     }
+    oneof OptionalFrozen {
+        bool Frozen = 10;
+    }
 }
 
 message TEvCreateSequenceResult {

@@ -1295,7 +1295,6 @@ message TSequenceDescription {
     optional uint64 Cache = 8; // number of items to cache, defaults to 1
     optional sint64 Increment = 9; // increment at each call, defaults to 1
     optional bool Cycle = 10; // true when cycle on overflow is allowed
-    optional string CopyFromSequence = 11; // for copy sequence
 }
 
 message TSequenceSharding {
@@ -1581,6 +1580,13 @@ message TModifyScheme {
     optional TViewDescription CreateView = 64;
 
     optional NActorsProto.TActorId TempTableOwnerActorId = 65;
+
+    optional TCopySequence CopySequence = 66;
+}
+
+message TCopySequence {
+    optional string CopyFrom = 1;
+    optional TSequenceDescription Sequence = 2;
 }
 
 // "Script", used by client to parse text files with multiple DDL commands

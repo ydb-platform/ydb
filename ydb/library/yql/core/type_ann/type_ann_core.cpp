@@ -12063,6 +12063,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgAnd"] = &PgBoolOpWrapper;
         Functions["PgOr"] = &PgBoolOpWrapper;
         Functions["PgNot"] = &PgBoolOpWrapper;
+        Functions["PgIsTrue"] = &PgBoolOpWrapper;
+        Functions["PgIsFalse"] = &PgBoolOpWrapper;
+        Functions["PgIsUnknown"] = &PgBoolOpWrapper;
         Functions["PgAggregationTraits"] = &PgAggregationTraitsWrapper;
         Functions["PgAggregationTraitsOverState"] = &PgAggregationTraitsWrapper;
         Functions["PgWindowTraits"] = &PgAggregationTraitsWrapper;

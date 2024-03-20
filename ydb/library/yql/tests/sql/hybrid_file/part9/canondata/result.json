@@ -1679,6 +1679,20 @@
             "uri": "https://{canondata_backend}/1889210/796baf28896eb5aaad8828a0b6000e7d17563447/resource.tar.gz#test.test_pg-cbo_pragma2-default.txt-Plan_/plan.txt"
         }
     ],
+    "test.test[pg-is_predicate-default.txt-Debug]": [
+        {
+            "checksum": "20a393aad06f1b1ff9b9c5b92c500def",
+            "size": 985,
+            "uri": "https://{canondata_backend}/1925842/3b19aeedb10a29b1dbd9b746d8269c577ec91ea2/resource.tar.gz#test.test_pg-is_predicate-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg-is_predicate-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1925842/3b19aeedb10a29b1dbd9b746d8269c577ec91ea2/resource.tar.gz#test.test_pg-is_predicate-default.txt-Plan_/plan.txt"
+        }
+    ],
     "test.test[pg-join_tree_order-default.txt-Debug]": [
         {
             "checksum": "572c90883517dee9f4335f4b184c2d50",

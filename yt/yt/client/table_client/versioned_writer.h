@@ -27,7 +27,7 @@ struct IVersionedWriter
      *  The caller must wait for asynchronous flag provided by #GetReadyEvent to become set.
      *  The latter may indicate an error occurred while fetching more data.
      */
-    virtual bool Write(TRange<TVersionedRow> rows) = 0;
+    [[nodiscard]] virtual bool Write(TRange<TVersionedRow> rows) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IVersionedWriter)

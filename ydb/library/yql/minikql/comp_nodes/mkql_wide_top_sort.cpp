@@ -10,6 +10,9 @@
 
 #include <ydb/library/yql/utils/sort.h>
 
+#include <list>
+
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -427,7 +430,8 @@ private:
                 MKQL_ENSURE(false, "Internal logic error");
                 break;
             case EOperatingMode::Spilling:
-                ctx.SpillerFactory->CreateSpiller();
+                auto spiller = ctx.SpillerFactory->CreateSpiller();
+                Spillers.push_back(spiller, type, 10);
                break;
             case EOperatingMode::ProcessSpilled:
                 break;
@@ -436,6 +440,7 @@ private:
     }
 
     bool SpillState() {
+
         return true;
     }
 
@@ -446,6 +451,7 @@ private:
     TStorage Storage;
     TPointers Free, Full;
     TFields Fields;
+    std::list<TWideUnboxedValuesSpillerAdapter*> Spillers;
     EOperatingMode Mode;
 };
 
@@ -496,9 +502,9 @@ class TWideTopWrapper: public TStatefulWideFlowCodegeneratorNode<TWideTopWrapper
 using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideTopWrapper<Sort, HasCount>>;
 public:
     TWideTopWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, TComputationNodePtrVector&& directions, std::vector<TKeyInfo>&& keys,
-        std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations)
+        std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations, TMultiType* sortKeysMultiType)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed), Flow(flow), Count(count), Directions(std::move(directions)), Keys(std::move(keys))
-        , Indexes(std::move(indexes)), Representations(std::move(representations))
+        , Indexes(std::move(indexes)), Representations(std::move(representations)), SortKeysMultiType(sortKeysMultiType)
     {
         for (const auto& x : Keys) {
             if (x.Compare || x.PresortType) {
@@ -762,6 +768,7 @@ private:
     const std::vector<ui32> Indexes;
     const std::vector<EValueRepresentation> Representations;
     TKeyTypes KeyTypes;
+    TMultiType* SortKeysMultiType;
     bool HasComplexType = false;
 
 #ifndef MKQL_DISABLE_CODEGEN

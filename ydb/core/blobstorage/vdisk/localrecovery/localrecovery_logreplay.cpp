@@ -755,7 +755,7 @@ namespace NKikimr {
             }
 
             TEvAnubisOsirisPut put(AnubisOsirisPutMsg);
-            TEvAnubisOsirisPut::THullDbInsert insert = put.PrepareInsert(LocRecCtx->VCtx->Top.get(), LocRecCtx->VCtx->ShortSelfVDisk);
+            THullDbInsert insert = put.PrepareInsert(LocRecCtx->VCtx->Top.get(), LocRecCtx->VCtx->ShortSelfVDisk);
             const bool fromVPutCommand = false;
             PutLogoBlobToHullAndSyncLog(ctx, record.Lsn, insert.Id, insert.Ingress, TString(), fromVPutCommand);
             return EDispatchStatus::Success;

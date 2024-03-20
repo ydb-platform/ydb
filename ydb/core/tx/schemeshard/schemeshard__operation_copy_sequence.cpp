@@ -107,17 +107,7 @@ public:
             auto shardIdx = shard.Idx;
             auto tabletId = context.SS->ShardInfos.at(shardIdx).TabletID;
             Y_ABORT_UNLESS(shard.TabletType == ETabletType::SequenceShard);
-
-            if (tabletId == InvalidTabletId) {
-                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "TCopySequence TConfigureParts ProgressState"
-                            << " shard " << shardIdx << " is not created yet, waiting"
-                            << " operationId# " << OperationId
-                            << " at tablet " << ssId);
-                context.OnComplete.WaitShardCreated(shardIdx, OperationId);
-                txState->ShardsInProgress.insert(shardIdx);
-                return false;
-            }
+            Y_ABORT_UNLESS(tabletId != InvalidTabletId);
 
             auto event = MakeHolder<NSequenceShard::TEvSequenceShard::TEvCreateSequence>(txState->TargetPathId);
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
@@ -156,7 +146,7 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {
-            TEvHive::TEvCreateTabletReply::EventType,
+            NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::EventType,
         });
     }
 
@@ -238,8 +228,8 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {
-            TEvHive::TEvCreateTabletReply::EventType,
             TEvPrivate::TEvOperationPlan::EventType,
+            NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::EventType,
         });
     }
 
@@ -289,9 +279,8 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {
-            TEvHive::TEvCreateTabletReply::EventType,
-            TEvPrivate::TEvOperationPlan::EventType,
             TEvPrivate::TEvCompleteBarrier::EventType,
+            NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::EventType,
         });
     }
 
@@ -397,27 +386,14 @@ public:
             return false;
         }
 
-        TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(txState->TargetPathId);
-        Y_ABORT_UNLESS(sequenceInfo);
-        Y_ABORT_UNLESS(!sequenceInfo->AlterData);
-
         auto getSequenceResult = ev->Get()->Record;
 
-        Y_ABORT_UNLESS(sequenceInfo->Sharding.GetSequenceShards().size() == 1);
-        for (const auto& shardIdxProto : sequenceInfo->Sharding.GetSequenceShards()) {
-            TShardIdx shardIdx = FromProto(shardIdxProto);
+        Y_ABORT_UNLESS(txState->Shards.size() == 1);
+        for (auto shard : txState->Shards) {
+            auto shardIdx = shard.Idx;
             auto currentTabletId = context.SS->ShardInfos.at(shardIdx).TabletID;
 
-            if (currentTabletId == InvalidTabletId) {
-                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "TCopySequence TProposedCopySequence ProgressState"
-                            << " shard " << shardIdx << " is not created yet, waiting"
-                            << " operationId# " << OperationId
-                            << " at tablet " << ssId);
-                context.OnComplete.WaitShardCreated(shardIdx, OperationId);
-                txState->ShardsInProgress.insert(shardIdx);
-                return false;
-            }
+            Y_ABORT_UNLESS(currentTabletId != InvalidTabletId);
 
             auto event = MakeHolder<NSequenceShard::TEvSequenceShard::TEvRestoreSequence>(
                 txState->TargetPathId, getSequenceResult);
@@ -452,13 +428,9 @@ public:
         Y_ABORT_UNLESS(!txState->Shards.empty());
         Y_ABORT_UNLESS(txState->SourcePathId != InvalidPathId);
 
-        TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(txState->SourcePathId);
-        Y_ABORT_UNLESS(sequenceInfo);
-        Y_ABORT_UNLESS(!sequenceInfo->AlterData);
-
-        Y_ABORT_UNLESS(sequenceInfo->Sharding.GetSequenceShards().size() == 1);
-        for (const auto& shardIdxProto : sequenceInfo->Sharding.GetSequenceShards()) {
-            TShardIdx shardIdx = FromProto(shardIdxProto);
+        Y_ABORT_UNLESS(txState->Shards.size() == 1);
+        for (auto shard : txState->Shards) {
+            auto shardIdx = shard.Idx;
             auto tabletId = context.SS->ShardInfos.at(shardIdx).TabletID;
 
             auto event = MakeHolder<NSequenceShard::TEvSequenceShard::TEvGetSequence>(txState->SourcePathId);
@@ -605,14 +577,12 @@ public:
         auto domainPathId = parentPath.GetPathIdForDomain();
         auto domainInfo = parentPath.DomainInfo();
 
-        // TODO: maybe select from several shards
-        ui64 shardsToCreate = 0;
-        TShardIdx sequenceShard;
-        if (domainInfo->GetSequenceShards().empty()) {
-            ++shardsToCreate;
-        } else {
-            sequenceShard = *domainInfo->GetSequenceShards().begin();
-        }
+        Y_ABORT_UNLESS(context.SS->Sequences.contains(srcPath.Base()->PathId));
+        TSequenceInfo::TPtr srcSequence = context.SS->Sequences.at(srcPath.Base()->PathId);
+        Y_ABORT_UNLESS(!srcSequence->Sharding.GetSequenceShards().empty());
+
+        auto protoSequenceShard = *srcSequence->Sharding.GetSequenceShards().rbegin();
+        TShardIdx sequenceShard = FromProto(protoSequenceShard);
 
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
 
@@ -641,9 +611,7 @@ public:
                 checks
                     .PathsLimit()
                     .DirChildrenLimit()
-                    .ShardsLimit(shardsToCreate)
                     .IsTheSameDomain(srcPath)
-                    //.PathShardsLimit(shardsToCreate)
                     .IsValidACL(acl);
             }
 
@@ -667,18 +635,6 @@ public:
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
-        }
-
-        Y_ABORT_UNLESS(context.SS->Sequences.contains(srcPath.Base()->PathId));
-
-        const ui32 profileId = 0;
-        TChannelsBindings channelsBindings;
-        if (shardsToCreate) {
-            if (!context.SS->ResolveTabletChannels(profileId, dstPath.GetPathIdForDomain(), channelsBindings)) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                            "Unable to construct channel binding for sequence shard with the storage pool");
-                return result;
-            }
         }
 
         dstPath.MaterializeLeaf(owner);
@@ -707,22 +663,10 @@ public:
         TSequenceInfo::TPtr alterData = sequenceInfo->CreateNextVersion();
         alterData->Description = descr;
 
-        if (shardsToCreate) {
-            sequenceShard = context.SS->RegisterShardInfo(
-                TShardInfo::SequenceShardInfo(OperationId.GetTxId(), domainPathId)
-                    .WithBindedChannels(channelsBindings));
-            context.SS->TabletCounters->Simple()[COUNTER_SEQUENCESHARD_COUNT].Add(1);
-            txState.Shards.emplace_back(sequenceShard, ETabletType::SequenceShard, TTxState::CreateParts);
-            txState.State = TTxState::CreateParts;
-            context.SS->PathsById.at(domainPathId)->IncShardsInside();
-            domainInfo->AddInternalShard(sequenceShard);
-            domainInfo->AddSequenceShard(sequenceShard);
-        } else {
-            txState.Shards.emplace_back(sequenceShard, ETabletType::SequenceShard, TTxState::ConfigureParts);
-            auto& shardInfo = context.SS->ShardInfos.at(sequenceShard);
-            if (shardInfo.CurrentTxId != OperationId.GetTxId()) {
-                context.OnComplete.Dependence(shardInfo.CurrentTxId, OperationId.GetTxId());
-            }
+        txState.Shards.emplace_back(sequenceShard, ETabletType::SequenceShard, TTxState::ConfigureParts);
+        auto& shardInfo = context.SS->ShardInfos.at(sequenceShard);
+        if (shardInfo.CurrentTxId != OperationId.GetTxId()) {
+            context.OnComplete.Dependence(shardInfo.CurrentTxId, OperationId.GetTxId());
         }
 
         {
@@ -749,9 +693,6 @@ public:
 
         context.SS->PersistTxState(db, OperationId);
         context.SS->PersistUpdateNextPathId(db);
-        if (shardsToCreate) {
-            context.SS->PersistUpdateNextShardIdx(db);
-        }
 
         for (auto shard : txState.Shards) {
             if (shard.Operation == TTxState::CreateParts) {

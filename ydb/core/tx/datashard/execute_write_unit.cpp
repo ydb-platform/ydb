@@ -64,6 +64,24 @@ public:
             txc.DB.RollbackChanges();
     }
 
+    bool CheckForVolatileReadDependencies(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx) {
+        if (!userDb.GetVolatileReadDependencies().empty()) {
+            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting because volatile read dependencies");
+
+            for (ui64 txId : userDb.GetVolatileReadDependencies()) {
+                writeOp.AddVolatileDependency(txId);
+                bool ok = DataShard.GetVolatileTxManager().AttachBlockedOperation(txId, writeOp.GetTxId());
+                Y_VERIFY_S(ok, "Unexpected failure to attach TxId# " << writeOp.GetTxId() << " to volatile tx " << txId);
+            }
+
+            ResetChanges(userDb, writeOp, txc);
+
+            return true;
+        }
+
+        return false;
+    }
+
     EExecutionStatus OnTabletNotReadyException(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx) {
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Tablet " << DataShard.TabletID() << " is not ready for " << writeOp << " execution");
 
@@ -74,6 +92,9 @@ public:
     }
 
     EExecutionStatus OnUniqueConstrainException(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx) {
+        if (CheckForVolatileReadDependencies(userDb, writeOp, txc, ctx)) 
+            return EExecutionStatus::Continue;
+        
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting because an duplicate key");
         writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "Operation is aborting because an duplicate key");
         ResetChanges(userDb, writeOp, txc);
@@ -334,19 +355,8 @@ public:
 
             DoUpdateToUserDb(userDb, writeOp, txc, ctx);
 
-            if (!userDb.GetVolatileReadDependencies().empty()) {
-                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *writeOp << " at " << tabletId << " aborting because volatile read dependencies");
-
-                for (ui64 txId : userDb.GetVolatileReadDependencies()) {
-                    writeOp->AddVolatileDependency(txId);
-                    bool ok = DataShard.GetVolatileTxManager().AttachBlockedOperation(txId, writeOp->GetTxId());
-                    Y_VERIFY_S(ok, "Unexpected failure to attach TxId# " << op->GetTxId() << " to volatile tx " << txId);
-                }
-
-                ResetChanges(userDb, *writeOp, txc);
-
+            if (CheckForVolatileReadDependencies(userDb, *writeOp, txc, ctx))
                 return EExecutionStatus::Continue;
-            }
 
             writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildCompleted(DataShard.TabletID(), writeOp->GetTxId()));
 

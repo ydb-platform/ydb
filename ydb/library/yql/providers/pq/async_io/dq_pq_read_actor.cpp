@@ -518,30 +518,26 @@ private:
 
         void operator()(NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent& event) {
             const auto partitionKey = MakePartitionKey(event.GetPartitionStream());
-            const auto partitionKeyStr = ToString(partitionKey);
             TMaybe<ui64> readOffset;
             const auto offsetIt = Self.PartitionToOffset.find(partitionKey);
-            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " CreatePartitionStreamEvent received");
+            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " CreatePartitionStreamEvent received");
 
             if (offsetIt != Self.PartitionToOffset.end()) {
                 readOffset = offsetIt->second;
             }
-            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " Confirm CreatePartitionStreamEvent with offset " << readOffset);
+            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Confirm CreatePartitionStreamEvent with offset " << readOffset);
             event.Confirm(readOffset);
         }
 
         void operator()(NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent& event) {
             const auto partitionKey = MakePartitionKey(event.GetPartitionStream());
-            const auto partitionKeyStr = ToString(partitionKey);
-            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " DestroyPartitionStreamEvent received");
+            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " DestroyPartitionStreamEvent received");
         }
 
         void operator()(NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamStatusEvent&) { }
 
-        void operator()(NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamClosedEvent& event) {
-            const auto partitionKey = MakePartitionKey(event.GetPartitionStream());
-            const auto partitionKeyStr = ToString(partitionKey);
-            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " PartitionStreamClosedEvent received");
+        void operator()(NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamClosedEvent&) {
+            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " PartitionStreamClosedEvent received");
         }
 
         TReadyBatch& GetActiveBatch(const TPartitionKey& partitionKey, TInstant time) {

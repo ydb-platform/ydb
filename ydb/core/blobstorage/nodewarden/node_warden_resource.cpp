@@ -286,7 +286,7 @@ void TNodeWarden::HandleGone(STATEFN_SIG) {
 }
 
 void TNodeWarden::ApplyStaticServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& ss) {
-    ApplyServiceSet(ss, true, false, true);
+    ApplyServiceSet(ss, true, false, false);
 }
 
 void TNodeWarden::HandleIncrHugeInit(NIncrHuge::TEvIncrHugeInit::TPtr ev) {

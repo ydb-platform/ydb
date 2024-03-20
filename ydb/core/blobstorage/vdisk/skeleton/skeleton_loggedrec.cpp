@@ -227,7 +227,7 @@ namespace NKikimr {
     TLoggedRecAnubisOsirisPut::TLoggedRecAnubisOsirisPut(
             TLsnSeg seg,
             bool confirmSyncLogAlso,
-            const TEvAnubisOsirisPut::THullDbInsert &insert,
+            const THullDbInsert &insert,
             std::unique_ptr<TEvAnubisOsirisPutResult> result,
             TEvAnubisOsirisPut::TPtr origEv)
         : ILoggedRec(seg, confirmSyncLogAlso)
@@ -237,7 +237,7 @@ namespace NKikimr {
     {}
 
     void TLoggedRecAnubisOsirisPut::Replay(THull &hull, const TActorContext &ctx) {
-        hull.AddAnubisOsirisLogoBlob(ctx, Insert.Id, Insert.Ingress, Seg);
+        hull.AddLogoBlob(ctx, Insert.Id, Insert.Ingress, Seg);
         const auto& vCtx = hull.GetHullCtx()->VCtx;
         SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie, vCtx->VDiskLogPrefix, vCtx->OOSMonGroup);
     }
@@ -266,16 +266,19 @@ namespace NKikimr {
     TLoggedRecDelLogoBlobDataSyncLog::TLoggedRecDelLogoBlobDataSyncLog(
             TLsnSeg seg,
             bool confirmSyncLogAlso,
+            const THullDbInsert &insert,
             std::unique_ptr<TEvDelLogoBlobDataSyncLogResult> result,
             const TActorId &recipient,
             ui64 recipientCookie)
         : ILoggedRec(seg, confirmSyncLogAlso)
+        , Insert(insert)
         , Result(std::move(result))
         , Recipient(recipient)
         , RecipientCookie(recipientCookie)
     {}
 
     void TLoggedRecDelLogoBlobDataSyncLog::Replay(THull &hull, const TActorContext &ctx) {
+        hull.AddLogoBlob(ctx, Insert.Id, Insert.Ingress, Seg);
         const auto& vCtx = hull.GetHullCtx()->VCtx;
         SendVDiskResponse(ctx, Recipient, Result.release(), RecipientCookie, vCtx->VDiskLogPrefix, vCtx->OOSMonGroup);
     }

@@ -236,7 +236,6 @@ TDefaultVDiskSetup::TDefaultVDiskSetup() {
         cfg->SyncJobTimeout = TDuration::Seconds(20);
         cfg->RunSyncer = true;
         cfg->ReplTimeInterval = TDuration::Seconds(10);
-        cfg->RunHandoff = true;
         cfg->SkeletonFrontQueueBackpressureCheckMsgId = false;
     };
     AddConfigModifier(modifier);

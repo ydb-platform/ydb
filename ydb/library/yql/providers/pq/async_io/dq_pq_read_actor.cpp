@@ -520,8 +520,6 @@ private:
             const auto partitionKey = MakePartitionKey(event.GetPartitionStream());
             TMaybe<ui64> readOffset;
             const auto offsetIt = Self.PartitionToOffset.find(partitionKey);
-            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " CreatePartitionStreamEvent received");
-
             if (offsetIt != Self.PartitionToOffset.end()) {
                 readOffset = offsetIt->second;
             }

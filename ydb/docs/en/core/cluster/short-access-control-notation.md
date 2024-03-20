@@ -56,7 +56,7 @@ For example, `+(SR|UR):subject` — permission for reading and updating table re
 | `CT` | (create table) creating table |
 | `CQ` | (create queue) creating queue |
 | `RS` | (remove schema) deleting objects |
-| `DS` | (describe schema) describing objects, listing folder content |
+| `DS` | (describe schema) describing objects, listing directories content |
 | `AS` | (alter schema) modifying objects |
 | `CDB` | (create database) creating database |
 | `DDB` | (drop database) deleting database |

@@ -421,14 +421,34 @@ namespace {
 
     END_SIMPLE_ARROW_UDF(TContains, TContainsKernelExec::Do);
 
-    SIMPLE_STRICT_UDF(TReplaceAll, char*(TAutoMap<char*>, char*, char*)) {
+
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TReplaceAll, char*(TAutoMap<char*>, char*, char*)) {
         if (TString result(args[0].AsStringRef()); SubstGlobal(result, args[1].AsStringRef(), args[2].AsStringRef()))
             return valueBuilder->NewString(result);
         else
             return args[0];
     }
 
-    SIMPLE_STRICT_UDF(TReplaceFirst, char*(TAutoMap<char*>, char*, char*)) {
+    struct TReplaceAllKernelExec
+        : public TGenericKernelExec<TReplaceAllKernelExec, 3>
+    {
+        template <typename TSink>
+        static void Process(TBlockItem args, const TSink& sink) {
+            TString result(args.GetElement(0).AsStringRef());
+            const TStringBuf what(args.GetElement(1).AsStringRef());
+            const TStringBuf with(args.GetElement(2).AsStringRef());
+            if (SubstGlobal(result, what, with)) {
+                return sink(TBlockItem(result));
+            } else {
+                return sink(args.GetElement(0));
+            }
+        }
+    };
+
+    END_SIMPLE_ARROW_UDF(TReplaceAll, TReplaceAllKernelExec::Do)
+
+
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TReplaceFirst, char*(TAutoMap<char*>, char*, char*)) {
         std::string result(args[0].AsStringRef());
         const std::string_view what(args[1].AsStringRef());
         if (const auto index = result.find(what); index != std::string::npos) {
@@ -438,7 +458,26 @@ namespace {
         return args[0];
     }
 
-    SIMPLE_STRICT_UDF(TReplaceLast, char*(TAutoMap<char*>, char*, char*)) {
+    struct TReplaceFirstKernelExec
+        : public TGenericKernelExec<TReplaceFirstKernelExec, 3>
+    {
+        template <typename TSink>
+        static void Process(TBlockItem args, const TSink& sink) {
+            std::string result(args.GetElement(0).AsStringRef());
+            const std::string_view what(args.GetElement(1).AsStringRef());
+            const std::string_view with(args.GetElement(2).AsStringRef());
+            if (const auto index = result.find(what); index != std::string::npos) {
+                result.replace(index, what.size(), with);
+                return sink(TBlockItem(result));
+            }
+            return sink(args.GetElement(0));
+        }
+    };
+
+    END_SIMPLE_ARROW_UDF(TReplaceFirst, TReplaceFirstKernelExec::Do)
+
+
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TReplaceLast, char*(TAutoMap<char*>, char*, char*)) {
         std::string result(args[0].AsStringRef());
         const std::string_view what(args[1].AsStringRef());
         if (const auto index = result.rfind(what); index != std::string::npos) {
@@ -447,6 +486,25 @@ namespace {
         }
         return args[0];
     }
+
+    struct TReplaceLastKernelExec
+        : public TGenericKernelExec<TReplaceLastKernelExec, 3>
+    {
+        template <typename TSink>
+        static void Process(TBlockItem args, const TSink& sink) {
+            std::string result(args.GetElement(0).AsStringRef());
+            const std::string_view what(args.GetElement(1).AsStringRef());
+            const std::string_view with(args.GetElement(2).AsStringRef());
+            if (const auto index = result.rfind(what); index != std::string::npos) {
+                result.replace(index, what.size(), with);
+                return sink(TBlockItem(result));
+            }
+            return sink(args.GetElement(0));
+        }
+    };
+
+    END_SIMPLE_ARROW_UDF(TReplaceLast, TReplaceLastKernelExec::Do)
+
 
     SIMPLE_STRICT_UDF(TRemoveAll, char*(TAutoMap<char*>, char*)) {
         std::string input(args[0].AsStringRef());

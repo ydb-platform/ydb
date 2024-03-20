@@ -3,6 +3,7 @@
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/tx/replication/common/sensitive_event_pb.h>
 
 namespace NKikimr::NReplication {
 
@@ -33,7 +34,7 @@ struct TEvService {
         TEvStatus() = default;
     };
 
-    struct TEvRunWorker: public TEventPB<TEvRunWorker, NKikimrReplication::TEvRunWorker, EvRunWorker> {
+    struct TEvRunWorker: public TSensitiveEventPB<TEvRunWorker, NKikimrReplication::TEvRunWorker, EvRunWorker> {
         TEvRunWorker() = default;
     };
 

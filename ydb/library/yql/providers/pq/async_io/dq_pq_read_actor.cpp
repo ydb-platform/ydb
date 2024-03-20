@@ -256,6 +256,10 @@ public:
         return *ReadSession;
     }
 
+    TString GetSessionId() const {
+        return ReadSession ? ReadSession->GetSessionId() : TString{"empty"};
+    }
+
 private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvSourceDataReady, Handle);
@@ -534,7 +538,7 @@ private:
 
         void operator()(NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamStatusEvent&) { }
 
-        void operator()(NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamClosedEvent&) { }
+        void operator()(NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamClosedEvent& event) {
             const auto partitionKey = MakePartitionKey(event.GetPartitionStream());
             const auto partitionKeyStr = ToString(partitionKey);
             SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " PartitionStreamClosedEvent received");

@@ -1,7 +1,7 @@
 /* postgres can not */
 use plato;
 
-select * from BigDates;
+select * from BigDates order by row;
 
 insert into @Output with truncate
 select * from BigDates

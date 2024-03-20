@@ -27,4 +27,3 @@ select row
 , 2, cast(dt64 as date32), cast(dt64 as timestamp64)
 , 3, cast(ts64 as date32), cast(ts64 as datetime64)
 from BigDates order by row;
-

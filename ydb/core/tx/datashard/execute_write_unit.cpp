@@ -73,12 +73,6 @@ public:
         return EExecutionStatus::Restart;
     }
 
-    EExecutionStatus OnPageFaultException(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx) {
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " has a page fault.");
-        ResetChanges(userDb, writeOp, txc);
-        return EExecutionStatus::Restart;
-    }
-
     EExecutionStatus OnUniqueConstrainException(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx) {
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting because an duplicate key");
         writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "Operation is aborting because an duplicate key");
@@ -340,6 +334,20 @@ public:
 
             DoUpdateToUserDb(userDb, writeOp, txc, ctx);
 
+            if (!userDb.GetVolatileReadDependencies().empty()) {
+                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *writeOp << " at " << tabletId << " aborting because volatile read dependencies");
+
+                for (ui64 txId : userDb.GetVolatileReadDependencies()) {
+                    writeOp->AddVolatileDependency(txId);
+                    bool ok = DataShard.GetVolatileTxManager().AttachBlockedOperation(txId, writeOp->GetTxId());
+                    Y_VERIFY_S(ok, "Unexpected failure to attach TxId# " << op->GetTxId() << " to volatile tx " << txId);
+                }
+
+                ResetChanges(userDb, *writeOp, txc);
+
+                return EExecutionStatus::Continue;
+            }
+
             writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildCompleted(DataShard.TabletID(), writeOp->GetTxId()));
 
             auto& writeResult = writeOp->GetWriteResult();
@@ -440,8 +448,6 @@ public:
                 txc.DB.RollbackChanges();
             }
             return EExecutionStatus::Executed;
-        } catch(const TPageFaultException&) {
-            return OnPageFaultException(userDb, *writeOp, txc, ctx);
         } catch (const TUniqueConstrainException&) {
             return OnUniqueConstrainException(userDb, *writeOp, txc, ctx);
         }

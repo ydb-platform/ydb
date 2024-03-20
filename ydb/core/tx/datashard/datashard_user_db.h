@@ -1,7 +1,6 @@
 #pragma once
 
 #include "change_collector.h"
-#include "datashard_exception.h"
 
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
@@ -15,6 +14,8 @@ namespace NKikimr::NMiniKQL {
 }
 
 namespace NKikimr::NDataShard {
+
+class TUniqueConstrainException: public yexception {};
 
 class IDataShardUserDb {
 protected:
@@ -169,7 +170,7 @@ private:
     static TSmallVec<TCell> ConvertTableKeys(const TArrayRef<const TRawTypeValue> key);
 
     void UpdateRowInt(NTable::ERowOp rowOp, const TTableId& tableId, ui64 localTableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
-    void CheckExistingRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key);
+    void EnsureMissingRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key);
 
     void IncreaseUpdateCounters(const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
 private:

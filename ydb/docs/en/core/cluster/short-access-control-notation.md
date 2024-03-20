@@ -39,8 +39,10 @@ For example, `+R:subject` — permission to read.
 | `F` | (full) all rights. It consists of permissions for use and management.|
 | `FL` | (full legacy) obsolete version of all rights. It consists of permissions for use (obsolete) and management.|
 
-#### Simple Permissions
-If no other option is available, the list of permissions will be provided in parentheses through the vertical bar `|` symbol.
+### Simple Permissions
+
+If there's no matching permission group, the list of permissions will be provided in parentheses separated by the vertical bar `|` symbol.
+
 For example, `+(SR|UR):subject` — permission for reading and updating table records.
 
 | Permission | Description |

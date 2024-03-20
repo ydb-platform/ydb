@@ -180,4 +180,48 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
         });
     }
 
+    Y_UNIT_TEST(CopyTableWithSequence) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+            runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
+
+            {
+                TInactiveZone inactive(activeZone);
+                // no inactive initialization
+            }
+
+            t.TestEnv->ReliablePropose(runtime,
+                CreateIndexedTableRequest(++t.TxId, "/MyRoot", R"(
+                    TableDescription {
+                        Name: "Table"
+                        Columns { Name: "key"   Type: "Uint64" DefaultFromSequence: "myseq" }
+                        Columns { Name: "value" Type: "Utf8" }
+                        KeyColumnNames: ["key"]
+                    }
+                    IndexDescription {
+                        Name: "ValueIndex"
+                        KeyColumnNames: ["value"]
+                    }
+                    SequenceDescription {
+                        Name: "myseq"
+                    }
+                )"),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            t.TestEnv->ReliablePropose(runtime, CopyTableRequest(++t.TxId, "/MyRoot", "copy", "/MyRoot/Table"),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists,
+                NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            TestLs(runtime, "/MyRoot/copy/myseq", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+
+            {
+                TInactiveZone inactive(activeZone);
+                // no inactive finalization
+            }
+        });
+    }
+
 } // Y_UNIT_TEST_SUITE(TSequenceReboots)

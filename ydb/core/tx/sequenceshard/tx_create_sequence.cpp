@@ -65,12 +65,9 @@ namespace NSequenceShard {
                 }
             }
 
-            bool frozen = false;
-            if (msg->Record.OptionalFrozen_case() == NKikimrTxSequenceShard::TEvCreateSequence::kFrozen) {
-                if (msg->Record.GetFrozen()) {
-                    frozen = true;
-                    sequence.State = Schema::ESequenceState::Frozen;
-                }
+            bool frozen = msg->Record.GetFrozen();
+            if (frozen) {
+                sequence.State = Schema::ESequenceState::Frozen;
             }
 
             if (msg->Record.OptionalCycle_case() == NKikimrTxSequenceShard::TEvCreateSequence::kCycle) {

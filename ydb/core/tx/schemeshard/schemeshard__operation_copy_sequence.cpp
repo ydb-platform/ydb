@@ -508,7 +508,7 @@ public:
         const auto acceptExisted = !Transaction.GetFailOnExist();
         const TString& parentPathStr = Transaction.GetWorkingDir();
         auto& copySequence = Transaction.GetCopySequence();
-        auto& descr = copySequence.GetSequence();
+        auto& descr = Transaction.GetSequence();
         const TString& name = descr.GetName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

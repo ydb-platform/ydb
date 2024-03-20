@@ -834,7 +834,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
 
         auto* copySequence = scheme.MutableCopySequence();
         copySequence->SetCopyFrom(copying.GetCopyFromTable() + "/" + sequenceDescription.GetName());
-        *copySequence->MutableSequence() = std::move(sequenceDescription);
+        *scheme.MutableSequence() = std::move(sequenceDescription);
 
         result.push_back(CreateCopySequence(NextPartId(nextId, result), scheme));
     }

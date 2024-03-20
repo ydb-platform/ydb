@@ -1586,7 +1586,6 @@ message TModifyScheme {
 
 message TCopySequence {
     optional string CopyFrom = 1;
-    optional TSequenceDescription Sequence = 2;
 }
 
 // "Script", used by client to parse text files with multiple DDL commands

@@ -106,6 +106,39 @@ SELECT *
    | 0 | zero
 (11 rows)
 
+SELECT *
+  FROM J1_TBL t1 (a, b, c) JOIN J2_TBL t2 (a, d) USING (a)
+  ORDER BY a, d;
+ a | b |   c   | d  
+---+---+-------+----
+ 0 |   | zero  |   
+ 1 | 4 | one   | -1
+ 2 | 3 | two   |  2
+ 2 | 3 | two   |  4
+ 3 | 2 | three | -3
+ 5 | 0 | five  | -5
+ 5 | 0 | five  | -5
+(7 rows)
+
+-- test join using aliases
+SELECT * FROM J1_TBL JOIN J2_TBL USING (i) WHERE J1_TBL.t = 'one';  -- ok
+ i | j |  t  | k  
+---+---+-----+----
+ 1 | 4 | one | -1
+(1 row)
+
+SELECT * FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE J1_TBL.t = 'one';  -- ok
+ i | j |  t  | k  
+---+---+-----+----
+ 1 | 4 | one | -1
+(1 row)
+
+SELECT *
+  FROM J1_TBL LEFT JOIN J2_TBL USING (i) WHERE (k = 1);
+ i | j | t | k 
+---+---+---+---
+(0 rows)
+
 --
 -- More complicated constructs
 --
@@ -202,6 +235,18 @@ on (x1 = xx1) where (xx2 is not null);
   2 | 22 |  2 | 222 |   2 |  22
   4 | 44 |  4 |     |   4 |  44
 (3 rows)
+
+--
+-- regression test: check for bug with propagation of implied equality
+-- to outside an IN
+--
+select count(*) from tenk1 a where unique1 in
+  (select unique1 from tenk1 b join tenk1 c using (unique1)
+   where b.unique2 = 42);
+ count 
+-------
+     1
+(1 row)
 
 -- try that with GEQO too
 begin;
@@ -442,6 +487,23 @@ order by 1,2;
  4567890123456789 | 4567890123456789 | 4567890123456789 | 42
  4567890123456789 | 4567890123456789 | 4567890123456789 | 42
 (8 rows)
+
+select t1.unique2, t1.stringu1, t2.unique1, t2.stringu2 from
+  tenk1 t1
+  inner join int4_tbl i1
+    left join (select v1.x2, v2.y1, 11 AS d1
+               from (values(1,0)) v1(x1,x2)
+               left join (values(3,1)) v2(y1,y2)
+               on v1.x1 = v2.y2) subq1
+    on (i1.f1 = subq1.x2)
+  on (t1.unique2 = subq1.d1)
+  left join tenk1 t2
+  on (subq1.y1 = t2.unique1)
+where t1.unique2 < 42 and t1.stringu1 > t2.stringu2;
+ unique2 | stringu1 | unique1 | stringu2 
+---------+----------+---------+----------
+      11 | WFAAAA   |       3 | LKIAAA
+(1 row)
 
 select count(*) from
   tenk1 a join tenk1 b on a.unique1 = b.unique2

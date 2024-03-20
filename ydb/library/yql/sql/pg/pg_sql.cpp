@@ -2411,6 +2411,9 @@ public:
         if (varName == "search_path"){
             return "public"; // mediawiki
         }
+        if (varName == "default_transaction_read_only"){
+            return "off"; // mediawiki
+        }
         return {};
     }
 
@@ -3497,6 +3500,17 @@ public:
         auto name = names.back();
         if (name == "shobj_description" || name == "obj_description") {
             AddWarning(TIssuesIds::PG_COMPAT, name + " function forced to NULL");
+            return L(A("Null"));
+        }
+
+        // for zabbix https://github.com/ydb-platform/ydb/issues/2904
+        if (name == "pg_try_advisory_lock" || name == "pg_try_advisory_lock_shared" || name == "pg_advisory_unlock" || name == "pg_try_advisory_xact_lock" || name == "pg_try_advisory_xact_lock_shared"){
+            AddWarning(TIssuesIds::PG_COMPAT, name + " function forced to return OK without waiting and without really lock/unlock");
+                return L(A("PgConst"), QA("true"), L(A("PgType"), QA("bool")));
+        }
+
+        if (name == "pg_advisory_lock" || name == "pg_advisory_lock_shared" || name == "pg_advisory_unlock_all" || name == "pg_advisory_xact_lock" || name == "pg_advisory_xact_lock_shared"){
+            AddWarning(TIssuesIds::PG_COMPAT, name + " function forced to return OK without waiting and without really lock/unlock");
             return L(A("Null"));
         }
 

@@ -491,28 +491,37 @@ private:
         }
 
         void operator()(NYdb::NTopic::TSessionClosedEvent& ev) {
-            ythrow yexception() << "SessionId: " << Self.GetSessionId() << " Read session to topic \"" << Self.SourceParams.GetTopicPath()
+            TString message;
+            message << "SessionId: " << Self.GetSessionId() << " Read session to topic \"" << Self.SourceParams.GetTopicPath()
                 << "\" was closed: " << ev.DebugString();
+            SRC_LOG_W(message);
+            ythrow yexception() << message;
         }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent&) { }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
+            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " StartPartitionSessionEvent received");
+
             TMaybe<ui64> readOffset;
             const auto offsetIt = Self.PartitionToOffset.find(MakePartitionKey(event.GetPartitionSession()));
             if (offsetIt != Self.PartitionToOffset.end()) {
                 readOffset = offsetIt->second;
             }
+            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Confirm StartPartitionSession with offset " << readOffset);
             event.Confirm(readOffset);
         }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent& event) {
+            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " StopPartitionSessionEvent received");
             event.Confirm();
         }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent&) { }
 
-        void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent&) { }
+        void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent&) { 
+            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " PartitionSessionClosedEvent received");
+        }
 
         TReadyBatch& GetActiveBatch(const TPartitionKey& partitionKey, TInstant time) {
             if (Y_UNLIKELY(Self.ReadyBuffer.empty() || Self.ReadyBuffer.back().Watermark.Defined())) {

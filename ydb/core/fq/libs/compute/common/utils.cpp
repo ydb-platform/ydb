@@ -5,8 +5,6 @@
 #include <library/cpp/json/yson/json2yson.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-// #include <ydb/core/fq/libs/control_plane_storage/internal/utils.h>
-
 namespace NFq {
 
 using TAggregates = std::map<TString, std::optional<ui64>>;

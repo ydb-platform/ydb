@@ -29,7 +29,7 @@ For example, `+R:subject` — permission to read.
 | Group	| Description |
 |:----:|:----|
 | `L` | (list) enumeration. It consists of permissions to read ACL attributes and describe objects.|
-| `R` | (read) reading. It consists of permissions to enumerate and read from a table.|
+| `R` | (read) reading. It consists of permissions to enumerate and read from a table and a topic.|
 | `W` | (write) writing. It consists of permissions to update and delete table records, write ACL attributes, create subdirectories, create tables, and topics, modify and delete objects, and change user attributes.|
 | `U` | (use) use. It consists of permissions for reading, writing, granting access rights, and sending requests to the database.|
 | `UL` | (use legacy) obsolete version of use. It consists of permissions for reading, writing, and granting access rights.|

@@ -3158,12 +3158,12 @@ public:
 
             case IS_UNKNOWN: {
                 op = "PgIsUnknown";
-                isNot = true;
                 break;
             }
 
             case IS_NOT_UNKNOWN: {
                 op = "PgIsUnknown";
+                isNot = true;
                 break;
             }
 

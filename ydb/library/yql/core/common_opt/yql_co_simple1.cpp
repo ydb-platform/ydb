@@ -98,8 +98,10 @@ TExprNode::TPtr ExpandPgIsFalse(const TExprNode::TPtr& input, TExprContext& ctx)
 TExprNode::TPtr ExpandPgIsUnknown(const TExprNode::TPtr& input, TExprContext& ctx) {
     return ctx.Builder(input->Pos())
         .Callable("ToPg")
-            .Callable(0, "Exists")
-                .Add(0, input->ChildPtr(0))
+            .Callable(0,"Not")
+                .Callable(0, "Exists")
+                    .Add(0, input->ChildPtr(0))
+                .Seal()
             .Seal()
         .Seal()
         .Build();

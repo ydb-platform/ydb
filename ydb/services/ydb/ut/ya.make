@@ -38,6 +38,7 @@ PEERDIR(
     library/cpp/svnversion
     ydb/core/kqp/ut/common
     ydb/core/testlib/default
+    ydb/core/tx/datashard/ut_common
     ydb/core/grpc_services/base
     ydb/core/testlib
     ydb/library/yql/minikql/dom

@@ -1831,7 +1831,12 @@ void ExecSQL(Tests::TServer::TPtr server,
     auto request = MakeSQLRequest(sql, dml);
     runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release(), 0, 0, nullptr));
     auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
-    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetRef().GetYdbStatus(), code);
+    auto& response = ev->Get()->Record.GetRef();
+    auto& issues = response.GetResponse().GetQueryIssues();
+    UNIT_ASSERT_VALUES_EQUAL_C(response.GetYdbStatus(),
+                               code,
+                               issues.empty() ? response.DebugString() : issues.Get(0).DebugString()
+    );
 }
 
 std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequest(ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount, ui64 seed) {

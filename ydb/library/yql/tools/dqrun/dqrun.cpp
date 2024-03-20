@@ -276,7 +276,8 @@ struct TActorIds {
 std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
     const TGatewaysConfig& gatewaysConfig,
     IMetricsRegistryPtr& metricsRegistry,
-    NYql::NLog::ELevel loggingLevel
+    NYql::NLog::ELevel loggingLevel,
+    ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory
 ) {
     auto actorSystemManager = std::make_unique<TActorSystemManager>(metricsRegistry, YqlToActorsLogLevel(loggingLevel));
     TActorIds actorIds;
@@ -297,7 +298,7 @@ std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
         auto httpProxy = NHttp::CreateHttpProxy();
         actorIds.HttpProxy = actorSystemManager->GetActorSystem()->Register(httpProxy);
 
-        auto databaseResolver = NFq::CreateDatabaseResolver(actorIds.HttpProxy, nullptr);
+        auto databaseResolver = NFq::CreateDatabaseResolver(actorIds.HttpProxy, credentialsFactory);
         actorIds.DatabaseResolver = actorSystemManager->GetActorSystem()->Register(databaseResolver);
     }
 
@@ -760,12 +761,21 @@ int RunMain(int argc, const char* argv[])
         dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
     }
 
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
+
+    if (tokenAccessorEndpoint) {
+        TVector<TString> ss = StringSplitter(tokenAccessorEndpoint).SplitByString("://");
+        YQL_ENSURE(ss.size() == 2, "Invalid tokenAccessorEndpoint: " << tokenAccessorEndpoint); 
+
+        credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(ss[1], ss[0] == "grpcs", "");
+    }
+
     auto dqCompFactory = NMiniKQL::GetCompositeWithBuiltinFactory(factories);
 
     // Actor system starts here and will be automatically destroyed when goes out of the scope.
     std::unique_ptr<TActorSystemManager> actorSystemManager;
     TActorIds actorIds;
-    std::tie(actorSystemManager, actorIds) = RunActorSystem(gatewaysConfig, metricsRegistry, loggingLevel);
+    std::tie(actorSystemManager, actorIds) = RunActorSystem(gatewaysConfig, metricsRegistry, loggingLevel, credentialsFactory);
 
     IHTTPGateway::TPtr httpGateway;
     if (gatewaysConfig.HasClickHouse()) {
@@ -788,16 +798,6 @@ int RunMain(int argc, const char* argv[])
             NFq::MakeMdbEndpointGeneratorGeneric(false)
         );
     }
-
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
-
-    if (tokenAccessorEndpoint) {
-        TVector<TString> ss = StringSplitter(tokenAccessorEndpoint).SplitByString("://");
-        YQL_ENSURE(ss.size() == 2, "Invalid tokenAccessorEndpoint: " << tokenAccessorEndpoint); 
-
-        credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(ss[1], ss[0] == "grpcs", "");
-    }
-
 
     NConnector::IClient::TPtr genericClient;
     if (gatewaysConfig.HasGeneric()) {

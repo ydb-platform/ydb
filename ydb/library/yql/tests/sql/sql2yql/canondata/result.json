@@ -5200,6 +5200,13 @@
             "uri": "https://{canondata_backend}/1936997/00f46808be87e2ae2d4ac3ac45675b659c5ace45/resource.tar.gz#test_sql2yql.test_expr-empty_dict_ops_/sql.yql"
         }
     ],
+    "test_sql2yql.test[expr-empty_iterator]": [
+        {
+            "checksum": "22d761af0ffe4adc3c02c923d800bdbe",
+            "size": 2521,
+            "uri": "https://{canondata_backend}/1936273/ce551aaac929f37e3131cd782d25a651ead4bae2/resource.tar.gz#test_sql2yql.test_expr-empty_iterator_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[expr-empty_list_ops1]": [
         {
             "checksum": "b6f28b7db5f8756ab1da05f680da2cb3",
@@ -22966,6 +22973,13 @@
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_expr-empty_dict_ops_/formatted.sql"
         }
     ],
+    "test_sql_format.test[expr-empty_iterator]": [
+        {
+            "checksum": "8272af326f5d0fe473c9b828af95121c",
+            "size": 447,
+            "uri": "https://{canondata_backend}/1936273/ce551aaac929f37e3131cd782d25a651ead4bae2/resource.tar.gz#test_sql_format.test_expr-empty_iterator_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[expr-empty_list_ops1]": [
         {
             "checksum": "c6f83d2880c7a417e693048a312785b1",
@@ -28183,9 +28197,9 @@
     ],
     "test_sql_format.test[order_by-assume_over_input_desc]": [
         {
-            "checksum": "a04d86cd5b06dcfd9d495d14e57c7f1e",
-            "size": 192,
-            "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_order_by-assume_over_input_desc_/formatted.sql"
+            "checksum": "e68351f70e08950b052657e280fcf180",
+            "size": 226,
+            "uri": "https://{canondata_backend}/1899731/0ca37b118ec11c394372b67045a20b184be56ed1/resource.tar.gz#test_sql_format.test_order_by-assume_over_input_desc_/formatted.sql"
         }
     ],
     "test_sql_format.test[order_by-assume_with_filter]": [

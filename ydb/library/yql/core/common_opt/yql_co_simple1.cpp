@@ -70,8 +70,7 @@ TExprNode::TPtr ExpandPgNot(const TExprNode::TPtr& input, TExprContext& ctx) {
         .Build();
 }
 
-template <bool Bool>
-TExprNode::TPtr ExpandPgIsTorF(const TExprNode::TPtr& input, TExprContext& ctx) {
+TExprNode::TPtr ExpandPgIsTorF(const TExprNode::TPtr& input, bool value, TExprContext& ctx) {
     return ctx.Builder(input->Pos())
         .Callable("ToPg")
             .Callable(0, "Coalesce")
@@ -79,7 +78,7 @@ TExprNode::TPtr ExpandPgIsTorF(const TExprNode::TPtr& input, TExprContext& ctx) 
                     .Callable(0, "PgOp")
                         .Atom(0, "=")
                         .Add(1, input->ChildPtr(0))
-                        .Add(2, MakePgBool<Bool>(input->Pos(), ctx))
+                        .Add(2, MakePgBool(input->Pos(), value, ctx))
                     .Seal()
                 .Seal()
             .Add(1, MakeBool<false>(input->Pos(), ctx))
@@ -89,11 +88,11 @@ TExprNode::TPtr ExpandPgIsTorF(const TExprNode::TPtr& input, TExprContext& ctx) 
 }
 
 TExprNode::TPtr ExpandPgIsTrue(const TExprNode::TPtr& input, TExprContext& ctx) {
-    return ExpandPgIsTorF<true>(input, ctx);
+    return ExpandPgIsTorF(input, true, ctx);
 }
 
 TExprNode::TPtr ExpandPgIsFalse(const TExprNode::TPtr& input, TExprContext& ctx) {
-    return ExpandPgIsTorF<false>(input, ctx);
+    return ExpandPgIsTorF(input, false, ctx);
 }
 
 TExprNode::TPtr ExpandPgIsUnknown(const TExprNode::TPtr& input, TExprContext& ctx) {

@@ -505,16 +505,16 @@
     ],
     "test.test[bigdate-table_explicit_cast-default.txt-Debug]": [
         {
-            "checksum": "b62faeb26c42af8a60c62bd196ec2ec4",
-            "size": 7934,
-            "uri": "https://{canondata_backend}/1937001/2c37deac8ee9b9ed2e57336e16b5741a4d7e1f38/resource.tar.gz#test.test_bigdate-table_explicit_cast-default.txt-Debug_/opt.yql_patched"
+            "checksum": "7d1ddeebbc081685dea5cbc0a5a62c81",
+            "size": 17282,
+            "uri": "https://{canondata_backend}/1937429/c619076ae9ed63153f2bbb2b2ac56cc6f7585a31/resource.tar.gz#test.test_bigdate-table_explicit_cast-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[bigdate-table_explicit_cast-default.txt-Plan]": [
         {
-            "checksum": "03b0dc19b4b32aad099fbf13c5dfef33",
-            "size": 14306,
-            "uri": "https://{canondata_backend}/1937001/2c37deac8ee9b9ed2e57336e16b5741a4d7e1f38/resource.tar.gz#test.test_bigdate-table_explicit_cast-default.txt-Plan_/plan.txt"
+            "checksum": "14b6d9e033eb14c0658b903b514c51d4",
+            "size": 19723,
+            "uri": "https://{canondata_backend}/1937429/c619076ae9ed63153f2bbb2b2ac56cc6f7585a31/resource.tar.gz#test.test_bigdate-table_explicit_cast-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[binding-anon_table_binding-default.txt-Debug]": [

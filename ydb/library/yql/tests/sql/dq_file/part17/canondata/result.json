@@ -479,9 +479,9 @@
     "test.test[bigdate-int_cast-default.txt-Results]": [],
     "test.test[bigdate-table_io-default.txt-Analyze]": [
         {
-            "checksum": "1b1766d83e5e0715da38e62b5e2878f1",
-            "size": 10148,
-            "uri": "https://{canondata_backend}/1784826/3a40bb5efa59ccae47b1321668a678114e2a484c/resource.tar.gz#test.test_bigdate-table_io-default.txt-Analyze_/plan.txt"
+            "checksum": "98dde4610012c7864233788539ec8b80",
+            "size": 16778,
+            "uri": "https://{canondata_backend}/1600758/25298d1c532d0c67aa8f12ec2205b095eb24cdb4/resource.tar.gz#test.test_bigdate-table_io-default.txt-Analyze_/plan.txt"
         },
         {
             "uri": "file://test.test_bigdate-table_io-default.txt-Analyze_/extracted"
@@ -489,16 +489,16 @@
     ],
     "test.test[bigdate-table_io-default.txt-Debug]": [
         {
-            "checksum": "d07fe44e900b76c4b1b56f38afcf00e9",
-            "size": 5310,
-            "uri": "https://{canondata_backend}/1784826/3a40bb5efa59ccae47b1321668a678114e2a484c/resource.tar.gz#test.test_bigdate-table_io-default.txt-Debug_/opt.yql_patched"
+            "checksum": "f5ce9db7630709861cf6ef24b03e06a1",
+            "size": 5441,
+            "uri": "https://{canondata_backend}/1600758/25298d1c532d0c67aa8f12ec2205b095eb24cdb4/resource.tar.gz#test.test_bigdate-table_io-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[bigdate-table_io-default.txt-Plan]": [
         {
-            "checksum": "9e211ca61a44c03b0063fa1d10703258",
-            "size": 12941,
-            "uri": "https://{canondata_backend}/1784826/3a40bb5efa59ccae47b1321668a678114e2a484c/resource.tar.gz#test.test_bigdate-table_io-default.txt-Plan_/plan.txt"
+            "checksum": "8a5bd5be69231d893ed984ff4eb25966",
+            "size": 13442,
+            "uri": "https://{canondata_backend}/1600758/25298d1c532d0c67aa8f12ec2205b095eb24cdb4/resource.tar.gz#test.test_bigdate-table_io-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[bigdate-table_io-default.txt-Results]": [],

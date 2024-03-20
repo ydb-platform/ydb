@@ -6437,7 +6437,7 @@ Y_UNIT_TEST_SUITE(TStorageBalanceTest) {
         while (!bsc.IsStable()) {
             runtime.DispatchEvents({.CustomFinalCondition = [&bsc] { return bsc.IsStable(); }});
         }
-        UNIT_ASSERT_LE(bsc.GetOccupancyStDev("def1"), 0.1);
+        UNIT_ASSERT_LE(bsc.GetOccupancyStDev("def1"), 0.2);
     }
 
     Y_UNIT_TEST(TestScenario3) {

@@ -25,16 +25,17 @@ A short abbreviation is used to record each permission.
 
 Permission groups are unions of several permissions. Where possible, one of the groups will be indicated in the short notation.
 For example, `+R:subject` — permission to read.
+
 | Group	| Description |
 |:----:|:----|
-| `L` | (list) enumeration. Consists of permissions to read ACL attributes and describe objects.
-| `R` | (read) reading. Consists of permissions to read from the table and enumeration.
-| `W` | (write) writing. Consists of permissions to update and delete table records, write ACL attributes, create subdirectories, create tables, queues, modify and delete objects, change user attributes
-| `UL` | (use legacy) use (obsolete). Consists of permissions for reading, writing, and granting access rights
-| `U` | (use) use. Consists of permissions for reading, writing, granting access rights, and sending requests to the database
-| `M` | (manage) management. Consists of permissions to create and delete databases
-| `FL` | (full legacy) all rights (obsolete). Consists of permissions for use (obsolete) and management
-| `F` | (full) all rights. Consists of permissions for use and management
+| `L` | (list) enumeration. It consists of permissions to read ACL attributes and describe objects.|
+| `R` | (read) reading. It consists of permissions to enumerate and read from a table.|
+| `W` | (write) writing. It consists of permissions to update and delete table records, write ACL attributes, create subdirectories, create tables, and topics, modify and delete objects, and change user attributes.|
+| `U` | (use) use. It consists of permissions for reading, writing, granting access rights, and sending requests to the database.|
+| `UL` | (use legacy) obsolete version of use. It consists of permissions for reading, writing, and granting access rights.|
+| `M` | (manage) management. It consists of permissions to create and delete databases.|
+| `F` | (full) all rights. It consists of permissions for use and management.|
+| `FL` | (full legacy) obsolete version of all rights. It consists of permissions for use (obsolete) and management.|
 
 #### Simple Permissions
 If no other option is available, the list of permissions will be provided in parentheses through the vertical bar `|` symbol.

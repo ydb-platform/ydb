@@ -1756,7 +1756,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
+            .SetWithSampleTables(false)
+            .SetEnableTempTables(true);
         TKikimrRunner kikimr(settings);
 
         const TString query = R"(
@@ -1779,8 +1780,10 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
         }
 
+        auto session = client.GetSession().GetValueSync().GetSession();
+
         {
-            auto prepareResult = client.ExecuteQuery(R"(
+            auto prepareResult = session.ExecuteQuery(R"(
                 CREATE TABLE `/Root/Destination1` (
                     PRIMARY KEY (Col1)
                 )
@@ -1791,7 +1794,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
 
         {
-            auto it = client.StreamExecuteQuery(R"(
+            auto it = session.StreamExecuteQuery(R"(
                 SELECT Col1, Col2 FROM `/Root/Destination1`;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
@@ -1808,7 +1811,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
+            .SetWithSampleTables(false)
+            .SetEnableTempTables(true);
         TKikimrRunner kikimr(settings);
 
         const TString query = R"(
@@ -1854,7 +1858,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
+            .SetWithSampleTables(false)
+            .SetEnableTempTables(true);
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();

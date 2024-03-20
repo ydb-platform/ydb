@@ -17,6 +17,7 @@ namespace {
     struct TCreateTableAsResult {
         NYql::TExprNode::TPtr CreateTable = nullptr;
         NYql::TExprNode::TPtr ReplaceInto = nullptr;
+        NYql::TExprNode::TPtr AlterTable = nullptr;
     };
 
     bool IsColumnTable(const NYql::NNodes::TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& tableSettings) {
@@ -161,6 +162,16 @@ namespace {
 
         create = exprCtx.ReplaceNode(std::move(create), *columns, exprCtx.NewList(pos, std::move(columnNodes)));
 
+        if (!settings.Temporary.IsValid() || settings.Temporary.Cast().Value() != "true") {
+            std::vector<NYql::TExprNodePtr> settingsNodes;
+            for (size_t index = 0; index < create->Child(4)->ChildrenSize(); ++index) {
+                settingsNodes.push_back(create->Child(4)->ChildPtr(index));
+            }
+            settingsNodes.push_back(
+                exprCtx.NewList(pos, {exprCtx.NewAtom(pos, "temporary")}));
+            create = exprCtx.ReplaceNode(std::move(create), *create->Child(4), exprCtx.NewList(pos, std::move(settingsNodes)));
+        }
+
         const auto topLevelRead = NYql::FindTopLevelRead(insertData.Ptr());
 
         const auto insert = exprCtx.NewCallable(pos, "Write!", {
@@ -202,6 +213,45 @@ namespace {
             }),
         });
 
+        if (!settings.Temporary.IsValid() || settings.Temporary.Cast().Value() != "true") {
+            result.AlterTable = exprCtx.NewCallable(pos, "Write!", {
+                exprCtx.NewWorld(pos),
+                exprCtx.NewCallable(pos, "DataSink", {
+                    exprCtx.NewAtom(pos, "kikimr"),
+                    exprCtx.NewAtom(pos, "db"),
+                }),
+                exprCtx.NewCallable(pos, "Key", {
+                    exprCtx.NewList(pos, {
+                        exprCtx.NewAtom(pos, "tablescheme"),
+                        exprCtx.NewCallable(pos, "String", {
+                            exprCtx.NewAtom(pos, key.Ptr()->Child(0)->Child(1)->Child(0)->Content()),
+                        }),
+                    }),
+                }),
+                exprCtx.NewCallable(pos, "Void", {}),
+                exprCtx.NewList(pos, {
+                    exprCtx.NewList(pos, {
+                        exprCtx.NewAtom(pos, "mode"),
+                        exprCtx.NewAtom(pos, "alter"),
+                    }),
+                    exprCtx.NewList(pos, {
+                        exprCtx.NewAtom(pos, "actions"),
+                        exprCtx.NewList(pos, {
+                            exprCtx.NewList(pos, {
+                                exprCtx.NewAtom(pos, "setTableSettings"),
+                                exprCtx.NewList(pos, {
+                                    exprCtx.NewList(pos, {
+                                        exprCtx.NewAtom(pos, "setTemporary"),
+                                        exprCtx.NewAtom(pos, "false"),
+                                    }),
+                                }),
+                            }),
+                        }),
+                    }),
+                }),
+            });
+        }
+
         return result;
     }
 }
@@ -222,6 +272,9 @@ TVector<NYql::TExprNode::TPtr> RewriteExpression(
                 YQL_ENSURE(result.empty());
                 result.push_back(rewriteResult->CreateTable);
                 result.push_back(rewriteResult->ReplaceInto);
+                if (rewriteResult->AlterTable) {
+                    result.push_back(rewriteResult->AlterTable);
+                }
             }
         }
         return true;

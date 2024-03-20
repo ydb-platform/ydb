@@ -2411,7 +2411,8 @@ void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId
         return;
     }
 
-    db.Table<Schema::TablePartitionStats>().Key(tableId.OwnerId, tableId.LocalPathId, partitionId).Update(
+    auto persistedStats = db.Table<Schema::TablePartitionStats>().Key(tableId.OwnerId, tableId.LocalPathId, partitionId);
+    persistedStats.Update(
         NIceDb::TUpdate<Schema::TablePartitionStats::SeqNoGeneration>(stats.SeqNo.Generation),
         NIceDb::TUpdate<Schema::TablePartitionStats::SeqNoRound>(stats.SeqNo.Round),
 
@@ -2448,6 +2449,21 @@ void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId
         NIceDb::TUpdate<Schema::TablePartitionStats::FullCompactionTs>(stats.FullCompactionTs),
         NIceDb::TUpdate<Schema::TablePartitionStats::MemDataSize>(stats.MemDataSize)
     );
+
+    if (!stats.StoragePoolsStats.empty()) {
+        NKikimrTableStats::TStoragePoolsStats protobufRepresentation;
+        for (const auto& [poolKind, storagePoolStats] : stats.StoragePoolsStats) {
+            auto* poolUsage = protobufRepresentation.MutablePoolsUsage()->Add();
+            poolUsage->SetPoolKind(poolKind);
+            poolUsage->SetDataSize(storagePoolStats.DataSize);
+            poolUsage->SetIndexSize(storagePoolStats.IndexSize);
+        }
+        TString serializedStoragePoolsStats;
+        Y_ABORT_UNLESS(protobufRepresentation.SerializeToString(&serializedStoragePoolsStats));
+        persistedStats.Update(NIceDb::TUpdate<Schema::TablePartitionStats::StoragePoolsStats>(serializedStoragePoolsStats));
+    } else {
+        persistedStats.Update(NIceDb::TNull<Schema::TablePartitionStats::StoragePoolsStats>());
+    }
 }
 
 void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, const TShardIdx& shardIdx, const TTableInfo::TPtr tableInfo) {

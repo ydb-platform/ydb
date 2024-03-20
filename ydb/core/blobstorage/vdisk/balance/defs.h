@@ -40,8 +40,6 @@ namespace NKikimr {
     struct TEvStartBalancing : TEventLocal<TEvStartBalancing, TEvBlobStorage::EvStartBalancing> {};
 
 namespace NBalancing {
-    #define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_VDISK_BALANCING, stream)
-    #define BLOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_VDISK_BALANCING, stream)
 
     struct TPartInfo {
         TLogoBlobID Key;

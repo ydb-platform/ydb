@@ -7,6 +7,8 @@
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_public_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 
+#include <ydb/core/util/stlog.h>
+
 namespace NKikimr {
 namespace NBalancing {
 
@@ -139,8 +141,8 @@ namespace {
             TIngress ingress;
             ingress.DeleteHandoff(&GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, key);
 
-            BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Deleting local: " << key.ToString() << " "
-                    << ingress.ToString(&GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, keyWithoutPartId));
+            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "Deleting local"), (LogoBlobID, key.ToString()),
+                (Ingress, ingress.ToString(&GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, keyWithoutPartId)));
 
             Send(Ctx->SkeletonId, new TEvDelLogoBlobDataSyncLog(keyWithoutPartId, ingress, OrderId++));
         }

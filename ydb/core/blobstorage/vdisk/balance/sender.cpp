@@ -4,6 +4,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_queues.h>
 #include <ydb/core/blobstorage/base/vdisk_sync_common.h>
 
+#include <ydb/core/util/stlog.h>
+
 
 namespace NKikimr {
 namespace NBalancing {
@@ -135,12 +137,13 @@ namespace {
         }
 
         void SendParts(const TVector<TPart>& batch) {
-            BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Sending parts " << batch.size());
+            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB11, VDISKP(Ctx->VCtx, "Sending parts"), (BatchSize, batch.size()));
+
             for (const auto& part: batch) {
                 auto vDiskId = GetMainReplicaVDiskId(*GInfo, part.Key);
-                BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Sending " << part.Key.ToString()
-                        << " to " << GInfo->GetTopology().GetOrderNumber(TVDiskIdShort(vDiskId))
-                        << "; Data size = " << part.PartData.size());
+                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB12, VDISKP(Ctx->VCtx, "Sending"), (LogoBlobId, part.Key.ToString()),
+                    (To, GInfo->GetTopology().GetOrderNumber(TVDiskIdShort(vDiskId))), (DataSize, part.PartData.size()));
+
                 auto& queue = (*QueueActorMapPtr)[TVDiskIdShort(vDiskId)];
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(
                     part.Key, part.PartData, vDiskId,
@@ -159,10 +162,10 @@ namespace {
             ++Stats.PartsSent;
             if (ev->Get()->Record.GetStatus() != NKikimrProto::OK) {
                 ++Stats.PartsSentUnsuccsesfull;
-                BLOG_W(Ctx->VCtx->VDiskLogPrefix << "Put failed: " << ev->Get()->ToString());
+                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB13, VDISKP(Ctx->VCtx, "Put failed"), (Msg, ev->Get()->ToString()));
                 return;
             }
-            BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Put result: " << ev->Get()->ToString());
+            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB14, VDISKP(Ctx->VCtx, "Put done"), (Msg, ev->Get()->ToString()));
         }
 
         void PassAway() override {

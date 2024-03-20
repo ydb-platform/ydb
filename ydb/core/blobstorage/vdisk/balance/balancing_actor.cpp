@@ -39,13 +39,15 @@ namespace NBalancing {
 
         void ContinueBalancing() {
             // ask for repl token to continue balancing
-            BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Ask repl token");
+            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB01, VDISKP(Ctx->VCtx, "Ask repl token to continue balancing"));
             Send(MakeBlobStorageReplBrokerID(), new TEvQueryReplToken(Ctx->VDiskCfg->BaseInfo.PDiskId), NActors::IEventHandle::FlagTrackDelivery);
         }
 
         void ScheduleJobQuant() {
             // once repl token received, start balancing - waking up sender and deleter
-            BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Connected vdisks " << ConnectedVDisks.size() << "/" << GInfo->GetTotalVDisksNum() - 1);
+            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB02, VDISKP(Ctx->VCtx, "Schedule job quant"),
+                (SendPartsLeft, Stats.SendPartsLeft), (DeletePartsLeft, Stats.DeletePartsLeft),
+                (ConnectedVDisks, ConnectedVDisks.size()), (TotalVDisks, GInfo->GetTotalVDisksNum()));
             Send(SenderId, new NActors::TEvents::TEvWakeup());
             Send(DeleterId, new NActors::TEvents::TEvWakeup());
         }
@@ -76,7 +78,7 @@ namespace NBalancing {
                 }
 
                 // balancing completed
-                BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Balancing completed");
+                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB03, VDISKP(Ctx->VCtx, "Balancing completed"));
                 Send(Ctx->SkeletonId, new TEvStartBalancing());
                 PassAway();
             }
@@ -90,7 +92,7 @@ namespace NBalancing {
             for (ui32 cnt = 0; It.Valid(); It.Next(), ++cnt) {
                 if (cnt % 1000 == 999 && TDuration::Seconds(timer.Passed()) > JOB_GRANULARITY) {
                     // actor should not block the thread for a long time, so we should yield
-                    BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Collected " << cnt << " keys");
+                    STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB04, VDISKP(Ctx->VCtx, "Collect keys"), (collected, cnt));
                     Send(SelfId(), new NActors::TEvents::TEvWakeup());
                     return;
                 }
@@ -101,7 +103,7 @@ namespace NBalancing {
                 // collect parts to send on main
                 for (ui8 partId: PartIdsToSendOnMain(GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, It.GetCurKey().LogoBlobID(), merger.Ingress)) {
                     if (!merger.Parts[partId - 1].has_value()) {
-                        BLOG_W(Ctx->VCtx->VDiskLogPrefix << "not found part " << (ui32)partId << " for " << It.GetCurKey().LogoBlobID().ToString());
+                        STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB05, VDISKP(Ctx->VCtx, "not found part"), (partId, (ui32)partId), (logoBlobId, It.GetCurKey().LogoBlobID()));
                         continue;  // something strange
                     }
                     SendOnMainParts.push(TPartInfo{
@@ -109,8 +111,8 @@ namespace NBalancing {
                         .Ingress=merger.Ingress,
                         .PartData=*merger.Parts[partId - 1]
                     });
-                    BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Send on main: " << SendOnMainParts.back().Key.ToString() << " "
-                        << SendOnMainParts.back().Ingress.ToString(&GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, SendOnMainParts.back().Key));
+                    STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB06, VDISKP(Ctx->VCtx, "Send on main"), (LogoBlobId, SendOnMainParts.back().Key.ToString()),
+                        (Ingress, SendOnMainParts.back().Ingress.ToString(&GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, SendOnMainParts.back().Key)));
                 }
 
                 // collect parts to delete
@@ -119,14 +121,14 @@ namespace NBalancing {
                         .Key=TLogoBlobID(It.GetCurKey().LogoBlobID(), partId),
                         .Ingress=merger.Ingress,
                     });
-                    BLOG_D(Ctx->VCtx->VDiskLogPrefix << "Delete: " << TryDeleteParts.back().Key.ToString()
-                            << " " << TryDeleteParts.back().Ingress.ToString(&GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, TryDeleteParts.back().Key));
+                    STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB07, VDISKP(Ctx->VCtx, "Delete"), (LogoBlobId, TryDeleteParts.back().Key.ToString()),
+                        (Ingress, TryDeleteParts.back().Ingress.ToString(&GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, TryDeleteParts.back().Key)));
                 }
                 merger.Clear();
             }
 
-            BLOG_D(Ctx->VCtx->VDiskLogPrefix << " Bootstrap" << ": "
-                << "sendOnMainParts size = " << SendOnMainParts.size() << "; tryDeleteParts size = " << TryDeleteParts.size());
+            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB08, VDISKP(Ctx->VCtx, "Keys collected"),
+                (SendOnMainParts, SendOnMainParts.size()), (TryDeleteParts, TryDeleteParts.size()));
 
             // register sender and deleter actors
             SenderId = TlsActivationContext->Register(CreateSenderActor(SelfId(), std::move(SendOnMainParts), QueueActorMapPtr, Ctx));
@@ -156,7 +158,7 @@ namespace NBalancing {
 
         void Handle(NActors::TEvents::TEvUndelivered::TPtr ev) {
             if (ev.Get()->Type == TEvReplToken::EventType) {
-                BLOG_W(Ctx->VCtx->VDiskLogPrefix << "Aske repl token msg not delivered");
+                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB09, VDISKP(Ctx->VCtx, "Aske repl token msg not delivered"));
                 ScheduleJobQuant();
             }
         }

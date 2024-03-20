@@ -193,14 +193,15 @@ public:
                     "Authorize");
             }
 
-            auto& result = (*response->mutable_results())[checkId];
-
             if (IsIn(UnavailableUserPermissions, mockPermToFind)) {
                 return LogResponse(
                     grpc::Status(grpc::StatusCode::UNAVAILABLE, "Service Unavailable"),
                     response,
                     "Authorize");
             }
+
+            auto& result = (*response->mutable_results())[checkId];
+            result.set_resultcode(nebius::iam::v1::AuthorizeResult::PERMISSION_DENIED);
 
             bool allowedResource = true;
             if (!AllowedResourceIds.empty()) {
@@ -216,14 +217,14 @@ public:
                 if (IsIn(AllowedUserTokens, token)) {
                     if (IsIn(AllowedUserPermissions, mockPermToFind)) {
                         result.mutable_account()->mutable_user_account()->set_id(token);
-                        result.set_authorized(true);
+                        result.set_resultcode(nebius::iam::v1::AuthorizeResult::OK);
                     }
                 }
 
                 if (IsIn(AllowedServiceTokens, token)) {
                     if (IsIn(AllowedServicePermissions, mockPermToFind)) {
                         result.mutable_account()->mutable_service_account()->set_id(token);
-                        result.set_authorized(true);
+                        result.set_resultcode(nebius::iam::v1::AuthorizeResult::OK);
                     }
                 }
             }

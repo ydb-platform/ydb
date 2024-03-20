@@ -995,6 +995,19 @@ private:
         return std::move(errorMessage);
     }
 
+    static TString GetErrorMessage(nebius::iam::v1::AuthorizeResult::ResultCode resultcode) {
+        switch (resultcode) {
+        case nebius::iam::v1::AuthorizeResult::PERMISSION_DENIED:
+            return "Access Denied";
+        case nebius::iam::v1::AuthorizeResult::UNKNOWN_SUBJECT:
+            return "Unknown Subject";
+        case nebius::iam::v1::AuthorizeResult::INVALID_TOKEN:
+            return "Invalid Token";
+        default:
+            return "Internal Error";
+        }
+    }
+
     void Handle(NNebiusCloud::TEvAccessService::TEvAuthorizeResponse::TPtr& ev) {
         NNebiusCloud::TEvAccessService::TEvAuthorizeResponse* response = ev->Get();
         TEvNebiusAccessServiceAuthorizeRequest* request = response->Request->Get<TEvNebiusAccessServiceAuthorizeRequest>();
@@ -1033,7 +1046,7 @@ private:
                         }
                         const auto& check = checkIt->second;
 
-                        if (!subjectIsResolved && result.authorized()) {
+                        if (!subjectIsResolved && result.resultcode() == nebius::iam::v1::AuthorizeResult::OK) {
                             const auto& account = result.account();
                             TString errorMessage;
                             if (!ApplySubjectName(account, record.Subject, errorMessage)) {
@@ -1056,7 +1069,7 @@ private:
                         if (permissionIt != examinedPermissions.end()) {
                             processedPermissions.insert(permissionIt->first);
                             auto& permissionRecord = permissionIt->second;
-                            if (!result.authorized()) {
+                            if (result.resultcode() != nebius::iam::v1::AuthorizeResult::OK) {
                                 permissionDeniedCount++;
                                 permissionRecord.Subject.clear();
                                 BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " permission " << permissionName << " access denied for subject \"" << (record.Subject ? record.Subject : "<not resolved>") << "\"");
@@ -1070,7 +1083,7 @@ private:
                                     errorMessage << " - ";
                                     requiredPermissions.push_back(permissionIt);
                                 }
-                                errorMessage << "Access Denied";
+                                errorMessage << GetErrorMessage(result.resultcode());
                                 permissionRecord.Error = {.Message = errorMessage, .Retryable = false};
                             }
                         } else {

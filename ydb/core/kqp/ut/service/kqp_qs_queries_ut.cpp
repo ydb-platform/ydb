@@ -1054,6 +1054,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
         auto client = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings()
+            .StatsMode(NYdb::NQuery::EStatsMode::Basic);
         {
             auto session = client.GetSession().GetValueSync().GetSession();
             auto id = session.GetId();
@@ -1062,13 +1064,63 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 const auto query = Q_(R"(
                     --!syntax_v1
                     CREATE TEMP TABLE Temp (
-                        Key Uint64 NOT NULL,
-                        Value String,
+                        Key Int32 NOT NULL,
+                        Value Int32,
                         PRIMARY KEY (Key)
                     );)");
 
-                auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                auto result =
+                    session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+            }
+
+            {
+                const auto query = Q_(R"(
+                    --!syntax_v1
+                    ALTER TABLE Temp DROP COLUMN Value;
+                )");
+                auto result =
+                    session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+            }
+
+            {
+                const auto query = Q_(R"(
+                    --!syntax_v1
+                    DROP TABLE Temp;
+                )");
+
+                auto result =
+                    session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+            }
+
+            {
+                const auto query = Q_(R"(
+                    --!syntax_v1
+                    CREATE TEMP TABLE Temp (
+                        Key Int32 NOT NULL,
+                        Value Int32,
+                        PRIMARY KEY (Key)
+                    );)");
+
+                auto result =
+                    session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+                auto resultInsert = session.ExecuteQuery(R"(
+                    UPSERT INTO Temp (Key, Value) VALUES (1, 1);
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    resultInsert.GetStatus(), EStatus::SUCCESS, resultInsert.GetIssues().ToString());
             }
 
             {
@@ -1078,26 +1130,62 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 )");
 
                 auto result = session.ExecuteQuery(
-                    query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                    query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+                UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+                CompareYson(R"([[1;[1]]])", FormatResultSetYson(result.GetResultSet(0)));
             }
 
             {
-                auto result = session.ExecuteSchemeQuery(R"(
-                    ALTER TABLE Temp RENAME TO TempAlter;
+                auto result = session.ExecuteQuery(R"(
+                    ALTER TABLE Temp DROP COLUMN Value;
                 )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
             }
 
             {
                 const auto query = Q_(R"(
                     --!syntax_v1
-                    SELECT * FROM TempAlter;
+                    SELECT * FROM Temp;
                 )");
 
                 auto result = session.ExecuteQuery(
-                    query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                    query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+                UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+                CompareYson(R"([[1]])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            {
+                const auto query = Q_(R"(
+                    --!syntax_v1
+                    DROP TABLE Temp;
+                )");
+
+                auto result =
+                    session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+            }
+
+            {
+                const auto querySelect = Q_(R"(
+                    --!syntax_v1
+                    SELECT * FROM Temp;
+                )");
+
+                auto resultSelect = client.ExecuteQuery(
+                    querySelect, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT(!resultSelect.IsSuccess());
             }
 
             bool allDoneOk = true;

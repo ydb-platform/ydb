@@ -18,7 +18,7 @@
     <dependency>
         <groupId>tech.ydb.dialects</groupId>
         <artifactId>hibernate-ydb-dialect</artifactId>
-        <!-- Set actual version -->
+        <!-- Set an actual version -->
         <version>${hibernate.ydb.dialect.version}</version> 
     </dependency>
     ```
@@ -27,13 +27,13 @@
 
     ```groovy
     dependencies {
-        implementation 'tech.ydb.dialects:hibernate-ydb-dialect:$version' // Set actual version
+        implementation 'tech.ydb.dialects:hibernate-ydb-dialect:$version' // Set an actual version
     }
     ```
 
 {% endlist %}
 
-В случае использования Hibernate 5 версии нужен artifactId равный `hibernate-ydb-dialect-v5`.
+В случае использования Hibernate 5 версии нужен artifactId равный `hibernate-ydb-dialect-v5` для Maven или `implementation 'tech.ydb.dialects:hibernate-ydb-dialect:$version'` для Gradle.
 
 ## Конфигурация диалекта {#configuration-dialect}
 
@@ -64,7 +64,7 @@ public static Configuration basedConfiguration() {
 spring.jpa.properties.hibernate.dialect=tech.ydb.hibernate.dialect.YdbDialect
 
 spring.datasource.driver-class-name=tech.ydb.jdbc.YdbDriver
-spring.datasource.url=jdbc:ydb:grpc://localhost:2136/local
+spring.datasource.url=jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/database[?saFile=file:~/sa_key.json]
 ```
 
 Создадим простую сущность и репозиторий:

@@ -6,6 +6,7 @@ import itertools
 import logging
 import subprocess
 import tempfile
+import copy
 
 import yaml
 from ydb.core.fq.libs.config.protos.fq_config_pb2 import TConfig as TFederatedQueryConfig
@@ -272,33 +273,16 @@ class StaticConfigGenerator(object):
         return mbus_config is not None and len(mbus_config) > 0
 
     @property
+    def host_configs(self):
+        return self.__cluster_details.get_service("host_configs")
+
+    @property
     def table_service_config(self):
         return self.__cluster_details.get_service("table_service_config")
 
     @property
     def hive_config(self):
         return self.__proto_config("hive", config_pb2.THiveConfig, self.__cluster_details.get_service("hive_config"))
-
-    @property
-    def host_configs(self):
-        drives_to_config_id = {}
-        host_config_id_iter = itertools.count(start=1)
-
-        for host_config in self._cluster_details.host_configs:
-            return self._cluster_details.raw_host_configs
-
-        host_configs = []
-        for host in self._cluster_details.hosts:
-            if host.drives not in drives_to_config_id:
-                drives_to_config_id[host.drives] = next(host_config_id_iter)
-                host_config = {
-                    "host_config_id": drives_to_config_id[host.drives],
-                    "drive": host.drives,
-                }
-                host_configs.append(host_config)
-            host["host_config_id"] = drives_to_config_id[host.drives]
-
-        return host_configs
 
     @property
     def kikimr_cfg(self):
@@ -403,11 +387,15 @@ class StaticConfigGenerator(object):
         dictionary = json_format.MessageToDict(app_config, preserving_proto_field_name=True)
         normalized_config = self.normalize_dictionary(dictionary)
 
+        if self.host_configs:
+            normalized_config["host_configs"] = copy.deepcopy(self.host_configs)
+            for host_config in normalized_config["host_configs"]:
+                if 'drives' in host_config:
+                    # inside config.yaml we should use field drive in host_configs section
+                    host_config['drive'] = host_config.pop('drives')
+
         if self.table_service_config:
             normalized_config["table_service_config"] = self.table_service_config
-
-        if self.__cluster_details.host_configs is not None:
-            normalized_config["host_configs"] = self.host_configs
 
         if self.__cluster_details.blob_storage_config is not None:
             normalized_config["blob_storage_config"] = self.__cluster_details.blob_storage_config
@@ -478,6 +466,7 @@ class StaticConfigGenerator(object):
         if "hive_config" in normalized_config["domains_config"]:
             del normalized_config["domains_config"]["hive_config"]
 
+        hostname_to_host_config_id = {node.hostname: node.host_config_id for node in self.__cluster_details.hosts}
         normalized_config["hosts"] = []
         for node in normalized_config["nameservice_config"]["node"]:
             if "port" in node and int(node.get("port")) == 19001:
@@ -486,6 +475,9 @@ class StaticConfigGenerator(object):
             if "interconnect_host" in node and node["interconnect_host"] == node["host"]:
                 del node["interconnect_host"]
 
+            host_config_id = hostname_to_host_config_id[node["host"]]
+            if host_config_id is not None:
+                node["host_config_id"] = host_config_id
             normalized_config["hosts"].append(node)
 
         del normalized_config["nameservice_config"]["node"]

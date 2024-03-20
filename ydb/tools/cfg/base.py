@@ -473,6 +473,8 @@ class ClusterDetailsProvider(object):
         converted_host_configs = []
         for host_config in self.__cluster_description.get("host_configs", []):
             host_config_drives = host_config.get("drives", [])
+            if 'drive' in host_config:
+                host_config_drives = host_config.get("drive")
             converted_host_configs.append(
                 HostConfig(
                     host_config_id=host_config["host_config_id"],

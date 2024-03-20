@@ -1,5 +1,6 @@
 # Short access control notation
-When describing or logging the permissions granted to users (e.g., in the recording of [audit logs](./audit-log.md)), a special short notation for access control may be used. The notation can vary slightly depending on the list of permissions and their inheritance from child objects.
+
+When describing or logging the permissions granted to users (e.g., in the [audit log](./audit-log.md) records), a special short notation for access control may be used. The notation can vary slightly depending on the list of permissions and their inheritance from child objects.
 
 ## Notation format
 

@@ -70,6 +70,42 @@ TExprNode::TPtr ExpandPgNot(const TExprNode::TPtr& input, TExprContext& ctx) {
         .Build();
 }
 
+template <bool Bool>
+TExprNode::TPtr ExpandPgIsTorF(const TExprNode::TPtr& input, TExprContext& ctx) {
+    return ctx.Builder(input->Pos())
+        .Callable("ToPg")
+            .Callable(0, "Coalesce")
+                .Callable(0, "FromPg")
+                    .Callable(0, "PgOp")
+                        .Atom(0, "=")
+                        .Add(1, input->ChildPtr(0))
+                        .Add(2, MakePgBool<Bool>(input->Pos(), ctx))
+                    .Seal()
+                .Seal()
+            .Add(1, MakeBool<false>(input->Pos(), ctx))
+            .Seal()
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr ExpandPgIsTrue(const TExprNode::TPtr& input, TExprContext& ctx) {
+    return ExpandPgIsTorF<true>(input, ctx);
+}
+
+TExprNode::TPtr ExpandPgIsFalse(const TExprNode::TPtr& input, TExprContext& ctx) {
+    return ExpandPgIsTorF<false>(input, ctx);
+}
+
+TExprNode::TPtr ExpandPgIsUnknown(const TExprNode::TPtr& input, TExprContext& ctx) {
+    return ctx.Builder(input->Pos())
+        .Callable("ToPg")
+            .Callable(0, "Exists")
+                .Add(0, input->ChildPtr(0))
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 TExprNode::TPtr OptimizePgCastOverPgConst(const TExprNode::TPtr& input, TExprContext& ctx) {
     if (input->ChildrenSize() != 2) {
         return input;
@@ -6288,6 +6324,9 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["PgAnd"] = std::bind(&ExpandPgAnd, _1, _2);
     map["PgOr"] = std::bind(&ExpandPgOr, _1, _2);
     map["PgNot"] = std::bind(&ExpandPgNot, _1, _2);
+    map["PgIsTrue"] = std::bind(&ExpandPgIsTrue, _1, _2);
+    map["PgIsFalse"] = std::bind(&ExpandPgIsFalse, _1, _2);
+    map["PgIsUnknown"] = std::bind(&ExpandPgIsUnknown, _1, _2);
     map["PgCast"] = std::bind(&OptimizePgCastOverPgConst, _1, _2);
 
     map["Ensure"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext& /*optCtx*/) {

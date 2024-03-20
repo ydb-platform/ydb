@@ -3123,6 +3123,64 @@ public:
         }
     }
 
+    TAstNode* ParseBooleanTest(const BooleanTest* value, const TExprSettings& settings) {
+        AT_LOCATION(value);
+
+        auto arg = ParseExpr(Expr2Node(value->arg), settings);
+        if (!arg) {
+            return nullptr;
+        }
+
+        TString op;
+        bool isNot = false;
+
+        switch (value->booltesttype) {
+            case IS_TRUE: {
+                op = "PgIsTrue";
+                break;
+            }
+            case IS_NOT_TRUE: {
+                op = "PgIsTrue";
+                isNot = true;
+                break;
+            }
+
+            case IS_FALSE: {
+                op = "PgIsFalse";
+                break;
+            }
+
+            case IS_NOT_FALSE: {
+                op = "PgIsFalse";
+                isNot = true;
+                break;
+            }
+
+            case IS_UNKNOWN: {
+                op = "PgIsUnknown";
+                isNot = true;
+                break;
+            }
+
+            case IS_NOT_UNKNOWN: {
+                op = "PgIsUnknown";
+                break;
+            }
+
+            default: {
+                TStringBuilder b;
+                b << "Unsupported booltesttype " << static_cast<int>(value->booltesttype);
+                AddError(b);
+                return nullptr;
+            }
+        }
+        auto result = L(A(op), arg);
+        if (isNot) {
+            result = L(A("PgNot"), result);
+        }
+        return result;
+    }
+
     TAstNode* ParseExpr(const Node* node, const TExprSettings& settings) {
         switch (NodeTag(node)) {
         case T_A_Const: {
@@ -3166,6 +3224,9 @@ public:
         }
         case T_SQLValueFunction: {
             return ParseSQLValueFunction(CAST_NODE(SQLValueFunction, node));
+        }
+        case T_BooleanTest: {
+            return ParseBooleanTest(CAST_NODE(BooleanTest, node), settings);
         }
         default:
             NodeNotImplemented(node);

@@ -1924,6 +1924,12 @@ NKikimrDataEvents::TEvWriteResult Delete(TTestActorRuntime& runtime, TActorId se
     return Write(runtime, sender, shardId, std::move(request), expectedStatus);
 }
 
+NKikimrDataEvents::TEvWriteResult Insert(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount, ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus)
+{
+    auto request = MakeWriteRequest(txId, txMode, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT, tableId, columns, rowCount);
+    return Write(runtime, sender, shardId, std::move(request), expectedStatus);
+}
+
 TTestActorRuntimeBase::TEventObserverHolderPair ReplaceEvProposeTransactionWithEvWrite(TTestActorRuntime& runtime, TEvWriteRows& rows) {
     if (rows.empty())
         return {};

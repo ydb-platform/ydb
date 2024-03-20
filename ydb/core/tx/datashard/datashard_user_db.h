@@ -1,6 +1,7 @@
 #pragma once
 
 #include "change_collector.h"
+#include "datashard_exception.h"
 
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
@@ -45,6 +46,11 @@ public:
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
     
+    virtual void InsertRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+
     virtual void EraseRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key) = 0;
@@ -110,6 +116,11 @@ public:
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops) override;
             
+    void InsertRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+            
     void EraseRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key) override;
@@ -158,7 +169,9 @@ private:
     static TSmallVec<TCell> ConvertTableKeys(const TArrayRef<const TRawTypeValue> key);
 
     void UpdateRowInt(NTable::ERowOp rowOp, const TTableId& tableId, ui64 localTableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
+    void CheckExistingRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key);
 
+    void IncreaseUpdateCounters(const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
 private:
     TDataShard& Self;
     NTable::TDatabase& Db;

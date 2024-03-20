@@ -55,16 +55,35 @@ public:
         DataShard.SubscribeNewLocks(ctx);
     }
 
-    EExecutionStatus OnTabletNotReady(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx)
-    {
+    void ResetChanges(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc) {
+        userDb.ResetCollectedChanges();
+
+        writeOp.ReleaseTxData(txc);
+
+        if (txc.DB.HasChanges())
+            txc.DB.RollbackChanges();
+    }
+
+    EExecutionStatus OnTabletNotReadyException(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx) {
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Tablet " << DataShard.TabletID() << " is not ready for " << writeOp << " execution");
 
         DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);
 
-        userDb.ResetCollectedChanges();
-
-        writeOp.ReleaseTxData(txc);
+        ResetChanges(userDb, writeOp, txc);
         return EExecutionStatus::Restart;
+    }
+
+    EExecutionStatus OnPageFaultException(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx) {
+        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " has a page fault.");
+        ResetChanges(userDb, writeOp, txc);
+        return EExecutionStatus::Restart;
+    }
+
+    EExecutionStatus OnUniqueConstrainException(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx) {
+        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting because an duplicate key");
+        writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "Operation is aborting because an duplicate key");
+        ResetChanges(userDb, writeOp, txc);
+        return EExecutionStatus::Executed;
     }
 
     void DoUpdateToUserDb(TDataShardUserDb& userDb, TWriteOperation* writeOp, TTransactionContext& txc, const TActorContext& ctx) {
@@ -118,8 +137,7 @@ public:
             }
 
             switch (operationType) {
-                case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:
-                {
+                case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT: {
                     fillOps(rowIdx);
                     userDb.UpdateRow(fullTableId, key, ops);
                     break;
@@ -129,9 +147,13 @@ public:
                     userDb.ReplaceRow(fullTableId, key, ops);
                     break;
                 }
-                case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE:
-                {
+                case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE: {
                     userDb.EraseRow(fullTableId, key);
+                    break;
+                }
+                case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT: {
+                    fillOps(rowIdx);
+                    userDb.InsertRow(fullTableId, key, ops);
                     break;
                 }
                 default:
@@ -142,7 +164,8 @@ public:
 
         switch (operationType) {
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:
-            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE: {
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE:
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT: {
                 DataShard.IncCounter(COUNTER_WRITE_ROWS, matrix.GetRowCount());
                 DataShard.IncCounter(COUNTER_WRITE_BYTES, matrix.GetBuffer().size());
                 break;
@@ -390,7 +413,7 @@ public:
             }
             return EExecutionStatus::Continue;
         } catch (const TNotReadyTabletException&) {
-            return OnTabletNotReady(userDb, *writeOp, txc, ctx);
+            return OnTabletNotReadyException(userDb, *writeOp, txc, ctx);
         } catch (const TLockedWriteLimitException&) {
             userDb.ResetCollectedChanges();
 
@@ -417,6 +440,10 @@ public:
                 txc.DB.RollbackChanges();
             }
             return EExecutionStatus::Executed;
+        } catch(const TPageFaultException&) {
+            return OnPageFaultException(userDb, *writeOp, txc, ctx);
+        } catch (const TUniqueConstrainException&) {
+            return OnUniqueConstrainException(userDb, *writeOp, txc, ctx);
         }
 
         Pipeline.AddCommittingOp(op);

@@ -19,6 +19,18 @@ namespace NKikimr::NStorage {
             }
         }
 
+        if (!Cfg->DomainsConfig) { // no automatic configuration required
+        } else if (Cfg->DomainsConfig->StateStorageSize() == 1) { // the StateStorage config is already defined explicitly, just migrate it
+            const auto& ss = Cfg->DomainsConfig->GetStateStorage(0);
+            config->MutableStateStorageConfig()->CopyFrom(ss);
+            config->MutableStateStorageBoardConfig()->CopyFrom(ss);
+            config->MutableSchemeBoardConfig()->CopyFrom(ss);
+        } else if (!Cfg->DomainsConfig->StateStorageSize()) { // no StateStorage config, generate a new one
+            GenerateStateStorageConfig(config->MutableStateStorageConfig(), *config);
+            GenerateStateStorageConfig(config->MutableStateStorageBoardConfig(), *config);
+            GenerateStateStorageConfig(config->MutableSchemeBoardConfig(), *config);
+        }
+
         if (!config->GetSelfAssemblyUUID()) {
             config->SetSelfAssemblyUUID(CreateGuidAsString());
             changes = true;
@@ -192,6 +204,59 @@ namespace NKikimr::NStorage {
                 }
             }
         }
+    }
+
+    void TDistributedConfigKeeper::GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
+            const NKikimrBlobStorage::TStorageConfig& baseConfig) {
+        auto *ring = ss->MutableRing();
+
+        THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>> nodesByDataCenter;
+
+        for (const auto& node : baseConfig.GetAllNodes()) {
+            TNodeLocation location(node.GetLocation());
+            nodesByDataCenter[location.GetDataCenterId()].emplace_back(node.GetNodeId(), location);
+        }
+
+        auto pickNodes = [](std::vector<std::tuple<ui32, TNodeLocation>>& nodes, size_t count) {
+            Y_ABORT_UNLESS(count <= nodes.size());
+            auto comp = [](const auto& x, const auto& y) { return std::get<1>(x).GetRackId() < std::get<1>(y).GetRackId(); };
+            std::ranges::sort(nodes, comp);
+            std::vector<ui32> result;
+            THashSet<ui32> disabled;
+            auto iter = nodes.begin();
+            while (result.size() < count) {
+                const auto& [nodeId, location] = *iter++;
+                if (disabled.contains(nodeId)) {
+                    if (iter == nodes.end()) {
+                        iter = nodes.begin();
+                    }
+                    continue;
+                }
+                result.push_back(nodeId);
+                disabled.insert(nodeId);
+                while (iter != nodes.end() && std::get<1>(*iter).GetRackId() == location.GetRackId()) {
+                    ++iter;
+                }
+                if (iter == nodes.end()) {
+                    iter = nodes.begin();
+                }
+            }
+            return result;
+        };
+
+        std::vector<ui32> nodes;
+
+        const size_t maxNodesPerDataCenter = nodesByDataCenter.size() == 1 ? 8 : 3;
+        for (auto& [_, v] : nodesByDataCenter) {
+            auto r = pickNodes(v, Min<size_t>(v.size(), maxNodesPerDataCenter));
+            nodes.insert(nodes.end(), r.begin(), r.end());
+        }
+
+        for (ui32 nodeId : nodes) {
+            ring->AddNode(nodeId);
+        }
+
+        ring->SetNToSelect(nodes.size() / 2 + 1);
     }
 
     bool TDistributedConfigKeeper::UpdateConfig(NKikimrBlobStorage::TStorageConfig *config) {

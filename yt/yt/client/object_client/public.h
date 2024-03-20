@@ -339,6 +339,9 @@ DEFINE_ENUM(EObjectType,
 
     // Flow stuff
     ((Pipeline)                                    (1600))
+
+    // Queue stuff
+    ((Consumer)                                    (1700))
 );
 
 //! A bit mask marking schema types.

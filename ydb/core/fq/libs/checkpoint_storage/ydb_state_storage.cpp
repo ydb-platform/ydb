@@ -109,7 +109,6 @@ public:
     }
 
     static EStateType GetStateType(const NYql::NDqProto::TComputeActorState& state) {
-        std::cerr << "GetStateType()" << std::endl;
         if (!state.HasMiniKqlProgram()) {
             return EStateType::Snapshot;
         }

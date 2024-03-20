@@ -11087,6 +11087,13 @@
             "uri": "https://{canondata_backend}/1777230/1dbd9686602f9d78fffc85db08fced3180ab8411/resource.tar.gz#test_sql2yql.test_pg-insert_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-is_predicate]": [
+        {
+            "checksum": "8827569779fcf55c4319262ab257dbe6",
+            "size": 1153,
+            "uri": "https://{canondata_backend}/1773845/183b7e5a3c4205759d8ee258c5357d8bd172fd74/resource.tar.gz#test_sql2yql.test_pg-is_predicate_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-join_tree_order]": [
         {
             "checksum": "d0a5d75f3f6bf70f0d9eee0888877e46",

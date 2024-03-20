@@ -21,7 +21,8 @@ These attributes are:
 
 A short abbreviation is used to record each permission.
 
-#### Permission Groups
+### Permission Groups
+
 Permission groups are unions of several permissions. Where possible, one of the groups will be indicated in the short notation.
 For example, `+R:subject` — permission to read.
 | Group	| Description |

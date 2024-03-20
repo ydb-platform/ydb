@@ -1638,6 +1638,9 @@ public:
         return Task.GetId();
     }
 
+    void SetSpillerFactory(std::shared_ptr<ISpillerFactory>) override {
+    }
+
     void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
         const IDqTaskRunnerExecutionContext& execCtx) override
     {

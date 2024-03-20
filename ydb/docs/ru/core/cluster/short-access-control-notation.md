@@ -48,7 +48,7 @@
 | `CT` | (create table) создание таблицы
 | `CQ` | (create queue) создание очереди
 | `RS` | (remove schema) удаление объектов
-| `DS` | (describe schema) описание объектов
+| `DS` | (describe schema) описание объектов, содержимое каталогов
 | `AS` | (alter schema) изменение объектов
 | `CDB` | (create database) создание БД
 | `DDB` | (drop database) удаление БД

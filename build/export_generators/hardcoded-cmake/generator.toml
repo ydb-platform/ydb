@@ -48,6 +48,7 @@ platform_cmakelists="list"
 platform_vars="list"
 includes="sorted_set"
 use_conan="bool"
+vanilla_protobuf="flag"
 
 [attrs.dir]
 prologue="str"

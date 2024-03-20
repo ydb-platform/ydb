@@ -491,11 +491,8 @@ private:
         }
 
         void operator()(NYdb::NTopic::TSessionClosedEvent& ev) {
-            TString message;
-            message << "SessionId: " << Self.GetSessionId() << " Read session to topic \"" << Self.SourceParams.GetTopicPath()
+            ythrow yexception() << "SessionId: " << Self.GetSessionId() << " Read session to topic \"" << Self.SourceParams.GetTopicPath()
                 << "\" was closed: " << ev.DebugString();
-            SRC_LOG_W(message);
-            ythrow yexception() << message;
         }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent&) { }

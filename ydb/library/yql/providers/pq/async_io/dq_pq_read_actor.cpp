@@ -530,6 +530,7 @@ private:
         void operator()(NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent& event) {
             const auto partitionKey = MakePartitionKey(event.GetPartitionStream());
             SRC_LOG_D("SessionId: " << Self.GetSessionId() << " DestroyPartitionStreamEvent received");
+            event.Confirm();
         }
 
         void operator()(NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamStatusEvent&) { }

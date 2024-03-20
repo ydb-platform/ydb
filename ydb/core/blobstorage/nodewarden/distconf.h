@@ -317,6 +317,8 @@ namespace NKikimr::NStorage {
 
         bool GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config);
         void AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config);
+        void GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
+            const NKikimrBlobStorage::TStorageConfig& baseConfig);
         bool UpdateConfig(NKikimrBlobStorage::TStorageConfig *config);
 
         void PrepareScatterTask(ui64 cookie, TScatterTask& task);

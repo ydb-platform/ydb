@@ -372,7 +372,7 @@ public:
 
         Result.set_success(Result.error_size() == 0);
         if (Result.error_size() == 0) {
-            auto fuzzy = FuzzySearcher(Dictionary);
+            auto fuzzy = FuzzySearcher<SchemaWordData>(Dictionary);
             auto autocomplete = fuzzy.Search(Prefix, Limit);
             Result.MutableResult()->SetTotal(autocomplete.size());
             for (SchemaWordData& wordData: autocomplete) {

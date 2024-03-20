@@ -1047,7 +1047,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         {
             TVector<TString> expectations = { "/slice/db" };
-            auto fuzzy = FuzzySearcher(dictionary);
+            auto fuzzy = FuzzySearcher<TString>(dictionary);
             auto result = fuzzy.Search("/slice/db", 1);
 
             UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
@@ -1058,7 +1058,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         {
             TVector<TString> expectations = { "/slice/db", "/slice" };
-            auto fuzzy = FuzzySearcher(dictionary);
+            auto fuzzy = FuzzySearcher<TString>(dictionary);
             auto result = fuzzy.Search("/slice/db", 2);
 
             UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
@@ -1069,7 +1069,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         {
             TVector<TString> expectations = { "/slice/db", "/slice", "/slice/db26000" };
-            auto fuzzy = FuzzySearcher(dictionary);
+            auto fuzzy = FuzzySearcher<TString>(dictionary);
             auto result = fuzzy.Search("/slice/db", 3);
 
             UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
@@ -1080,7 +1080,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         {
             TVector<TString> expectations = { "/slice/db", "/slice", "/slice/db26000" };
-            auto fuzzy = FuzzySearcher(dictionary);
+            auto fuzzy = FuzzySearcher<TString>(dictionary);
             auto result = fuzzy.Search("/slice/db", 4);
 
             UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
@@ -1091,7 +1091,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         {
             TVector<TString> expectations = { "/slice/db26000", "/slice/db", "/slice" };
-            auto fuzzy = FuzzySearcher(dictionary);
+            auto fuzzy = FuzzySearcher<TString>(dictionary);
             auto result = fuzzy.Search("/slice/db26001");
 
             UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());

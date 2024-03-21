@@ -26,7 +26,6 @@ target_link_options(ydb-core-ymq-http-ut PRIVATE
   -lpthread
   -lrt
   -ldl
-  -lutil
 )
 target_sources(ydb-core-ymq-http-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/ymq/http/ut/xml_builder_ut.cpp

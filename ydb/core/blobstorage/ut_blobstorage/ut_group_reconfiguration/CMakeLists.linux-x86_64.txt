@@ -28,7 +28,6 @@ target_link_options(ut_group_reconfiguration PRIVATE
   -lpthread
   -lrt
   -ldl
-  -lutil
 )
 target_sources(ut_group_reconfiguration PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/race.cpp

@@ -8,7 +8,6 @@
 
 add_subdirectory(actor)
 add_subdirectory(common)
-add_subdirectory(controller)
 add_subdirectory(events)
 add_subdirectory(manager)
 add_subdirectory(protos)
@@ -24,7 +23,6 @@ target_link_libraries(tx-columnshard-export INTERFACE
   columnshard-export-actor
   columnshard-export-events
   columnshard-export-protos
-  columnshard-export-controller
   columnshard-export-common
   columnshard-export-transactions
 )

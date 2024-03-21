@@ -7,6 +7,12 @@
 
 
 add_subdirectory(ut)
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
 add_library(core-config-init)
 target_compile_options(core-config-init PRIVATE
@@ -22,10 +28,10 @@ target_link_libraries(core-config-init PUBLIC
   ydb-library-yaml_config
   library-yql-minikql
   yql-public-udf
-  udf-service-exception_policy
   lib-deprecated-kicli
   cpp-client-ydb_discovery
   cpp-client-ydb_driver
+  tools-enum_parser-enum_serialization_runtime
 )
 target_sources(core-config-init PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/config/init/init.h
@@ -33,4 +39,9 @@ target_sources(core-config-init PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/config/init/init.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/config/init/init_noop.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/config/init/dummy.cpp
+)
+generate_enum_serilization(core-config-init
+  ${PROJECT_SOURCE_DIR}/ydb/core/config/init/init.h
+  INCLUDE_HEADERS
+  ydb/core/config/init/init.h
 )

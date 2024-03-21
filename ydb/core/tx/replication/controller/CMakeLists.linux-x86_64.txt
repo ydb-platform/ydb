@@ -27,9 +27,11 @@ target_link_libraries(tx-replication-controller PUBLIC
   core-engine-minikql
   ydb-core-protos
   ydb-core-tablet_flat
+  tx-replication-common
   tx-replication-ydb_proxy
   ydb-core-util
   ydb-core-ydb_convert
+  library-cpp-json
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(tx-replication-controller PRIVATE
@@ -40,6 +42,7 @@ target_sources(tx-replication-controller PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/nodes_manager.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/private_events.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/replication.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/session_info.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/stream_creator.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/stream_remover.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/sys_params.cpp

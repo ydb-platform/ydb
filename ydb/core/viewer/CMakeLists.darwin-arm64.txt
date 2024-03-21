@@ -59,6 +59,7 @@ target_sources(ydb-core-viewer PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/browse.h
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/counters_hosts.h
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/json_acl.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/json_autocomplete.h
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/json_blobindexstat.h
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/json_browse.h
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/json_bscontrollerinfo.h
@@ -98,6 +99,7 @@ target_sources(ydb-core-viewer PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/json_wb_req.h
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/json_whoami.h
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/log.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/query_autocomplete_helper.h
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/viewer_request.h
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/viewer.h
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/wb_aggregate.h

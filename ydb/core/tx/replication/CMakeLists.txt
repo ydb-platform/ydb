@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(common)
 add_subdirectory(controller)
 add_subdirectory(service)
 add_subdirectory(ut_helpers)

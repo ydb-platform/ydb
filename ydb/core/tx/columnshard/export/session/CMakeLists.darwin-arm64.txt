@@ -7,6 +7,7 @@
 
 
 add_subdirectory(selector)
+add_subdirectory(storage)
 get_built_tool_path(
   TOOL_enum_parser_bin
   TOOL_enum_parser_dependency
@@ -19,6 +20,7 @@ target_link_libraries(columnshard-export-session PUBLIC
   contrib-libs-cxxsupp
   yutil
   export-session-selector
+  export-session-storage
   ydb-core-scheme
   columnshard-export-protos
   ydb-core-tablet_flat

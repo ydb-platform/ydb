@@ -28,7 +28,6 @@ target_link_options(blobstorage-ut_blobstorage-ut_vdisk_restart PRIVATE
   -lpthread
   -lrt
   -ldl
-  -lutil
 )
 target_sources(blobstorage-ut_blobstorage-ut_vdisk_restart PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/vdisk_restart.cpp

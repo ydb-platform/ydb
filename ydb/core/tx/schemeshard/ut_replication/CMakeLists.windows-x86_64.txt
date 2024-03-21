@@ -20,6 +20,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_replication PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   core-tx-schemeshard
+  ydb-core-protos
   tx-schemeshard-ut_helpers
   yql-sql-pg_dummy
 )

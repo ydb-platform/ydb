@@ -10,7 +10,6 @@ add_subdirectory(anubis_osiris)
 add_subdirectory(balance)
 add_subdirectory(common)
 add_subdirectory(defrag)
-add_subdirectory(handoff)
 add_subdirectory(huge)
 add_subdirectory(hulldb)
 add_subdirectory(hullop)
@@ -31,7 +30,6 @@ target_link_libraries(core-blobstorage-vdisk PUBLIC
   blobstorage-vdisk-anubis_osiris
   blobstorage-vdisk-common
   blobstorage-vdisk-defrag
-  blobstorage-vdisk-handoff
   blobstorage-vdisk-huge
   blobstorage-vdisk-hulldb
   blobstorage-vdisk-hullop

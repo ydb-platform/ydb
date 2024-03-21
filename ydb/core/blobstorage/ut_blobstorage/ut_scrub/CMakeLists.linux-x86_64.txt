@@ -28,7 +28,6 @@ target_link_options(ydb-core-blobstorage-ut_blobstorage-ut_scrub PRIVATE
   -lpthread
   -lrt
   -ldl
-  -lutil
 )
 target_sources(ydb-core-blobstorage-ut_blobstorage-ut_scrub PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/scrub.cpp

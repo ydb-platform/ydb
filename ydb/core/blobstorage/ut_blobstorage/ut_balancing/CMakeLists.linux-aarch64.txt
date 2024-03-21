@@ -27,7 +27,6 @@ target_link_options(ydb-core-blobstorage-ut_blobstorage-ut_balancing PRIVATE
   -lpthread
   -lrt
   -ldl
-  -lutil
 )
 target_sources(ydb-core-blobstorage-ut_blobstorage-ut_balancing PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/balancing.cpp
@@ -37,7 +36,7 @@ set_property(
   ydb-core-blobstorage-ut_blobstorage-ut_balancing
   PROPERTY
   SPLIT_FACTOR
-  1
+  10
 )
 add_yunittest(
   NAME

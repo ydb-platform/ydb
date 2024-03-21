@@ -21,6 +21,7 @@ target_link_libraries(providers-common-comp_nodes PUBLIC
   yql-core-type_ann
   providers-common-codec
   common-schema-expr
+  yql-parser-pg_catalog
 )
 target_sources(providers-common-comp_nodes PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_factory.h

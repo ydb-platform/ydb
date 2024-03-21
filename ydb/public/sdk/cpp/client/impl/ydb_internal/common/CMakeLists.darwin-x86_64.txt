@@ -18,4 +18,5 @@ target_sources(impl-ydb_internal-common PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/impl/ydb_internal/common/parser.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/impl/ydb_internal/common/getenv.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/impl/ydb_internal/common/string_helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/impl/ydb_internal/common/client_pid.cpp
 )

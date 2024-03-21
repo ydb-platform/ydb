@@ -15,7 +15,6 @@ target_link_libraries(ydb-library-db_pool PUBLIC
   yutil
   library-actors-core
   cpp-monlib-dynamic_counters
-  ydb-core-protos
   library-db_pool-protos
   ydb-library-security
   cpp-client-ydb_driver

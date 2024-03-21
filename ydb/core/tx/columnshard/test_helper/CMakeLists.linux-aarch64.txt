@@ -8,6 +8,9 @@
 
 
 add_library(tx-columnshard-test_helper)
+target_compile_options(tx-columnshard-test_helper PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
 target_link_libraries(tx-columnshard-test_helper PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
@@ -17,8 +20,10 @@ target_link_libraries(tx-columnshard-test_helper PUBLIC
   library-actors-core
   columnshard-blobs_action-bs
   columnshard-blobs_action-tier
+  core-tx-columnshard
   ydb-core-wrappers
 )
 target_sources(tx-columnshard-test_helper PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/test_helper/helper.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/test_helper/controllers.cpp
 )

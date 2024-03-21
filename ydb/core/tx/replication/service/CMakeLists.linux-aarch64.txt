@@ -31,6 +31,7 @@ target_link_libraries(tx-replication-service PUBLIC
   ydb-core-scheme_types
   ydb-core-tablet_flat
   core-io_formats-cell_maker
+  tx-replication-common
   tx-replication-ydb_proxy
   library-actors-core
   ydb-library-services

@@ -48,4 +48,5 @@ target_sources(core-kqp-proxy_service PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/proxy_service/kqp_proxy_service.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/proxy_service/kqp_proxy_peer_stats_calculator.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/proxy_service/kqp_script_executions.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/proxy_service/kqp_session_info.cpp
 )

@@ -12,7 +12,6 @@ target_link_libraries(columnshard-export-actor PUBLIC
   contrib-libs-cxxsupp
   yutil
   columnshard-blobs_action-abstract
-  export-controller-abstract
   library-actors-core
   columnshard-engines-writer
   columnshard-export-events

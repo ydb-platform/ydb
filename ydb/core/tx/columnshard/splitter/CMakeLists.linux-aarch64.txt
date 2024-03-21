@@ -22,7 +22,7 @@ target_sources(tx-columnshard-splitter PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/batch_slice.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/chunks.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/simple.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/rb_splitter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/similar_packer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/stats.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/column_info.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/settings.cpp

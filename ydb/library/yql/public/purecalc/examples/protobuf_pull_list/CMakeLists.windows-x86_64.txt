@@ -47,6 +47,7 @@ target_proto_addincls(protobuf_pull_list
   ${PROJECT_SOURCE_DIR}/
   ${PROJECT_BINARY_DIR}
   ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc-format/src/main/proto/orc/proto
   ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
   ${PROJECT_BINARY_DIR}
   ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src

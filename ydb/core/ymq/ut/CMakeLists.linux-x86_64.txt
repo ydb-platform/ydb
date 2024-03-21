@@ -29,7 +29,6 @@ target_link_options(ydb-core-ymq-ut PRIVATE
   -lpthread
   -lrt
   -ldl
-  -lutil
 )
 target_sources(ydb-core-ymq-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/ymq/ut/queue_id_ut.cpp

@@ -42,6 +42,18 @@ get_built_tool_path(
   contrib/tools/protoc/plugins/cpp_styleguide
   cpp_styleguide
 )
+get_built_tool_path(
+  TOOL_protoc_bin
+  TOOL_protoc_dependency
+  contrib/tools/protoc/bin
+  protoc
+)
+get_built_tool_path(
+  TOOL_cpp_styleguide_bin
+  TOOL_cpp_styleguide_dependency
+  contrib/tools/protoc/plugins/cpp_styleguide
+  cpp_styleguide
+)
 
 add_library(columnshard-export-protos)
 target_link_libraries(columnshard-export-protos PUBLIC
@@ -49,16 +61,19 @@ target_link_libraries(columnshard-export-protos PUBLIC
   contrib-libs-cxxsupp
   yutil
   columnshard-common-protos
+  ydb-core-protos
   contrib-libs-protobuf
 )
 target_proto_messages(columnshard-export-protos PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/export/protos/cursor.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/export/protos/selector.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/export/protos/storage.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/export/protos/task.proto
 )
 target_sources(columnshard-export-protos PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/export/protos/cursor.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/export/protos/selector.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/export/protos/storage.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/export/protos/task.pb.h
 )
 target_proto_addincls(columnshard-export-protos

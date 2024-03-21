@@ -22,6 +22,7 @@ target_link_libraries(libs-control_plane_storage-internal PUBLIC
   ydb-core-base
   ydb-core-metering
   fq-libs-common
+  libs-compute-common
   fq-libs-config
   libs-control_plane_storage-proto
   fq-libs-exceptions

@@ -101,7 +101,6 @@ target_sources(ydb-core-base PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/base/statestorage_proxy.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/statestorage_replica.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/statestorage_replica_probe.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/base/statestorage_warden.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/storage_pools.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/subdomain.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/table_index.cpp

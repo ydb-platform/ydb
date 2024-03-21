@@ -21,6 +21,7 @@ target_link_libraries(ydb-core-config-init-ut PUBLIC
   cpp-testing-unittest_main
   core-config-init
   yql-sql-pg_dummy
+  udf-service-stub
 )
 target_link_options(ydb-core-config-init-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0

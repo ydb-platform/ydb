@@ -32,6 +32,7 @@ target_link_libraries(yql-dq-runtime PUBLIC
   yql-dq-common
   yql-dq-expr_nodes
   yql-dq-type_ann
+  providers-common-comp_nodes
   common-schema-mkql
   library-actors-util
   tools-enum_parser-enum_serialization_runtime

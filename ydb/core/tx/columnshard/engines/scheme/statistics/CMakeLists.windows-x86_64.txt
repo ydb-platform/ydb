@@ -9,6 +9,7 @@
 add_subdirectory(abstract)
 add_subdirectory(max)
 add_subdirectory(protos)
+add_subdirectory(variability)
 
 add_library(engines-scheme-statistics INTERFACE)
 target_link_libraries(engines-scheme-statistics INTERFACE
@@ -16,5 +17,6 @@ target_link_libraries(engines-scheme-statistics INTERFACE
   yutil
   scheme-statistics-abstract
   scheme-statistics-max
+  scheme-statistics-variability
   scheme-statistics-protos
 )

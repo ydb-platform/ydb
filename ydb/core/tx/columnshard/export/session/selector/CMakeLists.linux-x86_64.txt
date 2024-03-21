@@ -7,7 +7,7 @@
 
 
 add_subdirectory(abstract)
-add_subdirectory(snapshot)
+add_subdirectory(backup)
 
 add_library(export-session-selector INTERFACE)
 target_link_libraries(export-session-selector INTERFACE
@@ -15,5 +15,5 @@ target_link_libraries(export-session-selector INTERFACE
   contrib-libs-cxxsupp
   yutil
   session-selector-abstract
-  session-selector-snapshot
+  session-selector-backup
 )

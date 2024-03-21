@@ -7,6 +7,32 @@
 
 
 
+add_library(knn INTERFACE)
+target_link_libraries(knn INTERFACE
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  yql-public-udf
+  public-udf-support
+)
+
+add_global_library_for(knn.global knn)
+target_compile_options(knn.global PRIVATE
+  -DUDF_ABI_VERSION_MAJOR=2
+  -DUDF_ABI_VERSION_MINOR=35
+  -DUDF_ABI_VERSION_PATCH=0
+)
+target_link_libraries(knn.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  yql-public-udf
+  public-udf-support
+)
+target_sources(knn.global PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/knn/knn.cpp
+)
+
 add_shared_library(knn.dyn)
 set_property(TARGET knn.dyn PROPERTY
   OUTPUT_NAME knn
@@ -43,29 +69,3 @@ use_export_script(knn.dyn
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udfs_exports.exports
 )
 vcs_info(knn.dyn)
-
-add_library(knn INTERFACE)
-target_link_libraries(knn INTERFACE
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  yql-public-udf
-  public-udf-support
-)
-
-add_global_library_for(knn.global knn)
-target_compile_options(knn.global PRIVATE
-  -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=35
-  -DUDF_ABI_VERSION_PATCH=0
-)
-target_link_libraries(knn.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  yql-public-udf
-  public-udf-support
-)
-target_sources(knn.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/knn/knn.cpp
-)

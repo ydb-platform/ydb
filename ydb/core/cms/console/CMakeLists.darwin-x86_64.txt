@@ -9,18 +9,14 @@
 add_subdirectory(ut)
 add_subdirectory(util)
 add_subdirectory(validators)
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
 
 add_library(core-cms-console)
+target_compile_options(core-cms-console PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
 target_link_libraries(core-cms-console PUBLIC
   contrib-libs-cxxsupp
   yutil
-  tools-enum_parser-enum_serialization_runtime
   library-actors-core
   library-actors-http
   ydb-core-actorlib_impl
@@ -29,6 +25,7 @@ target_link_libraries(core-cms-console PUBLIC
   core-blobstorage-base
   core-blobstorage-groupinfo
   cms-console-validators
+  core-config-init
   ydb-core-control
   core-engine-minikql
   ydb-core-mind
@@ -113,9 +110,4 @@ target_sources(core-cms-console PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/shared_cache_configurator.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/tx_processor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/util.cpp
-)
-generate_enum_serilization(core-cms-console
-  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/config_item_info.h
-  INCLUDE_HEADERS
-  ydb/core/cms/console/config_item_info.h
 )

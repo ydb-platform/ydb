@@ -6,21 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-get_built_tool_path(
-  TOOL_protoc_bin
-  TOOL_protoc_dependency
-  contrib/tools/protoc/bin
-  protoc
-)
-get_built_tool_path(
-  TOOL_cpp_styleguide_bin
-  TOOL_cpp_styleguide_dependency
-  contrib/tools/protoc/plugins/cpp_styleguide
-  cpp_styleguide
-)
 
 add_library(libs-apache-orc)
 target_compile_options(libs-apache-orc PRIVATE
+  -DENABLE_METRICS=0
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(libs-apache-orc PUBLIC
@@ -28,32 +17,31 @@ target_include_directories(libs-apache-orc PUBLIC
 )
 target_include_directories(libs-apache-orc PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src
-  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/proto
   ${PROJECT_SOURCE_DIR}/contrib/libs/lz4
   ${PROJECT_SOURCE_DIR}/contrib/libs/zstd/include
 )
 target_link_libraries(libs-apache-orc PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
+  libs-apache-orc-format
   contrib-libs-lz4
   contrib-libs-snappy
   contrib-libs-zlib
   contrib-libs-zstd
-  contrib-libs-protobuf
-)
-target_proto_messages(libs-apache-orc PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/proto/orc_proto.proto
 )
 target_sources(libs-apache-orc PRIVATE
-  ${PROJECT_BINARY_DIR}/contrib/libs/apache/orc/proto/orc_proto.pb.h
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Adaptor.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/BlockBuffer.cc
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/BloomFilter.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/BpackingDefault.cc
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/ByteRLE.cc
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/ColumnPrinter.cc
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/ColumnReader.cc
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/ColumnWriter.cc
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Common.cc
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Compression.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/ConvertColumnReader.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/CpuInfoUtil.cc
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Exceptions.cc
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Int128.cc
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/LzoDecompressor.cc
@@ -66,6 +54,7 @@ target_sources(libs-apache-orc PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Reader.cc
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/RleDecoderV2.cc
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/RleEncoderV2.cc
+  ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/SchemaEvolution.cc
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Statistics.cc
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/StripeStream.cc
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Timezone.cc
@@ -80,17 +69,4 @@ target_sources(libs-apache-orc PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/sargs/SargsApplier.cc
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/sargs/SearchArgument.cc
   ${PROJECT_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/sargs/TruthValue.cc
-)
-target_proto_addincls(libs-apache-orc
-  ./
-  ${PROJECT_SOURCE_DIR}/
-  ${PROJECT_BINARY_DIR}
-  ${PROJECT_SOURCE_DIR}
-  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${PROJECT_BINARY_DIR}
-  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
-)
-target_proto_outs(libs-apache-orc
-  --cpp_out=${PROJECT_BINARY_DIR}/
-  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
 )

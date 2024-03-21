@@ -52,6 +52,12 @@ get_built_tool_path(
   tools/enum_parser/enum_parser
   enum_parser
 )
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
 add_library(library-yql-core)
 target_compile_options(library-yql-core PRIVATE
@@ -160,4 +166,9 @@ generate_enum_serilization(library-yql-core
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_type_annotation.h
   INCLUDE_HEADERS
   ydb/library/yql/core/yql_type_annotation.h
+)
+generate_enum_serilization(library-yql-core
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/yql_cost_function.h
+  INCLUDE_HEADERS
+  ydb/library/yql/core/yql_cost_function.h
 )

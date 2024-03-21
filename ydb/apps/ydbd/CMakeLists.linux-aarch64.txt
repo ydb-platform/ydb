@@ -35,6 +35,7 @@ target_link_libraries(ydbd PUBLIC
   histogram_udf
   hyperloglog_udf
   ip_udf
+  knn
   json_udf
   json2_udf
   math_udf

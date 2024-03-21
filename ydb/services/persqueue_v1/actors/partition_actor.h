@@ -209,6 +209,8 @@ private:
     std::map<ui64, NKikimrClient::TPersQueuePartitionResponse::TCmdPrepareDirectReadResult> DirectReads;
 
     bool UseMigrationProtocol;
+
+    bool FirstRead;
 };
 
 

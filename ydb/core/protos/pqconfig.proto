@@ -812,6 +812,7 @@ message THasDataInfoResponse { //signal
     optional uint64 Cookie = 2;
     optional uint64 SizeLag = 3;
     optional uint64 WriteTimestampEstimateMS = 4;
+    optional bool ReadingFinished = 5;
 }
 
 message TBatchHeader {

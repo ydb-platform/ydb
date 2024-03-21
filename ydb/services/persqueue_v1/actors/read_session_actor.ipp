@@ -1457,8 +1457,8 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvReleasePar
             Y_ABORT_UNLESS(!Partitions.empty());
 
             for (auto it = Partitions.begin(); it != Partitions.end(); ++it) {
-                if (it->second.Topic->GetInternalName() == converter->GetInternalName()
-                    && !it->second.Releasing) {
+                auto& partitionInfo = it->second;
+                if (!partitionInfo.Releasing && partitionInfo.Topic->GetInternalName() == converter->GetInternalName()) {
                     doRelease(it);
                     if (i--) {
                         break;
@@ -1468,7 +1468,6 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvReleasePar
         }
     } else {
         // Release partitions by partition id
-
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " gone release"
             << ": partitions# " << JoinRange(", ", partitionsForRealese.begin(), partitionsForRealese.end()));
 

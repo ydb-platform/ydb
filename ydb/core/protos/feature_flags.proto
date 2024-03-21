@@ -129,4 +129,5 @@ message TFeatureFlags {
     optional bool EnableAccessServiceBulkAuthorization = 114 [default = false];
     optional bool EnableAddColumsWithDefaults = 115 [ default = false];
     optional bool EnableReplaceIfExistsForExternalEntities = 116 [ default = false];
+    optional bool ExtendedVDiskCounters = 120 [default = true];
 }

@@ -4,6 +4,7 @@
 #include "vdisk_costmodel.h"
 #include "vdisk_events.h"
 #include "vdisk_handle_class.h"
+#include "vdisk_mongroups.h"
 
 #include <util/system/compiler.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
@@ -272,14 +273,8 @@ class TBsCostTracker {
 private:
     TBlobStorageGroupType GroupType;
     std::unique_ptr<TBsCostModelBase> CostModel;
-
-    const TIntrusivePtr<::NMonitoring::TDynamicCounters> CostCounters;
-
-    ::NMonitoring::TDynamicCounters::TCounterPtr UserDiskCost;
-    ::NMonitoring::TDynamicCounters::TCounterPtr CompactionDiskCost;
-    ::NMonitoring::TDynamicCounters::TCounterPtr ScrubDiskCost;
-    ::NMonitoring::TDynamicCounters::TCounterPtr DefragDiskCost;
-    ::NMonitoring::TDynamicCounters::TCounterPtr InternalDiskCost;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> CostCounters;
+    std::shared_ptr<NMonGroup::TCostTrackerGroup> MonGroup;
 
 public:
     TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::EDeviceType diskType,
@@ -309,35 +304,35 @@ public:
 public:
     template<class TEvent>
     void CountUserRequest(const TEvent& ev) {
-        *UserDiskCost += GetCost(ev);
+        MonGroup->UserDiskCost() += GetCost(ev);
     }
 
     void CountUserCost(ui64 cost) {
-        *UserDiskCost += cost;
+        MonGroup->UserDiskCost() += cost;
     }
 
     template<class TEvent>
     void CountCompactionRequest(const TEvent& ev) {
-        *CompactionDiskCost += GetCost(ev);
+        MonGroup->CompactionDiskCost() += GetCost(ev);
     }
 
     template<class TEvent>
     void CountScrubRequest(const TEvent& ev) {
-        *UserDiskCost += GetCost(ev);
+        MonGroup->UserDiskCost() += GetCost(ev);
     }
 
     template<class TEvent>
     void CountDefragRequest(const TEvent& ev) {
-        *DefragDiskCost += GetCost(ev);
+        MonGroup->DefragDiskCost() += GetCost(ev);
     }
 
     template<class TEvent>
     void CountInternalRequest(const TEvent& ev) {
-        *InternalDiskCost += GetCost(ev);
+        MonGroup->InternalDiskCost() += GetCost(ev);
     }
 
     void CountInternalCost(ui64 cost) {
-        *InternalDiskCost += cost;
+        MonGroup->InternalDiskCost() += cost;
     }
 };
 

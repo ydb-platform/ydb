@@ -210,6 +210,12 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
                 {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
+            {
+                TInactiveZone inactive(activeZone);
+                i64 value = DoNextVal(runtime, "/MyRoot/Table/myseq");
+                UNIT_ASSERT_VALUES_EQUAL(value, 1);
+            }
+
             t.TestEnv->ReliablePropose(runtime, CopyTableRequest(++t.TxId, "/MyRoot", "copy", "/MyRoot/Table"),
                 {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists,
                 NKikimrScheme::StatusMultipleModifications});
@@ -219,7 +225,8 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                // no inactive finalization
+                i64 value = DoNextVal(runtime, "/MyRoot/copy/myseq");
+                UNIT_ASSERT_VALUES_EQUAL(value, 2);
             }
         });
     }

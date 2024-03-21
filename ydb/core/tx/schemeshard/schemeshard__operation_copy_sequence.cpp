@@ -582,7 +582,7 @@ public:
         TSequenceInfo::TPtr srcSequence = context.SS->Sequences.at(srcPath.Base()->PathId);
         Y_ABORT_UNLESS(!srcSequence->Sharding.GetSequenceShards().empty());
 
-        auto protoSequenceShard = *srcSequence->Sharding.GetSequenceShards().rbegin();
+        const auto& protoSequenceShard = *srcSequence->Sharding.GetSequenceShards().rbegin();
         TShardIdx sequenceShard = FromProto(protoSequenceShard);
 
         const TString acl = Transaction.GetModifyACL().GetDiffACL();

@@ -11110,9 +11110,9 @@
     ],
     "test_sql2yql.test[pg-is_predicate]": [
         {
-            "checksum": "8827569779fcf55c4319262ab257dbe6",
+            "checksum": "59c977551580127020ede843f4176d6c",
             "size": 1153,
-            "uri": "https://{canondata_backend}/1773845/183b7e5a3c4205759d8ee258c5357d8bd172fd74/resource.tar.gz#test_sql2yql.test_pg-is_predicate_/sql.yql"
+            "uri": "https://{canondata_backend}/1599023/282267040727ec2d9d47363502a0aab57bbe068e/resource.tar.gz#test_sql2yql.test_pg-is_predicate_/sql.yql"
         }
     ],
     "test_sql2yql.test[pg-join_tree_order]": [

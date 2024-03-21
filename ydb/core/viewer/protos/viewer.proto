@@ -527,6 +527,12 @@ message THttpProxyRequest {
     bytes UserToken = 3;
 }
 
+message TSchemeCacheRequest {
+    string Database = 1;
+    repeated string Tables = 2;
+    string Prefix = 3;
+}
+
 message TEvViewerRequest {
     TNodeLocation Location = 1;
     uint32 Timeout = 2; // ms
@@ -535,9 +541,10 @@ message TEvViewerRequest {
         NKikimrWhiteboard.TEvSystemStateRequest SystemRequest = 12;
         THttpProxyRequest QueryRequest = 13;
         THttpProxyRequest RenderRequest = 14;
-        bytes Reserved15 = 15;
+        TSchemeCacheRequest AutocompleteRequest = 15;
         bytes Reserved16 = 16;
         bytes Reserved17 = 17;
+        bytes Reserved18 = 18;
     }
 }
 
@@ -548,9 +555,10 @@ message TEvViewerResponse {
         NKikimrWhiteboard.TEvSystemStateResponse SystemResponse = 12;
         NKikimrKqp.TEvQueryResponse QueryResponse = 13;
         NKikimrGraph.TEvMetricsResult RenderResponse = 14;
-        bytes Reserved15 = 15;
+        TQueryAutocomplete AutocompleteResponse = 15;
         bytes Reserved16 = 16;
         bytes Reserved17 = 17;
+        bytes Reserved18 = 18;
     }
 }
 
@@ -573,4 +581,20 @@ message TEvDescribeSchemeInfo {
     optional NKikimrSchemeOp.TPathDescription LastExistedPrefixDescription = 9;
     optional fixed64 PathOwnerId = 10;
     optional ESource Source = 11;
+}
+
+message TQueryAutocomplete {
+    message TResult {
+        message TEntity {
+            string Name = 1;
+            string Type = 2;
+            string Parent = 3;
+        }
+        uint32 Total = 1;
+        repeated TEntity Entities = 2;
+    }
+
+    bool Success = 1;
+    TResult Result = 2;
+    repeated string Error = 3;
 }

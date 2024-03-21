@@ -54,15 +54,24 @@ std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TSimpleColumnInf
     AFL_VERIFY(Loader);
     const auto checkNeedActualize = [&]() {
         if (!Serializer.IsEqualTo(sourceColumnFeatures.Serializer)) {
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "actualization")("reason", "serializer")
+                ("from", sourceColumnFeatures.Serializer.SerializeToProto().DebugString())
+                ("to", Serializer.SerializeToProto().DebugString());
             return true;
         }
         if (!Loader->IsEqualTo(*sourceColumnFeatures.Loader)) {
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "actualization")("reason", "loader");
             return true;
         }
         if (!!DictionaryEncoding != !!sourceColumnFeatures.DictionaryEncoding) {
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "actualization")("reason", "dictionary")("from", !!sourceColumnFeatures.DictionaryEncoding)("to", !!DictionaryEncoding);
             return true;
         }
-        if (!!DictionaryEncoding && DictionaryEncoding->IsEqualTo(*sourceColumnFeatures.DictionaryEncoding)) {
+        if (!!DictionaryEncoding && !DictionaryEncoding->IsEqualTo(*sourceColumnFeatures.DictionaryEncoding)) {
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "actualization")("reason", "dictionary_encoding")
+                ("from", sourceColumnFeatures.DictionaryEncoding->SerializeToProto().DebugString())
+                ("to", DictionaryEncoding->SerializeToProto().DebugString())
+                ;
             return true;
         }
         return false;

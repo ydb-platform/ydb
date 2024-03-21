@@ -186,6 +186,20 @@ public:
         return ShardActuals.size();
     }
 
+    void WaitActualization(const TDuration d) const {
+        ui32 lastActualizationsCount = 0;
+        TInstant lastChange = TInstant::Now();
+        while (!ActualizationsCount.Val() && TInstant::Now() - lastChange < d) {
+            Cerr << "waiting actualization: " << ActualizationsCount.Val() << "/" << TInstant::Now() - lastChange << Endl;
+            Sleep(TDuration::Seconds(1));
+            if (lastActualizationsCount != ActualizationsCount.Val()) {
+                lastActualizationsCount = ActualizationsCount.Val();
+                lastChange = TInstant::Now();
+            }
+        }
+        AFL_VERIFY(ActualizationsCount.Val());
+    }
+
     std::vector<ui64> GetShardActualIds() const {
         TGuard<TMutex> g(Mutex);
         std::vector<ui64> result;

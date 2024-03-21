@@ -2196,7 +2196,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 SELECT * FROM $a;
                 UPSERT INTO TestDdl4 (Key, Value) VALUES (3, 3);
             )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT(result.GetIssues().ToOneLineString().Contains("Unknown name: $a"));
 
             result = db.ExecuteQuery(R"(

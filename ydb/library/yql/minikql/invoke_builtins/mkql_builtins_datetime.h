@@ -127,25 +127,43 @@ NUdf::TDataType<NUdf::TInterval64>::TLayout FromScaledDate<NUdf::TDataType<NUdf:
     return src;
 }
 
-/*
-
-template<>
-inline bool IsBadScaledDate<NUdf::TDataType<NUdf::TTimestamp>>(TScaledDate val) {
-    return val < 0 || val >= TScaledDate(NUdf::MAX_TIMESTAMP);
-}
-
-template<>
-inline bool IsBadScaledDate<NUdf::TDataType<NUdf::TInterval>>(TScaledDate val) {
-    return val <= -TScaledDate(NUdf::MAX_TIMESTAMP) || val >= TScaledDate(NUdf::MAX_TIMESTAMP);
-}
-*/
-
 inline bool IsBadDateTime(TScaledDate val) {
     return val < 0 || val >= TScaledDate(NUdf::MAX_TIMESTAMP);
 }
 
 inline bool IsBadInterval(TScaledDate val) {
     return val <= -TScaledDate(NUdf::MAX_TIMESTAMP) || val >= TScaledDate(NUdf::MAX_TIMESTAMP);
+}
+
+template<typename TDateType>
+inline bool IsBadDateTimeNew(TScaledDate val) {
+    static_assert(TDateType::Features & (NYql::NUdf::DateType | NYql::NUdf::TzDateType),
+        "Date type expected as template argument");
+    if constexpr (TDateType::Features & NYql::NUdf::BigDateType) {
+        return val < NUdf::MIN_TIMESTAMP64 || val > NUdf::MAX_TIMESTAMP64;
+    } else {
+        return val < 0 || val >= TScaledDate(NUdf::MAX_TIMESTAMP);
+    }
+}
+
+template<typename TDateType>
+inline bool IsBadIntervalNew(TScaledDate val) {
+    static_assert(TDateType::Features & NYql::NUdf::TimeIntervalType,
+        "Time interval type expected as template argument");
+    if constexpr (TDateType::Features & NYql::NUdf::BigDateType) {
+        return val < -NUdf::MAX_INTERVAL64 || val > NUdf::MAX_INTERVAL64;
+    } else {
+        return val <= -TScaledDate(NUdf::MAX_TIMESTAMP) || val >= TScaledDate(NUdf::MAX_TIMESTAMP);
+    }
+}
+
+template<typename TDateType>
+inline bool IsBadScaledDate(TScaledDate val) {
+    if constexpr (TDateType::Features & NYql::NUdf::TimeIntervalType) {
+        return IsBadIntervalNew<TDateType>(val);
+    } else {
+        return IsBadDateTimeNew<TDateType>(val);
+    }
 }
 
 #ifndef MKQL_DISABLE_CODEGEN

@@ -120,8 +120,8 @@ struct TDateTimeSub {
 
 template<typename TLeft, typename TRight, typename TOutput>
 struct TIntervalSubInterval {
-    static_assert(std::is_same<TOutput, NUdf::TDataType<NUdf::TInterval>::TLayout>::value, "expected output interval");
-    static_assert(std::is_same<TLeft, TRight>::value, "left and right must be same");
+    static_assert(std::is_same_v<TOutput, NUdf::TDataType<NUdf::TInterval>::TLayout>, "expected output interval");
+    static_assert(std::is_same_v<TLeft, TRight>, "left and right must be same");
 
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
     {
@@ -157,7 +157,7 @@ struct TAnyDateTimeSubIntervalT {
         const auto lv = ToScaledDate<TLeft>(left.template Get<typename TLeft::TLayout>());
         const auto rv = ToScaledDate<TRight>(right.template Get<typename TRight::TLayout>());
         const auto ret = lv - rv;
-        if (IsBadDateTime(ret)) {
+        if (IsBadDateTimeNew<TOutput>(ret)) {
             return NUdf::TUnboxedValuePod();
         }
 

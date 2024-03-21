@@ -262,7 +262,7 @@ struct TAstParseResult {
     void Destroy();
 };
 
-struct TStmtParsedInfo {
+struct TStmtParseInfo {
     bool KeepInCache = true;
 };
 

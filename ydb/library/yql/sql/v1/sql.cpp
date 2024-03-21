@@ -166,7 +166,7 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
 }
 
 TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules,
-    TVector<NYql::TStmtParsedInfo>* stmtParsedInfo)
+    TVector<NYql::TStmtParseInfo>* stmtParseInfo)
 {
     TVector<TAstParseResult> result;
     const TString queryName = "query";
@@ -195,8 +195,8 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const NS
             } else {
                 TContext ctx(settings, hints, issues);
                 result.emplace_back();
-                if (stmtParsedInfo) {
-                    stmtParsedInfo->push_back({});
+                if (stmtParseInfo) {
+                    stmtParseInfo->push_back({});
                 }
                 SqlASTsToYqlsImpl(result.back(), {statements.GetRule_sql_stmt2().GetRule_sql_stmt_core2()}, ctx);
                 result.back().Issues = std::move(issues);
@@ -209,8 +209,8 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const NS
                 }
                 TContext ctx(settings, hints, issues);
                 result.emplace_back();
-                if (stmtParsedInfo) {
-                    stmtParsedInfo->push_back({});
+                if (stmtParseInfo) {
+                    stmtParseInfo->push_back({});
                 }
                 statementResult = commonStates;
                 statementResult.push_back(block.GetRule_sql_stmt2().GetRule_sql_stmt_core2());

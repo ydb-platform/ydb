@@ -283,7 +283,7 @@ public:
                     sessionSettings[settingName.GetStringSafe()] = settingValue.GetStringSafe();
                 }
             }
-            GUCSettings->Setup(settings, rollbackSettings, sessionSettings);
+            GUCSettings->ImportFromJson(settings, rollbackSettings, sessionSettings);
         }
 
         Config->Init(KqpSettings.DefaultSettings.GetDefaultSettings(), ReplayDetails["query_cluster"].GetStringSafe(), KqpSettings.Settings, false);

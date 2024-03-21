@@ -5,15 +5,6 @@ void TGUCSettings::Setup(const std::unordered_map<std::string, std::string>& run
     RollBack();
 }
 
-void TGUCSettings::Setup(const std::unordered_map<std::string, std::string>& settings,
-    const std::unordered_map<std::string, std::string>& rollbackSettings,
-    const std::unordered_map<std::string, std::string>& sessionSettings)
-{
-    Settings_ = settings;
-    RollbackSettings_ = rollbackSettings;
-    SessionSettings_ = sessionSettings;
-}
-
 std::optional<std::string> TGUCSettings::Get(const std::string& key) const {
     auto it = Settings_.find(key);
     if (it == Settings_.end()) {
@@ -55,6 +46,15 @@ void TGUCSettings::ExportToJson(NJson::TJsonValue& message) const {
     gucSettings.InsertValue("rollback_settings", std::move(rollbackSettings));
     gucSettings.InsertValue("session_settings", std::move(sessionSettings));
     message.InsertValue("guc_settings", std::move(gucSettings));
+}
+
+void TGUCSettings::ImportFromJson(const std::unordered_map<std::string, std::string>& settings,
+    const std::unordered_map<std::string, std::string>& rollbackSettings,
+    const std::unordered_map<std::string, std::string>& sessionSettings)
+{
+    Settings_ = settings;
+    RollbackSettings_ = rollbackSettings;
+    SessionSettings_ = sessionSettings;
 }
 
 bool TGUCSettings::operator==(const TGUCSettings& other) const {

@@ -157,11 +157,11 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
     if (isSql) {
         auto settings = settingsBuilder.Build(ctx);
         ui16 actualSyntaxVersion = 0;
-        NYql::TStmtParsedInfo stmtParsedInfo;
-        auto ast = NSQLTranslation::SqlToYql(queryText, settings, nullptr, &actualSyntaxVersion, &stmtParsedInfo);
+        NYql::TStmtParseInfo stmtParseInfo;
+        auto ast = NSQLTranslation::SqlToYql(queryText, settings, nullptr, &actualSyntaxVersion, &stmtParseInfo);
         deprecatedSQL = (actualSyntaxVersion == 0);
         sqlVersion = actualSyntaxVersion;
-        keepInCache = stmtParsedInfo.KeepInCache;
+        keepInCache = stmtParseInfo.KeepInCache;
         return std::move(ast);
     } else {
         sqlVersion = {};
@@ -194,13 +194,13 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
     if (isSql) {
         auto settings = settingsBuilder.Build(ctx);
         ui16 actualSyntaxVersion = 0;
-        TVector<NYql::TStmtParsedInfo> stmtParsedInfo;
-        auto astStatements = NSQLTranslation::SqlToAstStatements(queryText, settings, nullptr, &actualSyntaxVersion, &stmtParsedInfo);
+        TVector<NYql::TStmtParseInfo> stmtParseInfo;
+        auto astStatements = NSQLTranslation::SqlToAstStatements(queryText, settings, nullptr, &actualSyntaxVersion, &stmtParseInfo);
         deprecatedSQL = (actualSyntaxVersion == 0);
         sqlVersion = actualSyntaxVersion;
-        YQL_ENSURE(astStatements.size() == stmtParsedInfo.size());
+        YQL_ENSURE(astStatements.size() == stmtParseInfo.size());
         for (size_t i = 0; i < astStatements.size(); ++i) {
-            result.push_back({std::make_shared<NYql::TAstParseResult>(std::move(astStatements[i])), sqlVersion, (actualSyntaxVersion == 0), stmtParsedInfo[i].KeepInCache});
+            result.push_back({std::make_shared<NYql::TAstParseResult>(std::move(astStatements[i])), sqlVersion, (actualSyntaxVersion == 0), stmtParseInfo[i].KeepInCache});
         }
         return result;
     } else {

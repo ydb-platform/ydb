@@ -286,18 +286,18 @@ public:
     };
 
     TConverter(TVector<TAstParseResult>& astParseResults, const NSQLTranslation::TTranslationSettings& settings,
-            const TString& query, TVector<TStmtParsedInfo>* stmtParsedInfo, bool perStatementResult)
+            const TString& query, TVector<TStmtParseInfo>* stmtParseInfo, bool perStatementResult)
         : AstParseResults(astParseResults)
         , Settings(settings)
         , DqEngineEnabled(Settings.DqDefaultAuto->Allow())
         , BlockEngineEnabled(Settings.BlockDefaultAuto->Allow())
-        , StmtParsedInfo(stmtParsedInfo)
+        , StmtParseInfo(stmtParseInfo)
         , PerStatementResult(perStatementResult)
     {
         State.ApplicationName = Settings.ApplicationName;
         AstParseResults.push_back({});
-        if (StmtParsedInfo) {
-            StmtParsedInfo->push_back({});
+        if (StmtParseInfo) {
+            StmtParseInfo->push_back({});
         }
         ScanRows(query);
 
@@ -348,8 +348,8 @@ public:
             return;
         }
         AstParseResults.resize(ListLength(raw));
-        if (StmtParsedInfo) {
-            StmtParsedInfo->resize(AstParseResults.size());
+        if (StmtParseInfo) {
+            StmtParseInfo->resize(AstParseResults.size());
         }
         for (; StatementId < AstParseResults.size(); ++StatementId) {
             AstParseResults[StatementId].Pool = std::make_unique<TMemoryPool>(4096);
@@ -2204,8 +2204,8 @@ public:
             }
             if (Settings.GUCSettings) {
                 Settings.GUCSettings->Set(name, rawStr, value->is_local);
-                if (StmtParsedInfo) {
-                    (*StmtParsedInfo)[StatementId].KeepInCache = false;
+                if (StmtParseInfo) {
+                    (*StmtParseInfo)[StatementId].KeepInCache = false;
                 }
             }
             return State.Statements.back();
@@ -4662,7 +4662,7 @@ private:
 
     TState State;
     ui32 StatementId = 0;
-    TVector<TStmtParsedInfo>* StmtParsedInfo;
+    TVector<TStmtParseInfo>* StmtParseInfo;
     bool PerStatementResult;
 };
 
@@ -4671,21 +4671,21 @@ const THashMap<TStringBuf, TString> TConverter::ProviderToInsertModeMap = {
     {NYql::YtProviderName, "append"}
 };
 
-NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TStmtParsedInfo* stmtParsedInfo) {
+NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TStmtParseInfo* stmtParseInfo) {
     TVector<NYql::TAstParseResult> results;
-    TVector<TStmtParsedInfo> stmtParsedInfos;
-    TConverter converter(results, settings, query, &stmtParsedInfos, false);
+    TVector<TStmtParseInfo> stmtParseInfos;
+    TConverter converter(results, settings, query, &stmtParseInfos, false);
     NYql::PGParse(query, converter);
-    if (stmtParsedInfo) {
-        *stmtParsedInfo = stmtParsedInfos.back();
+    if (stmtParseInfo) {
+        *stmtParseInfo = stmtParseInfos.back();
     }
     Y_ENSURE(!results.empty());
     return std::move(results.back());
 }
 
-TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TVector<TStmtParsedInfo>* stmtParsedInfo) {
+TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TVector<TStmtParseInfo>* stmtParseInfo) {
     TVector<NYql::TAstParseResult> results;
-    TConverter converter(results, settings, query, stmtParsedInfo, true);
+    TConverter converter(results, settings, query, stmtParseInfo, true);
     NYql::PGParse(query, converter);
     return results;
 }

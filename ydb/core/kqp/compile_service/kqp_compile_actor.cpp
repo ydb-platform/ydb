@@ -76,7 +76,6 @@ public:
         , CompileActorSpan(TWilsonKqp::CompileActor, std::move(traceId), "CompileActor")
         , TempTablesState(std::move(tempTablesState))
         , CollectFullDiagnostics(collectFullDiagnostics)
-        , PerStatementResult(perStatementResult)
         , CompileAction(compileAction)
         , QueryAst(std::move(queryAst))
         , SplitCtx(splitCtx)
@@ -98,6 +97,7 @@ public:
                 Config->_ResultRowsLimit.Clear();
             }
         }
+        PerStatementResult = perStatementResult && Config->EnablePerStatementQueryExecution;
 
         Config->FreezeDefaults();
     }
@@ -142,7 +142,6 @@ private:
     TVector<TQueryAst> GetAstStatements(const TActorContext &ctx) {
         TString cluster = QueryId.Cluster;
         ui16 kqpYqlSyntaxVersion = Config->_KqpYqlSyntaxVersion.Get().GetRef();
-        bool perStatementExecution = Config->EnablePerStatementQueryExecution && PerStatementResult;
         
         TKqpTranslationSettingsBuilder settingsBuilder(ConvertType(QueryId.Settings.QueryType), kqpYqlSyntaxVersion, cluster, QueryId.Text, Config->BindingsMode, GUCSettings);
         settingsBuilder.SetKqpTablePathPrefix(Config->_KqpTablePathPrefix.Get().GetRef())
@@ -151,7 +150,7 @@ private:
             .SetApplicationName(ApplicationName)
             .SetQueryParameters(QueryId.QueryParameterTypes);
 
-        return ParseStatements(QueryId.Text, QueryId.Settings.Syntax, QueryId.IsSql(), settingsBuilder, perStatementExecution);
+        return ParseStatements(QueryId.Text, QueryId.Settings.Syntax, QueryId.IsSql(), settingsBuilder, PerStatementResult);
     }
 
     void ReplySplitResult(const TActorContext &ctx, IKqpHost::TSplitResult&& result) {
@@ -449,12 +448,12 @@ private:
     }
 
     void FillCompileResult(std::unique_ptr<NKikimrKqp::TPreparedQuery> preparingQuery, NKikimrKqp::EQueryType queryType,
-            bool parsingAllowCache) {
+            bool allowCache) {
         auto preparedQueryHolder = std::make_shared<TPreparedQueryHolder>(
             preparingQuery.release(), AppData()->FunctionRegistry);
         preparedQueryHolder->MutableLlvmSettings().Fill(Config, queryType);
         KqpCompileResult->PreparedQuery = preparedQueryHolder;
-        KqpCompileResult->AllowCache = CanCacheQuery(KqpCompileResult->PreparedQuery->GetPhysicalQuery()) && parsingAllowCache;
+        KqpCompileResult->AllowCache = CanCacheQuery(KqpCompileResult->PreparedQuery->GetPhysicalQuery()) && allowCache;
 
         if (QueryAst) {
             KqpCompileResult->Ast = QueryAst->Ast;
@@ -499,7 +498,7 @@ private:
 
         if (status == Ydb::StatusIds::SUCCESS) {
             YQL_ENSURE(kqpResult.PreparingQuery);
-            FillCompileResult(std::move(kqpResult.PreparingQuery), queryType, kqpResult.ParsingAllowCache);
+            FillCompileResult(std::move(kqpResult.PreparingQuery), queryType, kqpResult.AllowCache);
 
             auto now = TInstant::Now();
             auto duration = now - StartTime;
@@ -510,7 +509,7 @@ private:
                 << ", duration: " << duration);
         } else {
             if (kqpResult.PreparingQuery) {
-                FillCompileResult(std::move(kqpResult.PreparingQuery), queryType, kqpResult.ParsingAllowCache);
+                FillCompileResult(std::move(kqpResult.PreparingQuery), queryType, kqpResult.AllowCache);
             }
 
             LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation failed"
@@ -568,7 +567,7 @@ private:
     TKqpTempTablesState::TConstPtr TempTablesState;
     bool CollectFullDiagnostics;
 
-    const bool PerStatementResult;
+    bool PerStatementResult;
     ECompileActorAction CompileAction;
     TMaybe<TQueryAst> QueryAst;
 

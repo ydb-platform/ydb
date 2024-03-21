@@ -13,14 +13,14 @@ class TGUCSettings {
 public:
     using TPtr = std::shared_ptr<TGUCSettings>;
     void Setup(const std::unordered_map<std::string, std::string>& runtimeSettings);
-    void Setup(const std::unordered_map<std::string, std::string>& settings,
-        const std::unordered_map<std::string, std::string>& rollbackSettings,
-        const std::unordered_map<std::string, std::string>& sessionSettings);
     std::optional<std::string> Get(const std::string&) const;
     void Set(const std::string&, const std::string&, bool isLocal = false);
     void Commit();
     void RollBack();
     void ExportToJson(NJson::TJsonValue& message) const;
+    void ImportFromJson(const std::unordered_map<std::string, std::string>& settings,
+        const std::unordered_map<std::string, std::string>& rollbackSettings,
+        const std::unordered_map<std::string, std::string>& sessionSettings);
 
     size_t GetHash() const noexcept;
     bool operator==(const TGUCSettings& other) const;

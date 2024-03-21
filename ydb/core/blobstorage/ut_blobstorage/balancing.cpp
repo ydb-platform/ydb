@@ -256,6 +256,7 @@ struct TStopOneNodeTest {
 struct TRandomTest {
     TTestEnv Env;
     ui32 NumIters;
+    ui32 MaxBlobSize;
 
     void RunTest() {
         TVector<TString> data(Reserve(NumIters));
@@ -264,7 +265,7 @@ struct TRandomTest {
 
         for (ui32 step = 0; step < NumIters; ++step) {
             Cerr << "Step = " << step << Endl;
-            data.push_back(GenData(16 + random() % 4096));
+            data.push_back(GenData(16 + random() % MaxBlobSize));
 
             if (Env.SendPut(step, data.back()) == NKikimrProto::OK) {
                 successfulSteps.push_back(step);
@@ -360,10 +361,10 @@ Y_UNIT_TEST_SUITE(VDiskBalancing) {
     }
 
     Y_UNIT_TEST(TestRandom_Block42) {
-        TRandomTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), 1000}.RunTest();
+        TRandomTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), 1000, 521_KB * 6}.RunTest();
     }
     Y_UNIT_TEST(TestRandom_Mirror3dc) {
-        TRandomTest{TTestEnv(9, TBlobStorageGroupType::ErasureMirror3dc), 1000}.RunTest();
+        TRandomTest{TTestEnv(9, TBlobStorageGroupType::ErasureMirror3dc), 1000, 521_KB}.RunTest();
     }
 
 }

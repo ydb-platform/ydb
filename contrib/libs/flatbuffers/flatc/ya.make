@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-WITHOUT_LICENSE_TEXTS()
-
 LICENSE(Apache-2.0)
+
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
     contrib/restricted/abseil-cpp/absl/base
@@ -52,6 +52,7 @@ SRCS(
     src/idl_gen_java.cpp
     src/idl_gen_json_schema.cpp
     src/idl_gen_kotlin.cpp
+    src/idl_gen_kotlin_kmp.cpp
     src/idl_gen_lobster.cpp
     src/idl_gen_php.cpp
     src/idl_gen_python.cpp

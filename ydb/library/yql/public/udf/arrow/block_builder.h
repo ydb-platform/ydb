@@ -1127,12 +1127,16 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(
         case NUdf::EDataSlot::Date:
             return std::make_unique<TFixedSizeArrayBuilder<ui16, Nullable>>(typeInfoHelper, type, pool, maxLen);
         case NUdf::EDataSlot::Int32:
+        case NUdf::EDataSlot::Date32:
             return std::make_unique<TFixedSizeArrayBuilder<i32, Nullable>>(typeInfoHelper, type, pool, maxLen);
         case NUdf::EDataSlot::Uint32:
         case NUdf::EDataSlot::Datetime:
             return std::make_unique<TFixedSizeArrayBuilder<ui32, Nullable>>(typeInfoHelper, type, pool, maxLen);
         case NUdf::EDataSlot::Int64:
         case NUdf::EDataSlot::Interval:
+        case NUdf::EDataSlot::Interval64:
+        case NUdf::EDataSlot::Datetime64:
+        case NUdf::EDataSlot::Timestamp64:
             return std::make_unique<TFixedSizeArrayBuilder<i64, Nullable>>(typeInfoHelper, type, pool, maxLen);
         case NUdf::EDataSlot::Uint64:
         case NUdf::EDataSlot::Timestamp:

@@ -82,6 +82,9 @@ public:
     ui16 Chunk = 0;
     TBlobRangeLink16 BlobRange;
 
+    void ResetBlobRange() {
+        BlobRange = TBlobRangeLink16();
+    }
 
     void RegisterBlobIdx(const ui16 blobIdx) {
 //        AFL_VERIFY(!BlobRange.BlobId.GetTabletId())("original", BlobRange.BlobId.ToStringNew())("new", blobId.ToStringNew());
@@ -185,7 +188,14 @@ private:
     YDB_READONLY_DEF(TString, Data);
 protected:
     virtual TString DoDebugString() const override {
-        return TStringBuilder() << "column_id=" << GetColumnId() << ";chunk=" << GetChunkIdx() << ";data_size=" << Data.size() << ";";
+        TStringBuilder sb;
+        sb << "column_id=" << GetColumnId() << ";data_size=" << Data.size() << ";";
+        if (GetChunkIdxOptional()) {
+            sb << "chunk=" << GetChunkIdxVerified() << ";";
+        } else {
+            sb << "chunk=NO_INITIALIZED;";
+        }
+        return sb;
     }
 
     virtual const TString& DoGetData() const override {

@@ -1311,6 +1311,19 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             )", "external_source"_a=externalDataSourceName);
     }
 
+    Y_UNIT_TEST(StreamExecuteScriptWithGenericAutoDetection) {
+        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
+        const TString sql = CreateSimpleGenericQuery(kikimr, "test_bucket_stream_execute_generic_auto_detection");
+
+        auto driver = kikimr->GetDriver();
+        NScripting::TScriptingClient yqlScriptClient(driver);
+
+        auto it = yqlScriptClient.StreamExecuteYqlScript(sql).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        CompareYson("[[[1]]]", StreamResultToYson(it));
+    }
+
     Y_UNIT_TEST(ExecuteScriptWithGenericAutoDetection) {
         auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
         const TString sql = CreateSimpleGenericQuery(kikimr, "test_bucket_execute_generic_auto_detection");

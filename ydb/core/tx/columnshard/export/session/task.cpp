@@ -12,8 +12,18 @@ NKikimr::TConclusionStatus TExportTask::DeserializeFromProto(const NKikimrColumn
     if (!selector) {
         return selector;
     }
+    auto initializer = TStorageInitializerContainer::BuildFromProto(proto.GetStorageInitializer());
+    if (!initializer) {
+        return initializer;
+    }
+    auto serializer = NArrow::NSerialization::TSerializerContainer::BuildFromProto(proto.GetSerializer());
+    if (!serializer) {
+        return serializer;
+    }
     Identifier = id.DetachResult();
     Selector = selector.DetachResult();
+    StorageInitializer = initializer.DetachResult();
+    Serializer = serializer.DetachResult();
     return TConclusionStatus::Success();
 }
 
@@ -21,6 +31,8 @@ NKikimrColumnShardExportProto::TExportTask TExportTask::SerializeToProto() const
     NKikimrColumnShardExportProto::TExportTask result;
     *result.MutableIdentifier() = Identifier.SerializeToProto();
     *result.MutableSelector() = Selector.SerializeToProto();
+    *result.MutableStorageInitializer() = StorageInitializer.SerializeToProto();
+    *result.MutableSerializer() = Serializer.SerializeToProto();
     return result;
 }
 

@@ -171,7 +171,7 @@ class HttpClient(Client):
         final_query = super()._prep_query(context)
         if context.is_insert:
             return final_query
-        return f'{final_query}\n FORMAT {self._write_format}'
+        return f'{final_query}\n FORMAT {self._read_format}'
 
     def _query_with_context(self, context: QueryContext) -> QueryResult:
         headers = {}

@@ -8,6 +8,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
@@ -27,19 +28,6 @@ namespace NYql::NDq {
     using namespace NActors;
 
     namespace {
-
-        Ydb::Type ConvertType(const NKikimr::NMiniKQL::TType* type, bool enableOptional) {
-            Ydb::Type result;
-            if (type->IsData()) {
-                auto data = static_cast<const NKikimr::NMiniKQL::TDataType*>(type);
-                result.Settype_id(static_cast<Ydb::Type_PrimitiveTypeId>(data->GetSchemeType())); //???
-                return result;
-            } else if (enableOptional && type->IsOptional()) {
-                auto optional = static_cast<const NKikimr::NMiniKQL::TOptionalType*>(type);
-                return ConvertType(optional->GetItemType(), false);
-            }
-            Y_ABORT();
-        }
 
         const NKikimr::NMiniKQL::TStructType* MergeStructTypes(const NKikimr::NMiniKQL::TTypeEnvironment& env, const NKikimr::NMiniKQL::TStructType* t1, const NKikimr::NMiniKQL::TStructType* t2) {
             Y_ABORT_UNLESS(t1);
@@ -66,7 +54,9 @@ namespace NYql::NDq {
 
     } // namespace
 
-    class TGenericLookupActor: public TGenericBaseActor<TGenericLookupActor> {
+    class TGenericLookupActor
+        : public NYql::NDq::IDqAsyncLookupSource,
+          public TGenericBaseActor<TGenericLookupActor> {
         using TBase = TGenericBaseActor<TGenericLookupActor>;
 
     public:
@@ -110,19 +100,22 @@ namespace NYql::NDq {
 
         static constexpr char ActorName[] = "GENERIC_PROVIDER_LOOKUP_ACTOR";
 
+    private: //IDqAsyncLookupSource
+        size_t GetMaxSupportedKeysInRequest() const override {
+            return MaxKeysInRequest;
+        }
+        void AsyncLookup(const NKikimr::NMiniKQL::TUnboxedValueVector& keys) override {
+            CreateRequest(keys);
+        }
+
     private: //events
         STRICT_STFUNC(StateFunc,
-                      hFunc(NGenericProviderLookupActorEvents::TEvLookupRequest, Handle);
                       hFunc(TEvListSplitsIterator, Handle);
                       hFunc(TEvListSplitsPart, Handle);
                       hFunc(TEvReadSplitsIterator, Handle);
                       hFunc(TEvReadSplitsPart, Handle);
                       hFunc(TEvReadSplitsFinished, Handle);
                       hFunc(TEvError, Handle);)
-
-        void Handle(NGenericProviderLookupActorEvents::TEvLookupRequest::TPtr& ev) {
-            CreateRequest(ev->Get()->Keys);
-        }
 
         void Handle(TEvListSplitsIterator::TPtr ev) {
             auto& iterator = ev->Get()->Iterator;
@@ -225,10 +218,6 @@ namespace NYql::NDq {
         }
 
         void ProcessReceivedData(const NConnector::NApi::TReadSplitsResponse& resp) {
-            if (resp.Haserror()) {
-                std::cerr << "ERRRRR: " << resp.error().message() << "\n";
-                Y_ABORT();
-            }
             Y_ABORT_UNLESS(resp.payload_case() == NConnector::NApi::TReadSplitsResponse::PayloadCase::kArrowIpcStreaming);
             auto guard = Guard(*Alloc);
             NKikimr::NArrow::NSerialization::TSerializerContainer deser = NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer(); //todo move to class' member
@@ -258,7 +247,7 @@ namespace NYql::NDq {
         void FinalizeRequest() {
             if (!LookupResult.empty()) {
                 YQL_CLOG(INFO, ProviderGeneric) << "Sending lookup results with " << LookupResult.size() << " rows";
-                auto ev = new NGenericProviderLookupActorEvents::TEvLookupResult(Alloc, std::move(LookupResult));
+                auto ev = new IDqAsyncLookupSource::TEvLookupResult(Alloc, std::move(LookupResult));
                 TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
             }
             LookupResult = {};
@@ -313,20 +302,26 @@ namespace NYql::NDq {
             for (ui32 i = 0; i != SelectResultType->GetMembersCount(); ++i) {
                 auto c = select.mutable_what()->add_items()->mutable_column();
                 c->Setname((TString(SelectResultType->GetMemberName(i))));
-                *c->mutable_type() = ConvertType(SelectResultType->GetMemberType(i), true);
+                ExportTypeToProto(SelectResultType->GetMemberType(i), *c->mutable_type());
             }
 
             select.mutable_from()->Settable(Table);
 
-            //TODO use predicate after YQ-2710
-            Y_UNUSED(keys);
-            // NConnector::NApi::TPredicate_TComparison eq;
-            // eq.Setoperation(NConnector::NApi::TPredicate_TComparison_EOperation::TPredicate_TComparison_EOperation_EQ);
-            // eq.mutable_left_value()->Setcolumn("id");
-            // eq.mutable_right_value()->mutable_typed_value()->mutable_type()->Settype_id(Ydb::Type::UINT64);
-            // eq.mutable_right_value()->mutable_typed_value()->mutable_value()->set_uint64_value(1);
-            // *select.mutable_where()->mutable_filter_typed()->mutable_comparison() = eq;
-
+            NConnector::NApi::TPredicate_TDisjunction disjunction;
+            for (const auto& k : keys) {
+                NConnector::NApi::TPredicate_TConjunction conjunction;
+                for (ui32 c = 0; c != KeyType->GetMembersCount(); ++c) {
+                    NConnector::NApi::TPredicate_TComparison eq;
+                    eq.Setoperation(NConnector::NApi::TPredicate_TComparison_EOperation::TPredicate_TComparison_EOperation_EQ);
+                    eq.mutable_left_value()->Setcolumn(TString(KeyType->GetMemberName(c)));
+                    auto rightTypedValue = eq.mutable_right_value()->mutable_typed_value();
+                    ExportTypeToProto(KeyType->GetMemberType(c), *rightTypedValue->mutable_type());
+                    ExportValueToProto(KeyType->GetMemberType(c), k.GetElement(c), *rightTypedValue->mutable_value());
+                    *conjunction.mutable_operands()->Add()->mutable_comparison() = eq;
+                }
+                *disjunction.mutable_operands()->Add()->mutable_conjunction() = conjunction;
+            }
+            *select.mutable_where()->mutable_filter_typed()->mutable_disjunction() = disjunction;
             return select;
         }
 
@@ -348,7 +343,7 @@ namespace NYql::NDq {
         NKikimr::NMiniKQL::TKeyPayloadPairVector LookupResult;
     };
 
-    IActor* CreateGenericLookupActor(
+    std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateGenericLookupActor(
         NConnector::IClient::TPtr connectorClient,
         const TString& serviceAccountId,
         const TString& serviceAccountSignature,
@@ -378,7 +373,7 @@ namespace NYql::NDq {
             typeEnv,
             holderFactory,
             maxKeysInRequest);
-        return actor;
+        return {actor, actor};
     }
 
 } // namespace NYql::NDq

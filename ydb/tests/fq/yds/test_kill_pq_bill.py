@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import logging
-import time
 import json
 
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1

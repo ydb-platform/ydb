@@ -10,6 +10,7 @@ SRCS(
     browse.h
     counters_hosts.h
     json_acl.h
+    json_autocomplete.h
     json_blobindexstat.h
     json_browse.h
     json_bscontrollerinfo.h
@@ -51,6 +52,7 @@ SRCS(
     json_wb_req.h
     json_whoami.h
     log.h
+    query_autocomplete_helper.h
     viewer_request.cpp
     viewer_request.h
     viewer.cpp

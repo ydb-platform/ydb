@@ -250,6 +250,8 @@ public:
         // function returns idxInSubgroup-th element of vdisks array from PickSubgroup
         TVDiskIdShort GetVDiskInSubgroup(ui32 idxInSubgroup, ui32 hash) const;
 
+        bool IsHandoff(const TVDiskIdShort& vdisk, ui32 hash) const;
+
 
         TFailRealmIterator FailRealmsBegin() const;
         TFailRealmIterator FailRealmsEnd() const;

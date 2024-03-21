@@ -2,6 +2,7 @@
 #include "task.h"
 #include "cursor.h"
 #include <ydb/core/tablet_flat/flat_database.h>
+#include <ydb/core/tx/columnshard/common/tablet_id.h>
 
 namespace NKikimr::NColumnShard {
 class TColumnShard;
@@ -86,7 +87,8 @@ namespace NKikimr::NOlap::NExport {
             return Task->GetIdentifier();
         }
 
-        [[nodiscard]] bool Start(const std::shared_ptr<IStoragesManager>& storages);
+        [[nodiscard]] bool Start(const std::shared_ptr<IStoragesManager>& storages, const TTabletId tabletId, const TActorId& tabletActorId);
+        void Stop();
         void Finish() {
             AFL_VERIFY(Status == EStatus::Started);
             Status = EStatus::Finished;

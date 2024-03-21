@@ -11,8 +11,6 @@ ENV(LANG=ru_RU.UTF-8)
 # because we cannot change TZ in arcadia CI
 ENV(DATEUTIL_MAY_NOT_CHANGE_TZ_VAR=1)
 
-SRCDIR(contrib/python/python-dateutil/py3/dateutil/test)
-
 TEST_SRCS(
     property/test_isoparse_prop.py
     property/test_parser_prop.py

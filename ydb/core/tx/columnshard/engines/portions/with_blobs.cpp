@@ -12,7 +12,7 @@ void TPortionInfoWithBlobs::TBlobInfo::RestoreChunk(const TPortionInfoWithBlobs&
     Y_ABORT_UNLESS(!ResultBlob);
     const TString& data = chunk->GetData();
     Size += data.size();
-    auto address = chunk->GetChunkAddress();
+    auto address = chunk->GetChunkAddressVerified();
     AFL_VERIFY(owner.GetPortionInfo().HasEntityAddress(address))("address", address.DebugString());
     AFL_VERIFY(Chunks.emplace(address, chunk).second)("address", address.DebugString());
     ChunksOrdered.emplace_back(chunk);
@@ -26,7 +26,7 @@ void TPortionInfoWithBlobs::TBlobInfo::AddChunk(TPortionInfoWithBlobs& owner, co
     TBlobRangeLink16 bRange(Size, data.size());
     Size += data.size();
 
-    Y_ABORT_UNLESS(Chunks.emplace(chunk->GetChunkAddress(), chunk).second);
+    Y_ABORT_UNLESS(Chunks.emplace(chunk->GetChunkAddressVerified(), chunk).second);
     ChunksOrdered.emplace_back(chunk);
 
     chunk->AddIntoPortionBeforeBlob(bRange, owner.PortionInfo);
@@ -42,8 +42,8 @@ void TPortionInfoWithBlobs::TBlobInfo::RegisterBlobId(TPortionInfoWithBlobs& own
 void TPortionInfoWithBlobs::TBlobInfo::ExtractEntityChunks(const ui32 entityId, std::map<TChunkAddress, std::shared_ptr<IPortionDataChunk>>& resultMap) {
     const auto pred = [this, &resultMap, entityId](const std::shared_ptr<IPortionDataChunk>& chunk) {
         if (chunk->GetEntityId() == entityId) {
-            resultMap.emplace(chunk->GetChunkAddress(), chunk);
-            Chunks.erase(chunk->GetChunkAddress());
+            resultMap.emplace(chunk->GetChunkAddressVerified(), chunk);
+            Chunks.erase(chunk->GetChunkAddressVerified());
             return true;
         } else {
             return false;
@@ -142,7 +142,7 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TPortionInfoWithBlobs::GetEntity
     }
     std::vector<std::shared_ptr<IPortionDataChunk>> result;
     for (auto&& i : sortedChunks) {
-        AFL_VERIFY(i.second->GetChunkIdx() == result.size())("idx", i.second->GetChunkIdx())("size", result.size());
+        AFL_VERIFY(i.second->GetChunkIdxVerified() == result.size())("idx", i.second->GetChunkIdxVerified())("size", result.size());
         result.emplace_back(i.second);
     }
     return result;
@@ -218,8 +218,8 @@ TPortionInfoWithBlobs TPortionInfoWithBlobs::SyncPortion(TPortionInfoWithBlobs&&
     }
 
     auto schemaTo = std::make_shared<TDefaultSchemaDetails>(to, std::make_shared<TSerializationStats>());
-    TGeneralSerializedSlice slice(entityChunksNew, schemaTo, counters, storages->GetOperatorVerified(targetTier)->GetBlobSplitSettings());
-    const TEntityGroups groups = to->GetIndexInfo().GetEntityGroupsByStorageId(targetTier);
+    TGeneralSerializedSlice slice(entityChunksNew, schemaTo, counters);
+    const NSplitter::TEntityGroups groups = to->GetIndexInfo().GetEntityGroupsByStorageId(targetTier, *storages);
     TPortionInfoWithBlobs result = TPortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), source.PortionInfo, storages);
     result.GetPortionInfo().SetMinSnapshot(to->GetSnapshot());
     result.GetPortionInfo().MutableMeta().SetTierName(targetTier);

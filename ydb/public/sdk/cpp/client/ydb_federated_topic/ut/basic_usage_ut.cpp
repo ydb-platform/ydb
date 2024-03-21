@@ -757,6 +757,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         // Create write session.
         auto writeSettings = NTopic::TWriteSessionSettings()
+            .DirectWriteToPartition(false)
             .Path(setup->GetTestTopic())
             .MessageGroupId("src_id");
 
@@ -766,7 +767,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         WriteSession->WaitEvent().Wait(TDuration::Seconds(1));
         auto event = WriteSession->GetEvent(false);
         Y_ASSERT(event);
-        Cerr << "Got new read session event: " << DebugString(*event) << Endl;
+        Cerr << "Got new write session event: " << DebugString(*event) << Endl;
         auto* readyToAcceptEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event);
         Y_ASSERT(readyToAcceptEvent);
         WriteSession->Write(std::move(readyToAcceptEvent->ContinuationToken), NTopic::TWriteMessage("hello"));
@@ -774,7 +775,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         WriteSession->WaitEvent().Wait(TDuration::Seconds(1));
         event = WriteSession->GetEvent(false);
         Y_ASSERT(event);
-        Cerr << "Got new read session event: " << DebugString(*event) << Endl;
+        Cerr << "Got new write session event: " << DebugString(*event) << Endl;
 
         readyToAcceptEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event);
         Y_ASSERT(readyToAcceptEvent);
@@ -792,7 +793,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         WriteSession->WaitEvent().Wait(TDuration::Seconds(1));
         event = WriteSession->GetEvent(false);
         Y_ASSERT(event);
-        Cerr << "Got new read session event: " << DebugString(*event) << Endl;
+        Cerr << "Got new write session event: " << DebugString(*event) << Endl;
 
         auto* acksEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*event);
         Y_ASSERT(acksEvent);

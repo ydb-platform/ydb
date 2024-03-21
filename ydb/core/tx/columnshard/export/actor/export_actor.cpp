@@ -4,20 +4,29 @@
 namespace NKikimr::NOlap::NExport {
 
 void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
+    SwitchStage(EStage::WaitData, EStage::WaitWriting);
     auto data = ev->Get()->ArrowBatch;
     AFL_VERIFY(!!data || ev->Get()->Finished);
     CurrentData = data;
-    CurrentDataBlobs = ExternalControl->BatchToBlobs(CurrentData);
-    if (data) {
-        Register(CreateWriteActor((ui64)ShardTabletId, std::make_shared<TWriteController>(SelfId(), CurrentDataBlobs, BlobsOperator->StartWritingAction("EXPORT")), TInstant::Max()));
-        LastKey = ev->Get()->LastKey;
+    if (CurrentData) {
+        CurrentDataBlob = Serializer->SerializeFull(CurrentData);
+        if (data) {
+            auto controller = std::make_shared<TWriteController>(SelfId(), std::vector<TString>({CurrentDataBlob}), BlobsOperator->StartWritingAction("EXPORT"), Cursor, ShardTabletId, Selector->GetPathId());
+            Register(CreateWriteActor((ui64)ShardTabletId, controller, TInstant::Max()));
+        }
+    } else {
+        CurrentDataBlob = "";
+        TBase::Send(SelfId(), new NEvents::TEvExportWritingFinished);
     }
-    AFL_VERIFY(!LastMessageReceived);
-    LastMessageReceived = ev->Get()->Finished;
+    TOwnedCellVec lastKey = ev->Get()->LastKey;
+    AFL_VERIFY(!Cursor.IsFinished());
+    Cursor.InitNext(ev->Get()->LastKey, ev->Get()->Finished);
 }
 
 void TActor::HandleExecute(NEvents::TEvExportWritingFailed::TPtr& /*ev*/) {
-    Register(CreateWriteActor((ui64)ShardTabletId, std::make_shared<TWriteController>(SelfId(), CurrentDataBlobs, BlobsOperator->StartWritingAction("EXPORT")), TInstant::Max()));
+    SwitchStage(EStage::WaitWriting, EStage::WaitWriting);
+    auto controller = std::make_shared<TWriteController>(SelfId(), std::vector<TString>({CurrentDataBlob}), BlobsOperator->StartWritingAction("EXPORT"), Cursor, ShardTabletId, Selector->GetPathId());
+    Register(CreateWriteActor((ui64)ShardTabletId, controller, TInstant::Max()));
 }
 
 }

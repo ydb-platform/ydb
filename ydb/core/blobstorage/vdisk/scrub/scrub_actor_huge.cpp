@@ -21,8 +21,8 @@ namespace NKikimr {
         }
 
         auto readHugeBlob = [&](const TDiskPart& location) {
-            ++*HugeBlobsRead;
-            *HugeBlobBytesRead += location.Size;
+            ++MonGroup.HugeBlobsRead();
+            MonGroup.HugeBlobBytesRead() += location.Size;
             return Read(location);
         };
 

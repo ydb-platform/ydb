@@ -140,26 +140,55 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
-        auto it = db.StreamExecuteQuery(R"(
-            SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        {
+            auto it = db.StreamExecuteQuery(R"(
+                SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
-        ui64 count = 0;
-        for (;;) {
-            auto streamPart = it.ReadNext().GetValueSync();
-            if (!streamPart.IsSuccess()) {
-                UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
-                break;
+            ui64 count = 0;
+            for (;;) {
+                auto streamPart = it.ReadNext().GetValueSync();
+                if (!streamPart.IsSuccess()) {
+                    UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                    break;
+                }
+
+                if (streamPart.HasResultSet()) {
+                    auto resultSet = streamPart.ExtractResultSet();
+                    count += resultSet.RowsCount();
+                }
             }
 
-            if (streamPart.HasResultSet()) {
-                auto resultSet = streamPart.ExtractResultSet();
-                count += resultSet.RowsCount();
-            }
+            UNIT_ASSERT_VALUES_EQUAL(count, 2);
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(count, 2);
+        {
+            auto it = db.StreamExecuteQuery(R"(
+                SELECT Key, Value2 FROM TwoShard WHERE false ORDER BY Key > 0;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+            ui32 rsCount = 0;
+            ui32 columns = 0;
+            for (;;) {
+                auto streamPart = it.ReadNext().GetValueSync();
+                if (!streamPart.IsSuccess()) {
+                    UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                    break;
+                }
+
+                if (streamPart.HasResultSet()) {
+                    auto resultSet = streamPart.ExtractResultSet();
+                    columns = resultSet.ColumnsCount();
+                    CompareYson(R"([])", FormatResultSetYson(resultSet));
+                    rsCount++;
+                }
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(rsCount, 1);
+            UNIT_ASSERT_VALUES_EQUAL(columns, 2);
+        }
     }
 
     void CheckQueryResult(TExecuteQueryResult result) {
@@ -242,27 +271,60 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_VALUES_EQUAL_C(sessionResult.GetStatus(), EStatus::SUCCESS, sessionResult.GetIssues().ToString());
         auto session = sessionResult.GetSession();
 
-        const TString query = "UPDATE TwoShard SET Value2 = 0";
-        auto result = session.ExecuteQuery(query, TTxControl::BeginTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto transaction = result.GetTransaction();
-        UNIT_ASSERT(transaction->IsActive());
+        {
+            const TString query = "UPDATE TwoShard SET Value2 = 0";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto transaction = result.GetTransaction();
+            UNIT_ASSERT(transaction->IsActive());
 
-        auto checkResult = [&](TString expected) {
-            auto selectRes = db.ExecuteQuery(
-                "SELECT * FROM TwoShard ORDER BY Key",
-                TTxControl::BeginTx().CommitTx()
-            ).ExtractValueSync();
+            auto checkResult = [&](TString expected) {
+                auto selectRes = db.ExecuteQuery(
+                    "SELECT * FROM TwoShard ORDER BY Key",
+                    TTxControl::BeginTx().CommitTx()
+                ).ExtractValueSync();
 
-            UNIT_ASSERT_C(selectRes.IsSuccess(), selectRes.GetIssues().ToString());
-            CompareYson(expected, FormatResultSetYson(selectRes.GetResultSet(0)));
-        };
-        checkResult(R"([[[1u];["One"];[-1]];[[2u];["Two"];[0]];[[3u];["Three"];[1]];[[4000000001u];["BigOne"];[-1]];[[4000000002u];["BigTwo"];[0]];[[4000000003u];["BigThree"];[1]]])");
+                UNIT_ASSERT_C(selectRes.IsSuccess(), selectRes.GetIssues().ToString());
+                CompareYson(expected, FormatResultSetYson(selectRes.GetResultSet(0)));
+            };
+            checkResult(R"([[[1u];["One"];[-1]];[[2u];["Two"];[0]];[[3u];["Three"];[1]];[[4000000001u];["BigOne"];[-1]];[[4000000002u];["BigTwo"];[0]];[[4000000003u];["BigThree"];[1]]])");
 
-        auto txRes = transaction->Commit().GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(txRes.GetStatus(), EStatus::SUCCESS, txRes.GetIssues().ToString());
+            auto txRes = transaction->Commit().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(txRes.GetStatus(), EStatus::SUCCESS, txRes.GetIssues().ToString());
 
-        checkResult(R"([[[1u];["One"];[0]];[[2u];["Two"];[0]];[[3u];["Three"];[0]];[[4000000001u];["BigOne"];[0]];[[4000000002u];["BigTwo"];[0]];[[4000000003u];["BigThree"];[0]]])");
+            checkResult(R"([[[1u];["One"];[0]];[[2u];["Two"];[0]];[[3u];["Three"];[0]];[[4000000001u];["BigOne"];[0]];[[4000000002u];["BigTwo"];[0]];[[4000000003u];["BigThree"];[0]]])");
+        }
+
+        {
+            const TString query = "UPDATE TwoShard SET Value2 = 1";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto transaction = result.GetTransaction();
+            UNIT_ASSERT(transaction->IsActive());
+
+            const TString query2 = "UPDATE KeyValue SET Value = 'Vic'";
+            auto result2 = session.ExecuteQuery(query2, TTxControl::Tx(transaction->GetId())).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
+            auto transaction2 = result2.GetTransaction();
+            UNIT_ASSERT(transaction2->IsActive());
+
+            auto checkResult = [&](TString table, TString expected) {
+                auto selectRes = db.ExecuteQuery(
+                    Sprintf("SELECT * FROM %s ORDER BY Key", table.data()),
+                    TTxControl::BeginTx().CommitTx()
+                ).ExtractValueSync();
+
+                UNIT_ASSERT_C(selectRes.IsSuccess(), selectRes.GetIssues().ToString());
+                CompareYson(expected, FormatResultSetYson(selectRes.GetResultSet(0)));
+            };
+            checkResult("TwoShard", R"([[[1u];["One"];[0]];[[2u];["Two"];[0]];[[3u];["Three"];[0]];[[4000000001u];["BigOne"];[0]];[[4000000002u];["BigTwo"];[0]];[[4000000003u];["BigThree"];[0]]])");
+            checkResult("KeyValue", R"([[[1u];["One"]];[[2u];["Two"]]])");
+            auto txRes = transaction->Commit().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(txRes.GetStatus(), EStatus::SUCCESS, txRes.GetIssues().ToString());
+
+            checkResult("KeyValue", R"([[[1u];["Vic"]];[[2u];["Vic"]]])");
+            checkResult("TwoShard", R"([[[1u];["One"];[1]];[[2u];["Two"];[1]];[[3u];["Three"];[1]];[[4000000001u];["BigOne"];[1]];[[4000000002u];["BigTwo"];[1]];[[4000000003u];["BigThree"];[1]]])");
+        }
     }
 
     Y_UNIT_TEST(ExecuteQueryInteractiveTxCommitWithQuery) {
@@ -962,6 +1024,169 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto resultSelect = session.ExecuteQuery(
                 querySelect, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
+
+            bool allDoneOk = true;
+            NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
+
+            UNIT_ASSERT(allDoneOk);
+        }
+
+        {
+            const auto querySelect = Q_(R"(
+                --!syntax_v1
+                SELECT * FROM Temp;
+            )");
+
+            auto resultSelect = client.ExecuteQuery(
+                querySelect, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!resultSelect.IsSuccess());
+        }
+    }
+
+    Y_UNIT_TEST(AlterTempTable) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(
+            serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        auto client = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings()
+            .StatsMode(NYdb::NQuery::EStatsMode::Basic);
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            {
+                const auto query = Q_(R"(
+                    --!syntax_v1
+                    CREATE TEMP TABLE Temp (
+                        Key Int32 NOT NULL,
+                        Value Int32,
+                        PRIMARY KEY (Key)
+                    );)");
+
+                auto result =
+                    session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+            }
+
+            {
+                const auto query = Q_(R"(
+                    --!syntax_v1
+                    ALTER TABLE Temp DROP COLUMN Value;
+                )");
+                auto result =
+                    session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+            }
+
+            {
+                const auto query = Q_(R"(
+                    --!syntax_v1
+                    DROP TABLE Temp;
+                )");
+
+                auto result =
+                    session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+            }
+
+            {
+                const auto query = Q_(R"(
+                    --!syntax_v1
+                    CREATE TEMP TABLE Temp (
+                        Key Int32 NOT NULL,
+                        Value Int32,
+                        PRIMARY KEY (Key)
+                    );)");
+
+                auto result =
+                    session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+                auto resultInsert = session.ExecuteQuery(R"(
+                    UPSERT INTO Temp (Key, Value) VALUES (1, 1);
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    resultInsert.GetStatus(), EStatus::SUCCESS, resultInsert.GetIssues().ToString());
+            }
+
+            {
+                const auto query = Q_(R"(
+                    --!syntax_v1
+                    SELECT * FROM Temp;
+                )");
+
+                auto result = session.ExecuteQuery(
+                    query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+                UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+                CompareYson(R"([[1;[1]]])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            {
+                auto result = session.ExecuteQuery(R"(
+                    ALTER TABLE Temp DROP COLUMN Value;
+                )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+            }
+
+            {
+                const auto query = Q_(R"(
+                    --!syntax_v1
+                    SELECT * FROM Temp;
+                )");
+
+                auto result = session.ExecuteQuery(
+                    query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+                UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+                CompareYson(R"([[1]])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            {
+                const auto query = Q_(R"(
+                    --!syntax_v1
+                    DROP TABLE Temp;
+                )");
+
+                auto result =
+                    session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+            }
+
+            {
+                const auto querySelect = Q_(R"(
+                    --!syntax_v1
+                    SELECT * FROM Temp;
+                )");
+
+                auto resultSelect = client.ExecuteQuery(
+                    querySelect, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT(!resultSelect.IsSuccess());
+            }
 
             bool allDoneOk = true;
             NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
@@ -1971,7 +2196,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 SELECT * FROM $a;
                 UPSERT INTO TestDdl4 (Key, Value) VALUES (3, 3);
             )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT(result.GetIssues().ToOneLineString().Contains("Unknown name: $a"));
 
             result = db.ExecuteQuery(R"(

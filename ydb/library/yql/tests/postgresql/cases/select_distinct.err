@@ -1,7 +1,9 @@
 Registering pre-existing tables
 	tenk1
 	tmp
+	emp
 	student
+	stud_emp
 <sql-statement>
 --
 -- SELECT_DISTINCT

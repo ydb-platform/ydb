@@ -65,7 +65,7 @@ static constexpr TDuration DEFAULT_KEEP_ALIVE_TIMEOUT = TDuration::MilliSeconds(
 static constexpr TDuration DEFAULT_EXTRA_TIMEOUT_WAIT = TDuration::MilliSeconds(50);
 static constexpr TDuration DEFAULT_CREATE_SESSION_TIMEOUT = TDuration::MilliSeconds(5000);
 
-
+using VSessions = NKikimr::NSysView::Schema::QuerySessions;
 using namespace NKikimrConfig;
 
 
@@ -583,7 +583,10 @@ public:
 
         if (CheckRequestDeadline(requestInfo, deadline, result) &&
             CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), true, request.GetDatabase(),
-                request.GetApplicationName(), event.GetSupportsBalancing(), event.GetPgWire(), result))
+                request.GetApplicationName(), event.GetSupportsBalancing(), event.GetPgWire(),
+                event.GetClientAddress(), event.GetUserSID(), event.GetClientUserAgent(), event.GetClientSdkBuildInfo(),
+                event.GetClientPID(),
+                event.GetApplicationName(), result))
         {
             auto& response = *responseEv->Record.MutableResponse();
             response.SetSessionId(result.Value->SessionId);
@@ -616,7 +619,7 @@ public:
         if (ev->Get()->GetSessionId().empty()) {
             TProcessResult<TKqpSessionInfo*> result;
             if (!CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), false,
-                database, {}, false, false, result))
+                database, {}, false, false, "", "", "", "", "", "", result))
             {
                 ReplyProcessError(result.YdbStatus, result.Error, requestId);
                 return;
@@ -873,6 +876,10 @@ public:
         }
 
         Send(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
+
+        if (info && proxyRequest->EventType == TKqpEvents::EvQueryRequest) {
+            LocalSessions->DetachQueryText(info);
+        }
 
         TKqpRequestInfo requestInfo(proxyRequest->TraceId);
         KQP_PROXY_LOG_D(requestInfo << "Forwarded response to sender actor, requestId: " << requestId
@@ -1408,7 +1415,12 @@ private:
     }
 
     bool CreateNewSessionWorker(const TKqpRequestInfo& requestInfo, const TString& cluster, bool longSession,
-        const TString& database, const TMaybe<TString>& applicationName, bool supportsBalancing, bool pgWire, TProcessResult<TKqpSessionInfo*>& result)
+        const TString& database, const TMaybe<TString>& applicationName, bool supportsBalancing, bool pgWire,
+        const TString& clientHost, const TString& clientSid, const TString& userAgent,
+        const TString& sdkBuildInfo,
+        const TString& clientPid,
+        const TString& clientApplicationName,
+        TProcessResult<TKqpSessionInfo*>& result)
     {
         if (!database.empty() && AppData()->TenantName.empty()) {
             TString error = TStringBuilder() << "Node isn't ready to serve database requests.";
@@ -1458,6 +1470,13 @@ private:
         TKqpSessionInfo* sessionInfo = LocalSessions->Create(
             sessionId, workerId, database, dbCounters, supportsBalancing, GetSessionIdleDuration(), pgWire);
         KqpProxySharedResources->AtomicLocalSessionCount.store(LocalSessions->size());
+
+        sessionInfo->ClientSID = clientSid;
+        sessionInfo->ClientHost = clientHost;
+        sessionInfo->UserAgent = userAgent;
+        sessionInfo->SdkBuildInfo = sdkBuildInfo;
+        sessionInfo->ClientPID = clientPid;
+        sessionInfo->ClientApplicationName = clientApplicationName;
 
         KQP_PROXY_LOG_D(requestInfo << "Created new session"
             << ", sessionId: " << sessionInfo->SessionId
@@ -1639,36 +1658,7 @@ private:
         auto endIt = LocalSessions->GetOrderedEnd();
         i32 freeSpace = ev->Get()->Record.GetFreeSpace();
 
-        struct TFieldsMap {
-            bool NeedSessionId = false;
-            bool NeedQueryText = false;
-            bool NeedStatus = false;
-            bool NeedNodeId = false;
-
-            explicit TFieldsMap(const ::google::protobuf::RepeatedField<ui32>& columns) {
-                for(const auto& column: columns) {
-                    switch(column) {
-                        case NKikimr::NSysView::Schema::QuerySessions::SessionId::ColumnId:
-                            NeedSessionId = true;
-                            break;
-                        case NKikimr::NSysView::Schema::QuerySessions::Status::ColumnId:
-                            NeedStatus = true;
-                            break;
-                        case NKikimr::NSysView::Schema::QuerySessions::QueryText::ColumnId:
-                            NeedQueryText = true;
-                            break;
-                         case NKikimr::NSysView::Schema::QuerySessions::NodeId::ColumnId:
-                            NeedNodeId = true;
-                            break;
-                        default: {
-                            Y_UNREACHABLE();
-                        }
-                    }
-                }
-            }
-        };
-
-        TFieldsMap fieldsMap(ev->Get()->Record.GetColumns());
+        TKqpSessionInfo::TFieldsMap fieldsMap(ev->Get()->Record.GetColumns());
 
         const TString until = ev->Get()->Record.GetSessionIdEnd();
         bool finished = false;
@@ -1689,20 +1679,7 @@ private:
             }
 
             auto* sessionProto = result->Record.AddSessions();
-            sessionProto->SetSessionId(sessionInfo->SessionId);
-            // last executed query or currently running query.
-            if (fieldsMap.NeedQueryText) {
-                sessionProto->SetQueryText(sessionInfo->QueryText);
-            }
-
-            if (fieldsMap.NeedStatus) {
-                if (LocalSessions->IsSessionIdle(sessionInfo)) {
-                    sessionProto->SetStatus("IDLE");
-                } else {
-                    sessionProto->SetStatus("RUNNING");
-                }
-            }
-
+            sessionInfo->SerializeTo(sessionProto, fieldsMap);
             freeSpace -= sessionProto->ByteSizeLong();
             ++startIt;
         }

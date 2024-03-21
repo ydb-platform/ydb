@@ -29,15 +29,8 @@ private:
     }
 
 public:
-    static TCountMinSketch* Create(ui64 width = 256, ui64 depth = 8) {
-        auto* bytes = new char[StaticSize(width, depth)];
-        auto* sketch = reinterpret_cast<TCountMinSketch*>(bytes);
-        sketch->Width = width;
-        sketch->Depth = depth;
-        sketch->ElementCount = 0;
-        std::memset((void*)(sketch + 1), 0, width * depth * sizeof(ui32));
-        return sketch;
-    }
+    static TCountMinSketch* Create(ui64 width = 256, ui64 depth = 8);
+    void operator delete(void* data) noexcept;
 
     TCountMinSketch() = delete;
     TCountMinSketch(const TCountMinSketch&) = delete;

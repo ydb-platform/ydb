@@ -42,6 +42,7 @@ namespace NKikimr {
         // latency histograms
         NVDiskMon::THistograms Histograms;
         std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
+        std::shared_ptr<NMonGroup::TOutOfSpaceGroup> OOSMonGroup;
         // Self VDisk related info
         const ui32 GroupId;
         const TVDiskIdShort ShortSelfVDisk;

@@ -212,7 +212,7 @@ from int8_tbl group by q1 order by q1;
 </sql-statement>
 -stdin-:<main>: Fatal: Optimization
 
-    -stdin-:<main>:1:1: Fatal: ydb/library/yql/core/common_opt/yql_co_pgselect.cpp:3241  ExpandPgSelectImpl(): requirement order failed
+    -stdin-:<main>:1:1: Fatal: ydb/library/yql/core/common_opt/yql_co_pgselect.cpp:3404  ExpandPgSelectImpl(): requirement order failed
     	select q1, float8(count(*)) / (select count(*) from int8_tbl)
 	^
     -stdin-:<main>: Fatal: ydb/library/yql/core/common_opt/yql_co_pgselect.cpp:704  RewriteSubLinksPartial(): requirement status.Level != IGraphTransformer::TStatus::Error failed

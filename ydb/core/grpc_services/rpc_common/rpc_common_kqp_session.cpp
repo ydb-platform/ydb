@@ -69,6 +69,7 @@ private:
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
 
         ev->Record.SetDeadlineUs(Request->GetDeadline().MicroSeconds());
+        SetClientIdentitySettings(ev, *Request);
 
         if (traceId) {
             ev->Record.SetTraceId(traceId.GetRef());

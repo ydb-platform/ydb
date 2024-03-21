@@ -4,7 +4,7 @@ SRCS(
     batch_slice.cpp
     chunks.cpp
     simple.cpp
-    rb_splitter.cpp
+    similar_packer.cpp
     stats.cpp
     column_info.cpp
     settings.cpp

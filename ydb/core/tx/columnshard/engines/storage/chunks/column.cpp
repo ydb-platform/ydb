@@ -10,7 +10,7 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TChunkPreparation::DoInternalSpl
     std::vector<std::shared_ptr<IPortionDataChunk>> newChunks;
     for (auto&& i : chunks) {
         Y_ABORT_UNLESS(i.GetSlicedBatch()->num_columns() == 1);
-        newChunks.emplace_back(std::make_shared<TChunkPreparation>(saver.Apply(i.GetSlicedBatch()), i.GetSlicedBatch()->column(0), TChunkAddress(GetColumnId(), GetChunkIdx()), ColumnInfo));
+        newChunks.emplace_back(std::make_shared<TChunkPreparation>(saver.Apply(i.GetSlicedBatch()), i.GetSlicedBatch()->column(0), TChunkAddress(GetColumnId(), GetChunkIdxOptional().value_or(0)), ColumnInfo));
     }
     return newChunks;
 }

@@ -41,11 +41,34 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         auto rows = EvWrite ? TEvWriteRows{{{0, 1}}, {{2, 3}}, {{4, 5}}} : TEvWriteRows{};
         auto evWriteObservers = ReplaceEvProposeTransactionWithEvWrite(runtime, rows);
 
-        Cout << "========= Send immediate write =========\n";
+        Cout << "========= Send immediate upsert =========\n";
         {
             ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 1);"));
             ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 3);"));
             ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 5);"));
+        }
+
+        Cout << "========= Read table =========\n";
+        {
+            auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
+            UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ExecSQLInsertImmediate, EvWrite) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+
+        auto rows = EvWrite ? TEvWriteRows{{{0, 1}}, {{2, 3}}, {{4, 5}}} : TEvWriteRows{};
+        auto evWriteObservers = ReplaceEvProposeTransactionWithEvWrite(runtime, rows);
+
+        Cout << "========= Send immediate insert =========\n";
+        {
+            ExecSQL(server, sender, Q_("INSERT INTO `/Root/table-1` (key, value) VALUES (0, 1);"));
+            ExecSQL(server, sender, Q_("INSERT INTO `/Root/table-1` (key, value) VALUES (2, 3);"));
+            ExecSQL(server, sender, Q_("INSERT INTO `/Root/table-1` (key, value) VALUES (4, 5);"));
         }
 
         Cout << "========= Read table =========\n";

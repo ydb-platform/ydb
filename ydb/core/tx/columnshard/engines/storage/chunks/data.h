@@ -33,7 +33,7 @@ protected:
     }
     virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfo& portionInfo) const override;
     virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(TString&& data, const TSimpleColumnInfo& /*columnInfo*/) const override {
-        return std::make_shared<TPortionIndexChunk>(GetChunkAddress(), RecordsCount, RawBytes, std::move(data));
+        return std::make_shared<TPortionIndexChunk>(GetChunkAddressVerified(), RecordsCount, RawBytes, std::move(data));
     }
 public:
     TPortionIndexChunk(const TChunkAddress& address, const ui32 recordsCount, const ui64 rawBytes, const TString& data)

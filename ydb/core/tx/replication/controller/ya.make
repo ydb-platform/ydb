@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/tx/replication/ydb_proxy
     ydb/core/util
     ydb/core/ydb_convert
+    library/cpp/json
 )
 
 SRCS(

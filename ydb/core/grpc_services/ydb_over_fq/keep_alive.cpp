@@ -24,8 +24,6 @@ private:
         Ydb::Table::KeepAliveResult result;
         if (TBase::GetProtoRequest()->session_id() == FakeSessionId) {
             result.set_session_status(Ydb::Table::KeepAliveResult_SessionStatus_SESSION_STATUS_READY);
-        } else {
-            result.set_session_status(Ydb::Table::KeepAliveResult_SessionStatus_SESSION_STATUS_UNSPECIFIED);
         }
         ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
     }

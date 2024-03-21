@@ -87,13 +87,23 @@ runs:
         bazel_remote_password: ${{ inputs.put_build_results_to_cache &&  fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
         link_threads: ${{ inputs.link_threads }}
 
-    - name: debug1
+    - name: Check if there's a list of tests to run
+      id: test_run_choice
       shell: bash
-      run: echo "Run tests? ${{ inputs.run_tests }}"
+      run: |
+        if [ -s ya.make ];then
+          echo "value='list'" >> $GITHUB_OUTPUT
+        else
+          echo "value='cache'" >> $GITHUB_OUTPUT
+        fi
 
-    - name: Run tests
+    - name: Varify test run choice
+      shell: bash
+      run: echo "Test run choice: ${{ steps.test_run_choice.outputs.value }}"
+
+    - name: Run tests (using cache)
       uses: ./.github/actions/test_ya
-      if: ${{ inputs.run_tests == 'true' }}
+      if: ${{ inputs.run_tests == 'true' }} && ${{ steps.test_run_choice.outputs.value == 'cache' }}
       with:
         build_target: ${{ inputs.build_target }}
         build_preset: ${{ inputs.build_preset }}
@@ -105,6 +115,18 @@ runs:
         bazel_remote_uri: ${{  fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}
         bazel_remote_username: ${{ inputs.put_build_results_to_cache &&  fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}
         bazel_remote_password: ${{ inputs.put_build_results_to_cache &&  fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
+        link_threads: ${{ inputs.link_threads }}
+        test_threads: ${{ inputs.test_threads }}
+
+    - name: Run tests (listed)
+      uses: ./.github/actions/test_ya_root
+      if: ${{ inputs.run_tests == 'true' }} && ${{ steps.test_run_choice.outputs.value == 'list' }}
+      with:
+        build_preset: ${{ inputs.build_preset }}
+        test_size: ${{ inputs.test_size }}
+        testman_token: ${{ fromJSON( inputs.secs ).TESTMO_TOKEN }}
+        testman_url: ${{  fromJSON( inputs.vars ).TESTMO_URL }}
+        testman_project_id: ${{  fromJSON( inputs.vars ).TESTMO_PROJECT_ID }}
         link_threads: ${{ inputs.link_threads }}
         test_threads: ${{ inputs.test_threads }}
     

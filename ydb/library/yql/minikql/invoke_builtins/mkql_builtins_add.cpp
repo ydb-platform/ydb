@@ -187,6 +187,15 @@ void RegisterAdd(IBuiltinFunctionRegistry& registry) {
 
     RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>,
         NUdf::TDataType<NUdf::TInterval>, TDateTimeAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
+
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval64>,
+        NUdf::TDataType<NUdf::TInterval64>, TDateTimeAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
+
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>,
+        NUdf::TDataType<NUdf::TInterval64>, TDateTimeAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
+
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval64>,
+        NUdf::TDataType<NUdf::TInterval64>, TDateTimeAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
 }
 
 void RegisterAdd(TKernelFamilyMap& kernelFamilyMap) {

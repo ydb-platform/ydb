@@ -2,13 +2,13 @@
 #include <ydb/core/tx/columnshard/engines/scheme/statistics/abstract/operator.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
 
-namespace NKikimr::NOlap::NStatistics::NMax {
+namespace NKikimr::NOlap::NStatistics::NVariability {
 
 class TOperator: public IOperator {
 private:
     using TBase = IOperator;
     ui32 EntityId = 0;
-    static inline auto Registrator = TFactory::TRegistrator<TOperator>(::ToString(EType::Max));
+    static inline auto Registrator = TFactory::TRegistrator<TOperator>(::ToString(EType::Variability));
 protected:
     virtual void DoCopyData(const TPortionStorageCursor& cursor, const TPortionStorage& portionStatsFrom, TPortionStorage& portionStatsTo) const override {
         std::shared_ptr<arrow::Scalar> scalar = portionStatsFrom.GetScalarVerified(cursor);
@@ -36,6 +36,9 @@ public:
             case NScheme::NTypeIds::Uint32:
             case NScheme::NTypeIds::Int64:
             case NScheme::NTypeIds::Uint64:
+            case NScheme::NTypeIds::String:
+            case NScheme::NTypeIds::Utf8:
+            case NScheme::NTypeIds::Uuid:
             case NScheme::NTypeIds::Timestamp:
             case NScheme::NTypeIds::Double:
             case NScheme::NTypeIds::Float:
@@ -49,13 +52,13 @@ public:
     }
 
     TOperator()
-        : TBase(EType::Max)
+        : TBase(EType::Variability)
     {
 
     }
 
     TOperator(const ui32 entityId)
-        : TBase(EType::Max)
+        : TBase(EType::Variability)
         , EntityId(entityId) {
 
     }

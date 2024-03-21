@@ -1961,9 +1961,9 @@
     ],
     "test.test[pg-sublink_projection_expr_corr-default.txt-Debug]": [
         {
-            "checksum": "1bb5498074b2320cad52d56fda8ad19b",
-            "size": 2329,
-            "uri": "https://{canondata_backend}/1936842/51593b2a750dbb036388d012a30fa937edaab5f0/resource.tar.gz#test.test_pg-sublink_projection_expr_corr-default.txt-Debug_/opt.yql_patched"
+            "checksum": "7af7281b41bea0c18a286f6b3f8e96c5",
+            "size": 3054,
+            "uri": "https://{canondata_backend}/1889210/24a25999f164b13ed263c37581db046794ca3fa6/resource.tar.gz#test.test_pg-sublink_projection_expr_corr-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-sublink_projection_expr_corr-default.txt-Plan]": [

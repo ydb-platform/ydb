@@ -221,10 +221,12 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
                 NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            TestLs(runtime, "/MyRoot/copy/myseq", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
-
             {
                 TInactiveZone inactive(activeZone);
+
+                TestLs(
+                    runtime, "/MyRoot/copy/myseq", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+
                 i64 value = DoNextVal(runtime, "/MyRoot/copy/myseq");
                 UNIT_ASSERT_VALUES_EQUAL(value, 2);
             }

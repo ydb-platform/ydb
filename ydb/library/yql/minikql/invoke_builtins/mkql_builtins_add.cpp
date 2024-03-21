@@ -96,6 +96,23 @@ struct TDecimalAdd {
     static_assert(Precision <= NYql::NDecimal::MaxPrecision, "Too large precision!");
 };
 
+template<typename TDateType>
+inline bool IsBadScaledDate(TScaledDate val) {
+    static_assert(TDateType::Features & NYql::NUdf::DateType, "DateType expected as template argument");
+    if constexpr (TDateType::Features & NYql::NUdf::BigDateType) {
+        if constexpr (TDateType::Features & NYql::NUdf::TimeIntervalType) {
+            return val < -NUdf::MAX_INTERVAL64 || val > NUdf::MAX_INTERVAL64;
+        } else {
+            return val < -NUdf::MAX_TIMESTAMP64 || val > NUdf::MAX_TIMESTAMP64;
+        }
+    } else if constexpr (TDateType::Features & NYql::NUdf::DateType) {
+        if constexpr (TDateType::Features & NYql::NUdf::TimeIntervalType) {
+            return val <= -TScaledDate(NUdf::MAX_TIMESTAMP) || val >= TScaledDate(NUdf::MAX_TIMESTAMP);
+        } else {
+            return val < 0 || val >= TScaledDate(NUdf::MAX_TIMESTAMP);
+        }
+    }
+}
 
 template<typename TLeft, typename TRight, typename TOutput, bool Tz = false>
 struct TDateTimeAddT {
@@ -108,7 +125,7 @@ struct TDateTimeAddT {
         const auto lv = ToScaledDate<TLeft>(left.template Get<typename TLeft::TLayout>());
         const auto rv = ToScaledDate<TRight>(right.template Get<typename TRight::TLayout>());
         const auto ret = lv + rv;
-        if (std::is_same<TOutput, NUdf::TDataType<NUdf::TInterval>>() ? IsBadInterval(ret) : IsBadDateTime(ret)) {
+        if (IsBadScaledDate<TOutput>(ret)) {
             return NUdf::TUnboxedValuePod();
         }
 

@@ -10,18 +10,6 @@ using TScaledDate = i64;
 constexpr TScaledDate DateScale = 86400000000ll;
 constexpr TScaledDate DatetimeScale = 1000000ll;
 
-inline bool IsBadDateTime(TScaledDate val) {
-    return val < 0 || val >= TScaledDate(NUdf::MAX_TIMESTAMP);
-}
-
-inline bool IsBadInterval(TScaledDate val) {
-    return val <= -TScaledDate(NUdf::MAX_TIMESTAMP) || val >= TScaledDate(NUdf::MAX_TIMESTAMP);
-}
-
-inline bool IsBadInterval64(TScaledDate val) {
-    return val < -TScaledDate(NUdf::MAX_TIMESTAMP64) || val > TScaledDate(NUdf::MAX_TIMESTAMP64);
-}
-
 template<typename TSrc> inline
 TScaledDate ToScaledDate(typename TSrc::TLayout src);
 
@@ -137,6 +125,27 @@ TScaledDate ToScaledDate<NUdf::TDataType<NUdf::TInterval64>>(typename NUdf::TDat
 template<> inline
 NUdf::TDataType<NUdf::TInterval64>::TLayout FromScaledDate<NUdf::TDataType<NUdf::TInterval64>>(TScaledDate src) {
     return src;
+}
+
+/*
+
+template<>
+inline bool IsBadScaledDate<NUdf::TDataType<NUdf::TTimestamp>>(TScaledDate val) {
+    return val < 0 || val >= TScaledDate(NUdf::MAX_TIMESTAMP);
+}
+
+template<>
+inline bool IsBadScaledDate<NUdf::TDataType<NUdf::TInterval>>(TScaledDate val) {
+    return val <= -TScaledDate(NUdf::MAX_TIMESTAMP) || val >= TScaledDate(NUdf::MAX_TIMESTAMP);
+}
+*/
+
+inline bool IsBadDateTime(TScaledDate val) {
+    return val < 0 || val >= TScaledDate(NUdf::MAX_TIMESTAMP);
+}
+
+inline bool IsBadInterval(TScaledDate val) {
+    return val <= -TScaledDate(NUdf::MAX_TIMESTAMP) || val >= TScaledDate(NUdf::MAX_TIMESTAMP);
 }
 
 #ifndef MKQL_DISABLE_CODEGEN

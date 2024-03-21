@@ -1623,6 +1623,20 @@
             "uri": "https://{canondata_backend}/1936947/a5f83e5d38179c14126d53519dc062cef98113ec/resource.tar.gz#test.test_pg-distinct_on_single_projection_order_expr-default.txt-Plan_/plan.txt"
         }
     ],
+    "test.test[pg-doubles_search_path-default.txt-Debug]": [
+        {
+            "checksum": "ea64351f9e62c70ad3ea607991b54517",
+            "size": 3388,
+            "uri": "https://{canondata_backend}/1936842/06c9068023d4aba6d1f84ef3d63cea3dfcf5c68c/resource.tar.gz#test.test_pg-doubles_search_path-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg-doubles_search_path-default.txt-Plan]": [
+        {
+            "checksum": "78f0e1e757a64d6371b7201489602b7a",
+            "size": 5824,
+            "uri": "https://{canondata_backend}/1936842/06c9068023d4aba6d1f84ef3d63cea3dfcf5c68c/resource.tar.gz#test.test_pg-doubles_search_path-default.txt-Plan_/plan.txt"
+        }
+    ],
     "test.test[pg-join_using1-default.txt-Debug]": [
         {
             "checksum": "304c7dff88bdabd4b59aa070cf08f1f7",
@@ -1649,20 +1663,6 @@
             "checksum": "2285226db23bdeb50a3b9be08816a9e1",
             "size": 5286,
             "uri": "https://{canondata_backend}/1889210/ef7367b4155f26b3ef23170f285effb15331f727/resource.tar.gz#test.test_pg-join_using_tables1-default.txt-Plan_/plan.txt"
-       	}
-    ],
-    "test.test[pg-doubles_search_path-default.txt-Debug]": [
-        {
-            "checksum": "ea64351f9e62c70ad3ea607991b54517",
-            "size": 3388,
-            "uri": "https://{canondata_backend}/1936842/06c9068023d4aba6d1f84ef3d63cea3dfcf5c68c/resource.tar.gz#test.test_pg-doubles_search_path-default.txt-Debug_/opt.yql_patched"
-        }
-    ],
-    "test.test[pg-doubles_search_path-default.txt-Plan]": [
-        {
-            "checksum": "78f0e1e757a64d6371b7201489602b7a",
-            "size": 5824,
-            "uri": "https://{canondata_backend}/1936842/06c9068023d4aba6d1f84ef3d63cea3dfcf5c68c/resource.tar.gz#test.test_pg-doubles_search_path-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[pg-order_by_distinct_same_expr_agg-default.txt-Debug]": [

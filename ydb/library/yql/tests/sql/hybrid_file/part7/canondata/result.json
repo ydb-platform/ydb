@@ -463,16 +463,16 @@
     ],
     "test.test[bigdate-implicit_cast_callable-default.txt-Debug]": [
         {
-            "checksum": "cc269ec6b6e09639dff74dec2d931dcb",
-            "size": 2119,
-            "uri": "https://{canondata_backend}/1937027/b16c09e9a13e802c8e9af73cf9508048ead5f2e5/resource.tar.gz#test.test_bigdate-implicit_cast_callable-default.txt-Debug_/opt.yql_patched"
+            "checksum": "5faec1c1271d80047d20b3872f9a0c58",
+            "size": 13287,
+            "uri": "https://{canondata_backend}/1936947/034b59cedb2cca071a4937b836b50ccd404c8443/resource.tar.gz#test.test_bigdate-implicit_cast_callable-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[bigdate-implicit_cast_callable-default.txt-Plan]": [
         {
-            "checksum": "b4dd508a329723c74293d80f0278c705",
-            "size": 505,
-            "uri": "https://{canondata_backend}/1937027/b16c09e9a13e802c8e9af73cf9508048ead5f2e5/resource.tar.gz#test.test_bigdate-implicit_cast_callable-default.txt-Plan_/plan.txt"
+            "checksum": "b52e7d315943f8c3cfc8567aa30de4bb",
+            "size": 17474,
+            "uri": "https://{canondata_backend}/1936947/034b59cedb2cca071a4937b836b50ccd404c8443/resource.tar.gz#test.test_bigdate-implicit_cast_callable-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[bigdate-int_cast-default.txt-Debug]": [
@@ -2573,6 +2573,20 @@
             "checksum": "de57a0adf0ee10083b19d62926d4671f",
             "size": 9103,
             "uri": "https://{canondata_backend}/212715/61f0c59354c0aee96d5e21e3fd5f5993b2817ac3/resource.tar.gz#test.test_simple_columns-simple_columns_join_qualified-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[stream_lookup_join-hint-default.txt-Debug]": [
+        {
+            "checksum": "7a796f1884cff26dc2e5e900476002e4",
+            "size": 3799,
+            "uri": "https://{canondata_backend}/1936947/755069675dedbe2bbcd6fad43d4b26c82469e6b1/resource.tar.gz#test.test_stream_lookup_join-hint-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[stream_lookup_join-hint-default.txt-Plan]": [
+        {
+            "checksum": "53710c762be7df389c7b14f2b0c18fcd",
+            "size": 6003,
+            "uri": "https://{canondata_backend}/1936947/755069675dedbe2bbcd6fad43d4b26c82469e6b1/resource.tar.gz#test.test_stream_lookup_join-hint-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[tpch-q10-default.txt-Debug]": [

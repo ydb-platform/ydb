@@ -91,7 +91,7 @@ runs:
       id: test_run_choice
       shell: bash
       run: |
-        if [ -s ya.make ];then
+        if [ -f ya.make ];then
           echo "value='list'" >> $GITHUB_OUTPUT
         else
           echo "value='cache'" >> $GITHUB_OUTPUT

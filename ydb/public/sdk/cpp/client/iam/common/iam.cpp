@@ -58,7 +58,9 @@ private:
             else {
                 const TDuration expiresIn = TDuration::Seconds(it->second.GetUInteger());
 
-                NextTicketUpdate_ = TInstant::Now() + std::max(expiresIn, RefreshPeriod_);
+                const auto interval = std::max(std::min(expiresIn, RefreshPeriod_), TDuration::MilliSeconds(100));
+
+                NextTicketUpdate_ = TInstant::Now() + interval;
             }
         } catch (...) {
         }

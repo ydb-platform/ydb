@@ -2159,25 +2159,34 @@ public:
 
         auto name = to_lower(TString(value->name));
         if (name == "search_path") {
-            if (ListLength(value->args) != 1) {
-                AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
-                return nullptr;
-            }
-            auto val = ListNodeNth(value->args, 0);
-            if (!isSetConfig) {
-                if (NodeTag(val) == T_A_Const) {
-                    val = (const Node*)&CAST_NODE(A_Const, val)->val;
-                } else {
-                    AddError(TStringBuilder() << "VariableSetStmt, expected const for " << value->name << " option");
+            THashSet<TString> visitedValues;
+            TVector<TString> values;
+            for (int i = 0; i < ListLength(value->args); ++i) {
+                auto val = ListNodeNth(value->args, i);
+                if (!isSetConfig) {
+                    if (NodeTag(val) == T_A_Const) {
+                        val = (const Node*)&CAST_NODE(A_Const, val)->val;
+                    } else {
+                        AddError(TStringBuilder() << "VariableSetStmt, expected const for " << value->name << " option");
+                        return nullptr;
+                    }
+                }
+
+                if (NodeTag(val) != T_String) {
+                    AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                     return nullptr;
+                }
+                TString rawStr = to_lower(TString(StrVal(val)));
+                if (visitedValues.emplace(rawStr).second) {
+                    values.emplace_back(rawStr);
                 }
             }
 
-            if (NodeTag(val) != T_String) {
-                AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
+            if (values.size() != 1) {
+                AddError(TStringBuilder() << "VariableSetStmt, expected 1 unique scheme, but got: " << values.size());
                 return nullptr;
             }
-            TString rawStr = to_lower(TString(StrVal(val)));
+            auto rawStr = values[0];
             if (rawStr != "pg_catalog" && rawStr != "public" && rawStr != "" && rawStr != "information_schema") {
                 AddError(TStringBuilder() << "VariableSetStmt, search path supports only 'information_schema', 'public', 'pg_catalog', '' but got: '" << rawStr << "'");
                 return nullptr;

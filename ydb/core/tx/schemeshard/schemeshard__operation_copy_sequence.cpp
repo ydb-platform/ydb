@@ -279,6 +279,7 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {
+            TEvPrivate::TEvOperationPlan::EventType,
             TEvPrivate::TEvCompleteBarrier::EventType,
             NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::EventType,
         });

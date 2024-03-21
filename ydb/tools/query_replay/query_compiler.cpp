@@ -264,23 +264,23 @@ public:
                 : nullptr);
 
         if (ReplayDetails.Has("guc_settings")) {
-            const auto gucSettings = ReplayDetails["guc_settings"].GetMapSafe();
-            std::unordered_map<TString, TString> settings;
-            if (gucSettings.Has["settings"]) {
+            auto gucSettings = ReplayDetails["guc_settings"];
+            std::unordered_map<std::string, std::string> settings;
+            if (gucSettings.Has("settings")) {
                 for (const auto& [settingName, settingValue] : gucSettings["settings"].GetMapSafe()) {
-                    settings[settingName.GetStringSafe()] = settingValue.GetStringSafe();
+                    settings[settingName] = settingValue.GetStringSafe();
                 }
             }
-            std::unordered_map<TString, TString> rollbackSettings;
-            if (gucSettings.Has["rollback_settings"]) {
+            std::unordered_map<std::string, std::string> rollbackSettings;
+            if (gucSettings.Has("rollback_settings")) {
                 for (const auto& [settingName, settingValue] : gucSettings["rollback_settings"].GetMapSafe()) {
-                    rollbackSettings[settingName.GetStringSafe()] = settingValue.GetStringSafe();
+                    rollbackSettings[settingName] = settingValue.GetStringSafe();
                 }
             }
-            std::unordered_map<TString, TString> sessionSettings;
-            if (gucSettings.Has["session_settings"]) {
+            std::unordered_map<std::string, std::string> sessionSettings;
+            if (gucSettings.Has("session_settings")) {
                 for (const auto& [settingName, settingValue] : gucSettings["session_settings"].GetMapSafe()) {
-                    sessionSettings[settingName.GetStringSafe()] = settingValue.GetStringSafe();
+                    sessionSettings[settingName] = settingValue.GetStringSafe();
                 }
             }
             GUCSettings->ImportFromJson(settings, rollbackSettings, sessionSettings);
@@ -312,7 +312,7 @@ public:
             TlsActivationContext->ExecutorThread.ActorSystem, SelfId().NodeId(), counters);
         auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, nullptr});
         KqpHost = CreateKqpHost(Gateway, Query->Cluster, Query->Database, Config, ModuleResolverState->ModuleResolver,
-            federatedQuerySetup, nullptr, GUCSettings, Nothing(), FunctionRegistry, false); a
+            federatedQuerySetup, nullptr, GUCSettings, Nothing(), FunctionRegistry, false);
 
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = false;

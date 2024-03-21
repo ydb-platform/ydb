@@ -4677,6 +4677,7 @@ NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTran
     TConverter converter(results, settings, query, &stmtParseInfos, false);
     NYql::PGParse(query, converter);
     if (stmtParseInfo) {
+        Y_ENSURE(!stmtParseInfos.empty());
         *stmtParseInfo = stmtParseInfos.back();
     }
     Y_ENSURE(!results.empty());

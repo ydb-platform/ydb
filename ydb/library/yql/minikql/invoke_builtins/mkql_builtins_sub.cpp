@@ -120,25 +120,26 @@ struct TDateTimeSub {
 
 template<typename TLeft, typename TRight, typename TOutput>
 struct TIntervalSubInterval {
-    static_assert(std::is_same_v<TOutput, NUdf::TDataType<NUdf::TInterval>::TLayout>, "expected output interval");
-    static_assert(std::is_same_v<TLeft, TRight>, "left and right must be same");
+    // static_assert(std::is_same_v<TOutput, NUdf::TDataType<NUdf::TInterval>::TLayout>, "expected output interval");
+    // TODO check Features & TimeInterval
+    // FIXME static_assert(std::is_same_v<TLeft, TRight>, "left and right must be same");
 
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
     {
-        const auto lv = left.template Get<TLeft>();
-        const auto rv = right.template Get<TRight>();
+        const auto lv = left.template Get<typename TLeft::TLayout>();
+        const auto rv = right.template Get<typename TRight::TLayout>();
         const auto ret = lv - rv;
-        return IsBadInterval(ret) ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(ret);
+        return IsBadIntervalNew<TOutput>(ret) ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(ret);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen.GetContext();
-        const auto lhs = GetterFor<TLeft>(left, context, block);
-        const auto rhs = GetterFor<TRight>(right, context, block);
+        const auto lhs = GetterFor<typename TLeft::TLayout>(left, context, block);
+        const auto rhs = GetterFor<typename TRight::TLayout>(right, context, block);
         const auto sub = BinaryOperator::CreateSub(lhs, rhs, "sub", block);
-        const auto full = SetterFor<TOutput>(sub, context, block);
+        const auto full = SetterFor<typename TOutput::TLayout>(sub, context, block);
         const auto bad = GenIsBadInterval(sub, context, block);
         const auto zero = ConstantInt::get(Type::getInt128Ty(context), 0);
         const auto sel = SelectInst::Create(bad, zero, full, "sel", block);
@@ -244,7 +245,7 @@ void RegisterSub(IBuiltinFunctionRegistry& registry) {
     RegisterDateSub<true, false>(registry);
     RegisterDateSub<true, true>(registry);
 
-    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>,
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>,
         NUdf::TDataType<NUdf::TInterval>, TIntervalSubInterval, TBinaryArgsOptWithNullableResult>(registry, "Sub");
 
     RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TInterval>,

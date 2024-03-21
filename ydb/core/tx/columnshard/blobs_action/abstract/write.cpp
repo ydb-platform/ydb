@@ -6,7 +6,7 @@ namespace NKikimr::NOlap {
 TUnifiedBlobId IBlobsWritingAction::AddDataForWrite(const TString& data, const std::optional<TUnifiedBlobId>& externalBlobId) {
     Y_ABORT_UNLESS(!WritingStarted);
     auto blobId = AllocateNextBlobId(data);
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("generated_blob_id", blobId.ToStringNew());
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("generated_blob_id", blobId.ToStringNew());
     AddDataForWrite(externalBlobId.value_or(blobId), data);
     return externalBlobId.value_or(blobId);
 }

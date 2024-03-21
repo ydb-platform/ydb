@@ -13,7 +13,7 @@ namespace NKikimr::NOlap::NIndexes {
 
 void TPortionIndexChunk::DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfo& portionInfo) const {
     AFL_VERIFY(!bRange.IsValid());
-    portionInfo.AddIndex(TIndexChunk(GetEntityId(), GetChunkIdx(), RecordsCount, RawBytes, bRange));
+    portionInfo.AddIndex(TIndexChunk(GetEntityId(), GetChunkIdxVerified(), RecordsCount, RawBytes, bRange));
 }
 
 std::shared_ptr<NKikimr::NOlap::IPortionDataChunk> TIndexByColumns::DoBuildIndex(const ui32 indexId, THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const {

@@ -51,6 +51,7 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
     Y_UNIT_TEST(Sessions) {
         TKikimrRunner kikimr("root@builtin");
         auto client = kikimr.GetQueryClient();
+        auto tableClient = kikimr.GetTableClient();
         const size_t sessionsCount = 50;
         std::vector<NYdb::NQuery::TSession> sessionsSet;
         for(ui32 i = 0; i < sessionsCount; i++) {
@@ -187,6 +188,32 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.back().GetId().data()
             CompareYson(Sprintf(R"([
                 [["%s"]]
             ])", sessionsSet.back().GetId().data()), FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto result = sessionsSet.back().ExecuteQuery(Sprintf(R"(
+                --!syntax_v1
+                select SessionId
+                from `/Root/.sys/query_sessions`
+                where SessionId="%s"
+            )", sessionsSet.back().GetId().data()), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+            CompareYson(Sprintf(R"([
+                [["%s"]]
+            ])", sessionsSet.back().GetId().data()), FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto it = tableClient.StreamExecuteScanQuery(Sprintf(R"(
+                --!syntax_v1
+                select SessionId
+                from `/Root/.sys/query_sessions`
+                where SessionId="%s"
+            )", sessionsSet.back().GetId().data())).GetValueSync();
+
+            CompareYson(Sprintf(R"([
+                [["%s"]]
+            ])", sessionsSet.back().GetId().data()), StreamResultToYson(it));
         }
     }
 

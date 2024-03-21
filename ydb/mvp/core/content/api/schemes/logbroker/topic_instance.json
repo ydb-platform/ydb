@@ -1,0 +1,63 @@
+{
+    "title" : "TTopicInstance",
+    "type": "object",
+    "required" : ["targetCluster", "originCluster", "writeStatistics", "readStatistics"],
+    "properties": {
+        "targetCluster" : {
+            "type": "string"
+        },
+        "originCluster" : {
+            "type": "string"
+        },
+        "properties": {
+            "title": "TTopicInstanceProperties",
+            "type": "object",
+            "properties": {
+                "diskSize": {
+                    "type": "integer",
+                    "format": "int64"
+                }
+            }
+        },
+        "writeStatistics" : {
+            "title": "TTopicInstanceWriteStatistics",
+            "type" : "object",
+            "required" : ["writeSpeed", "writeIdleTime", "writeTimeLag"],
+            "properties" : {
+                "writeSpeed": {
+                    "$ref": "#/definitions/TIoAverageSpeed"
+                },
+                "writeIdleTime" : {
+                    "type" : "string",
+                    "description" : "Max write idle time across all topic instance partitions in ISO 8601 Duration format"
+                },
+                "writeTimeLag" : {
+                    "type" : "string",
+                    "description" : "Max message write lag across all topic instance partitions during last minute in ISO 8601 Duration format"
+                }
+            }
+        },
+        "readStatistics" : {
+            "title" : "TTopicInstanceReadStatistics",
+            "type" : "object",
+            "required" : ["readSpeed", "readIdleTime", "readTimeLag", "writeTimeLag"],
+            "properties" : {
+                "readSpeed": {
+                    "$ref": "#/definitions/TIoAverageSpeed"
+                },
+                "readIdleTime" : {
+                    "type" : "string",
+                    "description" : "Max read idle time across all topic instance partitions in ISO 8601 Duration format"
+                },
+                "readTimeLag" : {
+                    "type" : "string",
+                    "description" : "max last message read lag across all topic instance partitions in ISO 8601 Duration format"
+                },
+                "writeTimeLag" : {
+                    "type": "string",
+                    "description" : "Max messages write lag that were read by all topic instance consumers during one minute before last read in ISO 8601 Duration format"
+                }
+            }
+        }
+    }
+}

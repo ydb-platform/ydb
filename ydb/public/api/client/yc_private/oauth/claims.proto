@@ -1,0 +1,106 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.oauth;
+
+// claims representation, see https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims for details
+message SubjectClaims {
+    // Subject - Identifier for the End-User at the Issuer.
+    string sub = 1; // [(required) = true, (length) = "<=50"];
+    // End-User's full name in displayable form including all name parts, possibly including titles and suffixes, ordered according to the End-User's locale and preferences.
+    string name = 2; // [(sensitive) = true];
+    // Given name(s) or first name(s) of the End-User. Note that in some cultures, people can have multiple given names; all can be present, with the names being separated by space characters.
+    string given_name = 3; // [(sensitive) = true];
+    // Surname(s) or last name(s) of the End-User. Note that in some cultures, people can have multiple family names or no family name; all can be present, with the names being separated by space characters.
+    string family_name = 4; // [(sensitive) = true];
+    // Shorthand name by which the End-User wishes to be referred to at the RP, such as janedoe or j.doe.
+    // This value MAY be any valid JSON string including special characters such as @, /, or whitespace. The RP MUST NOT rely upon this value being unique, as discussed in Section 5.7.
+    string preferred_username = 7; // [(sensitive) = true];
+    // URL of the End-User's profile picture. This URL MUST refer to an image file (for example, a PNG, JPEG, or GIF image file),
+    // rather than to a Web page containing an image. Note that this URL SHOULD specifically reference a profile photo of the End-User suitable for displaying when describing the End-User, rather than an arbitrary photo taken by the End-User.
+    string picture = 9; // [(sensitive) = true];
+    // End-User's preferred e-mail address. Its value MUST conform to the RFC 5322 [RFC5322] addr-spec syntax.
+    // The RP MUST NOT rely upon this value being unique, as discussed in Section 5.7.
+    string email = 11; // [(sensitive) = true, (sensitive_type) = SENSITIVE_CRC];
+    // End-User's gender. Values defined by this specification are female and male. Other values MAY be used when neither of the defined values are applicable.
+    string gender = 13; // [(sensitive) = true];
+    // String from zoneinfo [zoneinfo] time zone database representing the End-User's time zone. For example, Europe/Paris or America/Los_Angeles.
+    string zoneinfo = 15; // [(sensitive) = true];
+    // End-User's locale, represented as a BCP47 [RFC5646] language tag. This is typically an ISO 639-1 Alpha-2 [ISO639-1] language code in lowercase and an ISO 3166-1 Alpha-2 [ISO3166-1] country code in uppercase, separated by a dash.
+    // For example, en-US or fr-CA. As a compatibility note, some implementations have used an underscore as the separator rather than a dash, for example, en_US; Relying Parties MAY choose to accept this locale syntax as well.
+    string locale = 16; // [(sensitive) = true];
+    // End-User's preferred telephone number. E.164 [E.164] is RECOMMENDED as the format of this Claim, for example, +1 (425) 555-1212 or +56 (2) 687 2400.
+    // If the phone number contains an extension, it is RECOMMENDED that the extension be represented using the RFC 3966 [RFC3966] extension syntax, for example, +1 (604) 555-1234;ext=5678.
+    string phone_number = 17; // [(sensitive) = true];
+
+    // Subject type.
+    SubjectType sub_type = 99;
+    // non-empty only for federated users
+    Federation federation = 100;
+    // An image content of the user. Typically a space-efficient format like JPEG or GIF encoded in base64-string.
+    // The maximum size is limited to 100 Kib.
+    string picture_data = 101; // [(sensitive) = true];
+    // Filled for service accounts only. Refers to a folder the service account is created in.
+    string service_account_folder_id = 102;
+    // List of groups where subject is member
+    repeated Group groups = 103;
+    YandexClaims yandex_claims = 200;
+}
+
+// minimalistic analog of yandex.cloud.priv.iam.v1.saml.Federation
+message Federation {
+    // ID of the federation.
+    string id = 1; // [(required) = true, (length) = "<=50"];
+    // Name of the federation. The name is unique within the cloud or organization
+    string name = 3; // [(sensitive) = true];
+    // Whether the federation is global or not.
+    bool is_global = 5;
+    // An organization owning the federation.
+    // It's empty if the federation is global.
+    Organization organization = 102;
+}
+
+// an organization view to represent the login-related organization in the SubjectClaims
+message Organization {
+    // ID of the organization
+    string id = 1; // [(required) = true, (length) = "<=50"];
+    // Display title of the organization
+    string title = 6; // [(sensitive) = true];
+}
+
+message YandexClaims {
+    // staff.yandex-team.ru login - only for passport users
+    string staff_login = 1; // [(sensitive) = true];
+    // passport uid (external). default_uid for Yandex.Passport active multi-session.
+    int64 passport_uid = 2;
+    // passport login
+    string login = 3; // [(sensitive) = true];
+    // For size-specific avatar rendering purposes https://avatars.mds.yandex.net/get-yapic/<avatarId>/<avatarSize>
+    // see https://doc.yandex-team.ru/blackbox/reference/method-sessionid-response-json.html#method-sessionid-response-json__display-name
+    string avatar_id = 4; // [(sensitive) = true];
+    // passport default email
+    string email = 5; // [(sensitive) = true];
+    bool two_factor_authentication_enabled = 6;
+    int64 karma = 7; // [(sensitive) = true, (sensitive_type) = SENSITIVE_REMOVE];
+    repeated string phones = 8; // [(sensitive) = true];
+    Domain domain = 9;
+    string login_id = 10;
+
+    message Domain {
+        string domain = 1; // [(sensitive) = true];
+        string domid = 2;
+        bool hosted = 3;
+    }
+}
+
+enum SubjectType {
+    SUBJECT_TYPE_UNSPECIFIED = 0;
+    USER_ACCOUNT = 1;
+    SERVICE_ACCOUNT = 2;
+    GROUP = 3;
+    INVITEE = 4;
+}
+
+message Group {
+    string group_id = 1;
+    string group_name = 2;
+}

@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.oauth.v1;
+
+message CloudUserInfo {
+  // corresponding to eulaAccepted field
+  bool is_eula_accepted = 1; // [deprecated = true];
+  // corresponding to hasClouds field
+  bool is_member_of_cloud = 2; // [deprecated = true];
+  // corresponding to canCreateClouds field
+  bool can_create_cloud = 3;
+  // corresponding to checks field
+  CreateCloudRestrictions create_cloud_restrictions = 4;
+
+  message CreateCloudRestrictions {
+    bool has_phone = 1;
+    bool has_email = 2;
+    bool has_login = 3;
+  }
+}

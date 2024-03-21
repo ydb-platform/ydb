@@ -9,4 +9,5 @@ RECURSE(
     docs
     docs/ru/core
     docs/en/core
+    mvp
 )

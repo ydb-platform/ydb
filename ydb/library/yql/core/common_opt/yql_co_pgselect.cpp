@@ -3851,7 +3851,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
         finalSortDirections = BuildSortDirections(node->Pos(), finalSort, ctx);
     }
 
-    if (outerInputs.empty()) {
+    if (extColumns.empty()) {
         if (finalSortLambda) {
             list = BuildSort(node->Pos(), list, finalSortDirections, finalSortLambda->TailPtr(), finalSortLambda->HeadPtr(), ctx);
         }

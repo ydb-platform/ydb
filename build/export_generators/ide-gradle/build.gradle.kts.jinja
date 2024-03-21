@@ -269,4 +269,4 @@ tasks.build.dependsOn(
 {% include 'publish.gradle.kts' ignore missing -%}
 {% endif -%}
 
-{{ dump }}
+{%- include "[generator]/debug.jinja" ignore missing -%}

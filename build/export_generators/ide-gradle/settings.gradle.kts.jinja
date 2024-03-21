@@ -6,4 +6,4 @@ include(":{{ classname }}")
 project(":{{ classname }}").projectDir = file("{{ exportRoot }}/{{ subdir }}")
 {% endfor -%}
 
-{{ dump }}
+{%- include "[generator]/debug.jinja" ignore missing -%}

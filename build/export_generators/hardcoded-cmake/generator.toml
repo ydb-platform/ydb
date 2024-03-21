@@ -198,3 +198,43 @@ copy=[
     "build/scripts/gather_swig_java.cmake"
 ]
 add_values=[{attr="includes", values=["cmake/swig.cmake"]}]
+
+# Conan profiles for platforms
+[[rules]]
+platforms=[
+    "android-arm",
+    "android-arm32"
+]
+copy=["cmake/conan-profiles/android.armv7.profile"]
+
+[[rules]]
+platforms=["android-arm64"]
+copy=["cmake/conan-profiles/android.arm64.profile"]
+
+[[rules]]
+platforms=["android-x86"]
+copy=["cmake/conan-profiles/android.x86.profile"]
+
+[[rules]]
+platforms=["android-x86_64"]
+copy=["cmake/conan-profiles/android.x86_64.profile"]
+
+[[rules]]
+platforms=[
+    "linux-aarch64",
+    "linux-arm64",
+    "linux-aarch64-cuda",
+    "linux-arm64-cuda"
+]
+copy=["cmake/conan-profiles/linux.aarch64.profile"]
+
+[[rules]]
+platforms=[
+    "linux-ppc64le",
+    "linux-ppc64le-cuda"
+]
+copy=["cmake/conan-profiles/linux.ppc64le.profile"]
+
+[[rules]]
+platforms=["darwin-arm64"]
+copy=["cmake/conan-profiles/macos.arm64.profile"]

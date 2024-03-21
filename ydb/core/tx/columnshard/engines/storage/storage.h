@@ -8,7 +8,6 @@ namespace NKikimr::NOlap {
 
 class TGranulesStorage {
 private:
-    const TCompactionLimits Limits;
     const NColumnShard::TEngineLogsCounters Counters;
     std::shared_ptr<IStoragesManager> StoragesManager;
     bool PackModificationFlag = false;
@@ -28,9 +27,8 @@ private:
     }
 
 public:
-    TGranulesStorage(const NColumnShard::TEngineLogsCounters counters, const TCompactionLimits& limits, const std::shared_ptr<IStoragesManager>& storagesManager)
-        : Limits(limits)
-        , Counters(counters)
+    TGranulesStorage(const NColumnShard::TEngineLogsCounters counters, const std::shared_ptr<IStoragesManager>& storagesManager)
+        : Counters(counters)
         , StoragesManager(storagesManager)
     {
 

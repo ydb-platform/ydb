@@ -93,6 +93,7 @@ namespace NKikimr::NPrivate {
         const NVDiskMon::TLtcHistoPtr PutHistogram;
         const TIntrusivePtr<TVPatchCtx> VPatchCtx;
         TString VDiskLogPrefix;
+        std::shared_ptr<NMonGroup::TOutOfSpaceGroup> MonGroup;
 
         TActorId LeaderId;
 
@@ -135,7 +136,8 @@ namespace NKikimr::NPrivate {
                 const ::NMonitoring::TDynamicCounters::TCounterPtr &vPatchFoundPartsMsgsPtr,
                 const ::NMonitoring::TDynamicCounters::TCounterPtr &vPatchResMsgsPtr,
                 const NVDiskMon::TLtcHistoPtr &getHistogram, const NVDiskMon::TLtcHistoPtr &putHistogram,
-                const TIntrusivePtr<TVPatchCtx> &vPatchCtx, const TString &vDiskLogPrefix, ui64 incarnationGuid)
+                const TIntrusivePtr<TVPatchCtx> &vPatchCtx, const TString &vDiskLogPrefix, ui64 incarnationGuid,
+                std::shared_ptr<NMonGroup::TOutOfSpaceGroup> monGroup)
             : TActorBootstrapped()
             , Sender(ev->Sender)
             , Cookie(ev->Cookie)
@@ -146,6 +148,7 @@ namespace NKikimr::NPrivate {
             , PutHistogram(putHistogram)
             , VPatchCtx(vPatchCtx)
             , VDiskLogPrefix(vDiskLogPrefix)
+            , MonGroup(std::move(monGroup))
             , LeaderId(leaderId)
             , IncarnationGuid(incarnationGuid)
             , GType(gType)
@@ -233,7 +236,7 @@ namespace NKikimr::NPrivate {
             AddMark((FoundOriginalParts.size() ? "Found parts" : "Parts were not found"));
             CurrentEventTrace = nullptr;
 #endif
-            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, FoundPartsEvent.release(), Cookie);
+            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, FoundPartsEvent.release(), Cookie, VDiskLogPrefix, MonGroup);
         }
 
         void PullOriginalPart(ui64 pullingPart) {
@@ -322,7 +325,7 @@ namespace NKikimr::NPrivate {
             if (forceEnd) {
                 ResultEvent->SetForceEndResponse();
             }
-            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, ResultEvent.release(), Cookie);
+            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, ResultEvent.release(), Cookie, VDiskLogPrefix, MonGroup);
         }
 
         void HandleVGetResult(TEvBlobStorage::TEvVGetResult::TPtr &ev) {
@@ -650,7 +653,7 @@ namespace NKikimr::NPrivate {
                 ev->Get()->VDiskSkeletonTrace->AddMark("Error: HandleError TEvVPatchXorDiff");
             }
 #endif
-            SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, resultEvent.release(), ev->Cookie);
+            SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, resultEvent.release(), ev->Cookie, VDiskLogPrefix, MonGroup);
         }
 
         void Handle(TEvBlobStorage::TEvVPatchXorDiff::TPtr &ev) {
@@ -688,7 +691,7 @@ namespace NKikimr::NPrivate {
             }
 #endif
 
-            SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, resultEvent.release(), ev->Cookie);
+            SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, resultEvent.release(), ev->Cookie, VDiskLogPrefix, MonGroup);
 
             if (!CheckDiff(xorDiffs, "XorDiff from datapart")) {
                 AddMark("Error: Incorrect xor diff");
@@ -822,11 +825,12 @@ namespace NKikimr {
             const ::NMonitoring::TDynamicCounters::TCounterPtr &vPatchFoundPartsMsgsPtr,
             const ::NMonitoring::TDynamicCounters::TCounterPtr &vPatchResMsgsPtr,
             const NVDiskMon::TLtcHistoPtr &getHistogram, const NVDiskMon::TLtcHistoPtr &putHistogram,
-            const TIntrusivePtr<TVPatchCtx> &vPatchCtx, const TString &vDiskLogPrefix, ui64 incarnationGuid)
+            const TIntrusivePtr<TVPatchCtx> &vPatchCtx, const TString &vDiskLogPrefix, ui64 incarnationGuid,
+            const std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup)
     {
         return new NPrivate::TSkeletonVPatchActor(leaderId, gType, ev, now, skeletonFrontIDPtr,
                 vPatchFoundPartsMsgsPtr, vPatchResMsgsPtr, getHistogram, putHistogram,
-                vPatchCtx, vDiskLogPrefix, incarnationGuid);
+                vPatchCtx, vDiskLogPrefix, incarnationGuid, monGroup);
     }
 
 } // NKikimr

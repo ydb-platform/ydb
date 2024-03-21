@@ -99,7 +99,10 @@ public:
         const TString& token = properties.Value("token", "");
 
         State_->Configuration->AddValidCluster(name);
-        State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
+        if (token) {
+            // Empty token is forbidden for yt reader
+            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
+        }
 
         TYtClusterConfig cluster;
         cluster.SetName(name);

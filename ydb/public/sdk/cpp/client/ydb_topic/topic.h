@@ -1317,7 +1317,7 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     //! 1. Get a partition ID.
     //! 2. Find out the location of the partition by its ID.
     //! 3. Connect directly to the partition host.
-    FLUENT_SETTING_DEFAULT(bool, DirectWriteToPartition, false);
+    FLUENT_SETTING_DEFAULT(bool, DirectWriteToPartition, true);
 
     //! codec and level to use for data compression prior to write.
     FLUENT_SETTING_DEFAULT(ECodec, Codec, ECodec::GZIP);

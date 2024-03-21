@@ -468,15 +468,35 @@ struct Schema : NIceDb::Schema {
     struct QuerySessions : Table<13> {
         struct SessionId : Column<1, NScheme::NTypeIds::Utf8> {};
         struct NodeId : Column<2, NScheme::NTypeIds::Uint32> {};
-        struct Status : Column<3, NScheme::NTypeIds::Utf8> {};
-        struct QueryText : Column<4, NScheme::NTypeIds::Utf8> {};
+        struct State : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct Query : Column<4, NScheme::NTypeIds::Utf8> {};
+        struct QueryCount : Column<5, NScheme::NTypeIds::Uint32> {};
+        struct ClientAddress : Column<6, NScheme::NTypeIds::Utf8> {};
+        struct ClientPID : Column<7, NScheme::NTypeIds::Utf8> {};
+        struct ClientUserAgent : Column<8, NScheme::NTypeIds::Utf8> {};
+        struct ClientSdkBuildInfo : Column<9, NScheme::NTypeIds::Utf8> {};
+        struct ApplicationName : Column<10, NScheme::NTypeIds::Utf8> {};
+        struct SessionStartAt : Column<11, NScheme::NTypeIds::Timestamp> {};
+        struct QueryStartAt : Column<12, NScheme::NTypeIds::Timestamp> {};
+        struct StateChangeAt : Column<13, NScheme::NTypeIds::Timestamp> {};
+        struct UserSID : Column<14, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<SessionId>;
         using TColumns = TableColumns<
             SessionId,
             NodeId,
-            Status,
-            QueryText>;
+            State,
+            Query,
+            QueryCount,
+            ClientAddress,
+            ClientPID,
+            ClientUserAgent,
+            ClientSdkBuildInfo,
+            ApplicationName,
+            SessionStartAt,
+            QueryStartAt,
+            StateChangeAt,
+            UserSID>;
     };
 };
 

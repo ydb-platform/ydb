@@ -49,9 +49,9 @@ ext.compileOnlyAndroidArs = [
 ]
 
 def minVersion = 21
-def compileVersion = 30
-def targetVersion = 30
-def buildVersion = '30.0.3'
+def compileVersion = 33
+def targetVersion = 33
+def buildVersion = '33.0.0'
 
 import com.android.build.gradle.LibraryPlugin
 import java.nio.file.Files

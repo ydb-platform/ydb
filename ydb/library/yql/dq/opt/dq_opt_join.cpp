@@ -171,7 +171,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
     leftJoinKeyNames.reserve(joinKeysCount);
     TVector<TCoAtom> rightJoinKeyNames;
     rightJoinKeyNames.reserve(joinKeysCount);
-    auto joinAlgo = BuildAtom(TStringBuilder() << int(linkSettings.JoinAlgo), joinTuple.Pos(), ctx).Ptr();
+    auto joinAlgo = BuildAtom(ToString(linkSettings.JoinAlgo), joinTuple.Pos(), ctx).Ptr();
 
     auto joinKeysBuilder = Build<TDqJoinKeyTupleList>(ctx, left->Input.Pos());
 
@@ -1123,7 +1123,7 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, bool useCBO, 
     YQL_ENSURE(joinType != "Cross"sv);
 
     if (useCBO) {
-        auto joinAlgo = EJoinAlgoType(int(std::stoi(join.JoinAlgo().StringValue())));
+        auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
         switch (joinAlgo) {
             case EJoinAlgoType::LookupJoin:
             case EJoinAlgoType::MapJoin:

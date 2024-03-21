@@ -1858,6 +1858,11 @@ const TTypeDesc& LookupType(const TString& name) {
     return *typePtr;
 }
 
+bool HasType(ui32 typeId) {
+    const auto& catalog = TCatalog::Instance();
+    return catalog.Types.contains(typeId);
+}
+
 const TTypeDesc& LookupType(ui32 typeId) {
     const auto& catalog = TCatalog::Instance();
     const auto typePtr = catalog.Types.FindPtr(typeId);
@@ -2551,10 +2556,15 @@ TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::functio
 
     const auto& catalog = TCatalog::Instance();
 
-    const TTypeDesc* commonType = &LookupType(typeIds[0]);
-    char commonCategory = commonType->Category;
-    size_t unknownsCnt = (commonType->TypeId == UnknownOid) ? 1 : 0;
+    size_t unknownsCnt = (typeIds[0] == UnknownOid || typeIds[0] == InvalidOid) ? 1 : 0;
     castsNeeded = (unknownsCnt != 0);
+    const TTypeDesc* commonType = nullptr;
+    char commonCategory = 0;
+    if (typeIds[0] != InvalidOid) {
+        commonType = &LookupType(typeIds[0]);
+        commonCategory = commonType->Category;
+    }
+
     size_t i = 1;
     for (auto typeId = typeIds.cbegin() + 1; typeId != typeIds.cend(); ++typeId, ++i) {
         if (*typeId == UnknownOid || *typeId == InvalidOid) {
@@ -2562,11 +2572,11 @@ TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::functio
             castsNeeded = true;
             continue;
         }
-        if (Y_LIKELY(*typeId == commonType->TypeId)) {
+        if (commonType && *typeId == commonType->TypeId) {
             continue;
         }
         const TTypeDesc& otherType = LookupType(*typeId);
-        if (commonType->TypeId == UnknownOid) {
+        if (!commonType || commonType->TypeId == UnknownOid) {
             commonType = &otherType;
             commonCategory = otherType.Category;
             continue;

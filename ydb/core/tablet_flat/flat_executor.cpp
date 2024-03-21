@@ -4315,6 +4315,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     comp->Epoch = snapshot->Subset->Epoch(); /* narrows requested to actual */
     comp->Layout.Final = comp->Params->IsFinal;
     comp->Layout.WriteBTreeIndex = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
+    comp->Layout.WriteFlatIndex = AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
     comp->Writer.StickyFlatIndex = !comp->Layout.WriteBTreeIndex;
     comp->Layout.MaxRows = snapshot->Subset->MaxRows();
     comp->Layout.ByKeyFilter = tableInfo->ByKeyFilter;

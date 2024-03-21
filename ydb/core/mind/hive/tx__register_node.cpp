@@ -45,8 +45,8 @@ public:
             node.BecomeDisconnected();
             if (node.LastSeenServicedDomains != servicedDomains) {
                 // new tenant - new rules
-                node.Down = false;
-                node.Freeze = false;
+                node.SetDown(false);
+                node.SetFreeze(false);
                 db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Down, Schema::Node::Freeze>(false, false);
             }
             node.Local = Local;

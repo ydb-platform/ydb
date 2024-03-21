@@ -894,7 +894,7 @@ TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const T
     }
     auto join = node.Cast<TDqJoin>();
 
-    if (useCBO && EJoinAlgoType(std::stoi(join.JoinAlgo().StringValue())) != EJoinAlgoType::LookupJoin) {
+    if (useCBO && FromString<EJoinAlgoType>(join.JoinAlgo().StringValue()) != EJoinAlgoType::LookupJoin) {
         return node;
     }
 

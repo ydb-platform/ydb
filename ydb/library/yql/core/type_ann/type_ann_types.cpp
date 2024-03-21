@@ -1563,6 +1563,36 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    template <>
+    IGraphTransformer::TStatus MakeTypeHandleWrapper<ETypeAnnotationKind::Pg>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureSpecificDataType(*input->Child(0), EDataSlot::String, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    template <>
+    IGraphTransformer::TStatus SplitTypeHandleWrapper<ETypeAnnotationKind::Pg>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureTypeHandleResourceType(*input->Child(0), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus CallableArgumentWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -1623,7 +1653,7 @@ namespace NTypeAnnImpl {
             .Seal()
             .Build();
 
-return IGraphTransformer::TStatus::Repeat;
+        return IGraphTransformer::TStatus::Repeat;
     }
 
     template <>

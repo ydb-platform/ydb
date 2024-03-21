@@ -2672,7 +2672,7 @@ TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationCon
         && rightIsUnionAll;
 
     if (useCBO) {
-        auto joinAlgo = EJoinAlgoType(int(std::stoi(join.JoinAlgo().StringValue())));
+        auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
         if (joinAlgo == EJoinAlgoType::MapJoin || joinAlgo == EJoinAlgoType::GraceJoin) {
             useHashJoin = joinType != "Cross"sv && leftIsUnionAll && rightIsUnionAll;
         }

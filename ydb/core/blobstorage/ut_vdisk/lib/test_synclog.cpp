@@ -170,7 +170,7 @@ class TSyncLogTestWriteActor : public TActorBootstrapped<TSyncLogTestWriteActor>
         VDiskConfig = vDiskInstance.Cfg;
         TestCtx->SelfVDiskId = groupInfo->GetVDiskId(VCtx->ShortSelfVDisk);
 
-        Db = MakeIntrusive<TDb>(VDiskConfig, groupInfo, VCtx);
+        Db = MakeIntrusive<TDb>(VDiskConfig, VCtx);
 
         ctx.Send(VDiskConfig->BaseInfo.PDiskActorID,
             new NPDisk::TEvYardInit(2, TestCtx->SelfVDiskId, VDiskConfig->BaseInfo.PDiskGuid));

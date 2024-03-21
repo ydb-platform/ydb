@@ -227,7 +227,10 @@ public:
     using TPtr = std::shared_ptr<TCommitOperation>;
 
     bool Parse(const NEvents::TDataEvents::TEvWrite& evWrite) {
-        LockId = evWrite.Record.GetLockTxId();
+        if (evWrite.Record.GetLocks().GetLocks().size() != 1) {
+            return false;
+        }
+        LockId = evWrite.Record.GetLocks().GetLocks()[0].GetLockId();
         TxId = evWrite.Record.GetTxId();
         KqpLocks = evWrite.Record.GetLocks();
         return !!LockId && !!TxId && KqpLocks.GetOp() == NKikimrDataEvents::TKqpLocks::Commit;

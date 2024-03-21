@@ -67,6 +67,7 @@ namespace NKqp {
 using EExecType = TEvKqpExecuter::TEvTxResponse::EExecutionType;
 
 const ui64 MaxTaskSize = 48_MB;
+constexpr ui64 PotentialUnsigned64OverflowLimit = (std::numeric_limits<ui64>::max() >> 1);
 
 std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo& stageInfo, const TTask& task);
 
@@ -359,7 +360,7 @@ protected:
         ui64 seqNo = ev->Get()->Record.GetSeqNo();
         i64 freeSpace = ev->Get()->Record.GetFreeSpace();
 
-        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId
             << ", send ack to channelId: " << channelId
             << ", seqNo: " << seqNo
             << ", enough: " << ev->Get()->Record.GetEnough()
@@ -797,6 +798,9 @@ protected:
 
         auto ru = NRuCalc::CalcRequestUnit(consumption);
 
+        YQL_ENSURE(consumption.ReadIOStat.Rows < PotentialUnsigned64OverflowLimit);
+        YQL_ENSURE(ru < PotentialUnsigned64OverflowLimit);
+
         // Some heuristic to reduce overprice due to round part stats
         if (ru <= 100 && !force)
             return;
@@ -910,7 +914,20 @@ protected:
         auto& output = task.Outputs[sink.GetOutputIndex()];
         output.Type = TTaskOutputType::Sink;
         output.SinkType = intSink.GetType();
-        output.SinkSettings = intSink.GetSettings();
+
+        if (intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+            NKikimrKqp::TKqpTableSinkSettings settings;
+            YQL_ENSURE(intSink.GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+            auto& lockTxId = TasksGraph.GetMeta().LockTxId;
+            if (lockTxId) {
+                settings.SetLockTxId(*lockTxId);
+                settings.SetLockNodeId(SelfId().NodeId());
+            }
+            output.SinkSettings.ConstructInPlace();
+            output.SinkSettings->PackFrom(settings);
+        } else {
+            output.SinkSettings = intSink.GetSettings();
+        }
     }
 
     void BuildSinks(const NKqpProto::TKqpPhyStage& stage, TKqpTasksGraph::TTaskType& task) {
@@ -1688,6 +1705,10 @@ protected:
     }
 
     void AbortExecutionAndDie(TActorId abortSender, NYql::NDqProto::StatusIds::StatusCode status, const TString& message) {
+        if (AlreadyReplied) {
+            return;
+        }
+
         LOG_E("Abort execution: " << NYql::NDqProto::StatusIds_StatusCode_Name(status) << "," << message);
         if (ExecuterSpan) {
             ExecuterSpan.EndError(TStringBuilder() << NYql::NDqProto::StatusIds_StatusCode_Name(status));
@@ -1701,6 +1722,7 @@ protected:
             this->Send(Target, abortEv.Release());
         }
 
+        AlreadyReplied = true;
         LOG_E("Sending timeout response to: " << Target);
         this->Send(Target, ResponseEv.release());
 
@@ -1712,6 +1734,10 @@ protected:
     virtual void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status,
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues)
     {
+        if (AlreadyReplied) {
+            return;
+        }
+
         if (Planner) {
             for (auto computeActor : Planner->GetPendingComputeActors()) {
                 LOG_D("terminate compute actor " << computeActor.first);
@@ -1721,6 +1747,7 @@ protected:
             }
         }
 
+        AlreadyReplied = true;
         auto& response = *ResponseEv->Record.MutableResponse();
 
         response.SetStatus(status);
@@ -1935,6 +1962,7 @@ protected:
     THashMap<NYql::NDq::TStageId, THashMap<ui64, TShardInfo>> SourceScanStageIdToParititions;
 
     ui32 StatementResultIndex;
+    bool AlreadyReplied = false;
 
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
@@ -1949,7 +1977,8 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
     TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-    const bool enableOlapSink, ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup);
+    const bool enableOlapSink, const bool useEvWrite, ui32 statementResultIndex,
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,

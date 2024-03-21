@@ -24,7 +24,7 @@ namespace NKikimr {
             ProcessLogoBlobs(str, tabletId, prettyPrint);
 
             Result->SetResult(str.Str());
-            SendVDiskResponse(ctx, Ev->Sender, Result.release(), 0);
+            SendVDiskResponse(ctx, Ev->Sender, Result.release(), 0, HullCtx->VCtx->VDiskLogPrefix, HullCtx->VCtx->OOSMonGroup);
             ctx.Send(ParentId, new TEvents::TEvActorDied);
             TThis::Die(ctx);
         }

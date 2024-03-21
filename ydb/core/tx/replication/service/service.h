@@ -3,6 +3,7 @@
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/tx/replication/common/sensitive_event_pb.h>
 
 namespace NKikimr::NReplication {
 
@@ -12,6 +13,8 @@ struct TEvService {
 
         EvHandshake,
         EvStatus,
+        EvRunWorker,
+        EvStopWorker,
 
         EvEnd,
     };
@@ -22,13 +25,21 @@ struct TEvService {
         TEvHandshake() = default;
 
         explicit TEvHandshake(ui64 tabletId, ui64 generation) {
-            Record.SetControllerId(tabletId);
-            Record.SetGeneration(generation);
+            Record.MutableController()->SetTabletId(tabletId);
+            Record.MutableController()->SetGeneration(generation);
         }
     };
 
     struct TEvStatus: public TEventPB<TEvStatus, NKikimrReplication::TEvStatus, EvStatus> {
         TEvStatus() = default;
+    };
+
+    struct TEvRunWorker: public TSensitiveEventPB<TEvRunWorker, NKikimrReplication::TEvRunWorker, EvRunWorker> {
+        TEvRunWorker() = default;
+    };
+
+    struct TEvStopWorker: public TEventPB<TEvStopWorker, NKikimrReplication::TEvStopWorker, EvStopWorker> {
+        TEvStopWorker() = default;
     };
 };
 

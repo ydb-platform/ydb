@@ -14,6 +14,9 @@ inputs:
     type: boolean
     default: true
     description: "run tests"
+  run_tests_if_build_fails:
+    default: "true"
+    description: "run tests if build fails"
   test_threads:
     type: string
     default: 28
@@ -78,6 +81,7 @@ runs:
 
     - name: Build
       uses: ./.github/actions/build_ya
+      id: build
       if: ${{ inputs.run_build == 'true' }}
       with:
         build_target: ${{ inputs.build_target }}
@@ -93,7 +97,7 @@ runs:
 
     - name: Run tests
       uses: ./.github/actions/test_ya
-      if: ${{ inputs.run_tests == 'true' }}
+      if: ${{ inputs.run_tests == 'true' &&  (steps.build.outputs.success == 'true' || inputs.run_tests_if_build_fails == 'true') }}
       with:
         build_target: ${{ inputs.build_target }}
         build_preset: ${{ inputs.build_preset }}
@@ -107,6 +111,18 @@ runs:
         bazel_remote_password: ${{ inputs.put_build_results_to_cache &&  fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
         link_threads: ${{ inputs.link_threads }}
         test_threads: ${{ inputs.test_threads }}
+        
+    - name: Notify about failed build
+      if: ${{ steps.build.outputs.success != 'true' && inputs.run_tests == 'true' && inputs.run_tests_if_build_fails == 'false' }}
+      shell: bash
+      run: |
+        echo 'Build failed. See the [build log](${{ steps.build.outputs.log_url }}).' >> $GITHUB_STEP_SUMMARY
+        
+        if [[ "$GITHUB_EVENT_NAME" =~ ^pull_request ]]; then
+          echo "Tests run skipped." | .github/scripts/tests/comment-pr.py --fail
+        fi
+        
+        exit 1
     
     - name: comment-if-cancel
       shell: bash

@@ -109,6 +109,12 @@ message TQueryRequest {
     optional bool IsInternalCall = 25;
     optional Ydb.Query.Syntax Syntax = 26;
     optional bool CollectDiagnostics = 27;
+    optional string ClientAddress = 28;
+    optional string ClientPID = 29;
+    optional string ClientUserAgent = 30;
+    optional string ClientSdkBuildInfo = 31;
+    optional string ApplicationName = 32;
+    optional string UserSID = 33;
 }
 
 message TKqpPathIdProto {
@@ -310,8 +316,20 @@ message TEvProcessResponse {
 
 message TSessionInfo {
     optional string SessionId = 1;
-    optional string Status = 2;
-    optional string QueryText = 3;
+    /// optional ui32 NodeId = 2;
+    optional string ClientAddress = 3;
+    optional string ClientPID = 4;
+    optional string ClientUserAgent = 5;
+    optional string ClientSdkBuildInfo = 6;
+    optional string ApplicationName = 7;
+    optional string Query = 8;
+    optional int64 QueryCount = 9;
+    optional string State = 10;
+    optional int64 SessionStartAt = 11;
+    optional int64 QueryStartAt = 12;
+    optional int64 StateChangeAt = 13;
+    optional string UserSID = 14;
+    optional bool PgWire = 15 [default = false];
 }
 
 message TEvListSessionsRequest {
@@ -356,6 +374,13 @@ message TEvCreateSessionRequest {
     optional bool CanCreateRemoteSession = 4 [default = false];
     optional bool SupportsBalancing = 5 [default = false];
     optional bool PgWire = 6 [default = false];
+
+    optional string ClientAddress = 7;
+    optional string ClientPID = 8;
+    optional string ClientUserAgent = 9;
+    optional string ClientSdkBuildInfo = 10;
+    optional string ApplicationName = 11;
+    optional string UserSID = 12;
 }
 
 message TCreateSessionResponse {

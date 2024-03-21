@@ -286,6 +286,7 @@ private:
         i64 minValue = GetSequenceResult.GetMinValue();
         i64 maxValue = GetSequenceResult.GetMaxValue();
         bool cycle = GetSequenceResult.GetCycle();
+        bool overflowed = false;
 
         if (GetSequenceResult.GetNextUsed()) {
             i64 increment = GetSequenceResult.GetIncrement();
@@ -298,6 +299,7 @@ private:
                     if (cycle) {
                         nextValue = minValue;
                     }
+                    overflowed = true;
                 }
             } else {
                 ui64 delta = -increment;
@@ -308,10 +310,12 @@ private:
                     if (cycle) {
                         nextValue = maxValue;
                     }
+                    overflowed = true;
                 }
             }
         }
         descr.SetStartValue(nextValue);
+        descr.SetOverflowed(overflowed);
     }
 
 public:

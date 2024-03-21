@@ -74,8 +74,21 @@ namespace NSequenceShard {
                 sequence.Cycle = msg->Record.GetCycle();
             }
 
-            sequence.NextValue = sequence.StartValue;
-            sequence.NextUsed = false;
+            bool overflowed = msg->Record.GetOverflowed();
+
+            if (overflowed) {
+                if (sequence.Increment > 0) {
+                    sequence.NextValue = sequence.MaxValue;
+                    sequence.NextUsed = true;
+                } else {
+                    sequence.NextValue = sequence.MinValue;
+                    sequence.NextUsed = true;
+                }
+            } else {
+                sequence.NextValue = sequence.StartValue;
+                sequence.NextUsed = false;
+            }
+
             if (msg->Record.OptionalCache_case() == NKikimrTxSequenceShard::TEvCreateSequence::kCache) {
                 sequence.Cache = msg->Record.GetCache();
                 if (sequence.Cache < 1) {

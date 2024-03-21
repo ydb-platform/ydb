@@ -1416,6 +1416,8 @@ void FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrS
                 if (sequenceDescription.HasIncrement()) {
                     fromSequence->set_increment(sequenceDescription.GetIncrement());
                 }
+                fromSequence->set_cycle(sequenceDescription.GetCycle());
+                fromSequence->set_overflowed(sequenceDescription.GetOverflowed());
                 break;
             }
             case Ydb::Table::ColumnMeta::kFromLiteral: {

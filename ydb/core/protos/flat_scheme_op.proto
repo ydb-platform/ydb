@@ -1295,6 +1295,7 @@ message TSequenceDescription {
     optional uint64 Cache = 8; // number of items to cache, defaults to 1
     optional sint64 Increment = 9; // increment at each call, defaults to 1
     optional bool Cycle = 10; // true when cycle on overflow is allowed
+    optional bool Overflowed = 11; // true when sequence is overflowed
 }
 
 message TSequenceSharding {

@@ -341,6 +341,7 @@ message SequenceDescription {
     optional uint64 cache = 5; // number of items to cache, defaults to 1
     optional sint64 increment = 6; // increment at each call, defaults to 1
     optional bool cycle = 7; // true when cycle on overflow is allowed
+    optional bool overflowed = 8; // true when sequence is overflowed
 }
 
 message ColumnMeta {

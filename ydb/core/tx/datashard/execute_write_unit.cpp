@@ -199,8 +199,9 @@ public:
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
         TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
+        const ui64 tabletId = DataShard.TabletID();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executing write operation for " << *op << " at " << DataShard.TabletID());
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executing write operation for " << *op << " at " << tabletId);
 
         if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) {
             return EExecutionStatus::Executed;
@@ -243,8 +244,6 @@ public:
         TDataShardLocksDb locksDb(DataShard, txc);
         TSetupSysLocks guardLocks(op, DataShard, &locksDb);
 
-        ui64 tabletId = DataShard.TabletID();
-
         if (op->IsImmediate() && !writeOp->ReValidateKeys(txc.DB.GetScheme())) {
             // Immediate transactions may be reordered with schema changes and become invalid
             Y_ABORT_UNLESS(!writeTx->Ready());
@@ -283,7 +282,7 @@ public:
 
             ui64 consumedMemory = writeTx->GetTxSize();
             if (MaybeRequestMoreTxMemory(consumedMemory, txc)) {
-                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << DataShard.TabletID() << " requested " << txc.GetRequestedMemory() << " more memory");
+                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << tabletId << " requested " << txc.GetRequestedMemory() << " more memory");
 
                 DataShard.IncCounter(COUNTER_TX_WAIT_RESOURCE);
                 return EExecutionStatus::Restart;
@@ -358,7 +357,7 @@ public:
             if (CheckForVolatileReadDependencies(userDb, *writeOp, txc, ctx))
                 return EExecutionStatus::Continue;
 
-            writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildCompleted(DataShard.TabletID(), writeOp->GetTxId()));
+            writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildCompleted(tabletId, writeOp->GetTxId()));
 
             auto& writeResult = writeOp->GetWriteResult();
             writeResult->Record.SetOrderId(op->GetTxId());
@@ -395,7 +394,7 @@ public:
                 // Notify other shards about our expectations as soon as possible, even before we commit
                 for (ui64 target : op->AwaitingDecisions()) {
                     if (DataShard.AddExpectation(target, op->GetStep(), op->GetTxId())) {
-                        DataShard.SendReadSetExpectation(ctx, op->GetStep(), op->GetTxId(), DataShard.TabletID(), target);
+                        DataShard.SendReadSetExpectation(ctx, op->GetStep(), op->GetTxId(), tabletId, target);
                     }
                 }
                 if (!op->OutReadSets().empty()) {
@@ -435,13 +434,13 @@ public:
         } catch (const TLockedWriteLimitException&) {
             userDb.ResetCollectedChanges();
 
-            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, TStringBuilder() << "Shard " << DataShard.TabletID() << " cannot write more uncommitted changes");
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, TStringBuilder() << "Shard " << tabletId << " cannot write more uncommitted changes");
 
             for (auto& table : guardLocks.AffectedTables) {
                 Y_ABORT_UNLESS(guardLocks.LockTxId);
                 op->Result()->AddTxLock(
                     guardLocks.LockTxId,
-                    DataShard.TabletID(),
+                    tabletId,
                     DataShard.Generation(),
                     Max<ui64>(),
                     table.GetTableId().OwnerId,

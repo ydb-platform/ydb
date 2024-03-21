@@ -4843,8 +4843,10 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
 
 IGraphTransformer::TStatus PgBoolOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
-    const bool isNot = input->Content() == "PgNot";
-    if (!EnsureArgsCount(*input, isNot ? 1 : 2, ctx.Expr)) {
+
+    const TStringBuf& c = input->Content();
+    const bool isSingleArg = (c == "PgNot") || (c == "PgIsTrue") || (c == "PgIsFalse") || (c == "PgIsUnknown");
+    if (!EnsureArgsCount(*input, isSingleArg ? 1 : 2, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 

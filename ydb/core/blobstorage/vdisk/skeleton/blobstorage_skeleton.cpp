@@ -819,8 +819,9 @@ namespace NKikimr {
                     nullptr, nullptr));
 
             bool confirmSyncLogAlso = static_cast<bool>(syncLogMsg);
+            THullDbInsert insert{.Id=msg->Id, .Ingress=msg->Ingress};
             intptr_t loggedRecId = LoggedRecsVault.Put(
-                    new TLoggedRecDelLogoBlobDataSyncLog(seg, confirmSyncLogAlso, std::move(result), ev->Sender, ev->Cookie));
+                    new TLoggedRecDelLogoBlobDataSyncLog(seg, confirmSyncLogAlso, insert, std::move(result), ev->Sender, ev->Cookie));
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureHandoffDelLogoBlob,
@@ -1540,7 +1541,7 @@ namespace NKikimr {
                 return;
             }
 
-            TEvAnubisOsirisPut::THullDbInsert insert = msg->PrepareInsert(VCtx->Top.get(), VCtx->ShortSelfVDisk);
+            THullDbInsert insert = msg->PrepareInsert(VCtx->Top.get(), VCtx->ShortSelfVDisk);
             TLsnSeg seg = Db->LsnMngr->AllocLsnForHullAndSyncLog();
 
             // Manage PDisk scheduler weights
@@ -1824,11 +1825,6 @@ namespace NKikimr {
                     Config->DskTrackerInterval)));
                 ActiveActors.Insert(Db->DskSpaceTrackerID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
-                // start handoff proxies right now, because they are required for Hull compactions
-                if (Config->RunHandoff && !Config->BaseInfo.DonorMode) {
-                    ActiveActors.Insert(Db->Handoff->RunProxies(ctx), ctx, NKikimrServices::BLOBSTORAGE);
-                }
-
                 // run LogCutter in the same mailbox
                 TLogCutterCtx logCutterCtx = {VCtx, PDiskCtx, Db->LsnMngr, Config,
                         (TActorId)(Db->LoggerID)};
@@ -1867,8 +1863,8 @@ namespace NKikimr {
                     Db->HugeKeeperID);
 
                 // create Hull
-                Hull = std::make_shared<THull>(Db->LsnMngr, PDiskCtx, Db->Handoff, Db->SkeletonID,
-                        Config->RunHandoff, std::move(*ev->Get()->Uncond),
+                Hull = std::make_shared<THull>(Db->LsnMngr, PDiskCtx, Db->SkeletonID,
+                        Config->FeatureFlags.GetUseVDisksBalancing(), std::move(*ev->Get()->Uncond),
                         ctx.ExecutorThread.ActorSystem, Config->BarrierValidation);
                 ActiveActors.Insert(Hull->RunHullServices(Config, HullLogCtx, Db->SyncLogFirstLsnToKeep,
                         Db->LoggerID, Db->LogCutterID, ctx), ctx, NKikimrServices::BLOBSTORAGE);
@@ -2295,6 +2291,9 @@ namespace NKikimr {
             if (DefragId) {
                 ctx.Send(DefragId, ev->Get()->Clone());
             }
+            if (BalancingId) {
+                ctx.Send(BalancingId, ev->Get()->Clone());
+            }
 
             // FIXME: reconfigure handoff
         }
@@ -2472,14 +2471,15 @@ namespace NKikimr {
         }
 
         void RunBalancing(const TActorContext &ctx) {
-            if (!Config->FeatureFlags.GetUseVDisksBalancing()) {
+            if (!Config->FeatureFlags.GetUseVDisksBalancing() || VCtx->Top->GType.GetErasure() == TErasureType::ErasureMirror3of4) {
                 return;
             }
             if (BalancingId) {
+                Send(BalancingId, new NActors::TEvents::TEvPoison());
                 ActiveActors.Erase(BalancingId);
             }
             auto balancingCtx = std::make_shared<TBalancingCtx>(
-                VCtx, PDiskCtx, SelfId(), Hull->GetHullDs()->GetIndexSnapshot(), Config, GInfo
+                VCtx, PDiskCtx, SelfId(), Hull->GetSnapshot(), Config, GInfo
             );
             BalancingId = ctx.Register(CreateBalancingActor(balancingCtx));
             ActiveActors.Insert(BalancingId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
@@ -2702,7 +2702,7 @@ namespace NKikimr {
             : TActorBootstrapped<TSkeleton>()
             , Config(cfg)
             , VCtx(vctx)
-            , Db(new TDb(cfg, info, vctx))
+            , Db(new TDb(cfg, vctx))
             , GInfo(info)
             , Hull()
             , LocalRecovInfo()

@@ -56,7 +56,7 @@ private:
             if (auto it = respMap.find("expires_in"); it == respMap.end())
                 ythrow yexception() << "Result doesn't contain expires_in";
             else {
-                const TDuration expiresIn = TDuration::Seconds(it->second.GetUInteger());
+                const TDuration expiresIn = TDuration::Seconds(it->second.GetUInteger()) / 2;
 
                 const auto interval = std::max(std::min(expiresIn, RefreshPeriod_), TDuration::MilliSeconds(100));
 

@@ -99,7 +99,8 @@ runs:
 
     - name: Varify test run choice
       shell: bash
-      run: echo "Test run choice: ${{ steps.test_run_choice.outputs.CH }}"
+      run: |
+        echo "Test run choice: ${{ steps.test_run_choice.outputs.CH }}"
 
     - name: Run tests (using cache)
       uses: ./.github/actions/test_ya

@@ -4024,6 +4024,35 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(StatsSysViewBytesColumnActualization) {
+        ui64 rawBytes1;
+        ui64 bytes1;
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTypedLocalHelper helper("Utf8", kikimr);
+        helper.CreateTestOlapTable();
+        NArrow::NConstruction::TStringPoolFiller sPool(3, 52);
+        helper.FillTable(sPool, 0, 800000);
+        helper.GetVolumes(rawBytes1, bytes1, false, {"new_column_ui64"});
+        AFL_VERIFY(rawBytes1 == 0);
+        AFL_VERIFY(bytes1 == 0);
+        auto tableClient = kikimr.GetTableClient();
+        {
+            helper.ExecuteSchemeQuery("ALTER TABLESTORE `/Root/olapStore` ADD COLUMN new_column_ui64 Uint64;");
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
+            csController->WaitActualization(TDuration::Seconds(10));
+            ui64 rawBytes2;
+            ui64 bytes2;
+            helper.GetVolumes(rawBytes2, bytes2, false, {"new_column_ui64"});
+            AFL_VERIFY(rawBytes2 == 6500041)("real", rawBytes2);
+            AFL_VERIFY(bytes2 == 44064)("b", bytes2);
+        }
+    }
+
     Y_UNIT_TEST(StatsSysViewBytesDictActualization) {
         ui64 rawBytes1;
         ui64 bytes1;

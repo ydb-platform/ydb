@@ -439,6 +439,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         
         void LockPartition(const TActorId pipe, TSessionInfo& sessionInfo, ui32 partition, const TActorContext& ctx);
         void ReleasePartition(const TActorId pipe, TSessionInfo& sessionInfo, const ui32 group, const ui32 count, const TActorContext& ctx);
+        void ReleasePartition(const TActorId pipe, TSessionInfo& sessionInfo, const ui32 group, const std::set<ui32>& partitions, const TActorContext& ctx);
+        THolder<TEvPersQueue::TEvReleasePartition> MakeEvReleasePartition(const TActorId pipe, const TSessionInfo& sessionInfo, const ui32 group, const ui32 count, const std::set<ui32>& partitions);
 
         void FreePartition(ui32 partitionId);
         void InactivatePartition(ui32 partitionId);

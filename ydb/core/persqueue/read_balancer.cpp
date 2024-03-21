@@ -1727,23 +1727,48 @@ void TPersQueueReadBalancer::TClientGroupInfo::LockPartition(const TActorId pipe
     ctx.Send(sessionInfo.Sender, res.Release());
 }
 
+THolder<TEvPersQueue::TEvReleasePartition> TPersQueueReadBalancer::TClientGroupInfo::MakeEvReleasePartition(
+                                                                const TActorId pipe,
+                                                                const TSessionInfo& sessionInfo,
+                                                                const ui32 group,
+                                                                const ui32 count,
+                                                                const std::set<ui32>& partitions) {
+    THolder<TEvPersQueue::TEvReleasePartition> res{new TEvPersQueue::TEvReleasePartition};
+    auto& r = res->Record;
+
+    r.SetSession(sessionInfo.Session);
+    r.SetTopic(Topic);
+    r.SetPath(Path);
+    r.SetGeneration(Generation);
+    if (count) {
+        r.SetCount(count);
+    }
+    for (auto& p : partitions) {
+        r.AddPartition(p);
+    }
+    r.SetClientId(ClientId);
+    r.SetGroup(group);
+    ActorIdToProto(pipe, r.MutablePipeClient());
+
+    return res;
+}
+
 void TPersQueueReadBalancer::TClientGroupInfo::ReleasePartition(const TActorId pipe, TSessionInfo& sessionInfo, const ui32 group, const ui32 count, const TActorContext& ctx) {
     sessionInfo.NumSuspended += count;
 
-    THolder<TEvPersQueue::TEvReleasePartition> res{new TEvPersQueue::TEvReleasePartition};
-    res->Record.SetSession(sessionInfo.Session);
-    res->Record.SetTopic(Topic);
-    res->Record.SetPath(Path);
-    res->Record.SetGeneration(Generation);
-    res->Record.SetClientId(ClientId);
-    res->Record.SetCount(count);
-    res->Record.SetGroup(group);
-    ActorIdToProto(pipe, res->Record.MutablePipeClient());
+    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "client " << ClientId << " release partition group " << group
+                                << " for pipe " << pipe << " session " << sessionInfo.Session << " count " << count);
+
+    ctx.Send(sessionInfo.Sender, MakeEvReleasePartition(pipe, sessionInfo, group, count, {}).Release());
+}
+
+void TPersQueueReadBalancer::TClientGroupInfo::ReleasePartition(const TActorId pipe, TSessionInfo& sessionInfo, const ui32 group, const std::set<ui32>& partitions, const TActorContext& ctx) {
+    sessionInfo.NumSuspended += partitions.size();
 
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "client " << ClientId << " release partition group " << group
                                 << " for pipe " << pipe << " session " << sessionInfo.Session);
 
-    ctx.Send(sessionInfo.Sender, res.Release());
+    ctx.Send(sessionInfo.Sender, MakeEvReleasePartition(pipe, sessionInfo, group, 0, partitions).Release());
 }
 
 

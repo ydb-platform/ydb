@@ -607,6 +607,7 @@ message TReleasePartition {
     optional NActorsProto.TActorId PipeClient = 6;
     optional uint32 Group = 7;
     optional string Path = 8;
+    repeated uint32 Partition = 9;
 }
 
 message TPartitionReleased {

@@ -378,9 +378,6 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
          tableDesc.Metadata->Kind == EKikimrTableKind::SysView))
     {
             auto buildLookup = [&] (TExprNode::TPtr keys, TMaybe<TExprBase>& result) {
-                if (tableDesc.Metadata->Kind == EKikimrTableKind::SysView) {
-                    return;
-                }
                 if (indexName) {
                     if (kqpCtx.IsScanQuery()) {
                         if (kqpCtx.Config->EnableKqpScanQueryStreamLookup) {
@@ -422,7 +419,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
 
         if (buildResult.LiteralRange) {
             bool ispoint = buildResult.PointPrefixLen == tableDesc.Metadata->KeyColumnNames.size();
-            if (ispoint) {
+            if (ispoint && tableDesc.Metadata->Kind != EKikimrTableKind::SysView) {
                 TVector<TExprBase> structMembers;
                 for (size_t i = 0; i < tableDesc.Metadata->KeyColumnNames.size(); ++i) {
                     auto member = Build<TCoNameValueTuple>(ctx, node.Pos())

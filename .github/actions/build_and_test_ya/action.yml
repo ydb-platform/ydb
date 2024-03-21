@@ -92,9 +92,9 @@ runs:
       shell: bash
       run: |
         if [ -f ya.make ];then
-          echo "CH='list'" >> $GITHUB_OUTPUT
+          echo "CH=list" >> $GITHUB_OUTPUT
         else
-          echo "CH='cache'" >> $GITHUB_OUTPUT
+          echo "CH=cache" >> $GITHUB_OUTPUT
         fi
 
     - name: Varify test run choice

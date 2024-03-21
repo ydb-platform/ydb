@@ -120,6 +120,9 @@ namespace {
                 conf.Group(1).PageRows = 2;
                 conf.Group(2).PageRows = 1;
             }
+            // TODO: rewrite tests when we deprecate flat index
+            conf.WriteBTreeIndex = false;
+            conf.WriteFlatIndex = true;
 
             NTest::TPartCook cook(Mass.Model->Scheme, conf);
 
@@ -329,6 +332,13 @@ namespace {
                 result.insert({mainGroupId, x});
             }
 
+            for (auto &x : pages.BTreeGroups) {
+                result.insert({mainGroupId, x.PageId});
+            }
+            for (auto &x : pages.BTreeHistoric) {
+                result.insert({mainGroupId, x.PageId});
+            }
+
             return result;
         }
 
@@ -341,14 +351,14 @@ namespace {
 
                 TMap<ui64, ui64> absoluteId;
                 NTest::TTestEnv env;
-                TPartIndexIt groupIndex(Eggs.Lone().Get(), &env, groupId);
+                auto groupIndex = CreateIndexIter(Eggs.Lone().Get(), &env, groupId);
                 for (size_t i = 0; ; i++) {
-                    auto ready = i == 0 ? groupIndex.Seek(0) : groupIndex.Next();
+                    auto ready = i == 0 ? groupIndex->Seek(0) : groupIndex->Next();
                     if (ready != EReady::Data) {
                         Y_ABORT_UNLESS(ready != EReady::Page);
                         break;
                     }
-                    absoluteId[absoluteId.size()] = groupIndex.GetPageId();
+                    absoluteId[absoluteId.size()] = groupIndex->GetPageId();
                 }
 
                 TSet<TPageId> actualValue;

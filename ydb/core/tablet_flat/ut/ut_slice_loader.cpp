@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
         for (int startOff = 0; startOff < 5; startOff++) {
             for (int endOff = -5; endOff < 5; endOff++) {
                 TVector<TScreen::THole> holes;
-                holes.emplace_back(IndexTools::GetRecord(*Part0(), 0)->GetRowId() + startOff, IndexTools::GetEndRowId(*Part0()) + endOff);
+                holes.emplace_back(startOff, IndexTools::GetEndRowId(*Part0()) + endOff);
                 TIntrusiveConstPtr<TScreen> screen = new TScreen(std::move(holes));
                 auto result = RunLoaderTest(Part0(), screen);
 
@@ -218,13 +218,14 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             // Construct screen from every index page
             TVector<TScreen::THole> holes;
             TTestEnv env;
-            TPartIndexIt index(&*Part0(), &env, { });
-            Y_ABORT_UNLESS(index.Seek(0) == EReady::Data);
-            while (index.IsValid()) {
-                auto from = index.GetRowId();
+            auto index = CreateIndexIter(&*Part0(), &env, { });
+
+            Y_ABORT_UNLESS(index->Seek(0) == EReady::Data);
+            while (index->IsValid()) {
+                auto from = index->GetRowId();
                 auto to = Max<TRowId>();
-                if (index.Next() == EReady::Data) {
-                    to = index.GetRowId();
+                if (index->Next() == EReady::Data) {
+                    to = index->GetRowId();
                 }
                 holes.emplace_back(from, to);
             }
@@ -243,14 +244,14 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             // Construct screen from every even index page
             TVector<TScreen::THole> holes;
             TTestEnv env;
-            TPartIndexIt index(&*Part0(), &env, { });
-            Y_ABORT_UNLESS(index.Seek(0) == EReady::Data);
-            while (index.IsValid()) {
-                auto from = index.GetRowId();
+            auto index = CreateIndexIter(&*Part0(), &env, { });
+            Y_ABORT_UNLESS(index->Seek(0) == EReady::Data);
+            while (index->IsValid()) {
+                auto from = index->GetRowId();
                 auto to = Max<TRowId>();
-                if (index.Next() == EReady::Data) {
-                    to = index.GetRowId();
-                    index.Next();
+                if (index->Next() == EReady::Data) {
+                    to = index->GetRowId();
+                    index->Next();
                 }
                 holes.emplace_back(from, to);
             }
@@ -270,14 +271,14 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             // Use every even index page, without first and last key
             TVector<TScreen::THole> holes;
             TTestEnv env;
-            TPartIndexIt index(&*Part0(), &env, { });
-            Y_ABORT_UNLESS(index.Seek(0) == EReady::Data);
-            while (index.IsValid()) {
-                TRowId begin = index.GetRowId() + 1;
+            auto index = CreateIndexIter(&*Part0(), &env, { });
+            Y_ABORT_UNLESS(index->Seek(0) == EReady::Data);
+            while (index->IsValid()) {
+                TRowId begin = index->GetRowId() + 1;
                 TRowId end;
-                if (index.Next() == EReady::Data) {
-                    end = index.GetRowId() - 1;
-                    index.Next();
+                if (index->Next() == EReady::Data) {
+                    end = index->GetRowId() - 1;
+                    index->Next();
                 } else {
                     end = IndexTools::GetEndRowId(*Part0()) - 1;
                 }

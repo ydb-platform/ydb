@@ -10,5 +10,7 @@ namespace NKqp {
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateStreamLookupActor(NYql::NDq::IDqAsyncIoFactory::TInputTransformArguments&& args,
     NKikimrKqp::TKqpStreamLookupSettings&& settings, TIntrusivePtr<TKqpCounters>);
 
+void InterceptStreamLookupActorPipeCache(NActors::TActorId);
+
 } // namespace NKqp
 } // namespace NKikimr

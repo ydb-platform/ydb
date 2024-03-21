@@ -2,6 +2,8 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
+#include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
+#include <ydb/core/tx/datashard/datashard_impl.h>
 
 namespace NKikimr::NKqp {
 
@@ -3648,11 +3650,11 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         NKikimrTxDataShard::TEvRead evread;
         evread.SetMaxRowsInResult(1);
         evread.SetMaxRows(2);
-        InjectRangeEvReadSettings(evread);
+        SetDefaultReadSettings(evread);
 
         NKikimrTxDataShard::TEvReadAck evreadack;
         evreadack.SetMaxRows(2);
-        InjectRangeEvReadAckSettings(evreadack);
+        SetDefaultReadAckSettings(evreadack);
 
         {
             auto result = session.ExecuteDataQuery(R"(
@@ -3730,10 +3732,10 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         NKikimrTxDataShard::TEvRead evread;
         evread.SetMaxRowsInResult(2);
-        InjectRangeEvReadSettings(evread);
+        SetDefaultReadSettings(evread);
 
         NKikimrTxDataShard::TEvReadAck evreadack;
-        InjectRangeEvReadAckSettings(evreadack);
+        SetDefaultReadAckSettings(evreadack);
 
         {
             auto result = session.ExecuteDataQuery(R"(
@@ -3758,10 +3760,10 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         NKikimrTxDataShard::TEvRead evread;
         evread.SetMaxRowsInResult(2);
-        InjectRangeEvReadSettings(evread);
+        SetDefaultReadSettings(evread);
 
         NKikimrTxDataShard::TEvReadAck evreadack;
-        InjectRangeEvReadAckSettings(evreadack);
+        SetDefaultReadAckSettings(evreadack);
 
         {
             auto result = session.ExecuteDataQuery(R"(

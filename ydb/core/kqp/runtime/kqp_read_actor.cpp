@@ -1,5 +1,6 @@
 #include "kqp_read_actor.h"
 
+#include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
@@ -28,72 +29,8 @@ bool IsDebugLogEnabled(const NActors::TActorSystem* actorSystem, NActors::NLog::
     return settings && settings->Satisfies(NActors::NLog::EPriority::PRI_DEBUG, component);
 }
 
-struct TEvReadSettings : public TAtomicRefCount<TEvReadSettings> {
-    NKikimrTxDataShard::TEvRead Read;
-    NKikimrTxDataShard::TEvReadAck Ack;
-
-    TEvReadSettings() {
-        Read.SetMaxRows(32767);
-        Read.SetMaxBytes(5_MB);
-
-        Ack.SetMaxRows(32767);
-        Ack.SetMaxBytes(5_MB);
-    }
-};
-
-struct TEvReadDefaultSettings {
-    THotSwap<TEvReadSettings> Settings;
-
-    TEvReadDefaultSettings() {
-        Settings.AtomicStore(MakeIntrusive<TEvReadSettings>());
-    }
-
-} DefaultSettings;
-
-THolder<NKikimr::TEvDataShard::TEvRead> DefaultReadSettings() {
-    auto result = MakeHolder<NKikimr::TEvDataShard::TEvRead>();
-    auto ptr = DefaultSettings.Settings.AtomicLoad();
-    result->Record.MergeFrom(ptr->Read);
-    return result;
-}
-
-THolder<NKikimr::TEvDataShard::TEvReadAck> DefaultAckSettings() {
-    auto result = MakeHolder<NKikimr::TEvDataShard::TEvReadAck>();
-    auto ptr = DefaultSettings.Settings.AtomicLoad();
-    result->Record.MergeFrom(ptr->Ack);
-    return result;
-}
-
 NActors::TActorId MainPipeCacheId = NKikimr::MakePipePeNodeCacheID(false);
 NActors::TActorId FollowersPipeCacheId =  NKikimr::MakePipePeNodeCacheID(true);
-
-struct TBackoffStorage {
-    THotSwap<NKikimr::NKqp::TIteratorReadBackoffSettings> SettingsPtr;
-
-    TBackoffStorage() {
-        SettingsPtr.AtomicStore(new NKikimr::NKqp::TIteratorReadBackoffSettings());
-    }
-};
-
-TDuration CalcDelay(size_t attempt, bool allowInstantRetry) {
-    return Singleton<::TBackoffStorage>()->SettingsPtr.AtomicLoad()->CalcShardDelay(attempt, allowInstantRetry);
-}
-
-size_t MaxShardResolves() {
-    return Singleton<::TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxShardResolves;
-}
-
-size_t MaxShardRetries() {
-    return Singleton<::TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxShardAttempts;
-}
-
-TMaybe<size_t> MaxTotalRetries() {
-    return Singleton<::TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxTotalRetries;
-}
-
-TMaybe<TDuration> ShardTimeout() {
-    return Singleton<::TBackoffStorage>()->SettingsPtr.AtomicLoad()->ReadResponseTimeout;
-}
 
 }
 
@@ -540,7 +477,7 @@ public:
     }
 
     void ResolveShard(TShardState* state) {
-        if (state->ResolveAttempt >= ::MaxShardResolves()) {
+        if (state->ResolveAttempt >= MaxShardResolves()) {
             RuntimeError(TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' resolve limit exceeded",
                 NDqProto::StatusIds::UNAVAILABLE);
             return;
@@ -792,19 +729,19 @@ public:
         auto state = Reads[id].Shard;
 
         TotalRetries += 1;
-        auto limit = ::MaxTotalRetries();
+        auto limit = MaxTotalRetries();
         if (limit && TotalRetries > *limit) {
             return RuntimeError(TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded",
                 NDqProto::StatusIds::UNAVAILABLE);
         }
 
         state->RetryAttempt += 1;
-        if (state->RetryAttempt > ::MaxShardRetries()) {
+        if (state->RetryAttempt > MaxShardRetries()) {
             ResetRead(id);
             return ResolveShard(state);
         }
 
-        auto delay = ::CalcDelay(state->RetryAttempt, allowInstantRetry);
+        auto delay = CalcDelay(state->RetryAttempt, allowInstantRetry);
         if (delay == TDuration::Zero()) {
             return DoRetryRead(id);
         }
@@ -848,7 +785,7 @@ public:
             }
         }
 
-        auto ev = ::DefaultReadSettings();
+        auto ev = GetDefaultReadSettings();
         auto& record = ev->Record;
 
         state->FillEvRead(*ev, KeyColumnTypes, Settings->GetReverse());
@@ -1307,7 +1244,7 @@ public:
                     }
 
                     if (!limit || *limit > 0) {
-                        auto request = ::DefaultAckSettings();
+                        auto request = GetDefaultReadAckSettings();
                         request->Record.SetReadId(record.GetReadId());
                         request->Record.SetSeqNo(record.GetSeqNo());
                         request->Record.SetMaxBytes(Min<ui64>(request->Record.GetMaxBytes(), BufSize));
@@ -1538,39 +1475,8 @@ void RegisterKqpReadActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<T
         });
 }
 
-void InjectRangeEvReadSettings(const NKikimrTxDataShard::TEvRead& read) {
-    auto ptr = ::DefaultSettings.Settings.AtomicLoad();
-    TEvReadSettings settings = *ptr;
-    settings.Read.MergeFrom(read);
-    ::DefaultSettings.Settings.AtomicStore(MakeIntrusive<TEvReadSettings>(settings));
-}
-
-void InjectRangeEvReadAckSettings(const NKikimrTxDataShard::TEvReadAck& ack) {
-    auto ptr = ::DefaultSettings.Settings.AtomicLoad();
-    TEvReadSettings settings = *ptr;
-    settings.Ack.MergeFrom(ack);
-    ::DefaultSettings.Settings.AtomicStore(MakeIntrusive<TEvReadSettings>(settings));
-}
-
-void SetDefaultIteratorQuotaSettings(ui32 rows, ui32 bytes) {
-    auto ptr = ::DefaultSettings.Settings.AtomicLoad();
-    TEvReadSettings settings = *ptr;
-
-    settings.Read.SetMaxRows(rows);
-    settings.Ack.SetMaxRows(rows);
-
-    settings.Read.SetMaxBytes(bytes);
-    settings.Ack.SetMaxBytes(bytes);
-
-    ::DefaultSettings.Settings.AtomicStore(MakeIntrusive<TEvReadSettings>(settings));
-}
-
 void InterceptReadActorPipeCache(NActors::TActorId id) {
     ::MainPipeCacheId = id;
-}
-
-void SetReadIteratorBackoffSettings(TIntrusivePtr<TIteratorReadBackoffSettings> ptr) {
-    Singleton<::TBackoffStorage>()->SettingsPtr.AtomicStore(ptr);
 }
 
 } // namespace NKqp

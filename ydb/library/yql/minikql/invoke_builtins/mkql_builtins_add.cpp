@@ -152,25 +152,41 @@ using TDateTimeAdd = TDateTimeAddT<TLeft, TRight, TOutput, false>;
 template<typename TLeft, typename TRight, typename TOutput>
 using TDateTimeAddTz = TDateTimeAddT<TLeft, TRight, TOutput, true>;
 
-template <bool Tz, template<typename, typename, typename> class TAdder>
+template <bool Tz, typename TIntervalType, template<typename, typename, typename> class TAdder>
 void RegisterAddDateAndInterval(IBuiltinFunctionRegistry& registry) {
     using TDate1 = std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TDate>>;
     using TDate2 = std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TDatetime>>;
     using TDate3 = std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTimestamp>>;
 
-    RegisterFunctionBinPolyOpt<TDate1, NUdf::TDataType<NUdf::TInterval>,
+    RegisterFunctionBinPolyOpt<TDate1, TIntervalType,
         TDate1, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
-    RegisterFunctionBinPolyOpt<TDate2, NUdf::TDataType<NUdf::TInterval>,
+    RegisterFunctionBinPolyOpt<TDate2, TIntervalType,
         TDate2, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
-    RegisterFunctionBinPolyOpt<TDate3, NUdf::TDataType<NUdf::TInterval>,
+    RegisterFunctionBinPolyOpt<TDate3, TIntervalType,
         TDate3, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
 
-    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval>, TDate1,
+    RegisterFunctionBinPolyOpt<TIntervalType, TDate1,
         TDate1, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
-    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval>, TDate2,
+    RegisterFunctionBinPolyOpt<TIntervalType, TDate2,
         TDate2, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
-    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval>, TDate3,
+    RegisterFunctionBinPolyOpt<TIntervalType, TDate3,
         TDate3, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
+
+    if constexpr (!Tz) {
+        RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TDate32>, TIntervalType,
+            NUdf::TDataType<NUdf::TDate32>, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
+        RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TDatetime64>, TIntervalType,
+            NUdf::TDataType<NUdf::TDatetime64>, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
+        RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TTimestamp64>, TIntervalType,
+            NUdf::TDataType<NUdf::TTimestamp64>, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
+
+        RegisterFunctionBinPolyOpt<TIntervalType, NUdf::TDataType<NUdf::TDate32>,
+            NUdf::TDataType<NUdf::TDate32>, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
+        RegisterFunctionBinPolyOpt<TIntervalType, NUdf::TDataType<NUdf::TDatetime64>,
+            NUdf::TDataType<NUdf::TDatetime64>, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
+        RegisterFunctionBinPolyOpt<TIntervalType, NUdf::TDataType<NUdf::TTimestamp64>,
+            NUdf::TDataType<NUdf::TTimestamp64>, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
+    }
 }
 
 template<typename TType>
@@ -182,8 +198,10 @@ void RegisterAdd(IBuiltinFunctionRegistry& registry) {
     RegisterBinaryNumericFunctionOpt<TAdd, TBinaryArgsOpt>(registry, "Add");
     NDecimal::RegisterBinaryFunctionForAllPrecisions<TDecimalAdd, TBinaryArgsOpt>(registry, "Add_");
 
-    RegisterAddDateAndInterval<false, TDateTimeAdd>(registry);
-    RegisterAddDateAndInterval<true, TDateTimeAddTz>(registry);
+    RegisterAddDateAndInterval<false, NUdf::TDataType<NUdf::TInterval>, TDateTimeAdd>(registry);
+    RegisterAddDateAndInterval<true, NUdf::TDataType<NUdf::TInterval>, TDateTimeAddTz>(registry);
+    RegisterAddDateAndInterval<false, NUdf::TDataType<NUdf::TInterval64>, TDateTimeAdd>(registry);
+    RegisterAddDateAndInterval<true, NUdf::TDataType<NUdf::TInterval64>, TDateTimeAddTz>(registry);
 
     RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>,
         NUdf::TDataType<NUdf::TInterval>, TDateTimeAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");

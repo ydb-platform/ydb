@@ -542,11 +542,12 @@ public:
         , UserToken(std::move(userToken))
         , Promise(promise)
         , RequestType(requestType)
-    {}
+{}
 
     void Bootstrap() {
         auto ctx = MakeIntrusive<TUserRequestContext>();
-        IActor* actor = CreateKqpSchemeExecuter(PhyTx, QueryType, SelfId(), RequestType, Database, UserToken, false /* temporary */, TString() /* sessionId */, ctx);
+        IActor* actor = CreateKqpSchemeExecuter(PhyTx, QueryType, SelfId(), RequestType, Database, UserToken,
+                                                false /* temporary */, false /* createTableAs */, TString() /* sessionId */, ctx);
         Register(actor);
         Become(&TThis::WaitState);
     }

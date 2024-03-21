@@ -204,6 +204,19 @@ public:
         return RequestEv->GetDatabase();
     }
 
+    bool IsSplitted() const {
+        return !SplittedExprs.empty();
+    }
+
+    bool IsCreateTableAs() const {
+        return IsSplitted();
+    }
+
+    bool IsCreateTemporaryTableAs() const {
+        // without alter reset temporary
+        return SplittedExprs.size() == 2;
+    }
+
     // todo: gvit
     // fill this hash set only once on query compilation.
     void FillTables(const NKqpProto::TKqpPhyTx& phyTx) {

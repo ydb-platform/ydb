@@ -1169,10 +1169,10 @@ public:
 
         auto userToken = QueryState->UserToken;
         const TString requestType = QueryState->GetRequestType();
-        bool temporary = GetTemporaryTableInfo(tx).has_value();
+        bool temporary = GetTemporaryTableInfo(tx).has_value() || QueryState->IsCreateTemporaryTableAs();
 
         auto executerActor = CreateKqpSchemeExecuter(tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken,
-            temporary, TempTablesState.SessionId, QueryState->UserRequestContext, KqpTempTablesAgentActor);
+            temporary, QueryState->IsCreateTableAs(), TempTablesState.SessionId, QueryState->UserRequestContext, KqpTempTablesAgentActor);
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
     }
@@ -1283,6 +1283,10 @@ public:
     std::optional<std::pair<bool, std::pair<TString, TKqpTempTablesState::TTempTableInfo>>>
     GetTemporaryTableInfo(TKqpPhyTxHolder::TConstPtr tx) {
         if (!tx) {
+            return std::nullopt;
+        }
+
+        if (QueryState->IsCreateTableAs() && !QueryState->IsCreateTemporaryTableAs()) {
             return std::nullopt;
         }
 

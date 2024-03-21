@@ -110,7 +110,8 @@ IActor* CreateKqpSchemeExecuter(
     TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target,
     const TMaybe<TString>& requestType, const TString& database,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-    bool temporary, TString SessionId, TIntrusivePtr<TUserRequestContext> ctx,
+    bool temporary, bool createTableAs,
+    TString SessionId, TIntrusivePtr<TUserRequestContext> ctx,
     const TActorId& kqpTempTablesAgentActor = TActorId());
 
 std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecuteLiteral(

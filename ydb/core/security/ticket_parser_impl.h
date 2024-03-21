@@ -7,6 +7,7 @@
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/grpc_services/auth_processor/dynamic_node_auth_processor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -202,12 +203,15 @@ protected:
                     return "AccessService";
                 case TDerived::ETokenType::ApiKey:
                     return "ApiKey";
+                case TDerived::ETokenType::Certificate:
+                    return "Certificate";
             }
         }
 
         bool NeedsRefresh() const {
             switch (TokenType) {
                 case TDerived::ETokenType::Builtin:
+                case TDerived::ETokenType::Certificate:
                     return false;
                 case TDerived::ETokenType::Login:
                     return true;
@@ -276,6 +280,7 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsErrorsRetryable;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsErrorsPermanent;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsBuiltin;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCertificate;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsLogin;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsAS;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheHit;
@@ -312,8 +317,8 @@ private:
             const auto& sign = request->Signature;
             key << sign.AccessKeyId << "-" << sign.Signature << ":" << sign.StringToSign << ":"
                 << sign.Service << ":" << sign.Region << ":" << sign.SignedAt.NanoSeconds();
-        } else {
-            key << request->Ticket;
+        } else if (request->AuthInfo.Ticket) {
+            key << request->AuthInfo.Ticket;
         }
         key << ':';
         if (request->Database) {
@@ -647,6 +652,35 @@ private:
     }
 
     template <typename TTokenRecord>
+    bool CanInitTokenFromCertificate(const TString& key, TTokenRecord& record) {
+        if (record.TokenType != TDerived::ETokenType::Certificate) {
+            return false;
+        }
+        CounterTicketsCertificate->Inc();
+        X509CertificateReader::X509Ptr x509cert = X509CertificateReader::ReadCertAsPEM(record.Ticket);
+        if (!x509cert) {
+            SetError(key, record, { .Message = "Cannot create token from certificate. Cannot read certificate", .Retryable = false });
+            return false;
+        }
+        TStringBuilder dn;
+        for (const auto& [attribute, value] : X509CertificateReader::ReadAllSubjectTerms(x509cert)) {
+            dn << attribute << "=" << value << ",";
+        }
+        if (dn.empty()) {
+            SetError(key, record, { .Message = "Cannot create token from certificate. Cannot extract subject from certificate", .Retryable = false });
+            return false;
+        }
+        dn.remove(dn.size() - 1);
+        dn << "@" << Config.GetCertificateAuthenticationDomain();
+        SetToken(key, record, new NACLib::TUserToken({
+            .OriginalUserToken = record.Ticket,
+            .UserSID = dn,
+            .AuthType = record.GetAuthType()
+        }));
+        return true;
+    }
+
+    template <typename TTokenRecord>
     bool CanInitLoginToken(const TString& key, TTokenRecord& record) {
         if (UseLoginProvider && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::Login)) {
             TString database = Config.GetDomainLoginOnly() ? DomainName : record.Database;
@@ -756,7 +790,12 @@ private:
     void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
         TStringBuf ticket;
         TStringBuf ticketType;
-        CrackTicket(ev->Get()->Ticket, ticket, ticketType);
+        if (ev->Get()->AuthInfo.IsCertificate) {
+            ticket = ev->Get()->AuthInfo.Ticket;
+            ticketType = "Certificate";
+        } else {
+            CrackTicket(ev->Get()->AuthInfo.Ticket, ticket, ticketType);
+        }
 
         TString key = GetKey(ev->Get());
         TActorId sender = ev->Sender;
@@ -769,7 +808,7 @@ private:
             error.Message = "Access key signature is not supported";
             error.Retryable = false;
             BLOG_ERROR("Ticket " << MaskTicket(signature.AccessKeyId) << ": " << error);
-            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, error), 0, cookie);
+            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->AuthInfo, error), 0, cookie);
             return;
         }
         if (ticket.empty() && !signature.AccessKeyId) {
@@ -777,7 +816,7 @@ private:
             error.Message = "Ticket is empty";
             error.Retryable = false;
             BLOG_ERROR("Ticket " << MaskTicket(ticket) << ": " << error);
-            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, error), 0, cookie);
+            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->AuthInfo, error), 0, cookie);
             return;
         }
         auto& userTokens = GetDerived()->GetUserTokens();
@@ -789,11 +828,11 @@ private:
             if (record.IsTokenReady()) {
                 // token already have built
                 record.AccessTime = now;
-                Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.GetToken()), 0, cookie);
+                Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->AuthInfo, record.GetToken()), 0, cookie);
             } else if (record.Error) {
                 // token stores information about previous error
                 record.AccessTime = now;
-                Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.Error), 0, cookie);
+                Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->AuthInfo, record.Error), 0, cookie);
             } else {
                 // token building in progress
                 record.AuthorizeRequests.emplace_back(ev.Release());
@@ -824,12 +863,12 @@ private:
         InitTokenRecord(key, record);
         if (record.Error) {
             BLOG_ERROR("Ticket " << record.GetMaskedTicket() << ": " << record.Error);
-            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.Error), 0, cookie);
+            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->AuthInfo, record.Error), 0, cookie);
             return;
         }
         if (record.IsTokenReady()) {
             // offline check ready
-            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.GetToken()), 0, cookie);
+            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->AuthInfo, record.GetToken()), 0, cookie);
             return;
         }
         record.AuthorizeRequests.emplace_back(ev.Release());
@@ -1502,7 +1541,6 @@ protected:
                 return TDerived::ETokenType::Unsupported;
             }
         }
-
         if (tokenType == "Bearer" || tokenType == "IAM") {
             if (AccessServiceEnabled()) {
                 return TDerived::ETokenType::AccessService;
@@ -1515,6 +1553,9 @@ protected:
             } else {
                 return TDerived::ETokenType::Unsupported;
             }
+        }
+        if (tokenType == "Certificate") {
+            return TDerived::ETokenType::Certificate;
         }
         return TDerived::ETokenType::Unknown;
     }
@@ -1608,7 +1649,8 @@ protected:
         }
 
         if (CanInitBuiltinToken(key, record) ||
-            CanInitLoginToken(key, record)) {
+            CanInitLoginToken(key, record) ||
+            CanInitTokenFromCertificate(key, record)) {
             return;
         }
 
@@ -1667,11 +1709,15 @@ protected:
     void Respond(TTokenRecordBase& record) {
         if (record.IsTokenReady()) {
             for (const auto& request : record.AuthorizeRequests) {
-                Send(request->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(record.Ticket, record.GetToken()), 0, request->Cookie);
+                Send(request->Sender, new TEvTicketParser::TEvAuthorizeTicketResult({.Ticket = record.Ticket,
+                                                                                                .IsCertificate = (record.TokenType == TDerived::ETokenType::Certificate)},
+                                                                                                record.GetToken()), 0, request->Cookie);
             }
         } else {
             for (const auto& request : record.AuthorizeRequests) {
-                Send(request->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(record.Ticket, record.Error), 0, request->Cookie);
+                Send(request->Sender, new TEvTicketParser::TEvAuthorizeTicketResult({.Ticket = record.Ticket,
+                                                                                                .IsCertificate = (record.TokenType == TDerived::ETokenType::Certificate)},
+                                                                                                record.Error), 0, request->Cookie);
             }
         }
         record.AuthorizeRequests.clear();
@@ -1877,6 +1923,7 @@ protected:
         CounterTicketsErrorsRetryable = counters->GetCounter("TicketsErrorsRetryable", true);
         CounterTicketsErrorsPermanent = counters->GetCounter("TicketsErrorsPermanent", true);
         CounterTicketsBuiltin = counters->GetCounter("TicketsBuiltin", true);
+        CounterTicketsCertificate = counters->GetCounter("TicketsCertificate", true);
         CounterTicketsLogin = counters->GetCounter("TicketsLogin", true);
         CounterTicketsAS = counters->GetCounter("TicketsAS", true);
         CounterTicketsCacheHit = counters->GetCounter("TicketsCacheHit", true);

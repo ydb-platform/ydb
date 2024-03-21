@@ -92,6 +92,14 @@ public:
 
     void InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
 
+    void Initialize(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
+        TString peerName = GrpcRequestBaseCtx_->GetPeerName();
+        TBase::SetPeerName(peerName);
+        InitializeAttributes(schemeData);
+        TBase::SetDatabase(CheckedDatabaseName_);
+        InitializeAuditSettings(schemeData);
+    }
+
     TGrpcRequestCheckActor(
         const TActorId& owner,
         const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
@@ -109,15 +117,19 @@ public:
         , FacilityProvider_(facilityProvider)
         , Span_(TWilsonGrpc::RequestCheckActor, GrpcRequestBaseCtx_->GetWilsonTraceId(), "RequestCheckActor")
     {
+        typename TBase::TAuthInfo authInfo;
         TMaybe<TString> authToken = GrpcRequestBaseCtx_->GetYdbToken();
         if (authToken) {
-            TString peerName = GrpcRequestBaseCtx_->GetPeerName();
-            TBase::SetSecurityToken(authToken.GetRef());
-            TBase::SetPeerName(peerName);
-            InitializeAttributes(schemeData);
-            TBase::SetDatabase(CheckedDatabaseName_);
-            InitializeAuditSettings(schemeData);
+            authInfo.Token = authToken.GetRef();
         }
+        auto& certAuth = authInfo.CertAuth;
+        certAuth.NeedAuthByCertificate = GrpcRequestBaseCtx_->NeedAuthByCertificate();
+        const auto& clientCertificates = GrpcRequestBaseCtx_->FindClientCertPropertyValues();
+        if (!clientCertificates.empty()) {
+            certAuth.ClientCertificate = TString(clientCertificates.front());
+        }
+        TBase::SetAuthInfo(std::move(authInfo));
+        Initialize(schemeData);
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -485,7 +497,7 @@ private:
             return {false, std::nullopt};
         }
 
-        if (!TBase::GetSecurityToken()) {
+        if (!TBase::GetAuthInfo().IsExists()) {
             if (!TBase::IsTokenRequired()) {
                 LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
                             "Skip check permission connect db, token is not required, there is no token provided"

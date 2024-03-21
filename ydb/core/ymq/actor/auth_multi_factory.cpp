@@ -445,7 +445,7 @@ public:
         if (!UseMockedVersion(Cfg())) {
             Send(MakeTicketParserID(), request.Release());
         } else {
-            TEvTicketParser::TEvAuthorizeTicketResult result("fake_token", nullptr);
+            TEvTicketParser::TEvAuthorizeTicketResult result({.Ticket = "fake_token"}, nullptr);
             if (AccessKeySignature_ && AccessKeySignature_->AccessKeyId.empty()) {
                 result.Error.Message = "mocked_auth_error: empty access key";
                 result.Error.Retryable = false;

@@ -30,8 +30,20 @@ public:
         : TBase(msg)
         , Request(request)
     {
-        TBase::SetSecurityToken(request.GetSecurityToken());
+        typename TBase::TAuthInfo authInfo;
+        const auto& token = request.GetSecurityToken();
+        if (!token.empty()) {
+            authInfo.Token = token;
+        }
+        auto& certAuth = authInfo.CertAuth;
+        certAuth.NeedAuthByCertificate = true;
+        const auto& clientCertificate = msg.FindClientCert();
+        if (!clientCertificate.empty()){
+            certAuth.ClientCertificate = TString(clientCertificate.front());
+        }
+        TBase::SetAuthInfo(std::move(authInfo));
         TBase::SetRequireAdminAccess(true);
+
     }
 
     void Bootstrap(const TActorContext &ctx)

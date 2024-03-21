@@ -593,6 +593,13 @@ void FillLiteralProtoImpl(const NNodes::TCoDataCtor& literal, TProto& proto) {
             protoValue.SetHi128(*reinterpret_cast<ui64*>(p + 8));
             break;
         }
+        case EDataSlot::Uuid: {
+            // protoValue.SetBytes(value.Data(), value.Size());
+            const ui64* uuidData = reinterpret_cast<const ui64*>(value.Data());
+            protoValue.SetLow128(uuidData[0]);
+            protoValue.SetHi128(uuidData[1]);
+            break;
+        }
 
         default:
             YQL_ENSURE(false, "Unexpected type slot " << slot);

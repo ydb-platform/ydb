@@ -3833,7 +3833,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
             TExprNode::TListType children = setItemNodes;
             for (ui32 childIndex = 0; childIndex < children.size(); ++childIndex) {
                 const auto& childColumnOrder = columnOrders[childIndex];
-                auto& child = setItemNodes[childIndex];
+                auto& child = children[childIndex];
                 child = NormalizeColumnOrder(child, childColumnOrder, targetOrder, ctx);
             }
 

@@ -178,6 +178,7 @@
   - __availability:                                        contrib/libs/cxxsupp/libcxx/include/__availability
   - __bit_reference:                                       contrib/libs/cxxsupp/libcxx/include/__bit_reference
   - __config:                                              contrib/libs/cxxsupp/libcxx/include/__config
+  - __config_epilogue.h:                                   contrib/libs/cxxsupp/libcxx/include/__config_epilogue.h
   - __config_site:                                         contrib/libs/cxxsupp/libcxx/include/__config_site
   - __config_site.in:                                      contrib/libs/cxxsupp/libcxx/include/__config_site.in
   - __hash_table:                                          contrib/libs/cxxsupp/libcxx/include/__hash_table

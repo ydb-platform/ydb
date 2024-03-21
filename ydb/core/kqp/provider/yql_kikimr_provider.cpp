@@ -594,7 +594,6 @@ void FillLiteralProtoImpl(const NNodes::TCoDataCtor& literal, TProto& proto) {
             break;
         }
         case EDataSlot::Uuid: {
-            // protoValue.SetBytes(value.Data(), value.Size());
             const ui64* uuidData = reinterpret_cast<const ui64*>(value.Data());
             protoValue.SetLow128(uuidData[0]);
             protoValue.SetHi128(uuidData[1]);
@@ -673,6 +672,12 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
             const auto p = reinterpret_cast<ui8*>(&v);
             protoValue.set_low_128(*reinterpret_cast<ui64*>(p));
             protoValue.set_high_128(*reinterpret_cast<ui64*>(p + 8));
+            break;
+        }
+        case EDataSlot::Uuid: {
+            const ui64* uuidData = reinterpret_cast<const ui64*>(value.Data());
+            protoValue.set_low_128(uuidData[0]);
+            protoValue.set_high_128(uuidData[1]);
             break;
         }
 

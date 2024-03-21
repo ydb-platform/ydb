@@ -566,7 +566,9 @@ private:
                 }
 
                 if (auto literal = key.Maybe<TCoUuid>()) {
-                    return literal.Cast().Literal().StringValue();
+                    TStringStream out;
+                    NUuid::UuidBytesToString(literal.Cast().Literal().Value().Data(), out);
+                    return out.Str();
                 }
 
                 if (auto literal = key.Maybe<TCoDataCtor>()) {
@@ -2177,8 +2179,6 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, const TString co
 
     if (!commonPlanInfo.Empty()) {
         NJson::TJsonValue commonPlanJson;
-        const char* cc = commonPlanInfo.c_str();
-        Cout << cc << Endl;
         NJson::ReadJsonTree(commonPlanInfo, &commonPlanJson, true);
 
         writer.WriteKey("tables");

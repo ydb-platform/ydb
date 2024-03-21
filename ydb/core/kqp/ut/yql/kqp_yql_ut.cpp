@@ -753,7 +753,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         }
     }
 
-    Y_UNIT_TEST(TestUuid) {
+    Y_UNIT_TEST(TestUuidPrimaryKeyPrefixSearch) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -777,9 +777,8 @@ Y_UNIT_TEST_SUITE(KqpYql) {
             const auto query = Q_(R"(
                 CREATE TABLE test(
                     key uuid NOT NULL,
-                    key2 Decimal(22, 9),
                     val int,
-                    PRIMARY KEY (key, key2)
+                    PRIMARY KEY (key)
                 );
             )");
             auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
@@ -789,8 +788,8 @@ Y_UNIT_TEST_SUITE(KqpYql) {
             int val = 0;
             for (const auto& uuid : testUuids) {
                 const auto query = Sprintf("\
-                    INSERT INTO test (key, key2, val)\n\
-                    VALUES (Uuid(\"%s\"), Decimal(\"1.11\", 22, 9), %u);\n\
+                    INSERT INTO test (key, val)\n\
+                    VALUES (Uuid(\"%s\"), %u);\n\
                 ", uuid.Data(), val++);
                 auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -799,7 +798,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         {
             int val = 0;
             for (const auto& uuid : testUuids) {
-                const auto query = Sprintf("SELECT * FROM test WHERE key=Uuid(\"%s\") and key2=Decimal(\"1.11\", 22, 9);", uuid.Data());
+                const auto query = Sprintf("SELECT * FROM test WHERE key=Uuid(\"%s\");", uuid.Data());
                 auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
@@ -808,6 +807,37 @@ Y_UNIT_TEST_SUITE(KqpYql) {
                 UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().GetRef(), val++);
                 UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
             }
+        }
+    }
+
+    Y_UNIT_TEST(TestUuidDefaultColumn) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetEnableUuidAsPrimaryKey(true)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            const auto query = Q_(R"(
+                CREATE TABLE test(
+                    key int NOT NULL,
+                    val uuid NOT NULL DEFAULT Uuid("65df9ecc-a97d-47b2-ae56-3c023da6ee8c"),
+                    PRIMARY KEY (key)
+                );
+            )");
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto query = "INSERT INTO test (key) VALUES (0);";
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     }
 

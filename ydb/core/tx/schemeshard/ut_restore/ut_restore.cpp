@@ -8,7 +8,6 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
-#include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/metering/metering.h>
@@ -28,7 +27,6 @@ using namespace NKikimr;
 using namespace NSchemeShardUT_Private;
 using namespace NKikimr::NSchemeShard;
 using namespace NKikimr::NWrappers::NTestHelpers;
-using namespace NKikimr::NSequenceProxy;
 
 namespace {
 
@@ -957,30 +955,6 @@ value {
         UNIT_ASSERT_C(CheckDefaultFromSequence(table), "Invalid default value");
     }
 
-    void SendNextValRequest(TTestActorRuntime& runtime, const TActorId& sender, const TString& path) {
-        auto request = MakeHolder<TEvSequenceProxy::TEvNextVal>(path);
-        runtime.Send(new IEventHandle(MakeSequenceProxyServiceID(), sender, request.Release()));
-    }
-
-    i64 WaitNextValResult(
-            TTestActorRuntime& runtime, const TActorId& sender,
-            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) {
-        Y_UNUSED(expectedStatus);
-        auto ev = runtime.GrabEdgeEventRethrow<TEvSequenceProxy::TEvNextValResult>(sender);
-        auto* msg = ev->Get();
-        UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
-        return msg->Value;
-    }
-
-    i64 DoNextVal(
-            TTestActorRuntime& runtime, const TString& path,
-            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) {
-        Y_UNUSED(expectedStatus);
-        auto sender = runtime.AllocateEdgeActor(0);
-        SendNextValRequest(runtime, sender, path);
-        return WaitNextValResult(runtime, sender);
-    }
-
     Y_UNIT_TEST(ShouldRestoreSequence) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -1046,7 +1020,7 @@ value {
 
         const auto& table = desc.GetPathDescription().GetTable();
 
-        value = DoNextVal(runtime, "/MyRoot/Restored/myseq");
+        value = DoNextVal(runtime, "/MyRoot/Restored/myseq", Ydb::StatusIds::SCHEME_ERROR);
         UNIT_ASSERT_VALUES_EQUAL(value, 2);
 
         UNIT_ASSERT_C(CheckDefaultFromSequence(table), "Invalid default value");

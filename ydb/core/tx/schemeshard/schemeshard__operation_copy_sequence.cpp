@@ -382,7 +382,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         auto sequenceInfo = context.SS->Sequences.at(pathId);
-        sequenceInfo->Description.SetStartValue(GetSequenceResult.GetNextValue());
+        UpdateSequenceDescription(sequenceInfo->Description);
 
         context.SS->PersistSequence(db, pathId, *sequenceInfo);
 

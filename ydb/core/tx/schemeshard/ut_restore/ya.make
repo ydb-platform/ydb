@@ -17,11 +17,12 @@ PEERDIR(
     contrib/libs/double-conversion
     library/cpp/string_utils/quote
     ydb/core/kqp/ut/common
+    ydb/core/tx/sequenceproxy
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/wrappers/ut_helpers
     ydb/core/ydb_convert
     ydb/library/yql/sql/pg
-    ydb/library/yql/parser/pg_wrapper    
+    ydb/library/yql/parser/pg_wrapper
 )
 
 SRCS(

@@ -8,6 +8,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
+#include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/metering/metering.h>
@@ -27,6 +28,7 @@ using namespace NKikimr;
 using namespace NSchemeShardUT_Private;
 using namespace NKikimr::NSchemeShard;
 using namespace NKikimr::NWrappers::NTestHelpers;
+using namespace NKikimr::NSequenceProxy;
 
 namespace {
 
@@ -951,6 +953,95 @@ value {
         UNIT_ASSERT_VALUES_EQUAL(desc.GetStatus(), NKikimrScheme::StatusSuccess);
 
         const auto& table = desc.GetPathDescription().GetTable();
+
+        UNIT_ASSERT_C(CheckDefaultFromSequence(table), "Invalid default value");
+    }
+
+    void SendNextValRequest(TTestActorRuntime& runtime, const TActorId& sender, const TString& path) {
+        auto request = MakeHolder<TEvSequenceProxy::TEvNextVal>(path);
+        runtime.Send(new IEventHandle(MakeSequenceProxyServiceID(), sender, request.Release()));
+    }
+
+    i64 WaitNextValResult(TTestActorRuntime& runtime, const TActorId& sender) {
+        auto ev = runtime.GrabEdgeEventRethrow<TEvSequenceProxy::TEvNextValResult>(sender);
+        auto* msg = ev->Get();
+        UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
+        return msg->Value;
+    }
+
+    i64 DoNextVal(TTestActorRuntime& runtime, const TString& path) {
+        auto sender = runtime.AllocateEdgeActor(0);
+        SendNextValRequest(runtime, sender, path);
+        return WaitNextValResult(runtime, sender);
+    }
+
+    Y_UNIT_TEST(ShouldRestoreSequence) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::SEQUENCEPROXY, NActors::NLog::PRI_TRACE);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Original"
+                Columns { Name: "key" Type: "Uint64" DefaultFromSequence: "myseq" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+            }
+            SequenceDescription {
+                Name: "myseq"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        i64 value = DoNextVal(runtime, "/MyRoot/Original/myseq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 1);
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Original"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
+
+        const auto desc = DescribePath(runtime, "/MyRoot/Restored", true, true);
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetStatus(), NKikimrScheme::StatusSuccess);
+
+        const auto& table = desc.GetPathDescription().GetTable();
+
+        value = DoNextVal(runtime, "/MyRoot/Restored/myseq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 2);
 
         UNIT_ASSERT_C(CheckDefaultFromSequence(table), "Invalid default value");
     }

@@ -106,8 +106,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     task.SetNeedToBill(!exportInfo->UserSID || !ss->SystemBackupSIDs.contains(*exportInfo->UserSID));
 
     const TPath sourcePath = TPath::Init(exportInfo->Items[itemIdx].SourcePathId, ss);
-    if (sourcePath.IsResolved()) {
-        task.MutableTable()->CopyFrom(GetTableDescription(ss, sourcePath.Base()->PathId));
+    const TPath exportPathItem = exportPath.Child(ToString(itemIdx));
+    if (sourcePath.IsResolved() && exportPathItem.IsResolved()) {
+        auto exportDescription = GetTableDescription(ss, exportPathItem.Base()->PathId);
+        exportDescription.MutableTable()->SetName(sourcePath.LeafName());
+        task.MutableTable()->CopyFrom(exportDescription);
     }
 
     task.SetSnapshotStep(exportInfo->SnapshotStep);

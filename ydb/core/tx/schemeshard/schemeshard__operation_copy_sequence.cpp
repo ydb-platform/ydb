@@ -115,7 +115,7 @@ public:
             event->Record.SetFrozen(true);
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "TCoptSequence TConfigureParts ProgressState"
+                        "TCopySequence TConfigureParts ProgressState"
                         << " sending TEvCreateSequence to tablet " << tabletId
                         << " operationId# " << OperationId
                         << " at tablet " << ssId);
@@ -274,6 +274,46 @@ private:
                 << " operationId#" << OperationId;
     }
 
+    void UpdateSequenceDescription(NKikimrSchemeOp::TSequenceDescription& descr) {
+        descr.SetStartValue(GetSequenceResult.GetNextValue());
+        descr.SetMinValue(GetSequenceResult.GetMinValue());
+        descr.SetMaxValue(GetSequenceResult.GetMaxValue());
+        descr.SetCache(GetSequenceResult.GetCache());
+        descr.SetIncrement(GetSequenceResult.GetIncrement());
+        descr.SetCycle(GetSequenceResult.GetCycle());
+
+        i64 nextValue = GetSequenceResult.GetNextValue();
+        i64 minValue = GetSequenceResult.GetMinValue();
+        i64 maxValue = GetSequenceResult.GetMaxValue();
+        bool cycle = GetSequenceResult.GetCycle();
+
+        if (GetSequenceResult.GetNextUsed()) {
+            i64 increment = GetSequenceResult.GetIncrement();
+            if (increment > 0) {
+                ui64 delta = increment;
+
+                if (nextValue < maxValue && ui64(maxValue) - ui64(nextValue) >= delta) {
+                    nextValue += delta;
+                } else {
+                    if (cycle) {
+                        nextValue = minValue;
+                    }
+                }
+            } else {
+                ui64 delta = -increment;
+
+                if (nextValue > minValue && ui64(nextValue) - ui64(minValue) >= delta) {
+                    nextValue -= delta;
+                } else {
+                    if (cycle) {
+                        nextValue = maxValue;
+                    }
+                }
+            }
+        }
+        descr.SetStartValue(nextValue);
+    }
+
 public:
     TProposedCopySequence(TOperationId id)
         : OperationId(id)
@@ -333,7 +373,15 @@ public:
             return false;
         }
 
+        TPathId pathId = txState->TargetPathId;
+
         NIceDb::TNiceDb db(context.GetDB());
+
+        auto sequenceInfo = context.SS->Sequences.at(pathId);
+        sequenceInfo->Description.SetStartValue(GetSequenceResult.GetNextValue());
+
+        context.SS->PersistSequence(db, pathId, *sequenceInfo);
+
         context.SS->ChangeTxState(db, OperationId, TTxState::Done);
         context.OnComplete.ActivateTx(OperationId);
         return true;
@@ -387,7 +435,7 @@ public:
             return false;
         }
 
-        auto getSequenceResult = ev->Get()->Record;
+        GetSequenceResult = ev->Get()->Record;
 
         Y_ABORT_UNLESS(txState->Shards.size() == 1);
         for (auto shard : txState->Shards) {
@@ -397,7 +445,7 @@ public:
             Y_ABORT_UNLESS(currentTabletId != InvalidTabletId);
 
             auto event = MakeHolder<NSequenceShard::TEvSequenceShard::TEvRestoreSequence>(
-                txState->TargetPathId, getSequenceResult);
+                txState->TargetPathId, GetSequenceResult);
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.SetTxPartId(OperationId.GetSubTxId());
 

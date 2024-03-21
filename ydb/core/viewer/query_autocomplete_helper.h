@@ -63,7 +63,7 @@ public:
 
     TVector<Type> Search(const TString& prefix, ui32 limit = 10) {
         auto cmp = [](const WordHit& left, const WordHit& right) {
-            return left.Distance > right.Distance;
+            return left.Distance < right.Distance;
         };
         std::priority_queue<WordHit, TVector<WordHit>, decltype(cmp)> queue(cmp);
 
@@ -83,6 +83,7 @@ public:
             queue.pop();
         }
 
+        std::reverse(results.begin(), results.end());
         return results;
     }
 };

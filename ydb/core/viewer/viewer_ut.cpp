@@ -1039,6 +1039,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("apple", "aple"), 1);
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("horse", "ros"), 3);
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("intention", "execution"), 5);
+        UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("/slice/db", "/slice"), 3);
+        UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("/slice", "/slice/db"), 3);
+        UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("/slice/db26000", "/slice/db"), 5);
+        UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("/slice/db", "/slice/db26000"), 5);
     }
 
     Y_UNIT_TEST(FuzzySearcher)
@@ -1068,7 +1072,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
 
         {
-            TVector<TString> expectations = { "/slice/db", "/slice", "/slice/db26000" };
+            TVector<TString> expectations = { "/slice/db", "/slice", "/slice/db26000"};
             auto fuzzy = FuzzySearcher<TString>(dictionary);
             auto result = fuzzy.Search("/slice/db", 3);
 

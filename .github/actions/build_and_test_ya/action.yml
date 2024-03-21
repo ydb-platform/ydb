@@ -92,18 +92,18 @@ runs:
       shell: bash
       run: |
         if [ -f ya.make ];then
-          echo "value='list'" >> $GITHUB_OUTPUT
+          echo "CH='list'" >> $GITHUB_OUTPUT
         else
-          echo "value='cache'" >> $GITHUB_OUTPUT
+          echo "CH='cache'" >> $GITHUB_OUTPUT
         fi
 
     - name: Varify test run choice
       shell: bash
-      run: echo "Test run choice: ${{ steps.test_run_choice.outputs.value }}"
+      run: echo "Test run choice: ${{ steps.test_run_choice.outputs.CH }}"
 
     - name: Run tests (using cache)
       uses: ./.github/actions/test_ya
-      if: ${{ inputs.run_tests == 'true' }} && ${{ steps.test_run_choice.outputs.value == 'cache' }}
+      if: ${{ inputs.run_tests == 'true' }} && ${{ steps.test_run_choice.outputs.CH == 'cache' }}
       with:
         build_target: ${{ inputs.build_target }}
         build_preset: ${{ inputs.build_preset }}
@@ -120,7 +120,7 @@ runs:
 
     - name: Run tests (listed)
       uses: ./.github/actions/test_ya_root
-      if: ${{ inputs.run_tests == 'true' }} && ${{ steps.test_run_choice.outputs.value == 'list' }}
+      if: ${{ inputs.run_tests == 'true' }} && ${{ steps.test_run_choice.outputs.CH == 'list' }}
       with:
         build_preset: ${{ inputs.build_preset }}
         test_size: ${{ inputs.test_size }}

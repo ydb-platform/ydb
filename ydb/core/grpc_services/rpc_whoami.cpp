@@ -31,7 +31,7 @@ public:
             TMaybe<TString> database = Request->GetDatabaseName();
             ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
                 .Database = database ? database.GetRef() : TString(),
-                .Ticket = authToken.GetRef(),
+                .AuthInfo = {.Ticket = authToken.GetRef()},
                 .PeerName = Request->GetPeerName()
             }));
             Become(&TThis::StateWaitForTicket);

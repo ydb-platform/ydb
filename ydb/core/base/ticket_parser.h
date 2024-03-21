@@ -24,6 +24,11 @@ namespace NKikimr {
 
         static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TICKET_PARSER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TICKET_PARSER)");
 
+        struct TAuthInfo {
+            TString Ticket;
+            bool IsCertificate = false;
+        };
+
         struct TEvAuthorizeTicket : TEventLocal<TEvAuthorizeTicket, EvAuthorizeTicket> {
             struct TPermission {
                 TString Permission;
@@ -67,7 +72,7 @@ namespace NKikimr {
             };
 
             const TString Database;
-            const TString Ticket;
+            const TAuthInfo AuthInfo;
             const TString PeerName;
 
             // if two identical permissions with different attributies are specified,
@@ -88,63 +93,63 @@ namespace NKikimr {
 
             struct TInitializationFields {
                 TString Database;
-                TString Ticket;
+                TAuthInfo AuthInfo;
                 TString PeerName;
                 std::vector<TEntry> Entries;
             };
 
             TEvAuthorizeTicket(TInitializationFields&& init)
                 : Database(std::move(init.Database))
-                , Ticket(std::move(init.Ticket))
+                , AuthInfo(std::move(init.AuthInfo))
                 , PeerName(std::move(init.PeerName))
                 , Entries(std::move(init.Entries))
             {
             }
 
             TEvAuthorizeTicket(const TString& ticket)
-                : Ticket(ticket)
+                : AuthInfo({.Ticket = ticket})
             {}
 
             TEvAuthorizeTicket(const TString& ticket, const TString& peerName)
-                : Ticket(ticket)
+                : AuthInfo({.Ticket = ticket})
                 , PeerName(peerName)
             {}
 
             TEvAuthorizeTicket(const TString& ticket, const TVector<std::pair<TString, TString>>& attributes, const TVector<TString>& permissions)
-                : Ticket(ticket)
+                : AuthInfo({.Ticket = ticket})
                 , Entries({{ToPermissions(permissions), attributes}})
             {}
 
             TEvAuthorizeTicket(const TString& ticket, const TString& peerName, const TVector<std::pair<TString, TString>>& attributes, const TVector<TString>& permissions)
-                : Ticket(ticket)
+                : AuthInfo({.Ticket = ticket})
                 , PeerName(peerName)
                 , Entries({{ToPermissions(permissions), attributes}})
             {}
 
             TEvAuthorizeTicket(const TString& ticket, const TVector<std::pair<TString, TString>>& attributes, const TVector<TPermission>& permissions)
-                : Ticket(ticket)
+                : AuthInfo({.Ticket = ticket})
                 , Entries({{permissions, attributes}})
             {}
 
             TEvAuthorizeTicket(const TString& ticket, const TString& peerName, const TVector<std::pair<TString, TString>>& attributes, const TVector<TPermission>& permissions)
-                : Ticket(ticket)
+                : AuthInfo({.Ticket = ticket})
                 , PeerName(peerName)
                 , Entries({{permissions, attributes}})
             {}
 
             TEvAuthorizeTicket(const TString& ticket, const TVector<TEntry>& entries)
-                : Ticket(ticket)
+                : AuthInfo({.Ticket = ticket})
                 , Entries(entries)
             {}
 
             TEvAuthorizeTicket(const TString& ticket, const TString& peerName, const TVector<TEntry>& entries)
-                : Ticket(ticket)
+                : AuthInfo({.Ticket = ticket})
                 , PeerName(peerName)
                 , Entries(entries)
             {}
 
             TEvAuthorizeTicket(TAccessKeySignature&& sign, const TString& peerName, const TVector<TEntry>& entries)
-                : Ticket("")
+                : AuthInfo({.Ticket = ""})
                 , PeerName(peerName)
                 , Entries(entries)
                 , Signature(std::move(sign))
@@ -176,20 +181,20 @@ namespace NKikimr {
         };
 
         struct TEvAuthorizeTicketResult : TEventLocal<TEvAuthorizeTicketResult, EvAuthorizeTicketResult> {
-            TString Ticket;
+            TAuthInfo AuthInfo;
             TError Error;
             TIntrusiveConstPtr<NACLib::TUserToken> Token;
             const TString SerializedToken;
 
-            TEvAuthorizeTicketResult(const TString& ticket, const TIntrusiveConstPtr<NACLib::TUserToken>& token)
-                : Ticket(ticket)
+            TEvAuthorizeTicketResult(const TAuthInfo& authInfo, const TIntrusiveConstPtr<NACLib::TUserToken>& token)
+                : AuthInfo(authInfo)
                 , Token(token)
                 , SerializedToken(token ? token->GetSerializedToken() : "")
             {
             }
 
-            TEvAuthorizeTicketResult(const TString& ticket, const TError& error)
-                : Ticket(ticket)
+            TEvAuthorizeTicketResult(const TAuthInfo& authInfo, const TError& error)
+                : AuthInfo(authInfo)
                 , Error(error)
             {}
         };

@@ -31,6 +31,7 @@ const TString TabletBalancerUserName("tablet_balancer");
 const TString EveryoneGroupName("everyone");
 const TString UsersGroupName("users");
 const TString SuperusersGroupName("superusers");
+const TString AdminsGroupName("admins");
 
 ////////////////////////////////////////////////////////////////////////////////
 

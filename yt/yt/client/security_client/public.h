@@ -42,6 +42,7 @@ extern const TString TabletBalancerUserName;
 extern const TString EveryoneGroupName;
 extern const TString UsersGroupName;
 extern const TString SuperusersGroupName;
+extern const TString AdminsGroupName;
 extern const TString ReplicatorUserName;
 extern const TString OwnerUserName;
 

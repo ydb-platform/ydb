@@ -1349,6 +1349,8 @@ public:
                             alterTableRequest.set_set_tiering(tieringName);
                         } else if (name == "resetTiering") {
                             alterTableRequest.mutable_drop_tiering();
+                        } else if (name == "resetTemporary") {
+                            alterTableRequest.mutable_reset_temporary();
                         } else {
                             ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                                 TStringBuilder() << "Unknown table profile setting: " << name));

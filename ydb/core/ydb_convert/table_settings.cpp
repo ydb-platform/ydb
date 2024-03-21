@@ -368,6 +368,10 @@ bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         tableDesc.MutableTTLSettings()->SetUseTiering("");
     }
 
+    if (proto.has_reset_temporary()) {
+        tableDesc.SetTemporary(false);
+    }
+
     if (!changed && !hadPartitionConfig) {
         tableDesc.ClearPartitionConfig();
     }

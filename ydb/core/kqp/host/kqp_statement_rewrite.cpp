@@ -241,8 +241,7 @@ namespace {
                                 exprCtx.NewAtom(pos, "setTableSettings"),
                                 exprCtx.NewList(pos, {
                                     exprCtx.NewList(pos, {
-                                        exprCtx.NewAtom(pos, "setTemporary"),
-                                        exprCtx.NewAtom(pos, "false"),
+                                        exprCtx.NewAtom(pos, "resetTemporary")
                                     }),
                                 }),
                             }),

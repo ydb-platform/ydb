@@ -11,7 +11,7 @@
 namespace NKikimr {
 
 enum class EAlterOperationKind {
-    // columns, column families, storage, ttl
+    // columns, column families, storage, ttl, temporary
     Common,
     // add indices
     AddIndex,

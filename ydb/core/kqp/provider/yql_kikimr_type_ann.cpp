@@ -1208,6 +1208,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 );
             } else if (name == "storeExternalBlobs") {
                 meta->TableSettings.StoreExternalBlobs = TString(setting.Value().Cast<TCoAtom>().Value());
+            } else if (name == "resetTemporary") {
+                meta->TableSettings.ResetTemporary = true;
             } else {
                 ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                     TStringBuilder() << "Unknown table profile setting: " << name));

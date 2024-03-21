@@ -195,6 +195,7 @@ struct TTableSettings {
     TResetableSetting<TString, void> Tiering;
     TMaybe<TString> PartitionByHashFunction;
     TMaybe<TString> StoreExternalBlobs;
+    TMaybe<bool> ResetTemporary;
 
     // These parameters are only used for external sources
     TMaybe<TString> DataSourcePath;

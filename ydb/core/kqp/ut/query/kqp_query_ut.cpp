@@ -1794,7 +1794,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
 
         {
-            auto it = session.StreamExecuteQuery(R"(
+            auto it = client.StreamExecuteQuery(R"(
                 SELECT Col1, Col2 FROM `/Root/Destination1`;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());

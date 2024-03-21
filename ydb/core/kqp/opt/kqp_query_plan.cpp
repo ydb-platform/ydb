@@ -565,6 +565,10 @@ private:
                     }
                 }
 
+                if (auto literal = key.Maybe<TCoUuid>()) {
+                    return literal.Cast().Literal().StringValue();
+                }
+
                 if (auto literal = key.Maybe<TCoDataCtor>()) {
                     return literal.Cast().Literal().StringValue();
                 }

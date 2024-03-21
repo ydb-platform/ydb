@@ -105,8 +105,8 @@ namespace NSequenceShard {
                 << " Cache# " << sequence.Cache
                 << " Increment# " << sequence.Increment
                 << " Cycle# " << (sequence.Cycle ? "true" : "false")
-                << " State# " << (frozen ? "Frozen" : "Active"))
-                << " Overflowed# " << (overflowed ? "true" : "false");
+                << " State# " << (frozen ? "Frozen" : "Active")
+                << " Overflowed# " << (overflowed ? "true" : "false"));
             return true;
         }
 

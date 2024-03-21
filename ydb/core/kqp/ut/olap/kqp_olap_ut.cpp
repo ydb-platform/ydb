@@ -4061,6 +4061,35 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(StatsSysViewBytesDictStatActualization) {
+        ui64 rawBytes1;
+        ui64 bytes1;
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTypedLocalHelper helper("Utf8", kikimr);
+        helper.CreateTestOlapTable();
+        NArrow::NConstruction::TStringPoolFiller sPool(3, 52);
+        helper.FillTable(sPool, 0, 800000);
+        helper.GetVolumes(rawBytes1, bytes1, false, {"field"});
+        auto tableClient = kikimr.GetTableClient();
+        {
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `ENCODING.DICTIONARY.ENABLED`=`true`);");
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_STAT, NAME=field_var, TYPE=variability, FEATURES=`{\"column_name\" : \"field\"}`);");
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_STAT, NAME=pk_int_max, TYPE=max, FEATURES=`{\"column_name\" : \"pk_int\"}`);");
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
+            csController->WaitActualization(TDuration::Seconds(10));
+            ui64 rawBytes2;
+            ui64 bytes2;
+            helper.GetVolumes(rawBytes2, bytes2, false, {"field"});
+            AFL_VERIFY(rawBytes2 == rawBytes1)("f1", rawBytes1)("f2", rawBytes2);
+            AFL_VERIFY(bytes2 < bytes1 * 0.5)("f1", bytes1)("f2", bytes2);
+        }
+    }
+
     Y_UNIT_TEST(StatsUsage) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         {

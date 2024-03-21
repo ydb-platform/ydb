@@ -6,6 +6,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/core/tx/columnshard/blobs_action/bs
     ydb/core/tx/columnshard/blobs_action/tier
+    ydb/core/tx/columnshard
     ydb/core/wrappers
 )
 

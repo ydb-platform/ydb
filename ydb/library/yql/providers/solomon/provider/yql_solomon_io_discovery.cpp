@@ -88,14 +88,14 @@ public:
                     ? Build<TSoReadObject>(ctx, read.Pos())
                         .World(read.World())
                         .DataSource(read.DataSource())
-                        .RowType(std::move(userSchema.front()))
+                        //.RowType(std::move(userSchema.front()))
                         .Object(soObject)
                         .ColumnOrder(std::move(userSchema.back()))
                       .Done().Ptr()
                     : Build<TSoReadObject>(ctx, read.Pos())
                         .World(read.World())
                         .DataSource(read.DataSource())
-                        .RowType(std::move(userSchema.front()))
+                        //.RowType(std::move(userSchema.front()))
                         .Object(soObject)
                       .Done().Ptr();
             }

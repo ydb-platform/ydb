@@ -153,12 +153,12 @@ public:
 
             source.MutableToken()->SetName(TString(settings.Token().Name().Value()));
 
-            for (auto& c : settings.SystemColumns()) {
-                source.AddSystemColumns(c.Cast<TCoAtom>().Value());
+            for (const auto& c : settings.SystemColumns()) {
+                source.AddSystemColumns(c.StringValue());
             }
 
-            for (auto& c : settings.LabelNames()) {
-                source.AddLabelNames(c.Cast<TCoAtom>().Value());
+            for (const auto& c : settings.LabelNames()) {
+                source.AddLabelNames(c.StringValue());
             }
 
             protoSettings.PackFrom(source);

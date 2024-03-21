@@ -126,9 +126,7 @@ struct TDateTimeAddT {
         const auto rhs = GenToScaledDate<TRight>(GetterFor<typename TRight::TLayout>(right, context, block), context, block);
         const auto add = BinaryOperator::CreateAdd(lhs, rhs, "add", block);
         const auto wide = SetterFor<typename TOutput::TLayout>(GenFromScaledDate<TOutput>(add, context, block), context, block);
-        const auto bad = std::is_same<TOutput, NUdf::TDataType<NUdf::TInterval>>() ?
-            GenIsBadInterval(add, context, block):
-            GenIsBadDateTime(add, context, block);
+        const auto bad = GenIsBadScaledDate<TOutput>(add, context, block);
         const auto type = Type::getInt128Ty(context);
         const auto zero = ConstantInt::get(type, 0);
 

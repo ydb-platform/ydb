@@ -50,6 +50,7 @@ message TAuthConfig {
     optional string AsSignatureExpireTime = 77 [default = "1m"];
     optional bool UseBuiltinDomain = 78 [default = true];
     optional string AccessServiceType = 79 [default = "Yandex_v2"]; // For now the following values are supported: "Yandex_v2", "Nebius_v1"
+    optional string CertificateAuthenticationDomain = 80 [default = "cert"];
 }
 
 message TUserRegistryConfig {

@@ -38,7 +38,7 @@ std::pair<TString, TString> X509CertificateReader::GetTermFromX509Name(X509_NAME
 
     char cnbuf[1024];
     int name_len = X509_NAME_get_text_by_NID(name, nid, cnbuf, sizeof(cnbuf));
-    if (name_len == 0) {
+    if (name_len <= 0) {
         return {};
     }
 
@@ -61,6 +61,38 @@ TVector<std::pair<TString, TString>> X509CertificateReader::ReadSubjectTerms(con
     extractions.erase(newEnd, extractions.end());
 
     return extractions;
+}
+
+TVector<std::pair<TString, TString>> X509CertificateReader::ReadAllSubjectTerms(const X509Ptr& x509) {
+    TVector<std::pair<TString, TString>> subjectTerms;
+    X509_NAME* name = X509_get_subject_name(x509.get()); // return internal pointer
+
+    int entryCount = X509_NAME_entry_count(name);
+    subjectTerms.reserve(entryCount);
+    char buf[1024];
+    static const int bufLen = sizeof(buf);
+    for (int i = 0; i < entryCount; i++) {
+        const X509_NAME_ENTRY* entry = X509_NAME_get_entry(name, i);
+        if (!entry) {
+            continue;
+        }
+        const ASN1_STRING* data = X509_NAME_ENTRY_get_data(entry);
+        if (!data) {
+            continue;
+        }
+        int dataLen = (data->length > (bufLen - 1)) ? (bufLen - 1) : data->length;
+        memcpy(buf, data->data, dataLen);
+        buf[dataLen] = '\0';
+
+        const ASN1_OBJECT* object = X509_NAME_ENTRY_get_object(entry);
+        if (!object) {
+            continue;
+        }
+        int nid = OBJ_obj2nid(object);
+        const char* sn = OBJ_nid2sn(nid);
+        subjectTerms.push_back(std::make_pair(TString(sn, std::strlen(sn)), TString(buf, std::strlen(buf))));
+    }
+    return subjectTerms;
 }
 
 TDynamicNodeAuthorizationParams::TDistinguishedName& TDynamicNodeAuthorizationParams::TDistinguishedName::AddRelativeDistinguishedName(TRelativeDistinguishedName name) {

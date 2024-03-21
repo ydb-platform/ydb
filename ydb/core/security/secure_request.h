@@ -15,6 +15,7 @@ private:
     bool RequireAdminAccess = false;
     bool UserAdmin = false;
     TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> Entries;
+    TString ClientCertificate;
 
     static bool GetEnforceUserTokenRequirement() {
         return AppData()->EnforceUserTokenRequirement;
@@ -29,7 +30,7 @@ private:
     }
 
     bool IsTokenExists() const {
-        return !SecurityToken.empty() || !GetDefaultUserSIDs().empty();
+        return !SecurityToken.empty() || !ClientCertificate.empty() || !GetDefaultUserSIDs().empty();
     }
 
     void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
@@ -78,6 +79,10 @@ public:
         SecurityToken = securityToken;
     }
 
+    void SetClientCertificate(const TString& clientCertificate) {
+        ClientCertificate = clientCertificate;
+    }
+
     void SetPeerName(const TString& peerName) {
         PeerName = peerName;
     }
@@ -100,6 +105,10 @@ public:
 
     TString GetSecurityToken() const {
         return SecurityToken;
+    }
+
+    TString GetCertificate() const {
+        return ClientCertificate;
     }
 
     TIntrusiveConstPtr<NACLib::TUserToken> GetParsedToken() const {
@@ -144,7 +153,7 @@ public:
         if (IsTokenRequired() && !IsTokenExists()) {
             return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{"Access denied without user token", false}, ctx);
         }
-        if (SecurityToken.empty()) {
+        if (SecurityToken.empty() && ClientCertificate.empty()) {
             if (!GetDefaultUserSIDs().empty()) {
                 TIntrusivePtr<NACLib::TUserToken> userToken = new NACLib::TUserToken(GetDefaultUserSIDs());
                 THolder<TEvTicketParser::TEvAuthorizeTicketResult> AuthorizeTicketResult = MakeHolder<TEvTicketParser::TEvAuthorizeTicketResult>(TString(), userToken);
@@ -153,9 +162,11 @@ public:
                 return static_cast<TBootstrap*>(this)->Bootstrap(ctx);
             }
         } else {
+
             ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
                 .Database = Database,
                 .Ticket = SecurityToken,
+                .Certificate = ClientCertificate,
                 .PeerName = PeerName,
                 .Entries = Entries
             }));
@@ -185,4 +196,3 @@ public:
 };
 
 }
-

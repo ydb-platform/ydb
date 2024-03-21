@@ -92,6 +92,14 @@ public:
 
     void InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
 
+    void Initialize(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
+        TString peerName = GrpcRequestBaseCtx_->GetPeerName();
+        TBase::SetPeerName(peerName);
+        InitializeAttributes(schemeData);
+        TBase::SetDatabase(CheckedDatabaseName_);
+        InitializeAuditSettings(schemeData);
+    }
+
     TGrpcRequestCheckActor(
         const TActorId& owner,
         const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
@@ -110,13 +118,13 @@ public:
         , Span_(TWilsonGrpc::RequestCheckActor, GrpcRequestBaseCtx_->GetWilsonTraceId(), "RequestCheckActor")
     {
         TMaybe<TString> authToken = GrpcRequestBaseCtx_->GetYdbToken();
+        const auto& clientCertificates = GrpcRequestBaseCtx_->FindClientCertPropertyValues();
         if (authToken) {
-            TString peerName = GrpcRequestBaseCtx_->GetPeerName();
             TBase::SetSecurityToken(authToken.GetRef());
-            TBase::SetPeerName(peerName);
-            InitializeAttributes(schemeData);
-            TBase::SetDatabase(CheckedDatabaseName_);
-            InitializeAuditSettings(schemeData);
+            Initialize(schemeData);
+        } else if (!clientCertificates.empty()) {
+            TBase::SetClientCertificate(TString(clientCertificates.front()));
+            Initialize(schemeData);
         }
     }
 
@@ -486,7 +494,7 @@ private:
             return {false, std::nullopt};
         }
 
-        if (!TBase::GetSecurityToken()) {
+        if (!TBase::GetSecurityToken() && !TBase::GetCertificate()) {
             if (!TBase::IsTokenRequired()) {
                 LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
                             "Skip check permission connect db, token is not required, there is no token provided"

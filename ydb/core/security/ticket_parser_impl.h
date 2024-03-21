@@ -7,6 +7,7 @@
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/grpc_services/auth_processor/dynamic_node_auth_processor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -113,6 +114,7 @@ protected:
         TTokenRecordBase& operator =(const TTokenRecordBase&) = delete;
 
         TString Ticket;
+        TString Certificate;
         typename TDerived::ETokenType TokenType = TDerived::ETokenType::Unknown;
         NKikimr::TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature Signature;
         THashMap<TString, TPermissionRecord> Permissions;
@@ -135,6 +137,11 @@ protected:
         TTokenRecordBase(const TStringBuf ticket)
             : Ticket(ticket)
         {}
+
+        void SetCertificate(const TStringBuf certificate) {
+            Certificate = certificate;
+            TokenType = (Ticket.empty() && !Certificate.empty() ? TDerived::ETokenType::Certificate : TDerived::ETokenType::Unknown);
+        }
 
         void SetToken(const TIntrusivePtr<NACLib::TUserToken>& token) {
             // saving serialization info into the token instance.
@@ -202,6 +209,8 @@ protected:
                     return "AccessService";
                 case TDerived::ETokenType::ApiKey:
                     return "ApiKey";
+                case TDerived::ETokenType::Certificate:
+                    return "Certificate";
             }
         }
 
@@ -276,6 +285,7 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsErrorsRetryable;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsErrorsPermanent;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsBuiltin;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCertificate;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsLogin;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsAS;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheHit;
@@ -312,8 +322,10 @@ private:
             const auto& sign = request->Signature;
             key << sign.AccessKeyId << "-" << sign.Signature << ":" << sign.StringToSign << ":"
                 << sign.Service << ":" << sign.Region << ":" << sign.SignedAt.NanoSeconds();
-        } else {
+        } else if (request->Ticket) {
             key << request->Ticket;
+        } else if (request->Certificate) {
+            key << request->Certificate;
         }
         key << ':';
         if (request->Database) {
@@ -645,6 +657,36 @@ private:
     }
 
     template <typename TTokenRecord>
+    bool CanInitTokenFromCertificate(const TString& key, TTokenRecord& record) {
+        if (record.TokenType != TDerived::ETokenType::Certificate) {
+            return false;
+        }
+        const static TString error = "Cannot create token from certificate. Cannot extract subject from certificate";
+        CounterTicketsCertificate->Inc();
+        X509CertificateReader::X509Ptr x509cert = X509CertificateReader::ReadCertAsPEM(record.Certificate);
+        if (!x509cert) {
+            SetError(key, record, { .Message = error, .Retryable = false });
+            return false;
+        }
+        TStringBuilder dn;
+        for (const auto& [attribute, value] : X509CertificateReader::ReadAllSubjectTerms(x509cert)) {
+            dn << attribute << "=" << value << ",";
+        }
+        if (dn.empty()) {
+            SetError(key, record, { .Message = error, .Retryable = false });
+            return false;
+        }
+        dn.remove(dn.size() - 1);
+        dn << "@" << Config.GetCertificateAuthenticationDomain();
+        SetToken(key, record, new NACLib::TUserToken({
+            .OriginalUserToken = record.Certificate,
+            .UserSID = dn,
+            .AuthType = record.GetAuthType()
+        }));
+        return true;
+    }
+
+    template <typename TTokenRecord>
     bool CanInitLoginToken(const TString& key, TTokenRecord& record) {
         if (UseLoginProvider && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::Login)) {
             TString database = Config.GetDomainLoginOnly() ? DomainName : record.Database;
@@ -770,7 +812,8 @@ private:
             Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, error), 0, cookie);
             return;
         }
-        if (ticket.empty() && !signature.AccessKeyId) {
+        TStringBuf certificate = ev->Get()->Certificate;
+        if (ticket.empty() && certificate.empty() && !signature.AccessKeyId) {
             TEvTicketParser::TError error;
             error.Message = "Ticket is empty";
             error.Retryable = false;
@@ -804,6 +847,7 @@ private:
         }
 
         auto& record = it->second;
+        record.SetCertificate(certificate);
         record.CurrentDelay = MinErrorRefreshTime;
         record.RefreshRetryableErrorImmediately = true;
         record.PeerName = std::move(ev->Get()->PeerName);
@@ -1497,14 +1541,14 @@ protected:
                 return TDerived::ETokenType::Unsupported;
             }
         }
-
         if (tokenType == "Bearer" || tokenType == "IAM") {
             if (AccessServiceEnabled()) {
                 return TDerived::ETokenType::AccessService;
             } else {
                 return TDerived::ETokenType::Unsupported;
             }
-        } else if (tokenType == "ApiKey") {
+        }
+         if (tokenType == "ApiKey") {
             if (ApiKeyEnabled()) {
                 return TDerived::ETokenType::ApiKey;
             } else {
@@ -1603,7 +1647,8 @@ protected:
         }
 
         if (CanInitBuiltinToken(key, record) ||
-            CanInitLoginToken(key, record)) {
+            CanInitLoginToken(key, record) ||
+            CanInitTokenFromCertificate(key, record)) {
             return;
         }
 
@@ -1872,6 +1917,7 @@ protected:
         CounterTicketsErrorsRetryable = counters->GetCounter("TicketsErrorsRetryable", true);
         CounterTicketsErrorsPermanent = counters->GetCounter("TicketsErrorsPermanent", true);
         CounterTicketsBuiltin = counters->GetCounter("TicketsBuiltin", true);
+        CounterTicketsCertificate = counters->GetCounter("TicketsCertificate", true);
         CounterTicketsLogin = counters->GetCounter("TicketsLogin", true);
         CounterTicketsAS = counters->GetCounter("TicketsAS", true);
         CounterTicketsCacheHit = counters->GetCounter("TicketsCacheHit", true);

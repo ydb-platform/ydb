@@ -44,9 +44,9 @@ datasources:
   - name: YDB
     type: ydbtech-ydb-datasource
     jsonData:
-      authKind: "UserPassword"
+      authKind: '<password>'
       endpoint: 'grpcs://<hostname>:2135'
-      dbLocation: '/location/to/db'
+      dbLocation: '<location_to_db>'
       user: '<username>'
     secureJsonData:
       password: '<userpassword>'
@@ -134,7 +134,7 @@ WHERE $__timeFilter(`timeCol` + INTERVAL("PT24H"))
 | `$__timeFilter(columnName)`                | Replaced by a conditional that filters the data (using the provided column or expression) based on the time range of the panel in microseconds | `foo >= CAST(1636717526371000 AS TIMESTAMP) AND foo <=  CAST(1668253526371000 AS TIMESTAMP)' )` |
 | `$__fromTimestamp`                         | Replaced by the starting time of the range of the panel casted to Timestamp                                                      | `CAST(1636717526371000 AS TIMESTAMP)`                                                           |
 | `$__toTimestamp`                           | Replaced by the ending time of the range of the panel casted to Timestamp                                                        | `CAST(1636717526371000 AS TIMESTAMP)`                                                           |
-| `$__varFallback(condition, $templateVar)` | Replaced by the first parameter when the template variable in the second parameter is not provided.                              | `$__varFallback('foo', $bar)` `foo` if variable `bar` is not provided, or `bar`'s value                                                               |
+| `$__varFallback(condition, $templateVar)` | Replaced by the first parameter when the template variable in the second parameter is not provided.                              | `$__varFallback('foo', $bar)` `foo` if variable `bar` is not provided, or `$bar`'s value                                                               |
 
 ### Templates and variables
 

@@ -19,9 +19,9 @@ datasources:
   - name: YDB
     type: ydbtech-ydb-datasource
     jsonData:
-      authKind: "UserPassword"
+      authKind: '<password>'
       endpoint: 'grpcs://<hostname>:2135'
-      dbLocation: '/location/to/db'
+      dbLocation: '<location_to_db>'
       user: '<username>'
     secureJsonData:
       password: '<userpassword>'
@@ -110,7 +110,7 @@ WHERE $__timeFilter(`timeCol` + INTERVAL("PT24H"))
 | `$__timeFilter(columnName)`  | Заменяется условием, которое фильтрует данные в указанной колонке или результате выражения на основании временного диапазона, заданного на панели в микросекундах  | `foo >= CAST(1636717526371000 AS TIMESTAMP) AND foo <=  CAST(1668253526371000 AS TIMESTAMP)' )` |
 | `$__fromTimestamp` | Заменяется временем начала диапазона, заданного на панели в формате Timestamp | `CAST(1636717526371000 AS TIMESTAMP)` |
 | `$__toTimestamp` | Заменяется временем окончания диапазона, заданного на панели в формате Timestamp | `CAST(1636717526371000 AS TIMESTAMP)` |
-| `$__varFallback(condition, $templateVar)` | Заменяется первым параметром в том случае, если второй параметр не определен. | `$__varFallback('foo', $bar)` `foo` если переменная `bar` не определена, или значение переменной `bar`  |
+| `$__varFallback(condition, $templateVar)` | Заменяется первым параметром в том случае, если второй параметр не определен. | `$__varFallback('foo', $bar)` `foo` если переменная `bar` не определена, или значение переменной `$bar`  |
 
 ### Шаблоны и переменные Templates and variables { #templates-and-variables }
 

@@ -1,0 +1,302 @@
+name: Run tests (ya make)
+description: Run test targets listed in repository root ya.make (to be created previously)
+inputs:
+  build_preset:
+    required: true
+    default: "relwithdebinfo"
+    description: "relwithdebinfo, release-asan, release-tsan"
+  test_size:
+    required: false
+    default: "small,medium,large"
+    description: "small or small-medium or all"
+  test_threads:
+    required: false
+    default: "56"
+    description: "Test threads count"
+  link_threads:
+    required: false
+    default: "16"
+    description: "link threads count"
+  testman_token:
+    required: false
+    description: "test manager auth token"
+  testman_url:
+    required: false
+    description: "test manager endpoint"
+  testman_project_id:
+    required: false
+    description: "test manager project id"
+runs:
+  using: "composite"
+  steps:
+    - name: Init
+      id: init
+      shell: bash
+      run: |
+        echo "SHELLOPTS=xtrace" >> $GITHUB_ENV
+        export TMP_DIR=$(pwd)/tmp
+        echo "TMP_DIR=$TMP_DIR" >> $GITHUB_ENV
+        echo "LOG_DIR=$TMP_DIR/logs" >> $GITHUB_ENV
+        echo "OUT_DIR=$TMP_DIR/out" >> $GITHUB_ENV
+        echo "ARTIFACTS_DIR=$TMP_DIR/artifacts" >> $GITHUB_ENV
+        echo "TEST_ARTIFACTS_DIR=$TMP_DIR/test_artifacts" >> $GITHUB_ENV
+        echo "REPORTS_ARTIFACTS_DIR=$TMP_DIR/artifacts/test_reports" >> $GITHUB_ENV
+        echo "JUNIT_REPORT_XML=$TMP_DIR/junit.xml" >> $GITHUB_ENV
+        echo "JUNIT_REPORT_PARTS=$TMP_DIR/junit-split" >> $GITHUB_ENV
+        echo "TESTMO_TOKEN=${{ inputs.testman_token }}" >> $GITHUB_ENV
+        echo "TESTMO_URL=${{ inputs.testman_url }}" >> $GITHUB_ENV
+        echo "SUMMARY_LINKS=$(mktemp)" >> $GITHUB_ENV
+        echo "GITHUB_TOKEN=${{ github.token }}" >> $GITHUB_ENV
+        echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
+    
+    - name: prepare
+      shell: bash
+      run: |
+        rm -rf $TMP_DIR $JUNIT_REPORT_XML $JUNIT_REPORT_PARTS $REPORTS_ARTIFACTS_DIR
+        mkdir -p $TMP_DIR $OUT_DIR $ARTIFACTS_DIR $TEST_ARTIFACTS_DIR $LOG_DIR $JUNIT_REPORT_PARTS $REPORTS_ARTIFACTS_DIR
+    
+    - name: Install Node required for Testmo CLI
+      uses: actions/setup-node@v3
+      with:
+        node-version: 19
+    
+    - name: Install Testmo CLI
+      shell: bash
+      run: npm install -g @testmo/testmo-cli
+
+    - name: Upload tests result to testmo
+      id: th
+      if: inputs.testman_token
+      shell: bash
+      env:
+        PR_NUMBER: ${{ github.event.number }}
+      run: |
+        RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+        BRANCH_TAG="$GITHUB_REF_NAME"
+        ARCH="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
+        
+        case "$BUILD_PRESET" in
+          relwithdebinfo)
+            TESTMO_SOURCE="ya-${ARCH}"
+            ;;
+          debug)
+            TESTMO_SOURCE="ya-${ARCH}-debug"
+            ;;
+          release-*)
+            TESTMO_SOURCE="ya-${ARCH}-${BUILD_PRESET/release-/}"
+            ;;
+          *)
+            echo "Invalid preset: $BUILD_PRESET"
+            exit 1
+            ;;
+        esac
+        
+        case $GITHUB_EVENT_NAME in
+          workflow_dispatch)
+            TESTMO_RUN_NAME="${{ github.run_id }} manual"
+            EXTRA_TAG="manual"
+            ;;
+          pull_request | pull_request_target)
+            TESTMO_RUN_NAME="${{ github.run_id }} PR #${PR_NUMBER}"
+            EXTRA_TAG="pr"
+            BRANCH_TAG=""
+            ;;
+          schedule)
+            TESTMO_RUN_NAME="${{ github.run_id }} schedule"
+            EXTRA_TAG="schedule"
+            ;;
+          push)
+            TESTMO_RUN_NAME="${{ github.run_id }} POST"
+            EXTRA_TAG="post-commit"
+            ;;
+          *)
+            TESTMO_RUN_NAME="${{ github.run_id }}"
+            EXTRA_TAG=""
+            ;;
+        esac
+        
+        testmo automation:resources:add-link --name build --url "$RUN_URL" --resources testmo.json
+        testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources testmo.json
+        RUN_ID=$(
+        testmo automation:run:create --instance "$TESTMO_URL" --project-id ${{ inputs.testman_project_id }} \
+          --name "$TESTMO_RUN_NAME" --source "$TESTMO_SOURCE" --resources testmo.json \
+          --tags "$BRANCH_TAG" --tags "$EXTRA_TAG"
+        )
+        echo "runid=${RUN_ID}" >> $GITHUB_OUTPUT
+        echo "TEST_HISTORY_URL=${TESTMO_URL}/automation/runs/view/${RUN_ID}" >> $GITHUB_ENV
+
+    - name: Print test history link
+      shell: bash
+      if: inputs.testman_token
+      run: |
+        echo "10 [Test history](${TEST_HISTORY_URL})" >> $SUMMARY_LINKS
+
+    - name: set environment variables required by some tests
+      shell: bash
+      run: |
+        echo "PSQL_BINARY=/usr/bin/psql" >> $GITHUB_ENV
+
+    - name: ya test
+      shell: bash
+      run: |
+        readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
+
+        params=(
+          -T -k
+          ${test_size[@]/#/--test-size=}
+          --cache-size 512G --do-not-output-stderrs
+          --stat
+          --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
+        )
+        
+        # FIXME: copy-paste from build_ya
+        case "$BUILD_PRESET" in
+          debug)
+            params+=(--build "debug")
+            ;;
+          relwithdebinfo)
+            params+=(--build "relwithdebinfo")
+            ;;
+          release-asan)
+            params+=(
+              --build "release" --sanitize="address"
+              -DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY
+            )
+            ;;
+          release-tsan)
+            params+=(
+              --build "release" --sanitize="thread"
+              -DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY
+            )
+            ;;
+          release-msan)
+            params+=(
+              --build "release" --sanitize="memory"
+              -DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY
+            )
+            ;;
+          *)
+            echo "Invalid preset: $BUILD_PRESET"
+            exit 1
+            ;;
+        esac
+        
+        echo "::debug::get version"
+        ./ya --version
+        
+        echo "Tests are running..." | .github/scripts/tests/comment-pr.py
+
+        ./ya test . "${params[@]}" \
+          --stat --log-file "$LOG_DIR/ya_log.txt" --evlog-file "$LOG_DIR/ya_evlog.jsonl" -DCONSISTENT_DEBUG \
+          --no-dir-outputs \
+          --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" || (
+            RC=$?
+            if [ $RC -ne 0 ]; then
+              echo "ya test returned $RC, check existence $JUNIT_REPORT_XML"
+              if [ -s "$JUNIT_REPORT_XML" ]; then
+                echo "$JUNIT_REPORT_XML exists"
+                ls -la "$JUNIT_REPORT_XML"
+              else
+                echo "$JUNIT_REPORT_XML doesn't exist or has zero size"
+                ls -la "$JUNIT_REPORT_XML" || true
+                exit $RC
+              fi
+            fi
+        )
+
+    - name: archive unitest reports (orig)
+      shell: bash
+      run: |
+        gzip -c $JUNIT_REPORT_XML > $REPORTS_ARTIFACTS_DIR/orig_junit.xml.gz
+    
+    - name: postprocess junit report
+      shell: bash
+      run: |
+        .github/scripts/tests/transform-ya-junit.py -i \
+          -m .github/config/muted_ya.txt \
+          --ya-out "$OUT_DIR" \
+          --log-url-prefix "$S3_URL_PREFIX/logs/" \
+          --log-out-dir "$ARTIFACTS_DIR/logs/" \
+          --test-stuff-out "$TEST_ARTIFACTS_DIR/" \
+          --test-stuff-prefix "$S3_TEST_ARTIFACTS_URL_PREFIX/" \
+          "$JUNIT_REPORT_XML"
+    
+        .github/scripts/tests/split-junit.py -o "$JUNIT_REPORT_PARTS" "$JUNIT_REPORT_XML"
+    
+    - name: archive unitest reports (transformed)
+      shell: bash
+      run: |
+        tar -C $JUNIT_REPORT_PARTS/.. -czf $REPORTS_ARTIFACTS_DIR/junit_parts.xml.tar.gz $(basename $JUNIT_REPORT_PARTS)
+
+    - name: Unit test history upload results
+      if: inputs.testman_token
+      shell: bash
+      run: |
+        PROXY_ADDR=127.0.0.1:8888
+
+        openssl req -x509 -newkey rsa:2048 \
+          -keyout $TMP_DIR/key.pem -out $TMP_DIR/cert.pem \
+          -sha256 -days 1 -nodes -subj "/CN=127.0.0.1"
+        
+        ./ydb/ci/testmo-proxy/testmo-proxy.py -l $PROXY_ADDR \
+          --cert-file "$TMP_DIR/cert.pem" \
+          --cert-key "$TMP_DIR/key.pem" \
+          --target-timeout 3,10 \
+          --max-request-time 55 \
+          "$TESTMO_URL" &
+        
+        proxy_pid=$!
+        
+        NODE_TLS_REJECT_UNAUTHORIZED=0 testmo automation:run:submit-thread \
+          --instance "https://$PROXY_ADDR" --run-id "${{ steps.th.outputs.runid }}" \
+          --results "$JUNIT_REPORT_PARTS/*.xml"
+        
+        kill $proxy_pid
+
+    - name: Test history run complete
+      if: always() && inputs.testman_token
+      shell: bash
+      run: |
+        testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{ steps.th.outputs.runid }}
+
+    - name: write tests summary
+      shell: bash
+      if: always()
+      run: |
+        mkdir $ARTIFACTS_DIR/summary/
+        
+        cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
+        
+        .github/scripts/tests/generate-summary.py \
+          --summary-out-path $ARTIFACTS_DIR/summary/ \
+          --summary-url-prefix $S3_URL_PREFIX/summary/ \
+          --test-history-url $TEST_HISTORY_URL \
+          --build-preset "$BUILD_PRESET" \
+          "Tests" ya-test.html "$JUNIT_REPORT_XML"
+
+    - name: sync test results to s3
+      if: always()
+      shell: bash
+      run: |
+        echo "::group::s3-sync"
+        s3cmd sync -r --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$ARTIFACTS_DIR/" "$S3_BUCKET_PATH/"
+        s3cmd sync -r --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$TEST_ARTIFACTS_DIR/" "$S3_TEST_ARTIFACTS_BUCKET_PATH/"
+        echo "::endgroup::"
+    
+    - name: sync logs results to s3
+      if: always()
+      shell: bash
+      run: |
+        echo "::group::s3-sync"
+        s3cmd sync --follow-symlinks --acl-private --no-progress --stats --no-check-md5 "$LOG_DIR/" "$S3_BUCKET_PATH/test_logs/"
+        echo "::endgroup::"
+        
+    - name: check test results
+      shell: bash
+      run: |
+        .github/scripts/tests/fail-checker.py "$JUNIT_REPORT_XML"
+
+    - name: show free space
+      if: always()
+      shell: bash
+      run: df -h

@@ -935,6 +935,10 @@ public:
                                 }
 
                                 if (ListLength(join->usingClause) > 0) {
+                                    if (join->join_using_alias) {
+                                        AddError(TStringBuilder() << "join USING: unsupported AS");
+                                        return nullptr;
+                                    }
                                     if (op == "cross") {
                                         op = "inner";
                                     }

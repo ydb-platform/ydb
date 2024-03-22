@@ -569,6 +569,19 @@ private:
     }
 
     bool ApplySubjectName(const nebius::iam::v1::AuthenticateResponse& response, TString& subject, TString& error) {
+        if (response.resultcode() != nebius::iam::v1::AuthenticateResponse::OK) {
+            switch (response.resultcode()) {
+            case nebius::iam::v1::AuthenticateResponse::UNKNOWN_SUBJECT:
+                error = "Unknown Subject";
+                return false;
+            case nebius::iam::v1::AuthenticateResponse::INVALID_TOKEN:
+                error = "Invalid Token";
+                return false;
+            default:
+                error = "Unthentication Error";
+                return false;
+            }
+        }
         return ApplySubjectName(response.account(), subject, error);
     }
 

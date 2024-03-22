@@ -28,8 +28,15 @@ message AuthenticateRequest {
 }
 
 message AuthenticateResponse {
-  Account account = 1;
-  google.protobuf.Timestamp session_expires_at = 2;
+  ResultCode resultCode = 1;
+  Account account = 2;
+  google.protobuf.Timestamp session_expires_at = 3;
+
+  enum ResultCode {
+    OK = 0; // authentication was successful.
+    UNKNOWN_SUBJECT = 1; // if the subject: doesn't exist, deleted, not found or account doesn't exist in the tenant owning the resource.
+    INVALID_TOKEN = 2; // The iam_token is not valid. It has an invalid length, invalid signature, etc.
+  }
 }
 
 message AuthorizeRequest {

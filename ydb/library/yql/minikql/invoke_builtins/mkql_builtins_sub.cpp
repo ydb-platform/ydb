@@ -96,7 +96,7 @@ struct TDecimalSub {
 
 template<typename TLeft, typename TRight, typename TOutput>
 struct TDateTimeSub {
-    static_assert(std::is_same<TOutput, NUdf::TDataType<NUdf::TInterval>>::value, "expected output interval");
+    static_assert(TOutput::Features & NYql::NUdf::TimeIntervalType, "Interval type expected");
 
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
     {
@@ -204,46 +204,74 @@ using TAnyDateTimeSubIntervalTz = TAnyDateTimeSubIntervalT<TLeft, TRight, TOutpu
 
 }
 
-template <bool LeftTz, bool RightTz>
+template <bool LeftTz, bool RightTz, bool LeftBig, bool RightBig>
 void RegisterDateSub(IBuiltinFunctionRegistry& registry) {
-    using TDateLeft1 = std::conditional_t<LeftTz, NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TDate>>;
-    using TDateLeft2 = std::conditional_t<LeftTz, NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TDatetime>>;
-    using TDateLeft3 = std::conditional_t<LeftTz, NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTimestamp>>;
+    static_assert(!(LeftTz && LeftBig), "Expect either Tz or Big date type");
+    static_assert(!(RightTz && RightBig), "Expect either Tz or Big date type");
 
-    using TDateRight1 = std::conditional_t<RightTz, NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TDate>>;
-    using TDateRight2 = std::conditional_t<RightTz, NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TDatetime>>;
-    using TDateRight3 = std::conditional_t<RightTz, NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTimestamp>>;
+    using TDateLeft1 = std::conditional_t<LeftBig,
+        NUdf::TDataType<NUdf::TDate32>,
+        std::conditional_t<LeftTz, NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TDate>>>;
+    using TDateLeft2 = std::conditional_t<LeftBig,
+          NUdf::TDataType<NUdf::TDatetime64>,
+          std::conditional_t<LeftTz, NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TDatetime>>>;
+    using TDateLeft3 = std::conditional_t<LeftBig,
+          NUdf::TDataType<NUdf::TTimestamp64>,
+          std::conditional_t<LeftTz, NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTimestamp>>>;
+
+    using TDateRight1 = std::conditional_t<RightBig,
+          NUdf::TDataType<NUdf::TDate32>,
+          std::conditional_t<RightTz, NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TDate>>>;
+    using TDateRight2 = std::conditional_t<RightBig,
+          NUdf::TDataType<NUdf::TDatetime64>,
+          std::conditional_t<RightTz, NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TDatetime>>>;
+    using TDateRight3 = std::conditional_t<RightBig,
+          NUdf::TDataType<NUdf::TTimestamp64>,
+          std::conditional_t<RightTz, NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTimestamp>>>;
+
+    using TOutput = std::conditional_t<LeftBig || RightBig, 
+          NUdf::TDataType<NUdf::TInterval64>,
+          NUdf::TDataType<NUdf::TInterval>>;
 
     RegisterFunctionBinPolyOpt<TDateLeft1, TDateRight1,
-        NUdf::TDataType<NUdf::TInterval>, TDateTimeSub, TBinaryArgsOpt>(registry, "Sub");
+        TOutput, TDateTimeSub, TBinaryArgsOpt>(registry, "Sub");
     RegisterFunctionBinPolyOpt<TDateLeft1, TDateRight2,
-        NUdf::TDataType<NUdf::TInterval>, TDateTimeSub, TBinaryArgsOpt>(registry, "Sub");
+        TOutput, TDateTimeSub, TBinaryArgsOpt>(registry, "Sub");
     RegisterFunctionBinPolyOpt<TDateLeft1, TDateRight3,
-        NUdf::TDataType<NUdf::TInterval>, TDateTimeSub, TBinaryArgsOpt>(registry, "Sub");
+        TOutput, TDateTimeSub, TBinaryArgsOpt>(registry, "Sub");
 
     RegisterFunctionBinPolyOpt<TDateLeft2, TDateRight1,
-        NUdf::TDataType<NUdf::TInterval>, TDateTimeSub, TBinaryArgsOpt>(registry, "Sub");
+        TOutput, TDateTimeSub, TBinaryArgsOpt>(registry, "Sub");
     RegisterFunctionBinPolyOpt<TDateLeft2, TDateRight2,
-        NUdf::TDataType<NUdf::TInterval>, TDateTimeSub, TBinaryArgsOpt>(registry, "Sub");
+        TOutput, TDateTimeSub, TBinaryArgsOpt>(registry, "Sub");
     RegisterFunctionBinPolyOpt<TDateLeft2, TDateRight3,
-        NUdf::TDataType<NUdf::TInterval>, TDateTimeSub, TBinaryArgsOpt>(registry, "Sub");
+        TOutput, TDateTimeSub, TBinaryArgsOpt>(registry, "Sub");
 
     RegisterFunctionBinPolyOpt<TDateLeft3, TDateRight1,
-        NUdf::TDataType<NUdf::TInterval>, TDateTimeSub, TBinaryArgsOpt>(registry, "Sub");
+        TOutput, TDateTimeSub, TBinaryArgsOpt>(registry, "Sub");
     RegisterFunctionBinPolyOpt<TDateLeft3, TDateRight2,
-        NUdf::TDataType<NUdf::TInterval>, TDateTimeSub, TBinaryArgsOpt>(registry, "Sub");
+        TOutput, TDateTimeSub, TBinaryArgsOpt>(registry, "Sub");
     RegisterFunctionBinPolyOpt<TDateLeft3, TDateRight3,
-        NUdf::TDataType<NUdf::TInterval>, TDateTimeSub, TBinaryArgsOpt>(registry, "Sub");
+        TOutput, TDateTimeSub, TBinaryArgsOpt>(registry, "Sub");
 }
 
 void RegisterSub(IBuiltinFunctionRegistry& registry) {
     RegisterBinaryNumericFunctionOpt<TSub, TBinaryArgsOpt>(registry, "Sub");
     NDecimal::RegisterBinaryFunctionForAllPrecisions<TDecimalSub, TBinaryArgsOpt>(registry, "Sub_");
 
-    RegisterDateSub<false, false>(registry);
-    RegisterDateSub<false, true>(registry);
-    RegisterDateSub<true, false>(registry);
-    RegisterDateSub<true, true>(registry);
+    RegisterDateSub<false, false, false, false>(registry);
+    RegisterDateSub<false, true,  false, false>(registry);
+    RegisterDateSub<true,  false, false, false>(registry);
+    RegisterDateSub<true,  true,  false, false>(registry);
+
+    // NarrowDate minus BigDate
+    RegisterDateSub<false, false, false, true>(registry);
+    RegisterDateSub<true,  false, false, true>(registry);
+    // BigDate minus NarrowDate
+    RegisterDateSub<false, false, true, false>(registry);
+    RegisterDateSub<false, true,  true, false>(registry);
+    // BigDate minus BigDate
+    RegisterDateSub<false, false, true, true>(registry);
 
     RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>,
         NUdf::TDataType<NUdf::TInterval>, TIntervalSubInterval, TBinaryArgsOptWithNullableResult>(registry, "Sub");

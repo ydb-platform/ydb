@@ -179,7 +179,9 @@ public:
 
     bool Reverse = false;
 
-    std::shared_ptr<TEvDataShard::TEvRead> Request;
+    // The original event handle
+    TEvDataShard::TEvRead::TPtr Ev;
+    TEvDataShard::TEvRead* Request = nullptr;
 
     // parallel to Request->Keys, but real data only in indices,
     // where in Request->Keys we have key prefix (here we have properly extended one).

@@ -87,6 +87,9 @@ namespace NActors {
         for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
             Executors[excIdx]->Shutdown();
         }
+        if (Shared) {
+            Shared->Shutdown();
+        }
         for (ui32 round = 0, done = 0; done < ExecutorPoolCount && round < 3; ++round) {
             done = 0;
             for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
@@ -96,7 +99,6 @@ namespace NActors {
             }
         }
         if (Shared) {
-            Shared->Shutdown();
             Shared->Cleanup();
         }
     }
@@ -124,10 +126,6 @@ namespace NActors {
         for (TBasicExecutorPoolConfig& cfg : Config.Basic) {
             if (cfg.PoolId == poolId) {
                 if (cfg.HasSharedThread) {
-                    cfg.Threads -= 1;
-                    if (cfg.MaxThreadCount) {
-                        cfg.MaxThreadCount -= 1;
-                    }
                     auto *sharedPool = static_cast<TSharedExecutorPool*>(Shared.get());
                     auto *pool = new TBasicExecutorPool(cfg, Harmonizer.get());
                     if (pool) {
@@ -163,15 +161,6 @@ namespace NActors {
         }
         if (Shared) {
             Shared->GetSharedStats(poolId, sharedStatsCopy);
-            auto state = Shared->GetState();
-            if (i16 threadIdx = state.BorrowedThreadByPool[poolId]; threadIdx != -1) {
-                poolStats.CurrentThreadCount += 0.5;
-            }
-            if (i16 threadIdx = state.ThreadByPool[poolId]; threadIdx != -1) {
-                if (state.PoolByBorrowedThread[threadIdx] == -1) {
-                    poolStats.CurrentThreadCount -= 0.5;
-                }
-            }
         }
     }
 

@@ -476,6 +476,7 @@ namespace NActors {
                 return {IsSharedThread, wasWorking};
             }
             executeActivation(activation, false);
+            // Cerr << (TStringBuilder() << "Activation was executed " << (Ctx.WorkerId >= 0 ? "[common]" : "[shared]") << Endl);
         }
 
         if (IsSharedThread) {
@@ -506,14 +507,15 @@ namespace NActors {
     }
 
     TGenericExecutorThread::TProcessingResult TSharedExecutorThread::ProcessSharedExecutorPool(TExecutorPoolBaseMailboxed *pool) {
+        TWorkerId workerId = (pool == ThreadCtx->ExecutorPools[0].load(std::memory_order_relaxed) ? -1 : -2);
         Ctx.Switch(
             pool,
             pool->MailboxTable.Get(),
             NHPTimer::GetClockRate() * TimePerMailbox.SecondsFloat(),
             EventsPerMailbox,
-            GetCycleCountFast() + SoftProcessingDurationTs,
+            (workerId == -1 ? -1 : GetCycleCountFast() + SoftProcessingDurationTs),
             &SharedStats[pool->PoolId]);
-        Ctx.WorkerId = (pool == ThreadCtx->ExecutorPools[0].load(std::memory_order_relaxed) ? -1 : -2);
+        Ctx.WorkerId = workerId;
         return ProcessExecutorPool(pool);
     }
 
@@ -547,6 +549,8 @@ namespace NActors {
                     wasWorking |= result.WasWorking;
                 }
             }
+
+            // Cerr << "Think about sleep [shared]\n";
 
             if (!wasWorking && !StopFlag.load(std::memory_order_relaxed)) {
                 TlsThreadContext->Timers.Reset();

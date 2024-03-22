@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/engines/changes/actualization/construction/context.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap::NActualizer {
 
@@ -28,8 +29,9 @@ void TSchemeActualizer::DoAddPortion(const TPortionInfo& info, const TAddExterna
     if (!actualizationInfo) {
         return;
     }
-    PortionsToActualizeScheme[actualizationInfo->GetAddress()].emplace(info.GetPortionId());
-    PortionsInfo.emplace(info.GetPortionId(), actualizationInfo->ExtractFindId());
+    NYDBTest::TControllers::GetColumnShardController()->AddPortionForActualizer(1);
+    AFL_VERIFY(PortionsToActualizeScheme[actualizationInfo->GetAddress()].emplace(info.GetPortionId()).second);
+    AFL_VERIFY(PortionsInfo.emplace(info.GetPortionId(), actualizationInfo->ExtractFindId()).second);
 }
 
 void TSchemeActualizer::DoRemovePortion(const TPortionInfo& info) {
@@ -37,13 +39,14 @@ void TSchemeActualizer::DoRemovePortion(const TPortionInfo& info) {
     if (it == PortionsInfo.end()) {
         return;
     }
-
     auto itAddress = PortionsToActualizeScheme.find(it->second.GetRWAddress());
     AFL_VERIFY(itAddress != PortionsToActualizeScheme.end());
     AFL_VERIFY(itAddress->second.erase(info.GetPortionId()));
+    NYDBTest::TControllers::GetColumnShardController()->AddPortionForActualizer(-1);
     if (itAddress->second.empty()) {
         PortionsToActualizeScheme.erase(itAddress);
     }
+    PortionsInfo.erase(it);
 }
 
 void TSchemeActualizer::DoBuildTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& /*internalContext*/) const {
@@ -71,6 +74,7 @@ void TSchemeActualizer::Refresh(const TAddExternalContext& externalContext) {
     if (!TargetSchema) {
         AFL_VERIFY(PortionsInfo.empty());
     } else {
+        NYDBTest::TControllers::GetColumnShardController()->AddPortionForActualizer(-1 * PortionsInfo.size());
         PortionsInfo.clear();
         PortionsToActualizeScheme.clear();
         for (auto&& i : externalContext.GetPortions()) {

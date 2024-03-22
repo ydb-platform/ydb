@@ -20,6 +20,8 @@ message TScalar {
         double Double = 10;
 
         TTimestamp Timestamp = 11;
+
+        float Float = 12;
     }
 }
 

@@ -1,5 +1,6 @@
 #include "inflight_request_tracker.h"
 #include "engines/column_engine.h"
+#include "engines/reader/plain_reader/constructor/read_metadata.h"
 
 namespace NKikimr::NColumnShard {
 
@@ -8,7 +9,7 @@ void TInFlightReadsTracker::RemoveInFlightRequest(ui64 cookie, const NOlap::TVer
     const auto& readMetaList = RequestsMeta[cookie];
 
     for (const auto& readMetaBase : readMetaList) {
-        NOlap::TReadMetadata::TConstPtr readMeta = std::dynamic_pointer_cast<const NOlap::TReadMetadata>(readMetaBase);
+        NOlap::NReader::NPlain::TReadMetadata::TConstPtr readMeta = std::dynamic_pointer_cast<const NOlap::NReader::NPlain::TReadMetadata>(readMetaBase);
 
         if (!readMeta) {
             continue;
@@ -46,10 +47,10 @@ void TInFlightReadsTracker::RemoveInFlightRequest(ui64 cookie, const NOlap::TVer
     RequestsMeta.erase(cookie);
 }
 
-void TInFlightReadsTracker::AddToInFlightRequest(const ui64 cookie, NOlap::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* index) {
+void TInFlightReadsTracker::AddToInFlightRequest(const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* index) {
     RequestsMeta[cookie].push_back(readMetaBase);
 
-    NOlap::TReadMetadata::TConstPtr readMeta = std::dynamic_pointer_cast<const NOlap::TReadMetadata>(readMetaBase);
+    auto readMeta = std::dynamic_pointer_cast<const NOlap::NReader::NPlain::TReadMetadata>(readMetaBase);
 
     if (!readMeta) {
         return;

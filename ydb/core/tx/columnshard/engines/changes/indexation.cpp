@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/read_filter_merger.h>
 
 namespace NKikimr::NOlap {
 

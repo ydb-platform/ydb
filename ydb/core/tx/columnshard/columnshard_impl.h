@@ -48,6 +48,13 @@ class TCompactColumnEngineChanges;
 class TInsertColumnEngineChanges;
 class TStoragesManager;
 
+namespace NReader {
+class TTxScan;
+namespace NPlain {
+class TIndexScannerConstructor;
+}
+}
+
 namespace NDataSharing {
 class TTxDataFromSource;
 class TTxDataAckToSource;
@@ -133,7 +140,6 @@ class TColumnShard
     friend class TTxWrite;
     friend class TTxReadBase;
     friend class TTxRead;
-    friend class TTxScan;
     friend class TTxWriteIndex;
     friend class TTxExportFinish;
     friend class TTxRunGC;
@@ -161,6 +167,9 @@ class TColumnShard
     friend class NOlap::NDataSharing::TTxFinishAckFromInitiator;
 
     friend class NOlap::TStoragesManager;
+
+    friend class NOlap::NReader::TTxScan;
+    friend class NOlap::NReader::NPlain::TIndexScannerConstructor;
 
     class TStoragesManager;
     friend class TTxController;
@@ -534,6 +543,10 @@ public:
     template <class T>
     const T& GetIndexAs() const {
         return TablesManager.GetPrimaryIndexAsVerified<T>();
+    }
+
+    const NOlap::IColumnEngine* GetIndexOptional() const {
+        return TablesManager.GetPrimaryIndex() ? TablesManager.GetPrimaryIndex().get() : nullptr;
     }
 
     template <class T>

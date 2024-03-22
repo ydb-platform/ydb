@@ -156,7 +156,7 @@ namespace NYql {
 
             Output = std::make_shared<TFileOutput>(LocalPath);
             return BIND([self = MakeWeak(this)]() {
-                return ReadNext(self);
+                ReadNext(self);
             }).AsyncVia(Client->GetConnection()->GetInvoker()).Run();
         }
     };

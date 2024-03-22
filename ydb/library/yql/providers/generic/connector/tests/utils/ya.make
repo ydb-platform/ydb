@@ -4,7 +4,6 @@ STYLE_PYTHON()
 
 PY_SRCS(
     artifacts.py
-    clickhouse.py
     comparator.py
     data_source_kind.py
     database.py
@@ -13,7 +12,6 @@ PY_SRCS(
     generate.py
     kqprun.py
     log.py
-    postgresql.py
     runner.py
     schema.py
     settings.py

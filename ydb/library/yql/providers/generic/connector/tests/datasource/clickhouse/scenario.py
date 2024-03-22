@@ -1,9 +1,11 @@
 from typing import Sequence
 
+
+import ydb.library.yql.providers.generic.connector.tests.test_cases as test_cases
+from ydb.library.yql.providers.generic.connector.tests import utils
 import ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 as data_source_pb2
 
 import utils.artifacts as artifacts
-from utils.clickhouse import Client
 from utils.comparator import data_outs_equal
 from utils.database import Database
 from utils.log import make_logger, debug_with_limit
@@ -11,6 +13,8 @@ from utils.schema import Schema
 from utils.settings import Settings
 from utils.runner import Runner
 from utils.sql import format_values_for_bulk_sql_insert
+
+from client import Client
 
 import test_cases.select_missing_database
 import test_cases.select_missing_table

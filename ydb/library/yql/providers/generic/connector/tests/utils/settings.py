@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Optional, Sequence
 
 import yatest.common
+import os
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
@@ -48,9 +49,9 @@ class Settings:
     postgresql: PostgreSQL
 
     @classmethod
-    def from_env(cls) -> 'Settings':
+    def from_env(cls, testDir: os.PathLike) -> 'Settings':
         docker_compose_file = yatest.common.source_path(
-            'ydb/library/yql/providers/generic/connector/tests/docker-compose.yml'
+            testDir.join('docker-compose.yaml'),
         )
         endpoint_determiner = EndpointDeterminer(docker_compose_file)
 

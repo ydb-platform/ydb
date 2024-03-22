@@ -3,7 +3,7 @@ PY3TEST()
 STYLE_PYTHON()
 NO_CHECK_IMPORTS()
 
-DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/docker-compose.yml)
+DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/datasource/postgresql/docker-compose.yaml)
 
 IF (AUTOCHECK) 
     # Split tests to chunks only when they're running on different machines with distbuild,

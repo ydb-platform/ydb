@@ -16,7 +16,7 @@
 #include "resource_subscriber/task.h"
 #include "normalizer/abstract/abstract.h"
 
-#include "data_locks/manager/manager.h"
+#include "export/events/events.h"
 
 #include "data_sharing/destination/events/control.h"
 #include "data_sharing/source/events/control.h"
@@ -27,8 +27,6 @@
 #include "data_sharing/common/transactions/tx_extension.h"
 #include "data_sharing/modification/events/change_owning.h"
 
-#include "backup/manager.h"
-
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
@@ -36,11 +34,11 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/tiering/common.h>
-#include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/tx/locks/locks.h>
 #include <ydb/services/metadata/service.h>
+#include <ydb/services/metadata/abstract/common.h>
 
 namespace NKikimr::NOlap {
 class TCleanupPortionsColumnEngineChanges;
@@ -56,7 +54,10 @@ class TTxDataFromSource;
 class TTxDataAckToSource;
 class TTxFinishAckToSource;
 class TTxFinishAckFromInitiator;
+}
 
+namespace NExport {
+class TExportsManager;
 }
 
 namespace NBlobOperations {
@@ -217,6 +218,8 @@ class TColumnShard
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishToSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(NOlap::NExport::NEvents::TEvExportSaveCursor::TPtr& ev, const TActorContext& ctx);
+
     ITransaction* CreateTxInitSchema();
 
     void OnActivateExecutor(const TActorContext& ctx) override;
@@ -229,10 +232,7 @@ class TColumnShard
         Y_UNUSED(ctx);
     }
 
-    const NTiers::TManager* GetTierManagerPointer(const TString& tierId) const {
-        Y_ABORT_UNLESS(!!Tiers);
-        return Tiers->GetManagerOptional(tierId);
-    }
+    const NTiers::TManager* GetTierManagerPointer(const TString& tierId) const;
 
     void Die(const TActorContext& ctx) override;
 
@@ -370,6 +370,7 @@ protected:
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishToSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator, Handle);
 
+            HFunc(NOlap::NExport::NEvents::TEvExportSaveCursor, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 LOG_S_WARN("TColumnShard.StateWork at " << TabletID()
@@ -385,6 +386,7 @@ private:
     std::unique_ptr<TOperationsManager> OperationsManager;
     std::shared_ptr<NOlap::NDataSharing::TSessionsManager> SharingSessionsManager;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
+    std::shared_ptr<NOlap::NExport::TExportsManager> ExportsManager;
     std::shared_ptr<NOlap::NDataLocks::TManager> DataLocksManager;
 
     using TSchemaPreset = TSchemaPreset;
@@ -492,8 +494,6 @@ private:
 
     const TCSCounters CSCounters;
     TWritesMonitor WritesMonitor;
-    TBackupManager BackupManager;
-
     bool ProgressTxInFlight = false;
     THashMap<ui64, TInstant> ScanTxInFlight;
     THashMap<TWriteId, TLongTxWriteInfo> LongTxWrites;
@@ -503,7 +503,6 @@ private:
     TBackgroundController BackgroundController;
     TSettings Settings;
     TLimits Limits;
-    TCompactionLimits CompactionLimits;
     NOlap::TNormalizationController NormalizerController;
     NDataShard::TSysLocks SysLocks;
 
@@ -592,6 +591,10 @@ public:
 
     NOlap::TSnapshot GetLastCompletedTx() const {
         return LastCompletedTx;
+    }
+
+    const std::shared_ptr<NOlap::NExport::TExportsManager>& GetExportsManager() const {
+        return ExportsManager;
     }
 
     const std::shared_ptr<NOlap::IStoragesManager>& GetStoragesManager() const {

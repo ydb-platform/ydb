@@ -192,6 +192,21 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
     return result;
 }
 
+TString FullTopicPath(TStringBuf dbPath, TStringBuf topic) {
+    if (topic.starts_with(dbPath)) {
+        return TString(topic);
+    }
+    TString full;
+    full.reserve(dbPath.size() + 1 + topic.size());
+    full.append(dbPath);
+    if (!full.EndsWith('/')) {
+        full.push_back('/');
+    }
+    topic.SkipPrefix("/");
+    full.append(topic);
+    return full;
+}
+
 void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& delay)
 {
     Y_ABORT_UNLESS(Lock.IsLocked());
@@ -218,11 +233,13 @@ void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& del
     NPersQueue::Cancel(prevDescribePartitionContext);
 
     Ydb::Topic::DescribePartitionRequest request;
-    request.set_path(Settings.Path_);
+    // Currently, the whole topic path needs to be sent in the DescribePartitionRequest.
+    request.set_path(FullTopicPath(DbDriverState->Database, Settings.Path_));
     request.set_partition_id(partition_id);
     request.set_include_location(true);
 
     TRACE_LAZY(DbDriverState->Log, "DescribePartitionRequest",
+        TRACE_KV("path", request.path()),
         TRACE_KV("partition_id", request.partition_id()));
 
     auto extractor = [cbContext = SelfContext, context = describePartitionContext](Ydb::Topic::DescribePartitionResponse* response, TPlainStatus status) mutable {
@@ -230,7 +247,8 @@ void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& del
         if (response)
             response->operation().result().UnpackTo(&result);
 
-        TStatus st(std::move(status));
+        TStatus st = status.Status == EStatus::SUCCESS ? NPersQueue::MakeErrorFromProto(response->operation()) : std::move(status);
+
         if (auto self = cbContext->LockShared()) {
             self->OnDescribePartition(st, result, context);
         }
@@ -1055,7 +1073,8 @@ TMemoryUsageChange TWriteSessionImpl::OnMemoryUsageChangedImpl(i64 diff) {
 
 TBuffer CompressBuffer(std::shared_ptr<TTopicClient::TImpl> client, TVector<TStringBuf>& data, ECodec codec, i32 level) {
     TBuffer result;
-    THolder<IOutputStream> coder = client->GetCodecImplOrThrow(codec)->CreateCoder(result, level);
+    Y_UNUSED(client);
+    THolder<IOutputStream> coder = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow((ui32)codec)->CreateCoder(result, level);
     for (auto& buffer : data) {
         coder->Write(buffer.data(), buffer.size());
     }

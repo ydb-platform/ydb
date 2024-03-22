@@ -2,7 +2,8 @@
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
-#include <ydb/core/tx/columnshard/splitter/rb_splitter.h>
+#include <ydb/core/tx/columnshard/splitter/batch_slice.h>
+#include <ydb/core/tx/columnshard/splitter/settings.h>
 
 namespace NKikimr::NOlap {
 
@@ -91,10 +92,6 @@ std::vector<TPortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions(cons
     Y_ABORT_UNLESS(batch->num_rows());
 
     auto resultSchema = context.SchemaVersions.GetSchema(snapshot);
-    TEntityGroups groups(IStoragesManager::DefaultStorageId);
-    for (auto&& i : resultSchema->GetIndexInfo().GetEntityIds()) {
-        groups.Add(i, resultSchema->GetIndexInfo().GetEntityStorageId(i, IStoragesManager::DefaultStorageId));
-    }
 
     std::shared_ptr<NOlap::TSerializationStats> stats = std::make_shared<NOlap::TSerializationStats>();
     if (granuleMeta) {
@@ -106,22 +103,24 @@ std::vector<TPortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions(cons
     }
     std::vector<TPortionInfoWithBlobs> out;
     {
-        std::vector<TBatchSerializedSlice> pages = TRBSplitLimiter::BuildSimpleSlices(batch, SplitSettings, context.Counters.SplitterCounters, schema);
+        std::vector<TBatchSerializedSlice> pages = TBatchSerializedSlice::BuildSimpleSlices(batch, NSplitter::TSplitSettings(), context.Counters.SplitterCounters, schema);
         std::vector<TGeneralSerializedSlice> generalPages;
         for (auto&& i : pages) {
             auto portionColumns = i.GetPortionChunksToHash();
             resultSchema->GetIndexInfo().AppendIndexes(portionColumns);
-            generalPages.emplace_back(portionColumns, schema, context.Counters.SplitterCounters, SplitSettings);
+            generalPages.emplace_back(portionColumns, schema, context.Counters.SplitterCounters);
         }
 
-        TSimilarSlicer slicer(SplitSettings.GetExpectedPortionSize());
+        const NSplitter::TEntityGroups groups = resultSchema->GetIndexInfo().GetEntityGroupsByStorageId(IStoragesManager::DefaultStorageId, *SaverContext.GetStoragesManager());
+        TSimilarPacker slicer(NSplitter::TSplitSettings().GetExpectedPortionSize());
         auto packs = slicer.Split(generalPages);
 
         ui32 recordIdx = 0;
         for (auto&& i : packs) {
-            TGeneralSerializedSlice slice(std::move(i), GetSplitSettings());
+            TGeneralSerializedSlice slice(std::move(i));
             auto b = batch->Slice(recordIdx, slice.GetRecordsCount());
-            out.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), nullptr, pathId, snapshot, SaverContext.GetStoragesManager(), resultSchema));
+            out.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), nullptr, pathId, snapshot, SaverContext.GetStoragesManager()));
+            out.back().FillStatistics(resultSchema->GetIndexInfo());
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultSchema->GetIndexInfo().GetReplaceKey()));
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
             out.back().GetPortionInfo().AddMetadata(*resultSchema, primaryKeys, snapshotKeys, IStoragesManager::DefaultStorageId);

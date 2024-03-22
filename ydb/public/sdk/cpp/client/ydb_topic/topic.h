@@ -1317,7 +1317,7 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     //! 1. Get a partition ID.
     //! 2. Find out the location of the partition by its ID.
     //! 3. Connect directly to the partition host.
-    FLUENT_SETTING_DEFAULT(bool, DirectWriteToPartition, false);
+    FLUENT_SETTING_DEFAULT(bool, DirectWriteToPartition, true);
 
     //! codec and level to use for data compression prior to write.
     FLUENT_SETTING_DEFAULT(ECodec, Codec, ECodec::GZIP);
@@ -1374,9 +1374,6 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
         //! If this handler is set, write these events will be handled by handler,
         //! otherwise sent to TWriteSession::GetEvent().
         FLUENT_SETTING(TReadyToAcceptHandler, ReadyToAcceptHandler);
-        TSelf& ReadyToAcceptHander(const TReadyToAcceptHandler& value) {
-            return ReadyToAcceptHandler(value);
-        }
 
         //! Function to handle close session events.
         //! If this handler is set, close session events will be handled by handler
@@ -1396,6 +1393,11 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
         //! Executor for handlers.
         //! If not set, default single threaded executor will be used.
         FLUENT_SETTING(IExecutor::TPtr, HandlersExecutor);
+
+        [[deprecated("Typo in name. Use ReadyToAcceptHandler instead.")]]
+        TSelf& ReadyToAcceptHander(const TReadyToAcceptHandler& value) {
+            return ReadyToAcceptHandler(value);
+        }
     };
 
     //! Event handlers.

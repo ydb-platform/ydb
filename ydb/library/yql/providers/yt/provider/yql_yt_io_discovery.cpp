@@ -537,7 +537,7 @@ public:
         CanonizeFuture_ = {};
         CanonizationRangesFoldersFuture_ = {};
 
-        if (!PendingWalkFolders_.empty() && !State_->Types->EvaluationInProgress) {
+        if (!PendingWalkFolders_.empty()) {
             const auto walkFoldersStatus = RewriteWalkFoldersOnAsyncOrEvalChanges(output, ctx);
             if (walkFoldersStatus != TStatus::Ok) {
                 return walkFoldersStatus;
@@ -663,18 +663,18 @@ private:
     [[nodiscard]]
     TExprNode::TPtr InitializeWalkFolders(TYtKey&& key, const TString& cluster, TPosition pos, TExprContext& ctx) {
         auto& args = key.GetWalkFolderArgs().GetRef();
-        const auto instanceKey = args.StateKey;
 
         TWalkFoldersImpl walkFolders {State_->SessionId, cluster, State_->Configuration->Snapshot(), 
                          pos, std::move(args), State_->Gateway};
         YQL_CLOG(INFO, ProviderYt) << "Initialized WalkFolders from " << cluster << ".`" 
             << args.InitialFolder.Prefix << "`" << " with root attributes cnt: " 
             << args.InitialFolder.Attributes.size();
+        const auto instanceKey = ctx.NextUniqueId;
         PendingWalkFolders_.emplace(instanceKey, std::move(walkFolders));
 
         auto walkFoldersImplNode = Build<TYtWalkFoldersImpl>(ctx, key.GetNode()->Pos())
             .ProcessStateKey()
-                .Value(args.StateKey)
+                .Value(instanceKey)
             .Build()
             .PickledUserState(args.PickledUserState)
             .UserStateType(args.UserStateType)
@@ -688,9 +688,10 @@ private:
     TStatus RewriteWalkFoldersOnAsyncOrEvalChanges(TExprNode::TPtr& output, TExprContext& ctx) {
         Y_ENSURE(!PendingWalkFolders_.empty());
 
-        auto currImplKey = PendingWalkFolders_.begin()->first;
+        const auto currImplKey = PendingWalkFolders_.begin()->first;
+        TStatus walkFoldersStatus = IGraphTransformer::TStatus::Ok;
 
-        auto status = VisitInputKeys(output, ctx, [this, &ctx, currImplKey] (TYtRead readNode, TYtInputKeys&& keys) -> TExprNode::TPtr {
+        auto status = VisitInputKeys(output, ctx, [this, &ctx, currImplKey, &walkFoldersStatus] (TYtRead readNode, TYtInputKeys&& keys) -> TExprNode::TPtr {
             if (keys.GetType() == TYtKey::EType::WalkFoldersImpl) {
                 YQL_CLOG(INFO, ProviderYt) << "YtIODiscovery - DoApplyAsyncChanges WalkFoldersImpl handling start";
 
@@ -713,8 +714,13 @@ private:
                 Y_ENSURE(walkFoldersImpl.GetAnyOpFuture().HasValue(), 
                     "Called RewriteWalkFoldersOnAsyncChanges, but impl future is not ready");
 
-                auto userState = 
-                    walkFoldersImpl.GetNextStateExpr(ctx, std::move(parsedKey.GetWalkFolderImplArgs().GetRef()));
+                auto nextState = parsedKey.GetWalkFolderImplArgs()->UserStateExpr;
+                walkFoldersStatus = walkFoldersImpl.GetNextStateExpr(ctx, std::move(parsedKey.GetWalkFolderImplArgs().GetRef()), nextState);
+
+                if (walkFoldersStatus == TStatus::Error) {
+                    return {};
+                }
+
                 if (walkFoldersImpl.IsFinished()) {
                     YQL_CLOG(INFO, ProviderYt) << "Building result expr for WalkFolders with key: " << instanceKey;
                     PendingWalkFolders_.erase(currImplKey);
@@ -740,7 +746,7 @@ private:
                                     .Add<TCoAtom>()
                                         .Value("State")
                                     .Build()
-                                    .Add(userState)
+                                    .Add(nextState)
                                 .Build()
                             .Build()
                         .Build()
@@ -760,30 +766,25 @@ private:
                     .Ptr();
                 }
 
-                if (userState == parsedKey.GetWalkFolderImplArgs()->UserStateExpr) {
+                if (nextState == parsedKey.GetWalkFolderImplArgs()->UserStateExpr) {
                     return readNode.Ptr();
                 }
 
-                YQL_CLOG(DEBUG, ProviderYt) << "State expr ast: " << ConvertToAst(*userState, ctx, {}).Root->ToString();
+                YQL_CLOG(DEBUG, ProviderYt) << "State expr ast: " << ConvertToAst(*nextState, ctx, {}).Root->ToString();
 
-                auto walkFoldersImplNode = ctx.ChangeChild(*parsedKey.GetNode(), 0, std::move(userState));
+                auto walkFoldersImplNode = ctx.ChangeChild(*parsedKey.GetNode(), 0, std::move(nextState));
                 return ctx.ChangeChild(readNode.Ref(), 2, std::move(walkFoldersImplNode));
-
-                return readNode.Ptr();
             }
             return readNode.Ptr();
         });
         
-        if (status != TStatus::Error && !PendingWalkFolders_.empty()) {
-            YQL_CLOG(INFO, ProviderYt) << "Has pending WalkFolders, repeating. ";
-            status = TStatus::Repeat;
-        } else {
-            YQL_CLOG(INFO, ProviderYt) << "All WalkFolders instances are finished. ";
-            status = TStatus::Ok;
+        if (status == TStatus::Error) {
+            YQL_CLOG(ERROR, ProviderYt) << "WalkFolders error transforming";
+            return status;
         }
 
-        YQL_CLOG(INFO, ProviderYt) << "WalkFolders next status: " << (TStatus::ELevel)status.Level;
-        return status;
+        YQL_CLOG(INFO, ProviderYt) << "WalkFolders next status: " << walkFoldersStatus;
+        return walkFoldersStatus;
     }
     
     IGraphTransformer::TStatus VisitInputKeys(TExprNode::TPtr& output,

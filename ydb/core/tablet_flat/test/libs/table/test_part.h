@@ -148,13 +148,32 @@ namespace NTest {
     namespace IndexTools {
         using TGroupId = NPage::TGroupId;
 
+        inline const TPartIndexIt::TRecord * GetFlatRecord(const TPart& part, ui32 pageIndex) {
+            TTestEnv env;
+            TPartIndexIt index(&part, &env, { });
+
+            Y_ABORT_UNLESS(index.Seek(0) == EReady::Data);
+            for (TPageId p = 0; p < pageIndex; p++) {
+                Y_ABORT_UNLESS(index.Next() == EReady::Data);
+            }
+
+            return index.GetRecord();
+        }
+
+        inline const TPartIndexIt::TRecord * GetFlatLastRecord(const TPart& part) {
+            TTestEnv env;
+            TPartIndexIt index(&part, &env, { });
+            Y_ABORT_UNLESS(index.SeekLast() == EReady::Data);
+            return index.GetLastRecord();
+        }
+
         inline size_t CountMainPages(const TPart& part) {
             size_t result = 0;
 
             TTestEnv env;
-            TPartIndexIt index(&part, &env, { });
+            auto index = CreateIndexIter(&part, &env, { });
             for (size_t i = 0; ; i++) {
-                auto ready = i == 0 ? index.Seek(0) : index.Next();
+                auto ready = i == 0 ? index->Seek(0) : index->Next();
                 if (ready != EReady::Data) {
                     Y_ABORT_UNLESS(ready != EReady::Page, "Unexpected page fault");
                     break;
@@ -167,90 +186,88 @@ namespace NTest {
 
         inline TRowId GetEndRowId(const TPart& part) {
             TTestEnv env;
-            TPartIndexIt index(&part, &env, { });
-            return index.GetEndRowId();
-        }
-
-        inline const TPartIndexIt::TRecord * GetLastRecord(const TPart& part) {
-            TTestEnv env;
-            TPartIndexIt index(&part, &env, { });
-            Y_ABORT_UNLESS(index.SeekLast() == EReady::Data);
-            return index.GetLastRecord();
+            auto index = CreateIndexIter(&part, &env, { });
+            return index->GetEndRowId();
         }
 
         inline TRowId GetPageId(const TPart& part, ui32 pageIndex) {
             TTestEnv env;
-            TPartIndexIt index(&part, &env, { });
+            auto index = CreateIndexIter(&part, &env, { });
 
-            Y_ABORT_UNLESS(index.Seek(0) == EReady::Data);
+            Y_ABORT_UNLESS(index->Seek(0) == EReady::Data);
             for (TPageId p = 0; p < pageIndex; p++) {
-                Y_ABORT_UNLESS(index.Next() == EReady::Data);
+                Y_ABORT_UNLESS(index->Next() == EReady::Data);
             }
 
-            return index.GetPageId();
+            return index->GetPageId();
         }
 
         inline TRowId GetRowId(const TPart& part, ui32 pageIndex) {
             TTestEnv env;
-            TPartIndexIt index(&part, &env, { });
+            auto index = CreateIndexIter(&part, &env, { });
 
-            Y_ABORT_UNLESS(index.Seek(0) == EReady::Data);
+            Y_ABORT_UNLESS(index->Seek(0) == EReady::Data);
             for (TPageId p = 0; p < pageIndex; p++) {
-                Y_ABORT_UNLESS(index.Next() == EReady::Data);
+                Y_ABORT_UNLESS(index->Next() == EReady::Data);
             }
 
-            return index.GetRowId();
-        }
-
-        inline const TPartIndexIt::TRecord * GetRecord(const TPart& part, ui32 pageIndex) {
-            TTestEnv env;
-            TPartIndexIt index(&part, &env, { });
-
-            Y_ABORT_UNLESS(index.Seek(0) == EReady::Data);
-            for (TPageId p = 0; p < pageIndex; p++) {
-                Y_ABORT_UNLESS(index.Next() == EReady::Data);
-            }
-
-            return index.GetRecord();
+            return index->GetRowId();
         }
 
         inline TPageId GetFirstPageId(const TPart& part, TGroupId groupId) {
             TTestEnv env;
-            TPartIndexIt index(&part, &env, groupId);
-            index.Seek(0);
-            return index.GetPageId();
+            auto index = CreateIndexIter(&part, &env, groupId);
+            index->Seek(0);
+            return index->GetPageId();
         }
 
         inline TPageId GetLastPageId(const TPart& part, TGroupId groupId) {
             TTestEnv env;
-            TPartIndexIt index(&part, &env, groupId);
-            index.Seek(index.GetEndRowId() - 1);
-            return index.GetPageId();
+            auto index = CreateIndexIter(&part, &env, groupId);
+            index->Seek(index->GetEndRowId() - 1);
+            return index->GetPageId();
+        }
+
+        inline TVector<TCell> GetKey(const TPart& part, ui32 pageIndex) {
+            TTestEnv env;
+            auto index = CreateIndexIter(&part, &env, { });
+
+            Y_ABORT_UNLESS(index->Seek(0) == EReady::Data);
+            for (TPageId p = 0; p < pageIndex; p++) {
+                Y_ABORT_UNLESS(index->Next() == EReady::Data);
+            }
+
+            TVector<TCell> key;
+            for (auto i : xrange(index->GetKeyCellsCount())) {
+                key.push_back(index->GetKeyCell(i));
+            }
+
+            return key;
         }
 
         inline TSlice MakeSlice(const TPartStore& part, ui32 pageIndex1Inclusive, ui32 pageIndex2Exclusive) {
             auto mainPagesCount = CountMainPages(part);
             Y_ABORT_UNLESS(pageIndex1Inclusive < pageIndex2Exclusive);
             Y_ABORT_UNLESS(pageIndex2Exclusive <= mainPagesCount);
-            auto getKey = [&] (const NPage::TIndex::TRecord* record) {
-                TSmallVec<TCell> key;
-                for (const auto& info : part.Scheme->Groups[0].ColsKeyIdx) {
-                    key.push_back(record->Cell(info));
-                }
-                return TSerializedCellVec(key);
-            };
+            
             TSlice slice;
-            slice.FirstInclusive = true;
-            slice.FirstRowId = IndexTools::GetRowId(part, pageIndex1Inclusive);
+            slice.FirstInclusive = pageIndex1Inclusive > 0
+                ? true
+                : part.Slices->begin()->FirstInclusive;
+            slice.FirstRowId = pageIndex1Inclusive > 0
+                ? IndexTools::GetRowId(part, pageIndex1Inclusive)
+                : part.Slices->begin()->FirstRowId;
             slice.FirstKey = pageIndex1Inclusive > 0 
-                ? getKey(IndexTools::GetRecord(part, pageIndex1Inclusive)) 
+                ? TSerializedCellVec(GetKey(part, pageIndex1Inclusive))
                 : part.Slices->begin()->FirstKey;
-            slice.LastInclusive = false;
+            slice.LastInclusive = pageIndex2Exclusive < mainPagesCount
+                ? false
+                : part.Slices->rbegin()->LastInclusive;
             slice.LastRowId = pageIndex2Exclusive < mainPagesCount 
                 ? IndexTools::GetRowId(part, pageIndex2Exclusive)
-                : part.Stat.Rows;
+                : part.Slices->rbegin()->LastRowId;
             slice.LastKey = pageIndex2Exclusive < mainPagesCount 
-                ? getKey(IndexTools::GetRecord(part, pageIndex2Exclusive)) 
+                ? TSerializedCellVec(GetKey(part, pageIndex2Exclusive))
                 : part.Slices->rbegin()->LastKey;
             return slice;
         }

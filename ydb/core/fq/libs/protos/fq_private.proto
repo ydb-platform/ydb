@@ -119,6 +119,7 @@ message GetTaskResult {
         string execution_id = 36;
         NFq.NConfig.TYdbStorageConfig compute_connection = 37;
         google.protobuf.Duration result_ttl = 38;
+        map<string, Ydb.TypedValue> parameters = 39;
     }
     repeated Task tasks = 1;
 }

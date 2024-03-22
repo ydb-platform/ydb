@@ -77,14 +77,12 @@ Ydb::ResultSet* TKqpExecuterTxResult::GetYdb(google::protobuf::Arena* arena, TMa
     return ydbResult;
 }
 
-Ydb::ResultSet* TKqpExecuterTxResult::GetTrailingYdb(google::protobuf::Arena* arena) {
+Ydb::ResultSet* TKqpExecuterTxResult::ExtractTrailingYdb(google::protobuf::Arena* arena) {
     if (!HasTrailingResult)
         return nullptr;
 
     Ydb::ResultSet* ydbResult = google::protobuf::Arena::CreateMessage<Ydb::ResultSet>(arena);
-    if (TrailingResult.rows().size() > 0) {
-        ydbResult->Swap(&TrailingResult);
-    }
+    ydbResult->Swap(&TrailingResult);
 
     return ydbResult;
 }
@@ -237,10 +235,10 @@ NKikimrMiniKQL::TResult* TQueryData::GetMkqlTxResult(const NKqpProto::TKqpPhyRes
     return TxResults[txIndex][resultIndex].GetMkql(arena);
 }
 
-Ydb::ResultSet* TQueryData::GetTrailingTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena) {
+Ydb::ResultSet* TQueryData::ExtractTrailingTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena) {
     auto txIndex = rb.GetTxResultBinding().GetTxIndex();
     auto resultIndex = rb.GetTxResultBinding().GetResultIndex();
-    return TxResults[txIndex][resultIndex].GetTrailingYdb(arena);
+    return TxResults[txIndex][resultIndex].ExtractTrailingYdb(arena);
 }
 
 

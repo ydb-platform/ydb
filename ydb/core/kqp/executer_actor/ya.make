@@ -44,6 +44,10 @@ PEERDIR(
     ydb/library/yql/providers/common/http_gateway
 )
 
+GENERATE_ENUM_SERIALIZATION(
+    kqp_executer.h
+)
+
 YQL_LAST_ABI_VERSION()
 
 END()

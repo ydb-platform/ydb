@@ -56,6 +56,8 @@ public:
     using TPostprocessor = std::function<void()>;
     using TPreprocessor = std::function<void()>;
 
+    TYsonStructBase();
+
     virtual ~TYsonStructBase() = default;
 
     void Load(
@@ -187,8 +189,13 @@ public:
     template <class TStruct>
     void InitializeStruct(TStruct* target);
 
+    void OnBaseCtorCalled();
+
+    void OnFinalCtorCalled();
+
 private:
     static inline YT_THREAD_LOCAL(IYsonStructMeta*) CurrentlyInitializingMeta_ = nullptr;
+    static inline YT_THREAD_LOCAL(i64) RegistryDepth_ = 0;
 
     template <class TStruct>
     friend class TYsonStructRegistrar;

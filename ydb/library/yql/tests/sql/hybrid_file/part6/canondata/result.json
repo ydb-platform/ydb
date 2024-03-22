@@ -1429,9 +1429,9 @@
     ],
     "test.test[limit-yql-8611_calc_peephole--Debug]": [
         {
-            "checksum": "487349d4dfda28492a154598e8e850b9",
+            "checksum": "8b10f504bf7d626c1c1e6d6bbbad13ee",
             "size": 6296,
-            "uri": "https://{canondata_backend}/1937367/2e0acac935f845d47f3117160ccd49e8ef7e3b58/resource.tar.gz#test.test_limit-yql-8611_calc_peephole--Debug_/opt.yql_patched"
+            "uri": "https://{canondata_backend}/1937492/30c052c39548e9c6e6d1c863510632526cb9d1be/resource.tar.gz#test.test_limit-yql-8611_calc_peephole--Debug_/opt.yql_patched"
         }
     ],
     "test.test[limit-yql-8611_calc_peephole--Plan]": [
@@ -1609,6 +1609,62 @@
             "uri": "https://{canondata_backend}/1775059/3cb7d014d70b84dbcb84645fa987dd9d47d7fd6c/resource.tar.gz#test.test_pg-equals_where_over_cross2-default.txt-Plan_/plan.txt"
         }
     ],
+    "test.test[pg-join_using3-default.txt-Debug]": [
+        {
+            "checksum": "7ac76ec74fbafe7a14352b453a34e4ae",
+            "size": 1383,
+            "uri": "https://{canondata_backend}/1880306/50edc7b5e532a58a5e491a9a910f5f3e374bdc2d/resource.tar.gz#test.test_pg-join_using3-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg-join_using3-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1923547/e2d4955e81c4f7962197732fb8ffe5f144012239/resource.tar.gz#test.test_pg-join_using3-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-join_using7-default.txt-Debug]": [
+        {
+            "checksum": "3f5e51eec7aa9cea078654017071f14b",
+            "size": 831,
+            "uri": "https://{canondata_backend}/1925842/620b4a12b99ac4a4ef526f742b6157cccada6f07/resource.tar.gz#test.test_pg-join_using7-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg-join_using7-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1923547/e2d4955e81c4f7962197732fb8ffe5f144012239/resource.tar.gz#test.test_pg-join_using7-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-join_using_case_insensetive2-default.txt-Debug]": [
+        {
+            "checksum": "0c6de9cb86785130878b3e591c62321c",
+            "size": 651,
+            "uri": "https://{canondata_backend}/1937429/0252e3c99211f482c7e07e8f941c9d3bc7c92fd0/resource.tar.gz#test.test_pg-join_using_case_insensetive2-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg-join_using_case_insensetive2-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1937429/0252e3c99211f482c7e07e8f941c9d3bc7c92fd0/resource.tar.gz#test.test_pg-join_using_case_insensetive2-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-join_using_tables4-default.txt-Debug]": [
+        {
+            "checksum": "1b118aff437d82f7e84b946cbc2b64b0",
+            "size": 7849,
+            "uri": "https://{canondata_backend}/1924537/244b67c156c69250a8a20eb16319f10dea1624e1/resource.tar.gz#test.test_pg-join_using_tables4-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg-join_using_tables4-default.txt-Plan]": [
+        {
+            "checksum": "56d5a17885a6ee32b78a639ccbd8934a",
+            "size": 9516,
+            "uri": "https://{canondata_backend}/1924537/244b67c156c69250a8a20eb16319f10dea1624e1/resource.tar.gz#test.test_pg-join_using_tables4-default.txt-Plan_/plan.txt"
+        }
+    ],
     "test.test[pg-long_ident-default.txt-Debug]": [
         {
             "checksum": "8fe9bfe92064e9e2c13ceea407a7b7ef",
@@ -1677,6 +1733,20 @@
             "checksum": "b4dd508a329723c74293d80f0278c705",
             "size": 505,
             "uri": "https://{canondata_backend}/1775059/3cb7d014d70b84dbcb84645fa987dd9d47d7fd6c/resource.tar.gz#test.test_pg-pg_like_opt-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-pg_type_from_oid-default.txt-Debug]": [
+        {
+            "checksum": "a11dc9cd5205df39dc38cf67d7e1ea16",
+            "size": 346,
+            "uri": "https://{canondata_backend}/212715/3898a96b3df9e749177ae140aa9739e06b0e4669/resource.tar.gz#test.test_pg-pg_type_from_oid-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg-pg_type_from_oid-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/212715/3898a96b3df9e749177ae140aa9739e06b0e4669/resource.tar.gz#test.test_pg-pg_type_from_oid-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[pg-pg_types_cast_with_length-default.txt-Debug]": [
@@ -2381,16 +2451,16 @@
     ],
     "test.test[tpch-q15-default.txt-Debug]": [
         {
-            "checksum": "86def2c7b6bac1894e6f941ec82a9469",
-            "size": 7578,
-            "uri": "https://{canondata_backend}/1031349/506ae7e8d4f20418c9124d112729390d56f60276/resource.tar.gz#test.test_tpch-q15-default.txt-Debug_/opt.yql_patched"
+            "checksum": "f5366b3499a579493a2fd47929fee0e7",
+            "size": 8000,
+            "uri": "https://{canondata_backend}/1937429/c6cf663d286207336e877922b1b362f0015754fe/resource.tar.gz#test.test_tpch-q15-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[tpch-q15-default.txt-Plan]": [
         {
-            "checksum": "0770638c754e6754b1771536c404c32c",
-            "size": 11480,
-            "uri": "https://{canondata_backend}/1031349/201452dd8c883b2adcbf46cb075c912d25efe67e/resource.tar.gz#test.test_tpch-q15-default.txt-Plan_/plan.txt"
+            "checksum": "9d26566d71fbb6f3744bfce9bc43cfc8",
+            "size": 12527,
+            "uri": "https://{canondata_backend}/1923547/b061d504cd48474f59ceb335225e901a3852457e/resource.tar.gz#test.test_tpch-q15-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[type_literal-evaluate-default.txt-Debug]": [

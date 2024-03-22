@@ -56,7 +56,7 @@ with year_total as (
          and t_w_firstyear.year_total > 0::numeric
          and case when t_w_firstyear.year_total > 0::numeric then t_w_secyear.year_total / t_w_firstyear.year_total else null::numeric end
            > case when t_s_firstyear.year_total > 0::numeric then t_s_secyear.year_total / t_s_firstyear.year_total else null::numeric end
- order by 2,1,3
+ order by 2 nulls first,1 nulls first,3 nulls first
 limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query74.tpl

@@ -8,6 +8,7 @@ PEERDIR(
     ydb/core/scheme_types
     ydb/core/tablet_flat
     ydb/core/io_formats/cell_maker
+    ydb/core/tx/replication/common
     ydb/core/tx/replication/ydb_proxy
     ydb/library/actors/core
     ydb/library/services

@@ -298,8 +298,10 @@ public:
                     {"oid", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.TypeId)); }},
                     {"typname", [](const NPg::TTypeDesc& desc) { return PointerDatumToPod((Datum)(MakeFixedString(desc.Name, NAMEDATALEN))); }},
                     {"typinput", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.InFuncId)); }},
-                    {"typnamespace", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
+                    {"typnamespace", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(PG_CATALOG_NAMESPACE)); }},
                     {"typtype", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(CharGetDatum(desc.TypType)); }},
+                    {"typrelid", [](const NPg::TTypeDesc&) { return ScalarDatumToPod(ObjectIdGetDatum(0)); }},
+                    {"typelem", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.ElementTypeId)); }},
                 };
 
                 ApplyFillers(AllPgTypeFillers, Y_ARRAY_SIZE(AllPgTypeFillers), PgTypeFillers_);
@@ -1117,14 +1119,20 @@ public:
             callInfo.args[i] = argDatum;
         }
 
+        const bool needToFree = PrepareVariadicArray(callInfo, this->ProcDesc);
+        NUdf::TUnboxedValuePod res;
         if constexpr (!UseContext) {
             TPAllocScope call;
-            return this->DoCall(callInfo);
+            res = this->DoCall(callInfo);
+        } else {
+            res = this->DoCall(callInfo);
         }
 
-        if constexpr (UseContext) {
-            return this->DoCall(callInfo);
+        if (needToFree) {
+            FreeVariadicArray(callInfo, this->ArgNodes.size());
         }
+
+        return res;
     }
 
 private:
@@ -2618,6 +2626,7 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakePgKernel(TVector<TType*> argTy
 
         state->flinfo.fn_expr = fmgrDataHolder->Build(procDesc);
         state->FmgrDataHolder = fmgrDataHolder;
+        state->ProcDesc = &procDesc;
 
         return arrow::Result(std::move(state));
     };

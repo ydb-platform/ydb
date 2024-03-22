@@ -50,32 +50,41 @@ TSimpleColumnInfo::TSimpleColumnInfo(const ui32 columnId, const std::shared_ptr<
     Loader = std::make_shared<TColumnLoader>(GetLoadTransformer(), Serializer, ArrowSchema, ColumnId);
 }
 
-// std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TSimpleColumnInfo::ActualizeColumnData(const std::vector<std::shared_ptr<IPortionDataChunk>>& source, const TSimpleColumnInfo& sourceColumnFeatures) const {
-//     AFL_VERIFY(Loader);
-//     const auto checkNeedActualize = [&]() {
-//         if (!Serializer.IsEqualTo(sourceColumnFeatures.Serializer)) {
-//             return true;
-//         }
-//         if (!Loader->IsEqualTo(*sourceColumnFeatures.Loader)) {
-//             return true;
-//         }
-//         if (!!DictionaryEncoding != !!sourceColumnFeatures.DictionaryEncoding) {
-//             return true;
-//         }
-//         if (!!DictionaryEncoding && DictionaryEncoding->IsEqualTo(*sourceColumnFeatures.DictionaryEncoding)) {
-//             return true;
-//         }
-//         return false;
-//     };
-//     if (!checkNeedActualize()) {
-//         return source;
-//     }
-//     std::vector<std::shared_ptr<IPortionDataChunk>> result;
-//     for (auto&& s : source) {
-//         auto data = NArrow::TStatusValidator::GetValid(sourceColumnFeatures.Loader->Apply(s->GetData()));
-//         result.emplace_back(s->CopyWithAnotherBlob(GetColumnSaver().Apply(data), *this));
-//     }
-//     return result;
-// }
+std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TSimpleColumnInfo::ActualizeColumnData(const std::vector<std::shared_ptr<IPortionDataChunk>>& source, const TSimpleColumnInfo& sourceColumnFeatures) const {
+    AFL_VERIFY(Loader);
+    const auto checkNeedActualize = [&]() {
+        if (!Serializer.IsEqualTo(sourceColumnFeatures.Serializer)) {
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "actualization")("reason", "serializer")
+                ("from", sourceColumnFeatures.Serializer.SerializeToProto().DebugString())
+                ("to", Serializer.SerializeToProto().DebugString());
+            return true;
+        }
+        if (!Loader->IsEqualTo(*sourceColumnFeatures.Loader)) {
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "actualization")("reason", "loader");
+            return true;
+        }
+        if (!!DictionaryEncoding != !!sourceColumnFeatures.DictionaryEncoding) {
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "actualization")("reason", "dictionary")("from", !!sourceColumnFeatures.DictionaryEncoding)("to", !!DictionaryEncoding);
+            return true;
+        }
+        if (!!DictionaryEncoding && !DictionaryEncoding->IsEqualTo(*sourceColumnFeatures.DictionaryEncoding)) {
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "actualization")("reason", "dictionary_encoding")
+                ("from", sourceColumnFeatures.DictionaryEncoding->SerializeToProto().DebugString())
+                ("to", DictionaryEncoding->SerializeToProto().DebugString())
+                ;
+            return true;
+        }
+        return false;
+    };
+    if (!checkNeedActualize()) {
+        return source;
+    }
+    std::vector<std::shared_ptr<IPortionDataChunk>> result;
+    for (auto&& s : source) {
+        auto data = NArrow::TStatusValidator::GetValid(sourceColumnFeatures.Loader->Apply(s->GetData()));
+        result.emplace_back(s->CopyWithAnotherBlob(GetColumnSaver().Apply(data), *this));
+    }
+    return result;
+}
 
 } // namespace NKikimr::NOlap

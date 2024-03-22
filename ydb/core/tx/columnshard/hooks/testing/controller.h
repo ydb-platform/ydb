@@ -16,6 +16,9 @@ private:
     YDB_READONLY(TAtomicCounter, IndexesApprovedOnSelect, 0);
     YDB_READONLY(TAtomicCounter, IndexesSkippedNoData, 0);
     YDB_READONLY(TAtomicCounter, TieringUpdates, 0);
+    YDB_READONLY(TAtomicCounter, ActualizationsCount, 0);
+    YDB_READONLY(TAtomicCounter, ActualizationRefreshSchemeCount, 0);
+    YDB_READONLY(TAtomicCounter, ActualizationRefreshTieringCount, 0);
     YDB_ACCESSOR(std::optional<TDuration>, GuaranteeIndexationInterval, TDuration::Zero());
     YDB_ACCESSOR(std::optional<TDuration>, PeriodicWakeupActivationPeriod, std::nullopt);
     YDB_ACCESSOR(std::optional<TDuration>, StatsReportInterval, std::nullopt);
@@ -118,6 +121,15 @@ private:
 
     THashSet<TString> SharingIds;
 protected:
+    virtual void OnPortionActualization(const NOlap::TPortionInfo& /*info*/) override {
+        ActualizationsCount.Inc();
+    }
+    virtual void OnActualizationRefreshScheme() override {
+        ActualizationRefreshSchemeCount.Inc();
+    }
+    virtual void OnActualizationRefreshTiering() override {
+        ActualizationRefreshTieringCount.Inc();
+    }
     virtual void DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumnShard& shard) override;
     virtual void DoOnTabletStopped(const ::NKikimr::NColumnShard::TColumnShard& shard) override;
     virtual void DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard& shard, const NOlap::IBlobsGCAction& action) override;
@@ -172,6 +184,20 @@ public:
     ui32 GetShardActualsCount() const {
         TGuard<TMutex> g(Mutex);
         return ShardActuals.size();
+    }
+
+    void WaitActualization(const TDuration d) const {
+        ui32 lastActualizationsCount = 0;
+        TInstant lastChange = TInstant::Now();
+        while (!ActualizationsCount.Val() && TInstant::Now() - lastChange < d) {
+            Cerr << "waiting actualization: " << ActualizationsCount.Val() << "/" << TInstant::Now() - lastChange << Endl;
+            Sleep(TDuration::Seconds(1));
+            if (lastActualizationsCount != ActualizationsCount.Val()) {
+                lastActualizationsCount = ActualizationsCount.Val();
+                lastChange = TInstant::Now();
+            }
+        }
+        AFL_VERIFY(ActualizationsCount.Val());
     }
 
     std::vector<ui64> GetShardActualIds() const {

@@ -186,6 +186,11 @@ public:
         ActualizationIndex->RefreshTiering(tiering, context);
     }
 
+    void RefreshScheme() {
+        NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
+        ActualizationIndex->RefreshScheme(context);
+    }
+
     void StartActualizationIndex() {
         ActualizationIndex->Start();
     }
@@ -207,8 +212,8 @@ public:
         ActualizationIndex->BuildActualizationTasks(context, extTasks);
     }
 
-    std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
-        return OptimizerPlanner->GetOptimizationTask(limits, self, locksManager);
+    std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
+        return OptimizerPlanner->GetOptimizationTask(self, locksManager);
     }
 
     const std::map<NArrow::TReplaceKey, THashMap<ui64, std::shared_ptr<TPortionInfo>>>& GroupOrderedPortionsByPK() const {

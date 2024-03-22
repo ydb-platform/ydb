@@ -1590,6 +1590,12 @@ message TModifyScheme {
     optional TViewDescription CreateView = 64;
 
     optional NActorsProto.TActorId TempTableOwnerActorId = 65;
+
+    optional TCopySequence CopySequence = 66;
+}
+
+message TCopySequence {
+    optional string CopyFrom = 1;
 }
 
 // "Script", used by client to parse text files with multiple DDL commands

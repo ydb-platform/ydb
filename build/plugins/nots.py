@@ -546,7 +546,7 @@ def on_ts_test_for_configure(unit, test_runner, default_config, node_modules_fil
     for_mod_path = unit.get("TS_TEST_FOR_PATH")
     unit.onpeerdir([for_mod_path])
     unit.on_setup_extract_node_modules_recipe([for_mod_path])
-    unit.on_setup_extract_peer_tars_recipe([for_mod_path])
+    unit.on_setup_extract_output_tars_recipe([for_mod_path])
 
     root = "$B" if test_runner == "hermione" else "$(BUILD_ROOT)"
     unit.set(["TS_TEST_NM", os.path.join(root, for_mod_path, node_modules_filename)])
@@ -617,5 +617,6 @@ def on_ts_files(unit, *files):
 
 @_with_report_configure_error
 def on_depends_on_mod(unit):
-    for_mod_path = unit.get("TS_TEST_FOR_PATH")
-    unit.ondepends([for_mod_path])
+    if unit.get("_TS_TEST_DEPENDS_ON_BUILD"):
+        for_mod_path = unit.get("TS_TEST_FOR_PATH")
+        unit.ondepends([for_mod_path])

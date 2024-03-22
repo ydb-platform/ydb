@@ -31,6 +31,47 @@ protected:
 
         TDelayedExecutor::WaitForDuration(RandomDuration(TDuration::MilliSeconds(15)));
     }
+
+    void EnsureRunning() {
+        WaitFor(BIND([] {}).AsyncVia(Invoker_).Run()).ThrowOnError();
+    }
+
+    struct TLooper
+    {
+        TClosure Callback;
+        IInvokerPtr Invoker;
+        TPromise<void> StopPromise;
+        std::unique_ptr<std::atomic<bool>> StopRespawning = std::make_unique<std::atomic<bool>>(false);
+
+        TClosure MakeCallback() const
+        {
+            return BIND([this] () mutable {
+                Run();
+            });
+        }
+
+        void Start() {
+            Invoker->Invoke(MakeCallback());
+        }
+
+        TFuture<void> Stop() {
+            StopPromise = NewPromise<void>();
+            StopRespawning->store(true);
+            return StopPromise.ToFuture();
+        }
+
+        void Run() const
+        {
+            if (StopRespawning->load()) {
+                StopPromise.Set();
+                return;
+            }
+            if (Callback) {
+                Callback();
+            }
+            Invoker->Invoke(MakeCallback());
+        }
+    };
 };
 
 TEST_F(TSuspendableActionQueueTest, Simple)
@@ -48,37 +89,37 @@ TEST_F(TSuspendableActionQueueTest, Simple)
 TEST_F(TSuspendableActionQueueTest, SuspendResume)
 {
     std::atomic<i64> x = 0;
-    auto future = BIND([&x] {
-        while (true) {
-            ++x;
-            Yield();
-        }
-    })
-        .AsyncVia(Invoker_)
-        .Run();
+    TLooper looper{
+        .Callback = BIND([&x] {
+            x.fetch_add(1);
+        }),
+        .Invoker = Invoker_,
+    };
 
-    TDelayedExecutor::WaitForDuration(RandomDuration(TDuration::MilliSeconds(15)));
+    looper.Start();
+
+    EnsureRunning();
 
     Queue_->Suspend(/*immediate*/ true)
         .Get()
         .ThrowOnError();
 
-    i64 x1 = x;
+    i64 x1 = x.load();
     EXPECT_GT(x1, 0);
 
-    TDelayedExecutor::WaitForDuration(RandomDuration(TDuration::MilliSeconds(15)));
+    RandomSleep();
 
-    i64 x2 = x;
+    i64 x2 = x.load();
     EXPECT_EQ(x2, x1);
 
     Queue_->Resume();
 
-    TDelayedExecutor::WaitForDuration(RandomDuration(TDuration::MilliSeconds(15)));
+    EnsureRunning();
 
-    i64 x3 = x;
+    i64 x3 = x.load();
     EXPECT_GT(x3, x2);
 
-    future.Cancel(TError("Test ended"));
+    looper.Stop().Get().ThrowOnError();
 }
 
 TEST_F(TSuspendableActionQueueTest, SuspendEmptyQueue)
@@ -105,60 +146,60 @@ TEST_F(TSuspendableActionQueueTest, SuspendEmptyQueue)
 
 TEST_F(TSuspendableActionQueueTest, NotImmediateSuspend)
 {
-    std::atomic<i64> x = 0;
-    Invoker_->Invoke(BIND([&x] {
-        for (int iteration = 0; iteration < 50; ++iteration) {
-            ++x;
+    std::atomic<i64> progress{0};
+    TLooper looper{
+        .Callback = BIND([&progress] {
+            progress.fetch_add(1);
+        }),
+        .Invoker = Invoker_,
+    };
 
-            Sleep(TDuration::MilliSeconds(10));
+    looper.Start();
 
-            Yield();
-        }
-    }));
+    auto current_progress = progress.load();
+    auto future = Queue_->Suspend(/*immediately*/ false);
 
-    auto future = Queue_->Suspend(/*immedidate*/ false);
-
-    TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(100));
+    EnsureRunning();
 
     EXPECT_FALSE(future.IsSet());
 
-    future
-        .Get()
-        .ThrowOnError();
+    looper.Stop().Get().ThrowOnError();
 
-    EXPECT_EQ(x, 50);
+    future.Get().ThrowOnError();
+
+    EXPECT_GE(progress.load(), current_progress);
 
     Queue_->Resume();
 }
 
 TEST_F(TSuspendableActionQueueTest, PromoteSuspendToImmediate)
 {
-    i64 x = 0;
-    auto future = BIND([&x] {
-        while (true) {
-            ++x;
-            Yield();
-        }
-    })
-        .AsyncVia(Invoker_)
-        .Run();
+    std::atomic<i64> progress{0};
+    TLooper looper{
+        .Callback = BIND([&progress] {
+            progress.fetch_add(1);
+        }),
+        .Invoker = Invoker_,
+    };
+    looper.Start();
 
+    auto current_progress = progress.load();
     auto suspendFuture = Queue_->Suspend(/*immedidate*/ false);
 
-    TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(100));
+    EnsureRunning();
 
     EXPECT_FALSE(suspendFuture.IsSet());
+    EXPECT_GE(progress.load(), current_progress);
 
     Queue_->Suspend(/*immediately*/ true)
         .Get()
         .ThrowOnError();
 
     EXPECT_TRUE(suspendFuture.IsSet());
-    EXPECT_GT(x, 0);
 
+    auto stopFuture = looper.Stop();
     Queue_->Resume();
-
-    future.Cancel(TError("Test ended"));
+    stopFuture.Get().ThrowOnError();
 }
 
 TEST_F(TSuspendableActionQueueTest, StressTest1)

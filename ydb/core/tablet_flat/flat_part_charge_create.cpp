@@ -5,7 +5,7 @@
 namespace NKikimr::NTable {
 
 THolder<ICharge> CreateCharge(IPages *env, const TPart &part, TTagsRef tags, bool includeHistory) {
-    if (part.IndexPages.BTreeGroups) {
+    if (part.IndexPages.HasBTree()) {
         return MakeHolder<TChargeBTreeIndex>(env, part, tags, includeHistory);
     } else {
         return MakeHolder<TCharge>(env, part, tags, includeHistory);

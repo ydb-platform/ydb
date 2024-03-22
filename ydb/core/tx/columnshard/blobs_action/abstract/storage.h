@@ -42,8 +42,8 @@ protected:
     virtual bool DoStop() {
         return true;
     }
-    virtual const TSplitSettings& DoGetBlobSplitSettings() const {
-        return Default<TSplitSettings>();
+    virtual const NSplitter::TSplitSettings& DoGetBlobSplitSettings() const {
+        return Default<NSplitter::TSplitSettings>();
     }
 
     virtual void DoOnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& tiers) = 0;
@@ -67,7 +67,7 @@ public:
 
     void Stop();
 
-    const TSplitSettings& GetBlobSplitSettings() const {
+    const NSplitter::TSplitSettings& GetBlobSplitSettings() const {
         return DoGetBlobSplitSettings();
     }
 

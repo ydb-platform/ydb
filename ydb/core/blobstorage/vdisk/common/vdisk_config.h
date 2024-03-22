@@ -170,8 +170,8 @@ namespace NKikimr {
         ui32 HandoffMaxInFlightByteSize;
         TDuration HandoffTimeout;
         bool RunRepl;
-        bool RunHandoff;
         bool ReplPausedAtStart = false;
+        TDuration ReplMaxTimeToMakeProgress;
 
         ///////////// SKELETON SETTINGS /////////////////////
         ui64 SkeletonFrontGets_MaxInFlightCount;

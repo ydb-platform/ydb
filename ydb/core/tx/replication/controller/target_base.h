@@ -51,6 +51,7 @@ private:
 
     TActorId DstCreator;
     TActorId DstRemover;
+    TActorId WorkerRegistar;
 
 }; // TTargetBase
 

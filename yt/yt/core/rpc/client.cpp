@@ -520,7 +520,7 @@ size_t TClientResponse::GetTotalSize() const
     return ResponseMessage_.ByteSize();
 }
 
-void TClientResponse::HandleError(const TError& error)
+void TClientResponse::HandleError(TError error)
 {
     auto prevState = State_.exchange(EState::Done);
     if (prevState == EState::Done) {
@@ -529,22 +529,15 @@ void TClientResponse::HandleError(const TError& error)
         return;
     }
 
-    auto invokeHandler = [&] (const TError& error) {
-        GetInvoker()->Invoke(
-            BIND(&TClientResponse::DoHandleError, MakeStrong(this), error));
-    };
-
-    auto optionalEnrichedError = TryEnrichClientRequestError(
-        error,
+    EnrichClientRequestError(
+        &error,
         ClientContext_->GetFeatureIdFormatter());
-    if (optionalEnrichedError) {
-        invokeHandler(*optionalEnrichedError);
-    } else {
-        invokeHandler(error);
-    }
+
+    GetInvoker()->Invoke(
+        BIND(&TClientResponse::DoHandleError, MakeStrong(this), std::move(error)));
 }
 
-void TClientResponse::DoHandleError(const TError& error)
+void TClientResponse::DoHandleError(TError error)
 {
     NProfiling::TWallTimer timer;
 

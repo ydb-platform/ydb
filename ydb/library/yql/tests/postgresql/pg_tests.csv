@@ -3,7 +3,7 @@ aggregates,416,129,31.01
 alter_table,1679,233,13.88
 arrays,410,120,29.27
 bit,115,90,78.26
-boolean,93,79,84.95
+boolean,93,87,93.55
 case,63,35,55.56
 char,25,16,64.0
 comments,7,7,100.0
@@ -22,10 +22,10 @@ int2,49,47,95.92
 int4,70,68,97.14
 int8,142,127,89.44
 interval,168,118,70.24
-join,591,200,33.84
-json,450,153,34.0
+join,591,206,34.86
+json,450,165,36.67
 json_encoding,42,42,100.0
-jsonb,1013,515,50.84
+jsonb,1013,527,52.02
 jsonb_jsonpath,427,88,20.61
 jsonpath,169,152,89.94
 jsonpath_encoding,31,31,100.0

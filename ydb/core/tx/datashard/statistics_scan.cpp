@@ -64,6 +64,7 @@ public:
         if (abort != EAbort::None) {
             record.SetStatus(NKikimrTxDataShard::TEvStatisticsScanResponse::ABORTED);
             TlsActivationContext->Send(new IEventHandle(ReplyTo, TActorId(), response.release(), 0, Cookie));
+            delete this;
             return nullptr;
         }
 
@@ -80,6 +81,7 @@ public:
         }
 
         TlsActivationContext->Send(new IEventHandle(ReplyTo, TActorId(), response.release(), 0, Cookie));
+        delete this;
         return nullptr;
     }
 

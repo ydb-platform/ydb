@@ -168,10 +168,9 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         )", NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode_Name(mode).c_str()));
         env.TestWaitNotification(runtime, txId);
 
-        const auto desc = DescribePath(runtime, "/MyRoot/Table");
-        const auto& table = desc.GetPathDescription().GetTable();
-        UNIT_ASSERT(table.HasReplicationConfig());
-        UNIT_ASSERT_EQUAL(table.GetReplicationConfig().GetMode(), mode);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::ReplicationMode(mode)});
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::ReplicationMode(mode)});
     }
 
     Y_UNIT_TEST(CreateReplicatedTable) {

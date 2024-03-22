@@ -130,7 +130,7 @@ namespace NYql {
     };
 
     struct TReadFileRequest;
-    TFuture<void> ReadNext(TWeakPtr<TReadFileRequest> request);
+    void ReadNext(TWeakPtr<TReadFileRequest> request);
 
     struct TReadFileRequest: public TRequest {
         IClientPtr Client;
@@ -161,26 +161,26 @@ namespace NYql {
         }
     };
 
-    TFuture<void> ReadNext(TWeakPtr<TReadFileRequest> request)
+    void ReadNext(TWeakPtr<TReadFileRequest> request)
     {
-        TFuture<TSharedRef> partResult;
-        {
-            auto this_ = request.Lock();
-            if (!this_) {
-                return MakeFuture(TErrorOr<void>(yexception() << "request complete"));
+        while(true) {
+            TFuture<TSharedRef> partResult;
+            {
+                auto this_ = request.Lock();
+                if (!this_) {
+                    ythrow yexception() << "request complete";
+                }
+
+                partResult = this_->Reader->Read();
             }
 
-            partResult = this_->Reader->Read();
-        }
+            auto blob = NYT::NConcurrency::WaitFor(partResult).ValueOrThrow();
+            {
+                auto this_ = request.Lock();
+                if (!this_) {
+                    ythrow yexception() << "request complete";
+                }
 
-        auto blob = NYT::NConcurrency::WaitFor(partResult).ValueOrThrow();
-        {
-            auto this_ = request.Lock();
-            if (!this_) {
-                return MakeFuture(TErrorOr<void>(yexception() << "request complete"));
-            }
-
-            try {
                 YQL_CLOG(DEBUG, ProviderDq) << "Store " << blob.Size() << " bytes ";
                 if (blob.Size() == 0) {
                     TString buf;
@@ -189,19 +189,16 @@ namespace NYql {
 
                     if (buf == this_->Digest) {
                         this_->Output.reset();
-                        return VoidFuture;
+                        return;
                     } else {
-                        return MakeFuture(TErrorOr<void>(yexception() << "md5 mismatch"));
+                        ythrow yexception() << "md5 mismatch";
                     }
                 }
-            } catch (...) {
-                return MakeFuture(TErrorOr<void>(yexception() << CurrentExceptionMessage()));
-            }
 
-            this_->Md5.Update(blob.Begin(), blob.Size());
-            this_->Output->Write(blob.Begin(), blob.Size());
+                this_->Md5.Update(blob.Begin(), blob.Size());
+                this_->Output->Write(blob.Begin(), blob.Size());
+            }
         }
-        return ReadNext(request);
     }
 
     using TRequestPtr = NYT::TIntrusivePtr<TRequest>;

@@ -72,6 +72,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
                 if (fromSequence.has_cycle()) {
                     seqDesc->SetCycle(fromSequence.cycle());
                 }
+                seqDesc->SetOverflowed(fromSequence.overflowed());
 
                 break;
             }

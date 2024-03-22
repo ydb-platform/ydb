@@ -104,6 +104,11 @@ namespace NSequenceShard {
                     return std::move(*this);
                 }
 
+                TBuilder&& SetOverflowed(bool overflowed) && {
+                    Msg->Record.SetOverflowed(overflowed);
+                    return std::move(*this);
+                }
+
                 THolder<TEvCreateSequence> Done() && {
                     return std::move(Msg);
                 }

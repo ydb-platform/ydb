@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/tx
     ydb/core/tx/datashard
     ydb/core/tx/schemeshard
+    ydb/core/tx/sequenceproxy
     ydb/core/tx/tx_allocator
     ydb/core/tx/tx_proxy
     ydb/public/lib/scheme_types

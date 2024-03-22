@@ -40,6 +40,7 @@ message TEvCreateSequence {
         bool Cycle = 9;
     }
     bool Frozen = 10; // defaults to false
+    bool Overflowed = 11; // defaults to false
 }
 
 message TEvCreateSequenceResult {

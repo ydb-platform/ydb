@@ -13,6 +13,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 
 #include <util/generic/hash.h>
+#include <util/generic/size_literals.h>
 
 #include <tuple>
 
@@ -178,6 +179,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         }
 
         auto topicReaderSettings = TEvYdbProxy::TTopicReaderSettings()
+            .MaxMemoryUsageBytes(1_MB)
             .ConsumerName(settings.GetConsumerName())
             .AppendTopics(NYdb::NTopic::TTopicReadSettings()
                 .Path(settings.GetTopicPath())

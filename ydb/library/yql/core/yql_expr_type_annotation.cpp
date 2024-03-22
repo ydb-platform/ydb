@@ -6738,6 +6738,18 @@ void AdjustReturnType(ui32& returnType, const TVector<ui32>& procArgTypes, ui32 
         } else if (inputArrayType) {
             returnType = *inputArrayType;
         }
+    } else if (returnType == NPg::AnyElementOid) {
+        for (ui32 i = 0; i < argTypes.size(); ++i) {
+            if (!argTypes[i]) {
+                continue;
+            }
+
+            const auto& typeDesc = NPg::LookupType(argTypes[i]);
+            if (typeDesc.ArrayTypeId == typeDesc.TypeId) {
+                returnType = typeDesc.ElementTypeId;
+                return;
+            }
+        }
     }
 }
 

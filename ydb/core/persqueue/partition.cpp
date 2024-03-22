@@ -346,7 +346,7 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
         TopicQuotaWaitTimeForCurrentBlob = TDuration::Zero();
         PartitionQuotaWaitTimeForCurrentBlob = TDuration::Zero();
         WritesTotal.Inc();
-        Become(&TThis::StateWrite);
+        BecomeWrite();
         AddMetaKey(request.Get());
         ctx.Send(Tablet, request.Release());
     }
@@ -2544,8 +2544,14 @@ void TPartition::ScheduleUpdateAvailableSize(const TActorContext& ctx) {
     ctx.Schedule(UPDATE_AVAIL_SIZE_INTERVAL, new TEvPQ::TEvUpdateAvailableSize());
 }
 
-void TPartition::BecomeIdle(const TActorContext&) {
+void TPartition::BecomeIdle()
+{
     Become(&TThis::StateIdle);
+}
+
+void TPartition::BecomeWrite()
+{
+    Become(&TThis::StateWrite);
 }
 
 void TPartition::ClearOldHead(const ui64 offset, const ui16 partNo, TEvKeyValue::TEvRequest* request) {

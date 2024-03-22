@@ -1543,7 +1543,7 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
     }
 
     PQ_LOG_T("TPartition::HandleWrites. Requests.size()=" << Requests.size());
-    Become(&TThis::StateWrite);
+    BecomeWrite();
 
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
 
@@ -1567,7 +1567,7 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
     ProcessReserveRequests(ctx);
     if (!haveData && !haveDrop && !haveCheckDisk) { //no data writed/deleted
         AnswerCurrentWrites(ctx); //in case if all writes are already done - no answer will be called on kv write, no kv write at all
-        BecomeIdle(ctx);
+        BecomeIdle();
         return;
     }
 

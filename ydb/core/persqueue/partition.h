@@ -211,6 +211,10 @@ private:
     void RequestBlobQuota();
     void WritePendingBlob();
     void UpdateAfterWriteCounters(bool writeComplete);
+
+    void CancelReserveRequests(const TActorContext& ctx);
+    void CancelRequests(const TActorContext& ctx);
+
     void UpdateUserInfoEndOffset(const TInstant& now);
     void UpdateWriteBufferIsFullState(const TInstant& now);
 

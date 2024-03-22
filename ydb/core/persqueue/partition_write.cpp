@@ -1519,24 +1519,31 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx) {
     UpdateWriteBufferIsFullState(ctx.Now());
 }
 
+void TPartition::CancelReserveRequests(const TActorContext& ctx)
+{
+    for(const auto& r : ReserveRequests) {
+        ReplyError(ctx, r->Cookie, InactivePartitionErrorCode,
+                   TStringBuilder() << "Write to inactive partition");
+    }
+    ReserveRequests.clear();
+}
+
+void TPartition::CancelRequests(const TActorContext& ctx)
+{
+    for(const auto& r : Requests) {
+        ReplyError(ctx, r.GetCookie(), InactivePartitionErrorCode,
+                   TStringBuilder() << "Write to inactive partition");
+    }
+    Requests.clear();
+}
 
 void TPartition::HandleWrites(const TActorContext& ctx) {
     if (!CanWrite()) {
-        if (CanEnqueue()) {
-            return;
-        } else {
-            for(const auto& r : ReserveRequests) {
-                ReplyError(ctx, r->Cookie, InactivePartitionErrorCode,
-                    TStringBuilder() << "Write to inactive partition");
-            }
-            ReserveRequests.clear();
-            for(const auto& r : Requests) {
-                ReplyError(ctx, r.GetCookie(), InactivePartitionErrorCode,
-                    TStringBuilder() << "Write to inactive partition");
-            }
-            Requests.clear();
-            return;
+        if (!CanEnqueue()) {
+            CancelReserveRequests(ctx);
+            CancelRequests(ctx);
         }
+        return;
     }
     if (PendingWriteRequest) {
         return;

@@ -66,6 +66,9 @@ struct TProcDesc {
     TVector<TString> OutputArgNames;
     TVector<ui32> OutputArgTypes;
     ui32 Lang = LangInternal;
+    ui32 VariadicType = 0;
+    ui32 VariadicArgType = 0;
+    TString VariadicArgName;
 };
 
 // Copied from pg_collation_d.h
@@ -253,6 +256,7 @@ bool HasReturnSetProc(const TString& name);
 void EnumProc(std::function<void(ui32, const TProcDesc&)> f);
 
 bool HasType(const TString& name);
+bool HasType(ui32 typeId);
 const TTypeDesc& LookupType(const TString& name);
 const TTypeDesc& LookupType(ui32 typeId);
 TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::function<TPosition(size_t i)>& GetPosition, const TTypeDesc*& typeDesc);
@@ -276,7 +280,7 @@ const TOperDesc& LookupOper(const TString& name, const TVector<ui32>& argTypeIds
 const TOperDesc& LookupOper(ui32 operId, const TVector<ui32>& argTypeIds);
 const TOperDesc& LookupOper(ui32 operId);
 
-bool HasAggregation(const TString& name);
+bool HasAggregation(const TString& name, EAggKind kind);
 const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>& argTypeIds);
 const TAggregateDesc& LookupAggregation(const TString& name, ui32 stateType, ui32 resultType);
 void EnumAggregation(std::function<void(ui32, const TAggregateDesc&)> f);

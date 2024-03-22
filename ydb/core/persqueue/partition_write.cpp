@@ -140,7 +140,7 @@ void TPartition::FailBadClient(const TActorContext& ctx) {
     TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(WriteNewSize);
     Responses.clear();
 
-    ProcessChangeOwnerRequests(ctx);
+    StartProcessChangeOwnerRequests(ctx);
     ProcessReserveRequests(ctx);
 }
 
@@ -157,6 +157,7 @@ void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, c
             return ReplyError(ctx, ev->Cookie, NPersQueue::NErrorCode::SOURCEID_DELETED, "SourceId isn't registered");
         }
     }
+
     if (it->second.NeedResetOwner || ev->Force) { //change owner
         Y_ABORT_UNLESS(ReservedSize >= it->second.ReservedSize);
         ReservedSize -= it->second.ReservedSize;
@@ -808,6 +809,15 @@ std::pair<TKey, ui32> TPartition::Compact(const TKey& key, const ui32 size, bool
     return res;
 }
 
+void TPartition::StartProcessChangeOwnerRequests(const TActorContext& ctx)
+{
+    ctx.Send(ctx.SelfID, new TEvPQ::TEvProcessChangeOwnerRequests());
+}
+
+void TPartition::Handle(TEvPQ::TEvProcessChangeOwnerRequests::TPtr&, const TActorContext& ctx)
+{
+    ProcessChangeOwnerRequests(ctx);
+}
 
 void TPartition::ProcessChangeOwnerRequests(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::ProcessChangeOwnerRequests.");
@@ -821,6 +831,7 @@ void TPartition::ProcessChangeOwnerRequests(const TActorContext& ctx) {
         }
         WaitToChangeOwner.pop_front();
     }
+
     if (CurrentStateFunc() == &TThis::StateIdle) {
         HandleWrites(ctx);
     }
@@ -1425,8 +1436,9 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant, const
     Y_ABORT_UNLESS(!PendingWriteRequest);
     QuotaDeadline = TInstant::Zero();
 
-    if (Requests.empty())
+    if (Requests.empty()) {
         return false;
+    }
 
     Y_ABORT_UNLESS(request->Record.CmdWriteSize() == 0);
     Y_ABORT_UNLESS(request->Record.CmdRenameSize() == 0);
@@ -1544,13 +1556,6 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
 
     ProcessReserveRequests(ctx);
     if (!haveData && !haveDrop && !haveCheckDisk) { //no data writed/deleted
-        if (!Requests.empty()) { //there could be change ownership requests that
-            bool res = ProcessWrites(request.Get(), now, ctx);
-            Y_ABORT_UNLESS(!res);
-        }
-        Y_ABORT_UNLESS(Requests.empty()
-                    || WaitingForPreviousBlobQuota()
-                    || WaitingForSubDomainQuota(ctx)); //in this case all writes must be processed or no quota left
         AnswerCurrentWrites(ctx); //in case if all writes are already done - no answer will be called on kv write, no kv write at all
         BecomeIdle(ctx);
         return;

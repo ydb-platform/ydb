@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/kqp_event_ids.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
@@ -74,7 +75,8 @@ struct IKqpNodeComputeActorFactory {
 };
 
 NActors::IActor* CreateKqpNodeService(const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-    TIntrusivePtr<TKqpCounters> counters, IKqpNodeComputeActorFactory* caFactory = nullptr, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory = nullptr);
+    TIntrusivePtr<TKqpCounters> counters, IKqpNodeComputeActorFactory* caFactory = nullptr, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory = nullptr,
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup = std::nullopt);
 
 } // namespace NKqp
 } // namespace NKikimr

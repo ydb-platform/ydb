@@ -243,6 +243,7 @@ protected:
 
     friend struct TStoragePoolInfo;
 
+    bool IsSafeOperation(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     bool IsItPossibleToStartBalancer(EBalancerType balancerType);
     void StartHiveBalancer(TBalancerSettings&& settings);
     void StartHiveDrain(TNodeId nodeId, TDrainSettings settings);
@@ -600,7 +601,7 @@ protected:
         {}
     };
 
-    TBestNodeResult FindBestNode(const TTabletInfo& tablet);
+    TBestNodeResult FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId = 0);
 
     struct TSelectedNode {
         double Usage;
@@ -644,7 +645,7 @@ public:
     void ReportDeletedToWhiteboard(const TLeaderTabletInfo& tablet);
     TTabletCategoryInfo& GetTabletCategory(TTabletCategoryId tabletCategoryId);
     void KillNode(TNodeId nodeId, const TActorId& local);
-    void AddToBootQueue(TTabletInfo* tablet);
+    void AddToBootQueue(TTabletInfo* tablet, TNodeId node = 0);
     void UpdateDomainTabletsTotal(const TSubDomainKey& objectDomain, i64 tabletsTotalDiff);
     void UpdateDomainTabletsAlive(const TSubDomainKey& objectDomain, i64 tabletsAliveDiff, const TSubDomainKey& tabletNodeDomain);
     void SetCounterTabletsTotal(ui64 tabletsTotal);
@@ -859,6 +860,10 @@ public:
         } else {
             return std::numeric_limits<ui64>::max();
         }
+    }
+
+    bool GetEnableDestroyOperations() {
+        return CurrentConfig.GetEnableDestroyOperations();
     }
 
     const std::unordered_map<TTabletTypes::EType, NKikimrConfig::THiveTabletLimit>& GetTabletLimit() const {

@@ -76,6 +76,11 @@ struct TProcessResult {
 };
 
 struct TKqpSessionInfo {
+    enum ESessionState : ui32 {
+        IDLE = 1,
+        EXECUTING = 2
+    };
+
     TString SessionId;
     TActorId WorkerId;
     TString Database;
@@ -90,22 +95,54 @@ struct TKqpSessionInfo {
     bool PgWire;
     TString QueryText;
     bool Ready = true;
+    TString ClientApplicationName;
+    TString ClientSID;
+    TString ClientHost;
+    TString UserAgent;
+    TString SdkBuildInfo;
+    TString ClientPID;
+    ui32 QueryCount = 0;
+    TInstant SessionStartedAt;
+    TInstant StateChangeAt;
+    TInstant QueryStartAt;
+
+    ESessionState State = ESessionState::IDLE;
+
+    struct TFieldsMap {
+        ui64 bitmap = 0;
+
+        bool NeedField(ui32 tag) const {
+            return bitmap & (1ull << tag);
+        }
+
+        explicit TFieldsMap(const ::google::protobuf::RepeatedField<ui32>& columns) {
+            for(const auto& column: columns) {
+                Y_ABORT_UNLESS(column <= 63);
+
+                bitmap |= (1ull << column);
+            }
+        }
+    };
 
     TKqpSessionInfo(const TString& sessionId, const TActorId& workerId,
         const TString& database, TKqpDbCountersPtr dbCounters, std::vector<i32>&& pos,
-        NActors::TMonotonic idleTimeout, std::list<TKqpSessionInfo*>::iterator idlePos, bool pgWire = false)
+        NActors::TMonotonic idleTimeout, std::list<TKqpSessionInfo*>::iterator idlePos, bool pgWire,
+        TInstant sessionStartedAt)
         : SessionId(sessionId)
         , WorkerId(workerId)
         , Database(database)
         , DbCounters(dbCounters)
         , ShutdownStartedAt()
         , ReadyPos(std::move(pos))
-        , IdleTimeout(idleTimeout)
+        , IdleTimeout(std::move(idleTimeout))
         , IdlePos(idlePos)
         , AttachedNodeId(0)
         , PgWire(pgWire)
+        , SessionStartedAt(std::move(sessionStartedAt))
     {
     }
+
+    void SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFieldsMap& fieldsMap) const;
 };
 
 class TLocalSessionsRegistry {
@@ -135,6 +172,18 @@ public:
 
     void AttachQueryText(const TKqpSessionInfo* sessionInfo, const TString& queryText) {
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryText = queryText;
+        const_cast<TKqpSessionInfo*>(sessionInfo)->QueryCount++;
+        const_cast<TKqpSessionInfo*>(sessionInfo)->State = TKqpSessionInfo::EXECUTING;
+        auto curNow = TInstant::Now();
+        const_cast<TKqpSessionInfo*>(sessionInfo)->QueryStartAt = curNow;
+        const_cast<TKqpSessionInfo*>(sessionInfo)->StateChangeAt = curNow;
+    }
+
+    void DetachQueryText(const TKqpSessionInfo* sessionInfo) {
+        const_cast<TKqpSessionInfo*>(sessionInfo)->QueryText = TString();
+        const_cast<TKqpSessionInfo*>(sessionInfo)->State = TKqpSessionInfo::IDLE;
+        auto curNow = TInstant::Now();
+        const_cast<TKqpSessionInfo*>(sessionInfo)->StateChangeAt = curNow;
     }
 
     TKqpSessionInfo* Create(const TString& sessionId, const TActorId& workerId,
@@ -150,9 +199,11 @@ public:
             ReadySessions[1].push_back(sessionId);
         }
 
+        NActors::TMonotonic sessionStartedAt = NActors::TActivationContext::Monotonic();
+        auto startedAt = TInstant::Now();
         auto result = LocalSessions.emplace(sessionId,
             TKqpSessionInfo(sessionId, workerId, database, dbCounters, std::move(pos),
-                NActors::TActivationContext::Monotonic() + idleDuration, IdleSessions.end(), pgWire));
+                sessionStartedAt + idleDuration, IdleSessions.end(), pgWire, startedAt));
         OrderedSessions.emplace(sessionId, &result.first->second);
         SessionsCountPerDatabase[database]++;
         Y_ABORT_UNLESS(result.second, "Duplicate session id!");

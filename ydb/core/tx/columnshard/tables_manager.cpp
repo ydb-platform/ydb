@@ -57,7 +57,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             if (table.IsDropped()) {
                 PathsToDrop.insert(table.GetPathId());
             }
-            Tables.insert_or_assign(table.GetPathId(), std::move(table));
+            AFL_VERIFY(Tables.emplace(table.GetPathId(), std::move(table)).second);
 
             if (!rowset.Next()) {
                 return false;
@@ -82,7 +82,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
                 Y_VERIFY_S(preset.GetName() == "default", "Preset name: " + preset.GetName());
                 isFakePresetOnly = false;
             }
-            SchemaPresets.insert_or_assign(preset.GetId(), preset);
+            AFL_VERIFY(SchemaPresets.emplace(preset.GetId(), preset).second);
             if (!rowset.Next()) {
                 return false;
             }
@@ -160,9 +160,16 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
         for (const auto& [version, schemaInfo] : preset.GetVersions()) {
             if (schemaInfo.HasSchema()) {
                 AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "index_schema")("preset_id", id)("snapshot", version)("version", schemaInfo.GetSchema().GetVersion());
-                IndexSchemaVersion(version, schemaInfo.GetSchema());
+                if (!PrimaryIndex) {
+                    PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, StoragesManager, version, schemaInfo.GetSchema());
+                } else {
+                    PrimaryIndex->RegisterSchemaVersion(version, schemaInfo.GetSchema());
+                }
             }
         }
+    }
+    for (auto&& i : Tables) {
+        PrimaryIndex->RegisterTable(i.first);
     }
     return true;
 }
@@ -230,7 +237,7 @@ void TTablesManager::RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db) {
 
     Schema::SaveTableInfo(db, table.GetPathId(), table.GetTieringUsage());
     const ui64 pathId = table.GetPathId();
-    Tables.insert_or_assign(pathId, std::move(table));
+    AFL_VERIFY(Tables.emplace(pathId, std::move(table)).second);
     if (PrimaryIndex) {
         PrimaryIndex->RegisterTable(pathId);
     }
@@ -241,7 +248,7 @@ bool TTablesManager::RegisterSchemaPreset(const TSchemaPreset& schemaPreset, NIc
         return false;
     }
     Schema::SaveSchemaPresetInfo(db, schemaPreset.GetId(), schemaPreset.GetName());
-    SchemaPresets.insert_or_assign(schemaPreset.GetId(), schemaPreset);
+    SchemaPresets.emplace(schemaPreset.GetId(), schemaPreset);
     return true;
 }
 
@@ -258,8 +265,15 @@ void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapsho
     auto& schemaPreset = SchemaPresets.at(presetId);
     Schema::SaveSchemaPresetVersionInfo(db, presetId, version, versionInfo);
     schemaPreset.AddVersion(version, versionInfo);
-    if (versionInfo.HasSchema()){
-        IndexSchemaVersion(version, versionInfo.GetSchema());
+    if (versionInfo.HasSchema()) {
+        if (!PrimaryIndex) {
+            PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, StoragesManager, version, schema);
+            for (auto&& i : Tables) {
+                PrimaryIndex->RegisterTable(i.first);
+            }
+        } else {
+            PrimaryIndex->RegisterSchemaVersion(version, schema);
+        }
         for (auto& columnName : Ttl.TtlColumns()) {
             PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetIndexInfo().CheckTtlColumn(columnName);
         }
@@ -300,45 +314,34 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
     table.AddVersion(version, versionInfo);
 }
 
-void TTablesManager::IndexSchemaVersion(const NOlap::TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema) {
-    std::optional<NOlap::TIndexInfo> indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema, StoragesManager);
-    Y_ABORT_UNLESS(indexInfoOptional);
-    NOlap::TIndexInfo indexInfo = std::move(*indexInfoOptional);
-    indexInfo.SetAllKeys(StoragesManager);
-    const bool isFirstPrimaryIndexInitialization = !PrimaryIndex;
-    if (!PrimaryIndex) {
-        PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, NOlap::TCompactionLimits(), StoragesManager);
-    }
-    PrimaryIndex->RegisterSchemaVersion(snapshot, std::move(indexInfo));
-    if (isFirstPrimaryIndexInitialization) {
-        for (auto&& i : Tables) {
-            PrimaryIndex->RegisterTable(i.first);
-        }
-    }
-}
-
 TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId)
     : StoragesManager(storagesManager)
     , TabletId(tabletId)
 {
 }
 
-bool TTablesManager::TryFinalizeDropPath(NTable::TDatabase& dbTable, const ui64 pathId) {
+bool TTablesManager::TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const ui64 pathId) const {
     auto itDrop = PathsToDrop.find(pathId);
-    if (itDrop == PathsToDrop.end()) {
-        return false;
-    }
-    if (GetPrimaryIndexSafe().HasDataInPathId(pathId)) {
-        return false;
-    }
-    PathsToDrop.erase(itDrop);
+    AFL_VERIFY(itDrop != PathsToDrop.end());
+    AFL_VERIFY(!GetPrimaryIndexSafe().HasDataInPathId(pathId));
     NIceDb::TNiceDb db(dbTable);
     NColumnShard::Schema::EraseTableInfo(db, pathId);
-    const auto& table = Tables.find(pathId);
-    Y_ABORT_UNLESS(table != Tables.end(), "No schema for path %lu", pathId);
-    for (auto&& tableVersion : table->second.GetVersions()) {
+    const auto& itTable = Tables.find(pathId);
+    AFL_VERIFY(itTable != Tables.end())("problem", "No schema for path")("path_id", pathId);
+    for (auto&& tableVersion : itTable->second.GetVersions()) {
         NColumnShard::Schema::EraseTableVersionInfo(db, pathId, tableVersion.first);
     }
+    return true;
+}
+
+bool TTablesManager::TryFinalizeDropPathOnComplete(const ui64 pathId) {
+    auto itDrop = PathsToDrop.find(pathId);
+    AFL_VERIFY(itDrop != PathsToDrop.end());
+    AFL_VERIFY(!GetPrimaryIndexSafe().HasDataInPathId(pathId));
+    PathsToDrop.erase(itDrop);
+    const auto& itTable = Tables.find(pathId);
+    AFL_VERIFY(itTable != Tables.end())("problem", "No schema for path")("path_id", pathId);
+    Tables.erase(itTable);
     return true;
 }
 

@@ -398,7 +398,8 @@ private:
             task.execution_id(),
             task.operation_id(),
             computeConnection,
-            NProtoInterop::CastFromProto(task.result_ttl())
+            NProtoInterop::CastFromProto(task.result_ttl()),
+            std::map<TString, Ydb::TypedValue>(task.parameters().begin(), task.parameters().end())
             );
 
         auto runActorId =

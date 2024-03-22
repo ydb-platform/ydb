@@ -15,6 +15,13 @@
 
 namespace NKikimr::NJaegerTracing {
 
+// Used to represent shared limits in throttlers and samplers
+template<class T>
+struct TWithTag {
+    T Value;
+    size_t Tag;
+};
+
 class TSamplingThrottlingConfigurator {
 public:
     TSamplingThrottlingConfigurator(TIntrusivePtr<ITimeProvider> timeProvider,
@@ -22,11 +29,11 @@ public:
 
     TIntrusivePtr<TSamplingThrottlingControl> GetControl();
 
-    void UpdateSettings(TSettings<double, TThrottlingSettings> settings);
+    void UpdateSettings(TSettings<double, TWithTag<TThrottlingSettings>> settings);
 
 private:
     TSettings<double, TIntrusivePtr<TThrottler>> GenerateThrottlers(
-        TSettings<double, TThrottlingSettings> settings);
+        TSettings<double, TWithTag<TThrottlingSettings>> settings);
     
     std::unique_ptr<TSamplingThrottlingControl::TSamplingThrottlingImpl> GenerateSetup();
 

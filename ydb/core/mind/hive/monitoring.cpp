@@ -1,11 +1,11 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/protobuf/json/proto2json.h>
+#include <library/cpp/digest/md5/md5.h>
 #include <util/string/vector.h>
 #include <ydb/core/tablet_flat/flat_executor_counters.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include "hive_impl.h"
-#include "hive_transactions.h"
 #include "hive_schema.h"
 #include "hive_log.h"
 #include "monitoring.h"
@@ -3792,11 +3792,11 @@ public:
     TIntrusivePtr<TTabletStorageInfo> Info;
     ui32 KnownGeneration = 0;
 
-    TTxMonEvent_ResetTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+    TTxMonEvent_ResetTablet(const TActorId& source, TTabletId tabletId, TSelf* hive)
         : TBase(hive)
         , Source(source)
+        , TabletId(tabletId)
     {
-        TabletId = FromStringWithDefault<TTabletId>(ev->Get()->Cgi().Get("tablet"), TabletId);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_RESET_TABLET; }
@@ -4344,6 +4344,32 @@ public:
 
     void Complete(const TActorContext&) override {}
 };
+
+bool THive::IsSafeOperation(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
+    NMon::TEvRemoteHttpInfo* httpInfo = ev->Get();
+    if (httpInfo->Method != HTTP_METHOD_POST) {
+        ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"error\":\"only POST method is allowed\"}"));
+        return false;
+    }
+    if (!GetEnableDestroyOperations()) {
+        ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"error\":\"destroy operations are disabled\"}"));
+        return false;
+    }
+    TCgiParameters cgi(httpInfo->Cgi());
+    TStringBuilder keyData;
+    keyData << cgi.Get("tablet") << cgi.Get("owner") << cgi.Get("owner_idx");
+    if (keyData.Empty()) {
+        ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"error\":\"tablet, owner or owner_idx parameters not set\"}"));
+        return false;
+    }
+    TString key = MD5::Data(keyData);
+    if (key != cgi.Get("key")) {
+        ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"error\":\"key parameter is incorrect\"}"));
+        return false;
+    }
+    return true;
+}
+
 void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
     if (!ReadyForConnections) {
         return Execute(new TTxMonEvent_NotReady(ev->Sender, this), ctx);
@@ -4410,9 +4436,6 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     if (page == "ObjectStats") {
         return Execute(new TTxMonEvent_ObjectStats(ev->Sender, this), ctx);
     }
-    if (page == "ResetTablet") {
-        return Execute(new TTxMonEvent_ResetTablet(ev->Sender, ev, this), ctx);
-    }
     if (page == "CreateTablet") {
         ui64 owner = FromStringWithDefault<ui64>(cgi.Get("owner"), 0);
         ui64 ownerIdx = FromStringWithDefault<ui64>(cgi.Get("owner_idx"), 0);
@@ -4422,16 +4445,24 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
         ctx.RegisterWithSameMailbox(new TCreateTabletActor(ev->Sender, owner, ownerIdx, type, channelsProfile, followers, this));
         return;
     }
-    if (page == "DeleteTablet") {
-        if (cgi.Has("owner") && cgi.Has("owner_idx")) {
-            ui64 owner = FromStringWithDefault<ui64>(cgi.Get("owner"), 0);
-            ui64 ownerIdx = FromStringWithDefault<ui64>(cgi.Get("owner_idx"), 0);
-            ctx.RegisterWithSameMailbox(new TDeleteTabletActor(ev->Sender, owner, ownerIdx, this));
-        } else if (cgi.Has("tablet")) {
+    if (page == "ResetTablet") {
+        if (IsSafeOperation(ev, ctx)) {
             TTabletId tabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), 0);
-            ctx.RegisterWithSameMailbox(new TDeleteTabletActor(ev->Sender, tabletId, this));
-        } else {
-            ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"Error\": \"tablet or (owner, owner_idx) params must be specified\"}"));
+            return Execute(new TTxMonEvent_ResetTablet(ev->Sender, tabletId, this), ctx);
+        }
+    }
+    if (page == "DeleteTablet") {
+        if (IsSafeOperation(ev, ctx)) {
+            if (cgi.Has("owner") && cgi.Has("owner_idx")) {
+                ui64 owner = FromStringWithDefault<ui64>(cgi.Get("owner"), 0);
+                ui64 ownerIdx = FromStringWithDefault<ui64>(cgi.Get("owner_idx"), 0);
+                ctx.RegisterWithSameMailbox(new TDeleteTabletActor(ev->Sender, owner, ownerIdx, this));
+            } else if (cgi.Has("tablet")) {
+                TTabletId tabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), 0);
+                ctx.RegisterWithSameMailbox(new TDeleteTabletActor(ev->Sender, tabletId, this));
+            } else {
+                ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"Error\": \"tablet or (owner, owner_idx) params must be specified\"}"));
+            }
         }
         return;
     }

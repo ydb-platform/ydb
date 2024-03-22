@@ -513,9 +513,7 @@ namespace NActors {
             EventsPerMailbox,
             GetCycleCountFast() + SoftProcessingDurationTs,
             &SharedStats[pool->PoolId]);
-        Y_ABORT_UNLESS(Ctx.Stats->ElapsedTicksByActivity.size());
         Ctx.WorkerId = (pool == ThreadCtx->ExecutorPools[0].load(std::memory_order_relaxed) ? -1 : -2);
-        Y_ABORT_UNLESS(Ctx.Stats->ElapsedTicksByActivity.size());
         return ProcessExecutorPool(pool);
     }
 
@@ -552,6 +550,7 @@ namespace NActors {
 
             if (!wasWorking && !StopFlag.load(std::memory_order_relaxed)) {
                 TlsThreadContext->Timers.Reset();
+                ThreadCtx->UnsetWork();
                 ThreadCtx->Wait(0, &StopFlag);
             }
 

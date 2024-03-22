@@ -493,6 +493,10 @@ message TStorageTierConfig {
     optional TCompressionOptions Compression = 3;
 }
 
+message TColumnTableSchemeOptions {
+    optional bool SchemeNeedActualization = 1 [default = false];
+}
+
 message TColumnTableSchema {
     // A list of columns for tables with this schema
     repeated TOlapColumnDescription Columns = 1;
@@ -514,6 +518,11 @@ message TColumnTableSchema {
     optional bool CompositeMarks = 9 [ default = false ];
     repeated TOlapIndexDescription Indexes = 10;
     repeated NKikimrColumnShardStatisticsProto.TOperatorContainer Statistics = 11;
+    optional TColumnTableSchemeOptions Options = 12;
+}
+
+message TColumnTableRequestedOptions {
+    optional bool SchemeNeedActualization = 1 [default = false];
 }
 
 message TAlterColumnTableSchema {
@@ -525,6 +534,7 @@ message TAlterColumnTableSchema {
     repeated string DropIndexes = 9;
     repeated NKikimrColumnShardStatisticsProto.TConstructorContainer UpsertStatistics = 10;
     repeated string DropStatistics = 11;
+    optional TColumnTableRequestedOptions Options = 12;
 }
 
 // Schema presets are used to manage multiple tables with the same schema
@@ -1870,6 +1880,10 @@ message TBasic {
     optional string PasswordSecretName = 2;
 }
 
+message TToken {
+    optional string TokenSecretName = 2;
+}
+
 message TAuth {
     oneof identity {
         TNoneAuth None = 3;
@@ -1877,6 +1891,7 @@ message TAuth {
         TBasic Basic = 5;
         TMdbBasic MdbBasic = 6;
         TAws Aws = 7;
+        TToken Token = 8;
     }
 }
 

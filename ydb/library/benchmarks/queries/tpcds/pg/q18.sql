@@ -26,10 +26,10 @@ select  i_item_id,
        ca_state in ('AR','TX','NC'
                    ,'GA','MS','WV','AL')
  group by rollup (i_item_id, ca_country, ca_state, ca_county)
- order by ca_country,
-        ca_state,
-        ca_county,
-	i_item_id
+ order by ca_country nulls first,
+        ca_state nulls first,
+        ca_county nulls first,
+	i_item_id nulls first
  limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query18.tpl

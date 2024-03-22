@@ -504,6 +504,19 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         CompareYson(R"([[#]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST(EvaluateExprYsonAndType) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT FormatType(EvaluateType(TypeHandle(TypeOf(1)))), EvaluateExpr("[1;2;3]"y);
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([[Int32;"[1;2;3]"]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST(Discard) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();

@@ -104,7 +104,9 @@ void TYsonStructRegistry::InitializeStruct(TStruct* target)
     if (CurrentlyInitializingMeta_) {
         // TODO(renadeen): assert target is from the same type hierarchy.
         // Call initialization method that is provided by user.
-        TStruct::Register(TYsonStructRegistrar<TStruct>(CurrentlyInitializingMeta_));
+        if (RegistryDepth_ <= 1) {
+            TStruct::Register(TYsonStructRegistrar<TStruct>(CurrentlyInitializingMeta_));
+        }
         return;
     }
 
@@ -428,13 +430,16 @@ private: \
     using TThis = TStruct; \
     friend class ::NYT::NYTree::TYsonStructRegistry;
 
-#define YSON_STRUCT_IMPL__CTOR_BODY(TStruct) \
+#define YSON_STRUCT_IMPL__CTOR_BODY \
     ::NYT::NYTree::TYsonStructRegistry::Get()->InitializeStruct(this);
 
 #define YSON_STRUCT_LITE_IMPL__CTOR_BODY(TStruct) \
-    YSON_STRUCT_IMPL__CTOR_BODY(TStruct) \
-    if (std::type_index(typeid(TStruct)) == this->FinalType_ && !::NYT::NYTree::TYsonStructRegistry::Get()->InitializationInProgress()) { \
-        this->SetDefaults(); \
+    YSON_STRUCT_IMPL__CTOR_BODY \
+    if (std::type_index(typeid(TStruct)) == this->FinalType_) { \
+        ::NYT::NYTree::TYsonStructRegistry::Get()->OnFinalCtorCalled(); \
+        if (!::NYT::NYTree::TYsonStructRegistry::Get()->InitializationInProgress()) { \
+            this->SetDefaults(); \
+        } \
     } \
 
 //! NB(arkady-e1ppa): Alias is used by registrar postprocessors
@@ -462,10 +467,9 @@ public: \
     TStruct() \
     { \
         static_assert(std::derived_from<TStruct, ::NYT::NYTree::TYsonStruct>, "Class must inherit from TYsonStruct"); \
-        YSON_STRUCT_IMPL__CTOR_BODY(TStruct) \
+        YSON_STRUCT_IMPL__CTOR_BODY \
     } \
     YSON_STRUCT_IMPL__DECLARE_ALIASES(TStruct)
-
 
 #define DECLARE_YSON_STRUCT_LITE(TStruct) \
 public: \
@@ -494,7 +498,7 @@ TStruct::TStruct() \
 TStruct::TStruct() \
 { \
     static_assert(std::derived_from<TStruct, ::NYT::NYTree::TYsonStruct>, "Class must inherit from TYsonStruct"); \
-    YSON_STRUCT_IMPL__CTOR_BODY(TStruct) \
+    YSON_STRUCT_IMPL__CTOR_BODY \
 }
 
 //! NB(arkady-e1ppa): These constructors are only used internally.

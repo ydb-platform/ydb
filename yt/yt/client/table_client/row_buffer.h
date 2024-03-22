@@ -90,6 +90,7 @@ public:
         int schemafulColumnCount,
         const TNameTableToSchemaIdMapping& idMapping,
         std::vector<bool>* columnPresenceBuffer,
+        bool preserveIds = false,
         std::optional<TUnversionedValue> addend = std::nullopt);
 
     //! Captures the row applying #idMapping to value ids.

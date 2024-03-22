@@ -3,6 +3,7 @@
 #include "blobstorage_replbroker.h"
 #include "blobstorage_hullrepljob.h"
 #include "query_donor.h"
+#include <ydb/library/actors/interconnect/watchdog_timer.h>
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 #include <ydb/core/blobstorage/vdisk/common/circlebuf.h>
@@ -173,6 +174,8 @@ namespace NKikimr {
         TInstant ReplicationEndTime;
         bool UnrecoveredNonphantomBlobs = false;
 
+        TWatchdogTimer<TEvReplCheckProgress> ReplProgressWatchdog;
+
         friend class TActorBootstrapped<TReplScheduler>;
 
         const char *StateToStr(EState state) {
@@ -262,6 +265,7 @@ namespace NKikimr {
             UnrecoveredNonphantomBlobs = false;
 
             Become(&TThis::StateRepl);
+            ResetReplProgressTimer(false);
 
             // switch to planning state
             Transition(Relaxation, Plan);
@@ -346,6 +350,10 @@ namespace NKikimr {
             UnrecoveredNonphantomBlobs |= info->UnrecoveredNonphantomBlobs;
             UnreplicatedBlobRecords = std::move(info->UnreplicatedBlobRecords);
 
+            if (info->ItemsRecovered > 0) {
+                ResetReplProgressTimer(false);
+            }
+
             bool finished = false;
 
             if (info->Eof) { // when it is the last quantum for some donor, rotate the blob sets
@@ -394,6 +402,7 @@ namespace NKikimr {
                     // release token as we have finished replicating
                     Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
                 }
+                ResetReplProgressTimer(true);
 
                 Become(&TThis::StateRelax);
                 if (!BlobsToReplicatePtr->empty()) {
@@ -494,6 +503,19 @@ namespace NKikimr {
             return TDuration::Seconds(workAtEnd / workPerSecond);
         }
 
+        void ResetReplProgressTimer(bool finish) {
+            if (finish) {
+                ReplProgressWatchdog.Disarm();
+            } else {
+                ReplProgressWatchdog.Rearm(SelfId());
+            }
+            ReplCtx->MonGroup.ReplMadeNoProgress() = 0;
+        }
+
+        void ReplStuck() {
+            ReplCtx->MonGroup.ReplMadeNoProgress() = 1;
+        }
+
         void Handle(NMon::TEvHttpInfo::TPtr &ev) {
             Y_DEBUG_ABORT_UNLESS(ev->Get()->SubRequestId == TDbMon::ReplId);
 
@@ -554,7 +576,7 @@ namespace NKikimr {
         std::set<TActorId> DonorQueryActors;
 
         void Handle(TEvBlobStorage::TEvEnrichNotYet::TPtr ev) {
-            DonorQueryActors.insert(Register(new TDonorQueryActor(*ev->Get(), Donors)));
+            DonorQueryActors.insert(Register(new TDonorQueryActor(*ev->Get(), Donors, ReplCtx->VCtx->VDiskLogPrefix, ReplCtx->VCtx->OOSMonGroup)));
         }
 
         void Handle(TEvents::TEvActorDied::TPtr ev) {
@@ -586,6 +608,7 @@ namespace NKikimr {
             hFunc(TEvents::TEvActorDied, Handle)
             cFunc(TEvBlobStorage::EvCommenceRepl, StartReplication)
             hFunc(TEvReplInvoke, Handle)
+            hFunc(TEvReplCheckProgress, ReplProgressWatchdog)
         )
 
         void PassAway() override {
@@ -611,6 +634,7 @@ namespace NKikimr {
                 Send(ReplJobActorId, new TEvents::TEvPoison);
             }
 
+            ResetReplProgressTimer(true);
             TActorBootstrapped::PassAway();
         }
 
@@ -627,6 +651,7 @@ namespace NKikimr {
             hFunc(TEvents::TEvActorDied, Handle)
             cFunc(TEvBlobStorage::EvCommenceRepl, Ignore)
             hFunc(TEvReplInvoke, Handle)
+            hFunc(TEvReplCheckProgress, ReplProgressWatchdog)
         )
 
     public:
@@ -639,6 +664,10 @@ namespace NKikimr {
             , ReplCtx(replCtx)
             , History(HistorySize)
             , State(Relaxation)
+            , ReplProgressWatchdog(
+                ReplCtx->VDiskCfg->ReplMaxTimeToMakeProgress,
+                std::bind(&TThis::ReplStuck, this)
+            )
         {}
     };
 

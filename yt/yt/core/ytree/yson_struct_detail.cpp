@@ -72,7 +72,7 @@ void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const TString& key,
 {
     const auto& parameter = GetParameter(key);
     auto validate = [&] () {
-        parameter->Postprocess(target, "/" + key);
+        parameter->PostprocessParameter(target, "/" + key);
         try {
             for (const auto& postprocessor : Postprocessors_) {
                 postprocessor(target);
@@ -92,10 +92,10 @@ void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const TString& key,
     parameter->SafeLoad(target, node, loadOptions, validate);
 }
 
-void TYsonStructMeta::Postprocess(TYsonStructBase* target, const TYPath& path) const
+void TYsonStructMeta::PostprocessStruct(TYsonStructBase* target, const TYPath& path) const
 {
     for (const auto& [name, parameter] : Parameters_) {
-        parameter->Postprocess(target, path + "/" + ToYPathLiteral(name));
+        parameter->PostprocessParameter(target, path + "/" + ToYPathLiteral(name));
     }
 
     try {
@@ -166,7 +166,7 @@ void TYsonStructMeta::LoadStruct(
     }
 
     if (postprocess) {
-        Postprocess(target, path);
+        PostprocessStruct(target, path);
     }
 }
 
@@ -278,7 +278,7 @@ void TYsonStructMeta::LoadStruct(
     }
 
     if (postprocess) {
-        Postprocess(target, path);
+        PostprocessStruct(target, path);
     }
 }
 

@@ -103,11 +103,11 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
         SanityCheck(); // May Die
     }
 
-    bool Action() {
+    bool Action(bool accelerate = false) {
         UpdateExpiredVDiskSet();
 
         TPutImpl::TPutResultVec putResults;
-        PutImpl.Step(LogCtx, putResults, ExpiredVDiskSet);
+        PutImpl.Step(LogCtx, putResults, ExpiredVDiskSet, accelerate);
         if (ReplyAndDieWithLastResponse(putResults)) {
             return true;
         }
@@ -133,9 +133,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
             return;
         }
         IsAccelerated = true;
-
-        PutImpl.Accelerate(LogCtx);
-        Action();
+        Action(true);
 //        *(IsMultiPutMode ? Mon->NodeMon->AccelerateEvVMultiPutCount : Mon->NodeMon->AccelerateEvVPutCount) += v.size();
     }
 
@@ -210,9 +208,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
             HandleIncarnation(issue, orderNumber, record.GetIncarnationGuid());
         }
 
-        if (Action()) {
-            return;
-        }
+        Action();
     }
 
     void Handle(TEvBlobStorage::TEvVPutResult::TPtr &ev) {
@@ -265,7 +261,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
         if (status == NKikimrProto::BLOCKED || status == NKikimrProto::DEADLINE) {
             TString error = TStringBuilder() << "Got VPutResult status# " << status << " from VDiskId# " << vdiskId;
             TPutImpl::TPutResultVec putResults;
-            PutImpl.PrepareOneReply(status, blobId.FullID(), blobIdx, LogCtx, std::move(error), putResults);
+            PutImpl.PrepareOneReply(status, blobIdx, LogCtx, std::move(error), putResults);
             ReplyAndDieWithLastResponse(putResults);
         } else {
             PutImpl.ProcessResponse(*ev->Get());
@@ -351,7 +347,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
             Y_ABORT_UNLESS(itemStatus != NKikimrProto::RACE); // we should get RACE for the whole request and handle it in CheckForTermErrors
             if (itemStatus == NKikimrProto::BLOCKED || itemStatus == NKikimrProto::DEADLINE) {
                 ErrorReason = TStringBuilder() << "Got VMultiPutResult itemStatus# " << itemStatus << " from VDiskId# " << vdiskId;
-                PutImpl.PrepareOneReply(itemStatus, blobId.FullID(), blobIdx, LogCtx, ErrorReason, putResults);
+                PutImpl.PrepareOneReply(itemStatus, blobIdx, LogCtx, ErrorReason, putResults);
             }
         }
         if (ReplyAndDieWithLastResponse(putResults)) {
@@ -405,7 +401,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
         return false;
     }
 
-    void SendReply(std::unique_ptr<TEvBlobStorage::TEvPutResult> putResult, ui64 blobIdx) {
+    void SendReply(std::unique_ptr<TEvBlobStorage::TEvPutResult> putResult, size_t blobIdx) {
         NKikimrProto::EReplyStatus status = putResult->Status;
         A_LOG_LOG_S(false, status == NKikimrProto::OK ? NLog::PRI_INFO : NLog::PRI_NOTICE, "BPP21",
             "SendReply putResult# " << putResult->ToString() << " ResponsesSent# " << ResponsesSent
@@ -449,7 +445,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
     TString BlobIdSequenceToString() const {
         TStringBuilder blobIdsStr;
         blobIdsStr << '[';
-        for (ui64 blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
+        for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
             if (blobIdx) {
                 blobIdsStr << ' ';
             }
@@ -603,7 +599,7 @@ public:
 
         StartTime = TActivationContext::Monotonic();
 
-        for (ui64 blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
+        for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
             LWTRACK(DSProxyPutBootstrapStart, PutImpl.Blobs[blobIdx].Orbit);
         }
 
@@ -703,12 +699,11 @@ public:
                     s << ' ';
                 }
                 s << i;
-                auto& record = IncarnationRecords[i];
-                s << '{';
-                s << "IncarnationGuid# " << record.IncarnationGuid;
-                s << " ExpirationTimestamp# " << record.ExpirationTimestamp;
-                s << " StatusIssueTimestamp# " << record.StatusIssueTimestamp;
-                s << '}';
+                auto& r = IncarnationRecords[i];
+                s << '{' << r.IncarnationGuid
+                    << ' ' << (r.ExpirationTimestamp != TMonotonic::Max() ? TStringBuilder() << r.ExpirationTimestamp : "-"_sb)
+                    << ' ' << (r.StatusIssueTimestamp != TMonotonic::Zero() ? TStringBuilder() << r.StatusIssueTimestamp : "-"_sb)
+                    << '}';
             }
             s << '}';
             return s.Str();
@@ -735,7 +730,7 @@ public:
     }
 
     STATEFN(StateWait) {
-        if (ProcessEvent(ev, IsManyPuts)) {
+        if (ProcessEvent(ev, true)) {
             return;
         }
         const ui32 type = ev->GetTypeRewrite();

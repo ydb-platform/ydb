@@ -450,6 +450,7 @@ public:
 
             auto event = MakeHolder<NSequenceShard::TEvSequenceShard::TEvRestoreSequence>(
                 txState->TargetPathId, GetSequenceResult);
+
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.SetTxPartId(OperationId.GetSubTxId());
 

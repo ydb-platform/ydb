@@ -1,6 +1,9 @@
 Registering pre-existing tables
 	onek
 	onek2
+	emp
+	student
+	stud_emp
 	int8_tbl
 <sql-statement>
 --

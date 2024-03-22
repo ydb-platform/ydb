@@ -1,7 +1,9 @@
 #pragma once
+
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/codecs/codecs.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -1315,7 +1317,7 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     //! 1. Get a partition ID.
     //! 2. Find out the location of the partition by its ID.
     //! 3. Connect directly to the partition host.
-    FLUENT_SETTING_DEFAULT(bool, DirectWriteToPartition, false);
+    FLUENT_SETTING_DEFAULT(bool, DirectWriteToPartition, true);
 
     //! codec and level to use for data compression prior to write.
     FLUENT_SETTING_DEFAULT(ECodec, Codec, ECodec::GZIP);
@@ -1772,6 +1774,8 @@ public:
 
     TTopicClient(const TDriver& driver, const TTopicClientSettings& settings = TTopicClientSettings());
 
+    void ProvideCodec(ECodec codecId, THolder<ICodec>&& codecImpl);
+
     // Create a new topic.
     TAsyncStatus CreateTopic(const TString& path, const TCreateTopicSettings& settings = {});
 
@@ -1800,6 +1804,9 @@ public:
     // Commit offset
     TAsyncStatus CommitOffset(const TString& path, ui64 partitionId, const TString& consumerName, ui64 offset,
         const TCommitOffsetSettings& settings = {});
+
+protected:
+    void OverrideCodec(ECodec codecId, THolder<ICodec>&& codecImpl);
 
 private:
     std::shared_ptr<TImpl> Impl_;

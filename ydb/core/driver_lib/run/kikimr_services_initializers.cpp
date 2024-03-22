@@ -311,6 +311,7 @@ void AddExecutorPool(
         basic.SpinThreshold = poolConfig.GetSpinThreshold();
         basic.Affinity = ParseAffinity(poolConfig.GetAffinity());
         basic.RealtimePriority = poolConfig.GetRealtimePriority();
+        basic.HasSharedThread = poolConfig.GetHasSharedThread();
         if (poolConfig.HasTimePerMailboxMicroSecs()) {
             basic.TimePerMailbox = TDuration::MicroSeconds(poolConfig.GetTimePerMailboxMicroSecs());
         } else if (systemConfig.HasTimePerMailboxMicroSecs()) {
@@ -963,6 +964,9 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
         nodeWardenConfig->CacheVDisks = bsc.GetCacheVDisks();
         nodeWardenConfig->EnableVDiskCooldownTimeout = true;
     }
+    if (Config.HasDomainsConfig()) {
+        nodeWardenConfig->DomainsConfig.emplace(Config.GetDomainsConfig());
+    }
 
     ObtainTenantKey(&nodeWardenConfig->TenantKey, Config.GetKeyConfig());
     ObtainStaticKey(&nodeWardenConfig->StaticKey);
@@ -1000,28 +1004,37 @@ TStateStorageServiceInitializer::TStateStorageServiceInitializer(const TKikimrRu
 void TStateStorageServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     bool found = false;
 
+    TIntrusivePtr<TStateStorageInfo> ssrInfo;
+    TIntrusivePtr<TStateStorageInfo> ssbInfo;
+    TIntrusivePtr<TStateStorageInfo> sbrInfo;
+
     for (const NKikimrConfig::TDomainsConfig::TStateStorage &ssconf : Config.GetDomainsConfig().GetStateStorage()) {
         Y_ABORT_UNLESS(ssconf.GetSSId() == 1);
         found = true;
-
-        TIntrusivePtr<TStateStorageInfo> ssrInfo;
-        TIntrusivePtr<TStateStorageInfo> ssbInfo;
-        TIntrusivePtr<TStateStorageInfo> sbrInfo;
 
         BuildStateStorageInfos(ssconf, ssrInfo, ssbInfo, sbrInfo);
 
         StartLocalStateStorageReplicas(CreateStateStorageReplica, ssrInfo.Get(), appData->SystemPoolId, *setup);
         StartLocalStateStorageReplicas(CreateStateStorageBoardReplica, ssbInfo.Get(), appData->SystemPoolId, *setup);
         StartLocalStateStorageReplicas(CreateSchemeBoardReplica, sbrInfo.Get(), appData->SystemPoolId, *setup);
-
-        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeStateStorageProxyID(),
-            TActorSetupCmd(CreateStateStorageProxy(ssrInfo.Get(), ssbInfo.Get(), sbrInfo.Get()),
-            TMailboxType::ReadAsFilled, appData->SystemPoolId)));
     }
     if (!found) {
-        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeStateStorageProxyID(),
-            TActorSetupCmd(CreateStateStorageProxyStub(), TMailboxType::HTSwap, appData->SystemPoolId)));
+        auto stubInfo = MakeIntrusive<TStateStorageInfo>();
+        stubInfo->NToSelect = 1;
+        stubInfo->Rings.push_back(TStateStorageInfo::TRing{
+            .IsDisabled = false,
+            .UseRingSpecificNodeSelection = false,
+            .Replicas{
+                TActorId()
+            }
+        });
+        stubInfo->StateStorageVersion = 0;
+        ssrInfo = ssbInfo = sbrInfo = stubInfo;
     }
+
+    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeStateStorageProxyID(),
+        TActorSetupCmd(CreateStateStorageProxy(ssrInfo, ssbInfo, sbrInfo),
+        TMailboxType::ReadAsFilled, appData->SystemPoolId)));
 
     setup->LocalServices.emplace_back(
         TActorId(),
@@ -2423,27 +2436,13 @@ void THttpProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetup
 
 
 TConfigsDispatcherInitializer::TConfigsDispatcherInitializer(const TKikimrRunConfig& runConfig)
-   : IKikimrServicesInitializer(runConfig)
-   , Labels(runConfig.Labels)
-   , InitialCmsConfig(runConfig.InitialCmsConfig)
-   , InitialCmsYamlConfig(runConfig.InitialCmsYamlConfig)
-   , ConfigInitInfo(runConfig.ConfigInitInfo)
+    : IKikimrServicesInitializer(runConfig)
+    , ConfigsDispatcherInitInfo(runConfig.ConfigsDispatcherInitInfo)
 {
 }
 
 void TConfigsDispatcherInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    NKikimr::NConsole::TConfigsDispatcherInitInfo initInfo {
-        .InitialConfig = Config,
-        .Labels = Labels,
-        .ItemsServeRules = std::monostate{},
-        .DebugInfo = NKikimr::NConsole::TDebugInfo {
-            .StaticConfig = Config,
-            .OldDynConfig = InitialCmsConfig,
-            .NewDynConfig = InitialCmsYamlConfig,
-            .InitInfo = ConfigInitInfo,
-        },
-    };
-    IActor* actor = NConsole::CreateConfigsDispatcher(initInfo);
+    IActor* actor = NConsole::CreateConfigsDispatcher(ConfigsDispatcherInitInfo);
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
             NConsole::MakeConfigsDispatcherID(NodeId),
             TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));

@@ -606,9 +606,23 @@ public:
             return false;
         }
 
-        auto call = dynamic_cast<TCallNode*>(Args[0].Get());
-        if (!call || call->GetOpName() != "PgType") {
-            ctx.Error(Args[0]->GetPos()) << "Expecting pg type name";
+        ui32 oid;
+        if (Args[0]->IsIntegerLiteral() && TryFromString<ui32>(Args[0]->GetLiteralValue(), oid)) {
+            if (!NPg::HasType(oid)) {
+                ctx.Error(Args[0]->GetPos()) << "Unknown pg type oid: " << oid;
+                return false;
+            } else {
+                Args[0] = BuildQuotedAtom(Args[0]->GetPos(), NPg::LookupType(oid).Name);
+            }
+        } else if (Args[0]->IsLiteral() && Args[0]->GetLiteralType() == "String") {
+            if (!NPg::HasType(Args[0]->GetLiteralValue())) {
+                ctx.Error(Args[0]->GetPos()) << "Unknown pg type: " << Args[0]->GetLiteralValue();
+                return false;
+            } else {
+                Args[0] = BuildQuotedAtom(Args[0]->GetPos(), Args[0]->GetLiteralValue());
+            }
+        } else {
+            ctx.Error(Args[0]->GetPos()) << "Expecting string literal with pg type name or integer literal with pg type oid";
             return false;
         }
 
@@ -618,12 +632,6 @@ public:
 
     TNodePtr DoClone() const final {
         return new TYqlPgType(Pos, CloneContainer(Args));
-    }
-
-    TAstNode* Translate(TContext& ctx) const final {
-        // argument is already a proper PgType callable - here we just return argument
-        YQL_ENSURE(Nodes.size() == 2);
-        return Nodes.back()->Translate(ctx);
     }
 };
 
@@ -3024,6 +3032,8 @@ struct TBuiltinFuncData {
             {"callabletypecomponents", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CallableTypeComponents", 1, 1) },
             {"callableargument", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CallableArgument", 1, 3) },
             {"callabletypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CallableTypeHandle", 2, 4) },
+            {"pgtypename", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("PgTypeName", 1, 1) },
+            {"pgtypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("PgTypeHandle", 1, 1) },
             {"formatcode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FormatCode", 1, 1) },
             {"worldcode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("WorldCode", 0, 0) },
             {"atomcode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AtomCode", 1, 1) },
@@ -3386,7 +3396,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     } else if (ns == "datetime2" && (name == "Format" || name == "Parse")) {
         return BuildUdf(ctx, pos, nameSpace, name, args);
     } else if (ns == "pg") {
-        const bool isAggregateFunc = NYql::NPg::HasAggregation(name);
+        const bool isAggregateFunc = NYql::NPg::HasAggregation(name, NYql::NPg::EAggKind::Normal);
         if (isAggregateFunc) {
             if (aggMode == EAggregateMode::Distinct) {
                 return new TInvalidBuiltin(pos, "Distinct is not supported yet for PG aggregation ");
@@ -3548,7 +3558,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
             if (to_lower(*args[0]->GetLiteral("String")).StartsWith("pg::")) {
                 auto name = args[0]->GetLiteral("String")->substr(4);
-                const bool isAggregateFunc = NYql::NPg::HasAggregation(name);
+                const bool isAggregateFunc = NYql::NPg::HasAggregation(name, NYql::NPg::EAggKind::Normal);
                 if (!isAggregateFunc) {
                     return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown aggregation function: " << *args[0]->GetLiteral("String"));
                 }

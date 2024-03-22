@@ -19,7 +19,6 @@ enum {
     MTYPE_CLIENT_FAKE_CONFIGDUMMY = 10403,
     MTYPE_CLIENT_INSPECT = 10404,
     MTYPE_CLIENT_SCHEME_INITROOT = 10405,
-    MTYPE_CLIENT_BSADM = 10406,
     MTYPE_CLIENT_SCHEME_NAVIGATE = 10407,
     MTYPE_CLIENT_TYPES_REQUEST = 10408,
     MTYPE_CLIENT_TYPES_RESPONSE = 10409,
@@ -103,7 +102,6 @@ struct TBusRequest : TBusMessage<TBusRequest, NKikimrClient::TRequest, MTYPE_CLI
 struct TBusResponse : TBusMessage<TBusResponse, NKikimrClient::TResponse, MTYPE_CLIENT_RESPONSE> {};
 struct TBusFakeConfigDummy : TBusMessage<TBusFakeConfigDummy, NKikimrClient::TFakeConfigDummy, MTYPE_CLIENT_FAKE_CONFIGDUMMY> {};
 struct TBusSchemeInitRoot : TBusMessage<TBusSchemeInitRoot, NKikimrClient::TSchemeInitRoot, MTYPE_CLIENT_SCHEME_INITROOT> {};
-struct TBusBSAdm : TBusMessage<TBusBSAdm, NKikimrClient::TBSAdm, MTYPE_CLIENT_BSADM> {};
 struct TBusTypesRequest : TBusMessage<TBusTypesRequest, NKikimrClient::TTypeMetadataRequest, MTYPE_CLIENT_TYPES_REQUEST> {};
 struct TBusTypesResponse : TBusMessage<TBusTypesResponse, NKikimrClient::TTypeMetadataResponse, MTYPE_CLIENT_TYPES_RESPONSE> {};
 struct TBusHiveCreateTablet : TBusMessage<TBusHiveCreateTablet, NKikimrClient::THiveCreateTablet, MTYPE_CLIENT_HIVE_CREATE_TABLET> {};
@@ -197,7 +195,6 @@ public:
         RegisterType(new TBusResponse);
         RegisterType(new TBusFakeConfigDummy);
         RegisterType(new TBusSchemeInitRoot);
-        RegisterType(new TBusBSAdm);
         RegisterType(new TBusTypesRequest);
         RegisterType(new TBusTypesResponse);
         RegisterType(new TBusHiveCreateTablet);

@@ -6,6 +6,7 @@
 #include "yql_yt_dq_integration.h"
 #include "yql_yt_dq_optimize.h"
 
+#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
@@ -95,11 +96,18 @@ public:
     }
 
     void AddCluster(const TString& name, const THashMap<TString, TString>& properties) override {
+        const TString& token = properties.Value("token", "");
+
         State_->Configuration->AddValidCluster(name);
+        if (token) {
+            // Empty token is forbidden for yt reader
+            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
+        }
 
         TYtClusterConfig cluster;
         cluster.SetName(name);
         cluster.SetCluster(properties.Value("location", ""));
+        cluster.SetYTToken(token);
         State_->Gateway->AddCluster(cluster);
     }
 

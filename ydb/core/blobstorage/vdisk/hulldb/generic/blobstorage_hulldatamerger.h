@@ -57,6 +57,10 @@ namespace NKikimr {
             HugeBlobMerger.Add(begin, end, parts, circaLsn);
         }
 
+        void AddDeletedHugeBlob(const TDiskPart& part) {
+            HugeBlobMerger.AddDeletedPart(part);
+        }
+
         void AddBlob(const TDiskBlob &addBlob) {
             Y_DEBUG_ABORT_UNLESS(HugeBlobMerger.Empty());
             DiskBlobMerger.Add(addBlob);

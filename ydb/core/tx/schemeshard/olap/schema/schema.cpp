@@ -114,6 +114,10 @@ bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector&
         return false;
     }
 
+    if (!Options.ApplyUpdate(schemaUpdate.GetOptions(), errors)) {
+        return false;
+    }
+
     if (!HasEngine()) {
         Engine = schemaUpdate.GetEngineDef(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
     } else {
@@ -136,6 +140,7 @@ void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& ta
 
     Columns.Parse(tableSchema);
     Indexes.Parse(tableSchema);
+    Options.Parse(tableSchema);
     Statistics.Parse(tableSchema);
 }
 
@@ -149,6 +154,7 @@ void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) co
 
     Columns.Serialize(tableSchema);
     Indexes.Serialize(tableSchema);
+    Options.Serialize(tableSchema);
     Statistics.Serialize(tableSchema);
 }
 
@@ -158,6 +164,10 @@ bool TOlapSchema::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, 
     }
 
     if (!Indexes.Validate(opSchema, errors)) {
+        return false;
+    }
+
+    if (!Options.Validate(opSchema, errors)) {
         return false;
     }
 

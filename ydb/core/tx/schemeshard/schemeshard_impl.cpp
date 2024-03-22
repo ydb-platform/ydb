@@ -13,6 +13,7 @@
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/stat_service.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/scheme_board/events_schemeshard.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 #include <util/random/random.h>
 #include <util/system/byteorder.h>
@@ -4522,7 +4523,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         HFuncTraced(TEvSchemeShard::TEvUpdateTenantSchemeShard, Handle);
 
-        HFuncTraced(TSchemeBoardEvents::TEvUpdateAck, Handle);
+        HFuncTraced(NSchemeBoard::NSchemeshardEvents::TEvUpdateAck, Handle);
 
         HFuncTraced(TEvBlockStore::TEvUpdateVolumeConfigResponse, Handle);
         HFuncTraced(TEvFileStore::TEvUpdateConfigResponse, Handle);
@@ -5332,7 +5333,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr& ev, 
     Execute(CreateTxUpdateTenant(ev), ctx);
 }
 
-void TSchemeShard::Handle(TSchemeBoardEvents::TEvUpdateAck::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(NSchemeBoard::NSchemeshardEvents::TEvUpdateAck::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                "Handle TEvUpdateAck"

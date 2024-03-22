@@ -430,7 +430,7 @@ bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
 void TGRpcRequestProxyImpl::MaybeStartTracing(IRequestProxyCtx& ctx) {
     NWilson::TTraceId traceId;
     if (const auto otelHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER)) {
-        traceId = NWilson::TTraceId::FromTraceparentHeader(otelHeader.GetRef());
+        traceId = NWilson::TTraceId::FromTraceparentHeader(otelHeader.GetRef(), TComponentTracingLevels::ProductionVerbose);
     }
     TracingControl->HandleTracing(traceId, ctx.GetRequestDiscriminator());
     if (traceId) {
@@ -578,7 +578,6 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TRefreshTokenGenericRequest, PreHandle);
         HFunc(TRefreshTokenStreamWriteSpecificRequest, PreHandle);
-        HFunc(TEvLoginRequest, PreHandle);
         HFunc(TEvListEndpointsRequest, PreHandle);
         HFunc(TEvBiStreamPingRequest, PreHandle);
         HFunc(TEvStreamPQWriteRequest, PreHandle);

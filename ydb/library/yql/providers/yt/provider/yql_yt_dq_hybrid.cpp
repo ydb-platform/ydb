@@ -188,6 +188,7 @@ private:
         const TStringBuf nodeName = node.Raw()->Content();
         const auto fill = node.Cast<TYtFill>();
         if (CanReplaceOnHybrid(fill) && CanExecuteInHybrid(fill.Content().Ptr(), nodeName, true)) {
+            PushHybridStat("Try", nodeName);
             YQL_CLOG(INFO, ProviderYt) << "Rewrite " << nodeName << " node by hybrid";
             return Build<TYtTryFirst>(ctx, fill.Pos())
                 .First<TYtDqProcessWrite>()
@@ -528,47 +529,61 @@ private:
             }
         }
 
-        auto arg = ctx.NewArgument(reduce.Pos(), "list");
+        auto reducer = Build<TCoLambda>(ctx, reduce.Pos())
+                            .Args({"list"})
+                            .Body("list")
+                            .Done();
 
-        auto body = hasGetSysKeySwitch ? Build<TCoChain1Map>(ctx, reduce.Pos())
-            .Input(arg)
-            .InitHandler()
-                .Args({"first"})
-                .template Body<TCoAddMember>()
-                    .Struct("first")
-                    .Name().Value(YqlSysColumnKeySwitch).Build()
-                    .Item(MakeBool<false>(reduce.Pos(), ctx))
-                    .Build()
-                .Build()
-            .UpdateHandler()
-                .Args({"next", "prev"})
-                .template Body<TCoAddMember>()
-                    .Struct("next")
-                    .Name().Value(YqlSysColumnKeySwitch).Build()
-                    .template Item<TCoAggrNotEqual>()
-                        .template Left<TExprApplier>()
-                            .Apply(extract).With(0, "next")
-                            .Build()
-                        .template Right<TExprApplier>()
-                            .Apply(extract).With(0, "prev")
-                            .Build()
-                        .Build()
-                    .Build()
-                .Build()
-            .Done().Ptr() : arg;
+        if (hasGetSysKeySwitch) {
+            reducer = Build<TCoLambda>(ctx, reducer.Pos())
+                            .Args({"list"})
+                            .template Body<TCoChain1Map>()
+                                .Input("list")
+                                .InitHandler()
+                                    .Args({"first"})
+                                    .template Body<TCoAddMember>()
+                                        .Struct("first")
+                                        .Name().Value(YqlSysColumnKeySwitch).Build()
+                                        .Item(MakeBool<false>(reduce.Pos(), ctx))
+                                        .Build()
+                                    .Build()
+                                .UpdateHandler()
+                                    .Args({"next", "prev"})
+                                    .template Body<TCoAddMember>()
+                                        .Struct("next")
+                                        .Name().Value(YqlSysColumnKeySwitch).Build()
+                                        .template Item<TCoAggrNotEqual>()
+                                            .template Left<TExprApplier>()
+                                                .Apply(extract).With(0, "next")
+                                                .Build()
+                                            .template Right<TExprApplier>()
+                                                .Apply(extract).With(0, "prev")
+                                                .Build()
+                                            .Build()
+                                        .Build()
+                                    .Build()
+                                .Build()
+                            .Done();
+        }
 
         const auto& items = GetSeqItemType(*reduce.Reducer().Args().Arg(0).Ref().GetTypeAnn()).template Cast<TStructExprType>()->GetItems();
         TExprNode::TListType fields(items.size());
         std::transform(items.cbegin(), items.cend(), fields.begin(), [&](const TItemExprType* item) { return ctx.NewAtom(reduce.Pos(), item->GetName()); });
-        body = Build<TExprApplier>(ctx, reduce.Pos())
-            .Apply(reduce.Reducer())
-                .template With<TCoExtractMembers>(0)
-                    .Input(std::move(body))
-                    .Members().Add(std::move(fields)).Build()
-                    .Build()
-            .Done().Ptr();
-
-        auto reducer = ctx.NewLambda(reduce.Pos(), ctx.NewArguments(reduce.Pos(), {std::move(arg)}), std::move(body));
+        auto [placeHolder, lambdaWithPlaceholder] = ReplaceDependsOn(reduce.Reducer().Ptr(), ctx, State_->Types);
+        reducer = Build<TCoLambda>(ctx, reduce.Pos())
+                    .Args({"list"})
+                    .template Body<TExprApplier>()
+                        .Apply(TCoLambda(lambdaWithPlaceholder))
+                        .template With<TCoExtractMembers>(0)
+                            .template Input<TExprApplier>()
+                                .Apply(reducer)
+                                .With(0, "list")
+                                .Build()
+                            .Members().Add(std::move(fields)).Build()
+                            .Build()
+                        .With(TExprBase(placeHolder), "list")
+                        .Build()
+                    .Done();
 
         return Build<TYtTryFirst>(ctx, reduce.Pos())
             .template First<TYtDqProcessWrite>()

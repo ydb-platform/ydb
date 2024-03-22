@@ -77,6 +77,11 @@ void WriteValueToYson(const TStringStream& stream, NCommon::TYsonResultWriter& w
                 return;
             }
 
+            if (type.GetData().GetScheme() == NYql::NProto::TypeIds::Yson) {
+                writer.OnRaw(value.GetBytes(), NYT::NYson::EYsonType::Node);
+                return;
+            }
+
             if (value.HasBool()) {
                 writer.OnBooleanScalar(value.GetBool());
             }

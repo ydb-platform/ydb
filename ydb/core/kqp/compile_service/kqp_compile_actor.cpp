@@ -415,12 +415,14 @@ private:
                     << ", owner: " << Owner
                     << ", statement id: " << statementId);
 
+                auto status = GetYdbStatus(astStatements[statementId].Ast->Issues);
+
                 NYql::TIssue issue(NYql::TPosition(), "Error while parsing query.");
                 for (const auto& i : astStatements[statementId].Ast->Issues) {
                     issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
                 }
 
-                ReplyError(Ydb::StatusIds::INTERNAL_ERROR, {issue});
+                ReplyError(status, {issue});
                 return;
             }
         }

@@ -506,8 +506,8 @@ public:
     TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
         if (auto maybeYtReadTable = TMaybeNode<TYtReadTable>(read)) {
             TMaybeNode<TCoSecureParam> secParams;
-            if (State_->Configuration->Auth.Get().GetOrElse(TString())) {
-                const auto cluster = maybeYtReadTable.Cast().DataSource().Cluster();
+            const auto cluster = maybeYtReadTable.Cast().DataSource().Cluster();
+            if (State_->Configuration->Auth.Get().GetOrElse(TString()) || State_->Configuration->Tokens.Value(cluster, "")) {
                 secParams = Build<TCoSecureParam>(ctx, read->Pos()).Name().Build(TString("cluster:default_").append(cluster)).Done();
             }
             return Build<TDqReadWrap>(ctx, read->Pos())

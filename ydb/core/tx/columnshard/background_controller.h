@@ -51,7 +51,8 @@ private:
     using TCurrentCompaction = THashMap<ui64, NOlap::TPlanCompactionInfo>;
     TCurrentCompaction ActiveCompactionInfo;
 
-    bool ActiveCleanup = false;
+    bool ActiveCleanupPortions = false;
+    bool ActiveCleanupTables = false;
     YDB_READONLY(TMonotonic, LastIndexationInstant, TMonotonic::Zero());
 public:
     THashSet<NOlap::TPortionAddress> GetConflictTTLPortions() const;
@@ -78,16 +79,28 @@ public:
         return ActiveIndexationTasks.size();
     }
 
-    void StartCleanup() {
-        Y_ABORT_UNLESS(!ActiveCleanup);
-        ActiveCleanup = true;
+    void StartCleanupPortions() {
+        Y_ABORT_UNLESS(!ActiveCleanupPortions);
+        ActiveCleanupPortions = true;
     }
-    void FinishCleanup() {
-        Y_ABORT_UNLESS(ActiveCleanup);
-        ActiveCleanup = false;
+    void FinishCleanupPortions() {
+        Y_ABORT_UNLESS(ActiveCleanupPortions);
+        ActiveCleanupPortions = false;
     }
-    bool IsCleanupActive() const {
-        return ActiveCleanup;
+    bool IsCleanupPortionsActive() const {
+        return ActiveCleanupPortions;
+    }
+
+    void StartCleanupTables() {
+        Y_ABORT_UNLESS(!ActiveCleanupTables);
+        ActiveCleanupTables = true;
+    }
+    void FinishCleanupTables() {
+        Y_ABORT_UNLESS(ActiveCleanupTables);
+        ActiveCleanupTables = false;
+    }
+    bool IsCleanupTablesActive() const {
+        return ActiveCleanupTables;
     }
 };
 

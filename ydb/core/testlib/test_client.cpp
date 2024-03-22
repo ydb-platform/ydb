@@ -737,7 +737,7 @@ namespace Tests {
                 initial.MutableImmediateControlsConfig()->CopyFrom(Settings->Controls);
             }
             auto *dispatcher = NConsole::CreateConfigsDispatcher(
-                    NKikimr::NConsole::TConfigsDispatcherInitInfo {
+                    NKikimr::NConfig::TConfigsDispatcherInitInfo {
                         .InitialConfig = initial,
                     });
             auto aid = Runtime->Register(dispatcher, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
@@ -875,7 +875,8 @@ namespace Tests {
                     queryServiceConfig.GetS3(),
                     queryServiceConfig.GetGeneric(),
                     queryServiceConfig.GetYt(),
-                    NKqp::MakeYtGateway(GetFunctionRegistry(), queryServiceConfig)
+                    Settings->YtGateway ? Settings->YtGateway : NKqp::MakeYtGateway(GetFunctionRegistry(), queryServiceConfig),
+                    Settings->ComputationFactory
                 );
             }
 

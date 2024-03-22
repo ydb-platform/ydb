@@ -559,17 +559,17 @@ chr(65) → A
 ||concat ( val1 "any" [, val2 "any" [, ...] ] ) → text|
 Concatenates the text representations of all the arguments. NULL arguments are ignored. (NOT SUPPORTED)|
 ```sql
-#concat('abcde', 2, NULL, 22) → abcde222
+concat('abcde', 2, NULL, 22) → abcde222
 ```||
 ||concat_ws ( sep text, val1 "any" [, val2 "any" [, ...] ] ) → text|
 Concatenates all but the first argument, with separators. The first argument is used as the separator string, and should not be NULL. Other NULL arguments are ignored. (NOT SUPPORTED)|
 ```sql
-#concat_ws(',', 'abcde', 2, NULL, 22) → abcde,2,22
+concat_ws(',', 'abcde', 2, NULL, 22) → abcde,2,22
 ```||
 ||format ( formatstr text [, formatarg "any" [, ...] ] ) → text|
 Formats arguments according to a format string; see Section 9.4.1. This function is similar to the C function sprintf. (NOT SUPPORTED)|
 ```sql
-#format('Hello %s, %1$s', 'World') → Hello World, World
+format('Hello %s, %1$s', 'World') → Hello World, World
 ```||
 ||initcap ( text ) → text|
 Converts the first letter of each word to upper case and the rest to lower case. Words are sequences of alphanumeric characters separated by non-alphanumeric characters.|
@@ -1279,7 +1279,7 @@ dog
 ```
 
 ```sql
-#SELECT regexp_split_to_array('the quick brown fox jumps over the lazy dog', '\s+') → {the,quick,brown,fox,jumps,over,the,lazy,dog}
+SELECT regexp_split_to_array('the quick brown fox jumps over the lazy dog', '\s+') → {the,quick,brown,fox,jumps,over,the,lazy,dog}
 ```
 
 ```sql
@@ -1752,10 +1752,10 @@ In addition to these functions, the SQL OVERLAPS operator is supported: (NOT SUP
 This expression yields true when two time periods (defined by their endpoints) overlap, false when they do not overlap. The endpoints can be specified as pairs of dates, times, or time stamps; or as a date, time, or time stamp followed by an interval. When a pair of values is provided, either the start or the end can be written first; OVERLAPS automatically takes the earlier value of the pair as the start. Each time period is considered to represent the half-open interval start <= time < end, unless start and end are equal in which case it represents that single time instant. This means for instance that two time periods with only an endpoint in common do not overlap.
 
 ```sql
-#(DATE '2001-02-16', DATE '2001-12-21') OVERLAPS (DATE '2001-10-30', DATE '2002-10-30') → true
+(DATE '2001-02-16', DATE '2001-12-21') OVERLAPS (DATE '2001-10-30', DATE '2002-10-30') → true
 #(DATE '2001-02-16', INTERVAL '100 days') OVERLAPS (DATE '2001-10-30', DATE '2002-10-30') → false
-#(DATE '2001-10-29', DATE '2001-10-30') OVERLAPS (DATE '2001-10-30', DATE '2001-10-31') → false
-#(DATE '2001-10-30', DATE '2001-10-30') OVERLAPS (DATE '2001-10-30', DATE '2001-10-31') → true
+(DATE '2001-10-29', DATE '2001-10-30') OVERLAPS (DATE '2001-10-30', DATE '2001-10-31') → false
+(DATE '2001-10-30', DATE '2001-10-30') OVERLAPS (DATE '2001-10-30', DATE '2001-10-31') → true
 ```
 
 When adding an interval value to (or subtracting an interval value from) a timestamp with time zone value, the days component advances or decrements the date of the timestamp with time zone by the indicated number of days, keeping the time of day the same. Across daylight saving time changes (when the session time zone is set to a time zone that recognizes DST), this means interval '1 day' does not necessarily equal interval '24 hours'. For example, with the session time zone set to America/Denver:
@@ -2981,7 +2981,7 @@ Concatenates two jsonb values. Concatenating two arrays generates an array conta
 To append an array to another array as a single entry, wrap it in an additional layer of array, for example:
 
 ```sql
-#'[1, 2]'::jsonb || jsonb_build_array('[3, 4]'::jsonb) → [1, 2, [3, 4]]
+'[1, 2]'::jsonb || jsonb_build_array('[3, 4]'::jsonb) → [1, 2, [3, 4]]
 ```||
 ||jsonb - text → jsonb|
 Deletes a key (and its value) from a JSON object, or matching string value(s) from a JSON array.|
@@ -3046,7 +3046,7 @@ Converts an SQL composite value to a JSON object. The behavior is the same as to
 jsonb_build_array ( VARIADIC "any" ) → jsonb|
 Builds a possibly-heterogeneously-typed JSON array out of a variadic argument list. Each argument is converted as per to_json or to_jsonb. (NOT SUPPORTED)|
 ```sql
-#json_build_array(1, 2, 'foo', 4, 5) → [1, 2, "foo", 4, 5]
+json_build_array(1, 2, 'foo', 4, 5) → [1, 2, "foo", 4, 5]
 ```||
 ||json_build_object ( VARIADIC "any" ) → json  
 jsonb_build_object ( VARIADIC "any" ) → jsonb|
@@ -3124,13 +3124,13 @@ b,bar
 jsonb_extract_path ( from_json jsonb, VARIADIC path_elems text[] ) → jsonb|
 Extracts JSON sub-object at the specified path. (This is functionally equivalent to the #> operator, but writing the path out as a variadic list can be more convenient in some cases.) (NOT SUPPORTED)|
 ```sql
-#json_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"foo"}}', 'f4', 'f6') → "foo"
+json_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"foo"}}', 'f4', 'f6') → "foo"
 ```||
 ||json_extract_path_text ( from_json json, VARIADIC path_elems text[] ) → text  
 jsonb_extract_path_text ( from_json jsonb, VARIADIC path_elems text[] ) → text|
 Extracts JSON sub-object at the specified path as text. (This is functionally equivalent to the #>> operator.) (NOT SUPPORTED)|
 ```sql
-#json_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"foo"}}', 'f4', 'f6') → foo
+json_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"foo"}}', 'f4', 'f6') → foo
 ```||
 ||json_object_keys ( json ) → setof text  
 jsonb_object_keys ( jsonb ) → setof text|
@@ -3252,7 +3252,7 @@ jsonb_path_query_array_tz ( target jsonb, path jsonpath [, vars jsonb [, silent 
 jsonb_path_query_first_tz ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → jsonb|
 These functions act like their counterparts described above without the _tz suffix, except that these functions support comparisons of date/time values that require timezone-aware conversions. The example below requires interpretation of the date-only value 2015-08-02 as a timestamp with time zone, so the result depends on the current TimeZone setting. Due to this dependency, these functions are marked as stable, which means these functions cannot be used in indexes. Their counterparts are immutable, and so can be used in indexes; but they will throw errors if asked to make such comparisons. (NOT SUPPORTED)|
 ```sql
-#jsonb_path_exists_tz('["2015-08-01 12:00:00-05"]', '$[*] ? (@.datetime() < "2015-08-02".datetime())', '{}', false) → true
+jsonb_path_exists_tz('["2015-08-01 12:00:00-05"]', '$[*] ? (@.datetime() < "2015-08-02".datetime())', '{}', false) → true
 ```||
 ||jsonb_pretty ( jsonb ) → text|
 Converts the given JSON value to pretty-printed, indented text.|
@@ -3451,12 +3451,12 @@ jsonb_path_query_array('{"z": -0.3}', '$.z.abs()', '{}', false) → [0.3]
 ||string . datetime() → datetime_type (see note)|
 Date/time value converted from a string (NOT SUPPORTED)|
 ```sql
-#jsonb_path_query_array('["2015-8-1", "2015-08-12"]', '$[*] ? (@.datetime() < "2015-08-2".datetime())', '{}', false) → ["2015-8-1"]
+jsonb_path_query_array('["2015-8-1", "2015-08-12"]', '$[*] ? (@.datetime() < "2015-08-2".datetime())', '{}', false) → ["2015-8-1"]
 ```||
 ||string . datetime(template) → datetime_type (see note)|
 Date/time value converted from a string using the specified to_timestamp template (NOT SUPPORTED)|
 ```sql
-#jsonb_path_query_array('["12:30", "18:40"]', '$[*].datetime("HH24:MI")', '{}', false) → ["12:30:00", "18:40:00"]
+jsonb_path_query_array('["12:30", "18:40"]', '$[*].datetime("HH24:MI")', '{}', false) → ["12:30:00", "18:40:00"]
 ```||
 ||object . keyvalue() → array|
 The object's key-value pairs, represented as an array of objects containing three fields: "key", "value", and "id"; "id" is a unique identifier of the object the key-value pair belongs to|
@@ -4005,17 +4005,17 @@ SELECT max(x::timestamp) FROM (VALUES ('2001-01-01 23:05:04'),('2001-01-01 23:06
 SELECT max(x::time) FROM (VALUES ('10:00:05'),('11:00:01'),('12:50:00')) a(x) → 12:50:00
 SELECT max(x) FROM (VALUES (interval '1' day),(interval '2' day),(interval '3' day)) a(x) → 3 days
 
-#SELECT max(array[x,x]::smallint[]) FROM (VALUES (1),(2),(3)) a(x) → {3,3}
-#SELECT max(array[x,x]::integer[]) FROM (VALUES (1),(2),(3)) a(x) → {3,3}
-#SELECT max(array[x,x]::bigint[]) FROM (VALUES (1),(2),(3)) a(x) → {3,3}
-#SELECT max(array[x,x]::real[]) FROM (VALUES (1),(2),(3)) a(x) → {3.0,3.0}
-#SELECT max(array[x,x]::double precision[]) FROM (VALUES (1),(2),(3)) a(x) → {3.0,3.0}
-#SELECT max(array[x,x]::numeric[]) FROM (VALUES (1),(2),(3)) a(x) → {3,3}
-#SELECT max(array[x,x]) FROM (VALUES ('a'),('b'),('c')) a(x) → {"c","c"}
-#SELECT max(array[x,x]::date[]) FROM (VALUES ('2001-01-01'),('2001-02-03'),('2002-01-01')) a(x) → {"2002-01-01","2002-01-01"}
-#SELECT max(array[x,x]::timestamp[]) FROM (VALUES ('2001-01-01 23:05:04'),('2001-01-01 23:06:03'),('2001-01-01 23:59:00')) a(x) → {"2001-01-01 23:59:00","2001-01-01 23:59:00"}
-#SELECT max(array[x,x]::time[]) FROM (VALUES ('10:00:05'),('11:00:01'),('12:50:00')) a(x) → {"12:50:00","12:50:00"}
-#SELECT max(array[x,x]) FROM (VALUES (interval '1' day),(interval '2' day),(interval '3' day)) a(x) → {"3 days","3 days"}
+SELECT max(array[x,x]::smallint[]) FROM (VALUES (1),(2),(3)) a(x) → {3,3}
+SELECT max(array[x,x]::integer[]) FROM (VALUES (1),(2),(3)) a(x) → {3,3}
+SELECT max(array[x,x]::bigint[]) FROM (VALUES (1),(2),(3)) a(x) → {3,3}
+SELECT max(array[x,x]::real[]) FROM (VALUES (1),(2),(3)) a(x) → {3,3}
+SELECT max(array[x,x]::double precision[]) FROM (VALUES (1),(2),(3)) a(x) → {3,3}
+SELECT max(array[x,x]::numeric[]) FROM (VALUES (1),(2),(3)) a(x) → {3,3}
+SELECT max(array[x,x]) FROM (VALUES ('a'),('b'),('c')) a(x) → {c,c}
+SELECT max(array[x,x]::date[]) FROM (VALUES ('2001-01-01'),('2001-02-03'),('2002-01-01')) a(x) → {2002-01-01,2002-01-01}
+SELECT max(array[x,x]::timestamp[]) FROM (VALUES ('2001-01-01 23:05:04'),('2001-01-01 23:06:03'),('2001-01-01 23:59:00')) a(x) → {"2001-01-01 23:59:00","2001-01-01 23:59:00"}
+SELECT max(array[x,x]::time[]) FROM (VALUES ('10:00:05'),('11:00:01'),('12:50:00')) a(x) → {12:50:00,12:50:00}
+SELECT max(array[x,x]) FROM (VALUES (interval '1' day),(interval '2' day),(interval '3' day)) a(x) → {"3 days","3 days"}
 ```||
 ||min ( see text ) → same as input type|
 Computes the minimum of the non-null input values. Available for any numeric, string, date/time, or enum type, as well as inet, interval, money, oid, pg_lsn, tid, and arrays of any of these types. (Arrays aren't supported)|
@@ -4033,17 +4033,17 @@ SELECT min(x::timestamp) FROM (VALUES ('2001-01-01 23:05:04'),('2001-01-01 23:06
 SELECT min(x::time) FROM (VALUES ('10:00:05'),('11:00:01'),('12:50:00')) a(x) → 10:00:05
 SELECT min(x) FROM (VALUES (interval '1' day),(interval '2' day),(interval '3' day)) a(x) → 1 day
 
-#SELECT min(array[x,x]::smallint[]) FROM (VALUES (1),(2),(3)) a(x) → {1,1}
-#SELECT min(array[x,x]::integer[]) FROM (VALUES (1),(2),(3)) a(x) → {1,1}
-#SELECT min(array[x,x]::bigint[]) FROM (VALUES (1),(2),(3)) a(x) → {1,1}
-#SELECT min(array[x,x]::real[]) FROM (VALUES (1),(2),(3)) a(x) → {1.0,1.0}
-#SELECT min(array[x,x]::double precision[]) FROM (VALUES (1),(2),(3)) a(x) → {1.0,1.0}
-#SELECT min(array[x,x]::numeric[]) FROM (VALUES (1),(2),(3)) a(x) → {1,1}
-#SELECT min(array[x,x]) FROM (VALUES ('a'),('b'),('c')) a(x) → {"a","a"}
-#SELECT min(array[x,x]::date[]) FROM (VALUES ('2001-01-01'),('2001-02-03'),('2002-01-01')) a(x) → {"2001-01-01","2001-01-01"}
-#SELECT min(array[x,x]::timestamp[]) FROM (VALUES ('2001-01-01 23:05:04'),('2001-01-01 23:06:03'),('2001-01-01 23:59:00')) a(x) → {"2001-01-01 23:05:04","2001-01-01 23:05:04"}
-#SELECT min(array[x,x]::time[]) FROM (VALUES ('10:00:05'),('11:00:01'),('12:50:00')) a(x) → {"10:00:05","10:00:05"}
-#SELECT min(array[x,x]) FROM (VALUES (interval '1' day),(interval '2' day),(interval '3' day)) a(x) → {"1 day","1 day"}
+SELECT min(array[x,x]::smallint[]) FROM (VALUES (1),(2),(3)) a(x) → {1,1}
+SELECT min(array[x,x]::integer[]) FROM (VALUES (1),(2),(3)) a(x) → {1,1}
+SELECT min(array[x,x]::bigint[]) FROM (VALUES (1),(2),(3)) a(x) → {1,1}
+SELECT min(array[x,x]::real[]) FROM (VALUES (1),(2),(3)) a(x) → {1,1}
+SELECT min(array[x,x]::double precision[]) FROM (VALUES (1),(2),(3)) a(x) → {1,1}
+SELECT min(array[x,x]::numeric[]) FROM (VALUES (1),(2),(3)) a(x) → {1,1}
+SELECT min(array[x,x]) FROM (VALUES ('a'),('b'),('c')) a(x) → {a,a}
+SELECT min(array[x,x]::date[]) FROM (VALUES ('2001-01-01'),('2001-02-03'),('2002-01-01')) a(x) → {2001-01-01,2001-01-01}
+SELECT min(array[x,x]::timestamp[]) FROM (VALUES ('2001-01-01 23:05:04'),('2001-01-01 23:06:03'),('2001-01-01 23:59:00')) a(x) → {"2001-01-01 23:05:04","2001-01-01 23:05:04"}
+SELECT min(array[x,x]::time[]) FROM (VALUES ('10:00:05'),('11:00:01'),('12:50:00')) a(x) → {10:00:05,10:00:05}
+SELECT min(array[x,x]) FROM (VALUES (interval '1' day),(interval '2' day),(interval '3' day)) a(x) → {"1 day","1 day"}
 ```||
 ||range_agg ( value anyrange ) → anymultirange|
 Computes the union of the non-null input values. (NOT SUPPORTED)|

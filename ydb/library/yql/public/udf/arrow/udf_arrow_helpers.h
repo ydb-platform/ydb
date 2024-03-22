@@ -592,7 +592,7 @@ public:
 }
 }
 
-#define BEGIN_ARROW_UDF(udfNameBlocks, signatureFunc) \
+#define BEGIN_ARROW_UDF(udfNameBlocks, signatureFunc, optArgc) \
     class udfNameBlocks { \
     public: \
         typedef bool TTypeAwareMarker; \
@@ -601,7 +601,7 @@ public:
             return name; \
         } \
         static ::NYql::NUdf::TType* GetSignatureType(::NYql::NUdf::IFunctionTypeInfoBuilder& builder) { \
-            return builder.SimpleSignatureType<signatureFunc>(); \
+            return builder.SimpleSignatureType<signatureFunc>(optArgc); \
         } \
         static bool DeclareSignature(\
             const ::NYql::NUdf::TStringRef& name, \
@@ -611,12 +611,16 @@ public:
     };
 
 #define BEGIN_SIMPLE_ARROW_UDF(udfName, signatureFunc) \
-    BEGIN_ARROW_UDF(udfName##_BlocksImpl, signatureFunc) \
+    BEGIN_ARROW_UDF(udfName##_BlocksImpl, signatureFunc, 0) \
     UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks();, ;, ;, "", "", udfName##_BlocksImpl)
 
 #define BEGIN_SIMPLE_STRICT_ARROW_UDF(udfName, signatureFunc) \
-    BEGIN_ARROW_UDF(udfName##_BlocksImpl, signatureFunc) \
+    BEGIN_ARROW_UDF(udfName##_BlocksImpl, signatureFunc, 0) \
     UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks().IsStrict();, ;, ;, "", "", udfName##_BlocksImpl)
+
+#define BEGIN_SIMPLE_ARROW_UDF_WITH_OPTIONAL_ARGS(udfName, signatureFunc, optArgc) \
+    BEGIN_ARROW_UDF(udfName##_BlocksImpl, signatureFunc, optArgc) \
+    UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().OptionalArgs(optArgc).SupportsBlocks();, ;, ;, "", "", udfName##_BlocksImpl)
 
 #define END_ARROW_UDF(udfNameBlocks, exec) \
     inline bool udfNameBlocks::DeclareSignature(\

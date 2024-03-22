@@ -323,6 +323,7 @@ def _get_test_runner_handlers():
     return {
         "jest": _add_jest_ts_test,
         "hermione": _add_hermione_ts_test,
+        "playwright": _add_playwright_ts_test,
     }
 
 
@@ -348,6 +349,15 @@ def _add_hermione_ts_test(unit, test_runner, test_files, deps, test_record):
         }
     )
 
+    _add_test(unit, test_runner, test_files, deps, test_record)
+
+
+def _add_playwright_ts_test(unit, test_runner, test_files, deps, test_record):
+    test_record.update(
+        {
+            "CONFIG-PATH": _resolve_config_path(unit, test_runner, rel_to="TS_TEST_FOR_PATH"),
+        }
+    )
     _add_test(unit, test_runner, test_files, deps, test_record)
 
 
@@ -461,6 +471,7 @@ def _add_test(unit, test_type, test_files, deps=None, test_record=None, test_cwd
         "SPLIT-FACTOR": unit.get("TEST_SPLIT_FACTOR") or "",
         "FORK-MODE": unit.get("TEST_FORK_MODE") or "",
         "SIZE": unit.get("TEST_SIZE_NAME") or "",
+        "TEST-DATA": ytest.serialize_list(ytest.get_values_list(unit, "TEST_DATA_VALUE")),
         "TEST-FILES": ytest.serialize_list(test_files),
         "TEST-CWD": test_cwd or "",
         "TAG": ytest.serialize_list(ytest.get_values_list(unit, "TEST_TAGS_VALUE")),

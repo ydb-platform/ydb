@@ -154,6 +154,7 @@ public:
     THashMap<TString, TString> AllowedServicePermissions = {{"service1-something.write", "root1/folder1"}};
     THashSet<TString> AllowedResourceIds;
     THashSet<TString> UnavailableUserPermissions;
+    TString ContainerId;
 
     grpc::Status Authorize(
             grpc::ServerContext*,
@@ -202,6 +203,11 @@ public:
 
             auto& result = (*response->mutable_results())[checkId];
             result.set_resultcode(nebius::iam::v1::AuthorizeResult::PERMISSION_DENIED);
+
+            if (ContainerId && check.container_id() != ContainerId) {
+                result.set_resultcode(nebius::iam::v1::AuthorizeResult::PERMISSION_DENIED);
+                continue;
+            }
 
             bool allowedResource = true;
             if (!AllowedResourceIds.empty()) {

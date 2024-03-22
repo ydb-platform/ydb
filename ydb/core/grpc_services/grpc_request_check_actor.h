@@ -73,7 +73,7 @@ public:
     }
 
     void ProcessCommonAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-        static std::vector<TString> allowedAttributes = {"folder_id", "service_account_id", "database_id"};
+        static std::vector<TString> allowedAttributes = {"folder_id", "service_account_id", "database_id", "container_id"};
         TVector<std::pair<TString, TString>> attributes;
         attributes.reserve(schemeData.GetPathDescription().UserAttributesSize());
         for (const auto& attr : schemeData.GetPathDescription().GetUserAttributes()) {

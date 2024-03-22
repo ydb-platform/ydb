@@ -1177,7 +1177,6 @@ public:
 
 private:
     TCompileExprResult CompileQuery(const TKqpQueryRef& query, bool isSql, TExprContext& ctx, TMaybe<TSqlVersion>& sqlVersion,
-    //TVector<TExprNode::TPtr> CompileQuery(const TKqpQueryRef& query, bool isSql, TExprContext& ctx, TMaybe<TSqlVersion>& sqlVersion,
         TKqpTranslationSettingsBuilder& settingsBuilder) const
     {
         TCompileExprResult result;

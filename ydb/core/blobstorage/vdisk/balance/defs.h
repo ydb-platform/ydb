@@ -43,19 +43,20 @@ namespace NBalancing {
 
     struct TPartInfo {
         TLogoBlobID Key;
-        TIngress Ingress;
+        NMatrix::TVectorType LocalParts;
         std::variant<TDiskPart, TRope> PartData;
     };
 
     struct TPart {
         TLogoBlobID Key;
-        TIngress Ingress;
-        TRope PartData;
+        NMatrix::TVectorType LocalParts;
+        // TIngress Ingress;
+        TVector<TRope> PartsData;
     };
 
     struct TPartOnMain {
         TLogoBlobID Key;
-        TIngress Ingress;
+        // TIngress Ingress;
         bool HasOnMain;
     };
 

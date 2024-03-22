@@ -47,7 +47,6 @@ namespace {
                 Parts.pop();
                 Result[i] = TPartOnMain{
                     .Key=item.Key,
-                    .Ingress=item.Ingress,
                     .HasOnMain=false
                 };
 

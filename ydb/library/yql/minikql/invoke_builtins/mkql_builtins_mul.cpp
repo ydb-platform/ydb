@@ -38,7 +38,7 @@ struct TNumMulInterval {
         const auto lv = static_cast<typename TOutput::TLayout>(left.template Get<typename TLeft::TLayout>());
         const auto rv = static_cast<typename TOutput::TLayout>(right.template Get<typename TRight::TLayout>());
         const auto ret = lv * rv;
-        return IsBadIntervalNew<TOutput>(ret) ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(ret);
+        return IsBadInterval<TOutput>(ret) ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(ret);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -51,7 +51,7 @@ struct TNumMulInterval {
                 GetterFor<typename TRight::TLayout>(right, context, block), context, block);
         const auto mul = BinaryOperator::CreateMul(lhs, rhs, "mul", block);
         const auto full = SetterFor<typename TOutput::TLayout>(mul, context, block);
-        const auto bad = GenIsBadIntervalNew<TOutput>(mul, context, block);
+        const auto bad = GenIsBadInterval<TOutput>(mul, context, block);
         const auto zero = ConstantInt::get(Type::getInt128Ty(context), 0);
         const auto sel = SelectInst::Create(bad, zero, full, "sel", block);
         return sel;

@@ -100,7 +100,7 @@ struct TNumDivInterval {
         }
 
         const auto ret = lv / rv;
-        return IsBadIntervalNew<TOutput>(ret) ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(ret);
+        return IsBadInterval<TOutput>(ret) ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(ret);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -126,7 +126,7 @@ struct TNumDivInterval {
         block = good;
         const auto div = BinaryOperator::CreateSDiv(lv, rv, "div", block);
         const auto full = SetterFor<typename TOutput::TLayout>(div, context, block);
-        const auto bad = GenIsBadIntervalNew<TOutput>(div, context, block);
+        const auto bad = GenIsBadInterval<TOutput>(div, context, block);
         const auto sel = SelectInst::Create(bad, zero, full, "sel", block);
         result->addIncoming(sel, block);
         BranchInst::Create(done, block);

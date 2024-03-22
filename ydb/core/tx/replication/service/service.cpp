@@ -1,3 +1,4 @@
+#include "logging.h"
 #include "service.h"
 #include "table_writer.h"
 #include "topic_reader.h"
@@ -118,6 +119,16 @@ namespace NKikimr::NReplication {
 namespace NService {
 
 class TReplicationService: public TActorBootstrapped<TReplicationService> {
+    TStringBuf GetLogPrefix() const {
+        if (!LogPrefix) {
+            LogPrefix = TStringBuilder()
+                << "[Service]"
+                << SelfId() << " ";
+        }
+
+        return LogPrefix.GetRef();
+    }
+
     void RunBoardPublisher() {
         const auto& tenant = AppData()->TenantName;
 
@@ -131,6 +142,8 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     void Handle(TEvService::TEvHandshake::TPtr& ev) {
+        LOG_T("Handle " << ev->Get()->ToString());
+
         const auto& record = ev->Get()->Record;
         const auto& controller = record.GetController();
 
@@ -142,7 +155,9 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         auto& session = it->second;
 
         if (session.GetGeneration() > controller.GetGeneration()) {
-            // ignore stale controller
+            LOG_W("Ignore stale controller"
+                << ": controller# " << controller.GetTabletId()
+                << ", generation# " << controller.GetGeneration());
             return;
         }
 
@@ -196,23 +211,37 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     void Handle(TEvService::TEvRunWorker::TPtr& ev) {
+        LOG_T("Handle " << ev->Get()->ToString());
+
         const auto& record = ev->Get()->Record;
         const auto& controller = record.GetController();
+        const auto& id = TWorkerId::Parse(record.GetWorker());
 
         auto it = Sessions.find(controller.GetTabletId());
         if (it == Sessions.end()) {
+            LOG_W("Cannot run worker"
+                << ": controller# " << controller.GetTabletId()
+                << ", worker# " << id
+                << ", reason# " << R"("unknown session")");
             return;
         }
 
         auto& session = it->second;
         if (session.GetGeneration() != controller.GetGeneration()) {
+            LOG_W("Cannot run worker"
+                << ": controller# " << controller.GetTabletId()
+                << ", generation# " << controller.GetGeneration()
+                << ", worker# " << id
+                << ", reason# " << R"("generation mismatch")");
             return;
         }
 
-        const auto& id = TWorkerId::Parse(record.GetWorker());
         if (session.HasWorker(id)) {
             return;
         }
+
+        LOG_I("Run worker"
+            << ": worker# " << id);
 
         const auto& cmd = record.GetCommand();
         // TODO: validate settings
@@ -222,21 +251,34 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     void Handle(TEvService::TEvStopWorker::TPtr& ev) {
+        LOG_T("Handle " << ev->Get()->ToString());
+
         const auto& record = ev->Get()->Record;
         const auto& controller = record.GetController();
+        const auto& id = TWorkerId::Parse(record.GetWorker());
 
         auto it = Sessions.find(controller.GetTabletId());
         if (it == Sessions.end()) {
+            LOG_W("Cannot stop worker"
+                << ": controller# " << controller.GetTabletId()
+                << ", worker# " << id
+                << ", reason# " << R"("unknown session")");
             return;
         }
 
         auto& session = it->second;
         if (session.GetGeneration() != controller.GetGeneration()) {
+            LOG_W("Cannot stop worker"
+                << ": controller# " << controller.GetTabletId()
+                << ", generation# " << controller.GetGeneration()
+                << ", worker# " << id
+                << ", reason# " << R"("generation mismatch")");
             return;
         }
 
-        const auto& id = TWorkerId::Parse(record.GetWorker());
         if (session.HasWorker(id)) {
+            LOG_I("Stop worker"
+                << ": worker# " << id);
             session.StopWorker(this, id);
         }
     }
@@ -277,6 +319,7 @@ public:
     }
 
 private:
+    mutable TMaybe<TString> LogPrefix;
     TActorId BoardPublisher;
     THashMap<ui64, TSessionInfo> Sessions;
     THashMap<TCredentialsKey, TActorId> YdbProxies;

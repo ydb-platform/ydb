@@ -31,4 +31,12 @@ void TWorkerId::Serialize(NKikimrReplication::TWorkerIdentity& proto) const {
     proto.SetWorkerId(WorkerId());
 }
 
+void TWorkerId::Out(IOutputStream& out) const {
+    out << ReplicationId() << ":" << TargetId() << ":" << WorkerId();
+}
+
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::TWorkerId, o, x) {
+    return x.Out(o);
 }

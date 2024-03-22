@@ -58,7 +58,13 @@ NUdf::TUnboxedValue TSqueezeState::Save(TComputationContext& ctx) const {
 }
 
 void TSqueezeState::Load(TComputationContext& ctx, const NUdf::TStringRef& state) {
-    TInputSerializer in(state);
+    TInputSerializer in(state, EMkqlStateType::SIMPLE_BLOB);
+
+    const auto loadStateVersion = in.GetStateVersion();
+    if (loadStateVersion != StateVersion) {
+        THROW yexception() << "Invalid state version " << loadStateVersion;
+    }
+
     Stage = static_cast<ESqueezeState>(in.Read<ui8>());
     if (ESqueezeState::Work == Stage) {
         InLoad->SetValue(ctx, in.ReadUnboxedValue(GetPacker(), ctx));

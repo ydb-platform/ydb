@@ -101,22 +101,21 @@ public:
 
     private:
         void Load(const NUdf::TStringRef& state) override {
-            TInputSerializer in(state);
+            TInputSerializer in(state, EMkqlStateType::SIMPLE_BLOB);
 
-            const auto stateVersion = in.GetStateVersion();
-            if (stateVersion == 1) {
-                const auto heapSize = in.Read<ui32>();
-                ClearState();
-                for (auto i = 0U; i < heapSize; ++i) {
-                    TTimestamp t = in.Read<ui64>();
-                    in(MonotonicCounter);
-                    NUdf::TUnboxedValue row = in.ReadUnboxedValue(Self->Packer.RefMutableObject(Ctx, false, Self->StateType), Ctx);
-                    Heap.emplace(THeapKey(t, MonotonicCounter), std::move(row));
-                }
-                in(Latest, Terminating);
-            } else {
-                THROW yexception() << "Invalid state version " << stateVersion;
+            const auto loadStateVersion = in.GetStateVersion();
+            if (loadStateVersion != StateVersion) {
+                THROW yexception() << "Invalid state version " << loadStateVersion;
             }
+            const auto heapSize = in.Read<ui32>();
+            ClearState();
+            for (auto i = 0U; i < heapSize; ++i) {
+                TTimestamp t = in.Read<ui64>();
+                in(MonotonicCounter);
+                NUdf::TUnboxedValue row = in.ReadUnboxedValue(Self->Packer.RefMutableObject(Ctx, false, Self->StateType), Ctx);
+                Heap.emplace(THeapKey(t, MonotonicCounter), std::move(row));
+            }
+            in(Latest, Terminating);
         }
 
         NUdf::TUnboxedValue Save() const override {

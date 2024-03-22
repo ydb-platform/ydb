@@ -74,7 +74,12 @@ public:
         }
 
         void Load(const NUdf::TStringRef& state) override {
-            TInputSerializer in(state);
+            TInputSerializer in(state, EMkqlStateType::SIMPLE_BLOB);
+
+            const auto loadStateVersion = in.GetStateVersion();
+            if (loadStateVersion != StateVersion) {
+                THROW yexception() << "Invalid state version " << loadStateVersion;
+            }
 
             auto size = in.Read<ui32>();
             Buckets.resize(size);

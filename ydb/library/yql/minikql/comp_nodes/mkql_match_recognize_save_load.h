@@ -84,7 +84,7 @@ private:
 
 public:
     TMrInputSerializer(TSerializerContext& context, const NUdf::TStringRef& state)
-        : TInputSerializer(state)
+        : TInputSerializer(state, EMkqlStateType::SIMPLE_BLOB)
         , Context(context) {    
     }
 

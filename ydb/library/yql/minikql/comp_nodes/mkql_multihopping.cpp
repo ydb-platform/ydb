@@ -125,36 +125,36 @@ public:
         }
 
         void Load(const NUdf::TStringRef& state) override {
-            TInputSerializer in(state);
+            TInputSerializer in(state, EMkqlStateType::SIMPLE_BLOB);
 
-            const auto stateVersion = in.Read<ui32>();
-            if (stateVersion == 1) {
-                const auto statesMapSize = in.Read<ui32>();
-                ClearState();
-                StatesMap.reserve(statesMapSize);
-                for (auto i = 0U; i < statesMapSize; ++i) {
-                    auto key = in.ReadUnboxedValue(Self->KeyPacker.RefMutableObject(Ctx, false, Self->KeyType), Ctx);
-                    const auto hopIndex = in.Read<ui64>();
-                    const auto bucketsSize = in.Read<ui32>();
-
-                    TKeyState keyState(bucketsSize, hopIndex);
-                    for (auto& bucket : keyState.Buckets) {
-                        in(bucket.HasValue);
-                        if (bucket.HasValue) {
-                            if (Self->StateType) {
-                                Self->InLoad->SetValue(Ctx, in.ReadUnboxedValue(Self->StatePacker.RefMutableObject(Ctx, false, Self->StateType), Ctx));
-                            }
-                            bucket.Value = Self->OutLoad->GetValue(Ctx);
-                        }
-                    }
-                    StatesMap.emplace(key, std::move(keyState));
-                    key.Ref();
-                }
-
-                in(Finished);
-            } else {
-                THROW yexception() << "Invalid state version " << stateVersion;
+            const auto loadStateVersion = in.GetStateVersion();
+            if (loadStateVersion != StateVersion) {
+                THROW yexception() << "Invalid state version " << loadStateVersion;
             }
+
+            const auto statesMapSize = in.Read<ui32>();
+            ClearState();
+            StatesMap.reserve(statesMapSize);
+            for (auto i = 0U; i < statesMapSize; ++i) {
+                auto key = in.ReadUnboxedValue(Self->KeyPacker.RefMutableObject(Ctx, false, Self->KeyType), Ctx);
+                const auto hopIndex = in.Read<ui64>();
+                const auto bucketsSize = in.Read<ui32>();
+
+                TKeyState keyState(bucketsSize, hopIndex);
+                for (auto& bucket : keyState.Buckets) {
+                    in(bucket.HasValue);
+                    if (bucket.HasValue) {
+                        if (Self->StateType) {
+                            Self->InLoad->SetValue(Ctx, in.ReadUnboxedValue(Self->StatePacker.RefMutableObject(Ctx, false, Self->StateType), Ctx));
+                        }
+                        bucket.Value = Self->OutLoad->GetValue(Ctx);
+                    }
+                }
+                StatesMap.emplace(key, std::move(keyState));
+                key.Ref();
+            }
+
+            in(Finished);
         }
 
         TInstant GetWatermark() {

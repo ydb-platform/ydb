@@ -52,11 +52,9 @@ public:
         return storage;
     }
 
-
     NYql::NDqProto::TComputeActorState MakeState(NYql::NUdf::TUnboxedValuePod&& value) {
-        const TStringBuf savedBuf = value.AsStringRef();
         TString result;
-        NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, savedBuf);
+        NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, value.AsStringRef());
         NYql::NDqProto::TComputeActorState state;
         state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(result);
         return state;
@@ -68,7 +66,7 @@ public:
         for (size_t i = 0; i < blobSize; ++i) {
             blob += static_cast<TString::value_type>(std::rand() % 100);
         }
-        return MakeState(NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(blob));
+        return MakeState(NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(blob, 0));
     }
 
     NYql::NDqProto::TComputeActorState MakeIncrementState(size_t miniKqlPStateSize) {
@@ -77,7 +75,7 @@ public:
         for (size_t i = 0; i < itemCount; ++i) {
             map[ToString(777 + i)] = TString(miniKqlPStateSize / itemCount, 'a');
         }
-        return MakeState(NKikimr::NMiniKQL::TNodeStateHelper::MakeSnapshotState(map));
+        return MakeState(NKikimr::NMiniKQL::TOutputSerializer::MakeSnapshotState(map, 0));
     }
 
     NYql::NDqProto::TComputeActorState MakeIncrementState(
@@ -86,9 +84,9 @@ public:
         const std::set<TString>& deleted)
     {
         if (!snapshot.empty()) {
-            return MakeState(NKikimr::NMiniKQL::TNodeStateHelper::MakeSnapshotState(snapshot));
+            return MakeState(NKikimr::NMiniKQL::TOutputSerializer::MakeSnapshotState(snapshot, 0));
         }
-        return MakeState(NKikimr::NMiniKQL::TNodeStateHelper::MakeIncrementState(increment, deleted));
+        return MakeState(NKikimr::NMiniKQL::TOutputSerializer::MakeIncrementState(increment, deleted, 0));
     }
 
     void SaveState(
@@ -140,6 +138,18 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
     Y_UNIT_TEST_F(ShouldSaveGetOldSmallState, TFixture)
     {
         ShouldSaveGetStateImpl("TStateStorageTestShouldSaveGetState", MakeStateFromBlob(4));
+    }
+
+    Y_UNIT_TEST_F(ShouldSaveGetOldSmallState2Tasks, TFixture)
+    {
+        TString result;
+        auto state1 = NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(TString(20, 'a'), 0);
+        auto state2 = NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(TString(20, 'b'), 0);
+        NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, state1.AsStringRef());
+        NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, state2.AsStringRef());
+        NYql::NDqProto::TComputeActorState state;
+        state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(result);
+        ShouldSaveGetStateImpl("TStateStorageTestShouldSaveGetState", state);
     }
 
     Y_UNIT_TEST_F(ShouldSaveGetOldBigState, TFixture)

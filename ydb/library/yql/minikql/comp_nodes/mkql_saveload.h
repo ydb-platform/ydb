@@ -85,13 +85,43 @@ enum class EMkqlStateType {
 
 struct TOutputSerializer {
 public:
-
-
-public:
-    static NUdf::TUnboxedValue MakeSimpleBlobState(const TString& blob) {
+    static NUdf::TUnboxedValue MakeSimpleBlobState(const TString& blob, ui32 stateVersion) {
         TString out;
-        //WriteUi32(out, static_cast<ui32>(EMkqlStateType::SIMPLE_BLOB));
+        WriteUi32(out, static_cast<ui32>(EMkqlStateType::SIMPLE_BLOB));
+        WriteUi32(out, stateVersion);
         out.AppendNoAlias(blob.data(), blob.size());
+        auto strRef = NUdf::TStringRef(out);
+        return NMiniKQL::MakeString(strRef);
+    }
+
+    template<typename TContainer>
+    static NUdf::TUnboxedValue MakeSnapshotState(TContainer& items, ui32 stateVersion) {
+        TString out;
+        WriteUi32(out, static_cast<ui32>(EMkqlStateType::SNAPSHOT));
+        WriteUi32(out, stateVersion);
+        WriteUi32(out, static_cast<ui32>(items.size()));
+        for (const auto& [key, value] : items) {
+            WriteString(out, key);
+            WriteString(out, value);
+        }
+        auto strRef = NUdf::TStringRef(out);
+        return NMiniKQL::MakeString(strRef);
+    }
+
+    template<typename TContainer, typename TContainer2>
+    static NUdf::TUnboxedValue MakeIncrementState(TContainer& createdOrChanged, TContainer2& deleted, ui32 stateVersion) {
+        TString out;
+        WriteUi32(out, static_cast<ui32>(EMkqlStateType::INCREMENT));
+        WriteUi32(out, stateVersion);
+        WriteUi32(out, static_cast<ui32>(createdOrChanged.size()));
+        WriteUi32(out, static_cast<ui32>(deleted.size()));
+        for(const auto& [key, value] : createdOrChanged) {
+            WriteString(out, key);
+            WriteString(out, value);
+        }
+        for(const auto& key : deleted) {
+            WriteString(out, key);
+        }
         auto strRef = NUdf::TStringRef(out);
         return NMiniKQL::MakeString(strRef);
     }
@@ -159,14 +189,13 @@ protected:
 
 struct TInputSerializer {
 public:
-    TInputSerializer(const NUdf::TStringRef& state)
-        : Buf(state)
-    {   
+    TInputSerializer(const NUdf::TStringRef& state, TMaybe<EMkqlStateType> ExpectedType = Nothing())
+        : Buf(state) { 
         Type = static_cast<EMkqlStateType>(Read<ui32>());
         Read(StateVersion);
-        std::cerr << "TInputSerializer type " <<  static_cast<ui32>(Type) << std::endl;
-        std::cerr << "TInputSerializer StateVersion " <<  StateVersion << std::endl;
-        MKQL_ENSURE(Type == EMkqlStateType::SIMPLE_BLOB, "state type is not SIMPLE_BLOB");
+        if (ExpectedType) {
+            MKQL_ENSURE(Type == *ExpectedType, "state type is not expected");
+        }
     }
 
     ui32 GetStateVersion() {
@@ -282,41 +311,10 @@ protected:
 
 
 class TNodeStateHelper {
-
 public:
     static void AddNodeState(TString& result, const TStringBuf& state) {
         WriteUi32(result, state.Size());
         result.AppendNoAlias(state.Data(), state.Size());
-    }
-
-    template<typename TContainer>
-    static NUdf::TUnboxedValue MakeSnapshotState(TContainer& items) {
-        TString out;
-        WriteUi32(out, static_cast<ui32>(EMkqlStateType::SNAPSHOT));
-        WriteUi32(out, static_cast<ui32>(items.size()));
-        for (const auto& [key, value] : items) {
-            WriteString(out, key);
-            WriteString(out, value);
-        }
-        auto strRef = NUdf::TStringRef(out);
-        return NMiniKQL::MakeString(strRef);
-    }
-
-    template<typename TContainer, typename TContainer2>
-    static NUdf::TUnboxedValue MakeIncrementState(TContainer& createdOrChanged, TContainer2& deleted) {
-        TString out;
-        WriteUi32(out, static_cast<ui32>(EMkqlStateType::INCREMENT));
-        WriteUi32(out, static_cast<ui32>(createdOrChanged.size()));
-        WriteUi32(out, static_cast<ui32>(deleted.size()));
-        for(const auto& [key, value] : createdOrChanged) {
-            WriteString(out, key);
-            WriteString(out, value);
-        }
-        for(const auto& key : deleted) {
-            WriteString(out, key);
-        }
-        auto strRef = NUdf::TStringRef(out);
-        return NMiniKQL::MakeString(strRef);
     }
 };
 

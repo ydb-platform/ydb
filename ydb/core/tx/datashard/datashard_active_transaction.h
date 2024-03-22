@@ -594,6 +594,7 @@ public:
     }
 
     bool OnStopping(TDataShard& self, const TActorContext& ctx) override;
+    void OnCleanup(TDataShard& self, std::vector<std::unique_ptr<IEventHandle>>& replies) override;
 
 private:
     void TrackMemory() const;

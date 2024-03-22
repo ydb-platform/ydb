@@ -163,41 +163,39 @@ namespace NYql {
 
     void ReadNext(TWeakPtr<TReadFileRequest> request)
     {
+        auto lockedRequest = [&] () {
+            auto this_ = request.Lock();
+            if (!this_) {
+                ythrow yexception() << "request complete";
+            }
+            return this_;
+        };
+
         while(true) {
-            TFuture<TSharedRef> partResult;
-            {
-                auto this_ = request.Lock();
-                if (!this_) {
-                    ythrow yexception() << "request complete";
-                }
+            TFuture<TSharedRef> part = lockedRequest()->Reader->Read();
+            auto blob = NYT::NConcurrency::WaitFor(part).ValueOrThrow();
 
-                partResult = this_->Reader->Read();
+            auto this_ = lockedRequest();
+            if (!this_) {
+                ythrow yexception() << "request complete";
             }
 
-            auto blob = NYT::NConcurrency::WaitFor(partResult).ValueOrThrow();
-            {
-                auto this_ = request.Lock();
-                if (!this_) {
-                    ythrow yexception() << "request complete";
+            YQL_CLOG(DEBUG, ProviderDq) << "Store " << blob.Size() << " bytes ";
+            if (blob.Size() == 0) {
+                TString buf;
+                buf.ReserveAndResize(32);
+                this_->Md5.End(buf.begin());
+
+                if (buf == this_->Digest) {
+                    this_->Output.reset();
+                    return;
+                } else {
+                    ythrow yexception() << "md5 mismatch";
                 }
-
-                YQL_CLOG(DEBUG, ProviderDq) << "Store " << blob.Size() << " bytes ";
-                if (blob.Size() == 0) {
-                    TString buf;
-                    buf.ReserveAndResize(32);
-                    this_->Md5.End(buf.begin());
-
-                    if (buf == this_->Digest) {
-                        this_->Output.reset();
-                        return;
-                    } else {
-                        ythrow yexception() << "md5 mismatch";
-                    }
-                }
-
-                this_->Md5.Update(blob.Begin(), blob.Size());
-                this_->Output->Write(blob.Begin(), blob.Size());
             }
+
+            this_->Md5.Update(blob.Begin(), blob.Size());
+            this_->Output->Write(blob.Begin(), blob.Size());
         }
     }
 

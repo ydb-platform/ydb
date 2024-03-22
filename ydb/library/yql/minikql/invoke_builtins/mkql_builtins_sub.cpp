@@ -120,9 +120,9 @@ struct TDateTimeSub {
 
 template<typename TLeft, typename TRight, typename TOutput>
 struct TIntervalSubInterval {
-    // static_assert(std::is_same_v<TOutput, NUdf::TDataType<NUdf::TInterval>::TLayout>, "expected output interval");
-    // TODO check Features & TimeInterval
-    // FIXME static_assert(std::is_same_v<TLeft, TRight>, "left and right must be same");
+    static_assert(TLeft::Features & NYql::NUdf::TimeIntervalType, "Left must be interval type");
+    static_assert(TRight::Features & NYql::NUdf::TimeIntervalType, "Right must be interval type");
+    static_assert(TOutput::Features & NYql::NUdf::TimeIntervalType, "Output must be interval type");
 
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
     {
@@ -140,7 +140,7 @@ struct TIntervalSubInterval {
         const auto rhs = GetterFor<typename TRight::TLayout>(right, context, block);
         const auto sub = BinaryOperator::CreateSub(lhs, rhs, "sub", block);
         const auto full = SetterFor<typename TOutput::TLayout>(sub, context, block);
-        const auto bad = GenIsBadInterval(sub, context, block);
+        const auto bad = GenIsBadIntervalNew<TOutput>(sub, context, block);
         const auto zero = ConstantInt::get(Type::getInt128Ty(context), 0);
         const auto sel = SelectInst::Create(bad, zero, full, "sel", block);
         return sel;
@@ -275,6 +275,12 @@ void RegisterSub(IBuiltinFunctionRegistry& registry) {
 
     RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>,
         NUdf::TDataType<NUdf::TInterval>, TIntervalSubInterval, TBinaryArgsOptWithNullableResult>(registry, "Sub");
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval64>,
+        NUdf::TDataType<NUdf::TInterval64>, TIntervalSubInterval, TBinaryArgsOptWithNullableResult>(registry, "Sub");
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>,
+        NUdf::TDataType<NUdf::TInterval64>, TIntervalSubInterval, TBinaryArgsOptWithNullableResult>(registry, "Sub");
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval64>,
+        NUdf::TDataType<NUdf::TInterval64>, TIntervalSubInterval, TBinaryArgsOptWithNullableResult>(registry, "Sub");
 
     RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TInterval>,
         NUdf::TDataType<NUdf::TDate>, TAnyDateTimeSubInterval, TBinaryArgsOptWithNullableResult>(registry, "Sub");

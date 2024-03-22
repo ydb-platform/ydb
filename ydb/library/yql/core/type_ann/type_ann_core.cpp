@@ -2442,10 +2442,13 @@ namespace NTypeAnnImpl {
             commonType = (IsDataTypeBigDate(dataType[0]->GetSlot()) || IsDataTypeBigDate(dataType[1]->GetSlot()))
                 ? ctx.Expr.MakeType<TDataExprType>(EDataSlot::Interval64)
                 : ctx.Expr.MakeType<TDataExprType>(EDataSlot::Interval);
-        } else if (IsDataTypeDateOrTzDateOrInterval(dataType[0]->GetSlot()) &&
-                IsDataTypeInterval(dataType[1]->GetSlot()))
-        {
-            commonType = dataType[0]; // TODO do we need to scale up commonType to bigdate if dataType[1] is interval64?
+        } else if (IsDataTypeDateOrTzDate(dataType[0]->GetSlot()) && IsDataTypeInterval(dataType[1]->GetSlot())) {
+            commonType = dataType[0];
+            haveOptional = true;
+        } else if (IsDataTypeInterval(dataType[0]->GetSlot()) && IsDataTypeInterval(dataType[1]->GetSlot())) {
+            commonType = (IsDataTypeBigDate(dataType[0]->GetSlot()) || IsDataTypeBigDate(dataType[1]->GetSlot()))
+                ? ctx.Expr.MakeType<TDataExprType>(EDataSlot::Interval64)
+                : ctx.Expr.MakeType<TDataExprType>(EDataSlot::Interval);
             haveOptional = true;
         } else if (IsDataTypeDecimal(dataType[0]->GetSlot()) && IsDataTypeDecimal(dataType[1]->GetSlot())) {
             const auto dataTypeOne = static_cast<const TDataExprParamsType*>(dataType[0]);

@@ -68,7 +68,7 @@ public:
         for (size_t i = 0; i < blobSize; ++i) {
             blob += static_cast<TString::value_type>(std::rand() % 100);
         }
-        return MakeState(NKikimr::NMiniKQL::TNodeStateHelper::MakeSimpleBlobState(blob));
+        return MakeState(NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(blob));
     }
 
     NYql::NDqProto::TComputeActorState MakeIncrementState(size_t miniKqlPStateSize) {

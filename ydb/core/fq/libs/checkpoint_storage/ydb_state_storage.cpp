@@ -41,7 +41,8 @@ public:
         Sources = update.GetSources();      // Always snapshot - copy it;
         Sinks = update.GetSinks();
         ui64 nodeNum = 0;
-        
+        std::cerr << "Apply" << std::endl;
+
         if (update.HasMiniKqlProgram()) {
             const TString& blob = update.MutableMiniKqlProgram()->MutableData()->MutableStateData()->GetBlob();
             ui64 version = update.MutableMiniKqlProgram()->MutableData()->MutableStateData()->GetVersion();
@@ -51,23 +52,31 @@ public:
             LastVersion = version;
             TStringBuf buf(blob);
 
+            std::cerr << "Apply blob size " << blob.Size() << std::endl;
+        
+
             while (!buf.empty()) {
                 auto nodeStateSize = NKikimr::NMiniKQL::ReadUi32(buf);
                 Y_ENSURE(buf.Size() >= nodeStateSize, "State/buf is corrupted");
-                NKikimr::NMiniKQL::TNodeStateHelper::Reader reader(buf);
+
+                std::cerr << "Apply nodeStateSize " << nodeStateSize << std::endl;
+
+                TStringBuf nodeStateBuf(buf.Data(), nodeStateSize);
+                buf.Skip(nodeStateSize);
+
+                NKikimr::NMiniKQL::TInputSerializer reader(nodeStateBuf);
                 auto type = reader.GetType();
                 auto& nodeState = NodeStates[nodeNum];
                 nodeState.Type = type;
 
                 switch (type) {
-                    case NKikimr::NMiniKQL::TNodeStateHelper::EType::SIMPLE_BLOB:
+                    case NKikimr::NMiniKQL::EMkqlStateType::SIMPLE_BLOB:
                     {
-                        auto simpleBlob = reader.ReadSimpleSnapshot();
-                        nodeState.SimpleBlob = simpleBlob;
+                        nodeState.SimpleBlobNodeState = TString(nodeStateBuf.Data(), nodeStateBuf.Size());
                     }
                     break;
-                    case NKikimr::NMiniKQL::TNodeStateHelper::EType::SNAPSHOT:
-                    case NKikimr::NMiniKQL::TNodeStateHelper::EType::INCREMENT:
+                    case NKikimr::NMiniKQL::EMkqlStateType::SNAPSHOT:
+                    case NKikimr::NMiniKQL::EMkqlStateType::INCREMENT:
                     {
                         reader.ReadItems(
                             [&](std::string_view key, std::string_view value) {
@@ -78,7 +87,11 @@ public:
                             });
                     }
                     break;
-                }        
+                }
+
+                std::cerr << "Apply buf " << buf.Size() << std::endl;
+
+                //Y_ENSURE(nodeStateBuf.empty(), "nodeStateBuf is corrupted");      
                 ++nodeNum;
             }
             Y_ENSURE(buf.empty(), "State/buf is corrupted");
@@ -93,13 +106,18 @@ public:
         TString result;                
         for (const auto& [nodeNum, nodeState] : NodeStates) {
             
-             NYql::NUdf::TUnboxedValue saved = 
-                nodeState.Type == NKikimr::NMiniKQL::TNodeStateHelper::EType::SIMPLE_BLOB
-                ? NKikimr::NMiniKQL::TNodeStateHelper::MakeSimpleBlobState(nodeState.SimpleBlob)
-                : NKikimr::NMiniKQL::TNodeStateHelper::MakeSnapshotState(nodeState.Items);
-            const TStringBuf savedBuf = saved.AsStringRef();
-            NKikimr::NMiniKQL::WriteUi32(result, savedBuf.Size());
-            result.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
+            if (nodeState.Type == NKikimr::NMiniKQL::EMkqlStateType::SIMPLE_BLOB) {
+                NKikimr::NMiniKQL::WriteUi32(result, nodeState.SimpleBlobNodeState.Size());
+                result.AppendNoAlias(nodeState.SimpleBlobNodeState.Data(), nodeState.SimpleBlobNodeState.Size());
+            } else {
+                NYql::NUdf::TUnboxedValue saved = 
+                    nodeState.Type == NKikimr::NMiniKQL::EMkqlStateType::SIMPLE_BLOB   // TODO
+                    ? NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(nodeState.SimpleBlobNodeState)
+                    : NKikimr::NMiniKQL::TNodeStateHelper::MakeSnapshotState(nodeState.Items);
+                const TStringBuf savedBuf = saved.AsStringRef();
+                NKikimr::NMiniKQL::WriteUi32(result, savedBuf.Size());
+                result.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
+            }
         }
         const auto& stateData = state.MutableMiniKqlProgram()->MutableData()->MutableStateData();
         stateData->SetBlob(result);
@@ -118,7 +136,7 @@ public:
             auto nodeStateSize = NKikimr::NMiniKQL::ReadUi32(buf);
             Y_ENSURE(buf.Size() >= nodeStateSize, "State/buf is corrupted");
             TStringBuf nodeStateBuf(buf.Data(), nodeStateSize);
-            if (NKikimr::NMiniKQL::TNodeStateHelper::Reader(nodeStateBuf).GetType() == NKikimr::NMiniKQL::TNodeStateHelper::EType::INCREMENT) {
+            if (NKikimr::NMiniKQL::TInputSerializer(nodeStateBuf).GetType() == NKikimr::NMiniKQL::EMkqlStateType::INCREMENT) {
                 return EStateType::Increment;
             }
             buf.Skip(nodeStateSize);
@@ -129,9 +147,9 @@ public:
 
 private:
     struct NodeState {
-        NKikimr::NMiniKQL::TNodeStateHelper::EType Type;
+        NKikimr::NMiniKQL::EMkqlStateType Type;
         std::map<TString, TString> Items;
-        TString SimpleBlob;
+        TString SimpleBlobNodeState;
     };
     std::map<ui64, NodeState> NodeStates;
     google::protobuf::RepeatedPtrField< ::NYql::NDqProto::TSourceState> Sources;

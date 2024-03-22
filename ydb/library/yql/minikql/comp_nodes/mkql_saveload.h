@@ -61,11 +61,6 @@ Y_FORCE_INLINE ui64 ReadUi64(TStringBuf& in) {
     return result;
 }
 
-Y_FORCE_INLINE void WriteString(TString& out, std::string_view str) {
-    WriteUi32(out, str.size());
-    out.AppendNoAlias(str.data(), str.size());
-}
-
 Y_FORCE_INLINE std::string_view ReadString(TStringBuf& in) {
     const ui32 size = ReadUi32(in);
     MKQL_ENSURE(in.Size() >= size, "Serialized state is corrupted");
@@ -74,46 +69,230 @@ Y_FORCE_INLINE std::string_view ReadString(TStringBuf& in) {
     return head;
 }
 
-Y_FORCE_INLINE void WriteUnboxedValue(TString& out, const TValuePacker& packer, const NUdf::TUnboxedValue& value) {
-    auto state = packer.Pack(value);
-    WriteUi32(out, state.size());
-    out.AppendNoAlias(state.data(), state.size());
+Y_FORCE_INLINE void WriteString(TString& out, std::string_view str) {
+    WriteUi32(out, str.size());
+    out.AppendNoAlias(str.data(), str.size());
 }
 
-Y_FORCE_INLINE NUdf::TUnboxedValue ReadUnboxedValue(TStringBuf& in, const TValuePacker& packer, TComputationContext& ctx) {
-    auto size = ReadUi32(in);
-    MKQL_ENSURE(size <= in.size(), "Serialized state is corrupted");
-    auto value = packer.Unpack(TStringBuf(in.data(), in.data() + size), ctx.HolderFactory);
-    in.Skip(size);
-    return value;
-}
+template<class>
+inline constexpr bool always_false_v = false;
+
+enum class EMkqlStateType {
+    SIMPLE_BLOB,
+    SNAPSHOT,
+    INCREMENT
+};
+
+struct TOutputSerializer {
+public:
+
+
+public:
+    static NUdf::TUnboxedValue MakeSimpleBlobState(const TString& blob) {
+        TString out;
+        //WriteUi32(out, static_cast<ui32>(EMkqlStateType::SIMPLE_BLOB));
+        out.AppendNoAlias(blob.data(), blob.size());
+        auto strRef = NUdf::TStringRef(out);
+        return NMiniKQL::MakeString(strRef);
+    }
+
+public:
+    TOutputSerializer(EMkqlStateType stateType, ui32 stateVersion) {
+        Write(static_cast<ui32>(stateType));
+        Write(stateVersion);
+    }
+
+    template <typename... Ts>
+    void operator()(Ts&&... args) {
+        (Write(std::forward<Ts>(args)), ...);
+    }
+
+    template<typename Type>
+    void Write(const Type& value ) {
+        if constexpr (std::is_same_v<std::remove_cv_t<Type>, TString>) {
+            WriteString(Buf, value);
+        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui64>) {
+            WriteUi64(Buf, value); 
+        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, i64>) {
+            WriteUi64(Buf, value);
+        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, bool>) {
+            WriteBool(Buf, value);
+        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui8>) {
+            WriteByte(Buf, value);
+        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui32>) {
+            WriteUi32(Buf, value);
+        } else if constexpr (std::is_empty_v<Type>){
+            // Empty struct is not saved/loaded.
+        } else {
+            static_assert(always_false_v<Type>, "Not supported type / not implemented");
+        }
+    }
+
+    template<class Type1, class Type2>
+    void Write(const std::pair<Type1, Type2>& value) {
+        Write(value.first);
+        Write(value.second);
+    }
+
+    template<class Type, class Allocator>
+    void Write(const std::vector<Type, Allocator>& value) {
+        Write(value.size());
+        for (size_t i = 0; i < value.size(); ++i) {
+            Write(value[i]);
+        }
+    }
+
+    Y_FORCE_INLINE void WriteUnboxedValue(const TValuePacker& packer, const NUdf::TUnboxedValue& value) {
+        auto state = packer.Pack(value);
+        Write<ui32>(state.size());
+        Buf.AppendNoAlias(state.data(), state.size());
+    }
+
+    NUdf::TUnboxedValue MakeState() {
+        auto strRef = NUdf::TStringRef(Buf.data(), Buf.size());
+        return NMiniKQL::MakeString(strRef);
+    }
+protected:
+    TString Buf;
+};
+
+
+struct TInputSerializer {
+public:
+    TInputSerializer(const NUdf::TStringRef& state)
+        : Buf(state)
+    {   
+        Type = static_cast<EMkqlStateType>(Read<ui32>());
+        Read(StateVersion);
+        std::cerr << "TInputSerializer type " <<  static_cast<ui32>(Type) << std::endl;
+        std::cerr << "TInputSerializer StateVersion " <<  StateVersion << std::endl;
+        MKQL_ENSURE(Type == EMkqlStateType::SIMPLE_BLOB, "state type is not SIMPLE_BLOB");
+    }
+
+    ui32 GetStateVersion() {
+        return StateVersion;
+    }
+
+    EMkqlStateType GetType() {
+        return Type;
+    }
+
+    template <typename... Ts>
+    void operator()(Ts&... args) {
+        (Read(args), ...);
+    }
+
+    template<typename Type, typename ReturnType = Type>
+    ReturnType Read() {
+        if constexpr (std::is_same_v<std::remove_cv_t<Type>, TString>) {
+            return ReadString(Buf);
+        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui64>) {
+            return ReadUi64(Buf);
+        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, i64>) {
+            return ReadUi64(Buf);
+        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, bool>) {
+            return ReadBool(Buf);
+        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui8>) {
+            return ReadByte(Buf);
+        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui32>) {
+            return ReadUi32(Buf);
+        } else if constexpr (std::is_empty_v<Type>){
+            // Empty struct is not saved/loaded.
+        } else {
+            static_assert(always_false_v<Type>, "Not supported type / not implemented");
+        }
+    }
+
+    Y_FORCE_INLINE NUdf::TUnboxedValue ReadUnboxedValue(const TValuePacker& packer, TComputationContext& ctx) {
+        auto size = Read<ui32>();
+        MKQL_ENSURE(size <= Buf.size(), "Serialized state is corrupted");
+        auto value = packer.Unpack(TStringBuf(Buf.data(), Buf.data() + size), ctx.HolderFactory);
+        Buf.Skip(size);
+        return value;
+    }
+
+    template<typename Type>
+    void Read(Type& value) {
+        if constexpr (std::is_same_v<std::remove_cv_t<Type>, TString>) {
+            value = ReadString(Buf);
+        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui64>) {
+            value = ReadUi64(Buf);
+        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, i64>) {
+            value = ReadUi64(Buf);
+        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, bool>) {
+            value = ReadBool(Buf);
+        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui8>) {
+            value = ReadByte(Buf);
+        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui32>) {
+            value = ReadUi32(Buf);
+        } else if constexpr (std::is_empty_v<Type>){
+            // Empty struct is not saved/loaded.
+        } else {
+            static_assert(always_false_v<Type>, "Not supported type / not implemented");
+        }
+    }
+
+    template<class Type1, class Type2>
+    void Read(std::pair<Type1, Type2>& value) {
+        Read(value.first);
+        Read(value.second);
+    }
+
+    template<class Type, class Allocator>
+    void Read(std::vector<Type, Allocator>& value) {
+        using TVector = std::vector<Type, Allocator>;
+        auto size = Read<typename TVector::size_type>();
+        //auto size = Read<TVector::size_type>();
+        value.clear();
+        value.resize(size);
+        for (size_t i = 0; i < size; ++i) {
+            Read(value[i]);
+        }
+    }
+
+    template<class TCallbackUpdate, class TCallbackDelete>
+    void ReadItems(TCallbackUpdate updateItem, TCallbackDelete deleteKey) {
+        MKQL_ENSURE(Buf.size(), "Serialized state is corrupted");
+        ui32 itemsCount = ReadUi32(Buf);
+        ui32 deletedCount = 0;
+        if (Type == EMkqlStateType::INCREMENT) {
+            deletedCount = ReadUi32(Buf);
+        }
+        for (ui32 i = 0; i < itemsCount; ++i) {
+            auto key = ReadString(Buf);
+            auto value = ReadString(Buf);
+            updateItem(key, value);
+        }
+        if (deletedCount) {
+            auto key = ReadString(Buf);
+            deleteKey(key);
+        }
+    }
+    
+    bool Empty() const {
+        std::cerr << "Empty " << Buf.Size() << std::endl;
+        return Buf.empty();
+    }
+
+protected:
+    TStringBuf Buf;
+    EMkqlStateType Type{EMkqlStateType::SIMPLE_BLOB};
+    ui32 StateVersion{0};
+};
+
 
 class TNodeStateHelper {
 
 public:
-    enum class EType {
-        SIMPLE_BLOB,
-        SNAPSHOT,
-        INCREMENT
-    };
-
     static void AddNodeState(TString& result, const TStringBuf& state) {
         WriteUi32(result, state.Size());
         result.AppendNoAlias(state.Data(), state.Size());
     }
 
-    static NUdf::TUnboxedValue MakeSimpleBlobState(const TString& blob) {
-        TString out;
-        WriteUi32(out, static_cast<ui32>(EType::SIMPLE_BLOB));
-        WriteString(out, blob);
-        auto strRef = NUdf::TStringRef(out);
-        return NMiniKQL::MakeString(strRef);
-    }
-
     template<typename TContainer>
     static NUdf::TUnboxedValue MakeSnapshotState(TContainer& items) {
         TString out;
-        WriteUi32(out, static_cast<ui32>(EType::SNAPSHOT));
+        WriteUi32(out, static_cast<ui32>(EMkqlStateType::SNAPSHOT));
         WriteUi32(out, static_cast<ui32>(items.size()));
         for (const auto& [key, value] : items) {
             WriteString(out, key);
@@ -126,7 +305,7 @@ public:
     template<typename TContainer, typename TContainer2>
     static NUdf::TUnboxedValue MakeIncrementState(TContainer& createdOrChanged, TContainer2& deleted) {
         TString out;
-        WriteUi32(out, static_cast<ui32>(EType::INCREMENT));
+        WriteUi32(out, static_cast<ui32>(EMkqlStateType::INCREMENT));
         WriteUi32(out, static_cast<ui32>(createdOrChanged.size()));
         WriteUi32(out, static_cast<ui32>(deleted.size()));
         for(const auto& [key, value] : createdOrChanged) {
@@ -139,56 +318,6 @@ public:
         auto strRef = NUdf::TStringRef(out);
         return NMiniKQL::MakeString(strRef);
     }
-
-    class Reader {
-    public:
-        explicit Reader(TStringBuf& buf)
-            : Buf(buf)
-        {
-            MKQL_ENSURE(Buf.size(), "Serialized state is corrupted");
-            const auto type = ReadUi32(Buf);
-            Type = static_cast<EType>(type);
-        }
-
-        EType GetType() const {
-            return Type;
-        }
-
-        static TStringBuf GetSimpleSnapshot(const NUdf::TStringRef& state) {
-            TStringBuf buf(state.Data(), state.Size());
-            Reader reader(buf);
-            MKQL_ENSURE(reader.GetType() == EType::SIMPLE_BLOB, "state type is not SIMPLE_BLOB");
-            auto str = ReadString(buf);
-            MKQL_ENSURE(buf.empty(), "broken state");
-            return str;
-        }
-
-        std::string_view ReadSimpleSnapshot() {
-            return ReadString(Buf);
-        }
-
-        template<class TCallbackUpdate, class TCallbackDelete>
-        void ReadItems(TCallbackUpdate updateItem, TCallbackDelete deleteKey) {
-            MKQL_ENSURE(Buf.size(), "Serialized state is corrupted");
-            ui32 itemsCount = ReadUi32(Buf);
-            ui32 deletedCount = 0;
-            if (Type == EType::INCREMENT) {
-                deletedCount = ReadUi32(Buf);
-            }
-            for (ui32 i = 0; i < itemsCount; ++i) {
-                auto key = ReadString(Buf);
-                auto value = ReadString(Buf);
-                updateItem(key, value);
-            }
-            if (deletedCount) {
-                auto key = ReadString(Buf);
-                deleteKey(key);
-            }
-        }
-    private:
-        TStringBuf& Buf;
-        EType Type{EType::SIMPLE_BLOB};
-    };
 };
 
 } // namespace NMiniKQL

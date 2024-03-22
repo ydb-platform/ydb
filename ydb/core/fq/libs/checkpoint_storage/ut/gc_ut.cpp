@@ -45,7 +45,7 @@ NYql::NDqProto::TComputeActorState MakeStateFromBlob(size_t blobSize, bool isInc
         std::set<TString> deleted;
         NKikimr::NMiniKQL::TNodeStateHelper::MakeIncrementState(increment, deleted);
     } else {
-        value = NKikimr::NMiniKQL::TNodeStateHelper::MakeSimpleBlobState(blob);
+        value = NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(blob);
     }
 
     const TStringBuf savedBuf = value.AsStringRef();

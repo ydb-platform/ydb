@@ -49,10 +49,10 @@ public:
     //TODO(YQL-16486): create a tree for backtracking(replace var names with indexes)
 
     struct TPatternConfiguration {
-        void Save(TOutputSerializer& /*serializer*/) const {
+        void Save(TMrOutputSerializer& /*serializer*/) const {
         }
 
-        void Load(TInputSerializer& /*serializer*/) {
+        void Load(TMrInputSerializer& /*serializer*/) {
         }
 
         friend bool operator==(const TPatternConfiguration&, const TPatternConfiguration&) {
@@ -144,7 +144,7 @@ public:
         // Not used in not streaming mode.
     }
 
-    void Load(TInputSerializer& /*serializer*/) {
+    void Load(TMrInputSerializer& /*serializer*/) {
         // Not used in not streaming mode.
     }
 
@@ -220,14 +220,14 @@ public:
         return false;
     }
 
-    void Save(TOutputSerializer& serializer) const {
+    void Save(TMrOutputSerializer& serializer) const {
         // PartitionKey saved in TStateForInterleavedPartitions as key.
         Rows.Save(serializer);
         Nfa.Save(serializer);
         serializer.Write(MatchNumber);
     }
 
-    void Load(TInputSerializer& serializer) {
+    void Load(TMrInputSerializer& serializer) {
         // PartitionKey passed in contructor.
         Rows.Load(serializer);
         Nfa.Load(serializer);
@@ -272,8 +272,7 @@ public:
     {}
 
     NUdf::TUnboxedValue Save() const override {
-        TOutputSerializer serializer(SerializerContext);
-        serializer.Write(StateVersion);
+        TMrOutputSerializer serializer(SerializerContext, EMkqlStateType::SIMPLE_BLOB, StateVersion);
         serializer.Write(CurPartitionPackedKey);
         bool isValid = static_cast<bool>(PartitionHandler);
         serializer.Write(isValid);
@@ -286,34 +285,35 @@ public:
             serializer.Write(DelayedRow);
         }
         RowPatternConfiguration->Save(serializer);
-        return TNodeStateHelper::MakeSimpleBlobState(serializer.MakeString());
+        return serializer.MakeState();
     }
 
     void Load(const NUdf::TStringRef& state) override {
-        TStringBuf in = TNodeStateHelper::Reader::GetSimpleSnapshot(state);
-        TInputSerializer serializer(SerializerContext, in);
-        const auto stateVersion = serializer.Read<decltype(StateVersion)>();
-        if (stateVersion == 1) {
-            serializer.Read(CurPartitionPackedKey);
-            bool validPartitionHandler = serializer.Read<bool>();
-            if (validPartitionHandler) {
-                NUdf::TUnboxedValue key = PartitionKeyPacker.Unpack(CurPartitionPackedKey, SerializerContext.Ctx.HolderFactory);
-                PartitionHandler.reset(new Algo(
-                    std::move(key),
-                    Parameters,
-                    RowPatternConfiguration,
-                    Cache
-                ));
-                PartitionHandler->Load(serializer);
-            }
-            bool validDelayedRow = serializer.Read<bool>();
-            if (validDelayedRow) {
-                DelayedRow = serializer.Read<NUdf::TUnboxedValue>();
-            }
-            auto restoredRowPatternConfiguration = std::make_shared<typename Algo::TPatternConfiguration>(); 
-            restoredRowPatternConfiguration->Load(serializer);
-            MKQL_ENSURE(*restoredRowPatternConfiguration == *RowPatternConfiguration, "Restored and current RowPatternConfiguration is different");
+        TMrInputSerializer serializer(SerializerContext, state);
+        const auto stateVersion = serializer.GetStateVersion();
+
+        if (stateVersion != 1) {
+            THROW yexception() << "Invalid state version " << stateVersion;
         }
+        serializer.Read(CurPartitionPackedKey);
+        bool validPartitionHandler = serializer.Read<bool>();
+        if (validPartitionHandler) {
+            NUdf::TUnboxedValue key = PartitionKeyPacker.Unpack(CurPartitionPackedKey, SerializerContext.Ctx.HolderFactory);
+            PartitionHandler.reset(new Algo(
+                std::move(key),
+                Parameters,
+                RowPatternConfiguration,
+                Cache
+            ));
+            PartitionHandler->Load(serializer);
+        }
+        bool validDelayedRow = serializer.Read<bool>();
+        if (validDelayedRow) {
+            serializer(DelayedRow);
+        }
+        auto restoredRowPatternConfiguration = std::make_shared<typename Algo::TPatternConfiguration>(); 
+        restoredRowPatternConfiguration->Load(serializer);
+        MKQL_ENSURE(*restoredRowPatternConfiguration == *RowPatternConfiguration, "Restored and current RowPatternConfiguration is different");
         MKQL_ENSURE(serializer.Empty(), "State is corrupted");
     }
 
@@ -415,8 +415,7 @@ public:
     {}
 
     NUdf::TUnboxedValue Save() const override {
-        TOutputSerializer serializer(SerializerContext);
-        serializer.Write(StateVersion);
+        TMrOutputSerializer serializer(SerializerContext, EMkqlStateType::SIMPLE_BLOB, StateVersion);
         serializer.Write(Partitions.size());
 
         for (const auto& [key, state] : Partitions) {
@@ -426,41 +425,44 @@ public:
         // HasReadyOutput is not packed because when loading we can recalculate HasReadyOutput from Partitions.
         serializer.Write(Terminating);
         NfaTransitionGraph->Save(serializer);
-        return TNodeStateHelper::MakeSimpleBlobState(serializer.MakeString());
+        std::cerr << "Save stateVersion " << StateVersion << std::endl;
+        return serializer.MakeState();
     }
 
     void Load(const NUdf::TStringRef& state) override {
-        TStringBuf in = TNodeStateHelper::Reader::GetSimpleSnapshot(state);
-        TInputSerializer serializer(SerializerContext, in);
-        const auto stateVersion = serializer.Read<decltype(StateVersion)>();
-        if (stateVersion == 1) {
-            Partitions.clear();
-            auto partitionsCount = serializer.Read<TPartitionMap::size_type>();
-            Partitions.reserve(partitionsCount);
-            for (size_t i = 0; i < partitionsCount; ++i) {
-                auto packedKey = serializer.Read<TPartitionMap::key_type, std::string_view>();
-                NUdf::TUnboxedValue key = PartitionKeyPacker.Unpack(packedKey, SerializerContext.Ctx.HolderFactory);
-                auto pair = Partitions.emplace(
-                    packedKey,
-                    std::make_unique<TStreamingMatchRecognize>(
-                        std::move(key),
-                        Parameters,
-                        NfaTransitionGraph,
-                        Cache));
-                pair.first->second->Load(serializer);
-            }
+        TMrInputSerializer serializer(SerializerContext, state);
+        const auto stateVersion = serializer.GetStateVersion();
 
-            for (auto it = Partitions.begin(); it != Partitions.end(); ++it) {
-                if (it->second->HasMatched()) {
-                    HasReadyOutput.push(it);
-                }
-            }
-            serializer.Read(Terminating);
-            auto restoredTransitionGraph = std::make_shared<TNfaTransitionGraph>();
-            restoredTransitionGraph->Load(serializer);
-            MKQL_ENSURE(NfaTransitionGraph, "Empty NfaTransitionGraph");
-            MKQL_ENSURE(*restoredTransitionGraph == *NfaTransitionGraph, "Restored and current NfaTransitionGraph is different");
+        if (stateVersion != 1) {
+            THROW yexception() << "Invalid state version " << stateVersion;
         }
+
+        Partitions.clear();
+        auto partitionsCount = serializer.Read<TPartitionMap::size_type>();
+        Partitions.reserve(partitionsCount);
+        for (size_t i = 0; i < partitionsCount; ++i) {
+            auto packedKey = serializer.Read<TPartitionMap::key_type, std::string_view>();
+            NUdf::TUnboxedValue key = PartitionKeyPacker.Unpack(packedKey, SerializerContext.Ctx.HolderFactory);
+            auto pair = Partitions.emplace(
+                packedKey,
+                std::make_unique<TStreamingMatchRecognize>(
+                    std::move(key),
+                    Parameters,
+                    NfaTransitionGraph,
+                    Cache));
+            pair.first->second->Load(serializer);
+        }
+
+        for (auto it = Partitions.begin(); it != Partitions.end(); ++it) {
+            if (it->second->HasMatched()) {
+                HasReadyOutput.push(it);
+            }
+        }
+        serializer.Read(Terminating);
+        auto restoredTransitionGraph = std::make_shared<TNfaTransitionGraph>();
+        restoredTransitionGraph->Load(serializer);
+        MKQL_ENSURE(NfaTransitionGraph, "Empty NfaTransitionGraph");
+        MKQL_ENSURE(*restoredTransitionGraph == *NfaTransitionGraph, "Restored and current NfaTransitionGraph is different");
         MKQL_ENSURE(serializer.Empty(), "State is corrupted");
     }
 

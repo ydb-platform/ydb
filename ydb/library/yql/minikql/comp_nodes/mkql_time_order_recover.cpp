@@ -101,39 +101,35 @@ public:
 
     private:
         void Load(const NUdf::TStringRef& state) override {
-            TStringBuf in = TNodeStateHelper::Reader::GetSimpleSnapshot(state);
+            TInputSerializer in(state);
 
-            const auto stateVersion = ReadUi32(in);
+            const auto stateVersion = in.GetStateVersion();
             if (stateVersion == 1) {
-                const auto heapSize = ReadUi32(in);
+                const auto heapSize = in.Read<ui32>();
                 ClearState();
                 for (auto i = 0U; i < heapSize; ++i) {
-                    TTimestamp t = ReadUi64(in);
-                    MonotonicCounter = ReadUi64(in);
-                    NUdf::TUnboxedValue row = ReadUnboxedValue(in, Self->Packer.RefMutableObject(Ctx, false, Self->StateType), Ctx);
+                    TTimestamp t = in.Read<ui64>();
+                    in(MonotonicCounter);
+                    NUdf::TUnboxedValue row = in.ReadUnboxedValue(Self->Packer.RefMutableObject(Ctx, false, Self->StateType), Ctx);
                     Heap.emplace(THeapKey(t, MonotonicCounter), std::move(row));
                 }
-                Latest = ReadUi64(in);
-                Terminating = ReadBool(in);
+                in(Latest, Terminating);
             } else {
                 THROW yexception() << "Invalid state version " << stateVersion;
             }
         }
 
         NUdf::TUnboxedValue Save() const override {
-            TString out;
-            WriteUi32(out, StateVersion);
-            WriteUi32(out, Heap.size());
+            TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, StateVersion);
+            out.Write<ui32>(Heap.size());
 
             for (const TEntry& entry : Heap) {
                 THeapKey key = entry.first;
-                WriteUi64(out, key.first);
-                WriteUi64(out, key.second);
-                WriteUnboxedValue(out, Self->Packer.RefMutableObject(Ctx, false, Self->StateType), entry.second);
+                out(key);
+                out.WriteUnboxedValue(Self->Packer.RefMutableObject(Ctx, false, Self->StateType), entry.second);
             }
-            WriteUi64(out, Latest);
-            WriteBool(out, Terminating);
-            return TNodeStateHelper::MakeSimpleBlobState(out);
+            out(Latest, Terminating);
+            return out.MakeState();
         }
 
         void ClearState() {

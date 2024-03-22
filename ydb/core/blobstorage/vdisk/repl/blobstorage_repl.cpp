@@ -554,7 +554,7 @@ namespace NKikimr {
         std::set<TActorId> DonorQueryActors;
 
         void Handle(TEvBlobStorage::TEvEnrichNotYet::TPtr ev) {
-            DonorQueryActors.insert(Register(new TDonorQueryActor(*ev->Get(), Donors, ReplCtx->VCtx->VDiskLogPrefix, ReplCtx->VCtx->OOSMonGroup)));
+            DonorQueryActors.insert(Register(new TDonorQueryActor(*ev->Get(), Donors, ReplCtx->VCtx)));
         }
 
         void Handle(TEvents::TEvActorDied::TPtr ev) {

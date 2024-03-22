@@ -55,8 +55,7 @@ namespace NKikimr {
             const TActorContext &ctx,
             i64 reqId,
             EHullDbType dbType,
-            const TString& vDiskLogPrefix,
-            const std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup) {
+            const TIntrusivePtr<TVDiskContext>& vCtx) {
         auto it = Requests.find(reqId);
         Y_ABORT_UNLESS(it != Requests.end());
         auto &req = it->second;
@@ -69,7 +68,7 @@ namespace NKikimr {
         }
 
         if (req.AllDone()) {
-            SendVDiskResponse(ctx, req.ClientId, req.Reply.release(), req.ClientCookie, vDiskLogPrefix, monGroup);
+            SendVDiskResponse(ctx, req.ClientId, req.Reply.release(), req.ClientCookie, vCtx);
             // delete req from Request, we handled it
             Requests.erase(it);
         }

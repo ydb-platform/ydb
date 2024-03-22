@@ -632,8 +632,8 @@ struct TCommonAppOptions {
                 // default
             } else {
                 ythrow yexception() << "wrong '--workload' value '" << Workload
-                                    << "', allowed values are {'" 
-                                    << WORKLOAD_HYBRID << "', '" 
+                                    << "', allowed values are {'"
+                                    << WORKLOAD_HYBRID << "', '"
                                     << WORKLOAD_ANALYTICAL << "', '"
                                     << WORKLOAD_OPERATIONAL << "'}";
             }

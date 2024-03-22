@@ -803,7 +803,41 @@ public:
     }
 
     TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) override {
-        FORWARD_ENSURE_NO_PREPARE(RenameTable, src, dst, cluster);
+        CHECK_PREPARED_DDL(RenameTable);
+
+        auto metadata = SessionCtx->Tables().GetTable(cluster, src).Metadata;
+
+        std::pair<TString, TString> pathPair;
+        TString error;
+        if (!NSchemeHelpers::SplitTablePath(metadata->Name, GetDatabase(), pathPair, error, false)) {
+            return MakeFuture(ResultFromError<TGenericResult>(error));
+        }
+
+        auto ranameTablePromise = NewPromise<TGenericResult>();
+
+        NKikimrSchemeOp::TModifyScheme schemeTx;
+        schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpMoveTable);
+        schemeTx.SetWorkingDir(pathPair.first);
+
+        auto* renameTable = schemeTx.MutableMoveTable();
+        renameTable->SetSrcPath(src);
+        renameTable->SetDstPath(dst);
+
+        if (IsPrepare()) {
+            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto& phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+
+            phyTx.MutableSchemeOperation()->MutableAlterTable()->Swap(&schemeTx);
+            TGenericResult result;
+            result.SetSuccess();
+            ranameTablePromise.SetValue(result);
+        } else {
+            return Gateway->RenameTable(src, dst, cluster);
+        }
+
+        return ranameTablePromise.GetFuture();
     }
 
     TFuture<TGenericResult> DropTable(const TString& cluster, const TDropTableSettings& settings) override {

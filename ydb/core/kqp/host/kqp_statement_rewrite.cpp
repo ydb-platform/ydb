@@ -72,6 +72,9 @@ namespace {
             return std::nullopt;
         }
 
+        auto tableNameNode = key.Ptr()->Child(0)->Child(1)->Child(0);
+        const TString tableName(tableNameNode->Content());
+
         auto maybeList = writeArgs.Get(4).Maybe<NYql::NNodes::TExprList>();
         if (!maybeList) {
             return std::nullopt;
@@ -160,9 +163,12 @@ namespace {
             }));
         }
 
+        const bool isTemporary = settings.Temporary.IsValid() && settings.Temporary.Cast().Value() == "true";
+        const TString temporaryTableName = isTemporary ? tableName : (tableName + "_tmp");
+
         create = exprCtx.ReplaceNode(std::move(create), *columns, exprCtx.NewList(pos, std::move(columnNodes)));
 
-        if (!settings.Temporary.IsValid() || settings.Temporary.Cast().Value() != "true") {
+        if (!isTemporary) {
             std::vector<NYql::TExprNodePtr> settingsNodes;
             for (size_t index = 0; index < create->Child(4)->ChildrenSize(); ++index) {
                 settingsNodes.push_back(create->Child(4)->ChildPtr(index));
@@ -170,6 +176,7 @@ namespace {
             settingsNodes.push_back(
                 exprCtx.NewList(pos, {exprCtx.NewAtom(pos, "temporary")}));
             create = exprCtx.ReplaceNode(std::move(create), *create->Child(4), exprCtx.NewList(pos, std::move(settingsNodes)));
+            create = exprCtx.ReplaceNode(std::move(create), *tableNameNode, exprCtx.NewAtom(pos, temporaryTableName));
         }
 
         const auto topLevelRead = NYql::FindTopLevelRead(insertData.Ptr());
@@ -184,7 +191,7 @@ namespace {
                 exprCtx.NewList(pos, {
                     exprCtx.NewAtom(pos, "table"),
                     exprCtx.NewCallable(pos, "String", {
-                        exprCtx.NewAtom(pos, key.Ptr()->Child(0)->Child(1)->Child(0)->Content()),
+                        exprCtx.NewAtom(pos, temporaryTableName),
                     }),
                 }),
             }),
@@ -213,7 +220,7 @@ namespace {
             }),
         });
 
-        if (!settings.Temporary.IsValid() || settings.Temporary.Cast().Value() != "true") {
+        if (!isTemporary) {
             result.AlterTable = exprCtx.NewCallable(pos, "Write!", {
                 exprCtx.NewWorld(pos),
                 exprCtx.NewCallable(pos, "DataSink", {
@@ -224,7 +231,7 @@ namespace {
                     exprCtx.NewList(pos, {
                         exprCtx.NewAtom(pos, "tablescheme"),
                         exprCtx.NewCallable(pos, "String", {
-                            exprCtx.NewAtom(pos, key.Ptr()->Child(0)->Child(1)->Child(0)->Content()),
+                            exprCtx.NewAtom(pos, temporaryTableName),
                         }),
                     }),
                 }),
@@ -244,6 +251,10 @@ namespace {
                                         exprCtx.NewAtom(pos, "resetTemporary")
                                     }),
                                 }),
+                            }),
+                            exprCtx.NewList(pos, {
+                                exprCtx.NewAtom(pos, "renameTo"),
+                                exprCtx.NewAtom(pos, tableName),
                             }),
                         }),
                     }),

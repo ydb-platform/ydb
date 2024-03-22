@@ -224,7 +224,7 @@ private:
     TVector<const TType*> ArgTypes_;
 };
 
-inline void PrepareSimpleArrowUdf(IFunctionTypeInfoBuilder& builder, TType* signature, TType* userType, TExec exec, bool typesOnly,
+inline void PrepareSimpleArrowUdf(IFunctionTypeInfoBuilder& builder, TType* signature, ui32 optionalArgc, TType* userType, TExec exec, bool typesOnly,
     const TString& name, arrow::compute::NullHandling::type nullHandling = arrow::compute::NullHandling::type::COMPUTED_NO_PREALLOCATE) {
     auto typeInfoHelper = builder.TypeInfoHelper();
     TCallableTypeInspector callableInspector(*typeInfoHelper, signature);
@@ -235,7 +235,8 @@ inline void PrepareSimpleArrowUdf(IFunctionTypeInfoBuilder& builder, TType* sign
     Y_ENSURE(userTypeInspector.GetElementsCount() == 3);
     TTupleTypeInspector argsInspector(*typeInfoHelper, userTypeInspector.GetElementType(0));
     Y_ENSURE(argsInspector);
-    Y_ENSURE(argsInspector.GetElementsCount() == callableInspector.GetArgsCount());
+    Y_ENSURE(argsInspector.GetElementsCount() <= callableInspector.GetArgsCount());
+    Y_ENSURE(argsInspector.GetElementsCount() >= callableInspector.GetArgsCount() - optionalArgc);
 
     bool hasBlocks = false;
     bool onlyScalars = true;
@@ -275,9 +276,6 @@ inline void PrepareSimpleArrowUdf(IFunctionTypeInfoBuilder& builder, TType* sign
     }
 
     builder.Returns(builder.Block(onlyScalars)->Item(callableInspector.GetReturnType()).Build());
-    if (callableInspector.GetOptionalArgsCount() > 0) {
-        builder.OptionalArgs(callableInspector.GetOptionalArgsCount());
-    }
 
     if (callableInspector.GetPayload().Size() > 0) {
         builder.PayloadImpl(callableInspector.GetPayload());
@@ -562,6 +560,7 @@ public:
 
 #define BEGIN_ARROW_UDF(udfNameBlocks, signatureFunc) \
     class udfNameBlocks { \
+        static const ui32 OptionalArgc_ = 0; \
     public: \
         typedef bool TTypeAwareMarker; \
         static const ::NYql::NUdf::TStringRef& Name() { \
@@ -593,7 +592,8 @@ public:
         ::NYql::NUdf::IFunctionTypeInfoBuilder& builder, \
         bool typesOnly) { \
             if (Name() == name) { \
-                PrepareSimpleArrowUdf(builder, GetSignatureType(builder), userType, exec, typesOnly, TString(name)); \
+                PrepareSimpleArrowUdf(builder, GetSignatureType(builder), OptionalArgc_, \
+                                      userType, exec, typesOnly, TString(name)); \
                 return true; \
             } \
             return false; \
@@ -606,7 +606,8 @@ public:
         ::NYql::NUdf::IFunctionTypeInfoBuilder& builder, \
         bool typesOnly) { \
             if (Name() == name) { \
-                PrepareSimpleArrowUdf(builder, GetSignatureType(builder), userType, exec, typesOnly, TString(name), nullHandling); \
+                PrepareSimpleArrowUdf(builder, GetSignatureType(builder), OptionalArgc_, \
+                                      userType, exec, typesOnly, TString(name), nullHandling); \
                 return true; \
             } \
             return false; \

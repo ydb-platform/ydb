@@ -6,23 +6,13 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(constructor)
+add_subdirectory(iterator)
 
-add_library(engines-reader-plain_reader)
-target_link_libraries(engines-reader-plain_reader PUBLIC
+add_library(engines-reader-plain_reader INTERFACE)
+target_link_libraries(engines-reader-plain_reader INTERFACE
   contrib-libs-cxxsupp
   yutil
-  core-formats-arrow
-  tx-columnshard-blobs_action
-  tx-conveyor-usage
-)
-target_sources(engines-reader-plain_reader PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/scanner.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/constructor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/source.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/interval.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/fetched_data.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/plain_read_data.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/columns_set.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/context.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/fetching.cpp
+  reader-plain_reader-constructor
+  reader-plain_reader-iterator
 )

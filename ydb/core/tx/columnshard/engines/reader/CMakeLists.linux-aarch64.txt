@@ -6,19 +6,15 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(abstract)
+add_subdirectory(actor)
+add_subdirectory(common)
 add_subdirectory(plain_reader)
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+add_subdirectory(sys_view)
+add_subdirectory(transaction)
 
-add_library(columnshard-engines-reader)
-target_compile_options(columnshard-engines-reader PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(columnshard-engines-reader PUBLIC
+add_library(columnshard-engines-reader INTERFACE)
+target_link_libraries(columnshard-engines-reader INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
@@ -30,19 +26,10 @@ target_link_libraries(columnshard-engines-reader PUBLIC
   tx-columnshard-resources
   core-tx-program
   engines-reader-plain_reader
+  engines-reader-sys_view
+  engines-reader-abstract
+  engines-reader-common
+  engines-reader-actor
+  engines-reader-transaction
   columnshard-engines-scheme
-  tools-enum_parser-enum_serialization_runtime
-)
-target_sources(columnshard-engines-reader PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/conveyor_task.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/description.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/queue.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/read_filter_merger.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/read_metadata.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/read_context.cpp
-)
-generate_enum_serilization(columnshard-engines-reader
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/read_metadata.h
-  INCLUDE_HEADERS
-  ydb/core/tx/columnshard/engines/reader/read_metadata.h
 )

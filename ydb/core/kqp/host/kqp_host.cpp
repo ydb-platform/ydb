@@ -1033,6 +1033,7 @@ public:
 
         SessionCtx->SetDatabase(database);
         SessionCtx->SetCluster(cluster);
+        SessionCtx->SetSessionId(tempTablesState->SessionId);
         SessionCtx->SetTempTables(std::move(tempTablesState));
     }
 

@@ -73,7 +73,7 @@ namespace {
         }
 
         auto tableNameNode = key.Ptr()->Child(0)->Child(1)->Child(0);
-        const TString tableName(tableNameNode->Content());
+        TString tableName(tableNameNode->Content());
 
         auto maybeList = writeArgs.Get(4).Maybe<NYql::NNodes::TExprList>();
         if (!maybeList) {
@@ -164,7 +164,15 @@ namespace {
         }
 
         const bool isTemporary = settings.Temporary.IsValid() && settings.Temporary.Cast().Value() == "true";
-        const TString temporaryTableName = isTemporary ? tableName : (tableName + "_tmp");
+        if (isTemporary) {
+            exprCtx.AddError(NYql::TIssue(exprCtx.GetPosition(pos), "CREATE TEMPORARY TABLE AS is not supported at current time"));
+            return std::nullopt;
+        }
+
+        const TString temporaryTableName = tableName + "_cas_" + sessionCtx->GetSessionId();
+        if (isTemporary) {
+            tableName = temporaryTableName;
+        }
 
         create = exprCtx.ReplaceNode(std::move(create), *columns, exprCtx.NewList(pos, std::move(columnNodes)));
 

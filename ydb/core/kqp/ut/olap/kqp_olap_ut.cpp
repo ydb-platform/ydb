@@ -4201,16 +4201,17 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TTypedLocalHelper helper("Utf8", kikimr);
             helper.CreateTestOlapTable();
             auto tableClient = kikimr.GetTableClient();
-            {
-                auto alterQuery = TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_STAT, TYPE=max, NAME=max_ts, FEATURES=`{\"column_name\": \"ts\"}`);";
-                auto session = tableClient.CreateSession().GetValueSync().GetSession();
-                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
-            }
+            auto queryClient = kikimr.GetQueryClient();
+            //{
+            //    auto alterQuery = TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_STAT, TYPE=max, NAME=max_ts, FEATURES=`{\"column_name\": \"ts\"}`);";
+            //    auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            //    auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            //    UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            //}
             {
                 auto alterQuery = TStringBuilder() << "ALTER TABLE `/Root/olapStore/olapTable` SET (TTL = Interval(\"P1D\") ON ts);";
-                auto session = tableClient.CreateSession().GetValueSync().GetSession();
-                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                auto session = queryClient.GetSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteQuery(alterQuery, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
             }
             {

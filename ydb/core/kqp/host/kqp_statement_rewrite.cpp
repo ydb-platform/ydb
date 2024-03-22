@@ -20,7 +20,7 @@ namespace {
         NYql::TExprNode::TPtr AlterTable = nullptr;
     };
 
-    bool IsColumnTable(const NYql::NNodes::TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& tableSettings) {
+    bool IsOlapTable(const NYql::NNodes::TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& tableSettings) {
         if (!tableSettings) {
             return false;
         }
@@ -73,7 +73,7 @@ namespace {
         }
 
         auto tableNameNode = key.Ptr()->Child(0)->Child(1)->Child(0);
-        TString tableName(tableNameNode->Content());
+        const TString tableName(tableNameNode->Content());
 
         auto maybeList = writeArgs.Get(4).Maybe<NYql::NNodes::TExprList>();
         if (!maybeList) {
@@ -88,6 +88,8 @@ namespace {
         if (mode != "create" && mode != "create_if_not_exists" && mode != "create_or_replace") {
             return std::nullopt;
         }
+
+        const bool isOlap = IsOlapTable(settings.TableSettings);
 
         const auto& insertData = writeArgs.Get(3);
         if (insertData.Ptr()->Content() == "Void") {
@@ -134,7 +136,7 @@ namespace {
             const auto name = item->GetName();
             auto currentType = item->GetItemType();
 
-            const bool notNull = primariKeyColumns.contains(name) && IsColumnTable(settings.TableSettings);
+            const bool notNull = primariKeyColumns.contains(name) && isOlap;
 
             if (notNull && currentType->GetKind() == NYql::ETypeAnnotationKind::Optional) {
                 currentType = currentType->Cast<NYql::TOptionalExprType>()->GetItemType();
@@ -169,14 +171,20 @@ namespace {
             return std::nullopt;
         }
 
-        const TString temporaryTableName = tableName + "_cas_" + sessionCtx->GetSessionId();
-        if (isTemporary) {
-            tableName = temporaryTableName;
-        }
+        const bool isAtomicOperation = !isTemporary && !isOlap;
+
+        const TString createTableName = !isAtomicOperation
+            ? tableName
+            : (TStringBuilder()
+                << tableName
+                << "_cas_"
+                << TInstant::Now().MicroSeconds()
+                << "_"
+                << sessionCtx->GetSessionId());
 
         create = exprCtx.ReplaceNode(std::move(create), *columns, exprCtx.NewList(pos, std::move(columnNodes)));
 
-        if (!isTemporary) {
+        if (isAtomicOperation) {
             std::vector<NYql::TExprNodePtr> settingsNodes;
             for (size_t index = 0; index < create->Child(4)->ChildrenSize(); ++index) {
                 settingsNodes.push_back(create->Child(4)->ChildPtr(index));
@@ -184,7 +192,7 @@ namespace {
             settingsNodes.push_back(
                 exprCtx.NewList(pos, {exprCtx.NewAtom(pos, "temporary")}));
             create = exprCtx.ReplaceNode(std::move(create), *create->Child(4), exprCtx.NewList(pos, std::move(settingsNodes)));
-            create = exprCtx.ReplaceNode(std::move(create), *tableNameNode, exprCtx.NewAtom(pos, temporaryTableName));
+            create = exprCtx.ReplaceNode(std::move(create), *tableNameNode, exprCtx.NewAtom(pos, createTableName));
         }
 
         const auto topLevelRead = NYql::FindTopLevelRead(insertData.Ptr());
@@ -199,7 +207,7 @@ namespace {
                 exprCtx.NewList(pos, {
                     exprCtx.NewAtom(pos, "table"),
                     exprCtx.NewCallable(pos, "String", {
-                        exprCtx.NewAtom(pos, temporaryTableName),
+                        exprCtx.NewAtom(pos, createTableName),
                     }),
                 }),
             }),
@@ -228,7 +236,7 @@ namespace {
             }),
         });
 
-        if (!isTemporary) {
+        if (isAtomicOperation) {
             result.AlterTable = exprCtx.NewCallable(pos, "Write!", {
                 exprCtx.NewWorld(pos),
                 exprCtx.NewCallable(pos, "DataSink", {
@@ -239,7 +247,7 @@ namespace {
                     exprCtx.NewList(pos, {
                         exprCtx.NewAtom(pos, "tablescheme"),
                         exprCtx.NewCallable(pos, "String", {
-                            exprCtx.NewAtom(pos, temporaryTableName),
+                            exprCtx.NewAtom(pos, createTableName),
                         }),
                     }),
                 }),

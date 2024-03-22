@@ -1169,7 +1169,7 @@ public:
 
         auto userToken = QueryState->UserToken;
         const TString requestType = QueryState->GetRequestType();
-        bool temporary = GetTemporaryTableInfo(tx).has_value() || QueryState->IsCreateTemporaryTableAs();
+        const bool temporary = GetTemporaryTableInfo(tx).has_value();
 
         auto executerActor = CreateKqpSchemeExecuter(tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken,
             temporary, QueryState->IsCreateTableAs(), TempTablesState.SessionId, QueryState->UserRequestContext, KqpTempTablesAgentActor);
@@ -1286,7 +1286,7 @@ public:
             return std::nullopt;
         }
 
-        if (QueryState->IsCreateTableAs() && !QueryState->IsCreateTemporaryTableAs()) {
+        if (QueryState->IsCreateTableAs()) {
             return std::nullopt;
         }
 

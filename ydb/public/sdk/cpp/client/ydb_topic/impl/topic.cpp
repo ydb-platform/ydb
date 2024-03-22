@@ -12,6 +12,15 @@
 
 namespace NYdb::NTopic {
 
+class TCommonCodecsProvider {
+public:
+    TCommonCodecsProvider() {
+        NYdb::NTopic::TCodecMap::GetTheCodecMap().Set((ui32)NYdb::NPersQueue::ECodec::GZIP, MakeHolder<NYdb::NTopic::TGzipCodec>());
+        NYdb::NTopic::TCodecMap::GetTheCodecMap().Set((ui32)NYdb::NPersQueue::ECodec::ZSTD, MakeHolder<NYdb::NTopic::TZstdCodec>());
+    }
+};
+TCommonCodecsProvider COMMON_CODECS_PROVIDER;
+
 TDescribeTopicResult::TDescribeTopicResult(TStatus&& status, Ydb::Topic::DescribeTopicResult&& result)
     : TStatus(std::move(status))
     , TopicDescription_(std::move(result))

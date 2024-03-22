@@ -25,6 +25,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_sequence PUBLIC
   core-testlib-default
   ydb-core-tx
   core-tx-columnshard
+  core-tx-datashard
   tx-schemeshard-ut_helpers
   udf-service-exception_policy
 )

@@ -32,6 +32,7 @@ target_sources(core-tx-sequenceshard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_create_sequence.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_drop_sequence.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_freeze_sequence.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_get_sequence.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_init.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_init_schema.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_mark_schemeshard_pipe.cpp

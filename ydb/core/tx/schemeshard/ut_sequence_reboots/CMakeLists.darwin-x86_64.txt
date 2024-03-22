@@ -44,7 +44,7 @@ set_property(
   ydb-core-tx-schemeshard-ut_sequence_reboots
   PROPERTY
   SPLIT_FACTOR
-  2
+  6
 )
 add_yunittest(
   NAME

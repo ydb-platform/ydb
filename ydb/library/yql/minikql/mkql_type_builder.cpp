@@ -56,46 +56,6 @@ public:
     }
 };
 
-class TCallablePayload : public NUdf::ICallablePayload {
-public:
-    TCallablePayload(NMiniKQL::TNode* node)
-    {
-        auto structObj = AS_VALUE(NMiniKQL::TStructLiteral, NMiniKQL::TRuntimeNode(node, true));
-        auto argsIndex = structObj->GetType()->GetMemberIndex("Args");
-        auto payloadIndex = structObj->GetType()->GetMemberIndex("Payload");
-        Payload_ = AS_VALUE(NMiniKQL::TDataLiteral, structObj->GetValue(payloadIndex))->AsValue().AsStringRef();
-        auto args = structObj->GetValue(argsIndex);
-        auto argsList = AS_VALUE(NMiniKQL::TListLiteral, args);
-        auto itemType = AS_TYPE(NMiniKQL::TStructType, AS_TYPE(NMiniKQL::TListType, args)->GetItemType());
-        auto nameIndex = itemType->GetMemberIndex("Name");
-        auto flagsIndex = itemType->GetMemberIndex("Flags");
-        ArgsNames_.reserve(argsList->GetItemsCount());
-        ArgsFlags_.reserve(argsList->GetItemsCount());
-        for (ui32 i = 0; i < argsList->GetItemsCount(); ++i) {
-            auto arg = AS_VALUE(NMiniKQL::TStructLiteral, argsList->GetItems()[i]);
-            ArgsNames_.push_back(AS_VALUE(NMiniKQL::TDataLiteral, arg->GetValue(nameIndex))->AsValue().AsStringRef());
-            ArgsFlags_.push_back(AS_VALUE(NMiniKQL::TDataLiteral, arg->GetValue(flagsIndex))->AsValue().Get<ui64>());
-        }
-    }
-
-    NUdf::TStringRef GetPayload() const override {
-        return Payload_;
-    }
-
-    NUdf::TStringRef GetArgumentName(ui32 index) const override {
-        return ArgsNames_[index];
-    }
-
-    ui64 GetArgumentFlags(ui32 index) const override {
-        return ArgsFlags_[index];
-    }
-
-private:
-    NUdf::TStringRef Payload_;
-    TVector<NUdf::TStringRef> ArgsNames_;
-    TVector<ui64> ArgsFlags_;
-};
-
 /////////////////////////////////////////////////////////////////////////////
 // TOptionalTypeBuilder
 //////////////////////////////////////////////////////////////////////////////

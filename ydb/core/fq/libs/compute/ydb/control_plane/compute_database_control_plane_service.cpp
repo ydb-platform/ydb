@@ -345,9 +345,10 @@ public:
         if (globalLoadConfig.GetEnable()) {
             TActorId clientActor;
             auto monitoringEndpoint = globalLoadConfig.GetMonitoringEndpoint();
-            auto credentialsProvider = CredentialsProviderFactory(GetYdbCredentialSettings(singleConfig.GetConnection()))->CreateProvider();
+            auto credentialsProviderFactory = CredentialsProviderFactory(GetYdbCredentialSettings(singleConfig.GetConnection())); 
+            auto credentialsProvider = credentialsProviderFactory->CreateProvider();
             if (monitoringEndpoint) {
-                clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, singleConfig.GetConnection().GetDatabase(), credentialsProvider).release());
+                clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, singleConfig.GetConnection().GetDatabase(), credentialsProviderFactory).release());
             } else {
                 clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(singleConfig.GetConnection()), credentialsProvider).release());
             }
@@ -369,9 +370,10 @@ public:
             if (loadConfig.GetEnable()) {
                 TActorId clientActor;
                 auto monitoringEndpoint = loadConfig.GetMonitoringEndpoint();
-                auto credentialsProvider = CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider();
+                auto credentialsProviderFactory = CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()));
+                auto credentialsProvider = credentialsProviderFactory->CreateProvider();
                 if (monitoringEndpoint) {
-                    clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, config.GetControlPlaneConnection().GetDatabase(), credentialsProvider).release());
+                    clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, config.GetControlPlaneConnection().GetDatabase(), credentialsProviderFactory).release());
                 } else {
                     clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), credentialsProvider).release());
                 }
@@ -393,9 +395,10 @@ public:
             if (loadConfig.GetEnable()) {
                 TActorId clientActor;
                 auto monitoringEndpoint = loadConfig.GetMonitoringEndpoint();
-                auto credentialsProvider = CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider();
+                auto credentialsProviderFactory = CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()));
+                auto credentialsProvider = credentialsProviderFactory->CreateProvider();
                 if (monitoringEndpoint) {
-                    clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, config.GetControlPlaneConnection().GetDatabase(), credentialsProvider).release());
+                    clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, config.GetControlPlaneConnection().GetDatabase(), credentialsProviderFactory).release());
                 } else {
                     clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), credentialsProvider).release());
                 }

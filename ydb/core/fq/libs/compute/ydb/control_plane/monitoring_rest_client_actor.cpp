@@ -1,14 +1,14 @@
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
-#include <ydb/library/services/services.pb.h>
-
-#include <ydb/library/security/ydb_credentials_provider_factory.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-
 #include <ydb/library/actors/http/http_proxy.h>
+
+#include <ydb/library/security/util.h>
+#include <ydb/library/security/ydb_credentials_provider_factory.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/yql/utils/actors/http_sender.h>
 #include <ydb/library/yql/utils/actors/http_sender_actor.h>
@@ -30,11 +30,11 @@ class TMonitoringRestServiceActor : public NActors::TActor<TMonitoringRestServic
 public:
     using TBase = NActors::TActor<TMonitoringRestServiceActor>;
 
-    TMonitoringRestServiceActor(const TString& endpoint, const TString& database, const NYdb::TCredentialsProviderPtr& credentialsProvider)
+    TMonitoringRestServiceActor(const TString& endpoint, const TString& database, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory)
         : TBase(&TMonitoringRestServiceActor::StateFunc)
         , Endpoint(endpoint)
         , Database(database)
-        , CredentialsProvider(credentialsProvider)
+        , CredentialsProviderFactory(credentialsProviderFactory)
     {}
 
     STRICT_STFUNC(StateFunc,
@@ -55,8 +55,12 @@ public:
                 .AddUrlParam("path", Database)
                 .Build()
         );
-        LOG_D(httpRequest->GetRawData());
-        httpRequest->Set("Authorization", CredentialsProvider->GetAuthInfo());
+        if (!CredentialsProvider) {
+            CredentialsProvider = CredentialsProviderFactory->CreateProvider();
+        }
+        auto ticket = CredentialsProvider->GetAuthInfo();
+        LOG_D(httpRequest->GetRawData() << " using ticket " << NKikimr::MaskTicket(ticket));
+        httpRequest->Set("Authorization", ticket);
 
         auto httpSenderId = Register(NYql::NDq::CreateHttpSenderActor(SelfId(), HttpProxyId, NYql::NDq::THttpSenderRetryPolicy::GetNoRetryPolicy()));
         Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest), 0, Cookie);
@@ -80,6 +84,7 @@ public:
         const TString& error = response.GetError();
         if (!error.empty()) {
             forwardResponse->Issues.AddIssue(error);
+            CredentialsProvider = nullptr;
             Send(request->Sender, forwardResponse.release(), 0, request->Cookie);
             return;
         }        
@@ -141,13 +146,14 @@ private:
     TString Endpoint;
     TString Database;
     TMap<uint64_t, TEvYdbCompute::TEvCpuLoadRequest::TPtr> Requests;
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
     NYdb::TCredentialsProviderPtr CredentialsProvider;
     int64_t Cookie = 0;
     TActorId HttpProxyId;
 };
 
-std::unique_ptr<NActors::IActor> CreateMonitoringRestClientActor(const TString& endpoint, const TString& database, const NYdb::TCredentialsProviderPtr& credentialsProvider) {
-    return std::make_unique<TMonitoringRestServiceActor>(endpoint, database, credentialsProvider);
+std::unique_ptr<NActors::IActor> CreateMonitoringRestClientActor(const TString& endpoint, const TString& database, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
+    return std::make_unique<TMonitoringRestServiceActor>(endpoint, database, credentialsProviderFactory);
 }
 
 }

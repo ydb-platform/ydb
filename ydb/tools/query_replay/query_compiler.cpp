@@ -261,7 +261,8 @@ public:
             settings,
             !queryParameterTypes.empty()
                 ? std::make_shared<std::map<TString, Ydb::Type>>(std::move(queryParameterTypes))
-                : nullptr);
+                : nullptr,
+            GUCSettings ? *GUCSettings : TGUCSettings());
 
         if (ReplayDetails.Has("guc_settings")) {
             auto gucSettings = ReplayDetails["guc_settings"];

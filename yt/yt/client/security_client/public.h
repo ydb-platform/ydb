@@ -28,6 +28,7 @@ using NRpc::RootUserName;
 extern const TString GuestUserName;
 extern const TString JobUserName;
 extern const TString SchedulerUserName;
+extern const TString BundleControllerUserName;
 extern const TString FileCacheUserName;
 extern const TString OperationsCleanerUserName;
 extern const TString OperationsClientUserName;

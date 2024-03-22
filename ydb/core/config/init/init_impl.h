@@ -51,9 +51,11 @@ using namespace NKikimrTabletBase;
 namespace NKikimr::NConfig {
 
 constexpr TStringBuf NODE_KIND_YDB = "ydb";
-constexpr TStringBuf NODE_KIND_YDB_OLAP = "ydb-olap";
-constexpr TStringBuf NODE_KIND_YDB_OLTP = "ydb-oltp";
 constexpr TStringBuf NODE_KIND_YQ = "yq";
+
+constexpr TStringBuf WORKLOAD_HYBRID = "hybrid";
+constexpr TStringBuf WORKLOAD_ANALYTICAL = "analytical";
+constexpr TStringBuf WORKLOAD_OPERATIONAL = "operational";
 
 constexpr static ui32 DefaultLogLevel = NActors::NLog::PRI_WARN; // log settings
 constexpr static ui32 DefaultLogSamplingLevel = NActors::NLog::PRI_DEBUG; // log settings
@@ -328,6 +330,7 @@ struct TCommonAppOptions {
     bool SysLogEnabled = false;
     bool TcpEnabled = false;
     bool SuppressVersionCheck = false;
+    TString Workload = TString(WORKLOAD_HYBRID); 
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {
         opts.AddLongOption("cluster-name", "which cluster this node belongs to")
@@ -393,8 +396,7 @@ struct TCommonAppOptions {
         opts.AddLongOption("compile-inflight-limit", "Limit on parallel programs compilation").OptionalArgument("NUM").StoreResult(&CompileInflightLimit);
         opts.AddLongOption("udf", "Load shared library with UDF by given path").AppendTo(&UDFsPaths);
         opts.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory").StoreResult(&UDFsDir);
-        opts.AddLongOption("node-kind", Sprintf("Kind of the node (allowed values are {'%s', '%s', '%s', '%s'})",
-                           NODE_KIND_YDB.data(), NODE_KIND_YDB_OLAP.data(), NODE_KIND_YDB_OLTP.data(), NODE_KIND_YQ.data()))
+        opts.AddLongOption("node-kind", Sprintf("Kind of the node (affects list of services activated allowed values are {'%s', '%s'} )", NODE_KIND_YDB.data(), NODE_KIND_YQ.data()))
             .RequiredArgument("NAME").StoreResult(&NodeKind);
         opts.AddLongOption("node-type", "Type of the node")
             .RequiredArgument("NAME").StoreResult(&NodeType);
@@ -419,6 +421,10 @@ struct TCommonAppOptions {
 
         opts.AddLongOption("tiny-mode", "Start in a tiny mode")
             .NoArgument().SetFlag(&TinyMode);
+
+        opts.AddLongOption("workload", Sprintf("Workload to be served by this node, allowed values are {'%s', '%s', '%s'}",
+                           WORKLOAD_HYBRID.data(), WORKLOAD_ANALYTICAL.data(), WORKLOAD_OPERATIONAL.data()))
+            .RequiredArgument("NAME").StoreResult(&Workload);
     }
 
     void ApplyFields(NKikimrConfig::TAppConfig& appConfig, IEnv& env, IConfigUpdateTracer& ConfigUpdateTracer) const {
@@ -618,10 +624,18 @@ struct TCommonAppOptions {
         }
 
         if (TenantName) {
-            if (NodeKind == NODE_KIND_YDB_OLTP) {
+            if (Workload == WORKLOAD_OPERATIONAL) {
                 ApplyDisableColumnShards(appConfig, ConfigUpdateTracer);
-            } else if (NodeKind == NODE_KIND_YDB_OLAP) {
+            } else if (Workload == WORKLOAD_ANALYTICAL) {
                 ApplyEnableOnlyColumnShards(appConfig, ConfigUpdateTracer);
+            } else if (Workload == WORKLOAD_HYBRID) {
+                // default
+            } else {
+                ythrow yexception() << "wrong '--workload' value '" << Workload
+                                    << "', allowed values are {'" 
+                                    << WORKLOAD_HYBRID << "', '" 
+                                    << WORKLOAD_ANALYTICAL << "', '"
+                                    << WORKLOAD_OPERATIONAL << "'}";
             }
         }
     }
@@ -820,7 +834,7 @@ struct TCommonAppOptions {
     }
 
     void ApplyServicesMask(NKikimr::TBasicKikimrServicesMask& out) const {
-        if (NodeKind == NODE_KIND_YDB || NodeKind == NODE_KIND_YDB_OLTP || NodeKind == NODE_KIND_YDB_OLAP) {
+        if (NodeKind == NODE_KIND_YDB) {
             if (TinyMode) {
                 out.SetTinyMode();
             }
@@ -829,12 +843,7 @@ struct TCommonAppOptions {
             out.DisableAll();
             out.EnableYQ();
         } else {
-            ythrow yexception() << "wrong '--node-kind' value '" << NodeKind
-                                << "', allowed: '" << NODE_KIND_YDB
-                                << "', '" << NODE_KIND_YQ 
-                                << "', '" << NODE_KIND_YDB_OLAP
-                                << "' or '" << NODE_KIND_YDB_OLTP
-                                << "'";
+            ythrow yexception() << "wrong '--node-kind' value '" << NodeKind << "', only '" << NODE_KIND_YDB << "' or '" << NODE_KIND_YQ << "' is allowed";
         }
     }
 

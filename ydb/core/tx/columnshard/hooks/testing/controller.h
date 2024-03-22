@@ -16,6 +16,8 @@ private:
     YDB_READONLY(TAtomicCounter, IndexesApprovedOnSelect, 0);
     YDB_READONLY(TAtomicCounter, IndexesSkippedNoData, 0);
     YDB_READONLY(TAtomicCounter, TieringUpdates, 0);
+    YDB_READONLY(TAtomicCounter, NeedActualizationCount, 0);
+    
     YDB_READONLY(TAtomicCounter, ActualizationsCount, 0);
     YDB_READONLY(TAtomicCounter, ActualizationRefreshSchemeCount, 0);
     YDB_READONLY(TAtomicCounter, ActualizationRefreshTieringCount, 0);
@@ -186,18 +188,17 @@ public:
         return ShardActuals.size();
     }
 
+    virtual void AddPortionForActualizer(const i32 portionsCount) override {
+        NeedActualizationCount.Add(portionsCount);
+    }
+
     void WaitActualization(const TDuration d) const {
-        ui32 lastActualizationsCount = 0;
-        TInstant lastChange = TInstant::Now();
-        while (!ActualizationsCount.Val() && TInstant::Now() - lastChange < d) {
-            Cerr << "waiting actualization: " << ActualizationsCount.Val() << "/" << TInstant::Now() - lastChange << Endl;
+        const TInstant start = TInstant::Now();
+        while (TInstant::Now() - start < d && NeedActualizationCount.Val()) {
+            Cerr << "waiting actualization: " << NeedActualizationCount.Val() << "/" << TInstant::Now() - start << Endl;
             Sleep(TDuration::Seconds(1));
-            if (lastActualizationsCount != ActualizationsCount.Val()) {
-                lastActualizationsCount = ActualizationsCount.Val();
-                lastChange = TInstant::Now();
-            }
         }
-        AFL_VERIFY(ActualizationsCount.Val());
+        AFL_VERIFY(!NeedActualizationCount.Val());
     }
 
     std::vector<ui64> GetShardActualIds() const {

@@ -6,7 +6,6 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/tx/columnshard/engines/reader/read_metadata.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <optional>

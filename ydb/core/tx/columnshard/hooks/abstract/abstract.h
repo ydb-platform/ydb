@@ -89,6 +89,9 @@ public:
     virtual void OnActualizationRefreshTiering() {
 
     }
+    virtual void AddPortionForActualizer(const i32 /*portionsCount*/) {
+
+    }
 
     void OnDataSharingFinished(const ui64 tabletId, const TString& sessionId) {
         return DoOnDataSharingFinished(tabletId, sessionId);

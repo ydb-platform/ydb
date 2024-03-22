@@ -552,4 +552,8 @@ namespace NSchemeShardUT_Private {
     void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, int partitionIdx, const TVector<ui32>& keyTags, const TVector<ui32>& valueTags, const TVector<ui32>& recordIds);
     void WriteRow(TTestActorRuntime& runtime, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, const TString& value, bool successIsExpected = true);
 
+    void SendNextValRequest(TTestActorRuntime& runtime, const TActorId& sender, const TString& path);
+    i64 WaitNextValResult(TTestActorRuntime& runtime, const TActorId& sender);
+    i64 DoNextVal(TTestActorRuntime& runtime, const TString& path);
+
 } //NSchemeShardUT_Private

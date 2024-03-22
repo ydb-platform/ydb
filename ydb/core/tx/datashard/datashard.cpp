@@ -2107,6 +2107,12 @@ TDataShard::TPromotePostExecuteEdges TDataShard::PromoteImmediatePostExecuteEdge
                 << " promoting UnprotectedReadEdge to " << version);
             SnapshotManager.PromoteUnprotectedReadEdge(version);
 
+            // Make sure pending distributed transactions are marked incomplete,
+            // since we just protected up to and including version from writes,
+            // we need to make sure new immediate conflicting writes are blocked
+            // and don't perform writes with out-of-order versions.
+            res.HadWrites |= Pipeline.MarkPlannedLogicallyIncompleteUpTo(version, txc);
+
             // We want to promote the complete edge when protected reads are
             // used or when we're already writing something anyway.
             if (res.HadWrites) {

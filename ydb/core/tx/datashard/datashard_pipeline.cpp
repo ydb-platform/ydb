@@ -38,6 +38,7 @@ TPipeline::~TPipeline()
         pr.second->ClearSpecialDependencies();
         pr.second->ClearPlannedConflicts();
         pr.second->ClearImmediateConflicts();
+        pr.second->ClearRepeatableReadConflicts();
     }
 }
 
@@ -487,6 +488,7 @@ void TPipeline::UnblockNormalDependencies(const TOperation::TPtr &op)
     op->ClearDependencies();
     op->ClearPlannedConflicts();
     op->ClearImmediateConflicts();
+    op->ClearRepeatableReadConflicts();
     DepTracker.RemoveOperation(op);
 }
 

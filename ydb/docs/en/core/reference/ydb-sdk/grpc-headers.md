@@ -6,7 +6,7 @@
   * `x-ydb-database` - database
   * `x-ydb-auth-ticket` - auth token from a credentials provider
   * `x-ydb-sdk-build-info` - {{ ydb-short-name }} SDK build info
-  * `x-ydb-trace-id` - user-defined request ID. If not defined by client {{ ydb-short-name }} SDK generates automatically using format [UUID](https://en.wikipedia.org/wiki/UUID)
+  * `x-ydb-trace-id` - user-defined request ID. If not defined by client {{ ydb-short-name }} SDK generates automatically using [UUID](https://en.wikipedia.org/wiki/UUID) format
   * `x-ydb-application-name` - optional user-defined application name
   * `x-ydb-client-capabilities` - supported client SDK capabilities (`session-balancer` and other)
   * `x-ydb-client-pid` - client application process ID

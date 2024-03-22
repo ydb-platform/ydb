@@ -1074,7 +1074,7 @@ public:
 
             for (auto action : maybeAlter.Cast().Actions()) {
                 auto name = action.Name().Value();
-                if (name == "renameTo") {
+                if (name == "renameTo" || name == "forceRenameTo") {
                     auto destination = action.Value().Cast<TCoAtom>().StringValue();
                     auto future = Gateway->RenameTable(table.Metadata->Name, destination, cluster);
                     return WrapFuture(future,

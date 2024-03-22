@@ -1257,7 +1257,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
         for (const auto& action : node.Actions()) {
             auto name = action.Name().Value();
-            if (name == "renameTo") {
+            if (name == "renameTo" || name == "forceRenameTo") {
                 YQL_ENSURE(action.Value().Cast<TCoAtom>().Value());
             } else if (name == "addColumns") {
                 auto listNode = action.Value().Cast<TExprList>();

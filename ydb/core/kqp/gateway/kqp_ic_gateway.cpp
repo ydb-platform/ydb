@@ -896,7 +896,8 @@ public:
         }
     }
 
-    TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) override {
+    TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster, const bool force) override {
+        Y_UNUSED(force);
         using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
         try {

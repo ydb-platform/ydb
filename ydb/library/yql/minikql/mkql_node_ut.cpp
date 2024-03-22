@@ -1,4 +1,5 @@
 #include "mkql_node.h"
+#include "mkql_node_builder.h"
 #include "mkql_node_visitor.h"
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -301,6 +302,52 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
 
         UNIT_ASSERT_EXCEPTION(ctype2optArg->SetOptionalArgumentsCount(1), yexception);
         UNIT_ASSERT_EXCEPTION(ctype2optArg->SetOptionalArgumentsCount(3), yexception);
+    }
+
+    Y_UNIT_TEST(TestCallableTypeWithOptionalArguments) {
+        TScopedAlloc alloc(__LOCATION__);
+        TTypeEnvironment env(alloc);
+
+        TVector<TType*> types;
+        types.push_back(env.GetVoidLazy()->GetGenericType());
+        types.push_back(env.GetEmptyStructLazy()->GetGenericType());
+        TCallableType* ctype2 = TCallableType::Create("c2", env.GetVoidLazy()->GetGenericType(), types.size(), types.data(), nullptr, env);
+
+        TOptionalType* opt1type = TOptionalType::Create(env.GetEmptyStructLazy()->GetGenericType(), env);
+        types.push_back(opt1type);
+        TCallableType* ctype2optArg1 = TCallableType::Create("c2", env.GetVoidLazy()->GetGenericType(), types.size(), types.data(), nullptr, env);
+        ctype2optArg1->SetOptionalArgumentsCount(1);
+        UNIT_ASSERT(!ctype2optArg1->IsSameType(*ctype2));
+        UNIT_ASSERT(ctype2optArg1->IsConvertableTo(*ctype2));
+        UNIT_ASSERT(!ctype2->IsConvertableTo(*ctype2optArg1));
+
+        auto callable1 = TCallableBuilder(env, "func1", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
+            .Add(TRuntimeNode(env.GetEmptyStructLazy(), true))
+            .Add(TRuntimeNode(env.GetVoidLazy(), true))
+            .SetArgumentName("Arg2")
+            .SetArgumentFlags(NUdf::ICallablePayload::TArgumentFlags::AutoMap)
+            .Add(TRuntimeNode(TOptionalLiteral::Create(TOptionalType::Create(env.GetEmptyTupleLazy()->GetGenericType(), env), env), true))
+            .SetArgumentName("Arg3")
+            .SetOptionalArgs(1)
+            .Build();
+
+        auto callable2 = TCallableBuilder(env, "func1", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
+            .Add(TRuntimeNode(env.GetEmptyStructLazy(), true))
+            .Add(TRuntimeNode(env.GetVoidLazy(), true))
+            .SetArgumentName("Arg2")
+            .SetArgumentFlags(NUdf::ICallablePayload::TArgumentFlags::AutoMap)
+            .Add(TRuntimeNode(TOptionalLiteral::Create(TOptionalType::Create(env.GetEmptyTupleLazy()->GetGenericType(), env), env), true))
+            .SetArgumentName("Arg3")
+            .Add(TRuntimeNode(TOptionalLiteral::Create(TOptionalType::Create(env.GetEmptyTupleLazy()->GetGenericType(), env), env), true))
+            .SetArgumentName("Arg4")
+            .SetOptionalArgs(2)
+            .Build();
+
+        auto* callable1Type = callable1->GetType();
+        auto* callable2Type = callable2->GetType();
+        UNIT_ASSERT(!callable2Type->IsSameType(*callable1Type));
+        UNIT_ASSERT(callable2Type->IsConvertableTo(*callable1Type));
+        UNIT_ASSERT(!callable1Type->IsConvertableTo(*callable2Type));
     }
 
     Y_UNIT_TEST(TestDictLiteral) {

@@ -1079,7 +1079,7 @@ public:
 
             if (x != value) {
                 if (x->limitOption == LIMIT_OPTION_COUNT || x->limitOption == LIMIT_OPTION_DEFAULT) {
-                    if (value->limitCount || value->limitOffset) {
+                    if (x->limitCount || x->limitOffset) {
                         AddError("SelectStmt: limit should be used only on top");
                         return nullptr;
                     }

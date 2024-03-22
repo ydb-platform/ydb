@@ -178,13 +178,23 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             event = readSession->GetEvent(true);
             UNIT_ASSERT(event.Defined());
 
+            TDeferredCommit a;
+
+            TDeferredCommit d = std::move(a);
+
+            TDeferredCommit deferredCommit(std::move(d));
+
             auto& dataReceived = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
-            dataReceived.Commit();
 
             auto& messages = dataReceived.GetMessages();
             UNIT_ASSERT(messages.size() == 101);
             UNIT_ASSERT(messages[0].GetData() == "message_using_MessageGroupId");
             UNIT_ASSERT(messages[100].GetData() == "message_using_PartitionId");
+            for (auto& msg : messages) {
+                deferredCommit.Add(msg);
+            }
+
+            deferredCommit.Commit();
         }
     }
 

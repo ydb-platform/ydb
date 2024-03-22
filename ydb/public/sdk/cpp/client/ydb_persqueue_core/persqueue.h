@@ -884,8 +884,14 @@ struct TReadSessionEvent {
 //! Set of offsets to commit.
 //! Class that could store offsets in order to commit them later.
 //! This class is not thread safe.
-class TDeferredCommit {
+class TDeferredCommit : private TMoveOnly {
 public:
+    TDeferredCommit();
+    ~TDeferredCommit();
+
+    TDeferredCommit(TDeferredCommit&&);
+    TDeferredCommit& operator=(TDeferredCommit&&);
+
     //! Add message to set.
     void Add(const TReadSessionEvent::TDataReceivedEvent::TMessage& message);
 
@@ -901,17 +907,12 @@ public:
     //! Commit all added offsets.
     void Commit();
 
-    TDeferredCommit();
-    TDeferredCommit(const TDeferredCommit&) = delete;
-    TDeferredCommit(TDeferredCommit&&);
-    TDeferredCommit& operator=(const TDeferredCommit&) = delete;
-    TDeferredCommit& operator=(TDeferredCommit&&);
-
-    ~TDeferredCommit();
-
 private:
     class TImpl;
-    THolder<TImpl> Impl;
+    TImpl& GetImpl();
+
+private:
+    std::unique_ptr<TImpl> Impl;
 };
 
 //! Event debug string.

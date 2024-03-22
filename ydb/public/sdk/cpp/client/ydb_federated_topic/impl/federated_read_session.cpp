@@ -26,12 +26,12 @@ typename std::function<void(TEvent&)> WrapFederatedHandler(std::function<void(TF
 }
 
 NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& settings, const std::shared_ptr<TDbInfo>& db, std::shared_ptr<TEventFederator> federator) {
-    NTopic::TReadSessionSettings SubsessionSettings = settings;
-    SubsessionSettings.EventHandlers_.MaxMessagesBytes(settings.EventHandlers_.MaxMessagesBytes_);
-    SubsessionSettings.EventHandlers_.HandlersExecutor(settings.EventHandlers_.HandlersExecutor_);
+    auto subsessionSettings = NTopic::TReadSessionSettings(settings);
+    subsessionSettings.EventHandlers_.MaxMessagesBytes(settings.FederatedEventHandlers_.MaxMessagesBytes_);
+    subsessionSettings.EventHandlers_.HandlersExecutor(settings.FederatedEventHandlers_.HandlersExecutor_);
 
     if (settings.FederatedEventHandlers_.SimpleDataHandlers_.DataHandler) {
-        SubsessionSettings.EventHandlers_.SimpleDataHandlers(
+        subsessionSettings.EventHandlers_.SimpleDataHandlers(
             WrapFederatedHandler<NTopic::TReadSessionEvent::TDataReceivedEvent, TReadSessionEvent::TDataReceivedEvent>(
                 settings.FederatedEventHandlers_.SimpleDataHandlers_.DataHandler, db, federator),
             settings.FederatedEventHandlers_.SimpleDataHandlers_.CommitDataAfterProcessing,
@@ -40,7 +40,7 @@ NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& 
 
 #define MAYBE_CONVERT_HANDLER(type, name)                                                                       \
     if (settings.FederatedEventHandlers_.name##_) {                                                             \
-        SubsessionSettings.EventHandlers_.name(                                                                 \
+        subsessionSettings.EventHandlers_.name(                                                                 \
             WrapFederatedHandler<NTopic::type, type>(settings.FederatedEventHandlers_.name##_, db, federator)   \
         );                                                                                                      \
     }
@@ -55,9 +55,9 @@ NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& 
 
 #undef MAYBE_CONVERT_HANDLER
 
-    SubsessionSettings.EventHandlers_.SessionClosedHandler(settings.FederatedEventHandlers_.SessionClosedHandler_);
+    subsessionSettings.EventHandlers_.SessionClosedHandler(settings.FederatedEventHandlers_.SessionClosedHandler_);
 
-    return SubsessionSettings;
+    return subsessionSettings;
 }
 
 TFederatedReadSessionImpl::TFederatedReadSessionImpl(const TFederatedReadSessionSettings& settings,

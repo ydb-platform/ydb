@@ -575,6 +575,141 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         AtomicSet(check, 0);
     }
 
+    Y_UNIT_TEST(DeferredCommit) {
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME, false);
+        setup->Start(true, true);
+
+        TFederationDiscoveryServiceMock fdsMock;
+        fdsMock.Port = setup->GetGrpcPort();
+
+        ui16 newServicePort = setup->GetPortManager()->GetPort(4285);
+        auto grpcServer = setup->StartGrpcService(newServicePort, &fdsMock);
+
+        std::shared_ptr<NYdb::NFederatedTopic::IFederatedReadSession> ReadSession;
+
+        // Create topic client.
+        NYdb::TDriverConfig cfg;
+        cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
+        cfg.SetDatabase("/Root");
+        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        NYdb::TDriver driver(cfg);
+        auto clientSettings = TFederatedTopicClientSettings()
+            .RetryPolicy(NTopic::IRetryPolicy::GetFixedIntervalPolicy(
+                TDuration::Seconds(10),
+                TDuration::Seconds(10)
+            ));
+        NYdb::NFederatedTopic::TFederatedTopicClient topicClient(driver, clientSettings);
+
+        ui64 count = 300u;
+        ui64 commitOnFirstReadCount = 100u;
+
+        TString messageBase = "message----";
+        TVector<TString> sentMessages;
+
+        for (auto i = 0u; i < count; i++) {
+            // sentMessages.emplace_back(messageBase * (i+1) + ToString(i));
+            sentMessages.emplace_back(messageBase * (10 * i + 1));
+        }
+
+        NThreading::TPromise<void> checkedPromise = NThreading::NewPromise<void>();
+        auto totalReceived = 0u;
+
+        auto f = checkedPromise.GetFuture();
+        TAtomic check = 1;
+
+        // Create read session.
+        NYdb::NFederatedTopic::TFederatedReadSessionSettings readSettings;
+        readSettings
+            .ConsumerName("shared/user")
+            .MaxMemoryUsageBytes(1_MB)
+            .AppendTopics(setup->GetTestTopic());
+
+        NYdb::NFederatedTopic::TDeferredCommit deferredCommit;
+
+        readSettings.FederatedEventHandlers_.SimpleDataHandlers([&](TReadSessionEvent::TDataReceivedEvent& ev) mutable {
+            Cerr << ">>> event from dataHandler: " << DebugString(ev) << Endl;
+            Y_VERIFY_S(AtomicGet(check) != 0, "check is false");
+            auto& messages = ev.GetMessages();
+            for (size_t i = 0u; i < messages.size(); ++i) {
+                auto& message = messages[i];
+                UNIT_ASSERT_VALUES_EQUAL(message.GetData(), sentMessages[totalReceived]);
+                if (totalReceived < commitOnFirstReadCount) {
+                    deferredCommit.Add(messages[i]);
+                }
+                totalReceived++;
+            }
+            if (totalReceived == sentMessages.size())
+                checkedPromise.SetValue();
+        });
+
+        ReadSession = topicClient.CreateReadSession(readSettings);
+        Cerr << ">>> Session was created" << Endl;
+
+        Sleep(TDuration::MilliSeconds(50));
+
+        auto events = ReadSession->GetEvents(false);
+        UNIT_ASSERT(events.empty());
+
+        std::optional<TFederationDiscoveryServiceMock::TManualRequest> fdsRequest;
+        do {
+            fdsRequest = fdsMock.GetNextPendingRequest();
+            if (!fdsRequest.has_value()) {
+                Sleep(TDuration::MilliSeconds(50));
+            }
+        } while (!fdsRequest.has_value());
+
+        fdsRequest->Result.SetValue(fdsMock.ComposeOkResult());
+
+        NPersQueue::TWriteSessionSettings writeSettings;
+        writeSettings.Path(setup->GetTestTopic()).MessageGroupId("src_id");
+        writeSettings.Codec(NPersQueue::ECodec::RAW);
+        NPersQueue::IExecutor::TPtr executor = new NPersQueue::TSyncExecutor();
+        writeSettings.CompressionExecutor(executor);
+
+        auto& client = setup->GetPersQueueClient();
+        auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
+
+        for (auto i = 0u; i < count; i++) {
+            auto res = session->Write(sentMessages[i]);
+            UNIT_ASSERT(res);
+        }
+
+        f.GetValueSync();
+
+        deferredCommit.Commit();
+
+        Sleep(TDuration::MilliSeconds(50));
+
+        ReadSession->Close();
+        AtomicSet(check, 0);
+
+        NThreading::TPromise<void> checkedPromiseSecond = NThreading::NewPromise<void>();
+
+        auto futureSecond = checkedPromiseSecond.GetFuture();
+
+        readSettings.FederatedEventHandlers_.SimpleDataHandlers([&](TReadSessionEvent::TDataReceivedEvent& ev) mutable {
+            Cerr << ">>> event from dataHandler: " << DebugString(ev) << Endl;
+            if (checkedPromiseSecond.HasValue()) {
+                return;
+            }
+            auto& messages = ev.GetMessages();
+            UNIT_ASSERT(!messages.empty());
+
+            auto& message = messages.front();
+            Cerr << "Data received: " << message.DebugString(false);
+            UNIT_ASSERT_VALUES_EQUAL(message.GetOffset(), commitOnFirstReadCount);
+            UNIT_ASSERT_VALUES_EQUAL(message.GetData(), sentMessages[commitOnFirstReadCount]);
+
+            checkedPromiseSecond.SetValue();
+        });
+
+        ReadSession = topicClient.CreateReadSession(readSettings);
+        Cerr << ">>> Second session was created" << Endl;
+
+        futureSecond.GetValueSync();
+        ReadSession->Close();
+    }
+
     Y_UNIT_TEST(ReadMirrored) {
         auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME, false);
         setup->Start(true, true);
@@ -622,11 +757,10 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TAtomic check = 1;
 
         // Create read session.
-        NYdb::NFederatedTopic::TFederatedReadSessionSettings readSettings;
-        readSettings
-            .ReadMirrored("dc1")
+        auto readSettings = NYdb::NFederatedTopic::TFederatedReadSessionSettings()
             .ConsumerName("shared/user")
             .MaxMemoryUsageBytes(16_MB)
+            .ReadMirrored("dc1")
             .AppendTopics(setup->GetTestTopic());
 
         readSettings.FederatedEventHandlers_.SimpleDataHandlers([&](TReadSessionEvent::TDataReceivedEvent& ev) mutable {
@@ -761,7 +895,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Path(setup->GetTestTopic())
             .MessageGroupId("src_id");
 
-        WriteSession = topicClient.CreateWriteSession(writeSettings);
+        WriteSession = topicClient.CreateWriteSession(TFederatedWriteSessionSettings(writeSettings));
         Cerr << "Session was created" << Endl;
 
         WriteSession->WaitEvent().Wait(TDuration::Seconds(1));

@@ -79,8 +79,9 @@ private:
     TStringBuilder GetLogPrefix() const;
 
 private:
+    const TFederatedWriteSessionSettings Settings;
     // For subsession creation
-    const NTopic::TFederatedWriteSessionSettings Settings;
+    NTopic::TWriteSessionSettings SubsessionSettings;
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
     const NTopic::TTopicClientSettings SubClientSetttings;
     std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> ProvidedCodecs;

@@ -92,9 +92,10 @@ private:
     THashMap<ui64, TReadSessionEvent::TStopPartitionSessionEvent> UnconfirmedDestroys; // Partition stream id -> destroy events.
 };
 
-TReadSessionSettings::TEventHandlers& TReadSessionSettings::TEventHandlers::SimpleDataHandlers(std::function<void(TReadSessionEvent::TDataReceivedEvent&)> dataHandler,
-                                                                                               bool commitDataAfterProcessing,
-                                                                                               bool gracefulReleaseAfterCommit) {
+TReadSessionSettings::TEventHandlers&
+TReadSessionSettings::TEventHandlers::SimpleDataHandlers(
+    std::function<void(TReadSessionEvent::TDataReceivedEvent&)> dataHandler, bool commitDataAfterProcessing,
+    bool gracefulReleaseAfterCommit) {
     Y_ASSERT(dataHandler);
 
     PartitionSessionStatusHandler([](TReadSessionEvent::TPartitionSessionStatusEvent&){});

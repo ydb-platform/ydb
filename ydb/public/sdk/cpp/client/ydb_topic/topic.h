@@ -1093,8 +1093,14 @@ struct TReadSessionEvent {
 //! Set of offsets to commit.
 //! Class that could store offsets in order to commit them later.
 //! This class is not thread safe.
-class TDeferredCommit {
+class TDeferredCommit : private TMoveOnly {
 public:
+    TDeferredCommit();
+    ~TDeferredCommit();
+
+    TDeferredCommit(TDeferredCommit&&);
+    TDeferredCommit& operator=(TDeferredCommit&&);
+
     //! Add message to set.
     void Add(const TReadSessionEvent::TDataReceivedEvent::TMessage& message);
 
@@ -1110,17 +1116,12 @@ public:
     //! Commit all added offsets.
     void Commit();
 
-    TDeferredCommit();
-    TDeferredCommit(const TDeferredCommit&) = delete;
-    TDeferredCommit(TDeferredCommit&&);
-    TDeferredCommit& operator=(const TDeferredCommit&) = delete;
-    TDeferredCommit& operator=(TDeferredCommit&&);
-
-    ~TDeferredCommit();
-
 private:
     class TImpl;
-    THolder<TImpl> Impl;
+    TImpl& GetImpl();
+
+private:
+    std::unique_ptr<TImpl> Impl;
 };
 
 //! Events debug strings.
@@ -1278,20 +1279,9 @@ TString DebugString(const TWriteSessionEvent::TEvent& event);
 using TSessionClosedHandler = std::function<void(const TSessionClosedEvent&)>;
 
 //! Settings for write session.
-struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
-    using TSelf = TWriteSessionSettings;
-
-    TWriteSessionSettings() = default;
-    TWriteSessionSettings(const TWriteSessionSettings&) = default;
-    TWriteSessionSettings(TWriteSessionSettings&&) = default;
-    TWriteSessionSettings(const TString& path, const TString& producerId, const TString& messageGroupId) {
-        Path(path);
-        ProducerId(producerId);
-        MessageGroupId(messageGroupId);
-    }
-
-    TWriteSessionSettings& operator=(const TWriteSessionSettings&) = default;
-    TWriteSessionSettings& operator=(TWriteSessionSettings&&) = default;
+template <typename TDerived>
+struct TWriteSessionSettingsBase : public TRequestSettings<TWriteSessionSettingsBase<TDerived>> {
+    using TSelf = TDerived;
 
     //! Path of topic to write.
     FLUENT_SETTING(TString, Path);
@@ -1336,7 +1326,7 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     FLUENT_SETTING(IRetryPolicy::TPtr, RetryPolicy);
 
     //! User metadata that may be attached to write session.
-    TWriteSessionSettings& AppendSessionMeta(const TString& key, const TString& value) {
+    TWriteSessionSettingsBase& AppendSessionMeta(const TString& key, const TString& value) {
         Meta_.Fields[key] = value;
         return *this;
     };
@@ -1387,11 +1377,7 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
         //! If event with current type has no handler for this type of event,
         //! this handler (if specified) will be used.
         //! If this handler is not specified, event can be received with TWriteSession::GetEvent() method.
-        std::function<void(TWriteSessionEvent::TEvent&)> CommonHandler_;
-        TSelf& CommonHandler(std::function<void(TWriteSessionEvent::TEvent&)>&& handler) {
-            CommonHandler_ = std::move(handler);
-            return static_cast<TSelf&>(*this);
-        }
+        FLUENT_SETTING(std::function<void(TWriteSessionEvent::TEvent&)>, CommonHandler);
 
         //! Executor for handlers.
         //! If not set, default single threaded executor will be used.
@@ -1403,6 +1389,50 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
 
     //! Enables validation of SeqNo. If enabled, then writer will check writing with seqNo and without it and throws exception.
     FLUENT_SETTING_DEFAULT(bool, ValidateSeqNo, true);
+
+    TWriteSessionSettingsBase() = default;
+
+    template <typename T>
+    explicit TWriteSessionSettingsBase(const TWriteSessionSettingsBase<T>& other)
+        : TRequestSettings<TWriteSessionSettingsBase<TDerived>>(other)
+        , Path_(other.Path_)
+        , ProducerId_(other.ProducerId_)
+        , MessageGroupId_(other.MessageGroupId_)
+        , DeduplicationEnabled_(other.DeduplicationEnabled_)
+        , PartitionId_(other.PartitionId_)
+        , DirectWriteToPartition_(other.DirectWriteToPartition_)
+        , Codec_(other.Codec_)
+        , CompressionLevel_(other.CompressionLevel_)
+        , MaxMemoryUsage_(other.MaxMemoryUsage_)
+        , MaxInflightCount_(other.MaxInflightCount_)
+        , RetryPolicy_(other.RetryPolicy_)
+        , Meta_(other.Meta_)
+        , BatchFlushInterval_(other.BatchFlushInterval_)
+        , BatchFlushSizeBytes_(other.BatchFlushSizeBytes_)
+        , ConnectTimeout_(other.ConnectTimeout_)
+        , Counters_(other.Counters_)
+        , CompressionExecutor_(other.CompressionExecutor_)
+        , EventHandlers_(TEventHandlers()
+            .AcksHandler(other.EventHandlers_.AcksHandler_)
+            .ReadyToAcceptHandler(other.EventHandlers_.ReadyToAcceptHandler_)
+            .SessionClosedHandler(other.EventHandlers_.SessionClosedHandler_)
+            .CommonHandler(other.EventHandlers_.CommonHandler_)
+            .HandlersExecutor(other.EventHandlers_.HandlersExecutor_)
+        )
+        , ValidateSeqNo_(other.ValidateSeqNo_)
+    {}
+};
+
+struct TWriteSessionSettings : public TWriteSessionSettingsBase<TWriteSessionSettings> {
+    using TWriteSessionSettingsBase<TWriteSessionSettings>::TWriteSessionSettingsBase;
+
+    TWriteSessionSettings() = default;
+
+    TWriteSessionSettings(const TString& path, const TString& producerId, const TString& messageGroupId) {
+        Path(path);
+        ProducerId(producerId);
+        MessageGroupId(messageGroupId);
+    }
 };
 
 //! Read settings for single topic.
@@ -1434,8 +1464,82 @@ struct TTopicReadSettings {
 };
 
 //! Settings for read session.
-struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
-    using TSelf = TReadSessionSettings;
+template <typename TDerived>
+struct TReadSessionSettingsBase: public TRequestSettings<TReadSessionSettingsBase<TDerived>> {
+    using TSelf = TDerived;
+
+    TString ConsumerName_ = "";
+    //! Consumer.
+    TSelf& ConsumerName(const TString& name) {
+        ConsumerName_ = name;
+        WithoutConsumer_ = false;
+        return static_cast<TSelf&>(*this);
+    }
+
+    bool WithoutConsumer_ = false;
+    //! Read without consumer.
+    TSelf& WithoutConsumer() {
+        WithoutConsumer_ = true;
+        ConsumerName_ = "";
+        return static_cast<TSelf&>(*this);
+    }
+
+    //! Topics.
+    FLUENT_SETTING_VECTOR(TTopicReadSettings, Topics);
+
+    //! Maximum memory usage for read session.
+    FLUENT_SETTING_DEFAULT(size_t, MaxMemoryUsageBytes, 100_MB);
+
+    //! Max message time lag. All messages older that now - MaxLag will be ignored.
+    FLUENT_SETTING_OPTIONAL(TDuration, MaxLag);
+
+    //! Start reading from this timestamp.
+    FLUENT_SETTING_OPTIONAL(TInstant, ReadFromTimestamp);
+
+    //! Policy for reconnections.
+    //! IRetryPolicy::GetDefaultPolicy() if null (not set).
+    FLUENT_SETTING(IRetryPolicy::TPtr, RetryPolicy);
+
+    //! Decompress messages
+    FLUENT_SETTING_DEFAULT(bool, Decompress, true);
+
+    //! Executor for decompression tasks.
+    //! If not set, default executor will be used.
+    FLUENT_SETTING(IExecutor::TPtr, DecompressionExecutor);
+
+    //! Counters.
+    //! If counters are not provided explicitly,
+    //! they will be created inside session (without link with parent counters).
+    FLUENT_SETTING(TReaderCounters::TPtr, Counters);
+
+    FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Seconds(30));
+
+    //! Log.
+    FLUENT_SETTING_OPTIONAL(TLog, Log);
+
+    TReadSessionSettingsBase() = default;
+
+    template <typename T>
+    explicit TReadSessionSettingsBase(const TReadSessionSettingsBase<T>& other)
+        : TRequestSettings<TReadSessionSettingsBase<TDerived>>(other)
+        , ConsumerName_(other.ConsumerName_)
+        , WithoutConsumer_(other.WithoutConsumer_)
+        , Topics_(other.Topics_)
+        , MaxMemoryUsageBytes_(other.MaxMemoryUsageBytes_)
+        , MaxLag_(other.MaxLag_)
+        , ReadFromTimestamp_(other.ReadFromTimestamp_)
+        , RetryPolicy_(other.RetryPolicy_)
+        , Decompress_(other.Decompress_)
+        , DecompressionExecutor_(other.DecompressionExecutor_)
+        , Counters_(other.Counters_)
+        , ConnectTimeout_(other.ConnectTimeout_)
+        , Log_(other.Log_)
+    {}
+};
+
+//! Settings for read session.
+struct TReadSessionSettings: public TReadSessionSettingsBase<TReadSessionSettings> {
+    using TReadSessionSettingsBase<TReadSessionSettings>::TReadSessionSettingsBase;
 
     struct TEventHandlers {
         using TSelf = TEventHandlers;
@@ -1521,59 +1625,9 @@ struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
         FLUENT_SETTING(IExecutor::TPtr, HandlersExecutor);
     };
 
-
-    TString ConsumerName_ = "";
-    //! Consumer.
-    TSelf& ConsumerName(const TString& name) {
-        ConsumerName_ = name;
-        WithoutConsumer_ = false;
-        return static_cast<TSelf&>(*this);
-    }
-
-    bool WithoutConsumer_ = false;
-    //! Read without consumer.
-    TSelf& WithoutConsumer() {
-        WithoutConsumer_ = true;
-        ConsumerName_ = "";
-        return static_cast<TSelf&>(*this);
-    }
-
-    //! Topics.
-    FLUENT_SETTING_VECTOR(TTopicReadSettings, Topics);
-
-    //! Maximum memory usage for read session.
-    FLUENT_SETTING_DEFAULT(size_t, MaxMemoryUsageBytes, 100_MB);
-
-    //! Max message time lag. All messages older that now - MaxLag will be ignored.
-    FLUENT_SETTING_OPTIONAL(TDuration, MaxLag);
-
-    //! Start reading from this timestamp.
-    FLUENT_SETTING_OPTIONAL(TInstant, ReadFromTimestamp);
-
-    //! Policy for reconnections.
-    //! IRetryPolicy::GetDefaultPolicy() if null (not set).
-    FLUENT_SETTING(IRetryPolicy::TPtr, RetryPolicy);
-
     //! Event handlers.
     //! See description in TEventHandlers class.
     FLUENT_SETTING(TEventHandlers, EventHandlers);
-
-    //! Decompress messages
-    FLUENT_SETTING_DEFAULT(bool, Decompress, true);
-
-    //! Executor for decompression tasks.
-    //! If not set, default executor will be used.
-    FLUENT_SETTING(IExecutor::TPtr, DecompressionExecutor);
-
-    //! Counters.
-    //! If counters are not provided explicitly,
-    //! they will be created inside session (without link with parent counters).
-    FLUENT_SETTING(TReaderCounters::TPtr, Counters);
-
-    FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Seconds(30));
-
-    //! Log.
-    FLUENT_SETTING_OPTIONAL(TLog, Log);
 };
 
 //! Contains the message to write and all the options.

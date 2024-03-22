@@ -30,6 +30,7 @@ TFederatedWriteSession::TFederatedWriteSession(const TFederatedWriteSessionSetti
                                              std::shared_ptr<TFederatedDbObserver> observer,
                                              std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> codecs)
     : Settings(settings)
+    , SubsessionSettings(settings)
     , Connections(std::move(connections))
     , SubClientSetttings(FromFederated(clientSetttings))
     , ProvidedCodecs(std::move(codecs))
@@ -37,9 +38,15 @@ TFederatedWriteSession::TFederatedWriteSession(const TFederatedWriteSessionSetti
     , AsyncInit(Observer->WaitForFirstState())
     , FederationState(nullptr)
     , Log(Connections->GetLog())
-    , ClientEventsQueue(std::make_shared<NTopic::TWriteSessionEventsQueue>(Settings))
     , BufferFreeSpace(Settings.MaxMemoryUsage_)
 {
+    if (!SubsessionSettings.CompressionExecutor_) {
+        SubsessionSettings.CompressionExecutor(SubClientSetttings.DefaultCompressionExecutor_);
+    }
+    if (!SubsessionSettings.EventHandlers_.HandlersExecutor_) {
+        SubsessionSettings.EventHandlers_.HandlersExecutor(SubClientSetttings.DefaultHandlersExecutor_);
+    }
+    ClientEventsQueue = std::make_shared<NTopic::TWriteSessionEventsQueue>(SubsessionSettings);
 }
 
 TStringBuilder TFederatedWriteSession::GetLogPrefix() const {
@@ -76,8 +83,8 @@ void TFederatedWriteSession::OpenSubSessionImpl(std::shared_ptr<TDbInfo> db) {
     subclient->SetProvidedCodecs(ProvidedCodecs);
 
     auto handlers = NTopic::TWriteSessionSettings::TEventHandlers()
-        .HandlersExecutor(Settings.EventHandlers_.HandlersExecutor_)
-        .ReadyToAcceptHander([self = shared_from_this()](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& ev){
+        .HandlersExecutor(SubsessionSettings.EventHandlers_.HandlersExecutor_)
+        .ReadyToAcceptHandler([self = shared_from_this()](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& ev){
             TDeferredWrite deferred(self->Subsession);
             with_lock(self->Lock) {
                 Y_ABORT_UNLESS(self->PendingToken.Empty());
@@ -106,7 +113,7 @@ void TFederatedWriteSession::OpenSubSessionImpl(std::shared_ptr<TDbInfo> db) {
             }
         });
 
-    NTopic::TWriteSessionSettings wsSettings = Settings;
+    auto wsSettings = SubsessionSettings;
     wsSettings
         // .MaxMemoryUsage(Settings.MaxMemoryUsage_)  // to fix if split not by half on creation
         .EventHandlers(handlers);

@@ -261,14 +261,6 @@ void CreateCompletedCheckpoint(
     CompleteCheckpoint(runtime, graphId, generation, checkpointId, false);
 }
 
-TString MakeState(NYql::NUdf::TUnboxedValuePod&& value) {
-    const TStringBuf savedBuf = value.AsStringRef();
-    TString result;
-    NKikimr::NMiniKQL::WriteUi32(result, savedBuf.Size());
-    result.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
-    return result;
-}
-
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -299,7 +299,6 @@ public:
     }
     
     bool Empty() const {
-        std::cerr << "Empty " << Buf.Size() << std::endl;
         return Buf.empty();
     }
 

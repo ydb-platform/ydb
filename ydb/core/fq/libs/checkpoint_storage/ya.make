@@ -1,5 +1,3 @@
-OWNER(g:yq)
-
 LIBRARY()
 
 SRCS(

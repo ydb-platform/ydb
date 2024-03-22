@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/fq/libs/checkpoint_storage)
 
-OWNER(g:yq)
-
 SIZE(MEDIUM)
 
 FORK_SUBTESTS()

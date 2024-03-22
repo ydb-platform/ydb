@@ -144,8 +144,8 @@ struct TTestBootstrap : public TTestActorRuntime {
         const TEvCheckpointStorage::TEvCreateCheckpointRequest& rhs) {
         return IsEqual(lhs.CoordinatorId, rhs.CoordinatorId)
             && std::tie(lhs.CheckpointId, lhs.NodeCount) == std::tie(rhs.CheckpointId, rhs.NodeCount)
-             && lhs.GraphDescription.index() == rhs.GraphDescription.index()
-                 && (lhs.GraphDescription.index() == 0 
+            && lhs.GraphDescription.index() == rhs.GraphDescription.index()
+                && (lhs.GraphDescription.index() == 0 
                     ? std::get<0>(lhs.GraphDescription) == std::get<0>(rhs.GraphDescription)
                     : google::protobuf::util::MessageDifferencer::Equals(std::get<1>(lhs.GraphDescription), std::get<1>(rhs.GraphDescription)));
     }

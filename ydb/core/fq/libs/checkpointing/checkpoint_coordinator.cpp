@@ -386,7 +386,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCreateCheckpo
         UpdateInProgressMetric();
         ++*Metrics.FailedToCreate;
         ++*Metrics.StorageError;
-        CheckpointingSnapshotRotationIndex = CheckpointingSnapshotRotationPeriod; // Next ceckpoint is snapshot.
+        CheckpointingSnapshotRotationIndex = CheckpointingSnapshotRotationPeriod; // Next checkpoint is snapshot.
         return;
     }
 
@@ -463,7 +463,7 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvSaveTaskSt
         }
     } else {
         CC_LOG_E("[" << checkpointId << "] Can't save node state, aborting checkpoint");
-        CheckpointingSnapshotRotationIndex = CheckpointingSnapshotRotationPeriod;  // Next ceckpoint is snapshot.
+        CheckpointingSnapshotRotationIndex = CheckpointingSnapshotRotationPeriod;  // Next checkpoint is snapshot.
         Send(StorageProxy, new TEvCheckpointStorage::TEvAbortCheckpointRequest(CoordinatorId, checkpointId, "Can't save node state"), IEventHandle::FlagTrackDelivery);
     }
 }

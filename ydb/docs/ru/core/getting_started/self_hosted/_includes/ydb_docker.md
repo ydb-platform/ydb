@@ -193,7 +193,7 @@ docker run --rm -it --entrypoint cat {{ ydb_local_docker_image }} THIRD_PARTY_LI
 
 1. Установите `docker-compose` подходящим вам [способом](https://github.com/docker/compose?tab=readme-ov-file#where-to-get-docker-compose). 
 
-1. Скачайте [пример](https://github.com/ydb-platform/fq-connector-go/blob/main/examples/docker-compose/docker-compose.yaml) файла `docker-compose.yaml` и запустите контейнеры:
+1. Скачайте [пример](https://github.com/ydb-platform/fq-connector-go/blob/main/examples/docker_compose/docker-compose.yaml) файла `docker-compose.yaml` и запустите контейнеры:
 
     ```bash
     mkdir /tmp/fq && cd /tmp/fq

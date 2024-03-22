@@ -29,7 +29,6 @@ items:
 
 # Footer
 - { name: Вопросы и ответы,                        include: { mode: link, path: faq/toc_p.yaml } }
+- { name: Публичные материалы,                     include: { mode: link, path: public-talks/toc_p.yaml } }
 - include: { mode: link, path: downloads/toc_p.yaml }
-- name: Публичные материалы
-  href: public-talks.md
 - { name: Список изменений,                        include: { mode: link, path: toc_changelog.yaml } }

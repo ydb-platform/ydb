@@ -3,6 +3,8 @@
 #include <util/generic/hash.h>
 #include <util/system/execpath.h>
 
+#include <algorithm>
+
 #if defined(_linux_) && defined(_x86_64_)
 #include <dlfcn.h>
 #include <link.h>
@@ -18,18 +20,22 @@ namespace {
     };
 
     const size_t MaxDLLCnt = 100;
-    std::pair<const char*, TDllInfo> DLLs[MaxDLLCnt];
+    TDllInfo DLLs[MaxDLLCnt];
     size_t DLLCount = 0;
 
 #if defined(_linux_) && defined(_x86_64_)
     int DlIterCallback(struct dl_phdr_info *info, size_t, void *data) {
         if (*info->dlpi_name) {
-            TDllInfo dllInfo{ info->dlpi_name, (ui64)info->dlpi_addr };
-            *reinterpret_cast<decltype(DLLs)*>(data)[DLLCount++] = {dllInfo.Path, dllInfo};
+            if (DLLCount + 1 < MaxDLLCnt) {
+                reinterpret_cast<std::remove_reference_t<decltype(DLLs[0])>*>(data)[DLLCount++] = { info->dlpi_name, (ui64)info->dlpi_addr };
+            }
         }
         return 0;
     }
 #endif
+    bool comp(const TDllInfo& a, const TDllInfo& b) {
+        return strcmp(a.Path, b.Path) < 0;
+    }
 
 }
 
@@ -43,13 +49,10 @@ namespace NYql {
             memset(&dlInfo, 0, sizeof(dlInfo));
             auto ret = dladdr(reinterpret_cast<void*>(addr), &dlInfo);
             if (ret) {
-                for (size_t i = 0; i < DLLCount; ++i) {
-                    if (strcmp(dlInfo.dli_fname, DLLs[i].first)) {
-                        continue;
-                    }
-                    File = dlInfo.dli_fname;
-                    Address -= DLLs[i].second.BaseAddress;
-                    break;
+                auto it = std::lower_bound(DLLs, DLLs + DLLCount, std::remove_reference_t<decltype(DLLs[0])> {dlInfo.dli_fname, {}}, comp);
+                if (it != DLLs + DLLCount && !strcmp(it->Path, dlInfo.dli_fname)) {
+                    File = it->Path;
+                    Address -= it->BaseAddress;
                 }
             }
 #endif
@@ -60,6 +63,7 @@ namespace NYql {
             DLLCount = 0;
             dl_iterate_phdr(DlIterCallback, &DLLs);
 #endif
+            std::stable_sort(DLLs, DLLs + DLLCount, comp);
             size_t cnt = CollectBacktrace(Stack, Limit, data);
             return CollectFrames(frames, Stack, cnt);
         }

@@ -9,6 +9,7 @@
 add_subdirectory(dq)
 add_subdirectory(llvm14)
 add_subdirectory(no_llvm)
+add_subdirectory(ut)
 
 add_library(providers-yt-comp_nodes INTERFACE)
 target_link_libraries(providers-yt-comp_nodes INTERFACE

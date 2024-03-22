@@ -13,6 +13,8 @@
 #include <ydb/core/protos/alloc.pb.h>
 #include <ydb/core/protos/resource_broker.pb.h>
 #include <ydb/core/protos/http_config.pb.h>
+#include <ydb/core/protos/local.pb.h>
+#include <ydb/core/protos/tablet.pb.h>
 #include <ydb/core/protos/tenant_pool.pb.h>
 #include <ydb/core/protos/compile_service_config.pb.h>
 #include <ydb/core/protos/cms.pb.h>
@@ -44,10 +46,13 @@ extern TAutoPtr<NKikimrConfig::TActorSystemConfig> DummyActorSystemConfig();
 extern TAutoPtr<NKikimrConfig::TAllocatorConfig> DummyAllocatorConfig();
 
 using namespace NYdb::NConsoleClient;
+using namespace NKikimrTabletBase;
 
 namespace NKikimr::NConfig {
 
 constexpr TStringBuf NODE_KIND_YDB = "ydb";
+constexpr TStringBuf NODE_KIND_YDB_OLAP = "ydb-olap";
+constexpr TStringBuf NODE_KIND_YDB_OLTP = "ydb-oltp";
 constexpr TStringBuf NODE_KIND_YQ = "yq";
 
 constexpr static ui32 DefaultLogLevel = NActors::NLog::PRI_WARN; // log settings
@@ -368,6 +373,7 @@ struct TCommonAppOptions {
             .RequiredArgument("NUM").StoreResult(&SqsHttpPort);
         opts.AddLongOption("tenant", "add binding for Local service to specified tenant, might be one of {'/<root>', '/<root>/<path_to_user>'}")
             .RequiredArgument("NAME").StoreResult(&TenantName);
+
         opts.AddLongOption("mon-port", "Monitoring port").OptionalArgument("NUM").StoreResult(&MonitoringPort);
         opts.AddLongOption("mon-address", "Monitoring address").OptionalArgument("ADDR").StoreResult(&MonitoringAddress);
         opts.AddLongOption("mon-cert", "Monitoring certificate (https)").OptionalArgument("PATH").StoreResult(&MonitoringCertificateFile);
@@ -388,7 +394,8 @@ struct TCommonAppOptions {
         opts.AddLongOption("compile-inflight-limit", "Limit on parallel programs compilation").OptionalArgument("NUM").StoreResult(&CompileInflightLimit);
         opts.AddLongOption("udf", "Load shared library with UDF by given path").AppendTo(&UDFsPaths);
         opts.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory").StoreResult(&UDFsDir);
-        opts.AddLongOption("node-kind", Sprintf("Kind of the node (affects list of services activated allowed values are {'%s', '%s'} )", NODE_KIND_YDB.data(), NODE_KIND_YQ.data()))
+        opts.AddLongOption("node-kind", Sprintf("Kind of the node (allowed values are {'%s', '%s', '%s', '%s'} )",
+                           NODE_KIND_YDB.data(), NODE_KIND_YDB_OLAP.data(), NODE_KIND_YDB_OLTP.data(), NODE_KIND_YQ.data()))
             .RequiredArgument("NAME").StoreResult(&NodeKind);
         opts.AddLongOption("node-type", "Type of the node")
             .RequiredArgument("NAME").StoreResult(&NodeType);
@@ -610,6 +617,56 @@ struct TCommonAppOptions {
                 ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::FederatedQueryConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
             }
         }
+
+        if (TenantName) {
+            if (NodeKind == NODE_KIND_YDB_OLTP) {
+                ApplyDisableColumnShards(appConfig, ConfigUpdateTracer);
+            } else if (NodeKind == NODE_KIND_YDB_OLAP) {
+                ApplyEnableOnlyColumnShards(appConfig, ConfigUpdateTracer);
+            }
+        }
+    }
+
+    void ApplyDisableColumnShards(NKikimrConfig::TAppConfig& appConfig, IConfigUpdateTracer& configUpdateTracer) const {
+        std::unordered_map<TTabletTypes::EType, NKikimrLocal::TTabletAvailability> tabletAvailabilities;
+        for (const auto& availability : appConfig.GetDynamicNodeConfig().GetTabletAvailability()) {
+            tabletAvailabilities.emplace(availability.GetType(), availability);
+        }
+
+        tabletAvailabilities[TTabletTypes::ColumnShard].SetType(TTabletTypes::ColumnShard);
+        tabletAvailabilities[TTabletTypes::ColumnShard].SetMaxCount(0);
+
+        appConfig.MutableDynamicNodeConfig()->MutableTabletAvailability()->Clear();
+        for (const auto& [_, tabletAvailability] : tabletAvailabilities) {
+            appConfig.MutableDynamicNodeConfig()->MutableTabletAvailability()->Add()->CopyFrom(tabletAvailability);
+        }
+
+        configUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::DynamicNodeConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+    }
+
+    void ApplyEnableOnlyColumnShards(NKikimrConfig::TAppConfig& appConfig, IConfigUpdateTracer& configUpdateTracer) const {
+        std::unordered_map<TTabletTypes::EType, NKikimrLocal::TTabletAvailability> tabletAvailabilities;
+        for (const auto& availability : appConfig.GetDynamicNodeConfig().GetTabletAvailability()) {
+            tabletAvailabilities.emplace(availability.GetType(), availability);
+        }
+
+        for (int i = TTabletTypes::EType_MIN; i < TTabletTypes::EType_MAX; ++i) {
+            TTabletTypes::EType type = static_cast<TTabletTypes::EType>(i);
+            tabletAvailabilities[type].SetType(type);
+            if (type == TTabletTypes::ColumnShard) {
+                tabletAvailabilities[type].ClearMaxCount(); // default is big enough
+                tabletAvailabilities[type].SetPriority(std::numeric_limits<i32>::max());
+            } else {
+                tabletAvailabilities[type].SetMaxCount(0);
+            }
+        }
+
+        appConfig.MutableDynamicNodeConfig()->MutableTabletAvailability()->Clear();
+        for (const auto& [_, tabletAvailability] : tabletAvailabilities) {
+            appConfig.MutableDynamicNodeConfig()->MutableTabletAvailability()->Add()->CopyFrom(tabletAvailability);
+        }
+
+        configUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::DynamicNodeConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
     }
 
     ui32 DeduceNodeId(const NKikimrConfig::TAppConfig& appConfig, IEnv& env) const {
@@ -764,7 +821,7 @@ struct TCommonAppOptions {
     }
 
     void ApplyServicesMask(NKikimr::TBasicKikimrServicesMask& out) const {
-        if (NodeKind == NODE_KIND_YDB) {
+        if (NodeKind == NODE_KIND_YDB || NodeKind == NODE_KIND_YDB_OLTP || NodeKind == NODE_KIND_YDB_OLAP) {
             if (TinyMode) {
                 out.SetTinyMode();
             }
@@ -773,7 +830,7 @@ struct TCommonAppOptions {
             out.DisableAll();
             out.EnableYQ();
         } else {
-            ythrow yexception() << "wrong '--node-kind' value '" << NodeKind << "', only '" << NODE_KIND_YDB << "' or '" << NODE_KIND_YQ << "' is allowed";
+            ythrow yexception() << "wrong '--node-kind' value '" << NodeKind << "'";
         }
     }
 

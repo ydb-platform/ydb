@@ -373,7 +373,6 @@ struct TCommonAppOptions {
             .RequiredArgument("NUM").StoreResult(&SqsHttpPort);
         opts.AddLongOption("tenant", "add binding for Local service to specified tenant, might be one of {'/<root>', '/<root>/<path_to_user>'}")
             .RequiredArgument("NAME").StoreResult(&TenantName);
-
         opts.AddLongOption("mon-port", "Monitoring port").OptionalArgument("NUM").StoreResult(&MonitoringPort);
         opts.AddLongOption("mon-address", "Monitoring address").OptionalArgument("ADDR").StoreResult(&MonitoringAddress);
         opts.AddLongOption("mon-cert", "Monitoring certificate (https)").OptionalArgument("PATH").StoreResult(&MonitoringCertificateFile);
@@ -394,7 +393,7 @@ struct TCommonAppOptions {
         opts.AddLongOption("compile-inflight-limit", "Limit on parallel programs compilation").OptionalArgument("NUM").StoreResult(&CompileInflightLimit);
         opts.AddLongOption("udf", "Load shared library with UDF by given path").AppendTo(&UDFsPaths);
         opts.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory").StoreResult(&UDFsDir);
-        opts.AddLongOption("node-kind", Sprintf("Kind of the node (allowed values are {'%s', '%s', '%s', '%s'} )",
+        opts.AddLongOption("node-kind", Sprintf("Kind of the node (allowed values are {'%s', '%s', '%s', '%s'})",
                            NODE_KIND_YDB.data(), NODE_KIND_YDB_OLAP.data(), NODE_KIND_YDB_OLTP.data(), NODE_KIND_YQ.data()))
             .RequiredArgument("NAME").StoreResult(&NodeKind);
         opts.AddLongOption("node-type", "Type of the node")
@@ -830,7 +829,12 @@ struct TCommonAppOptions {
             out.DisableAll();
             out.EnableYQ();
         } else {
-            ythrow yexception() << "wrong '--node-kind' value '" << NodeKind << "'";
+            ythrow yexception() << "wrong '--node-kind' value '" << NodeKind
+                                << "', allowed: '" << NODE_KIND_YDB
+                                << "', '" << NODE_KIND_YQ 
+                                << "', '" << NODE_KIND_YDB_OLAP
+                                << "' or '" << NODE_KIND_YDB_OLTP
+                                << "'";
         }
     }
 

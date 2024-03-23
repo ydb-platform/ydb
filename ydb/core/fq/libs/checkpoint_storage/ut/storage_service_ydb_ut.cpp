@@ -261,6 +261,13 @@ void CreateCompletedCheckpoint(
     CompleteCheckpoint(runtime, graphId, generation, checkpointId, false);
 }
 
+TString MakeState(const TString& value) {
+    TString nodesState;
+    auto mkqlState = NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(value, 0);
+    NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(nodesState, mkqlState.AsStringRef());
+    return nodesState;
+}
+
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -501,7 +508,7 @@ Y_UNIT_TEST_SUITE(TStorageServiceTest) {
         RegisterDefaultCoordinator(runtime);
         CreateCheckpoint(runtime, GraphId, Generation, CheckpointId1, false);
 
-        SaveState(runtime, 1317, CheckpointId1, MakeState(NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState("some random state", 0)));
+        SaveState(runtime, 1317, CheckpointId1, MakeState("some random state"));
     }
 
     Y_UNIT_TEST(ShouldGetState)
@@ -511,7 +518,7 @@ Y_UNIT_TEST_SUITE(TStorageServiceTest) {
 
         RegisterDefaultCoordinator(runtime);
         CreateCheckpoint(runtime, GraphId, Generation, CheckpointId1, false);
-        auto state = MakeState(NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState("some random state", 0));
+        auto state = MakeState("some random state");
         SaveState(runtime, 1317, CheckpointId1, state);
 
         auto actual = GetState(runtime, 1317, GraphId, CheckpointId1);

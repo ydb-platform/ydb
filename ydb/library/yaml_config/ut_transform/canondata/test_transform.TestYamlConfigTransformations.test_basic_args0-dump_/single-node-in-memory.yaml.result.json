@@ -1,4 +1,58 @@
 {
+  "ActorSystemConfig":
+    {
+      "Executor":
+        [
+          {
+            "Type":"BASIC",
+            "Threads":2,
+            "SpinThreshold":0,
+            "Name":"System"
+          },
+          {
+            "Type":"BASIC",
+            "Threads":3,
+            "SpinThreshold":0,
+            "Name":"User"
+          },
+          {
+            "Type":"BASIC",
+            "Threads":2,
+            "SpinThreshold":0,
+            "Name":"Batch"
+          },
+          {
+            "Type":"IO",
+            "Threads":1,
+            "Name":"IO",
+            "TimePerMailboxMicroSecs":100
+          },
+          {
+            "Type":"BASIC",
+            "Threads":1,
+            "SpinThreshold":10,
+            "Name":"IC",
+            "TimePerMailboxMicroSecs":100
+          }
+        ],
+      "Scheduler":
+        {
+          "Resolution":256,
+          "SpinThreshold":0,
+          "ProgressThreshold":10000
+        },
+      "SysExecutor":0,
+      "UserExecutor":1,
+      "IoExecutor":3,
+      "BatchExecutor":2,
+      "ServiceExecutor":
+        [
+          {
+            "ServiceName":"Interconnect",
+            "ExecutorId":4
+          }
+        ]
+    },
   "LogConfig":
     {
       "DefaultLevel":5
@@ -12,11 +66,11 @@
             "Port":19001,
             "Host":"localhost",
             "InterconnectHost":"localhost",
-            "Location":
+            "WalleLocation":
               {
                 "Body":1,
-                "DataCenter":"default",
-                "Rack":"generated-rack-1"
+                "DataCenter":"1",
+                "Rack":"1"
               }
           }
         ]
@@ -51,6 +105,7 @@
                       "BoxId":1,
                       "ErasureSpecies":"none",
                       "VDiskKind":"Default",
+                      "Kind":"ssd",
                       "PDiskFilter":
                         [
                           {
@@ -1048,12 +1103,8 @@
           }
         ]
     },
-  "MonitoringConfig":
+  "TableServiceConfig":
     {
-      "MonitoringPort":8765
-    },
-  "GRpcConfig":
-    {
-      "Port":2136
+      "SqlVersion":1
     }
 }

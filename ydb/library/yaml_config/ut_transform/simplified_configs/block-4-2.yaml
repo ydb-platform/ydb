@@ -41,8 +41,9 @@ domains_config:
       node: [1, 2, 3, 4, 5, 6, 7, 8]
       nto_select: 5
     ssid: 1
-blob_storage_config:    # configuration of static blobstorage group.
-                        # YDB uses this group to store system tablets' data, like SchemeShard
+# configuration of static blobstorage group.
+# YDB uses this group to store system tablets' data, like SchemeShard
+blob_storage_config:
   service_set:
     groups:
     - rings:           # in block-4-2 must have exactly 1 ring or availability zone.
@@ -72,6 +73,9 @@ blob_storage_config:    # configuration of static blobstorage group.
           - node_id: "ydb-node-zone-a-8.local"
             path: /dev/disk/by-partlabel/ydb_disk_ssd_01
 tls:
-    cert: "/opt/ydb/certs/node.crt"
-    key: "/opt/ydb/certs/node.key"
-    ca: "/opt/ydb/certs/ca.crt"
+  cert: "/opt/ydb/certs/node.crt"
+  key: "/opt/ydb/certs/node.key"
+  ca: "/opt/ydb/certs/ca.crt"
+grpc_config:
+  services_enabled:
+  - legacy

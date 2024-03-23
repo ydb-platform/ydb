@@ -1,1 +1,37 @@
-{"error": true, "stderr": "uncaught exception:\n    address -> REDACTED\n    what() -> \"ydb/library/yaml_config/deprecated/yaml_config_parser.cpp:913: Specify host_configs to use blobstorage init command\"\n    type -> TWithBackTrace<yexception>\n"}
+{
+  "Command":
+    [
+      {
+        "DefineHostConfig":
+          {
+            "HostConfigId":1,
+            "Drive":
+              [
+                {
+                  "Path":"SectorMap:1:64",
+                  "Type":"SSD"
+                }
+              ],
+            "ItemConfigGeneration":18446744073709551615
+          }
+      },
+      {
+        "DefineBox":
+          {
+            "BoxId":1,
+            "Host":
+              [
+                {
+                  "Key":
+                    {
+                      "Fqdn":"localhost",
+                      "IcPort":19001,
+                      "NodeId":1
+                    },
+                  "HostConfigId":1
+                }
+              ]
+          }
+      }
+    ]
+}

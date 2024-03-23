@@ -1,4 +1,58 @@
 {
+  "ActorSystemConfig":
+    {
+      "Executor":
+        [
+          {
+            "Type":"BASIC",
+            "Threads":2,
+            "SpinThreshold":0,
+            "Name":"System"
+          },
+          {
+            "Type":"BASIC",
+            "Threads":3,
+            "SpinThreshold":0,
+            "Name":"User"
+          },
+          {
+            "Type":"BASIC",
+            "Threads":2,
+            "SpinThreshold":0,
+            "Name":"Batch"
+          },
+          {
+            "Type":"IO",
+            "Threads":1,
+            "Name":"IO",
+            "TimePerMailboxMicroSecs":100
+          },
+          {
+            "Type":"BASIC",
+            "Threads":1,
+            "SpinThreshold":10,
+            "Name":"IC",
+            "TimePerMailboxMicroSecs":100
+          }
+        ],
+      "Scheduler":
+        {
+          "Resolution":256,
+          "SpinThreshold":0,
+          "ProgressThreshold":10000
+        },
+      "SysExecutor":0,
+      "UserExecutor":1,
+      "IoExecutor":3,
+      "BatchExecutor":2,
+      "ServiceExecutor":
+        [
+          {
+            "ServiceName":"Interconnect",
+            "ExecutorId":4
+          }
+        ]
+    },
   "LogConfig":
     {
       "DefaultLevel":5
@@ -12,11 +66,11 @@
             "Port":19001,
             "Host":"localhost",
             "InterconnectHost":"localhost",
-            "Location":
+            "WalleLocation":
               {
                 "Body":1,
                 "DataCenter":"1",
-                "Rack":"generated-rack-1"
+                "Rack":"1"
               }
           },
           {
@@ -24,11 +78,11 @@
             "Port":19002,
             "Host":"localhost",
             "InterconnectHost":"localhost",
-            "Location":
+            "WalleLocation":
               {
                 "Body":2,
                 "DataCenter":"2",
-                "Rack":"generated-rack-2"
+                "Rack":"2"
               }
           },
           {
@@ -36,22 +90,18 @@
             "Port":19003,
             "Host":"localhost",
             "InterconnectHost":"localhost",
-            "Location":
+            "WalleLocation":
               {
                 "Body":3,
                 "DataCenter":"3",
-                "Rack":"generated-rack-3"
+                "Rack":"3"
               }
           }
         ]
     },
   "InterconnectConfig":
     {
-      "StartTcp":true,
-      "EncryptionMode":"OPTIONAL",
-      "PathToCertificateFile":"/opt/ydb/certs/node.crt",
-      "PathToPrivateKeyFile":"/opt/ydb/certs/node.key",
-      "PathToCaFile":"/opt/ydb/certs/ca.crt"
+      "StartTcp":true
     },
   "DomainsConfig":
     {
@@ -73,6 +123,7 @@
             "StoragePoolTypes":
               [
                 {
+                  "Kind":"ssd",
                   "PoolConfig":
                     {
                       "BoxId":1,
@@ -84,7 +135,19 @@
                           "DomainLevelBegin":10,
                           "DomainLevelEnd":256
                         },
-                      "VDiskKind":"Default"
+                      "VDiskKind":"Default",
+                      "Kind":"ssd",
+                      "PDiskFilter":
+                        [
+                          {
+                            "Property":
+                              [
+                                {
+                                  "Type":"SSD"
+                                }
+                              ]
+                          }
+                        ]
                     }
                 }
               ],
@@ -230,55 +293,64 @@
                 "NodeID":1,
                 "PDiskID":1,
                 "Path":"SectorMap:1:64",
-                "PDiskGuid":1
+                "PDiskGuid":1,
+                "PDiskCategory":1
               },
               {
                 "NodeID":1,
                 "PDiskID":2,
                 "Path":"SectorMap:2:64",
-                "PDiskGuid":2
+                "PDiskGuid":2,
+                "PDiskCategory":1
               },
               {
                 "NodeID":1,
                 "PDiskID":3,
                 "Path":"SectorMap:3:64",
-                "PDiskGuid":3
+                "PDiskGuid":3,
+                "PDiskCategory":1
               },
               {
                 "NodeID":2,
                 "PDiskID":1,
                 "Path":"SectorMap:1:64",
-                "PDiskGuid":1
+                "PDiskGuid":1,
+                "PDiskCategory":1
               },
               {
                 "NodeID":2,
                 "PDiskID":2,
                 "Path":"SectorMap:2:64",
-                "PDiskGuid":2
+                "PDiskGuid":2,
+                "PDiskCategory":1
               },
               {
                 "NodeID":2,
                 "PDiskID":3,
                 "Path":"SectorMap:3:64",
-                "PDiskGuid":3
+                "PDiskGuid":3,
+                "PDiskCategory":1
               },
               {
                 "NodeID":3,
                 "PDiskID":1,
                 "Path":"SectorMap:1:64",
-                "PDiskGuid":1
+                "PDiskGuid":1,
+                "PDiskCategory":1
               },
               {
                 "NodeID":3,
                 "PDiskID":2,
                 "Path":"SectorMap:2:64",
-                "PDiskGuid":2
+                "PDiskGuid":2,
+                "PDiskCategory":1
               },
               {
                 "NodeID":3,
                 "PDiskID":3,
                 "Path":"SectorMap:3:64",
-                "PDiskGuid":3
+                "PDiskGuid":3,
+                "PDiskCategory":1
               }
             ],
           "VDisks":
@@ -576,6 +648,33 @@
               1
             ]
         }
+    },
+  "ChannelProfileConfig":
+    {
+      "Profile":
+        [
+          {
+            "ProfileId":0,
+            "Channel":
+              [
+                {
+                  "ErasureSpecies":"mirror-3-dc",
+                  "PDiskCategory":1,
+                  "StoragePoolKind":"ssd"
+                },
+                {
+                  "ErasureSpecies":"mirror-3-dc",
+                  "PDiskCategory":1,
+                  "StoragePoolKind":"ssd"
+                },
+                {
+                  "ErasureSpecies":"mirror-3-dc",
+                  "PDiskCategory":1,
+                  "StoragePoolKind":"ssd"
+                }
+              ]
+          }
+        ]
     },
   "BootstrapConfig":
     {
@@ -1367,10 +1466,8 @@
           }
         ]
     },
-  "GRpcConfig":
+  "TableServiceConfig":
     {
-      "CA":"/opt/ydb/certs/ca.crt",
-      "Cert":"/opt/ydb/certs/node.crt",
-      "Key":"/opt/ydb/certs/node.key"
+      "SqlVersion":1
     }
 }

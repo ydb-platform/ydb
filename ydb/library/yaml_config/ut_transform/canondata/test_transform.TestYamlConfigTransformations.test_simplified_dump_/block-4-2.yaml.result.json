@@ -133,11 +133,24 @@
             "StoragePoolTypes":
               [
                 {
+                  "Kind":"ssd",
                   "PoolConfig":
                     {
                       "BoxId":1,
                       "ErasureSpecies":"block-4-2",
-                      "VDiskKind":"Default"
+                      "VDiskKind":"Default",
+                      "Kind":"ssd",
+                      "PDiskFilter":
+                        [
+                          {
+                            "Property":
+                              [
+                                {
+                                  "Type":"SSD"
+                                }
+                              ]
+                          }
+                        ]
                     }
                 }
               ],
@@ -288,49 +301,57 @@
                 "NodeID":1,
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1
+                "PDiskGuid":1,
+                "PDiskCategory":1
               },
               {
                 "NodeID":2,
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1
+                "PDiskGuid":1,
+                "PDiskCategory":1
               },
               {
                 "NodeID":3,
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1
+                "PDiskGuid":1,
+                "PDiskCategory":1
               },
               {
                 "NodeID":4,
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1
+                "PDiskGuid":1,
+                "PDiskCategory":1
               },
               {
                 "NodeID":5,
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1
+                "PDiskGuid":1,
+                "PDiskCategory":1
               },
               {
                 "NodeID":6,
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1
+                "PDiskGuid":1,
+                "PDiskCategory":1
               },
               {
                 "NodeID":7,
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1
+                "PDiskGuid":1,
+                "PDiskCategory":1
               },
               {
                 "NodeID":8,
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1
+                "PDiskGuid":1,
+                "PDiskCategory":1
               }
             ],
           "VDisks":
@@ -589,6 +610,33 @@
               1
             ]
         }
+    },
+  "ChannelProfileConfig":
+    {
+      "Profile":
+        [
+          {
+            "ProfileId":0,
+            "Channel":
+              [
+                {
+                  "ErasureSpecies":"block-4-2",
+                  "PDiskCategory":1,
+                  "StoragePoolKind":"ssd"
+                },
+                {
+                  "ErasureSpecies":"block-4-2",
+                  "PDiskCategory":1,
+                  "StoragePoolKind":"ssd"
+                },
+                {
+                  "ErasureSpecies":"block-4-2",
+                  "PDiskCategory":1,
+                  "StoragePoolKind":"ssd"
+                }
+              ]
+          }
+        ]
     },
   "BootstrapConfig":
     {

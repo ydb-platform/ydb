@@ -40,6 +40,8 @@ struct TOperDesc {
     ui32 RightType = 0;
     ui32 ResultType = 0;
     ui32 ProcId = 0;
+    ui32 ComId = 0;
+    ui32 NegateId = 0;
 };
 
 enum class EProcKind : char {

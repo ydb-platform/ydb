@@ -1,6 +1,7 @@
 #include <ydb/library/yaml_config/yaml_config_parser.h>
 
 #include <ydb/core/protos/bootstrap.pb.h>
+#include <ydb/core/protos/blobstorage_base3.pb.h>
 
 #include <google/protobuf/descriptor.h>
 

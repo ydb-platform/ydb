@@ -1,55 +1,4 @@
 {
-  "ActorSystemConfig":
-    {
-      "Executor":
-        [
-          {
-            "Type":"BASIC",
-            "Threads":2,
-            "Name":"System"
-          },
-          {
-            "Type":"BASIC",
-            "Threads":3,
-            "Name":"User"
-          },
-          {
-            "Type":"BASIC",
-            "Threads":2,
-            "Name":"Batch"
-          },
-          {
-            "Type":"IO",
-            "Threads":1,
-            "Name":"IO",
-            "TimePerMailboxMicroSecs":100
-          },
-          {
-            "Type":"BASIC",
-            "Threads":1,
-            "SpinThreshold":10,
-            "Name":"IC",
-            "TimePerMailboxMicroSecs":100
-          }
-        ],
-      "Scheduler":
-        {
-          "Resolution":256,
-          "SpinThreshold":0,
-          "ProgressThreshold":10000
-        },
-      "SysExecutor":0,
-      "UserExecutor":1,
-      "IoExecutor":3,
-      "BatchExecutor":2,
-      "ServiceExecutor":
-        [
-          {
-            "ServiceName":"Interconnect",
-            "ExecutorId":4
-          }
-        ]
-    },
   "LogConfig":
     {
       "DefaultLevel":5
@@ -63,11 +12,11 @@
             "Port":19001,
             "Host":"ydb-node-zone-a-1.local",
             "InterconnectHost":"ydb-node-zone-a-1.local",
-            "WalleLocation":
+            "Location":
               {
                 "Body":1,
-                "DataCenter":"zone-a",
-                "Rack":"1"
+                "DataCenter":"default",
+                "Rack":"generated-rack-1"
               }
           },
           {
@@ -75,11 +24,11 @@
             "Port":19001,
             "Host":"ydb-node-zone-a-2.local",
             "InterconnectHost":"ydb-node-zone-a-2.local",
-            "WalleLocation":
+            "Location":
               {
                 "Body":2,
-                "DataCenter":"zone-a",
-                "Rack":"2"
+                "DataCenter":"default",
+                "Rack":"generated-rack-2"
               }
           },
           {
@@ -87,11 +36,11 @@
             "Port":19001,
             "Host":"ydb-node-zone-a-3.local",
             "InterconnectHost":"ydb-node-zone-a-3.local",
-            "WalleLocation":
+            "Location":
               {
                 "Body":3,
-                "DataCenter":"zone-a",
-                "Rack":"3"
+                "DataCenter":"default",
+                "Rack":"generated-rack-3"
               }
           },
           {
@@ -99,11 +48,11 @@
             "Port":19001,
             "Host":"ydb-node-zone-a-4.local",
             "InterconnectHost":"ydb-node-zone-a-4.local",
-            "WalleLocation":
+            "Location":
               {
                 "Body":4,
-                "DataCenter":"zone-a",
-                "Rack":"4"
+                "DataCenter":"default",
+                "Rack":"generated-rack-4"
               }
           },
           {
@@ -111,11 +60,11 @@
             "Port":19001,
             "Host":"ydb-node-zone-a-5.local",
             "InterconnectHost":"ydb-node-zone-a-5.local",
-            "WalleLocation":
+            "Location":
               {
                 "Body":5,
-                "DataCenter":"zone-a",
-                "Rack":"5"
+                "DataCenter":"default",
+                "Rack":"generated-rack-5"
               }
           },
           {
@@ -123,11 +72,11 @@
             "Port":19001,
             "Host":"ydb-node-zone-a-6.local",
             "InterconnectHost":"ydb-node-zone-a-6.local",
-            "WalleLocation":
+            "Location":
               {
                 "Body":6,
-                "DataCenter":"zone-a",
-                "Rack":"6"
+                "DataCenter":"default",
+                "Rack":"generated-rack-6"
               }
           },
           {
@@ -135,11 +84,11 @@
             "Port":19001,
             "Host":"ydb-node-zone-a-7.local",
             "InterconnectHost":"ydb-node-zone-a-7.local",
-            "WalleLocation":
+            "Location":
               {
                 "Body":7,
-                "DataCenter":"zone-a",
-                "Rack":"7"
+                "DataCenter":"default",
+                "Rack":"generated-rack-7"
               }
           },
           {
@@ -147,11 +96,11 @@
             "Port":19001,
             "Host":"ydb-node-zone-a-8.local",
             "InterconnectHost":"ydb-node-zone-a-8.local",
-            "WalleLocation":
+            "Location":
               {
                 "Body":8,
-                "DataCenter":"zone-a",
-                "Rack":"8"
+                "DataCenter":"default",
+                "Rack":"generated-rack-8"
               }
           }
         ]
@@ -184,24 +133,11 @@
             "StoragePoolTypes":
               [
                 {
-                  "Kind":"ssd",
                   "PoolConfig":
                     {
                       "BoxId":1,
                       "ErasureSpecies":"block-4-2",
-                      "VDiskKind":"Default",
-                      "Kind":"ssd",
-                      "PDiskFilter":
-                        [
-                          {
-                            "Property":
-                              [
-                                {
-                                  "Type":"SSD"
-                                }
-                              ]
-                          }
-                        ]
+                      "VDiskKind":"Default"
                     }
                 }
               ],
@@ -352,57 +288,49 @@
                 "NodeID":1,
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
+                "PDiskGuid":1
               },
               {
                 "NodeID":2,
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
+                "PDiskGuid":1
               },
               {
                 "NodeID":3,
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
+                "PDiskGuid":1
               },
               {
                 "NodeID":4,
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
+                "PDiskGuid":1
               },
               {
                 "NodeID":5,
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
+                "PDiskGuid":1
               },
               {
                 "NodeID":6,
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
+                "PDiskGuid":1
               },
               {
                 "NodeID":7,
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
+                "PDiskGuid":1
               },
               {
                 "NodeID":8,
                 "PDiskID":1,
                 "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
+                "PDiskGuid":1
               }
             ],
           "VDisks":
@@ -661,33 +589,6 @@
               1
             ]
         }
-    },
-  "ChannelProfileConfig":
-    {
-      "Profile":
-        [
-          {
-            "ProfileId":0,
-            "Channel":
-              [
-                {
-                  "ErasureSpecies":"block-4-2",
-                  "PDiskCategory":1,
-                  "StoragePoolKind":"ssd"
-                },
-                {
-                  "ErasureSpecies":"block-4-2",
-                  "PDiskCategory":1,
-                  "StoragePoolKind":"ssd"
-                },
-                {
-                  "ErasureSpecies":"block-4-2",
-                  "PDiskCategory":1,
-                  "StoragePoolKind":"ssd"
-                }
-              ]
-          }
-        ]
     },
   "BootstrapConfig":
     {
@@ -1568,9 +1469,5 @@
         [
           "legacy"
         ]
-    },
-  "TableServiceConfig":
-    {
-      "SqlVersion":1
     }
 }

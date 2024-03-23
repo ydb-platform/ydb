@@ -8,7 +8,8 @@ erasure: mirror-3-dc
 host_configs: # the list of available host configurations in the cluster.
 - host_config_id: 1
   drive:
-  - path: /dev/disk/by-partlabel/ydb_disk_ssd_01    # path of the first disk in the host configration.                                       # kind of the disk: available kinds are SSD, NVME, HDD
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_01    # path of the first disk in the host configration.
+                                                    # kind of the disk: available kinds are SSD, NVME, HDD
   - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
   - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
 
@@ -43,11 +44,12 @@ domains_config:
       node: [1, 2, 3]
       nto_select: 3
     ssid: 1
-blob_storage_config:         # configuration of static blobstorage group.
-                             # YDB uses this group to store system tablets' data, like SchemeShard
+# configuration of static blobstorage group.
+# YDB uses this group to store system tablets' data, like SchemeShard
+blob_storage_config:
   service_set:
     groups:
-    - rings:          # in mirror-3-dc must have exactly 3 rings or availability zones
+    - rings:           # in mirror-3-dc must have exactly 3 rings or availability zones
       - fail_domains:  # first record: fail domains of the static group describe where each vdisk of the static group should be located.
         - vdisk_locations:
           - node_id: ydb-node-zone-a.local
@@ -79,6 +81,9 @@ blob_storage_config:         # configuration of static blobstorage group.
           - node_id: ydb-node-zone-c.local
             path: /dev/disk/by-partlabel/ydb_disk_ssd_03
 tls:
-    cert: "/opt/ydb/certs/node.crt"
-    key: "/opt/ydb/certs/node.key"
-    ca: "/opt/ydb/certs/ca.crt"
+  cert: "/opt/ydb/certs/node.crt"
+  key: "/opt/ydb/certs/node.key"
+  ca: "/opt/ydb/certs/ca.crt"
+grpc_config:
+  services_enabled:
+  - legacy

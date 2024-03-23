@@ -8,7 +8,7 @@
             "Drive":
               [
                 {
-                  "Path":"/tmp/pdisk.data",
+                  "Path":"/tmp/ydb.data",
                   "Type":"SSD"
                 }
               ],

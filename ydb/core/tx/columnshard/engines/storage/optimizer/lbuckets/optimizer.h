@@ -265,6 +265,22 @@ public:
         return true;
     }
 
+    THashSet<ui64> GetAllPortionIds() const {
+        THashSet<ui64> result;
+        for (auto&& i : Actuals) {
+            result.emplace(i.first);
+        }
+        for (auto&& i : Futures) {
+            for (auto&& p : i.second) {
+                AFL_VERIFY(result.emplace(p.first).second);
+            }
+        }
+        for (auto&& i : PreActuals) {
+            AFL_VERIFY(result.emplace(i.first).second);
+        }
+        return result;
+    }
+
     bool IsEmpty() const {
         return Actuals.empty() && Futures.empty() && PreActuals.empty();
     }
@@ -610,6 +626,14 @@ private:
     mutable std::optional<i64> LastWeight;
     TPortionsPool Others;
     std::optional<NArrow::TReplaceKey> NextBorder;
+    THashSet<ui64> PortionsToCompact;
+
+    void RebuildPortionsToCompact() {
+        PortionsToCompact = Others.GetAllPortionIds();
+        if (!!MainPortion) {
+            AFL_VERIFY(PortionsToCompact.emplace(MainPortion->GetPortionId()).second);
+        }
+    }
 
     void MoveNextBorderTo(TPortionsBucket& dest) {
         dest.NextBorder = NextBorder;
@@ -657,9 +681,16 @@ public:
         }
     };
 
+    const THashSet<ui64>& GetPortionsToCompact() const {
+        return PortionsToCompact;
+    }
+
     bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
-        if (MainPortion && dataLocksManager->IsLocked(*MainPortion)) {
-            return true;
+        if (MainPortion) {
+            if (auto lockInfo = dataLocksManager->IsLocked(*MainPortion)) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "optimization_locked")("reason", *lockInfo);
+                return true;
+            }
         }
         return Others.IsLocked(dataLocksManager);
     }
@@ -679,6 +710,7 @@ public:
     {
         if (MainPortion) {
             Counters->PortionsAlone->AddPortion(MainPortion);
+            PortionsToCompact.emplace(MainPortion->GetPortionId());
         }
     }
 
@@ -825,18 +857,22 @@ public:
                 ("bucket_from", MainPortion->IndexKeyStart().DebugString())("bucket_to", NextBorder->DebugString());
         }
         Others.Add(portion, now);
+        AFL_VERIFY(PortionsToCompact.emplace(portion->GetPortionId()).second);
     }
 
     void RemoveOther(const std::shared_ptr<TPortionInfo>& portion) {
         auto gChartsThis = StartModificationGuard();
         AFL_VERIFY(Others.Remove(portion))("portion", portion->DebugString())("bucket_start", MainPortion ? MainPortion->DebugString(true) : "-inf")("bucket_finish", NextBorder ? NextBorder->DebugString() : "undef");
+        AFL_VERIFY(PortionsToCompact.erase(portion->GetPortionId()));
     }
 
     void MergeOthersFrom(TPortionsBucket& dest) {
         auto gChartsDest = dest.StartModificationGuard();
         auto gChartsThis = StartModificationGuard();
         Others.MergeFrom(dest.Others);
+        RebuildPortionsToCompact();
         dest.MoveNextBorderTo(*this);
+        dest.RebuildPortionsToCompact();
     }
 
     void Actualize(const TInstant currentInstant) {
@@ -853,6 +889,8 @@ public:
             AFL_VERIFY(MainPortion->IndexKeyEnd() < dest.MainPortion->IndexKeyStart());
         }
         Others.SplitTo(dest.Others, dest.MainPortion->IndexKeyStart());
+        RebuildPortionsToCompact();
+        dest.RebuildPortionsToCompact();
     }
 };
 
@@ -957,6 +995,17 @@ public:
         , Counters(counters)
     {
         AddBucketToRating(LeftBucket);
+    }
+
+    const THashSet<ui64>& GetPortionsToCompact() const {
+        if (BucketsByWeight.empty()) {
+            return Default<THashSet<ui64>>();
+        }
+        if (BucketsByWeight.rbegin()->second.empty()) {
+            return Default<THashSet<ui64>>();
+        }
+        const TPortionsBucket* bucketForOptimization = *BucketsByWeight.rbegin()->second.begin();
+        return bucketForOptimization->GetPortionsToCompact();
     }
 
     bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
@@ -1109,6 +1158,10 @@ protected:
     virtual void DoActualize(const TInstant currentInstant) override {
         Buckets.Actualize(currentInstant);
     }
+    virtual const THashSet<ui64>& DoGetPortionsToCompact() const override {
+        return Buckets.GetPortionsToCompact();
+    }
+
     virtual TOptimizationPriority DoGetUsefulMetric() const override {
         if (Buckets.GetWeight()) {
             return TOptimizationPriority::Critical(Buckets.GetWeight());

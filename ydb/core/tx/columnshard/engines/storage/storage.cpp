@@ -12,30 +12,44 @@ void TGranulesStorage::UpdateGranuleInfo(const TGranuleMeta& granule) {
 
 std::shared_ptr<NKikimr::NOlap::TGranuleMeta> TGranulesStorage::GetGranuleForCompaction(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
     const TInstant now = TInstant::Now();
-    std::optional<NStorageOptimizer::TOptimizationPriority> priority;
-    std::shared_ptr<TGranuleMeta> granule;
+    std::map<NStorageOptimizer::TOptimizationPriority, std::shared_ptr<TGranuleMeta>> granulesSorted;
+    ui32 countChecker = 0;
+    std::optional<NStorageOptimizer::TOptimizationPriority> priorityChecker;
     for (auto&& i : granules) {
         NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("path_id", i.first);
         i.second->ActualizeOptimizer(now);
         auto gPriority = i.second->GetCompactionPriority();
-        if (!priority || *priority < gPriority) {
-            if (i.second->IsLockedOptimizer(dataLocksManager) && !gPriority.IsZero()) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_optimizer_throught_lock")("priority", gPriority.DebugString());
-                continue;
+        if (gPriority.IsZero() || (priorityChecker && gPriority < *priorityChecker)) {
+            continue;
+        }
+        granulesSorted.emplace(gPriority, i.second);
+        if (++countChecker % 100 == 0) {
+            for (auto&& it = granulesSorted.rbegin(); it != granulesSorted.rend(); ++it) {
+                if (!it->second->IsLockedOptimizer(dataLocksManager)) {
+                    priorityChecker = it->first;
+                    break;
+                }
             }
-            priority = gPriority;
-            granule = i.second;
         }
     }
-    if (!priority) {
+    if (granulesSorted.empty()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "no_granules");
         return nullptr;
     }
-    if (priority->IsZero()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "zero_priority");
-        return nullptr;
+    for (auto&& it = granulesSorted.rbegin(); it != granulesSorted.rend(); ++it) {
+        if (priorityChecker && it->first < *priorityChecker) {
+            continue;
+        }
+        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("path_id", it->second->GetPathId());
+        if (it->second->IsLockedOptimizer(dataLocksManager)) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_optimizer_throught_lock")("priority", it->first.DebugString());
+        } else {
+            return it->second;
+        }
     }
-    return granule;
+
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "all_significant_granules_locked")("count", granulesSorted.size());
+    return nullptr;
 }
 
 } // namespace NKikimr::NOlap

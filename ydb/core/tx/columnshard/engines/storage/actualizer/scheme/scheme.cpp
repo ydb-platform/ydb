@@ -63,6 +63,11 @@ void TSchemeActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, con
             continue;
         }
         for (auto&& portionId : portions) {
+            if (!address.WriteIs(NBlobOperations::TGlobal::DefaultStorageId) && !address.WriteIs(NTiering::NCommon::DeleteTierName)) {
+                if (externalContext.GetPortionsToCompact().contains(portionId)) {
+                    continue;
+                }
+            }
             auto portion = externalContext.GetPortionVerified(portionId);
             auto info = BuildActualizationInfo(*portion);
             AFL_VERIFY(info);
@@ -76,10 +81,24 @@ void TSchemeActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, con
                 portionsToRemove.emplace(portion->GetPortionId());
             }
         }
+        
     }
     for (auto&& i : portionsToRemove) {
         RemovePortion(i);
     }
+
+    ui64 waitQueueExternal = 0;
+    ui64 waitQueueInternal = 0;
+    for (auto&& i : PortionsToActualizeScheme) {
+        if (i.first.WriteIs(IStoragesManager::DefaultStorageId)) {
+            waitQueueInternal += i.second.size();
+        } else {
+            waitQueueExternal += i.second.size();
+        }
+    }
+    Counters.QueueSizeInternalWrite->SetValue(waitQueueInternal);
+    Counters.QueueSizeExternalWrite->SetValue(waitQueueExternal);
+
 }
 
 void TSchemeActualizer::Refresh(const TAddExternalContext& externalContext) {

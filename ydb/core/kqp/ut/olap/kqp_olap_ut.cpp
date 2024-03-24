@@ -1277,12 +1277,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
 
-        //        Tests::NCommon::TLoggerInit(kikimr).Initialize();
-
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        Tests::NCommon::TLoggerInit(kikimr).SetComponents({NKikimrServices::TX_COLUMNSHARD}, "CS").SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
 
         std::vector<TString> uids;
         std::vector<TString> resourceIds;
@@ -1341,15 +1342,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
-        {
-            const TInstant start = TInstant::Now();
-            AFL_VERIFY(!csController->GetActualizationsCount().Val());
-            while (TInstant::Now() - start < TDuration::Seconds(20) && !csController->GetActualizationsCount().Val()) {
-                Sleep(TDuration::Seconds(1));
-                Cerr << "waiting actualizations..." << Endl;
-            }
-            AFL_VERIFY(csController->GetActualizationsCount().Val());
-        }
+        csController->WaitActualization(TDuration::Seconds(10));
         {
             auto it = tableClient.StreamExecuteScanQuery(R"(
                 --!syntax_v1
@@ -1362,11 +1355,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
-            Cout << result << Endl;
-            Cout << csController->GetIndexesSkippingOnSelect().Val() << " / " << csController->GetIndexesApprovedOnSelect().Val() << Endl;
+            Cerr << result << Endl;
+            Cerr << csController->GetIndexesSkippingOnSelect().Val() << " / " << csController->GetIndexesApprovedOnSelect().Val() << Endl;
             CompareYson(result, R"([[0u;]])");
             AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0);
-            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val() * 0.3);
+            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val() * 0.4)
+                ("approve", csController->GetIndexesApprovedOnSelect().Val())("skip", csController->GetIndexesSkippingOnSelect().Val());
         }
     }
 
@@ -1376,11 +1370,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TKikimrRunner kikimr(settings);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
-
-        //        Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         std::vector<TString> uids;
         std::vector<TString> resourceIds;

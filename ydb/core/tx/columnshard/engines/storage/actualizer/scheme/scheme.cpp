@@ -21,9 +21,16 @@ std::optional<NKikimr::NOlap::NActualizer::TSchemeActualizer::TFullActualization
     return {};
 }
 
-void TSchemeActualizer::DoAddPortion(const TPortionInfo& info, const TAddExternalContext& /*context*/) {
+void TSchemeActualizer::DoAddPortion(const TPortionInfo& info, const TAddExternalContext& addContext) {
     if (!TargetSchema) {
         return;
+    }
+    if (!addContext.GetPortionExclusiveGuarantee()) {
+        if (PortionsInfo.contains(info.GetPortionId())) {
+            return;
+        }
+    } else {
+        AFL_VERIFY(!PortionsInfo.contains(info.GetPortionId()));
     }
     auto actualizationInfo = BuildActualizationInfo(info);
     if (!actualizationInfo) {
@@ -34,14 +41,14 @@ void TSchemeActualizer::DoAddPortion(const TPortionInfo& info, const TAddExterna
     AFL_VERIFY(PortionsInfo.emplace(info.GetPortionId(), actualizationInfo->ExtractFindId()).second);
 }
 
-void TSchemeActualizer::DoRemovePortion(const TPortionInfo& info) {
-    auto it = PortionsInfo.find(info.GetPortionId());
+void TSchemeActualizer::DoRemovePortion(const ui64 portionId) {
+    auto it = PortionsInfo.find(portionId);
     if (it == PortionsInfo.end()) {
         return;
     }
     auto itAddress = PortionsToActualizeScheme.find(it->second.GetRWAddress());
     AFL_VERIFY(itAddress != PortionsToActualizeScheme.end());
-    AFL_VERIFY(itAddress->second.erase(info.GetPortionId()));
+    AFL_VERIFY(itAddress->second.erase(portionId));
     NYDBTest::TControllers::GetColumnShardController()->AddPortionForActualizer(-1);
     if (itAddress->second.empty()) {
         PortionsToActualizeScheme.erase(itAddress);
@@ -49,10 +56,11 @@ void TSchemeActualizer::DoRemovePortion(const TPortionInfo& info) {
     PortionsInfo.erase(it);
 }
 
-void TSchemeActualizer::DoBuildTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& /*internalContext*/) const {
+void TSchemeActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& /*internalContext*/) {
+    THashSet<ui64> portionsToRemove;
     for (auto&& [address, portions] : PortionsToActualizeScheme) {
         if (!tasksContext.IsRWAddressAvailable(address)) {
-            break;
+            continue;
         }
         for (auto&& portionId : portions) {
             auto portion = externalContext.GetPortionVerified(portionId);
@@ -64,8 +72,13 @@ void TSchemeActualizer::DoBuildTasks(TTieringProcessContext& tasksContext, const
 
             if (!tasksContext.AddPortion(*portion, std::move(features), {})) {
                 break;
+            } else {
+                portionsToRemove.emplace(portion->GetPortionId());
             }
         }
+    }
+    for (auto&& i : portionsToRemove) {
+        RemovePortion(i);
     }
 }
 

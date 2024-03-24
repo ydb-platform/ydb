@@ -9,15 +9,30 @@ namespace NKikimr::NOlap::NDataLocks {
 class TManager {
 private:
     THashMap<TString, std::shared_ptr<ILock>> ProcessLocks;
+    void UnregisterLock(const TString& processId);
 public:
     TManager() = default;
 
-    void RegisterLock(const std::shared_ptr<ILock>& lock);
+    class TGuard {
+    private:
+        const TString ProcessId;
+        bool Released = false;
+    public:
+        TGuard(const TString& processId)
+            : ProcessId(processId)
+        {
+
+        }
+        ~TGuard();
+
+        void Release(TManager& manager);
+    };
+
+    [[nodiscard]] std::shared_ptr<TGuard> RegisterLock(const std::shared_ptr<ILock>& lock);
     template <class TLock, class ...Args>
-    void RegisterLock(Args&&... args) {
-        RegisterLock(std::make_shared<TLock>(args...));
+    [[nodiscard]] std::shared_ptr<TGuard> RegisterLock(Args&&... args) {
+        return RegisterLock(std::make_shared<TLock>(args...));
     }
-    void UnregisterLock(const TString& processId);
     std::optional<TString> IsLocked(const TPortionInfo& portion) const;
     std::optional<TString> IsLocked(const TGranuleMeta& granule) const;
 

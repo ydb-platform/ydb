@@ -103,8 +103,6 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     FillConfig(config);
     NLastGetopt::TOpts& opts = *config.Opts;
 
-    opts.AddSection("Global options", "Global options for query mode or subcomands");
-
     TStringBuilder endpointHelp;
     endpointHelp << "[Required] Endpoint to connect. Protocols: grpc, grpcs (Default: "
         << (Settings.EnableSsl.GetRef() ? "grpcs" : "grpc" ) << ")." << Endl;
@@ -227,10 +225,6 @@ void TClientCommandRootCommon::Config(TConfig& config) {
 
     opts.AddLongOption("profile-file", "Path to config file with profile data in yaml format")
         .RequiredArgument("PATH").StoreResult(&ProfileFile);
-
-    opts.AddSection("Query mode options", "Query mode options for executing queries");
-    opts.AddLongOption('q', "query", "Query text to execute")
-        .RequiredArgument("STR").StoreResult(&QueryText);
 
     TStringStream stream;
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);

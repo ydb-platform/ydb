@@ -289,6 +289,8 @@ public:
         RenderEntryType type = BEGIN
     );
 
+    void Hide();
+
 protected:
     virtual void Config(TConfig& config);
     virtual void SaveParseResult(TConfig& config);
@@ -308,12 +310,14 @@ private:
     void CheckForExecutableOptions(TConfig& config);
 
     constexpr static int DESCRIPTION_ALIGNMENT = 28;
+    bool Hidden = false;
 };
 
 class TClientCommandTree : public TClientCommand {
 public:
     TClientCommandTree(const TString& name, const std::initializer_list<TString>& aliases = std::initializer_list<TString>(), const TString& description = TString());
     void AddCommand(std::unique_ptr<TClientCommand> command);
+    void AddHiddenCommand(std::unique_ptr<TClientCommand> command);
     virtual void Prepare(TConfig& config) override;
     void RenderCommandsDescription(
         TStringStream& stream,

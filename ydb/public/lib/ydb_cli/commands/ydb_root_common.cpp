@@ -11,6 +11,7 @@
 #include "ydb_service_scripting.h"
 #include "ydb_service_table.h"
 #include "ydb_service_topic.h"
+#include "ydb_sql.h"
 #include "ydb_tools.h"
 #include "ydb_yql.h"
 #include "ydb_workload.h"
@@ -35,7 +36,7 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TC
     AddCommand(std::make_unique<TCommandAuth>());
     AddCommand(std::make_unique<TCommandDiscovery>());
     AddCommand(std::make_unique<TCommandScheme>());
-    AddCommand(std::make_unique<TCommandScripting>());
+    AddHiddenCommand(std::make_unique<TCommandScripting>());
     AddCommand(std::make_unique<TCommandTable>());
     AddCommand(std::make_unique<TCommandTools>());
     AddCommand(std::make_unique<TCommandExport>(Settings.UseExportToYt.GetRef()));
@@ -44,6 +45,7 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TC
     AddCommand(std::make_unique<TCommandOperation>());
     AddCommand(std::make_unique<TCommandConfig>());
     AddCommand(std::make_unique<TCommandInit>());
+    AddCommand(std::make_unique<TCommandSql>());
     AddCommand(std::make_unique<TCommandYql>());
     AddCommand(std::make_unique<TCommandTopic>());
     AddCommand(std::make_unique<TCommandWorkload>());
@@ -100,6 +102,8 @@ void TClientCommandRootCommon::SetCredentialsGetter(TConfig& config) {
 void TClientCommandRootCommon::Config(TConfig& config) {
     FillConfig(config);
     NLastGetopt::TOpts& opts = *config.Opts;
+
+    opts.AddSection("Global options", "Global options for query mode or subcomands");
 
     TStringBuilder endpointHelp;
     endpointHelp << "[Required] Endpoint to connect. Protocols: grpc, grpcs (Default: "
@@ -223,6 +227,10 @@ void TClientCommandRootCommon::Config(TConfig& config) {
 
     opts.AddLongOption("profile-file", "Path to config file with profile data in yaml format")
         .RequiredArgument("PATH").StoreResult(&ProfileFile);
+
+    opts.AddSection("Query mode options", "Query mode options for executing queries");
+    opts.AddLongOption('q', "query", "Query text to execute")
+        .RequiredArgument("STR").StoreResult(&QueryText);
 
     TStringStream stream;
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);

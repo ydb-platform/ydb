@@ -111,6 +111,13 @@ public:
     std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
         const std::shared_ptr<NDataLocks::TManager>& locksManager, const ui64 memoryUsageLimit) noexcept override;
 
+    void ReturnToIndexes(const THashMap<ui64, THashSet<ui64>>& portions) const {
+        for (auto&& [g, portionIds] : portions) {
+            auto it = Tables.find(g);
+            AFL_VERIFY(it != Tables.end());
+            it->second->ReturnToIndexes(portionIds);
+        }
+    }
     bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges,
                       const TSnapshot& snapshot) noexcept override;
 

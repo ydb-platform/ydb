@@ -61,12 +61,7 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
         Ev->Get()->IndexChanges->WriteIndexOnComplete(Self, context);
     }
 
-    if (Ev->Get()->GetPutStatus() == NKikimrProto::TRYLATER) {
-        ctx.Schedule(Self->FailActivationDelay, new TEvPrivate::TEvPeriodicWakeup(true));
-    } else {
-        Self->EnqueueBackgroundActivities(false, TriggerActivity);
-    }
-
+    Self->EnqueueBackgroundActivities(false, TriggerActivity);
     changes->MutableBlobsAction().OnCompleteTxAfterAction(*Self, Ev->Get()->GetPutStatus() == NKikimrProto::OK);
     NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexComplete(*changes, *Self);
 }

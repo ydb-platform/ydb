@@ -505,7 +505,7 @@ public:
                     fileQueueBatchObjectCountLimit,
                     State_->Gateway,
                     connect.Url,
-                    GetAuthInfo(State_->CredentialsFactory, connect.Token),
+                    GetAuthInfo(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster)),
                     pathPattern,
                     pathPatternVariant,
                     NS3Lister::ES3PatternType::Wildcard

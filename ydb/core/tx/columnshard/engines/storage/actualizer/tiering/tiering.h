@@ -85,8 +85,8 @@ private:
     std::optional<TFullActualizationInfo> BuildActualizationInfo(const TPortionInfo& portion, const TInstant now) const;
 
     virtual void DoAddPortion(const TPortionInfo& portion, const TAddExternalContext& addContext) override;
-    virtual void DoRemovePortion(const TPortionInfo& info) override;
-    virtual void DoBuildTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& internalContext) const override;
+    virtual void DoRemovePortion(const ui64 portionId) override;
+    virtual void DoExtractTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& internalContext) override;
 
 public:
     void Refresh(const std::optional<TTiering>& info, const TAddExternalContext& externalContext);

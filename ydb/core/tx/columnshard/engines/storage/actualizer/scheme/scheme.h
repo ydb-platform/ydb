@@ -56,8 +56,8 @@ private:
 
 protected:
     virtual void DoAddPortion(const TPortionInfo& info, const TAddExternalContext& context) override;
-    virtual void DoRemovePortion(const TPortionInfo& info) override;
-    virtual void DoBuildTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& internalContext) const override;
+    virtual void DoRemovePortion(const ui64 portionId) override;
+    virtual void DoExtractTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& internalContext) override;
 public:
     void Refresh(const TAddExternalContext& externalContext);
 

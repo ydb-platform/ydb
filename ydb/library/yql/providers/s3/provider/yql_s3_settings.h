@@ -31,7 +31,7 @@ struct TS3Settings {
 };
 
 struct TS3ClusterSettings {
-    TString Url;
+    TString Url, Token;
 };
 
 struct TS3Configuration : public TS3Settings, public NCommon::TSettingDispatcher {

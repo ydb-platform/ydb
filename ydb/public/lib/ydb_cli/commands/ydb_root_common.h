@@ -73,7 +73,6 @@ private:
     TString YCTokenFile;
     TString SaKeyFile;
     TString IamEndpoint;
-    TString QueryText;
     const TClientSettings& Settings;
     TVector<TString> MisuseErrors;
 

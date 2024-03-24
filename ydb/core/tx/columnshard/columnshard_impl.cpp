@@ -1086,7 +1086,7 @@ void TColumnShard::Enqueue(STFUNC_SIG) {
 }
 
 void TColumnShard::OnTieringModified(const std::optional<ui64> pathId) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnTieringModified");
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnTieringModified")("path_id", pathId);
     if (Tiers->IsReady()) {
         StoragesManager->OnTieringModified(Tiers);
         if (TablesManager.HasPrimaryIndex()) {

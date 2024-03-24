@@ -191,6 +191,16 @@ public:
         ActualizationIndex->RefreshScheme(context);
     }
 
+    void ReturnToIndexes(const THashSet<ui64>& portionIds) {
+        NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
+        context.SetPortionExclusiveGuarantee(false);
+        for (auto&& p : portionIds) {
+            auto it = Portions.find(p);
+            AFL_VERIFY(it != Portions.end());
+            ActualizationIndex->AddPortion(it->second, context);
+        }
+    }
+
     void StartActualizationIndex() {
         ActualizationIndex->Start();
     }
@@ -209,7 +219,7 @@ public:
 
     void BuildActualizationTasks(NActualizer::TTieringProcessContext& context) const {
         NActualizer::TExternalTasksContext extTasks(Portions);
-        ActualizationIndex->BuildActualizationTasks(context, extTasks);
+        ActualizationIndex->ExtractActualizationTasks(context, extTasks);
     }
 
     std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {

@@ -15,12 +15,15 @@ std::shared_ptr<NKikimr::NOlap::TGranuleMeta> TGranulesStorage::GetGranuleForCom
     std::optional<NStorageOptimizer::TOptimizationPriority> priority;
     std::shared_ptr<TGranuleMeta> granule;
     for (auto&& i : granules) {
+        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("path_id", i.first);
         i.second->ActualizeOptimizer(now);
-        if (!priority || *priority < i.second->GetCompactionPriority()) {
-            if (i.second->IsLockedOptimizer(dataLocksManager)) {
+        auto gPriority = i.second->GetCompactionPriority();
+        if (!priority || *priority < gPriority) {
+            if (i.second->IsLockedOptimizer(dataLocksManager) && !gPriority.IsZero()) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_optimizer_throught_lock")("priority", gPriority.DebugString());
                 continue;
             }
-            priority = i.second->GetCompactionPriority();
+            priority = gPriority;
             granule = i.second;
         }
     }

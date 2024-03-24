@@ -16,6 +16,7 @@ class TTieringProcessContext;
 class TAddExternalContext {
 private:
     YDB_READONLY_DEF(TInstant, Now);
+    YDB_ACCESSOR(bool, PortionExclusiveGuarantee, true);
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& Portions;
 public:
     TAddExternalContext(const TInstant now, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& portions)

@@ -1244,6 +1244,10 @@ private:
                     NullableDatum argDatum = { 0, false };
                     if (!value) {
                         argDatum.isnull = true;
+                        if (callInfo.flinfo->fn_strict) {
+                            IsFinished = true;
+                            break;
+                        }
                     } else {
                         argDatum.value = ArgDesc[i].PassByValue ?
                             ScalarDatumFromPod(value) :

@@ -11094,6 +11094,13 @@
             "uri": "https://{canondata_backend}/1599023/af9c2f81df0601cf266a0926b5ce73b6101b9115/resource.tar.gz#test_sql2yql.test_pg-equals_where_over_cross_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-expr_op_array]": [
+        {
+            "checksum": "7eb7eb2bbd882b2728d4e43e47d7d792",
+            "size": 2405,
+            "uri": "https://{canondata_backend}/1600758/c0da0eabfcdc1f45f57dfae3a7b2c8a87ec7dbd2/resource.tar.gz#test_sql2yql.test_pg-expr_op_array_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-in_sorted]": [
         {
             "checksum": "fbc06075b87f817a209a48f1f7f5ea42",

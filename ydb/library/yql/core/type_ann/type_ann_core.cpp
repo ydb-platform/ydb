@@ -12284,6 +12284,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["PgResolvedCallCtx"] = &PgCallWrapper;
         ExtFunctions["PgOp"] = &PgOpWrapper;
         ExtFunctions["PgResolvedOp"] = &PgOpWrapper;
+        ExtFunctions["PgAnyOp"] = &PgArrayOpWrapper;
+        ExtFunctions["PgAllOp"] = &PgArrayOpWrapper;
+        ExtFunctions["PgAnyResolvedOp"] = &PgArrayOpWrapper;
+        ExtFunctions["PgAllResolvedOp"] = &PgArrayOpWrapper;
         ExtFunctions["PgSelect"] = &PgSelectWrapper;
         ExtFunctions["PgSetItem"] = &PgSetItemWrapper;
         ExtFunctions["PgValuesList"] = &PgValuesListWrapper;

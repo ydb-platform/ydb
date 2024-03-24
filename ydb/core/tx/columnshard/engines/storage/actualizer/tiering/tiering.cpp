@@ -38,7 +38,7 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
             max = statOperator.GetScalarVerified(portion.GetMeta().GetStatisticsStorage());
         }
         auto tieringInfo = Tiering->GetTierToMove(max, now);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("tiering_info", tieringInfo.DebugString());
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("tiering_info", tieringInfo.DebugString());
         std::optional<i64> d;
         std::set<TString> storagesWrite;
         TString targetTierName;
@@ -72,6 +72,13 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
 }
 
 void TTieringActualizer::DoAddPortion(const TPortionInfo& portion, const TAddExternalContext& addContext) {
+    if (!addContext.GetPortionExclusiveGuarantee()) {
+        if (PortionsInfo.contains(portion.GetPortionId())) {
+            return;
+        }
+    } else {
+        AFL_VERIFY(!PortionsInfo.contains(portion.GetPortionId()));
+    }
     auto info = BuildActualizationInfo(portion, addContext.GetNow());
     if (!info) {
         return;
@@ -79,11 +86,11 @@ void TTieringActualizer::DoAddPortion(const TPortionInfo& portion, const TAddExt
     PortionIdByWaitDuration[info->GetAddress()][info->GetWaitDuration() + (addContext.GetNow() - StartInstant)].emplace(portion.GetPortionId());
     auto address = info->GetAddress();
     TFindActualizationInfo findId(std::move(address), info->GetWaitDuration() + (addContext.GetNow() - StartInstant));
-    PortionsInfo.emplace(portion.GetPortionId(), std::move(findId));
+    AFL_VERIFY(PortionsInfo.emplace(portion.GetPortionId(), std::move(findId)).second);
 }
 
-void TTieringActualizer::DoRemovePortion(const TPortionInfo& info) {
-    auto it = PortionsInfo.find(info.GetPortionId());
+void TTieringActualizer::DoRemovePortion(const ui64 portionId) {
+    auto it = PortionsInfo.find(portionId);
     if (it == PortionsInfo.end()) {
         return;
     }
@@ -91,19 +98,21 @@ void TTieringActualizer::DoRemovePortion(const TPortionInfo& info) {
     AFL_VERIFY(itAddress != PortionIdByWaitDuration.end());
     auto itDuration = itAddress->second.find(it->second.GetWaitDuration());
     AFL_VERIFY(itDuration != itAddress->second.end());
-    AFL_VERIFY(itDuration->second.erase(info.GetPortionId()));
+    AFL_VERIFY(itDuration->second.erase(portionId));
     if (itDuration->second.empty()) {
         itAddress->second.erase(itDuration);
     }
     if (itAddress->second.empty()) {
         PortionIdByWaitDuration.erase(itAddress);
     }
+    PortionsInfo.erase(it);
 }
 
-void TTieringActualizer::DoBuildTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& /*internalContext*/) const {
+void TTieringActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& /*internalContext*/) {
+    THashSet<ui64> portionIds;
     for (auto&& [address, addressPortions] : PortionIdByWaitDuration) {
         if (!tasksContext.IsRWAddressAvailable(address)) {
-            break;
+            continue;
         }
         for (auto&& [duration, portions] : addressPortions) {
             if (duration - (tasksContext.Now - StartInstant) > TDuration::Zero()) {
@@ -130,12 +139,17 @@ void TTieringActualizer::DoBuildTasks(TTieringProcessContext& tasksContext, cons
                 if (!tasksContext.AddPortion(*portion, std::move(features), info->GetLateness())) {
                     limitEnriched = true;
                     break;
+                } else {
+                    portionIds.emplace(portion->GetPortionId());
                 }
             }
             if (limitEnriched) {
                 break;
             }
         }
+    }
+    for (auto&& i : portionIds) {
+        RemovePortion(i);
     }
 }
 

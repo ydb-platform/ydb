@@ -721,6 +721,7 @@ public:
     ///
     /// Strict schemas are not allowed to have columns not described in schema.
     /// Nonstrict schemas are allowed to have such columns, all such missing columns are assumed to have
+    /// type any (or optional<yson> in type_v3 terminology).
     FLUENT_FIELD_DEFAULT_ENCAPSULATED(bool, Strict, true);
 
     ///

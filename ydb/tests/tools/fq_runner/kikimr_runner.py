@@ -173,6 +173,13 @@ class BaseTenant(abc.ABC):
                     result.append(metering["usage"]["quantity"])
         return result
 
+    def drop_metering(self, node_index=None):
+        if node_index is None:
+            for n in self.kikimr_cluster.nodes:
+                self.drop_metering(n)
+        else:
+            open(self.kikimr_cluster.nodes[node_index].cwd + "/metering.bill", "w").close()
+
     def get_sensors(self, node_index, counters):
         url = self.monitoring_endpoint(node_index=node_index) + "/counters/counters={}/json".format(counters)
         return load_metrics(url)

@@ -9,17 +9,22 @@ namespace NKikimr::NOlap::NDataLocks {
 class TManager {
 private:
     THashMap<TString, std::shared_ptr<ILock>> ProcessLocks;
+    std::shared_ptr<TAtomicCounter> StopFlag = std::make_shared<TAtomicCounter>(0);
     void UnregisterLock(const TString& processId);
 public:
     TManager() = default;
 
+    void Stop();
+
     class TGuard {
     private:
         const TString ProcessId;
+        std::shared_ptr<TAtomicCounter> StopFlag;
         bool Released = false;
     public:
-        TGuard(const TString& processId)
+        TGuard(const TString& processId, const std::shared_ptr<TAtomicCounter>& stopFlag)
             : ProcessId(processId)
+            , StopFlag(stopFlag)
         {
 
         }

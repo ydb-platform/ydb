@@ -25,6 +25,7 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
 
     StoragesManager->Stop();
     ExportsManager->Stop();
+    DataLocksManager->Stop();
     if (Tiers) {
         Tiers->Stop(true);
     }

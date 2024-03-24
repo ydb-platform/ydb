@@ -6,7 +6,7 @@ namespace NKikimr::NOlap::NDataLocks {
 std::shared_ptr<TManager::TGuard> TManager::RegisterLock(const std::shared_ptr<ILock>& lock) {
     AFL_VERIFY(lock);
     AFL_VERIFY(ProcessLocks.emplace(lock->GetLockName(), lock).second)("process_id", lock->GetLockName());
-    return std::make_shared<TGuard>(lock->GetLockName());
+    return std::make_shared<TGuard>(lock->GetLockName(), StopFlag);
 }
 
 void TManager::UnregisterLock(const TString& processId) {
@@ -31,8 +31,12 @@ std::optional<TString> TManager::IsLocked(const TGranuleMeta& granule) const {
     return {};
 }
 
+void TManager::Stop() {
+    AFL_VERIFY(StopFlag->Inc() == 1);
+}
+
 TManager::TGuard::~TGuard() {
-//    AFL_VERIFY(Released || !NActors::TlsActivationContext);
+    AFL_VERIFY(Released || !NActors::TlsActivationContext || StopFlag->Val() == 1);
 }
 
 void TManager::TGuard::Release(TManager& manager) {

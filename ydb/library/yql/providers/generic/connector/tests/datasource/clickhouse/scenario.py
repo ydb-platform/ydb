@@ -1,6 +1,5 @@
 from typing import Sequence
 
-
 import ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 as data_source_pb2
 
 import ydb.library.yql.providers.generic.connector.tests.utils.artifacts as artifacts
@@ -14,8 +13,9 @@ from ydb.library.yql.providers.generic.connector.tests.utils.sql import format_v
 
 from client import Client
 
-import ydb.library.yql.providers.generic.connector.tests.test_cases.select_missing_database as select_missing_database
-import ydb.library.yql.providers.generic.connector.tests.test_cases.select_missing_table as select_missing_table
+import ydb.library.yql.providers.generic.connector.tests.test_cases.select_missing_database as tc_select_missing_database
+import ydb.library.yql.providers.generic.connector.tests.test_cases.select_missing_table as tc_select_missing_table
+import ydb.library.yql.providers.generic.connector.tests.test_cases.select_positive_common as tc_select_positive_common
 
 LOGGER = make_logger(__name__)
 
@@ -61,7 +61,7 @@ def prepare_table(
 
 def select_positive(
     test_name: str,
-    test_case: select_missing_table.TestCase,
+    test_case: tc_select_positive_common.TestCase,
     settings: Settings,
     runner: Runner,
     client: Client,
@@ -114,7 +114,7 @@ def select_positive(
 
 def select_missing_database(
     test_name: str,
-    test_case: select_missing_database.TestCase,
+    test_case: tc_select_missing_database.TestCase,
     settings: Settings,
     runner: Runner,
 ):
@@ -134,7 +134,7 @@ def select_missing_database(
 
 def select_missing_table(
     test_name: str,
-    test_case: select_missing_table.TestCase,
+    test_case: tc_select_missing_table.TestCase,
     settings: Settings,
     runner: Runner,
     client: Client,

@@ -1,5 +1,4 @@
 from contextlib import contextmanager
-import abc
 import time
 from datetime import datetime
 from typing import Tuple
@@ -7,7 +6,7 @@ import sys
 
 import pg8000.dbapi
 
-from utils.settings import Settings
+from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
 
 
 class Client:
@@ -55,4 +54,3 @@ class Client:
         ss = self.settings
         params = f'{ss.username} {ss.password} {ss.host_external} {ss.port_external} {dbname}'
         raise Exception(f"Failed to connect PostgreSQL in {attempt} attempt(s) with params: {params}")
-

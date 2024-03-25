@@ -1,34 +1,31 @@
-from typing import TypeAlias
+from typing import TypeAlias, Final
+import pathlib
 
 import grpc
 import pytest
 
-import ydb.library.yql.providers.generic.connector.api.service.connector_pb2_grpc as api
 import yatest.common as yat
 
-from utils.settings import Settings
-import utils.clickhouse
-from utils.dqrun import DqRunner
-from utils.kqprun import KqpRunner
-from utils.runner import Runner
-import utils.postgresql
+from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
+import ydb.library.yql.providers.generic.connector.api.service.connector_pb2_grpc as api
+from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
+from ydb.library.yql.providers.generic.connector.tests.utils.dqrun import DqRunner
+from ydb.library.yql.providers.generic.connector.tests.utils.kqprun import KqpRunner
+from ydb.library.yql.providers.generic.connector.tests.utils.runner import Runner
+from client import Client
+
+
+docker_compose_dir: Final = pathlib.Path("ydb/library/yql/providers/generic/connector/tests/datasource/postgresql")
 
 
 @pytest.fixture
 def settings() -> Settings:
-    return Settings.from_env()
+    return Settings.from_env(docker_compose_dir=docker_compose_dir, data_source_kind=EDataSourceKind.POSTGRESQL)
 
 
 @pytest.fixture
-def clickhouse_client(settings) -> utils.clickhouse.Client:
-    client = utils.clickhouse.make_client(settings.clickhouse)
-    yield client
-    client.close()
-
-
-@pytest.fixture
-def postgresql_client(settings) -> utils.postgresql.Client:
-    return utils.postgresql.Client(settings.postgresql)
+def postgresql_client(settings) -> Client:
+    return Client(settings.postgresql)
 
 
 ConnectorClient: TypeAlias = api.ConnectorStub

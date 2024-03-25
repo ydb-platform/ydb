@@ -84,6 +84,8 @@ class Settings:
             case _:
                 raise Exception(f'invalid data source: {data_source_kind}')
 
+        print("CRAB", data_sources)
+
         return cls(
             connector=cls.Connector(
                 grpc_host='localhost',

@@ -111,7 +111,7 @@ void TWorkersStorage::CheckZombie(ui32 nodeId, TGUID workerId, Yql::DqsProto::Re
             NodeIds[nodeId] = std::make_pair(workerId, request.GetStartTime());
             auto maybeWorker = Workers.find(NodeIds[nodeId].first);
             if (maybeWorker != Workers.end()) {
-                maybeWorker->second.OnDead();
+                maybeWorker->second->OnDead();
             }
         } else {
             // Ping from old node

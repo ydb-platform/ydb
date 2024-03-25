@@ -114,6 +114,25 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(key[desc];[asc])");
     }
 
+    Y_UNIT_TEST(SortByExpr) {
+        const auto s = R"((
+            (let mr_sink (DataSink 'yt (quote plato)))
+            (let list (AsList
+                (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
+                (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
+                (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
+            ))
+            (let sorted (Sort list (Bool 'False) (lambda '(item) (Substring (Member item 'subkey) (Uint64 '0) (Uint64 '3)))))
+            (let world (Write! world mr_sink (Key '('table (String 'Output))) sorted '('('mode 'renew))))
+            (let world (Commit! world mr_sink))
+            (return world)
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted([desc])");
+    }
+
     Y_UNIT_TEST(SortByTranspentIfPresent) {
         const auto s = R"((
             (let mr_sink (DataSink 'yt (quote plato)))

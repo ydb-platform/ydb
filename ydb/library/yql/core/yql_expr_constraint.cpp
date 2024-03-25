@@ -800,7 +800,7 @@ private:
             else
                 return {};
         else
-            return {};
+            columns.resize(1U);
 
         return columns;
     }

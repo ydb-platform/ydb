@@ -3,13 +3,11 @@ items:
 - name: Оглавление
   href: index.yaml
 - name: Начало работы
-  items:
-  - name: Быстрый старт
-    href: getting_started/quickstart.md
-  - name: Kubernetes
-    href: getting_started/kubernetes.md
-  - name: Ansible
-    href: getting_started/ansible.md
+  href: quickstart.md
+- name: Для SRE
+  include:
+    mode: link
+    path: sre/toc_p.yaml
 
 # Main
 - { name: Концепции,                               include: { mode: link, path: concepts/toc_p.yaml } }

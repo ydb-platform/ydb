@@ -38,7 +38,7 @@ default:
   objstorage-name: Object Storage
   ydb-cli: ydb
   k8s: Kubernetes
-  quickstart-path: ../../../../getting_started/quickstart.md
+  quickstart-path: ../../../../quickstart.md
   oss: true
   feature_not_null_for_pk: true
   feature_not_null: true

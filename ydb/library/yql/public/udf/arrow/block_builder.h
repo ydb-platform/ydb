@@ -353,7 +353,8 @@ public:
     void DoAdd(NUdf::TUnboxedValuePod value) final {
         if constexpr (Nullable) {
             if (!value) {
-                return DoAddDefault();
+                NullPtr[GetCurrLen()] = 0;
+                return DoAdd(TLayout{});
             }
         }
         DoAdd(FromUnboxedValuePod(value));
@@ -362,8 +363,10 @@ public:
     void DoAdd(TBlockItem value) final {
         if constexpr (Nullable) {
             if (!value) {
-                return DoAddDefault();
+                NullPtr[GetCurrLen()] = 0;
+                return DoAdd(TLayout{});
             }
+            NullPtr[GetCurrLen()] = 1;
         }
         DoAdd(FromBlockItem(value));
     }
@@ -391,7 +394,7 @@ public:
     void DoAdd(TInputBuffer &input) final {
         if constexpr (Nullable) {
             if (!input.PopChar()) {
-                return DoAddDefault();
+                return DoAdd(TBlockItem{});
             }
         }
         DoAdd(input.PopNumber<TLayout>());

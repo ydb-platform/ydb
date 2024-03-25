@@ -1072,8 +1072,6 @@ struct TEvPQ {
         ui64 MessagesWrittenTotal;
         ui64 MessagesWrittenGrpc;
         TVector<ui64> MessagesSizes;
-        TVector<ui64> TopicWriteQuotaWait;
-        TVector<ui64> PartitionWriteQuotaWait;
     };
 
     struct TEvGetWriteInfoError : public TEventLocal<TEvGetWriteInfoError, EvGetWriteInfoError> {

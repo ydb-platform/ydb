@@ -159,13 +159,13 @@ Y_UNIT_TEST_SUITE(ObjectDistribuiton) {
             if (toggleNode(engine)) {
                 auto nodeId = pickNode(engine);
                 auto& node = nodes.at(nodeId);
-                if (node.IsDown()) {
+                if (node.Down) {
                     Ctest << "AddNode " << nodeId << Endl;
-                    node.Availability = ENodeAvailability::Up;
+                    node.Down = false;
                     objectDistributions.AddNode(node);
                 } else {
                     Ctest << "RemoveNode " << nodeId << Endl;
-                    node.Availability = ENodeAvailability::Down;
+                    node.Down = true;
                     objectDistributions.RemoveNode(node);
                 }
             }
@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(ObjectDistribuiton) {
             i64 minCnt = NUM_OPERATIONS;
             i64 maxCnt = 0;
             for (TNodeId nodeId = nodeBegin; nodeId < nodeEnd; ++nodeId) {
-                if (nodes.at(nodeId).IsDown()) {
+                if (nodes.at(nodeId).Down) {
                     continue;
                 }
                 i64 cnt = trueDistribution[{nodeId, object}];
@@ -212,7 +212,7 @@ Y_UNIT_TEST_SUITE(ObjectDistribuiton) {
             Ctest << "\n";
         }
         for (TNodeId nodeId = 0; nodeId < NUM_NODES; ++nodeId) {
-            Ctest << (nodes.at(nodeId).IsDown() ? "-" : "+") << "\t";
+            Ctest << (nodes.at(nodeId).Down ? "-" : "+") << "\t";
         }
         Ctest << "\n";
 

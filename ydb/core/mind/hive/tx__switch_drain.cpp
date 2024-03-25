@@ -32,10 +32,11 @@ public:
                 if (Settings.Persist) {
                     db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Drain, Schema::Node::DrainInitiators>(node->Drain, node->DrainInitiators);
                 }
-                if (Settings.KeepDown) {
-                    node->SetAvailability(ENodeAvailability::DownUntilRestart);
+                if (Settings.KeepDown && !node->Down) {
+                    node->SetDown(true);
+                    node->BecomeUpOnRestart = true;
                     if (Settings.Persist) {
-                        db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Down>(ENodeAvailability::DownUntilRestart);
+                        db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Down, Schema::Node::BecomeUpOnRestart>(true, true);
                     }
                 }
                 Self->StartHiveDrain(NodeId, std::move(Settings));
@@ -84,7 +85,7 @@ public:
             if (!Settings.KeepDown) {
                 // node->SetDown(false); // it has already been dropped by Drain actor
                 if (Settings.Persist) {
-                    db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Down>(ENodeAvailability::Up);
+                    db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Down>(false);
                 }
             }
         }

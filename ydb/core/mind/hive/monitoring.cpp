@@ -443,7 +443,7 @@ public:
 
             jsonNode["Domain"] = node.ServicedDomains.empty() ? "" : Self->GetDomainName(node.GetServicedDomain());
             jsonNode["Alive"] = node.IsAlive();
-            jsonNode["Down"] = node.Availability;
+            jsonNode["Down"] = node.Down;
         }
         NJson::WriteJson(&out, &jsonData);
     }
@@ -2457,7 +2457,7 @@ public:
                 }
                 jsonNode["Domain"] = node.ServicedDomains.empty() ? "" : Self->GetDomainName(node.GetServicedDomain());
                 jsonNode["Alive"] = node.IsAlive();
-                jsonNode["Down"] = node.Availability;
+                jsonNode["Down"] = node.Down;
                 jsonNode["Freeze"] = node.Freeze;
                 jsonNode["Drain"] = node.IsAlive() ? node.Drain : false;
                 jsonNode["Uptime"] = node.IsAlive() ? GetDurationString(node.GetUptime()) : "";
@@ -2520,11 +2520,7 @@ public:
         TNodeInfo* node = Self->FindNode(NodeId);
         if (node != nullptr) {
             node->SetDown(Down);
-            if (Down) {
-                db.Table<Schema::Node>().Key(NodeId).Update(NIceDb::TUpdate<Schema::Node::Down>(ENodeAvailability::Down));
-            } else {
-                db.Table<Schema::Node>().Key(NodeId).Update(NIceDb::TUpdate<Schema::Node::Down>(ENodeAvailability::Up));
-            }
+            db.Table<Schema::Node>().Key(NodeId).Update(NIceDb::TUpdate<Schema::Node::Down>(Down));
             NJson::TJsonValue jsonOperation;
             jsonOperation["NodeId"] = NodeId;
             jsonOperation["Down"] = Down;

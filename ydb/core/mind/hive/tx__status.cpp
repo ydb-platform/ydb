@@ -49,7 +49,7 @@ public:
             Self->ProcessWaitQueue(); // new node connected
             if (node.Drain && Self->BalancerNodes.count(nodeId) == 0) {
                 BLOG_D("THive::TTxStatus(" << nodeId << ")::Complete - continuing node drain");
-                // If the drain originally had KeepDown = true, it is already reflected in node.Availability
+                // If the drain originally had KeepDown = true, it is already reflected in node.BecomeUpOnRestart
                 Self->StartHiveDrain(nodeId, {.Persist = true, .KeepDown = false});
             }
             Self->ObjectDistributions.AddNode(node);

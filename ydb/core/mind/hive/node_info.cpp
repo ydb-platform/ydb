@@ -10,7 +10,7 @@ TNodeInfo::TNodeInfo(TNodeId nodeId, THive& hive)
     : VolatileState(EVolatileState::Unknown)
     , Hive(hive)
     , Id(nodeId)
-    , Availability(ENodeAvailability::Up)
+    , Down(false)
     , Freeze(false)
     , Drain(false)
     , ResourceValues()
@@ -161,7 +161,7 @@ bool TNodeInfo::MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debu
 }
 
 bool TNodeInfo::IsAllowedToRunTablet(TTabletDebugState* debugState) const {
-    if (IsDown()) {
+    if (Down) {
         if (debugState) {
             debugState->NodesDown++;
         }
@@ -358,25 +358,13 @@ void TNodeInfo::SendReconnect(const TActorId& local) {
     Hive.SendReconnect(local);
 }
 
-bool TNodeInfo::IsDown() const {
-    return Availability != ENodeAvailability::Up;
-}
-
-void TNodeInfo::SetAvailability(ENodeAvailability availability) {
-    Availability = availability;
-    if (IsDown()) {
+void TNodeInfo::SetDown(bool down) {
+    Down = down;
+    if (Down) {
         Hive.ObjectDistributions.RemoveNode(*this);
     } else {
         Hive.ObjectDistributions.AddNode(*this);
         Hive.ProcessWaitQueue();
-    }
-}
-
-void TNodeInfo::SetDown(bool down) {
-    if (down) {
-        SetAvailability(ENodeAvailability::Down);
-    } else {
-        SetAvailability(ENodeAvailability::Up);
     }
 }
 

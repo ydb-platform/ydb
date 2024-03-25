@@ -61,9 +61,10 @@ public:
     THive& Hive;
     TNodeId Id;
     TActorId Local;
-    ENodeAvailability Availability;
+    bool Down;
     bool Freeze;
     bool Drain;
+    bool BecomeUpOnRestart = false;
     TVector<TActorId> DrainInitiators;
     TDrainSettings DrainSettings;
     std::unordered_map<TTabletInfo::EVolatileState, std::unordered_set<TTabletInfo*>> Tablets;
@@ -231,8 +232,6 @@ public:
     void DeregisterInDomains();
     void Ping();
     void SendReconnect(const TActorId& local);
-    bool IsDown() const;
-    void SetAvailability(ENodeAvailability availability);
     void SetDown(bool down);
     void SetFreeze(bool freeze);
     void UpdateResourceMaximum(const NKikimrTabletBase::TMetrics& metrics);

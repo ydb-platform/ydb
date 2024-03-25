@@ -15,7 +15,7 @@ protected:
     ui32 KickInFlight;
     ui32 Movements;
     TNodeId NodeId;
-    ENodeAvailability AvailabilityBefore;
+    bool DownBefore = false;
     TActorId DomainHivePipeClient;
     TTabletId DomainHiveId = 0;
     ui32 DomainMovements = 0;
@@ -50,7 +50,9 @@ protected:
         BLOG_I("Drain " << SelfId() << " finished with " << Movements << " movements made");
         TNodeInfo* nodeInfo = Hive->FindNode(NodeId);
         if (nodeInfo != nullptr) {
-            nodeInfo->SetAvailability(AvailabilityBefore);
+            if (!DownBefore) {
+                nodeInfo->SetDown(false);
+            }
         }
         Hive->Execute(Hive->CreateSwitchDrainOff(NodeId, std::move(Settings), status, Movements + DomainMovements));
         PassAway();
@@ -174,8 +176,10 @@ public:
                 }
             }
             NextKick = Tablets.begin();
-            AvailabilityBefore = nodeInfo->Availability;
-            nodeInfo->SetAvailability(ENodeAvailability::DownUntilDrainEnds);
+            DownBefore = nodeInfo->Down;
+            if (!DownBefore) {
+                nodeInfo->SetDown(true);
+            }
 
             if (nodeInfo->ServicedDomains.size() == 1) {
                 TDomainInfo* domainInfo = Hive->FindDomain(nodeInfo->ServicedDomains.front());

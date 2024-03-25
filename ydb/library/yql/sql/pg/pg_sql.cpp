@@ -2447,7 +2447,7 @@ public:
         }
 
         if (varName == "search_path"){
-            auto searchPath = this->State->GUCSettings->Get("search_path");
+            auto searchPath = Settings.GUCSettings->Get("search_path");
             return searchPath ? *searchPath : "public";
         }
         if (varName == "default_transaction_read_only"){

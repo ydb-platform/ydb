@@ -14,6 +14,14 @@
 
 namespace NYdb::NTopic {
 
+enum class ECodec : ui32 {
+    RAW = 1,
+    GZIP = 2,
+    LZOP = 3,
+    ZSTD = 4,
+    CUSTOM = 10000,
+};
+
 class ICodec {
 public:
     virtual ~ICodec() = default;

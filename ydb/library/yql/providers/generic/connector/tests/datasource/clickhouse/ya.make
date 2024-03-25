@@ -40,8 +40,11 @@ ENDIF()
 
 TEST_SRCS(
     client.py
+    collection.py
     conftest.py
     scenario.py
+    select_datetime.py
+    select_positive_clickhouse.py
     test.py
 )
 

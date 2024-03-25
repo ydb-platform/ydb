@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import Optional, Sequence
+import pathlib
 
 import yatest.common
-import os
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
@@ -49,11 +49,40 @@ class Settings:
     postgresql: PostgreSQL
 
     @classmethod
-    def from_env(cls, testDir: os.PathLike) -> 'Settings':
-        docker_compose_file = yatest.common.source_path(
-            testDir.join('docker-compose.yml'),
-        )
+    def from_env(cls, docker_compose_dir: pathlib.Path, data_source_kind: EDataSourceKind) -> 'Settings':
+        docker_compose_file_relative_path = str(docker_compose_dir / 'docker-compose.yml')
+        docker_compose_file = yatest.common.source_path(docker_compose_file_relative_path)
         endpoint_determiner = EndpointDeterminer(docker_compose_file)
+
+        data_sources = dict()
+
+        match data_source_kind:
+            case EDataSourceKind.CLICKHOUSE:
+                data_sources[data_source_kind] = cls.ClickHouse(
+                    cluster_name='clickhouse_integration_test',
+                    host_external='localhost',
+                    host_internal='clickhouse',
+                    http_port_external=endpoint_determiner.get_port('clickhouse', 8123),
+                    native_port_external=endpoint_determiner.get_port('clickhouse', 9000),
+                    http_port_internal=8123,
+                    native_port_internal=9000,
+                    username='user',
+                    password='password',
+                    protocol='native',
+                )
+            case EDataSourceKind.POSTGRESQL:
+                data_sources[data_source_kind] = cls.PostgreSQL(
+                    cluster_name='postgresql_integration_test',
+                    host_external='localhost',
+                    host_internal='postgresql',
+                    port_external=endpoint_determiner.get_port('postgresql', 5432),
+                    port_internal=5432,
+                    dbname='db',
+                    username='user',
+                    password='password',
+                )
+            case _:
+                raise Exception(f'invalid data source: {data_source_kind}')
 
         return cls(
             connector=cls.Connector(
@@ -62,28 +91,8 @@ class Settings:
                 paging_bytes_per_page=4 * 1024 * 1024,
                 paging_prefetch_queue_capacity=2,
             ),
-            clickhouse=cls.ClickHouse(
-                cluster_name='clickhouse_integration_test',
-                host_external='localhost',
-                host_internal='clickhouse',
-                http_port_external=endpoint_determiner.get_port('clickhouse', 8123),
-                native_port_external=endpoint_determiner.get_port('clickhouse', 9000),
-                http_port_internal=8123,
-                native_port_internal=9000,
-                username='user',
-                password='password',
-                protocol='native',
-            ),
-            postgresql=cls.PostgreSQL(
-                cluster_name='postgresql_integration_test',
-                host_external='localhost',
-                host_internal='postgresql',
-                port_external=endpoint_determiner.get_port('postgresql', 5432),
-                port_internal=5432,
-                dbname='db',
-                username='user',
-                password='password',
-            ),
+            clickhouse=data_sources.get(EDataSourceKind.CLICKHOUSE),
+            postgresql=data_sources.get(EDataSourceKind.POSTGRESQL),
         )
 
     def get_cluster_name(self, data_source_kind: EDataSourceKind) -> str:

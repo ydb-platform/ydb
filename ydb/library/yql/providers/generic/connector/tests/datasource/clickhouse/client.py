@@ -1,5 +1,4 @@
 from typing import TypeAlias
-import abc
 from datetime import datetime
 import sys
 import time
@@ -28,4 +27,3 @@ def make_client(s: Settings.ClickHouse) -> Client:
         return client
 
     raise Exception(f"Failed to connect ClickHouse in {attempt} attempt(s)")
-

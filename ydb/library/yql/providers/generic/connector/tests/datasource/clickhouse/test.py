@@ -1,26 +1,25 @@
-from pathlib import Path
 import pytest
 
+from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
+from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
+from ydb.library.yql.providers.generic.connector.tests.utils.runner import Runner
+import ydb.library.yql.providers.generic.connector.tests.utils.dqrun as dqrun
+import ydb.library.yql.providers.generic.connector.tests.utils.kqprun as kqprun
 
-import ydb.library.yql.providers.generic.connector.tests.test_cases as test_cases
-import ydb.library.yql.providers.generic.connector.tests.utils as utils
-
-from utils.settings import Settings
-from utils.runner import Runner
-import utils.dqrun as dqrun
-import utils.kqprun as kqprun
-
-from conftest import configure_runner
+from client import Client
+from conftest import configure_runner, docker_compose_dir
 import scenario
+from collection import Collection
 
-from test_cases.collection import Collection
-import test_cases.select_missing_database
-import test_cases.select_missing_table
-import test_cases.select_positive_common
+import ydb.library.yql.providers.generic.connector.tests.test_cases.select_missing_database as select_missing_database
+import ydb.library.yql.providers.generic.connector.tests.test_cases.select_missing_table as select_missing_table
+import ydb.library.yql.providers.generic.connector.tests.test_cases.select_positive_common as select_positive_common
 
 
 # Global collection of test cases dependent on environment
-tc_collection = Collection(Settings.from_env())
+tc_collection = Collection(
+    Settings.from_env(docker_compose_dir=docker_compose_dir, data_source_kind=EDataSourceKind.CLICKHOUSE)
+)
 
 runners = (dqrun.DqRunner, kqprun.KqpRunner)
 runners_ids = ("dqrun", "kqprun")
@@ -36,8 +35,8 @@ def test_select_positive_clickhouse(
     request: pytest.FixtureRequest,
     settings: Settings,
     runner_type: Runner,
-    clickhouse_client: utils.clickhouse.Client,
-    test_case: test_cases.select_positive_common.TestCase,
+    clickhouse_client: Client,
+    test_case: select_positive_common.TestCase,
 ):
     runner = configure_runner(runner=runner_type, settings=settings)
     scenario.select_positive(
@@ -55,8 +54,8 @@ def test_select_missing_database(
     request: pytest.FixtureRequest,
     settings: Settings,
     runner_type: Runner,
-    clickhouse_client: utils.clickhouse.Client,
-    test_case: test_cases.select_missing_database.TestCase,
+    clickhouse_client: Client,
+    test_case: select_missing_database.TestCase,
 ):
     runner = configure_runner(runner=runner_type, settings=settings)
     scenario.select_missing_table(
@@ -78,8 +77,8 @@ def test_select_missing_table(
     request: pytest.FixtureRequest,
     settings: Settings,
     runner_type: Runner,
-    clickhouse_client: utils.clickhouse.Client,
-    test_case: test_cases.select_missing_table.TestCase,
+    clickhouse_client: Client,
+    test_case: select_missing_table.TestCase,
 ):
     runner = configure_runner(runner=runner_type, settings=settings)
     scenario.select_missing_table(
@@ -99,8 +98,8 @@ def test_select_datetime(
     request: pytest.FixtureRequest,
     settings: Settings,
     runner_type: Runner,
-    clickhouse_client: utils.clickhouse.Client,
-    test_case: test_cases.select_positive_common.TestCase,
+    clickhouse_client: Client,
+    test_case: select_positive_common.TestCase,
 ):
     runner = configure_runner(runner=runner_type, settings=settings)
     scenario.select_positive(

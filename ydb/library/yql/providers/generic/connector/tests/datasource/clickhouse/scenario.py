@@ -1,24 +1,21 @@
 from typing import Sequence
 
 
-import ydb.library.yql.providers.generic.connector.tests.test_cases as test_cases
-from ydb.library.yql.providers.generic.connector.tests import utils
 import ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 as data_source_pb2
 
-import utils.artifacts as artifacts
-from utils.comparator import data_outs_equal
-from utils.database import Database
-from utils.log import make_logger, debug_with_limit
-from utils.schema import Schema
-from utils.settings import Settings
-from utils.runner import Runner
-from utils.sql import format_values_for_bulk_sql_insert
+import ydb.library.yql.providers.generic.connector.tests.utils.artifacts as artifacts
+from ydb.library.yql.providers.generic.connector.tests.utils.comparator import data_outs_equal
+from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
+from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger, debug_with_limit
+from ydb.library.yql.providers.generic.connector.tests.utils.schema import Schema
+from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
+from ydb.library.yql.providers.generic.connector.tests.utils.runner import Runner
+from ydb.library.yql.providers.generic.connector.tests.utils.sql import format_values_for_bulk_sql_insert
 
 from client import Client
 
-import test_cases.select_missing_database
-import test_cases.select_missing_table
-import test_cases.select_positive_common
+import ydb.library.yql.providers.generic.connector.tests.test_cases.select_missing_database as select_missing_database
+import ydb.library.yql.providers.generic.connector.tests.test_cases.select_missing_table as select_missing_table
 
 LOGGER = make_logger(__name__)
 
@@ -64,7 +61,7 @@ def prepare_table(
 
 def select_positive(
     test_name: str,
-    test_case: test_cases.select_missing_table.TestCase,
+    test_case: select_missing_table.TestCase,
     settings: Settings,
     runner: Runner,
     client: Client,
@@ -117,7 +114,7 @@ def select_positive(
 
 def select_missing_database(
     test_name: str,
-    test_case: test_cases.select_missing_database.TestCase,
+    test_case: select_missing_database.TestCase,
     settings: Settings,
     runner: Runner,
 ):
@@ -137,7 +134,7 @@ def select_missing_database(
 
 def select_missing_table(
     test_name: str,
-    test_case: test_cases.select_missing_table.TestCase,
+    test_case: select_missing_table.TestCase,
     settings: Settings,
     runner: Runner,
     client: Client,

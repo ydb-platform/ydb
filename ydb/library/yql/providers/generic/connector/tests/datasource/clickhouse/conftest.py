@@ -1,8 +1,10 @@
-from typing import TypeAlias
+from typing import TypeAlias, Final
+import pathlib
 
 import grpc
 import pytest
 
+from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
 import ydb.library.yql.providers.generic.connector.api.service.connector_pb2_grpc as api
 import yatest.common as yat
 
@@ -10,12 +12,21 @@ from ydb.library.yql.providers.generic.connector.tests.utils.settings import Set
 from ydb.library.yql.providers.generic.connector.tests.utils.dqrun import DqRunner
 from ydb.library.yql.providers.generic.connector.tests.utils.kqprun import KqpRunner
 from ydb.library.yql.providers.generic.connector.tests.utils.runner import Runner
+
 import client
+from collection import Collection
+
+docker_compose_dir: Final = pathlib.Path("ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse")
 
 
 @pytest.fixture
 def settings() -> Settings:
-    return Settings.from_env("ydb/library/yql/providers/generic/connector/datasource/clickhouse")
+    return Settings.from_env(docker_compose_dir=docker_compose_dir, data_source_kind=EDataSourceKind.CLICKHOUSE)
+
+
+@pytest.fixture
+def collection(settings) -> Collection:
+    return Collection(settings)
 
 
 @pytest.fixture

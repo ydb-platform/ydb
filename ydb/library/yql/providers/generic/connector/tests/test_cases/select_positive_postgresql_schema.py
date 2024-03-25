@@ -9,8 +9,8 @@ from utils.settings import GenericSettings
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
-import ydb.library.yql.providers.generic.connector.tests.utils.clickhouse as clickhouse
-import ydb.library.yql.providers.generic.connector.tests.utils.postgresql as postgresql
+import ydb.library.yql.providers.generic.connector.tests.utils.types.clickhouse as clickhouse
+import ydb.library.yql.providers.generic.connector.tests.utils.types.postgresql as postgresql
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     Schema,
     Column,

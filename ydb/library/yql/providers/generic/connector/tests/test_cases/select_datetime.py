@@ -7,8 +7,8 @@ from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
 import ydb.library.yql.providers.generic.connector.tests.test_cases.select_positive_common as select_positive_common
-import ydb.library.yql.providers.generic.connector.tests.utils.clickhouse as clickhouse
-import ydb.library.yql.providers.generic.connector.tests.utils.postgresql as postgresql
+import ydb.library.yql.providers.generic.connector.tests.utils.types.clickhouse as clickhouse
+import ydb.library.yql.providers.generic.connector.tests.utils.types.postgresql as postgresql
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     Schema,
     Column,

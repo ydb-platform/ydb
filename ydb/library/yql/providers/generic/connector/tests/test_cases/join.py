@@ -7,8 +7,8 @@ from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
 from utils.settings import Settings
-import ydb.library.yql.providers.generic.connector.tests.utils.clickhouse as clickhouse
-import ydb.library.yql.providers.generic.connector.tests.utils.postgresql as postgresql
+import ydb.library.yql.providers.generic.connector.tests.utils.types.clickhouse as clickhouse
+import ydb.library.yql.providers.generic.connector.tests.utils.types.postgresql as postgresql
 from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
 from ydb.library.yql.providers.generic.connector.tests.utils.data_source_kind import data_source_kind_alias
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import (

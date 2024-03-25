@@ -51,7 +51,7 @@ class Settings:
     @classmethod
     def from_env(cls, testDir: os.PathLike) -> 'Settings':
         docker_compose_file = yatest.common.source_path(
-            testDir.join('docker-compose.yaml'),
+            testDir.join('docker-compose.yml'),
         )
         endpoint_determiner = EndpointDeterminer(docker_compose_file)
 

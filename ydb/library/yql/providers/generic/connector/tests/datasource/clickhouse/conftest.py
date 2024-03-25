@@ -6,11 +6,11 @@ import pytest
 import ydb.library.yql.providers.generic.connector.api.service.connector_pb2_grpc as api
 import yatest.common as yat
 
-from utils.settings import Settings
+from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
+from ydb.library.yql.providers.generic.connector.tests.utils.dqrun import DqRunner
+from ydb.library.yql.providers.generic.connector.tests.utils.kqprun import KqpRunner
+from ydb.library.yql.providers.generic.connector.tests.utils.runner import Runner
 import client
-from utils.dqrun import DqRunner
-from utils.kqprun import KqpRunner
-from utils.runner import Runner
 
 
 @pytest.fixture

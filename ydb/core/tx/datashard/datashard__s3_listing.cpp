@@ -8,8 +8,8 @@ using namespace NTabletFlatExecutor;
 
 class TDataShard::TTxS3Listing : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
-    TEvDataShard::TEvS3ListingRequest::TPtr Ev;
-    TAutoPtr<TEvDataShard::TEvS3ListingResponse> Result;
+    TEvDataShard::TEvObjectStorageListingRequest::TPtr Ev;
+    TAutoPtr<TEvDataShard::TEvObjectStorageListingResponse> Result;
 
     // Used to continue iteration from last known position instead of restarting from the beginning
     // This greatly improves performance for the cases with many deletion markers but sacrifices
@@ -19,7 +19,7 @@ private:
     ui32 RestartCount;
 
 public:
-    TTxS3Listing(TDataShard* ds, TEvDataShard::TEvS3ListingRequest::TPtr ev)
+    TTxS3Listing(TDataShard* ds, TEvDataShard::TEvObjectStorageListingRequest::TPtr ev)
         : TBase(ds)
         , Ev(ev)
         , RestartCount(0)
@@ -31,14 +31,13 @@ public:
         ++RestartCount;
 
         if (!Result) {
-            Result = new TEvDataShard::TEvS3ListingResponse(Self->TabletID());
+            Result = new TEvDataShard::TEvObjectStorageListingResponse(Self->TabletID());
         }
 
         if (Self->State != TShardState::Ready &&
             Self->State != TShardState::Readonly &&
             Self->State != TShardState::SplitSrcWaitForNoTxInFlight &&
-            Self->State != TShardState::Frozen)
-        {
+            Self->State != TShardState::Frozen) {
             SetError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE,
                         Sprintf("Wrong shard state: %" PRIu32 " tablet id: %" PRIu64, Self->State, Self->TabletID()));
             return true;
@@ -173,6 +172,19 @@ public:
             keyRange.MinInclusive = false;
         }
 
+        bool hasFilter = Ev->Get()->Record.has_filter();
+        TSerializedCellVec filterColumnValues;
+        TVector<ui32> filterColumnIds;
+
+        if (hasFilter) {
+            const auto& filter = Ev->Get()->Record.filter();
+
+            filterColumnValues.Parse(filter.values());
+            for (const auto& colId : filter.columns()) {
+                filterColumnIds.push_back(colId);
+            }
+        }
+
         TAutoPtr<NTable::TTableIt> iter = txc.DB.IterateRange(localTableId, keyRange, columnsToReturn);
 
         ui64 foundKeys = Result->Record.ContentsRowsSize() + Result->Record.CommonPrefixesRowsSize();
@@ -226,14 +238,46 @@ public:
                 TString newContentsRow = TSerializedCellVec::Serialize(value.Cells());
 
                 if (Result->Record.GetContentsRows().empty() ||
-                    *Result->Record.GetContentsRows().rbegin() != newContentsRow)
-                {
+                    *Result->Record.GetContentsRows().rbegin() != newContentsRow) {
+                    if (hasFilter) {
+                        bool matches = true;
+
+                        for (size_t i = 0; i < filterColumnIds.size(); i++) {
+                            auto &columnId = filterColumnIds[i];
+                            if (value.Cells()[columnId].AsBuf() != filterColumnValues.GetCells()[i].AsBuf()) {
+                                matches = false;
+                                break;
+                            }
+                        }
+
+                        if (!matches) {
+                            continue;
+                        }
+                    }
+                    
                     // Add a row with path column and all columns requested by user
                     Result->Record.AddContentsRows(newContentsRow);
-                    if (++foundKeys >= maxKeys)
+                    if (++foundKeys >= maxKeys) {
                         break;
+                    }
                 }
             } else {
+                if (hasFilter) {
+                    bool matches = true;
+
+                    for (size_t i = 0; i < filterColumnIds.size(); i++) {
+                        auto &columnId = filterColumnIds[i];
+                        if (value.Cells()[columnId].AsBuf() != filterColumnValues.GetCells()[i].AsBuf()) {
+                            matches = false;
+                            break;
+                        }
+                    }
+
+                    if (!matches) {
+                        continue;
+                    }
+                }
+                
                 // For prefix save only path
                 if (path > startAfterPath && path != lastCommonPath) {
                     LastCommonPath = path;
@@ -275,7 +319,7 @@ public:
 
 private:
     void SetError(ui32 status, TString descr) {
-        Result = new TEvDataShard::TEvS3ListingResponse(Self->TabletID());
+        Result = new TEvDataShard::TEvObjectStorageListingResponse(Self->TabletID());
 
         Result->Record.SetStatus(status);
         Result->Record.SetErrorDescription(descr);
@@ -317,7 +361,7 @@ private:
     }
 };
 
-void TDataShard::Handle(TEvDataShard::TEvS3ListingRequest::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx) {
     Executor()->Execute(new TTxS3Listing(this, ev), ctx);
 }
 

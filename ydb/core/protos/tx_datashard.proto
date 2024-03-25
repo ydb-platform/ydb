@@ -810,7 +810,12 @@ message TEvPeriodicTableStats {
     repeated TEvPeriodicTableStats Tables = 14;
 }
 
-message TEvS3ListingRequest {
+message TObjectStorageListingFilter {
+    optional bytes Values = 1;
+    repeated uint32 Columns = 2;
+}
+
+message TEvObjectStorageListingRequest {
     optional uint64 TableId = 1;
     optional bytes SerializedKeyPrefix = 2;
 
@@ -822,11 +827,13 @@ message TEvS3ListingRequest {
     repeated uint32 ColumnsToReturn = 6;
     optional uint32 MaxKeys = 7;
 
-    optional string LastCommonPrefix = 8;
-    optional string LastPath = 9;
+    optional TObjectStorageListingFilter Filter = 8;
+
+    optional string LastCommonPrefix = 9;
+    optional string LastPath = 10;
 }
 
-message TEvS3ListingResponse {
+message TEvObjectStorageListingResponse {
     optional uint64 TabletID = 1;
     optional uint32 Status = 2;
     optional string ErrorDescription = 3;

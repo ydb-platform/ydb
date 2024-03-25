@@ -2447,7 +2447,8 @@ public:
         }
 
         if (varName == "search_path"){
-            return "public"; // mediawiki
+            auto searchPath = this->State->GUCSettings->Get("search_path");
+            return searchPath ? *searchPath : "public";
         }
         if (varName == "default_transaction_read_only"){
             return "off"; // mediawiki

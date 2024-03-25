@@ -1020,7 +1020,7 @@ value {
 
         const auto& table = desc.GetPathDescription().GetTable();
 
-        value = DoNextVal(runtime, "/MyRoot/Restored/myseq", Ydb::StatusIds::SCHEME_ERROR);
+        value = DoNextVal(runtime, "/MyRoot/Restored/myseq");
         UNIT_ASSERT_VALUES_EQUAL(value, 2);
 
         UNIT_ASSERT_C(CheckDefaultFromSequence(table), "Invalid default value");
@@ -1096,10 +1096,7 @@ value {
 
         const auto& table = desc.GetPathDescription().GetTable();
 
-        value = DoNextVal(runtime, "/MyRoot/Restored/myseq");
-        UNIT_ASSERT_VALUES_EQUAL(value, 2);
-
-        value = DoNextVal(runtime, "/MyRoot/Restored/myseq");
+        value = DoNextVal(runtime, "/MyRoot/Restored/myseq", Ydb::StatusIds::SCHEME_ERROR);
         UNIT_ASSERT_VALUES_EQUAL(value, 2);
 
         UNIT_ASSERT_C(CheckDefaultFromSequence(table), "Invalid default value");

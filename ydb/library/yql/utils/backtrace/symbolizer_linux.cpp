@@ -20,19 +20,46 @@
 
 namespace {
 const size_t MaxStrLen = 512;
-char Buff[MaxStrLen];
+const size_t MaxDemangleLen = 1024 * 1024;
+char Buff[MaxDemangleLen];
+
+class TNoThrowingMemoryOutput : public TMemoryOutput {
+public:
+    TNoThrowingMemoryOutput(void* c, size_t l) : TMemoryOutput(c, l) {}
+    void Truncate() {
+        *(Buf_ - 1) = '.';
+        *(Buf_ - 2) = '.';
+        *(Buf_ - 3) = '.';
+    }
+
+    void DoWrite(const void* buf, size_t len) override {
+        bool truncated = Buf_ + len > End_;
+        if (truncated) {
+            len = std::min(len, (size_t)(End_ - Buf_));
+        }
+        memcpy(Buf_, buf, len);
+        Buf_ += len;
+        if (truncated) {
+            Truncate();
+        }
+    }
+
+    void DoWriteC(char c) override {
+        if (Buf_ == End_) {
+            Truncate();
+        } else {
+            *Buf_++ = c;
+        }
+    }
+};
 
 void HandleLibBacktraceError(void* data, const char* msg, int) {
     if (!data) {
         Cerr << msg;
         return;
     }
-    TMemoryOutput out(data, MaxStrLen - 1);
-    try {
-        out << msg;
-    } catch (...) {
-        Cerr << CurrentExceptionMessage();
-    }
+    TNoThrowingMemoryOutput out(data, MaxStrLen - 1);
+    out << msg;
 }
 
 const char* Demangle(const char* name) {
@@ -40,7 +67,7 @@ const char* Demangle(const char* name) {
     return name;
 #else
     int status;
-    size_t len = MaxStrLen - 1;
+    size_t len = MaxDemangleLen - 1;
     const char* res = __cxxabiv1::__cxa_demangle(name, Buff, &len, &status);
 
     if (!res) {
@@ -51,14 +78,10 @@ const char* Demangle(const char* name) {
 }
 
 int HandleLibBacktraceFrame(void* data, uintptr_t, const char* filename, int lineno, const char* function) {
-    TMemoryOutput out(data, MaxStrLen - 1);
+    TNoThrowingMemoryOutput out(data, MaxStrLen - 1);
     const char* fileName = filename ? filename : "???";
     const char* functionName = function ? Demangle(function) : "???";
-    try {
-        out << functionName << " at " << fileName << " : " << lineno << " :0";
-    } catch (...) {
-        Cerr << CurrentExceptionMessage();
-    }
+    out << functionName << " at " << fileName << ":" << lineno << ":0";
     return 0;
 }
 }

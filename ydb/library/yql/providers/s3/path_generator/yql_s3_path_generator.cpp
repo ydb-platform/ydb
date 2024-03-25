@@ -491,6 +491,8 @@ private:
                 columnConfig.Interval = GetIntOrThrow(p.second, "The interval must be a number");
             } else if (p.first == "unit") {
                 columnConfig.IntervalUnit = ToIntervalUnit(GetStringOrThrow(p.second, "The unit must be a string"));
+            } else if (p.first == "attach") {
+                columnConfig.Attach = GetBoolOrThrow(p.second, "The attach must be a bool");
             } else {
                 ythrow yexception() << "Invalid projection scheme: date element must include only type, min, max, format, interval, unit but got " << p.first;
             }
@@ -591,7 +593,7 @@ private:
             TString copyLocationTemplate = locationTemplate;
             const TString time = Strftime(rule.Format.c_str(), current);
             ReplaceAll(copyLocationTemplate, "${" + rule.Name + "}", time);
-            columnsWithValue.push_back(CreateDateColumnWithValue(rule.Name, current));
+            columnsWithValue.push_back(CreateDateColumnWithValue(rule.Name, current, rule.Attach));
             DoGenerate(rules, copyLocationTemplate, columnsWithValue, result, pathsLimit, now, p + 1);
             columnsWithValue.pop_back();
 
@@ -677,12 +679,12 @@ private:
         }
     }
 
-    IPathGenerator::TColumnWithValue CreateDateColumnWithValue(const TString& name, const TInstant& current) {
+    IPathGenerator::TColumnWithValue CreateDateColumnWithValue(const TString& name, const TInstant& current, bool attach) {
         auto it = Columns.find(name);
         auto slot = it == Columns.end() ? NUdf::EDataSlot::Date : it->second;
         switch (slot) {
             case NUdf::EDataSlot::Datetime:
-                return {.Name=name, .Type=NUdf::EDataSlot::Datetime, .Value=Strftime("%FT%TZ", current)};
+                return {.Name=name, .Type=NUdf::EDataSlot::Datetime, .Value=Strftime("%FT%TZ", current), .Attach=attach};
             default:
             break;
         }

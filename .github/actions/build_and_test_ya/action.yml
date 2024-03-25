@@ -31,16 +31,9 @@ inputs:
   folder_prefix:
     type: string
     default: "ya-"
-  cache_tests:
-    type: boolean
-    default: false
-    description: "Use cache for tests"
   put_build_results_to_cache:
     type: boolean
     default: true
-  commit_sha:
-    type: string
-    default: ""
   secs:
     type: string
     default: ""
@@ -64,7 +57,7 @@ runs:
         # tricky: we are searching job with name that contains build_preset
         check_url=$(curl -s $jobs_url | jq --arg n "$BUILD_PRESET" -r '.jobs[] | select(.name | contains($n)) | .html_url')
         
-        echo "Pre-commit [check]($check_url) for ${{ inputs.commit_sha }} has started." | .github/scripts/tests/comment-pr.py --rewrite
+        echo "Pre-commit [check]($check_url) for $(git rev-parse HEAD) has started." | .github/scripts/tests/comment-pr.py --rewrite
     
     - name: Prepare s3cmd
       uses: ./.github/actions/s3cmd

@@ -1,5 +1,5 @@
 name: graph_compare
-description: Compare graphs between merge commit and its base, and list affected tests in ya.make
+description: Compare graphs between current and previous commits (merge commit base in case of a merge commit), and list affected tests in ya.make
 runs:
   using: "composite"
   steps:
@@ -11,7 +11,7 @@ runs:
     - name: generate_ya_make
       shell: bash
       run: |
-        ./.github/scripts/graph_compare.sh ${{ steps.oref.outputs.value }}^1 ${{ steps.oref.outputs.value }}
+        ./.github/scripts/graph_compare.sh ${{ steps.oref.outputs.value }}~1 ${{ steps.oref.outputs.value }}
     - name: restore_ref
       shell: bash
       run: |

@@ -323,7 +323,7 @@ namespace NFwd {
         {
             auto it = Parts.find(part);
             Y_ABORT_UNLESS(it != Parts.end(),
-                "NFwd cache tyring to access part outside of subset");
+                "NFwd cache trying to access part outside of subset");
             Y_ABORT_UNLESS(room < it->second.size(),
                 "NFwd cache trying to access room out of bounds");
             Y_ABORT_UNLESS(it->second[room] != Max<ui16>(),

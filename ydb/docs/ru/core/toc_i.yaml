@@ -1,16 +1,18 @@
 items:
-# Header
 - name: Оглавление
   href: index.yaml
 - name: Начало работы
   href: quickstart.md
+- name: Концепции
+  include:
+    mode: link
+    path: concepts/toc_p.yaml
 - name: Для SRE
   include:
     mode: link
     path: sre/toc_p.yaml
 
 # Main
-- { name: Концепции,                               include: { mode: link, path: concepts/toc_p.yaml } }
 - { name: Практические руководства,                include: { mode: link, path: operations/toc_p.yaml } }
 - { name: Рекомендации,                            include: { mode: link, path: best_practices/toc_p.yaml } }
 - { name: Управление базами данных,                include: { mode: link, path: db/toc_p.yaml } }

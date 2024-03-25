@@ -78,8 +78,7 @@ void SetFatalSignalAction(void (*sigaction)(int, siginfo_t*, void*))
 namespace {
     std::vector<std::function<void(int)>> Before, After;
     bool KikimrSymbolize = false;
-    const int Limit = 400;
-    NYql::NBacktrace::TCollectedFrame Frames[Limit];
+    NYql::NBacktrace::TCollectedFrame Frames[NYql::NBacktrace::Limit];
 
     void CallCallbacks(decltype(Before)& where, int signum) {
         for (const auto &fn: where) {
@@ -189,18 +188,15 @@ void EnableKikimrBacktraceFormat() {
 }
 
 namespace {
+    NYql::NBacktrace::TStackFrame sFrames[NYql::NBacktrace::Limit];
     void PrintFrames(IOutputStream* out, const NYql::NBacktrace::TCollectedFrame* frames, size_t count) {
         auto& outp = *out;
 #if defined(_linux_) && defined(_x86_64_)
         if (KikimrSymbolize) {
-            TVector<NYql::NBacktrace::TStackFrame> sFrames(count);
             for (size_t i = 0; i < count; ++i) {
                 sFrames[i] = NYql::NBacktrace::TStackFrame{frames[i].File, frames[i].Address};
             }
-            auto symbolized = NYql::NBacktrace::Symbolize(sFrames);
-            for (auto& line: symbolized) {
-                outp << line << "\n";
-            }
+            NYql::NBacktrace::Symbolize(sFrames, count, out);
             return;
         }
 #endif

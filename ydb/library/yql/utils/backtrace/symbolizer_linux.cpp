@@ -8,26 +8,57 @@
 #include <util/system/execpath.h>
 #include <util/string/builder.h>
 
-#include <functional>
 #include <mutex>
-#include <vector>
 #include <numeric>
 #include <algorithm>
-#include <filesystem>
+
+#include <util/stream/mem.h>
+
+#ifdef __GNUC__
+    #include <cxxabi.h>
+#endif
 
 namespace {
+const size_t MaxStrLen = 512;
+char Buff[MaxStrLen];
+
 void HandleLibBacktraceError(void* data, const char* msg, int) {
     if (!data) {
         Cerr << msg;
         return;
     }
-    *(reinterpret_cast<TString*>(data)) = msg;
+    TMemoryOutput out(data, MaxStrLen - 1);
+    try {
+        out << msg;
+    } catch (...) {
+        Cerr << CurrentExceptionMessage();
+    }
+}
+
+const char* Demangle(const char* name) {
+#ifndef __GNUC__
+    return name;
+#else
+    int status;
+    size_t len = MaxStrLen - 1;
+    const char* res = __cxxabiv1::__cxa_demangle(name, Buff, &len, &status);
+
+    if (!res) {
+        return name;
+    }
+    return res;
+#endif
 }
 
 int HandleLibBacktraceFrame(void* data, uintptr_t, const char* filename, int lineno, const char* function) {
-    TString fileName = filename ? filename : "???";
-    TString functionName = function ? CppDemangle(function) : "???";
-    *reinterpret_cast<TString*>(data) = TStringBuilder() << functionName << " at " << fileName << ":" << lineno << ":0";
+    TMemoryOutput out(data, MaxStrLen - 1);
+    const char* fileName = filename ? filename : "???";
+    const char* functionName = function ? Demangle(function) : "???";
+    try {
+        out << functionName << " at " << fileName << " : " << lineno << " :0";
+    } catch (...) {
+        Cerr << CurrentExceptionMessage();
+    }
     return 0;
 }
 }
@@ -35,9 +66,13 @@ int HandleLibBacktraceFrame(void* data, uintptr_t, const char* filename, int lin
 namespace NYql {
     namespace NBacktrace {
         namespace {
-            auto CreateState(TStringBuf filename) {
+            std::mutex Mutex;
+            char* Result[Limit];
+            size_t Order[Limit];
+            char TmpBuffer[MaxStrLen * Limit]{};
+            auto CreateState(const char* filename) {
                 return backtrace_create_state(
-                    filename.data(),
+                    filename,
                     0,
                     HandleLibBacktraceError,
                     nullptr
@@ -45,45 +80,48 @@ namespace NYql {
             }
         }
 
-        TVector<TString> Symbolize(const TVector<TStackFrame>& frames) {
-            if (frames.empty()) {
-                return {};
+        void Symbolize(const TStackFrame* frames, size_t count, IOutputStream* out) {
+            if (!count) {
+                return;
             }
-            static std::mutex mutex;
-            const std::lock_guard lock{mutex};
+            memset(TmpBuffer, 0, sizeof(TmpBuffer));
+            Result[0] = TmpBuffer;
+            for (size_t i = 1; i < Limit; ++i) {
+                Result[i] = Result[i - 1] + MaxStrLen;
+            }
+            const std::lock_guard lock{Mutex};
 
-            TVector<TString> result(frames.size());
-            std::vector<size_t> order(frames.size());
-            std::iota(order.begin(), order.end(), 0u);
-            std::sort(order.begin(), order.end(), [&frames](auto a, auto b) { return frames[a].File < frames[b].File; });
+            std::iota(Order, Order + count, 0u);
+            std::sort(Order, Order + count, [&frames](auto a, auto b) { return strcmp(frames[a].File, frames[b].File) < 0; });
 
             struct backtrace_state* state = nullptr;
-
-            for (size_t i = 0; i < order.size(); ++i) {
-                if (!i || frames[order[i - 1]].File != frames[order[i]].File) {
-                    if (!std::filesystem::exists(frames[order[i]].File.c_str())) {
-                        state = nullptr;
-                    } else {
-                        state = CreateState(frames[order[i]].File);
-                    }
+            for (size_t i = 0; i < count; ++i) {
+                if (!i || frames[Order[i - 1]].File != frames[Order[i]].File) {
+                    state = CreateState(frames[Order[i]].File);
                 }
 
                 if (!state) {
-                    result[order[i]] = TStringBuilder() << "File not found: " << frames[order[i]].File;
+                    Result[Order[i]] = nullptr; // File not found
                     continue;
                 }
 
                 int status = backtrace_pcinfo(
                     state,
-                    reinterpret_cast<uintptr_t>(frames[order[i]].Address) - 1, // last byte of the call instruction
+                    reinterpret_cast<uintptr_t>(frames[Order[i]].Address) - 1, // last byte of the call instruction
                     HandleLibBacktraceFrame,
                     HandleLibBacktraceError,
-                    &result[order[i]]);
+                    reinterpret_cast<void*>(Result[Order[i]]));
                 if (0 != status) {
                     break;
                 }
             }
-            return result;
+            for (size_t i = 0; i < count; ++i) {
+                if (Result[i]) {
+                    *out << Result[i] << "\n";
+                } else {
+                    *out << "File `" << frames[i].File << "` not found\n"; 
+                }
+            }
         }
     }
 }

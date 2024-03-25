@@ -376,6 +376,7 @@
         "5647712429": "https://devtools-registry.s3.yandex.net/5647712429",
         "5690801745": "https://devtools-registry.s3.yandex.net/5690801745",
         "5731299437": "https://devtools-registry.s3.yandex.net/5731299437",
+        "6048579718": "https://devtools-registry.s3.yandex.net/6048579718",
         "2980468199": "https://devtools-registry.s3.yandex.net/2980468199",
         "5562224408": "https://devtools-registry.s3.yandex.net/5562224408"
     },
@@ -755,6 +756,7 @@
         "5647712429": "ymake.exe for win32-clang-cl",
         "5690801745": "ymake.exe for win32-clang-cl",
         "5731299437": "ymake.exe for win32-clang-cl",
+        "6048579718": "yt/go/ytrecipe/cmd/ytexec for linux",
         "2980468199": "ytexec for linux",
         "5562224408": "ytexec for linux"
     },

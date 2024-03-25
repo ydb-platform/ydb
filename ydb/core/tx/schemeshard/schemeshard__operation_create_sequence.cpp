@@ -142,7 +142,10 @@ public:
             if (alterData->Description.HasCycle()) {
                 event->Record.SetCycle(alterData->Description.GetCycle());
             }
-            event->Record.SetOverflowed(alterData->Description.GetOverflowed());
+            if (alterData->Description.HasSetVal()) {
+                event->Record.MutableSetVal()->SetNextValue(alterData->Description.GetSetVal().GetNextValue());
+                event->Record.MutableSetVal()->SetNextUsed(alterData->Description.GetSetVal().GetNextUsed());
+            }
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "TCreateSequence TConfigureParts ProgressState"

@@ -74,9 +74,14 @@ namespace NSequenceShard {
                 sequence.Cycle = msg->Record.GetCycle();
             }
 
-            sequence.NextValue = sequence.StartValue;
-            bool overflowed = msg->Record.GetOverflowed();
-            sequence.NextUsed = overflowed;
+
+            if (msg->Record.OptionalSetVal_case() == NKikimrTxSequenceShard::TEvCreateSequence::kSetVal) {
+                sequence.NextValue = msg->Record.GetSetVal().GetNextValue();
+                sequence.NextUsed = msg->Record.GetSetVal().GetNextUsed();
+            } else {
+                sequence.NextUsed = false;
+                sequence.NextValue = sequence.StartValue;
+            }
 
             if (msg->Record.OptionalCache_case() == NKikimrTxSequenceShard::TEvCreateSequence::kCache) {
                 sequence.Cache = msg->Record.GetCache();
@@ -105,8 +110,7 @@ namespace NSequenceShard {
                 << " Cache# " << sequence.Cache
                 << " Increment# " << sequence.Increment
                 << " Cycle# " << (sequence.Cycle ? "true" : "false")
-                << " State# " << (frozen ? "Frozen" : "Active")
-                << " Overflowed# " << (overflowed ? "true" : "false"));
+                << " State# " << (frozen ? "Frozen" : "Active"));
             return true;
         }
 

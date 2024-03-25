@@ -1419,7 +1419,11 @@ void FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrS
                 if (sequenceDescription.HasCycle()) {
                     fromSequence->set_cycle(sequenceDescription.GetCycle());
                 }
-                fromSequence->set_overflowed(sequenceDescription.GetOverflowed());
+                if (sequenceDescription.HasSetVal()) {
+                    auto* setVal = fromSequence->mutable_set_val();
+                    setVal->set_next_used(sequenceDescription.GetSetVal().GetNextUsed());
+                    setVal->set_next_value(sequenceDescription.GetSetVal().GetNextValue());
+                }
                 break;
             }
             case Ydb::Table::ColumnMeta::kFromLiteral: {

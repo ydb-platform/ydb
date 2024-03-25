@@ -275,47 +275,15 @@ private:
     }
 
     void UpdateSequenceDescription(NKikimrSchemeOp::TSequenceDescription& descr) {
-        descr.SetStartValue(GetSequenceResult.GetNextValue());
+        descr.SetStartValue(GetSequenceResult.GetStartValue());
         descr.SetMinValue(GetSequenceResult.GetMinValue());
         descr.SetMaxValue(GetSequenceResult.GetMaxValue());
         descr.SetCache(GetSequenceResult.GetCache());
         descr.SetIncrement(GetSequenceResult.GetIncrement());
         descr.SetCycle(GetSequenceResult.GetCycle());
-
-        i64 nextValue = GetSequenceResult.GetNextValue();
-        i64 minValue = GetSequenceResult.GetMinValue();
-        i64 maxValue = GetSequenceResult.GetMaxValue();
-        bool cycle = GetSequenceResult.GetCycle();
-        bool overflowed = false;
-
-        if (GetSequenceResult.GetNextUsed()) {
-            i64 increment = GetSequenceResult.GetIncrement();
-            if (increment > 0) {
-                ui64 delta = increment;
-
-                if (nextValue < maxValue && ui64(maxValue) - ui64(nextValue) >= delta) {
-                    nextValue += delta;
-                } else {
-                    if (cycle) {
-                        nextValue = minValue;
-                    }
-                    overflowed = true;
-                }
-            } else {
-                ui64 delta = -increment;
-
-                if (nextValue > minValue && ui64(nextValue) - ui64(minValue) >= delta) {
-                    nextValue -= delta;
-                } else {
-                    if (cycle) {
-                        nextValue = maxValue;
-                    }
-                    overflowed = true;
-                }
-            }
-        }
-        descr.SetStartValue(nextValue);
-        descr.SetOverflowed(overflowed);
+        auto* setValMsg = descr.MutableSetVal();
+        setValMsg->SetNextValue(GetSequenceResult.GetNextValue());
+        setValMsg->SetNextUsed(GetSequenceResult.GetNextUsed());
     }
 
 public:

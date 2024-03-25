@@ -136,7 +136,7 @@ void ComputeJoinConditions(const TCoEquiJoinTuple& joinTuple,
  * After join enumeration, internal nodes need to be converted to regular nodes, that own the data
  * structures
 */
-struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
+struct TJoinOptimizerNodeInternal : public      {
     std::shared_ptr<IBaseOptimizerNode> LeftArg;
     std::shared_ptr<IBaseOptimizerNode> RightArg;
     const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& JoinConditions;

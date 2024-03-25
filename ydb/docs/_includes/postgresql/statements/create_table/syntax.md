@@ -1,5 +1,5 @@
 ```sql
-CREATE [TEMPORARY] TABLE <table name> (
+CREATE [TEMPORARY | TEMP] TABLE <table name> (
 
 <column name> <column data type> [COLLATE][PRIMARY KEY]
 

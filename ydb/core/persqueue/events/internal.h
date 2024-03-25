@@ -1066,6 +1066,14 @@ struct TEvPQ {
         NPQ::TSourceIdMap SrcIdInfo;
         std::deque<NPQ::TDataKey> BodyKeys;
         TVector<NPQ::TClientBlob> BlobsFromHead;
+        ui64 BytesWrittenTotal;
+        ui64 BytesWrittenGrpc;
+        ui64 BytesWrittenUncompressed;
+        ui64 MessagesWrittenTotal;
+        ui64 MessagesWrittenGrpc;
+        TVector<ui64> MessagesSizes;
+        TVector<ui64> TopicWriteQuotaWait;
+        TVector<ui64> PartitionWriteQuotaWait;
     };
 
     struct TEvGetWriteInfoError : public TEventLocal<TEvGetWriteInfoError, EvGetWriteInfoError> {

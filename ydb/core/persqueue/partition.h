@@ -206,10 +206,13 @@ private:
     void BecomeIdle();
     void BecomeWrite();
     void CheckHeadConsistency() const;
-    void HandleWrites(const TActorContext& ctx);
+    void HandlePendingRequests(const TActorContext& ctx);
+    void HandleQuotaWaitingRequests(const TActorContext& ctx);
+    void HandleRequests(const TActorContext& ctx);
     void RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie);
-    void RequestBlobQuota();
-    void WritePendingBlob();
+    bool RequestBlobQuota();
+    void RequestBlobQuota(size_t quotaSize);
+    void WritePendingBlob(THolder<TEvKeyValue::TEvRequest> request);
     void UpdateAfterWriteCounters(bool writeComplete);
 
     void CancelReserveRequests(const TActorContext& ctx);
@@ -336,9 +339,9 @@ private:
     void Initialize(const TActorContext& ctx);
 
     template <typename T>
-    void EmplaceRequest(T&& body, const TActorContext& ctx) {
+    void EmplacePendingRequest(T&& body, const TActorContext& ctx) {
         const auto now = ctx.Now();
-        Requests.emplace_back(body, now - TInstant::Zero());
+        PendingRequests.emplace_back(body, now - TInstant::Zero());
     }
     void EmplaceResponse(TMessage&& message, const TActorContext& ctx);
 
@@ -592,6 +595,10 @@ private:
     ProcessResult ProcessRequest(TSplitMessageGroupMsg& msg, ProcessParameters& parameters);
     ProcessResult ProcessRequest(TWriteMsg& msg, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
 
+    static void RemoveMessages(std::deque<TMessage>& src, std::deque<TMessage>& dst);
+    void RemovePendingRequests(std::deque<TMessage>& requests);
+    void RemoveQuotaWaitingRequests();
+
 private:
     ui64 TabletID;
     ui32 TabletGeneration;
@@ -627,6 +634,8 @@ private:
     TActorId Tablet;
     TActorId BlobCache;
 
+    std::deque<TMessage> PendingRequests;
+    std::deque<TMessage> QuotaWaitingRequests;
     std::deque<TMessage> Requests;
     std::deque<TMessage> Responses;
 
@@ -778,10 +787,6 @@ private:
     TInstant WriteStartTime;
     TDuration TopicQuotaWaitTimeForCurrentBlob;
     TDuration PartitionQuotaWaitTimeForCurrentBlob;
-
-    //Pending request
-    THolder<TEvKeyValue::TEvRequest> PendingWriteRequest;
-
 
     TDeque<NKikimrPQ::TStatusResponse::TErrorMessage> Errors;
 

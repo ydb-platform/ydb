@@ -22,6 +22,13 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
+
+#define DBGTRACE_QUEUES() \
+    DBGTRACE_LOG("PendingRequests.size=" << PendingRequests.size() << \
+                 ", QuotaWaitingRequests.size=" << QuotaWaitingRequests.size() << \
+                 ", Requests.size=" << Requests.size() << \
+                 ", Responses.size=" << Responses.size())
 
 namespace NKikimr::NPQ {
 
@@ -32,6 +39,8 @@ static const ui32 MAX_INLINE_SIZE = 1000;
 static constexpr NPersQueue::NErrorCode::EErrorCode InactivePartitionErrorCode = NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_INACTIVE;
 
 void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& cookie, ui64 seqNo) {
+    DBGTRACE("TPartition::ReplyOwnerOk");
+    DBGTRACE_LOG("dst=" << dst);
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "TPartition::ReplyOwnerOk. Partition: " << Partition);
 
     THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
@@ -43,6 +52,7 @@ void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TS
     r->SetStatus(PartitionConfig ? PartitionConfig->GetStatus() : NKikimrPQ::ETopicPartitionStatus::Active);
     r->SetSeqNo(seqNo);
 
+    DBGTRACE_LOG("send TEvPQ::TEvProxyResponse");
     ctx.Send(Tablet, response.Release());
 }
 
@@ -50,6 +60,8 @@ void TPartition::ReplyWrite(
     const TActorContext& ctx, const ui64 dst, const TString& sourceId, const ui64 seqNo, const ui16 partNo, const ui16 totalParts,
     const ui64 offset, const TInstant writeTimestamp, bool already, const ui64 maxSeqNo,
     const TDuration partitionQuotedTime, const TDuration topicQuotedTime, const TDuration queueTime, const TDuration writeTime) {
+    DBGTRACE("TPartition::ReplyWrite");
+    DBGTRACE_LOG("dst=" << dst);
 
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "TPartition::ReplyWrite. Partition: " << Partition);
 
@@ -76,12 +88,14 @@ void TPartition::ReplyWrite(
     write->SetTotalTimeInPartitionQueueMs(queueTime.MilliSeconds());
     write->SetWriteTimeMs(writeTime.MilliSeconds());
 
+    DBGTRACE_LOG("send TEvPQ::TEvProxyResponse");
     ctx.Send(Tablet, response.Release());
 }
 
-void TPartition::HandleOnIdle(TEvPQ::TEvUpdateAvailableSize::TPtr&, const TActorContext& ctx) {
+void TPartition::HandleOnIdle(TEvPQ::TEvUpdateAvailableSize::TPtr&, const TActorContext& ctx)
+{
     UpdateAvailableSize(ctx);
-    HandleWrites(ctx);
+    HandlePendingRequests(ctx);
 }
 
 void TPartition::HandleOnWrite(TEvPQ::TEvUpdateAvailableSize::TPtr&, const TActorContext& ctx) {
@@ -164,7 +178,7 @@ void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, c
 
         it->second.GenerateCookie(owner, ev->PipeClient, ev->Sender, TopicName(), Partition, ctx);//will change OwnerCookie
         //cookie is generated. but answer will be sent when all inflight writes will be done - they in the same queue 'Requests'
-        EmplaceRequest(TOwnershipMsg{ev->Cookie, it->second.OwnerCookie}, ctx);
+        EmplacePendingRequest(TOwnershipMsg{ev->Cookie, it->second.OwnerCookie}, ctx);
         TabletCounters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(ReservedSize);
         UpdateWriteBufferIsFullState(ctx.Now());
         ProcessReserveRequests(ctx);
@@ -191,6 +205,7 @@ THashMap<TString, NKikimr::NPQ::TOwnerInfo>::iterator TPartition::DropOwner(THas
 }
 
 void TPartition::Handle(TEvPQ::TEvChangeOwner::TPtr& ev, const TActorContext& ctx) {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvChangeOwner)");
     PQ_LOG_T("TPartition::HandleOnWrite TEvChangeOwner.");
 
     bool res = OwnerPipes.insert(ev->Get()->PipeClient).second;
@@ -278,12 +293,16 @@ void TPartition::Handle(TEvPQ::TEvReserveBytes::TPtr& ev, const TActorContext& c
     ProcessReserveRequests(ctx);
 }
 
-void TPartition::HandleOnIdle(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx) {
+void TPartition::HandleOnIdle(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx)
+{
+    DBGTRACE("TPartition::HandleOnIdle(TEvPQ::TEvWrite)");
     HandleOnWrite(ev, ctx);
-    HandleWrites(ctx);
+    HandlePendingRequests(ctx);
 }
 
 void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
+    DBGTRACE("TPartition::AnswerCurrentWrites");
+    DBGTRACE_LOG("Responses.size=" << Responses.size());
     PQ_LOG_T("TPartition::AnswerCurrentWrites. Responses.size()=" << Responses.size());
 
     ui64 offset = EndOffset;
@@ -294,6 +313,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
         const TDuration writeTime = ctx.Now() - response.WriteTimeBaseline;
 
         if (response.IsWrite()) {
+            DBGTRACE_LOG("IsWrite");
             const auto& writeResponse = response.GetWrite();
             const TString& s = writeResponse.Msg.SourceId;
             const ui64& seqNo = writeResponse.Msg.SeqNo;
@@ -364,6 +384,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             if (!already && partNo + 1 == totalParts && !writeResponse.Msg.HeartbeatVersion)
                 ++offset;
         } else if (response.IsOwnership()) {
+            DBGTRACE_LOG("IsOwnership");
             const auto& r = response.GetOwnership();
             const TString& ownerCookie = r.OwnerCookie;
             auto it = Owners.find(TOwnerInfo::GetOwnerFromOwnerCookie(ownerCookie));
@@ -375,6 +396,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 ReplyError(ctx, response.GetCookie(), NPersQueue::NErrorCode::WRONG_COOKIE, "new GetOwnership request is dropped already");
             }
         } else if (response.IsRegisterMessageGroup()) {
+            DBGTRACE_LOG("IsRegisterMessageGroup");
             const auto& body = response.GetRegisterMessageGroup().Body;
 
             TMaybe<TPartitionKeyRange> keyRange;
@@ -386,11 +408,13 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             SourceIdStorage.RegisterSourceId(body.SourceId, body.SeqNo, *body.AssignedOffset, CurrentTimestamp, std::move(keyRange));
             ReplyOk(ctx, response.GetCookie());
         } else if (response.IsDeregisterMessageGroup()) {
+            DBGTRACE_LOG("IsDeregisterMessageGroup");
             const auto& body = response.GetDeregisterMessageGroup().Body;
 
             SourceIdStorage.DeregisterSourceId(body.SourceId);
             ReplyOk(ctx, response.GetCookie());
         } else if (response.IsSplitMessageGroup()) {
+            DBGTRACE_LOG("IsSplitMessageGroup");
             const auto& split = response.GetSplitMessageGroup();
 
             for (const auto& body : split.Deregistrations) {
@@ -486,6 +510,7 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
 }
 
 void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContext& ctx) {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvHandleWriteResponse)");
     PQ_LOG_T("TPartition::HandleOnWrite TEvHandleWriteResponse.");
     HandleWriteResponse(ctx);
 }
@@ -512,6 +537,7 @@ void TPartition::UpdateAfterWriteCounters(bool writeComplete) {
 }
 
 void TPartition::HandleWriteResponse(const TActorContext& ctx) {
+    DBGTRACE("TPartition::HandleWriteResponse");
     PQ_LOG_T("TPartition::HandleWriteResponse.");
     Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateWrite);
     ui64 prevEndOffset = EndOffset;
@@ -537,6 +563,8 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
     if (WriteQuotaTrackerActor) {
         ui64 size = 0;
+        DBGTRACE_LOG("WriteNewSize=" << WriteNewSize << ", WriteCycleSize=" << WriteCycleSize);
+        DBGTRACE_LOG("TopicQuotaConsumedCookie=" << TopicQuotaConsumedCookie);
 
         if (quotingConfig.GetTopicWriteQuotaEntityToLimit() == NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE) {
             size = WriteNewSize;
@@ -579,10 +607,12 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
 
     ProcessTimestampsForNewData(prevEndOffset, ctx);
 
-    HandleWrites(ctx);
+    BecomeIdle();
+    HandleRequests(ctx);
 }
 
 void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx) {
+    DBGTRACE("TPartition::HandleOnWrite(TEvPQ::TEvWrite)");
     PQ_LOG_T("TPartition::HandleOnWrite TEvWrite.");
 
     if (!CanEnqueue()) {
@@ -687,7 +717,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     for (auto& msg: ev->Get()->Msgs) {
         size += msg.Data.size();
         bool needToChangeOffset = msg.PartNo + 1 == msg.TotalParts;
-        EmplaceRequest(TWriteMsg{ev->Get()->Cookie, offset, std::move(msg), ev->Get()->InitialSeqNo}, ctx);
+        EmplacePendingRequest(TWriteMsg{ev->Get()->Cookie, offset, std::move(msg), ev->Get()->InitialSeqNo}, ctx);
         if (offset && needToChangeOffset)
             ++*offset;
     }
@@ -701,9 +731,10 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     UpdateWriteBufferIsFullState(ctx.Now());
 }
 
-void TPartition::HandleOnIdle(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx) {
+void TPartition::HandleOnIdle(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx)
+{
     HandleOnWrite(ev, ctx);
-    HandleWrites(ctx);
+    HandlePendingRequests(ctx);
 }
 
 void TPartition::HandleOnWrite(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx) {
@@ -736,12 +767,13 @@ void TPartition::HandleOnWrite(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const T
             "SourceId not found, registration cannot be completed");
     }
 
-    EmplaceRequest(TRegisterMessageGroupMsg(*ev->Get()), ctx);
+    EmplacePendingRequest(TRegisterMessageGroupMsg(*ev->Get()), ctx);
 }
 
-void TPartition::HandleOnIdle(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx) {
+void TPartition::HandleOnIdle(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx)
+{
     HandleOnWrite(ev, ctx);
-    HandleWrites(ctx);
+    HandlePendingRequests(ctx);
 }
 
 void TPartition::HandleOnWrite(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx) {
@@ -755,12 +787,13 @@ void TPartition::HandleOnWrite(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const
             "SourceId doesn't exist");
     }
 
-    EmplaceRequest(TDeregisterMessageGroupMsg(*ev->Get()), ctx);
+    EmplacePendingRequest(TDeregisterMessageGroupMsg(*ev->Get()), ctx);
 }
 
-void TPartition::HandleOnIdle(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TActorContext& ctx) {
+void TPartition::HandleOnIdle(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TActorContext& ctx)
+{
     HandleOnWrite(ev, ctx);
-    HandleWrites(ctx);
+    HandlePendingRequests(ctx);
 }
 
 void TPartition::HandleOnWrite(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TActorContext& ctx) {
@@ -795,7 +828,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TAct
         }
     }
 
-    EmplaceRequest(std::move(msg), ctx);
+    EmplacePendingRequest(std::move(msg), ctx);
 }
 
 std::pair<TKey, ui32> TPartition::Compact(const TKey& key, const ui32 size, bool headCleared) {
@@ -842,9 +875,10 @@ void TPartition::ProcessChangeOwnerRequests(const TActorContext& ctx) {
         WaitToChangeOwner.pop_front();
     }
 
-    if (CurrentStateFunc() == &TThis::StateIdle) {
-        HandleWrites(ctx);
-    }
+//    if (CurrentStateFunc() == &TThis::StateIdle) {
+//        HandleWrites(ctx);
+//    }
+    HandlePendingRequests(ctx);
 }
 
 void TPartition::CancelAllWritesOnWrite(const TActorContext& ctx, TEvKeyValue::TEvRequest* request, const TString& errorStr, const TWriteMsg& p, TPartitionSourceManager::TModificationBatch& sourceIdBatch, NPersQueue::NErrorCode::EErrorCode errorCode) {
@@ -1425,28 +1459,32 @@ void TPartition::SetDeadlinesForWrites(const TActorContext& ctx) {
     if (AppData(ctx)->PQConfig.GetQuotingConfig().GetQuotaWaitDurationMs() > 0 && QuotaDeadline == TInstant::Zero()) {
         QuotaDeadline = ctx.Now() + TDuration::MilliSeconds(AppData(ctx)->PQConfig.GetQuotingConfig().GetQuotaWaitDurationMs());
 
+        DBGTRACE_LOG("schedule TEvPQ::TEvQuotaDeadlineCheck");
         ctx.Schedule(QuotaDeadline, new TEvPQ::TEvQuotaDeadlineCheck());
     }
 }
 
 void TPartition::Handle(TEvPQ::TEvQuotaDeadlineCheck::TPtr&, const TActorContext& ctx) {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvQuotaDeadlineCheck)");
     PQ_LOG_T("TPartition::Handle TEvQuotaDeadlineCheck.");
 
     FilterDeadlinedWrites(ctx);
 }
 
 bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant, const TActorContext& ctx) {
+    DBGTRACE("TPartition::ProcessWrites");
     PQ_LOG_T("TPartition::ProcessWrites.");
     FilterDeadlinedWrites(ctx);
 
-    if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota(ctx)) { // Waiting for topic quota.
-        SetDeadlinesForWrites(ctx);
-        return false;
-    }
-    Y_ABORT_UNLESS(!PendingWriteRequest);
+//    if (/*WaitingForPreviousBlobQuota() || */WaitingForSubDomainQuota(ctx)) { // Waiting for topic quota.
+//        DBGTRACE_LOG("no changes");
+//        SetDeadlinesForWrites(ctx);
+//        return false;
+//    }
     QuotaDeadline = TInstant::Zero();
 
     if (Requests.empty()) {
+        DBGTRACE_LOG("no changes");
         return false;
     }
 
@@ -1466,10 +1504,12 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant, const
 
     if (NewHead.PackedSize == 0) { //nothing added to head - just compaction or tmp part blobs writed
         if (!sourceIdBatch.HasModifications()) {
+            DBGTRACE_LOG("has changes?");
             return request->Record.CmdWriteSize() > 0
                 || request->Record.CmdRenameSize() > 0
                 || request->Record.CmdDeleteRangeSize() > 0;
         } else {
+            DBGTRACE_LOG("has changes");
             sourceIdBatch.FillRequest(request);
             return true;
         }
@@ -1489,12 +1529,17 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant, const
                 << " size " << res.second << " WTime " << ctx.Now().MilliSeconds()
     );
     AddNewWriteBlob(res, request, headCleared, ctx);
+    DBGTRACE_LOG("has changes");
     return true;
 }
 
 void TPartition::FilterDeadlinedWrites(const TActorContext& ctx) {
-    if (QuotaDeadline == TInstant::Zero() || QuotaDeadline > ctx.Now())
+    DBGTRACE("TPartition::FilterDeadlinedWrites");
+    DBGTRACE_LOG("QuotaDeadline=" << QuotaDeadline << ", now=" << ctx.Now());
+    if (QuotaDeadline == TInstant::Zero() || QuotaDeadline > ctx.Now()) {
+        DBGTRACE_LOG("return");
         return;
+    }
     PQ_LOG_T("TPartition::FilterDeadlinedWrites.");
 
     std::deque<TMessage> newRequests;
@@ -1515,6 +1560,7 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx) {
     }
     Requests = std::move(newRequests);
     QuotaDeadline = TInstant::Zero();
+    DBGTRACE_QUEUES();
 
     UpdateWriteBufferIsFullState(ctx.Now());
 }
@@ -1523,7 +1569,7 @@ void TPartition::CancelReserveRequests(const TActorContext& ctx)
 {
     for(const auto& r : ReserveRequests) {
         ReplyError(ctx, r->Cookie, InactivePartitionErrorCode,
-                   TStringBuilder() << "Write to inactive partition");
+                   "Write to inactive partition");
     }
     ReserveRequests.clear();
 }
@@ -1532,20 +1578,90 @@ void TPartition::CancelRequests(const TActorContext& ctx)
 {
     for(const auto& r : Requests) {
         ReplyError(ctx, r.GetCookie(), InactivePartitionErrorCode,
-                   TStringBuilder() << "Write to inactive partition");
+                   "Write to inactive partition");
     }
     Requests.clear();
 }
 
-void TPartition::HandleWrites(const TActorContext& ctx) {
+void TPartition::RemoveMessages(std::deque<TMessage>& src, std::deque<TMessage>& dst)
+{
+    for (auto& r : src) {
+        dst.push_back(std::move(r));
+    }
+    src.clear();
+}
+
+void TPartition::RemovePendingRequests(std::deque<TMessage>& requests)
+{
+    DBGTRACE("TPartition::RemovePendingRequests");
+    DBGTRACE_QUEUES();
+    RemoveMessages(PendingRequests, requests);
+    DBGTRACE_QUEUES();
+}
+
+void TPartition::RemoveQuotaWaitingRequests()
+{
+    DBGTRACE("TPartition::RemoveQuotaWaitingRequests");
+    DBGTRACE_QUEUES();
+    RemoveMessages(QuotaWaitingRequests, Requests);
+    DBGTRACE_QUEUES();
+}
+
+bool TPartition::RequestBlobQuota()
+{
+    DBGTRACE("TPartition::RequestBlobQuota");
+    if (!WriteQuotaTrackerActor) {
+        DBGTRACE_LOG("no tracker");
+        return false;
+    }
+
+    size_t quotaSize = 0;
+    for (auto& r : PendingRequests) {
+        quotaSize += r.GetWriteSize();
+    }
+
+    if (!quotaSize) {
+        DBGTRACE_LOG("no data");
+        return false;
+    }
+
+    RemovePendingRequests(QuotaWaitingRequests);
+    RequestBlobQuota(quotaSize);
+
+    return true;
+}
+
+void TPartition::HandlePendingRequests(const TActorContext& ctx)
+{
+    DBGTRACE("TPartition::HandlePendingRequests");
+    if (WaitingForPreviousBlobQuota()) {
+        DBGTRACE_LOG("waiting for blob quota");
+        return;
+    }
+
+    if (RequestBlobQuota()) {
+        DBGTRACE_LOG("request blob quota");
+        return;
+    }
+
+    RemovePendingRequests(Requests);
+    HandleRequests(ctx);
+}
+
+void TPartition::HandleRequests(const TActorContext& ctx)
+{
+    DBGTRACE("TPartition::HandleRequests");
     if (!CanWrite()) {
         if (!CanEnqueue()) {
             CancelReserveRequests(ctx);
             CancelRequests(ctx);
         }
+        DBGTRACE_LOG("writing disabled");
         return;
     }
-    if (PendingWriteRequest) {
+
+    if (CurrentStateFunc() == &TThis::StateWrite) {
+        DBGTRACE_LOG("invalid state");
         return;
     }
 
@@ -1574,17 +1690,17 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
     ProcessReserveRequests(ctx);
     if (!haveData && !haveDrop && !haveCheckDisk) { //no data writed/deleted
         AnswerCurrentWrites(ctx); //in case if all writes are already done - no answer will be called on kv write, no kv write at all
+        DBGTRACE_LOG("no data writed/deleted");
         BecomeIdle();
         return;
     }
 
     WritesTotal.Inc();
-    Y_ABORT_UNLESS(!PendingWriteRequest);
-    PendingWriteRequest = std::move(request);
-    RequestBlobQuota();
+    WritePendingBlob(std::move(request));
 }
 
 void TPartition::RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie) {
+    DBGTRACE("TPartition::RequestQuotaForWriteBlobRequest");
     LOG_DEBUG_S(
             TActivationContext::AsActorContext(), NKikimrServices::PERSQUEUE,
             "Send write quota request." <<" Topic: \"" << TopicName() << "\"." <<
@@ -1612,38 +1728,33 @@ bool TPartition::WaitingForSubDomainQuota(const TActorContext& ctx, const ui64 w
     return MeteringDataSize(ctx) + withSize > ReserveSize();
 }
 
-void TPartition::RequestBlobQuota() {
+void TPartition::RequestBlobQuota(size_t quotaSize)
+{
+    DBGTRACE("TPartition::RequestBlobQuota");
+    DBGTRACE_LOG("quotaSize=" << quotaSize);
     PQ_LOG_T("TPartition::RequestBlobQuota.");
 
-    // Request quota and write blob.
-    // Mirrored topics are not quoted in local dc.
-    const bool skip = !WriteQuotaTrackerActor;
-    if (size_t quotaRequestSize = skip ? 0 : GetQuotaRequestSize(*PendingWriteRequest)) {
-        // Request with data. We should check before attempting to write data whether we have enough quota.
-        Y_ABORT_UNLESS(!WaitingForPreviousBlobQuota());
+    Y_ABORT_UNLESS(!WaitingForPreviousBlobQuota());
 
-        TopicQuotaRequestCookie = NextTopicWriteQuotaRequestCookie++;
-        RequestQuotaForWriteBlobRequest(quotaRequestSize, TopicQuotaRequestCookie);
-    } else {
-        WritePendingBlob();
-    }
-
+    TopicQuotaRequestCookie = NextTopicWriteQuotaRequestCookie++;
+    DBGTRACE_LOG("TopicQuotaRequestCookie=" << TopicQuotaRequestCookie);
+    RequestQuotaForWriteBlobRequest(quotaSize, TopicQuotaRequestCookie);
 }
 
-void TPartition::WritePendingBlob() {
+void TPartition::WritePendingBlob(THolder<TEvKeyValue::TEvRequest> request) {
+    DBGTRACE("TPartition::WritePendingBlob");
     UpdateAfterWriteCounters(false);
     Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateWrite);
-    Y_ABORT_UNLESS(PendingWriteRequest);
 
-    AddMetaKey(PendingWriteRequest.Get());
+    AddMetaKey(request.Get());
     WriteStartTime = TActivationContext::Now();
     // Write blob
 #if 1
     // PQ -> CacheProxy -> KV
-    Send(BlobCache, PendingWriteRequest.Release());
-    PendingWriteRequest = nullptr;
+    DBGTRACE_LOG("send TEvKeyValue::TEvRequest");
+    Send(BlobCache, request.Release());
 #else
-    Send(Tablet, PendingWriteRequest.Release());
+    Send(Tablet, request.Release());
 #endif
 }
 

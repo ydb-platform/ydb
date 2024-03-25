@@ -19,6 +19,7 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -135,6 +136,8 @@ ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp
 }
 
 void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error) {
+    DBGTRACE("TPartition::ReplyError");
+    DBGTRACE_LOG("error=" << error);
     ReplyPersQueueError(
         dst == 0 ? ctx.SelfID : Tablet, ctx, TabletID, TopicName(), Partition,
         TabletCounters, NKikimrServices::PERSQUEUE, dst, errorCode, error, true
@@ -150,6 +153,8 @@ void TPartition::ReplyPropose(const TActorContext& ctx,
 }
 
 void TPartition::ReplyOk(const TActorContext& ctx, const ui64 dst) {
+    DBGTRACE("TPartition::ReplyOk");
+    DBGTRACE_LOG("dst=" << dst);
     ctx.Send(Tablet, MakeReplyOk(dst).Release());
 }
 
@@ -232,6 +237,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
 }
 
 void TPartition::EmplaceResponse(TMessage&& message, const TActorContext& ctx) {
+    DBGTRACE("TPartition::EmplaceResponse");
     const auto now = ctx.Now();
     Responses.emplace_back(
         message.Body,
@@ -330,8 +336,9 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
     }
     Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateIdle);
 
-    if (ManageWriteTimestampEstimate)
+    if (ManageWriteTimestampEstimate) {
         WriteTimestampEstimate = now;
+    }
 
     THolder <TEvKeyValue::TEvRequest> request = MakeHolder<TEvKeyValue::TEvRequest>();
     bool haveChanges = CleanUp(request.Get(), ctx);
@@ -348,6 +355,7 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
         WritesTotal.Inc();
         BecomeWrite();
         AddMetaKey(request.Get());
+        DBGTRACE_LOG("send TEvKeyValue::TEvRequest");
         ctx.Send(Tablet, request.Release());
     }
 }
@@ -966,7 +974,12 @@ void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx
 }
 
 void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& ctx) {
-    if (ClosedInternalPartition || CurrentStateFunc() != &TThis::StateIdle || !Requests.empty()) {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest)");
+    DBGTRACE_LOG("ev->Sender=" << ev->Sender);
+    DBGTRACE_LOG("ClosedInternalPartition=" << ClosedInternalPartition);
+    DBGTRACE_LOG("Requests.size=" << Requests.size());
+    if (ClosedInternalPartition || WaitingForPreviousBlobQuota() || (CurrentStateFunc() != &TThis::StateIdle) || !Requests.empty()) {
+        DBGTRACE_LOG("send TEvGetWriteInfoError");
         auto* response = new TEvPQ::TEvGetWriteInfoError(Partition.InternalPartitionId,
                                                        "Write info requested while writes are not complete");
         ctx.Send(ev->Sender, response);
@@ -974,6 +987,7 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorCon
         return;
     }
     ClosedInternalPartition = true;
+    DBGTRACE_LOG("send TEvPQ::TEvGetWriteInfoResponse");
     auto response = new TEvPQ::TEvGetWriteInfoResponse();
     response->Cookie = Partition.InternalPartitionId;
     response->BodyKeys = std::move(DataKeysBody);
@@ -1397,6 +1411,7 @@ void TPartition::Handle(NReadQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TAct
 }
 
 void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+    DBGTRACE("TPartition::Handle(TEvKeyValue::TEvResponse)");
     auto& response = ev->Get()->Record;
 
     //check correctness of response
@@ -1455,10 +1470,13 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         }
         diskIsOk = diskIsOk && CheckDiskStatus(res.GetStatusFlags());
     }
-    if (response.GetStatusResultSize())
+    if (response.GetStatusResultSize()) {
         DiskIsFull = !diskIsOk;
+    }
+    DBGTRACE_LOG("DiskIsFull=" << DiskIsFull);
 
     if (response.HasCookie()) {
+        DBGTRACE_LOG("cookie=" << response.GetCookie());
         OnProcessTxsAndUserActsWriteComplete(response.GetCookie(), ctx);
     } else {
         const auto writeDuration = ctx.Now() - WriteStartTime;
@@ -1466,6 +1484,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         if (writeDuration > minWriteLatency) {
             HandleWriteResponse(ctx);
         } else {
+            DBGTRACE_LOG("schedule TEvPQ::TEvHandleWriteResponse");
             ctx.Schedule(minWriteLatency - writeDuration, new TEvPQ::TEvHandleWriteResponse());
         }
     }
@@ -1594,6 +1613,7 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
     AddCmdWriteUserInfos(request->Record);
     AddCmdWriteConfig(request->Record);
 
+    DBGTRACE_LOG("send TEvKeyValue::TEvRequest");
     ctx.Send(Tablet, request.Release());
     UsersInfoWriteInProgress = true;
 }
@@ -1851,6 +1871,7 @@ void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& co
 }
 
 void TPartition::OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorContext& ctx) {
+    DBGTRACE("TPartition::OnProcessTxsAndUserActsWriteComplete");
     Y_ABORT_UNLESS(cookie == SET_OFFSET_COOKIE);
 
     if (ChangeConfig) {
@@ -1923,9 +1944,10 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorC
 
     ProcessTxsAndUserActs(ctx);
 
-    if (ChangeConfig && CurrentStateFunc() == &TThis::StateIdle) {
-        HandleWrites(ctx);
-    }
+//    if (ChangeConfig && CurrentStateFunc() == &TThis::StateIdle) {
+//        HandleWrites(ctx);
+//    }
+    HandleRequests(ctx);
 }
 
 void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
@@ -2546,11 +2568,13 @@ void TPartition::ScheduleUpdateAvailableSize(const TActorContext& ctx) {
 
 void TPartition::BecomeIdle()
 {
+    DBGTRACE("TPartition::BecomeIdle");
     Become(&TThis::StateIdle);
 }
 
 void TPartition::BecomeWrite()
 {
+    DBGTRACE("TPartition::BecomeWrite");
     Become(&TThis::StateWrite);
 }
 
@@ -2589,6 +2613,7 @@ ui32 TPartition::NextChannel(bool isHead, ui32 blobSize) {
 }
 
 void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorContext& ctx) {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvApproveWriteQuota)");
     const ui64 cookie = ev->Get()->Cookie;
     LOG_DEBUG_S(
             ctx, NKikimrServices::PERSQUEUE,
@@ -2599,11 +2624,9 @@ void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorConte
 
     // Search for proper request
     Y_ABORT_UNLESS(TopicQuotaRequestCookie == cookie);
-    TopicQuotaRequestCookie = 0;
     TopicQuotaConsumedCookie = cookie;
-    Y_ASSERT(!WaitingForPreviousBlobQuota());
-    Y_ABORT_UNLESS(PendingWriteRequest);
-    WritePendingBlob();
+    TopicQuotaRequestCookie = 0;
+    RemoveQuotaWaitingRequests();
 
     // Metrics
     TopicQuotaWaitTimeForCurrentBlob = ev->Get()->AccountQuotaWaitTime;
@@ -2612,8 +2635,9 @@ void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorConte
     if (TopicWriteQuotaWaitCounter) {
         TopicWriteQuotaWaitCounter->IncFor(TopicQuotaWaitTimeForCurrentBlob.MilliSeconds());
     }
-    if (CurrentStateFunc() == &TThis::StateIdle)
-        HandleWrites(ctx);
+
+    RequestBlobQuota();
+    HandleRequests(ctx);
 }
 
 void TPartition::Handle(NReadQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const TActorContext& ctx) {
@@ -2659,10 +2683,12 @@ bool TPartition::IsQuotingEnabled() const
 
 void TPartition::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvSubDomainStatus)");
     const TEvPQ::TEvSubDomainStatus& event = *ev->Get();
 
     bool statusChanged = SubDomainOutOfSpace != event.SubDomainOutOfSpace();
     SubDomainOutOfSpace = event.SubDomainOutOfSpace();
+    DBGTRACE_LOG("statusChanged=" << statusChanged << ", SubDomainOutOfSpace=" << SubDomainOutOfSpace);
 
     if (statusChanged) {
         LOG_INFO_S(
@@ -2674,9 +2700,10 @@ void TPartition::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext
         );
 
         if (!SubDomainOutOfSpace) {
-            if (CurrentStateFunc() == &TThis::StateIdle) {
-                HandleWrites(ctx);
-            }
+//            if (CurrentStateFunc() == &TThis::StateIdle) {
+//                HandleWrites(ctx);
+//            }
+            HandleRequests(ctx);
         }
     }
 }

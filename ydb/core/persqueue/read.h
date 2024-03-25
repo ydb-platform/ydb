@@ -6,6 +6,7 @@
 
 #include <ydb/core/keyvalue/keyvalue_flat_impl.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -141,6 +142,7 @@ namespace NPQ {
             THolder<TEvKeyValue::TEvRequest> request = kvReq.MakeKvRequest(); // before save
             ui64 cookie = SaveKvRequest(std::move(kvReq));
             request->Record.SetCookie(cookie);
+            DBGTRACE_LOG("send TEvKeyValue::TEvRequest");
             ctx.Send(Tablet, request.Release()); // -> KV
         }
 
@@ -291,6 +293,7 @@ namespace NPQ {
             THolder<TEvKeyValue::TEvRequest> request = MakeHolder<TEvKeyValue::TEvRequest>();
             request->Record = std::move(ev->Get()->Record);
             request->Record.SetCookie(cookie);
+            DBGTRACE_LOG("send TEvKeyValue::TEvRequest");
             ctx.Send(Tablet, request.Release()); // -> KV
         }
 

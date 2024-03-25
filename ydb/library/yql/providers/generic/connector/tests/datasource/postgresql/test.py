@@ -25,25 +25,25 @@ runners = (dqrun.DqRunner, kqprun.KqpRunner)
 runners_ids = ("dqrun", "kqprun")
 
 
-# @pytest.mark.parametrize("runner_type", runners, ids=runners_ids)
-# @pytest.mark.parametrize("test_case", tc_collection.get('select_positive'), ids=tc_collection.ids('select_positive'))
-# @pytest.mark.usefixtures("settings")
-# @pytest.mark.usefixtures("postgresql_client")
-# def test_select_positive(
-#     request: pytest.FixtureRequest,
-#     settings: Settings,
-#     runner_type: Runner,
-#     postgresql_client: Client,
-#     test_case: select_positive_common.TestCase,
-# ):
-#     runner = configure_runner(runner=runner_type, settings=settings)
-#     scenario.select_positive(
-#         settings=settings,
-#         runner=runner,
-#         client=postgresql_client,
-#         test_case=test_case,
-#         test_name=request.node.name,
-#     )
+@pytest.mark.parametrize("runner_type", runners, ids=runners_ids)
+@pytest.mark.parametrize("test_case", tc_collection.get('select_positive'), ids=tc_collection.ids('select_positive'))
+@pytest.mark.usefixtures("settings")
+@pytest.mark.usefixtures("postgresql_client")
+def test_select_positive(
+    request: pytest.FixtureRequest,
+    settings: Settings,
+    runner_type: Runner,
+    postgresql_client: Client,
+    test_case: select_positive_common.TestCase,
+):
+    runner = configure_runner(runner=runner_type, settings=settings)
+    scenario.select_positive(
+        settings=settings,
+        runner=runner,
+        client=postgresql_client,
+        test_case=test_case,
+        test_name=request.node.name,
+    )
 
 
 @pytest.mark.parametrize("runner_type", runners, ids=runners_ids)

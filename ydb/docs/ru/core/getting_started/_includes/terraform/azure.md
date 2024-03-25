@@ -1,4 +1,4 @@
-Создайте [аккаунт](https://portal.azure.com/#home) в Azure и пополните [счёт](https://portal.azure.com/#view/Microsoft_Azure_GTM/ModernBillingMenuBlade/~/BillingAccounts) аккаунта на сумму достаточную для работы девяти ВМ. Рассчитать стоимость можно с помощью [калькулятора](https://azure.com/e/26977c150e854617a888fb3a7d1a399d).
+Создайте [аккаунт](https://portal.azure.com/#home) в Azure и пополните [счёт](https://portal.azure.com/#view/Microsoft_Azure_GTM/ModernBillingMenuBlade/~/BillingAccounts) аккаунта на сумму, достаточную для работы девяти ВМ. Рассчитать примерную стоимость содержания инфраструктуры в зависимости от региона и прочих обстоятельств можно с помощью [калькулятора](https://azure.com/e/26977c150e854617a888fb3a7d1a399d).
 
 Аутентификация в провайдере Azure для Terraform осуществляется через CLI. Скачать, установить и настроить Azure CLI можно, следуя [этой](https://learn.microsoft.com/ru-ru/cli/azure/install-azure-cli) инструкции. Авторизоваться в Azure с помощью Azure CLI можно в интерактивном режиме командой `az login`, а для создания пары SSH-ключей (Linux, macOS) проще всего будет воспользоваться командой `ssh-keygen`.
 

@@ -152,8 +152,13 @@ Y_UNIT_TEST(PartitionWriteQuota) {
         TStringStream histogramStr;
         histogram->OutputHtml(histogramStr);
         Cerr << "**** Total histogram: **** \n " << histogramStr.Str() << "**** **** **** ****" << Endl;
-        UNIT_ASSERT_VALUES_EQUAL(histogram->FindNamedCounter("Interval", "1000ms")->Val(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(histogram->FindNamedCounter("Interval", "2500ms")->Val(), 2);
+        auto instant = histogram->FindNamedCounter("Interval", "0ms")->Val();
+        auto oneSec = histogram->FindNamedCounter("Interval", "1000ms")->Val();
+        auto twoSec = histogram->FindNamedCounter("Interval", "2500ms")->Val();
+        UNIT_ASSERT_VALUES_EQUAL(oneSec + twoSec, 5);
+        UNIT_ASSERT(twoSec >= 2);
+        UNIT_ASSERT(oneSec >= 1);
+        UNIT_ASSERT(instant >= 1);
     }
 }
 

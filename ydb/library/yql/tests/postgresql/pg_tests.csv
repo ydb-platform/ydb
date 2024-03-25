@@ -1,7 +1,7 @@
 testcase,statements,successful,ratio
 aggregates,416,129,31.01
 alter_table,1679,233,13.88
-arrays,410,120,29.27
+arrays,410,45,10.98
 bit,115,90,78.26
 boolean,93,87,93.55
 case,63,35,55.56
@@ -22,7 +22,7 @@ int2,49,47,95.92
 int4,70,68,97.14
 int8,142,127,89.44
 interval,168,118,70.24
-join,591,206,34.86
+join,591,205,34.69
 json,450,165,36.67
 json_encoding,42,42,100.0
 jsonb,1013,527,52.02

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_dbtype.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h>
@@ -25,8 +26,7 @@ namespace NKikimr {
         // setup input compaction request
         void Setup(const TActorContext &ctx, std::optional<ui64> lsn, TCompactionReq cState);
         // when hull db reports compaction finish we change state by calling this function
-        void Compacted(const TActorContext &ctx, i64 reqId, EHullDbType dbType,
-                        const TString& vDiskLogPrefix, const std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup);
+        void Compacted(const TActorContext &ctx, i64 reqId, EHullDbType dbType, const TIntrusivePtr<TVDiskContext>& vCtx);
         // when data is flushed to recovery log run compaction
         void Logged(const TActorContext &ctx, ui64 lsn) {
             if (Triggered && lsn >= LsnToCommit) {

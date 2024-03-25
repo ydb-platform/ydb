@@ -438,6 +438,20 @@ public:
                 };
 
                 ApplyFillers(AllPgProcFillers, Y_ARRAY_SIZE(AllPgProcFillers), PgProcFillers_);
+            } else if (Table_ == "pg_operator") {
+                static const std::pair<const char*, TPgOperFiller> AllPgOperFillers[] = {
+                    {"oid", [](const NPg::TOperDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.OperId)); }},
+                    {"oprcom", [](const NPg::TOperDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.ComId)); }},
+                    {"oprleft", [](const NPg::TOperDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.LeftType)); }},
+                    {"oprname", [](const NPg::TOperDesc& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN)); }},
+                    {"oprnamespace", [](const NPg::TOperDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(PG_CATALOG_NAMESPACE)); }},
+                    {"oprnegate", [](const NPg::TOperDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.NegateId)); }},
+                    {"oprowner", [](const NPg::TOperDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
+                    {"oprresult", [](const NPg::TOperDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.ResultType)); }},
+                    {"oprright", [](const NPg::TOperDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.RightType)); }},
+                };
+
+                ApplyFillers(AllPgOperFillers, Y_ARRAY_SIZE(AllPgOperFillers), PgOperFillers_);
             } else if (Table_ == "pg_aggregate") {
                 static const std::pair<const char*, TPgAggregateFiller> AllPgAggregateFillers[] = {
                     {"aggfnoid", [](const NPg::TAggregateDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.AggId)); }},
@@ -740,6 +754,18 @@ public:
 
                     rows.emplace_back(row);
                 });
+            } else if (Table_ == "pg_operator") {
+                NPg::EnumOperators([&](const NPg::TOperDesc& desc) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgOperFillers_.size(), items);
+                    for (ui32 i = 0; i < PgOperFillers_.size(); ++i) {
+                        if (PgOperFillers_[i]) {
+                            items[i] = PgOperFillers_[i](desc);
+                        }
+                    }
+
+                    rows.emplace_back(row);
+                });
             } else if (Table_ == "pg_aggregate") {
                 NPg::EnumAggregation([&](ui32, const NPg::TAggregateDesc& desc) {
                     NUdf::TUnboxedValue* items;
@@ -855,6 +881,9 @@ private:
 
     using TPgLanguageFiller = NUdf::TUnboxedValuePod(*)(const NPg::TLanguageDesc&);
     TVector<TPgLanguageFiller> PgLanguageFillers_;
+
+    using TPgOperFiller = NUdf::TUnboxedValuePod(*)(const NPg::TOperDesc&);
+    TVector<TPgOperFiller> PgOperFillers_;
 };
 
 class TFunctionCallInfo {
@@ -1216,6 +1245,10 @@ private:
                     NullableDatum argDatum = { 0, false };
                     if (!value) {
                         argDatum.isnull = true;
+                        if (callInfo.flinfo->fn_strict) {
+                            IsFinished = true;
+                            break;
+                        }
                     } else {
                         argDatum.value = ArgDesc[i].PassByValue ?
                             ScalarDatumFromPod(value) :

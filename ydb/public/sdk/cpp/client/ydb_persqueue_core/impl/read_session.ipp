@@ -2569,23 +2569,19 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
                         && data.codec() != Ydb::PersQueue::V1::CODEC_RAW
                         && data.codec() != Ydb::PersQueue::V1::CODEC_UNSPECIFIED
                     ) {
-                        if (auto session = Parent->CbContext->LockShared()) {
-                            const NYdb::NTopic::ICodec* codecImpl = session->GetCodecImplOrThrow(static_cast<ECodec>(data.codec()));
-                            TString decompressed = codecImpl->Decompress(data.data());
-                            data.set_data(decompressed);
-                            data.set_codec(Ydb::PersQueue::V1::CODEC_RAW);
-                        }
+                        const NYdb::NTopic::ICodec* codecImpl = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(data.codec()));
+                        TString decompressed = codecImpl->Decompress(data.data());
+                        data.set_data(decompressed);
+                        data.set_codec(Ydb::PersQueue::V1::CODEC_RAW);
                     }
                 } else {
                     if (Parent->DoDecompress
                         && static_cast<Ydb::Topic::Codec>(batch.codec()) != Ydb::Topic::CODEC_RAW
                         && static_cast<Ydb::Topic::Codec>(batch.codec()) != Ydb::Topic::CODEC_UNSPECIFIED
                     ) {
-                        if (auto session = Parent->CbContext->LockShared()) {
-                            const NYdb::NTopic::ICodec* codecImpl = session->GetCodecImplOrThrow(static_cast<NTopic::ECodec>(batch.codec()));
-                            TString decompressed = codecImpl->Decompress(data.data());
-                            data.set_data(decompressed);
-                        }
+                        const NYdb::NTopic::ICodec* codecImpl = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(batch.codec()));
+                        TString decompressed = codecImpl->Decompress(data.data());
+                        data.set_data(decompressed);
                     }
                 }
 

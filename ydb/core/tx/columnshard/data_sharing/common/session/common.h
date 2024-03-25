@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/data_sharing/common/context/context.h>
+#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -29,6 +30,7 @@ private:
     YDB_READONLY_DEF(TString, SessionId);
     const TString Info;
     YDB_READONLY(ui64, RuntimeId, GetNextRuntimeId());
+    std::shared_ptr<NDataLocks::TManager::TGuard> LockGuard;
     bool IsStartedFlag = false;
     bool IsStartingFlag = false;
     bool IsFinishedFlag = false;

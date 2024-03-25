@@ -15,7 +15,7 @@ class TestS3(object):
     @yq_all
     @pytest.mark.parametrize("format", ["json_list", "json_each_row", "csv_with_names", "parquet"])
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_egress(self, kikimr, s3, client, format, yq_version):
+    def test_egress(self, kikimr, s3, client, format, yq_version, unique_prefix):
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -26,12 +26,13 @@ class TestS3(object):
         bucket = resource.Bucket("egress_bucket")
         bucket.create(ACL='public-read-write')
 
-        client.create_storage_connection("sbucket", "egress_bucket")
+        storage_connection_name = unique_prefix + "sbucket"
+        client.create_storage_connection(storage_connection_name, "egress_bucket")
 
         sql = R'''
-            insert into sbucket.`{0}_{1}/` with (format={0})
+            insert into `{2}`.`{0}_{1}/` with (format={0})
             select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
-            '''.format(format, yq_version)
+            '''.format(format, yq_version, storage_connection_name)
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -52,7 +53,7 @@ class TestS3(object):
     @pytest.mark.parametrize("format1", ["json_list", "json_each_row", "csv_with_names", "parquet"])
     @pytest.mark.parametrize("format2", ["json_list", "json_each_row", "csv_with_names", "parquet"])
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_convert(self, kikimr, s3, client, format1, format2, yq_version):
+    def test_convert(self, kikimr, s3, client, format1, format2, yq_version, unique_prefix):
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -63,12 +64,13 @@ class TestS3(object):
         bucket = resource.Bucket("convert_bucket")
         bucket.create(ACL='public-read-write')
 
-        client.create_storage_connection("sbucket", "convert_bucket")
+        storage_connection_name = unique_prefix + "sbucket"
+        client.create_storage_connection(storage_connection_name, "convert_bucket")
 
         sql = R'''
-            insert into sbucket.`{0}_1_{1}_{2}/` with (format={0})
+            insert into `{3}`.`{0}_1_{1}_{2}/` with (format={0})
             select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
-            '''.format(format1, format2, yq_version)
+            '''.format(format1, format2, yq_version, storage_connection_name)
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -78,12 +80,12 @@ class TestS3(object):
         egress_bytes_1 = stat[graph_name]["EgressBytes"]["sum"]
 
         sql = R'''
-            insert into sbucket.`{0}_2_{1}_{2}/` with (format={1})
-            select foo, bar from sbucket.`{0}_1_{1}_{2}/*` with (format={0}, schema(
+            insert into `{3}`.`{0}_2_{1}_{2}/` with (format={1})
+            select foo, bar from `{3}`.`{0}_1_{1}_{2}/*` with (format={0}, schema(
                 foo Int NOT NULL,
                 bar String NOT NULL
             ))
-            '''.format(format1, format2, yq_version)
+            '''.format(format1, format2, yq_version, storage_connection_name)
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -94,11 +96,11 @@ class TestS3(object):
         egress_bytes_2 = stat[graph_name]["EgressBytes"]["sum"]
 
         sql = R'''
-            select foo, bar from sbucket.`{0}_2_{1}_{2}/*` with (format={1}, schema(
+            select foo, bar from `{3}`.`{0}_2_{1}_{2}/*` with (format={1}, schema(
                 foo Int NOT NULL,
                 bar String NOT NULL
             ))
-            '''.format(format1, format2, yq_version)
+            '''.format(format1, format2, yq_version, storage_connection_name)
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -125,7 +127,7 @@ class TestS3(object):
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_precompute(self, kikimr, s3, client, yq_version):
+    def test_precompute(self, kikimr, s3, client, yq_version, unique_prefix):
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -136,30 +138,31 @@ class TestS3(object):
         bucket = resource.Bucket("pbucket")
         bucket.create(ACL='public-read-write')
 
-        client.create_storage_connection("pb", "pbucket")
+        storage_connection_name = unique_prefix + "pb"
+        client.create_storage_connection(storage_connection_name, "pbucket")
 
-        sql = R'''
-            insert into pb.`path1/` with (format=json_list)
+        sql = fR'''
+            insert into `{storage_connection_name}`.`path1/` with (format=json_list)
             select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
             '''
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
-        sql = R'''
-            insert into pb.`path2/` with (format=csv_with_names)
+        sql = fR'''
+            insert into `{storage_connection_name}`.`path2/` with (format=csv_with_names)
             select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
             '''
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
-        sql = R'''
+        sql = fR'''
             $c1 =
                 SELECT
                 count(*) as `count`
                 FROM
-                pb.`path1/`
+                `{storage_connection_name}`.`path1/`
                 with (format=json_list, schema(
                     foo Int NOT NULL,
                     bar String NOT NULL
@@ -169,7 +172,7 @@ class TestS3(object):
                 SELECT
                 count(*) as `count`
                 FROM
-                pb.`path2/`
+                `{storage_connection_name}`.`path2/`
                 with (format=csv_with_names, schema(
                     foo Int NOT NULL,
                     bar String NOT NULL
@@ -199,7 +202,7 @@ class TestS3(object):
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_sum(self, kikimr, s3, client, yq_version):
+    def test_sum(self, kikimr, s3, client, yq_version, unique_prefix):
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -211,10 +214,11 @@ class TestS3(object):
         bucket = resource.Bucket(bucket_name)
         bucket.create(ACL='public-read-write')
 
-        client.create_storage_connection("sbucket", bucket_name)
+        storage_connection_name = unique_prefix + "sbucket"
+        client.create_storage_connection(storage_connection_name, bucket_name)
 
-        sql = R'''
-            insert into sbucket.`file/` with (format="csv_with_names")
+        sql = fR'''
+            insert into `{storage_connection_name}`.`file/` with (format="csv_with_names")
             select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
             '''
 
@@ -226,8 +230,8 @@ class TestS3(object):
         for file in bucket.objects.all():
             files_size += bucket.Object(file.key).content_length
 
-        sql = ("PRAGMA dq.MaxTasksPerStage=\"1\";" if yq_version == "v1" else "") + R'''
-            select foo, bar from sbucket.`file/*` with (format="csv_with_names", schema(
+        sql = ("PRAGMA dq.MaxTasksPerStage=\"1\";" if yq_version == "v1" else "") + fR'''
+            select foo, bar from `{storage_connection_name}`.`file/*` with (format="csv_with_names", schema(
                 foo Int NOT NULL,
                 bar String NOT NULL
             ))

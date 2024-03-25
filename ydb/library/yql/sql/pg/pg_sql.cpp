@@ -1081,7 +1081,7 @@ public:
 
             if (x != value) {
                 if (x->limitOption == LIMIT_OPTION_COUNT || x->limitOption == LIMIT_OPTION_DEFAULT) {
-                    if (value->limitCount || value->limitOffset) {
+                    if (x->limitCount || x->limitOffset) {
                         AddError("SelectStmt: limit should be used only on top");
                         return nullptr;
                     }
@@ -4275,6 +4275,33 @@ public:
         return L(A("PgOp"), QAX(op), lhs, rhs);
     }
 
+    TAstNode* ParseAExprOpAnyAll(const A_Expr* value, const TExprSettings& settings, bool all) {
+        if (ListLength(value->name) != 1) {
+            AddError(TStringBuilder() << "Unsupported count of names: " << ListLength(value->name));
+            return nullptr;
+        }
+
+        auto nameNode = ListNodeNth(value->name, 0);
+        if (NodeTag(nameNode) != T_String) {
+            NodeNotImplemented(value, nameNode);
+            return nullptr;
+        }
+
+        auto op = StrVal(nameNode);
+        if (!value->lexpr || !value->rexpr) {
+            AddError("Missing operands");
+            return nullptr;
+        }
+
+        auto lhs = ParseExpr(value->lexpr, settings);
+        auto rhs = ParseExpr(value->rexpr, settings);
+        if (!lhs || !rhs) {
+            return nullptr;
+        }
+
+        return L(A(all ? "PgAllOp" : "PgAnyOp"), QAX(op), lhs, rhs);
+    }
+
     TAstNode* ParseAExprLike(const A_Expr* value, const TExprSettings& settings, bool insensitive) {
         if (ListLength(value->name) != 1) {
             AddError(TStringBuilder() << "Unsupported count of names: " << ListLength(value->name));
@@ -4443,10 +4470,8 @@ public:
         case AEXPR_NOT_BETWEEN_SYM:
             return ParseAExprBetween(value, settings);
         case AEXPR_OP_ANY:
-            if (State.ApplicationName && State.ApplicationName->StartsWith("pgAdmin")) {
-                AddWarning(TIssuesIds::PG_COMPAT, "AEXPR_OP_ANY forced to false");
-                return L(A("PgConst"), QA("false"), L(A("PgType"), QA("bool")));
-            }
+        case AEXPR_OP_ALL:
+            return ParseAExprOpAnyAll(value, settings, value->kind == AEXPR_OP_ALL);
         default:
             AddError(TStringBuilder() << "A_Expr_Kind unsupported value: " << (int)value->kind);
             return nullptr;

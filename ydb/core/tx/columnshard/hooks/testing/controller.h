@@ -21,6 +21,8 @@ private:
     YDB_READONLY(TAtomicCounter, ActualizationsCount, 0);
     YDB_READONLY(TAtomicCounter, ActualizationRefreshSchemeCount, 0);
     YDB_READONLY(TAtomicCounter, ActualizationRefreshTieringCount, 0);
+    
+    YDB_ACCESSOR_DEF(std::optional<TDuration>, LagForCompactionBeforeTierings);
     YDB_ACCESSOR(std::optional<TDuration>, GuaranteeIndexationInterval, TDuration::Zero());
     YDB_ACCESSOR(std::optional<TDuration>, PeriodicWakeupActivationPeriod, std::nullopt);
     YDB_ACCESSOR(std::optional<TDuration>, StatsReportInterval, std::nullopt);
@@ -123,6 +125,10 @@ private:
 
     THashSet<TString> SharingIds;
 protected:
+    virtual TDuration GetLagForCompactionBeforeTierings(const TDuration def) const override {
+        return LagForCompactionBeforeTierings.value_or(def);
+    }
+
     virtual void OnPortionActualization(const NOlap::TPortionInfo& /*info*/) override {
         ActualizationsCount.Inc();
     }

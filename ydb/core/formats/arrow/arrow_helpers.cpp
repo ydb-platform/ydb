@@ -136,7 +136,7 @@ std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::
         columns.emplace_back(result);
         Y_ABORT_UNLESS(result);
     }
-    return arrow::RecordBatch::Make(schema, 0, columns);
+    return arrow::RecordBatch::Make(schema, rowsCount, columns);
 }
 
 namespace {

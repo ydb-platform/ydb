@@ -60,6 +60,8 @@ TEngineLogsCounters::TEngineLogsCounters()
     PortionNoBorderCount = TBase::GetDeriviative("Ttl/PortionNoBorder/Count");
     PortionNoBorderBytes = TBase::GetDeriviative("Ttl/PortionNoBorder/Bytes");
 
+    GranuleOptimizerLocked = TBase::GetDeriviative("Optimizer/Granules/Locked");
+
     StatUsageForTTLCount = TBase::GetDeriviative("Ttl/StatUsageForTTLCount/Count");
     ChunkUsageForTTLCount = TBase::GetDeriviative("Ttl/ChunkUsageForTTLCount/Count");
 }

@@ -55,8 +55,9 @@ extern "C" {
 
 #include <nghttp2/nghttp2ver.h>
 
-#if defined(WIN32)
-typedef int ssize_t;
+#if defined(_MSC_VER)
+#  include <basetsd.h>
+   typedef SSIZE_T ssize_t;
 #endif
 
 #if 1

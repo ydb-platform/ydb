@@ -1674,7 +1674,7 @@ void TServiceBase::HandleRequest(
 {
     SetActive();
 
-    const auto& method = header->method();
+    auto method = FromProto<TString>(header->method());
     auto requestId = FromProto<TRequestId>(header->request_id());
 
     auto replyError = [&] (TError error) {
@@ -1788,7 +1788,6 @@ void TServiceBase::HandleRequest(
             NYT::NRpc::EErrorCode::AuthenticationError,
             "Request is missing credentials"));
     }
-
 }
 
 void TServiceBase::ReplyError(

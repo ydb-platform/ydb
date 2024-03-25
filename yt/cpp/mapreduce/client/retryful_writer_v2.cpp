@@ -25,7 +25,7 @@ public:
     TSentBuffer() = default;
     TSentBuffer(const TSentBuffer& ) = delete;
 
-    std::pair<std::shared_ptr<char[]>, ssize_t> Snapshot() const
+    std::pair<std::shared_ptr<std::string>, ssize_t> Snapshot() const
     {
         return {Buffer_, Size_};
     }
@@ -44,14 +44,15 @@ public:
     {
         auto newSize = Size_ + size;
         if (newSize < Capacity_) {
-            memcpy(Buffer_.get() + Size_, data, size);
+            memcpy(Buffer_->data() + Size_, data, size);
         } else {
             // Closest power of 2 exceeding new size
             auto newCapacity = 1 << (MostSignificantBit(newSize) + 1);
             newCapacity = Max<ssize_t>(64, newCapacity);
-            auto newBuffer = std::make_shared<char[]>(newCapacity);
-            memcpy(newBuffer.get(), Buffer_.get(), Size_);
-            memcpy(newBuffer.get() + Size_, data, size);
+            auto newBuffer = std::make_shared<std::string>();
+            newBuffer->resize(newCapacity);
+            memcpy(newBuffer->data(), Buffer_->data(), Size_);
+            memcpy(newBuffer->data() + Size_, data, size);
             Buffer_ = newBuffer;
             Capacity_ = newCapacity;
         }
@@ -59,7 +60,7 @@ public:
     }
 
 private:
-    std::shared_ptr<char[]> Buffer_ = nullptr;
+    std::shared_ptr<std::string> Buffer_ = nullptr;
     ssize_t Size_ = 0;
     ssize_t Capacity_ = 0;
 };
@@ -210,7 +211,7 @@ private:
                     retrier = MakeHolder<THeavyRequestRetrier>(*currentParameters);
                 }
                 retrier->Update([task=task] {
-                    return MakeHolder<TMemoryInput>(task.Data.get(), task.Size);
+                    return MakeHolder<TMemoryInput>(task.Data->data(), task.Size);
                 });
                 if (task.BufferComplete) {
                     retrier->Finish();
@@ -245,7 +246,7 @@ private:
     struct TWriteTask
     {
         NThreading::TPromise<void> SendingComplete;
-        std::shared_ptr<char[]> Data;
+        std::shared_ptr<std::string> Data;
         ssize_t Size = 0;
         bool BufferComplete = false;
     };

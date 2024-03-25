@@ -800,16 +800,16 @@ public:
 
     bool Close(const TASessionClosedEvent<UseMigrationProtocol>& event, TDeferredActions<UseMigrationProtocol>& deferred) {
         TWaiter waiter;
-        TVector<TRawPartitionStreamEventQueue<UseMigrationProtocol>> deferedDelete;
+        TVector<TRawPartitionStreamEventQueue<UseMigrationProtocol>> deferredDelete;
         with_lock (TParent::Mutex) {
             if (TParent::Closed) {
                 return false;
             }
-            deferedDelete.reserve(TParent::Events.size());
+            deferredDelete.reserve(TParent::Events.size());
             while (!TParent::Events.empty()) {
                 auto& event = TParent::Events.front();
                 if (!event.IsEmpty()) {
-                    deferedDelete.push_back(event.PartitionStream->ExtractQueue());
+                    deferredDelete.push_back(event.PartitionStream->ExtractQueue());
                 }
                 TParent::Events.pop();
             }
@@ -819,7 +819,7 @@ public:
         }
 
         // Delayed deletion is necessary to avoid deadlock with PushEvent
-        deferedDelete.clear();
+        deferredDelete.clear();
 
         TReadSessionEventInfo<UseMigrationProtocol> info(event);
         ApplyHandler(info, deferred);

@@ -20,7 +20,7 @@ class BaseTestCase:
 
     @property
     def name(self) -> str:
-        return f'{self.name_}_{data_source_kind_alias(self.data_source_kind)}_{EProtocol.Name(self.protocol)}'
+        return f'{self.name_}_{EProtocol.Name(self.protocol)}'
 
     @property
     def database(self) -> Database:

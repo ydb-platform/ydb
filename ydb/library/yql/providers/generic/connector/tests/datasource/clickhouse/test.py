@@ -29,7 +29,7 @@ runners_ids = ("dqrun", "kqprun")
 @pytest.mark.parametrize("test_case", tc_collection.get('select_positive'), ids=tc_collection.ids('select_positive'))
 @pytest.mark.usefixtures("settings")
 @pytest.mark.usefixtures("clickhouse_client")
-def test_select_positive_clickhouse(
+def test_select_positive(
     request: pytest.FixtureRequest,
     settings: Settings,
     runner_type: Runner,

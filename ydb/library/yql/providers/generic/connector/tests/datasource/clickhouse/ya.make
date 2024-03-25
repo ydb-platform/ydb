@@ -44,7 +44,7 @@ TEST_SRCS(
     conftest.py
     scenario.py
     select_datetime.py
-    select_positive_clickhouse.py
+    select_positive.py
     test.py
 )
 

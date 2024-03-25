@@ -4,14 +4,15 @@ runs:
   using: "composite"
   steps:
     - name: original_ref
+      if: oref
       shell: bash
       run: |
         echo "value=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
     - name: generate_ya_make
       shell: bash
       run: |
-        ./scripts/graph_compare.sh ${{ steps.original_ref.outputs.value }}^1 ${{ steps.original_ref.outputs.value }}
+        ./.github/scripts/graph_compare.sh ${{ steps.oref.outputs.value }}^1 ${{ steps.oref.outputs.value }}
     - name: restore_ref
       shell: bash
       run: |
-        git checkout ${{ steps.original_ref.outputs.value }}
+        git checkout ${{ steps.oref.outputs.value }}

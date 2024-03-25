@@ -43,6 +43,7 @@ extern "C" {
 #include "utils/memutils.h"
 #include "utils/array.h"
 #include "utils/arrayaccess.h"
+#include "utils/datum.h"
 #include "utils/lsyscache.h"
 #include "utils/datetime.h"
 #include "utils/typcache.h"
@@ -1037,12 +1038,13 @@ class TPgResolvedCallBase : public TMutableComputationNode<TDerived> {
     typedef TMutableComputationNode<TDerived> TBaseComputation;
 public:
     TPgResolvedCallBase(TComputationMutables& mutables, const std::string_view& name, ui32 id,
-        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes, bool isList, const TStructType* structType)
+        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes, TType* returnType,
+        bool isList, const TStructType* structType)
         : TBaseComputation(mutables)
         , Name(name)
         , Id(id)
         , ProcDesc(NPg::LookupProc(id))
-        , RetTypeDesc(NPg::LookupType(ProcDesc.ResultType))
+        , RetTypeDesc(NPg::LookupType(AS_TYPE(TPgType, returnType)->GetTypeId()))
         , ArgNodes(std::move(argNodes))
         , ArgTypes(std::move(argTypes))
         , StructType(structType)
@@ -1114,8 +1116,8 @@ class TPgResolvedCall : public TPgResolvedCallBase<TPgResolvedCall<UseContext>> 
     typedef TPgResolvedCallBase<TPgResolvedCall<UseContext>> TBaseComputation;
 public:
     TPgResolvedCall(TComputationMutables& mutables, const std::string_view& name, ui32 id,
-        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes)
-        : TBaseComputation(mutables, name, id, std::move(argNodes), std::move(argTypes), false, nullptr)
+        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes, TType* returnType)
+        : TBaseComputation(mutables, name, id, std::move(argNodes), std::move(argTypes), returnType, false, nullptr)
         , StateIndex(mutables.CurValueIndex++)
     {
     }
@@ -1291,7 +1293,12 @@ private:
                     if (callInfo.isnull) {
                         value = NUdf::TUnboxedValuePod();
                     } else {
-                        value = AnyDatumToPod(ret, RetTypeDesc.PassByValue);
+                        if (RetTypeDesc.PassByValue) {
+                            value = ScalarDatumToPod(ret);
+                        } else {
+                            auto cloned = datumCopy(ret, false, RetTypeDesc.TypeLen);
+                            value = PointerDatumToPod(cloned);
+                        }
                     }
 
                     return true;
@@ -1414,8 +1421,8 @@ private:
 
 public:
     TPgResolvedMultiCall(TComputationMutables& mutables, const std::string_view& name, ui32 id,
-        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes, const TStructType* structType)
-        : TBaseComputation(mutables, name, id, std::move(argNodes), std::move(argTypes), true, structType)
+        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes, TType* returnType, const TStructType* structType)
+        : TBaseComputation(mutables, name, id, std::move(argNodes), std::move(argTypes), returnType, true, structType)
     {
     }
 
@@ -2741,13 +2748,13 @@ TComputationNodeFactory GetPgFactory() {
 
                 if (isList) {
                     YQL_ENSURE(!useContext);
-                    return new TPgResolvedMultiCall(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes), structType);
+                    return new TPgResolvedMultiCall(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes), itemType, structType);
                 } else {
                     YQL_ENSURE(!structType);
                     if (useContext) {
-                        return new TPgResolvedCall<true>(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes));
+                        return new TPgResolvedCall<true>(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes), returnType);
                     } else {
-                        return new TPgResolvedCall<false>(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes));
+                        return new TPgResolvedCall<false>(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes), returnType);
                     }
                 }
             }

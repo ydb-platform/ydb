@@ -68,10 +68,18 @@ public:
 
 class TOperatorContainer: public NBackgroundTasks::TInterfaceProtoContainer<IOperator> {
 private:
+    YDB_READONLY_DEF(TString, Name);
     std::optional<TPortionStorageCursor> Cursor;
     using TBase = NBackgroundTasks::TInterfaceProtoContainer<IOperator>;
 public:
     using TBase::TBase;
+
+    TOperatorContainer(const TString& name, const std::shared_ptr<IOperator>& object)
+        : TBase(object)
+        , Name(name)
+    {
+
+    }
 
     const TPortionStorageCursor& GetCursorVerified() const {
         AFL_VERIFY(Cursor);
@@ -86,6 +94,30 @@ public:
     std::shared_ptr<arrow::Scalar> GetScalarVerified(const TPortionStorage& storage) {
         AFL_VERIFY(!!Cursor);
         return storage.GetScalarVerified(*Cursor);
+    }
+
+    NKikimrColumnShardStatisticsProto::TOperatorContainer SerializeToProto() const {
+        NKikimrColumnShardStatisticsProto::TOperatorContainer result = TBase::SerializeToProto();
+        result.SetName(Name);
+        AFL_VERIFY(Name);
+        return result;
+    }
+
+    void SerializeToProto(NKikimrColumnShardStatisticsProto::TOperatorContainer& proto) const {
+        TBase::SerializeToProto(proto);
+        proto.SetName(Name);
+        AFL_VERIFY(Name);
+    }
+
+    bool DeserializeFromProto(const NKikimrColumnShardStatisticsProto::TOperatorContainer& proto) {
+        Name = proto.GetName();
+        if (!Name) {
+            return false;
+        }
+        if (!TBase::DeserializeFromProto(proto)) {
+            return false;
+        }
+        return true;
     }
 };
 

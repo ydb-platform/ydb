@@ -43,7 +43,7 @@ private:
     THashMap<ui32, TColumnFeatures> ColumnFeatures;
     THashMap<ui32, std::shared_ptr<arrow::Field>> ArrowColumnByColumnIdCache;
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
-    std::map<NStatistics::TIdentifier, NStatistics::TOperatorContainer> Statistics;
+    std::map<TString, NStatistics::TOperatorContainer> StatisticsByName;
     TIndexInfo(const TString& name);
     bool SchemeNeedActualization = false;
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators);
@@ -78,14 +78,15 @@ public:
 
     std::vector<std::shared_ptr<IPortionDataChunk>> MakeEmptyChunks(const ui32 columnId, const std::vector<ui32>& pages, const TSimpleColumnInfo& columnInfo) const;
 
-    const std::map<NStatistics::TIdentifier, NStatistics::TOperatorContainer>& GetStatistics() const {
-        return Statistics;
+    const std::map<TString, NStatistics::TOperatorContainer>& GetStatisticsByName() const {
+        return StatisticsByName;
     }
 
     NStatistics::TOperatorContainer GetStatistics(const NStatistics::TIdentifier& id) const {
-        auto it = Statistics.find(id);
-        if (it != Statistics.end()) {
-            return it->second;
+        for (auto&& i : StatisticsByName) {
+            if (i.second->GetIdentifier() == id) {
+                return i.second;
+            }
         }
         return NStatistics::TOperatorContainer();
     }

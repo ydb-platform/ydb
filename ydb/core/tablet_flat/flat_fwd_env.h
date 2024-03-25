@@ -200,15 +200,15 @@ namespace NFwd {
                 return stat += q->Stat;
             };
 
-            return
-                std::accumulate(Queues.begin(), Queues.end(), Total, aggr);
+            return std::accumulate(Queues.begin(), Queues.end(), Total, aggr);
         }
 
         TAutoPtr<TFetch> GrabFetches() noexcept
         {
             while (auto *q = Queue ? Queue.PopFront() : nullptr) {
-                if (std::exchange(q->Grow, false))
+                if (std::exchange(q->Grow, false)) {
                     (*q)->Forward(q, Max(ui64(1), Conf.AheadHi));
+                }
 
                 if (auto req = std::move(q->Fetch)) {
                     Y_ABORT_UNLESS(req->Pages, "Shouldn't sent an empty requests");

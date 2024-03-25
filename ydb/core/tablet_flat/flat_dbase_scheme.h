@@ -217,8 +217,6 @@ public:
      * is true the record is deemed useful, otherwise it is discarded.
      */
     virtual bool ApplyAlterRecord(const TAlterRecord& record) = 0;
-
-    virtual void SetRewriteScheme() {};
 };
 
 // scheme delta

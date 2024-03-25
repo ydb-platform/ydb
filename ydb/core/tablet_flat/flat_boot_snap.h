@@ -142,15 +142,11 @@ namespace NBoot {
 
             blobs.reserve(Proto.SchemeInfoBodiesSize());
 
-            ui32 fromGeneration = 0;
-            const auto* systemChannel = Logic->Info->ChannelInfo(0);
-            if (systemChannel) {
-                fromGeneration = systemChannel->LatestEntry()->FromGeneration;
-            }
-
             for (const auto &one : Proto.GetSchemeInfoBodies()) {
                 blobs.emplace_back(LogoBlobIDFromLogoBlobID(one));
-                if (blobs.back().Generation() < fromGeneration) {
+                const auto& blob = blobs.back();
+                const auto* channel = Logic->Info->ChannelInfo(blob.Channel());
+                if (channel && blob.Generation() < channel->LatestEntry()->FromGeneration) {
                     Logic->Result().ShouldSnapshotScheme = true;
                 }
             }

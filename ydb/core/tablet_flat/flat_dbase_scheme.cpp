@@ -318,9 +318,6 @@ TAlter& TAlter::SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 max
 TAlter& TAlter::SetRewrite()
 {
     Log.SetRewrite(true);
-    if (Sink) {
-        Sink->SetRewriteScheme();
-    }
     return *this;
 }
 

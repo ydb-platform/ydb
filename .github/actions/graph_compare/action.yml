@@ -1,0 +1,17 @@
+name: graph_compare
+description: Compare graphs between merge commit and its base, and list affected tests in ya.make
+runs:
+  using: "composite"
+  steps:
+    - name: original_ref
+      shell: bash
+      run: |
+        echo "value=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+    - name: generate_ya_make
+      shell: bash
+      run: |
+        ./scripts/graph_compare.sh ${{ steps.original_ref.outputs.value }}^1 ${{ steps.original_ref.outputs.value }}
+    - name: restore_ref
+      shell: bash
+      run: |
+        git checkout ${{ steps.original_ref.outputs.value }}

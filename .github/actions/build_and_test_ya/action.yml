@@ -87,6 +87,9 @@ runs:
         bazel_remote_password: ${{ inputs.put_build_results_to_cache &&  fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
         link_threads: ${{ inputs.link_threads }}
 
+    - name: Generate ya.make with affected test suites list
+      uses: ./.github/actions/graph_compare
+ 
     - name: Check if there's a list of tests to run
       id: test_run_choice
       shell: bash
@@ -97,7 +100,7 @@ runs:
           echo "CH=cache" >> $GITHUB_OUTPUT
         fi
 
-    - name: Varify test run choice
+    - name: Verify test run choice
       shell: bash
       run: |
         echo "Test run choice: ${{ steps.test_run_choice.outputs.CH }}"

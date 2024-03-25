@@ -11,7 +11,7 @@ The `CREATE TABLE` statement is used to create an empty table in the current dat
 
 
 When creating a table, you can specify:
-1. **Table Type**: `TEMPORARY` (not fully supported yet and used only in tests) – a temporary table that is automatically deleted at the end of the session or at the end of the current transaction. If this parameter is not set (left empty), a permanent table is created.
+1. **Table Type**: `TEMPORARY` / `TEMP` – a temporary table that is automatically deleted at the regular end of the session, otherwise it will no longer be available and will be automatically deleted after the time has elapsed. If this parameter is not set (left empty), a permanent table is created.
 2. **Table Name**: `<table name>` – you can use English letters in lowercase, numbers, and underscores. For example, the table name "People" will be stored as "people". For more information, see [Identifiers and Key Words](https://www.postgresql.org/docs/current/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS).
 3. **Column Name**: `<column name>` – the same naming rules apply as for table names.
 4. **Data Type**: `<column data type>` – [standard PostgreSQL data types](https://www.postgresql.org/docs/14/datatype.html) are specified.
@@ -26,12 +26,12 @@ When creating a table, you can specify:
 ## Creating two tables with primary key autoincrement {#create_table_pk_serial}
 #|
 || **Table people** | **Table social_card** ||
-|| 
+||
 
 
 {% include [create_table_people](../_includes/statements/create_table/create_table_people.md) %}
 
-| 
+|
 
 {% include [create_table_social_card](../_includes/statements/create_table/create_table_social_card.md) %}
 
@@ -60,7 +60,7 @@ The temporary table functionality is not fully implemented. Temporary tables may
 
 {% include [create_table_temp](../_includes/statements/create_table/create_table_temp.md) %}
 
-The temporary table is defined using the `TEMPORARY` keyword. It exists until the end of the session or the completion of the transaction, after which it is automatically deleted.
+The temporary table is defined using the `TEMPORARY` or `TEMP` keywords. It exists until the end of the session, after which it is automatically deleted.
 
 
 ## Creating a table with sorting conditions {#create_table_collate}

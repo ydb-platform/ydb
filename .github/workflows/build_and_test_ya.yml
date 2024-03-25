@@ -65,60 +65,18 @@ jobs:
       with:
         ref: ${{ inputs.commit_sha }}
 
-    - name: comment-build-start
-      if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
-      shell: bash
-      env:
-        BUILD_PRESET: ${{ inputs.build_preset }}
-        GITHUB_TOKEN: ${{ github.token }}
-      run: |
-        jobs_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs"
-        # tricky: we are searching job with name that contains build_preset
-        check_url=$(curl -s $jobs_url | jq --arg n "$BUILD_PRESET" -r '.jobs[] | select(.name | contains($n)) | .html_url')
-        
-        echo "Pre-commit [check]($check_url) for ${{ inputs.commit_sha }} has started." | .github/scripts/tests/comment-pr.py --rewrite
-    
-    - name: Prepare s3cmd
-      uses: ./.github/actions/s3cmd
+    - name: Build and test
+      uses: ./.github/actions/build_and_test_ya
       with:
-        s3_bucket: ${{ vars.AWS_BUCKET }}
-        s3_endpoint: ${{ vars.AWS_ENDPOINT }}
-        s3_key_id: ${{ secrets.AWS_KEY_ID }}
-        s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
-        folder_prefix: ya-
-        build_preset: ${{ inputs.build_preset }}
-
-    - name: Build
-      uses: ./.github/actions/build_ya
-      if: inputs.run_build
-      with:
-        build_target: ${{ inputs.build_target }}
-        build_preset: ${{ inputs.build_preset }}
-        bazel_remote_uri: ${{ vars.REMOTE_CACHE_URL_YA || '' }}
-        bazel_remote_username: ${{ inputs.put_build_results_to_cache && secrets.REMOTE_CACHE_USERNAME || '' }}
-        bazel_remote_password: ${{ inputs.put_build_results_to_cache && secrets.REMOTE_CACHE_PASSWORD || '' }}
-        link_threads: ${{ inputs.link_threads }}
-
-    - name: Run tests
-      uses: ./.github/actions/test_ya
-      if: inputs.run_tests
-      with:
-        build_target: ${{ inputs.build_target }}
-        build_preset: ${{ inputs.build_preset }}
-        test_size: ${{ inputs.test_size }}
-        test_type: ${{ inputs.test_type }}
-        testman_token: ${{ secrets.TESTMO_TOKEN }}
-        testman_url: ${{ vars.TESTMO_URL }}
-        testman_project_id: ${{ vars.TESTMO_PROJECT_ID }}
-        bazel_remote_uri: ${{ vars.REMOTE_CACHE_URL_YA || '' }}
-        bazel_remote_username: ${{ inputs.put_build_results_to_cache && secrets.REMOTE_CACHE_USERNAME || '' }}
-        bazel_remote_password: ${{ inputs.put_build_results_to_cache && secrets.REMOTE_CACHE_PASSWORD || '' }}
-        link_threads: ${{ inputs.link_threads }}
-        test_threads: ${{ inputs.test_threads }}
-    
-    - name: comment-if-cancel
-      if: cancelled() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
-      env:
-        BUILD_PRESET: ${{ inputs.build_preset }}
-        GITHUB_TOKEN: ${{ github.token }}
-      run:  echo "Check cancelled" | .github/scripts/tests/comment-pr.py --color black
+        build_preset: relwithdebinfo
+        build_target: "ydb/"
+        increment: false
+        run_tests: true
+        test_size: "small,medium"
+        test_type: "unittest,py3test,py2test,pytest"
+        test_threads: 52
+        put_build_results_to_cache: true
+        secs: ${{ format('{{"TESTMO_TOKEN":"{0}","AWS_KEY_ID":"{1}","AWS_KEY_VALUE":"{2}","REMOTE_CACHE_USERNAME":"{3}","REMOTE_CACHE_PASSWORD":"{4}"}}', 
+          secrets.TESTMO_TOKEN, secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD ) }}
+        vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","TESTMO_URL":"{3}","TESTMO_PROJECT_ID":"{4}"}}',
+          vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.TESTMO_URL, vars.TESTMO_PROJECT_ID ) }}

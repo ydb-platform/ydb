@@ -25,6 +25,7 @@ jobs:
       with:
         build_preset: "release-asan"
         build_target: "ydb/"
+        increment: true
         run_tests: true
         test_size: "small,medium"
         test_type: "unittest,py3test,py2test,pytest"

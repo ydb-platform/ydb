@@ -11,7 +11,7 @@ void TGranulesStorage::UpdateGranuleInfo(const TGranuleMeta& granule) {
 }
 
 std::shared_ptr<NKikimr::NOlap::TGranuleMeta> TGranulesStorage::GetGranuleForCompaction(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
-    const TInstant now = TInstant::Now();
+    const TInstant now = HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now();
     std::map<NStorageOptimizer::TOptimizationPriority, std::shared_ptr<TGranuleMeta>> granulesSorted;
     ui32 countChecker = 0;
     std::optional<NStorageOptimizer::TOptimizationPriority> priorityChecker;

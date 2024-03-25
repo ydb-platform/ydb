@@ -1026,7 +1026,7 @@ public:
     }
 
     void RemovePortion(const std::shared_ptr<TPortionInfo>& portion) {
-        if (portion->GetBlobBytes() < SmallPortionDetectSizeLimit) {
+        if (portion->GetBlobBytes() < NYDBTest::TControllers::GetColumnShardController()->GetSmallPortionSizeDetector(SmallPortionDetectSizeLimit)) {
             Counters->SmallPortions->RemovePortion(portion);
         }
         if (!RemoveBucket(portion)) {
@@ -1060,7 +1060,7 @@ public:
     }
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& portion, const TInstant now) {
-        if (portion->GetBlobBytes() < SmallPortionDetectSizeLimit) {
+        if (portion->GetBlobBytes() < NYDBTest::TControllers::GetColumnShardController()->GetSmallPortionSizeDetector(SmallPortionDetectSizeLimit)) {
             Counters->SmallPortions->AddPortion(portion);
             AddOther(portion, now);
             return;
@@ -1075,8 +1075,14 @@ public:
         } else {
             if (itFrom == Buckets.end()) {
                 const TDuration freshness = now - TInstant::MilliSeconds(portion->RecordSnapshotMax().GetPlanStep());
-                if (freshness < GetCommonFreshnessCheckDuration() || portion->GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
-                    AddOther(portion, now);
+                if (Y_LIKELY(!NYDBTest::TControllers::GetColumnShardController()->NeedForceCompactionBacketsConstruction())) {
+                    if (freshness < GetCommonFreshnessCheckDuration() || portion->GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
+                        AddOther(portion, now);
+                        return;
+                    }
+                }
+                if (Buckets.empty()) {
+                    AddBucket(portion);
                     return;
                 }
             }

@@ -83,6 +83,13 @@ public:
     }
 
     bool HasRuntimeFeature(const ERuntimeFeature feature) const {
+        if (feature == ERuntimeFeature::Optimized) {
+            if ((RuntimeFeatures & (TRuntimeFeatures)feature)) {
+                return true;
+            } else {
+                return GetTierNameDef(NOlap::NBlobOperations::TGlobal::DefaultStorageId) != NOlap::NBlobOperations::TGlobal::DefaultStorageId;
+            }
+        }
         return (RuntimeFeatures & (TRuntimeFeatures)feature);
     }
 

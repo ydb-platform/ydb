@@ -1279,6 +1279,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetLagForCompactionBeforeTierings(TDuration::Seconds(1));
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();

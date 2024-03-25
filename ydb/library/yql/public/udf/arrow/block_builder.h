@@ -404,7 +404,7 @@ public:
         if constexpr (Nullable) {
             NullPtr[GetCurrLen()] = 1;
         }
-        ::new(DataPtr + GetCurrLen()) TLayout{};
+        DoAdd(TLayout{});
     }
 
     void DoAddMany(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {

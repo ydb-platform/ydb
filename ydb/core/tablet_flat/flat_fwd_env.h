@@ -64,7 +64,7 @@ namespace NFwd {
         TAutoPtr<TFetch> Fetch;
     };
 
-    struct TEnv: public IPages {
+    struct TEnv : public IPages {
         using TSlot = ui32;
         using TSlotVec = TSmallVec<TSlot>;
 
@@ -352,15 +352,15 @@ namespace NFwd {
             }
         }
 
-        TEgg MakeCache(const TPart *part, NPage::TGroupId groupId, TIntrusiveConstPtr<TSlices> bounds) noexcept
+        TEgg MakeCache(const TPart *part, NPage::TGroupId groupId, TIntrusiveConstPtr<TSlices> slices) noexcept
         {
-            auto *partStore = dynamic_cast<const TPartStore*>(part);
+            auto *partStore = CheckedCast<const TPartStore*>(part);
 
             Y_ABORT_UNLESS(groupId.Index < partStore->PageCollections.size(), "Got part without enough page collections");
 
             auto& cache = partStore->PageCollections[groupId.Index];
             
-            auto* fwd = new NFwd::TCache(part, this, groupId, bounds);
+            auto* fwd = new NFwd::TCache(part, this, groupId, slices);
             return { fwd, cache->PageCollection };
         }
 
@@ -421,7 +421,7 @@ namespace NFwd {
         TDeque<TSimpleEnv> IndexPages;
         THashMap<const TPart*, TSlotVec> Parts;
         THashSet<const TPart*> ColdParts;
-        // Wrapper for memable blobs
+        // Wrapper for memtable blobs
         TAutoPtr<TMemTableHandler> MemTable;
         // Waiting for read aheads
         TIntrusiveList<TPageLoadingQueue> Queue;

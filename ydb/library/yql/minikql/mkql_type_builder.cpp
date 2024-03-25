@@ -1565,6 +1565,11 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type) {
         return true;
     }
 
+    if (unpacked->IsResource()) {
+        type = arrow::fixed_size_binary(sizeof(NYql::NUdf::TUnboxedValuePod));
+        return true;
+    }
+
     if (!unpacked->IsData()) {
         return false;
     }
@@ -2385,6 +2390,10 @@ size_t CalcMaxBlockItemSize(const TType* type) {
         }
     }
 
+    if (type->IsResource()) {
+        return sizeof(NYql::NUdf::TUnboxedValue);
+    }
+
     if (type->IsData()) {
         auto slot = *AS_TYPE(TDataType, type)->GetDataSlot();
         switch (slot) {
@@ -2437,6 +2446,7 @@ struct TComparatorTraits {
     template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>
     using TStrings = NUdf::TStringBlockItemComparator<TStringType, Nullable>;
     using TExtOptional = NUdf::TExternalOptionalBlockItemComparator;
+    static const bool ImplementedForResources = false;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
@@ -2453,6 +2463,7 @@ struct THasherTraits {
     template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>
     using TStrings = NUdf::TStringBlockItemHasher<TStringType, Nullable>;
     using TExtOptional = NUdf::TExternalOptionalBlockItemHasher;
+    static const bool ImplementedForResources = false;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);

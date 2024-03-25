@@ -309,7 +309,21 @@ private:
     size_t CurrLen = 0;
 };
 
-template<typename T, bool Nullable>
+namespace {
+template<typename T>
+T FromUnboxedValuePodDefault(TUnboxedValuePod uv) {
+    return uv.Get<T>(); 
+};
+
+template<typename T>
+T FromBlockItemDefault(TBlockItem item) {
+    return item.Get<T>(); 
+};
+}
+
+template<typename TLayout, bool Nullable, 
+TLayout FromUnboxedValuePod(TUnboxedValuePod) = FromUnboxedValuePodDefault, 
+TLayout FromBlockItem(TBlockItem) = FromBlockItemDefault>
 class TFixedSizeArrayBuilder final : public TArrayBuilderBase {
 public:
     TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen)
@@ -328,7 +342,7 @@ public:
         SetCurrLen(length);
     }
 
-    T* MutableData() {
+    TLayout* MutableData() {
         return DataPtr;
     }
 
@@ -339,52 +353,55 @@ public:
     void DoAdd(NUdf::TUnboxedValuePod value) final {
         if constexpr (Nullable) {
             if (!value) {
-                return DoAdd(TBlockItem{});
+                return DoAddDefault();
             }
         }
-        DoAdd(TBlockItem(value.Get<T>()));
+        DoAdd(FromUnboxedValuePod(value));
     }
 
     void DoAdd(TBlockItem value) final {
         if constexpr (Nullable) {
             if (!value) {
-                NullPtr[GetCurrLen()] = 0;
-                DataPtr[GetCurrLen()] = T{};
-                return;
+                return DoAddDefault();
             }
-            NullPtr[GetCurrLen()] = 1;
         }
-
-        DataPtr[GetCurrLen()] = value.As<T>();
+        DoAdd(FromBlockItem(value));
     }
 
     void DoAdd(TBlockItem value, size_t count) final {
         if constexpr (Nullable) {
             if (!value) {
                 std::fill(NullPtr + GetCurrLen(), NullPtr + GetCurrLen() + count, 0);
-                std::fill(DataPtr + GetCurrLen(), DataPtr + GetCurrLen() + count, T{});
+                std::fill(DataPtr + GetCurrLen(), DataPtr + GetCurrLen() + count, TLayout{});
                 return;
             }
             std::fill(NullPtr + GetCurrLen(), NullPtr + GetCurrLen() + count, 1);
         }
 
-        std::fill(DataPtr + GetCurrLen(), DataPtr + GetCurrLen() + count, value.As<T>());
+        if constexpr (std::is_trivially_copy_assignable_v<TLayout>) {
+            std::fill(DataPtr + GetCurrLen(), DataPtr + GetCurrLen() + count, FromBlockItem(value));
+        } else {
+            const auto blockItem = FromBlockItem(value);
+            for (size_t i = 0; i < count; ++i) {
+                ::new(DataPtr + GetCurrLen() + i) TLayout(blockItem);
+            }
+        }
     }
 
     void DoAdd(TInputBuffer &input) final {
         if constexpr (Nullable) {
             if (!input.PopChar()) {
-                return DoAdd(TBlockItem{});
+                return DoAddDefault();
             }
         }
-        DoAdd(TBlockItem(input.PopNumber<T>()));
+        DoAdd(input.PopNumber<TLayout>());
     }
 
     void DoAddDefault() final {
         if constexpr (Nullable) {
             NullPtr[GetCurrLen()] = 1;
         }
-        DataPtr[GetCurrLen()] = T{};
+        ::new(DataPtr + GetCurrLen()) TLayout{};
     }
 
     void DoAddMany(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {
@@ -399,8 +416,8 @@ public:
             }
         }
 
-        const T* src = array.GetValues<T>(1);
-        T* dst = DataPtr + GetCurrLen();
+        const TLayout* src = array.GetValues<TLayout>(1);
+        TLayout* dst = DataPtr + GetCurrLen();
         CompressArray(src, sparseBitmap, dst, array.length);
     }
 
@@ -412,9 +429,9 @@ public:
             }
         }
 
-        const T* values = array.GetValues<T>(1);
+        const TLayout* values = array.GetValues<TLayout>(1);
         for (size_t i = beginIndex; i < beginIndex + count; ++i) {
-            DataPtr[GetCurrLen() + i - beginIndex] = T(values[i]);
+            ::new(DataPtr + GetCurrLen() + i - beginIndex) TLayout(values[i]);
         }
     }
 
@@ -426,9 +443,9 @@ public:
             }
         }
 
-        const T* values = array.GetValues<T>(1);
+        const TLayout* values = array.GetValues<TLayout>(1);
         for (size_t i = 0; i < count; ++i) {
-            DataPtr[GetCurrLen() + i] = T(values[indexes[i]]);
+            ::new(DataPtr + GetCurrLen() + i) TLayout(values[indexes[i]]);
         }
     }
 
@@ -456,7 +473,7 @@ public:
 
 private:
     void Reserve() {
-        DataBuilder = std::make_unique<TTypedBufferBuilder<T>>(Pool);
+        DataBuilder = std::make_unique<TTypedBufferBuilder<TLayout>>(Pool);
         DataBuilder->Reserve(MaxLen + 1);
         DataPtr = DataBuilder->MutableData();
         if constexpr (Nullable) {
@@ -466,10 +483,14 @@ private:
         }
     }
 
+    void DoAdd(TLayout&& value)  {
+        ::new(DataPtr + GetCurrLen()) TLayout(std::move(value));
+    }
+
     std::unique_ptr<TTypedBufferBuilder<ui8>> NullBuilder;
-    std::unique_ptr<TTypedBufferBuilder<T>> DataBuilder;
+    std::unique_ptr<TTypedBufferBuilder<TLayout>> DataBuilder;
     ui8* NullPtr = nullptr;
-    T* DataPtr = nullptr;
+    TLayout* DataPtr = nullptr;
 };
 
 template<typename TStringType, bool Nullable, EPgStringType PgString = EPgStringType::None>
@@ -1092,6 +1113,25 @@ std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderBase(
     size_t maxBlockLength, const IPgBuilder* pgBuilder);
 
 template<bool Nullable>
+std::unique_ptr<TArrayBuilderBase> MakeResourceArrayBuilder(
+    const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, 
+    size_t maxLen) {
+
+    using TBuilder = TFixedSizeArrayBuilder<TUnboxedValue, Nullable, 
+        [] (TUnboxedValuePod pod) {
+            return TUnboxedValue(pod);
+        },
+        [] (TBlockItem item) {
+            TUnboxedValue val;
+            std::memcpy(val.GetRawPtr(), item.GetRawPtr(), sizeof(val));
+            val.Ref();
+            return val;
+        }>;
+
+    return std::make_unique<TBuilder>(typeInfoHelper, type, pool, maxLen);
+}
+
+template<bool Nullable>
 inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(
     const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, 
     size_t maxLen, const IPgBuilder* pgBuilder) {
@@ -1151,6 +1191,11 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(
         default:
             Y_ENSURE(false, "Unsupported data slot");
         }
+    }
+    
+    TResourceTypeInspector resource(typeInfoHelper, type);
+    if (resource) {
+        return MakeResourceArrayBuilder<Nullable>(typeInfoHelper, type, pool, maxLen);
     }
 
     TPgTypeInspector typePg(typeInfoHelper, type);

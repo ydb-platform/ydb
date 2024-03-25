@@ -188,6 +188,7 @@ struct TConverterTraits {
     template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String, NUdf::EPgStringType PgString = NUdf::EPgStringType::None>
     using TStrings = TStringBlockItemConverter<TStringType, Nullable, PgString>;
     using TExtOptional = TExternalOptionalBlockItemConverter;
+    static const bool ImplementedForResources = false;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         if (desc.PassByValue) {

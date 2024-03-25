@@ -1,17 +1,14 @@
 #pragma once
 
+#include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/public/udf/udf_string_ref.h>
 #include <ydb/library/yql/public/udf/udf_type_size_check.h>
 
 namespace NYql::NUdf {
 
-// ABI stable
 class TBlockItem {
-    enum class EMarkers : ui8 {
-        Empty = 0,
-        Present = 1,
-    };
+    using EMarkers = TUnboxedValuePod::EMarkers;
 
 public:
     TBlockItem() noexcept = default;
@@ -25,21 +22,27 @@ public:
 
     template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result>>
     inline explicit TBlockItem(T value);
+    
+    inline explicit TBlockItem(IBoxedValuePtr&& value) {
+        Raw.Resource.Meta = static_cast<ui8>(EMarkers::Boxed);
+        Raw.Resource.Value = value.Release();
+        Raw.Resource.Value->ReleaseRef();
+    }
 
     inline explicit TBlockItem(bool value) {
         Raw.Simple.bool_ = value ? 1 : 0;
-        Raw.Simple.Meta = static_cast<ui8>(EMarkers::Present);
+        Raw.Simple.Meta = static_cast<ui8>(EMarkers::Embedded);
     }
 
     inline explicit TBlockItem(TStringRef value) {
         Raw.String.Value = value.Data();
         Raw.String.Size = value.Size();
-        Raw.Simple.Meta = static_cast<ui8>(EMarkers::Present);
+        Raw.Simple.Meta = static_cast<ui8>(EMarkers::String);
     }
 
     inline explicit TBlockItem(const TBlockItem* tupleItems) {
         Raw.Tuple.Value = tupleItems;
-        Raw.Simple.Meta = static_cast<ui8>(EMarkers::Present);
+        Raw.Simple.Meta = static_cast<ui8>(EMarkers::Embedded);
     }
 
     inline TBlockItem(ui64 low, ui64 high) {
@@ -64,23 +67,28 @@ public:
 
     // TODO: deprecate AsTuple() in favor of GetElements()
     inline const TBlockItem* AsTuple() const {
-        Y_DEBUG_ABORT_UNLESS(Raw.GetMarkers() == EMarkers::Present);
+        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::Embedded);
         return Raw.Tuple.Value;
     }
 
     inline const TBlockItem* GetElements() const {
-        Y_DEBUG_ABORT_UNLESS(Raw.GetMarkers() == EMarkers::Present);
+        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::Embedded);
         return Raw.Tuple.Value;
     }
 
     inline TBlockItem GetElement(ui32 index) const {
-        Y_DEBUG_ABORT_UNLESS(Raw.GetMarkers() == EMarkers::Present);
+        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::Embedded);
         return Raw.Tuple.Value[index];
     }
 
     inline TStringRef AsStringRef() const {
-        Y_DEBUG_ABORT_UNLESS(Raw.GetMarkers() == EMarkers::Present);
+        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::String);
         return TStringRef(Raw.String.Value, Raw.String.Size);
+    }
+
+    inline TStringRef GetEmbeddedStringRef() const {
+        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::Embedded);
+        return TStringRef(Raw.Embedded.Buffer, Raw.Embedded.Size);
     }
 
     inline TBlockItem MakeOptional() const
@@ -105,10 +113,31 @@ public:
         return result;
     }
 
+    inline IBoxedValuePtr GetBoxed() const
+    {
+        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::Boxed, "Value is not boxed");
+        return Raw.Resource.Value;
+    }
+
+    inline void* GetRawPtr()
+    {
+        return &Raw;
+    }
+
     inline explicit operator bool() const { return bool(Raw); }
+    
+    EMarkers GetMarkers() const {
+        return static_cast<EMarkers>(Raw.Simple.Meta);
+    }
+
 private:
     union TRaw {
         ui64 Halfs[2] = {0, 0};
+
+        TRawEmbeddedValue Embedded;
+        
+        TRawBoxedValue Resource;
+
         struct {
             union {
                 #define FIELD(type) type type##_;
@@ -139,10 +168,6 @@ private:
             const TBlockItem* Value;
         } Tuple;
 
-        EMarkers GetMarkers() const {
-            return static_cast<EMarkers>(Simple.Meta);
-        }
-
         explicit operator bool() const { return Simple.Meta | Simple.Count; }
     } Raw;
 };
@@ -153,7 +178,7 @@ UDF_ASSERT_TYPE_SIZE(TBlockItem, 16);
     template <> \
     inline xType TBlockItem::As<xType>() const \
     { \
-        Y_DEBUG_ABORT_UNLESS(Raw.GetMarkers() == EMarkers::Present); \
+        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::Embedded); \
         return Raw.Simple.xType##_; \
     }
 
@@ -161,7 +186,7 @@ UDF_ASSERT_TYPE_SIZE(TBlockItem, 16);
     template <> \
     inline xType TBlockItem::Get<xType>() const \
     { \
-        Y_DEBUG_ABORT_UNLESS(Raw.GetMarkers() == EMarkers::Present); \
+        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::Embedded); \
         return Raw.Simple.xType##_; \
     }
 
@@ -170,7 +195,7 @@ UDF_ASSERT_TYPE_SIZE(TBlockItem, 16);
     inline TBlockItem::TBlockItem(xType value) \
     { \
         Raw.Simple.xType##_ = value; \
-        Raw.Simple.Meta = static_cast<ui8>(EMarkers::Present); \
+        Raw.Simple.Meta = static_cast<ui8>(EMarkers::Embedded); \
     }
 
 PRIMITIVE_VALUE_TYPES(VALUE_AS)

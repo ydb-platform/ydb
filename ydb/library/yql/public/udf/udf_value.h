@@ -674,10 +674,23 @@ UDF_ASSERT_TYPE_SIZE(TBoxedValue, 32);
 ///////////////////////////////////////////////////////////////////////////////
 // TUnboxedValuePod
 ///////////////////////////////////////////////////////////////////////////////
+
+struct TRawEmbeddedValue {
+    char Buffer[0xE];
+    ui8 Size;
+    ui8 Meta;
+};
+
+struct TRawBoxedValue {
+    IBoxedValue* Value;
+    ui8 Reserved[7];
+    ui8 Meta;
+};
+
 class TUnboxedValuePod
 {
 friend class TUnboxedValue;
-protected:
+public:
     enum class EMarkers : ui8 {
         Empty = 0,
         Embedded,
@@ -685,7 +698,6 @@ protected:
         Boxed,
     };
 
-public:
     inline TUnboxedValuePod() noexcept = default;
     inline ~TUnboxedValuePod() noexcept = default;
 
@@ -824,17 +836,9 @@ protected:
     union TRaw {
         ui64 Halfs[2] = {0, 0};
 
-        struct {
-            char Buffer[0xE];
-            ui8 Size;
-            ui8 Meta;
-        } Embedded;
-
-        struct {
-            IBoxedValue* Value;
-            ui8 Reserved[7];
-            ui8 Meta;
-        } Boxed;
+        TRawEmbeddedValue Embedded;
+        
+        TRawBoxedValue Boxed;
 
         struct {
             TStringValue::TData* Value;

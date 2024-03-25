@@ -503,6 +503,7 @@ struct TSerializerTraits {
     template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>
     using TStrings = TStringBlockSerializer<TStringType, Nullable>;
     using TExtOptional = TExtOptionalBlockSerializer;
+    static const bool ImplementedForResources = false;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
@@ -522,6 +523,7 @@ struct TDeserializerTraits {
     template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>
     using TStrings = TStringBlockDeserializer<TStringType, Nullable>;
     using TExtOptional = TExtOptionalBlockDeserializer;
+    static const bool ImplementedForResources = false;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);

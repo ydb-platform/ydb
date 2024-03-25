@@ -32,7 +32,15 @@ struct TBlockItemSerializeProps {
     bool IsFixed = true;      // true if each block item takes fixed size
 };
 
-template<typename T, bool Nullable>
+namespace {
+    template<typename T>
+    TBlockItem DefaultToBlockItem(T val) {
+        return TBlockItem(val);
+    }
+}
+
+template<typename T, bool Nullable, 
+TBlockItem ToBlockItem(T) = DefaultToBlockItem<T>>
 class TFixedSizeBlockReader final : public IBlockReader {
 public:
     TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
@@ -41,8 +49,7 @@ public:
                 return {};
             }
         }
-
-        return TBlockItem(data.GetValues<T>(1)[index]);
+        return ToBlockItem(data.GetValues<T>(1)[index]);
     }
 
     TBlockItem GetScalarItem(const arrow::Scalar& scalar) final {
@@ -52,7 +59,7 @@ public:
             }
         }
 
-        return TBlockItem(*static_cast<const T*>(arrow::internal::checked_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data()));
+        return ToBlockItem(*static_cast<const T*>(arrow::internal::checked_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data()));
     }
 
     ui64 GetDataWeight(const arrow::ArrayData& data) const final {
@@ -367,6 +374,10 @@ struct TReaderTraits {
     template <typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot TOriginal>
     using TStrings = TStringBlockReader<TStringType, Nullable, TOriginal>;
     using TExtOptional = TExternalOptionalBlockReader;
+    
+    static const bool ImplementedForResources = true;
+    template <typename T, bool Nullable, TBlockItem ToBlockItem(T)>
+    using TResource = TFixedSizeBlockReader<T, Nullable, ToBlockItem>;
 
     static std::unique_ptr<TResult> MakePg(const TPgTypeDescription& desc, const IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
@@ -393,6 +404,21 @@ std::unique_ptr<typename TTraits::TResult> MakeFixedSizeBlockReaderImpl(bool isO
         return std::make_unique<typename TTraits::template TFixedSize<T, true>>();
     } else {
         return std::make_unique<typename TTraits::template TFixedSize<T, false>>();
+    }
+}
+
+template <typename TTraits, typename T>
+std::unique_ptr<typename TTraits::TResult> MakeResourceBlockReaderImpl(bool isOptional) {
+    const auto toBlockItem = [] (TUnboxedValuePod uv) {
+        TBlockItem item;
+        std::memcpy(item.GetRawPtr(), uv.GetRawPtr(), sizeof(TBlockItem));
+        return item;
+    };
+
+    if (isOptional) {
+        return std::make_unique<typename TTraits::template TResource<T, true, toBlockItem>>();
+    } else {
+        return std::make_unique<typename TTraits::template TResource<T, false, toBlockItem>>();
     }
 }
 
@@ -503,6 +529,12 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
         }
     }
 
+    if constexpr (TTraits::ImplementedForResources) {
+        TResourceTypeInspector resource(typeInfoHelper, type);
+        if (resource) {
+            return MakeResourceBlockReaderImpl<TTraits, TUnboxedValuePod>(isOptional);
+        }
+    }
     TPgTypeInspector typePg(typeInfoHelper, type);
     if (typePg) {
         auto desc = typeInfoHelper.FindPgTypeDescription(typePg.GetTypeId());

@@ -802,6 +802,10 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
     MsgsWrittenTotal.Setup(
         IsSupportive(), true,
         NKikimr::NPQ::TMultiCounter(subGroup, labels, {}, {"MessagesWritten" + txSuffix}, true));
+    if (IsLocalDC) {
+        MsgsDiscarded = NKikimr::NPQ::TMultiCounter(subGroup, labels, {}, {"DiscardedMessages"}, true);
+        BytesDiscarded = NKikimr::NPQ::TMultiCounter(subGroup, labels, {}, {"DiscardedBytes"}, true);
+    }
 
     TVector<NPersQueue::TPQLabelsInfo> aggr = {{{{"Account", TopicConverter->GetAccount()}}, {"total"}}};
     ui32 border = AppData(ctx)->PQConfig.GetWriteLatencyBigMs();
@@ -903,6 +907,16 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
         NKikimr::NPQ::TMultiCounter(
         NPersQueue::GetCountersForTopic(counters, IsServerless), {}, subgroups,
                     {"topic.write." + messagesSuffix}, true, "name"));
+
+    MsgsDiscarded = NKikimr::NPQ::TMultiCounter(
+        NPersQueue::GetCountersForTopic(counters, IsServerless), {}, subgroups,
+                    {"topic.write.discarded_messages"}, true, "name");
+    BytesDiscarded = NKikimr::NPQ::TMultiCounter(
+        NPersQueue::GetCountersForTopic(counters, IsServerless), {}, subgroups,
+                    {"topic.write.discarded_bytes"} , true, "name");
+
+
+    BytesWrittenUncompressed = NKikimr::NPQ::TMultiCounter(
 
     BytesWrittenUncompressed.Setup(
         IsSupportive(), false,

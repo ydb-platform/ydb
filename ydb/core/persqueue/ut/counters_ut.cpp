@@ -84,6 +84,8 @@ Y_UNIT_TEST(Partition) {
     CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
     CmdWrite(0, "sourceid1", TestData(), tc, false);
     CmdWrite(0, "sourceid2", TestData(), tc, false);
+    CmdWrite(0, "sourceid1", TestData(), tc, false);
+    CmdWrite(0, "sourceid2", TestData(), tc, false);
     PQGetPartInfo(0, 30, tc);
 
 
@@ -94,7 +96,7 @@ Y_UNIT_TEST(Partition) {
         dbGroup->OutputHtml(countersStr);
         TString referenceCounters = NResource::Find(TStringBuf("counters_pqproxy.html"));
 
-        UNIT_ASSERT_EQUAL(countersStr.Str() + "\n", referenceCounters);
+        UNIT_ASSERT_VALUES_EQUAL(countersStr.Str() + "\n", referenceCounters);
     }
 
     {
@@ -102,7 +104,7 @@ Y_UNIT_TEST(Partition) {
         auto dbGroup = GetServiceCounters(counters, "datastreams");
         TStringStream countersStr;
         dbGroup->OutputHtml(countersStr);
-        UNIT_ASSERT_EQUAL(countersStr.Str(), "<pre></pre>");
+        UNIT_ASSERT_VALUES_EQUAL(countersStr.Str(), "<pre></pre>");
     }
 }
 
@@ -173,6 +175,7 @@ Y_UNIT_TEST(PartitionFirstClass) {
     CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
     CmdWrite(0, "sourceid1", TestData(), tc, false);
     CmdWrite(0, "sourceid2", TestData(), tc, false);
+    CmdWrite(0, "sourceid0", TestData(), tc, false);
     PQGetPartInfo(0, 30, tc);
 
     {
@@ -194,6 +197,14 @@ Y_UNIT_TEST(PartitionFirstClass) {
         const TString referenceCounters = NResource::Find(TStringBuf("counters_datastreams.html"));
         UNIT_ASSERT_VALUES_EQUAL(countersStr.Str() + "\n", referenceCounters);
     }
+    // CmdWrite(0, "sourceid2", TestData(), tc, false);
+    // {
+    //     auto counters = tc.Runtime->GetAppData(0).Counters;
+    //     auto dbGroup = GetServiceCounters(counters, "pqproxy");
+    //     TStringStream countersStr;
+    //     dbGroup->OutputHtml(countersStr);
+    //     Cerr << "Counters: ==========================\n" << countersStr.Str() << "==================================" << Endl;;
+    // }
 }
 
 Y_UNIT_TEST(SupportivePartitionCountersPersist) {

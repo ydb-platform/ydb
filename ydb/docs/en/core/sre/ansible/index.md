@@ -1,8 +1,8 @@
-# Работа с {{ ydb-short-name }} с помощью Ansible
+# Working with {{ ydb-short-name }} using Ansible
 
-Этот раздел документации {{ ydb-short-name }} содержит набор статей, предназначенных для работы SRE с кластерами {{ ydb-short-name }} при помощи [Ansible](https://www.ansible.com/). Это рекомендуемый подход к запуску produciton кластеров {{ ydb-short-name }}, если ваша организация ещё не внедрила [Kubernetes](../kubernetes/index.md).
+This section of {{ ydb-short-name }} documentation contains a collection of articles intended for SRE's managin {{ ydb-short-name }} clusters using [Ansible](https://www.ansible.com/). This is the recommended approach to running production {{ ydb-short-name }} clusters unless your organization have already embraced [Kubernetes](../kubernetes/index.md).
 
-Ключевые статьи для начала работы с этим разделом:
+The key articles to get started with this section:
 
-* [Первоначальное развертывание](initial-deployment.md)
-* [Подготовка виртуальных машин с помощью Terraform](preparing-vms-with-terraform.md)
+* [Initial deployment](initial-deployment.md)
+* [Preparing VMs with Terraform](preparing-vms-with-terraform.md)

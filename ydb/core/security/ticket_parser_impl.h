@@ -570,17 +570,8 @@ private:
 
     bool ApplySubjectName(const nebius::iam::v1::AuthenticateResponse& response, TString& subject, TString& error) {
         if (response.resultcode() != nebius::iam::v1::AuthenticateResponse::OK) {
-            switch (response.resultcode()) {
-            case nebius::iam::v1::AuthenticateResponse::UNKNOWN_SUBJECT:
-                error = "Unknown Subject";
-                return false;
-            case nebius::iam::v1::AuthenticateResponse::INVALID_TOKEN:
-                error = "Invalid Token";
-                return false;
-            default:
-                error = "Unthentication Error";
-                return false;
-            }
+            error = nebius::iam::v1::AuthenticateResponse::ResultCode_Name(response.resultcode());
+            return false;
         }
         return ApplySubjectName(response.account(), subject, error);
     }
@@ -1022,19 +1013,6 @@ private:
         return std::move(errorMessage);
     }
 
-    static TString GetErrorMessage(nebius::iam::v1::AuthorizeResult::ResultCode resultcode) {
-        switch (resultcode) {
-        case nebius::iam::v1::AuthorizeResult::PERMISSION_DENIED:
-            return "Access Denied";
-        case nebius::iam::v1::AuthorizeResult::UNKNOWN_SUBJECT:
-            return "Unknown Subject";
-        case nebius::iam::v1::AuthorizeResult::INVALID_TOKEN:
-            return "Invalid Token";
-        default:
-            return "Internal Error";
-        }
-    }
-
     void Handle(NNebiusCloud::TEvAccessService::TEvAuthorizeResponse::TPtr& ev) {
         NNebiusCloud::TEvAccessService::TEvAuthorizeResponse* response = ev->Get();
         TEvNebiusAccessServiceAuthorizeRequest* request = response->Request->Get<TEvNebiusAccessServiceAuthorizeRequest>();
@@ -1110,7 +1088,7 @@ private:
                                     errorMessage << " - ";
                                     requiredPermissions.push_back(permissionIt);
                                 }
-                                errorMessage << GetErrorMessage(result.resultcode());
+                                errorMessage << nebius::iam::v1::AuthorizeResult::ResultCode_Name(result.resultcode());
                                 permissionRecord.Error = {.Message = errorMessage, .Retryable = false};
                             }
                         } else {

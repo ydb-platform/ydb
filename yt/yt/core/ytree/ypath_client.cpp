@@ -389,7 +389,7 @@ void ExecuteVerb(
     SetRequestTargetYPath(requestHeader.get(), suffixPath);
     context->SetRequestHeader(std::move(requestHeader));
 
-    // This should never throw or yield.
+    // This should never throw.
     suffixService->Invoke(context);
 }
 

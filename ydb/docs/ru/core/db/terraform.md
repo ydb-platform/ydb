@@ -138,6 +138,8 @@ resource "ydb_table_index" "table_index" {
   name              = "my_index"
   type              = "global_sync" # "global_async"
   columns           = ["a", "b"]
+
+  depends_on = [ydb_table.table] #ссылка на ресурс создания таблицы.
 }
 
 resource "ydb_table_changefeed" "table_changefeed" {
@@ -149,6 +151,8 @@ resource "ydb_table_changefeed" "table_changefeed" {
     name = "test"
     supported_codecs = ["raw", "gzip"]
   }
+
+  depends_on = [ydb_table.table] #ссылка на ресурс создания таблицы.
 }
 
 resource "ydb_topic" "test" {
@@ -507,6 +511,8 @@ resource "ydb_table_changefeed" "ydb_table_changefeed" {
   consumer {
     name = "test_consumer"
   }
+
+  depends_on = [ydb_table.ydb_table] #ссылка на ресурс создания таблицы.
 }
 
 resource "ydb_table_index" "ydb_table_index" {
@@ -515,6 +521,8 @@ resource "ydb_table_index" "ydb_table_index" {
   columns = ["c", "d"]
   cover = ["e"]
   type = "global_sync"
+
+  depends_on = [ydb_table.ydb_table] #ссылка на ресурс создания таблицы.
 }
 ```
 

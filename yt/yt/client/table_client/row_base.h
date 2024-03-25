@@ -71,6 +71,11 @@ DEFINE_ENUM_WITH_UNDERLYING_TYPE(ESimpleLogicalValueType, ui32,
     ((Json)        (0x100e))
 
     ((Uuid)        (0x100f))
+
+    ((Date32)      (0x1010))
+    ((Datetime64)  (0x1011))
+    ((Timestamp64) (0x1012))
+    ((Interval64)  (0x1013))
 );
 
 //! Debug printers for Gtest unittests.
@@ -206,6 +211,12 @@ inline constexpr EValueType GetPhysicalType(ESimpleLogicalValueType type)
 
         case ESimpleLogicalValueType::Float:
             return EValueType::Double;
+
+        case ESimpleLogicalValueType::Date32:
+        case ESimpleLogicalValueType::Datetime64:
+        case ESimpleLogicalValueType::Timestamp64:
+        case ESimpleLogicalValueType::Interval64:
+            return EValueType::Int64;
 
         default:
             YT_ABORT();

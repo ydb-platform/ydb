@@ -3,9 +3,6 @@
 #include "private_events.h"
 #include "util.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/hfunc.h>
-
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/protos/console_config.pb.h>
@@ -13,6 +10,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 namespace NKikimr::NReplication::NController {
 
@@ -114,7 +113,12 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         // TODO: support indexed tables
         TxBody.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
-        TxBody.MutableCreateTable()->SetName(ToString(ExtractBase(DstPath)));
+        auto& desc = *TxBody.MutableCreateTable();
+        desc.SetName(ToString(ExtractBase(DstPath)));
+        // TODO: support other modes
+        auto& replicationConfig = *desc.MutableReplicationConfig();
+        replicationConfig.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        replicationConfig.SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK);
 
         AllocateTxId();
     }
@@ -249,6 +253,30 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     bool CheckTableScheme(const NKikimrSchemeOp::TTableDescription& got, TString& error) const {
+        if (!got.HasReplicationConfig()) {
+            error = "Empty replication config";
+            return false;
+        }
+
+        const auto& replicationConfig = got.GetReplicationConfig();
+
+        switch (replicationConfig.GetMode()) {
+        case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY:
+            break;
+        default:
+            error = "Unsupported replication mode";
+            return false;
+        }
+
+        switch (replicationConfig.GetConsistency()) {
+        case NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK:
+            break;
+        default:
+            error = TStringBuilder() << "Unsupported replication consistency"
+                << ": " << static_cast<int>(replicationConfig.GetConsistency());
+            return false;
+        }
+
         const auto& expected = TxBody.GetCreateTable();
 
         // check key
@@ -466,6 +494,13 @@ private:
     TPathId DstPathId;
 
 }; // TDstCreator
+
+IActor* CreateDstCreator(TReplication::TPtr replication, ui64 targetId, const TActorContext& ctx) {
+    const auto* target = replication->FindTarget(targetId);
+    Y_ABORT_UNLESS(target);
+    return CreateDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
+        replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath());
+}
 
 IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath)

@@ -1084,6 +1084,11 @@ void ValidateValueType(
             CASE(ESimpleLogicalValueType::Interval)
             CASE(ESimpleLogicalValueType::Json)
             CASE(ESimpleLogicalValueType::Uuid)
+
+            CASE(ESimpleLogicalValueType::Date32)
+            CASE(ESimpleLogicalValueType::Datetime64)
+            CASE(ESimpleLogicalValueType::Timestamp64)
+            CASE(ESimpleLogicalValueType::Interval64)
 #undef CASE
         }
         YT_ABORT();
@@ -1228,8 +1233,7 @@ bool ValidateNonKeyColumnsAgainstLock(
     const TTableSchema& schema,
     const TNameTableToSchemaIdMapping& idMapping,
     const TNameTablePtr& nameTable,
-    const std::vector<int>& columnIndexToLockIndex,
-    bool allowSharedWriteLocks)
+    const std::vector<int>& columnIndexToLockIndex)
 {
     bool hasNonKeyColumns = false;
     for (const auto& value : row) {
@@ -1252,10 +1256,6 @@ bool ValidateNonKeyColumnsAgainstLock(
         }
 
         auto lockType = locks.Get(lockIndex);
-
-        if (lockType == ELockType::SharedWrite && !allowSharedWriteLocks) {
-            THROW_ERROR_EXCEPTION("Shared write locks are not allowed for the table");
-        }
 
         if (mappedId >= schema.GetKeyColumnCount()) {
             hasNonKeyColumns = true;

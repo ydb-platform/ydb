@@ -817,7 +817,13 @@ public:
                     }
                     break;
                 case EKikimrQueryType::YqlScriptStreaming:
-                    if (useScanQuery) {
+                    if (useGenericQuery) {
+                        Ydb::Table::TransactionSettings txSettings;
+                        txSettings.mutable_serializable_read_write();
+
+                        future = Gateway->StreamExecGenericQuery(Cluster, SessionCtx->Query().PreparingQuery->GetText(), CollectParameters(query),
+                                querySettings, txSettings, SessionCtx->Query().ReplyTarget);
+                    } else if (useScanQuery) {
                         future = Gateway->StreamExecScanQueryAst(Cluster, queryAstStr, CollectParameters(query),
                             querySettings, SessionCtx->Query().ReplyTarget, SessionCtx->Query().RpcCtx);
                     } else {
@@ -1543,6 +1549,7 @@ private:
         SessionCtx->Query().StatsMode = settings.StatsMode;
         SessionCtx->Query().ReplyTarget = target;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
+        SessionCtx->Query().PreparingQuery->SetText(script.Text);
         SessionCtx->Query().PreparedQuery.reset();
 
         TMaybe<TSqlVersion> sqlVersion;
@@ -1637,7 +1644,7 @@ private:
             TypesCtx.Get(),
             FuncRegistry,
             FederatedQuerySetup->DatabaseAsyncResolver,
-            nullptr,
+            FederatedQuerySetup->CredentialsFactory,
             FederatedQuerySetup->ConnectorClient,
             FederatedQuerySetup->GenericGatewayConfig
         );
@@ -1705,7 +1712,7 @@ private:
         TypesCtx->AddDataSink(providerNames, kikimrDataSink);
 
         bool addExternalDataSources = queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query
-            || queryType == EKikimrQueryType::YqlScript && AppData()->FeatureFlags.GetEnableExternalDataSources();
+            || (queryType == EKikimrQueryType::YqlScript || queryType == EKikimrQueryType::YqlScriptStreaming) && AppData()->FeatureFlags.GetEnableExternalDataSources();
         if (addExternalDataSources && FederatedQuerySetup) {
             InitS3Provider(queryType);
             InitGenericProvider();

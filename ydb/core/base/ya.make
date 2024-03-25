@@ -49,7 +49,6 @@ SRCS(
     statestorage_proxy.cpp
     statestorage_replica.cpp
     statestorage_replica_probe.cpp
-    statestorage_warden.cpp
     storage_pools.cpp
     storage_pools.h
     subdomain.h

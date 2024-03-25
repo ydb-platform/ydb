@@ -282,7 +282,6 @@ IActor* CreateMessageBusTabletCountersRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusLocalMKQL(TBusMessageContext &msg);
 IActor* CreateMessageBusLocalSchemeTx(TBusMessageContext &msg);
 IActor* CreateMessageBusSchemeInitRoot(TBusMessageContext &msg);
-IActor* CreateMessageBusBSAdm(TBusMessageContext &msg);
 IActor* CreateMessageBusGetTypes(TBusMessageContext &msg);
 IActor* CreateMessageBusHiveCreateTablet(TBusMessageContext &msg);
 IActor* CreateMessageBusLocalEnumerateTablets(TBusMessageContext &msg);

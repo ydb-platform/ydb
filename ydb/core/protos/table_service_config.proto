@@ -279,5 +279,5 @@ message TTableServiceConfig {
     optional bool EnableCreateTableAs = 57 [default = false];
 
     optional uint64 IdxLookupJoinPointsLimit = 58 [default = 1];
-    optional bool OldLookupJoinBehaviour = 59 [default = true]; 
+    optional bool OldLookupJoinBehaviour = 59 [default = false]; 
 };

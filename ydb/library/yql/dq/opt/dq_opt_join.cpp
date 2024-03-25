@@ -171,7 +171,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
     leftJoinKeyNames.reserve(joinKeysCount);
     TVector<TCoAtom> rightJoinKeyNames;
     rightJoinKeyNames.reserve(joinKeysCount);
-    auto joinAlgo = BuildAtom(TStringBuilder() << int(linkSettings.JoinAlgo), joinTuple.Pos(), ctx).Ptr();
+    auto joinAlgo = BuildAtom(ToString(linkSettings.JoinAlgo), joinTuple.Pos(), ctx).Ptr();
 
     auto joinKeysBuilder = Build<TDqJoinKeyTupleList>(ctx, left->Input.Pos());
 
@@ -714,6 +714,11 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
         if (!buildNewStage) {
             // NOTE: Do not push join to stage with multiple outputs, reduce memory footprint.
             buildNewStage = GetStageOutputsCount(leftCn.Output().Stage()) > 1;
+            if (!buildNewStage && rightBroadcast) {
+                // NOTE: Do not fuse additional input into stage which have first input `Broadcast` type.
+                // Rule described in /ydb/library/yql/dq/tasks/dq_connection_builder.h:23
+                buildNewStage = DqStageFirstInputIsBroadcast(leftCn.Output().Stage());
+            }
         }
     }
 
@@ -1118,7 +1123,7 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, bool useCBO, 
     YQL_ENSURE(joinType != "Cross"sv);
 
     if (useCBO) {
-        auto joinAlgo = EJoinAlgoType(int(std::stoi(join.JoinAlgo().StringValue())));
+        auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
         switch (joinAlgo) {
             case EJoinAlgoType::LookupJoin:
             case EJoinAlgoType::MapJoin:
@@ -1421,6 +1426,8 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, bool useCBO, 
                                         return parent;
                                     })
                                 .Seal()
+                                .List(7).Add(join.LeftJoinKeyNames().Ref().ChildrenList()).Seal()
+                                .List(8).Add(join.RightJoinKeyNames().Ref().ChildrenList()).Seal()
                             .Seal()
                         .Seal()
                     .Seal().Build();
@@ -1469,6 +1476,8 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, bool useCBO, 
                                         return parent;
                                     })
                                 .Seal()
+                                .List(7).Add(join.LeftJoinKeyNames().Ref().ChildrenList()).Seal()
+                                .List(8).Add(join.RightJoinKeyNames().Ref().ChildrenList()).Seal()
                             .Seal()
                         .Seal()
                     .Seal().Build();

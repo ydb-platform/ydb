@@ -48,9 +48,9 @@ def main():
 
     table_path_prefix = args.table_path_prefix
     if table_path_prefix is None:
-        pg = ''
+        pg = '/'
         if args.syntax == 'pg':
-            pg = '/pg'
+            pg = '/pg/'
         table_path_prefix = f'home/yql_perf/tpc{args.variant}{args.dataset_size}s{pg}'
 
     pragma_keyword = "pragma"

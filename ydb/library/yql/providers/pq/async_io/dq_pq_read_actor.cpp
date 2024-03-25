@@ -194,7 +194,7 @@ public:
             }
         }
         for (const auto& [key, value] : PartitionToOffset) {
-            SRC_LOG_D("Restoring offset: cluster " << key.first << ", partition id " << key.second << ", offset: " << value);
+            SRC_LOG_D("SessionId: " << GetSessionId() << " Restoring offset: cluster " << key.first << ", partition id " << key.second << ", offset: " << value);
         }
         StartingMessageTimestamp = minStartingMessageTs;
         IngressStats.Bytes += ingressBytes;
@@ -234,8 +234,13 @@ public:
     NYdb::NTopic::IReadSession& GetReadSession() {
         if (!ReadSession) {
             ReadSession = GetTopicClient().CreateReadSession(GetReadSessionSettings());
+            SRC_LOG_I("SessionId: " << GetSessionId() << " CreateReadSession");
         }
         return *ReadSession;
+    }
+
+    TString GetSessionId() const {
+        return ReadSession ? ReadSession->GetSessionId() : TString{"empty"};
     }
 
 private:
@@ -244,7 +249,7 @@ private:
     )
 
     void Handle(TEvPrivate::TEvSourceDataReady::TPtr&) {
-        SRC_LOG_T("Source data ready");
+        SRC_LOG_T("SessionId: " << GetSessionId() << " Source data ready");
         SubscribedOnEvent = false;
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
@@ -274,13 +279,13 @@ private:
 
         if (!NextIdlenesCheckAt.Defined() || nextIdleCheckAt != *NextIdlenesCheckAt) {
             NextIdlenesCheckAt = *nextIdleCheckAt;
-            SRC_LOG_T("Next idleness check scheduled at " << *nextIdleCheckAt);
+            SRC_LOG_T("SessionId: " << GetSessionId() << " Next idleness check scheduled at " << *nextIdleCheckAt);
             Schedule(*nextIdleCheckAt, new TEvPrivate::TEvSourceDataReady());
         }
     }
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override {
-        SRC_LOG_T("GetAsyncInputData freeSpace = " << freeSpace);
+        SRC_LOG_T("SessionId: " << GetSessionId() << " GetAsyncInputData freeSpace = " << freeSpace);
 
         const auto now = TInstant::Now();
         MaybeScheduleNextIdleCheck(now);
@@ -313,7 +318,7 @@ private:
 
             if (watermark) {
                 const auto t = watermark;
-                SRC_LOG_T("Fake watermark " << t << " was produced");
+                SRC_LOG_T("SessionId: " << GetSessionId() << " Fake watermark " << t << " was produced");
                 PushWatermarkToReady(*watermark);
                 recheckBatch = true;
             }
@@ -345,7 +350,7 @@ private:
     }
 
     void InitWatermarkTracker() {
-        SRC_LOG_D("Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: "
+        SRC_LOG_D("SessionId: " << GetSessionId() << " Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: "
             << SourceParams.GetWatermarks().GetGranularityUs() << " microseconds");
 
         if (!SourceParams.GetWatermarks().GetEnabled()) {
@@ -364,7 +369,7 @@ private:
         NYdb::NTopic::TTopicReadSettings topicReadSettings;
         topicReadSettings.Path(SourceParams.GetTopicPath());
         auto partitionsToRead = GetPartitionsToRead();
-        SRC_LOG_D("PartitionsToRead: " << JoinSeq(", ", partitionsToRead));
+        SRC_LOG_D("SessionId: " << GetSessionId() << " PartitionsToRead: " << JoinSeq(", ", partitionsToRead));
         for (const auto partitionId : partitionsToRead) {
             topicReadSettings.AppendPartitionIds(partitionId);
         }
@@ -433,7 +438,7 @@ private:
             Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
         }
 
-        SRC_LOG_T("Return ready batch."
+        SRC_LOG_T("SessionId: " << GetSessionId() << " Return ready batch."
             << " DataCount = " << buffer.RowCount()
             << " Watermark = " << (watermark ? ToString(*watermark) : "none")
             << " Used space = " << usedSpace);
@@ -441,7 +446,7 @@ private:
     }
 
     void PushWatermarkToReady(TInstant watermark) {
-        SRC_LOG_D("New watermark " << watermark << " was generated");
+        SRC_LOG_D("SessionId: " << GetSessionId() << " New watermark " << watermark << " was generated");
 
         if (Y_UNLIKELY(ReadyBuffer.empty() || ReadyBuffer.back().Watermark.Defined())) {
             ReadyBuffer.emplace(watermark, 0);
@@ -452,16 +457,21 @@ private:
     }
 
     struct TTopicEventProcessor {
+        static TString ToString(const TPartitionKey& key) {
+            return TStringBuilder{} << "[" << key.first << ", " << key.second << "]";
+        }
+
         void operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
             const auto partitionKey = MakePartitionKey(event.GetPartitionSession());
+            const auto partitionKeyStr = ToString(partitionKey);
             for (const auto& message : event.GetMessages()) {
                 const TString& data = message.GetData();
                 Self.IngressStats.Bytes += data.size();
                 LWPROBE(PqReadDataReceived, TString(TStringBuilder() << Self.TxId), Self.SourceParams.GetTopicPath(), data);
-                SRC_LOG_T("Data received: " << message.DebugString(true));
+                SRC_LOG_T("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " Data received: " << message.DebugString(true));
 
                 if (message.GetWriteTime() < Self.StartingMessageTimestamp) {
-                    SRC_LOG_D("Skip data. StartingMessageTimestamp: " << Self.StartingMessageTimestamp << ". Write time: " << message.GetWriteTime());
+                    SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " Skip data. StartingMessageTimestamp: " << Self.StartingMessageTimestamp << ". Write time: " << message.GetWriteTime());
                     continue;
                 }
 
@@ -481,28 +491,41 @@ private:
         }
 
         void operator()(NYdb::NTopic::TSessionClosedEvent& ev) {
-            ythrow yexception() << "Read session to topic \"" << Self.SourceParams.GetTopicPath()
+            ythrow yexception() << "SessionId: " << Self.GetSessionId() << " Read session to topic \"" << Self.SourceParams.GetTopicPath()
                 << "\" was closed: " << ev.DebugString();
         }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent&) { }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
+            const auto partitionKey = MakePartitionKey(event.GetPartitionSession());
+            const auto partitionKeyStr = ToString(partitionKey);
+
+            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " StartPartitionSessionEvent received");
+
             TMaybe<ui64> readOffset;
-            const auto offsetIt = Self.PartitionToOffset.find(MakePartitionKey(event.GetPartitionSession()));
+            const auto offsetIt = Self.PartitionToOffset.find(partitionKey);
             if (offsetIt != Self.PartitionToOffset.end()) {
                 readOffset = offsetIt->second;
             }
+            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " Confirm StartPartitionSession with offset " << readOffset);
             event.Confirm(readOffset);
         }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent& event) {
+            const auto partitionKey = MakePartitionKey(event.GetPartitionSession());
+            const auto partitionKeyStr = ToString(partitionKey);
+            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " StopPartitionSessionEvent received");
             event.Confirm();
         }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent&) { }
 
-        void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent&) { }
+        void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent& event) {
+            const auto partitionKey = MakePartitionKey(event.GetPartitionSession());
+            const auto partitionKeyStr = ToString(partitionKey);
+            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " PartitionSessionClosedEvent received");
+        }
 
         TReadyBatch& GetActiveBatch(const TPartitionKey& partitionKey, TInstant time) {
             if (Y_UNLIKELY(Self.ReadyBuffer.empty() || Self.ReadyBuffer.back().Watermark.Defined())) {

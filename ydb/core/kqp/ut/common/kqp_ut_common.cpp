@@ -164,6 +164,8 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
         .SetAuthToken(settings.AuthToken);
     Driver.Reset(MakeHolder<NYdb::TDriver>(DriverConfig));
 
+    CountersRoot = settings.CountersRoot;
+
     Initialize(settings);
 }
 

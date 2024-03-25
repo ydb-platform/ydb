@@ -37,7 +37,8 @@ public:
     TFederatedWriteSession(const TFederatedWriteSessionSettings& settings,
                           std::shared_ptr<TGRpcConnectionsImpl> connections,
                           const TFederatedTopicClientSettings& clientSetttings,
-                          std::shared_ptr<TFederatedDbObserver> observer);
+                          std::shared_ptr<TFederatedDbObserver> observer,
+                          std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> codecs);
 
     ~TFederatedWriteSession() = default;
 
@@ -75,16 +76,21 @@ private:
 
     void CloseImpl(EStatus statusCode, NYql::TIssues&& issues);
 
+    TStringBuilder GetLogPrefix() const;
+
 private:
     // For subsession creation
     const NTopic::TFederatedWriteSessionSettings Settings;
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
     const NTopic::TTopicClientSettings SubClientSetttings;
+    std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> ProvidedCodecs;
 
     std::shared_ptr<TFederatedDbObserver> Observer;
     NThreading::TFuture<void> AsyncInit;
     std::shared_ptr<TFederatedDbState> FederationState;
     NYdbGrpc::IQueueClientContextPtr UpdateStateDelayContext;
+
+    TLog Log;
 
     std::shared_ptr<TDbInfo> CurrentDatabase;
 

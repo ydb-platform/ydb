@@ -8,6 +8,29 @@
 
 namespace NYql {
 
+TExprNode::TPtr WrapWithNonNegativeCheck(TPositionHandle pos, const TExprNode::TPtr& value, TExprContext& ctx, const TString& message) {
+    return ctx.Builder(pos)
+        .Callable("Ensure")
+            .Add(0, value)
+            .Callable(1, "FromPg")
+                .Callable(0, "PgOp")
+                    .Atom(0, ">=")
+                    .Add(1, value)
+                    .Callable(2, "PgConst")
+                        .Atom(0, "0")
+                        .Callable(1, "PgType")
+                            .Atom(0, "int8")
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Callable(2, "String")
+                .Atom(0, message)
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 TExprNode::TPtr BuildArrayAggTraits(TExprContext& ctx, TPositionHandle pos, const TExprNode::TPtr& typeNode) {
     return ctx.Builder(pos)
         .Callable("AggApply")
@@ -84,7 +107,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> SplitByPredicate(TPositionHandle pos
 }
 
 TExprNode::TPtr JoinColumns(TPositionHandle pos, const TExprNode::TPtr& list1, const TExprNode::TPtr& list2,
-    TExprNode::TPtr leftJoinColumns, ui32 subLinkId, TExprContext& ctx, const TString& leftPrefix = {}) {
+    TExprNode::TPtr leftJoinColumns, TMaybe<ui32> subLinkId, TExprContext& ctx, const TString& leftPrefix = {}) {
     auto join = ctx.Builder(pos)
         .Callable("EquiJoin")
             .List(0)
@@ -116,8 +139,8 @@ TExprNode::TPtr JoinColumns(TPositionHandle pos, const TExprNode::TPtr& list1, c
                         if (leftJoinColumns) {
                             for (ui32 i = 0; i < leftJoinColumns->ChildrenSize(); ++i) {
                                 parent.Atom(2 * i, "b");
-                                parent.Atom(2 * i + 1, TString("_yql_join_sublink_") + ToString(subLinkId) +
-                                    "_" + leftJoinColumns->Child(i)->Content() );
+                                parent.Atom(2 * i + 1, subLinkId ? TString("_yql_join_sublink_") + ToString(*subLinkId) +
+                                    "_" + leftJoinColumns->Child(i)->Content() : leftJoinColumns->ChildPtr(i)->Content());
                             }
                         }
 
@@ -133,8 +156,8 @@ TExprNode::TPtr JoinColumns(TPositionHandle pos, const TExprNode::TPtr& list1, c
                         for (ui32 i = 0; i < leftJoinColumns->ChildrenSize(); ++i) {
                             parent.List(i)
                                 .Atom(0, "rename")
-                                .Atom(1, TString("b._yql_join_sublink_") + ToString(subLinkId) +
-                                    "_" + leftJoinColumns->Child(i)->Content())
+                                .Atom(1, TString("b.") + (subLinkId ? (TString("_yql_join_sublink_") + ToString(*subLinkId) +
+                                    "_") : "") + leftJoinColumns->Child(i)->Content())
                                 .Atom(2, "")
                                 .Seal();
                         }
@@ -911,7 +934,7 @@ void GatherUsedWindows(const TExprNode::TPtr& window, const TExprNode::TPtr& pro
 
 TUsedColumns GatherUsedColumns(const TExprNode::TPtr& result, const TExprNode::TPtr& joinOps,
     const TExprNode::TPtr& filter, const TExprNode::TPtr& groupExprs, const TExprNode::TPtr& having, const TExprNode::TPtr& extraSortColumns,
-    const TExprNode::TPtr& window, const TWindowsCtx& winCtx) {
+    const TExprNode::TPtr& window, const TWindowsCtx& winCtx, TVector<std::pair<TString, TString>>& joinUsingColumns) {
     TUsedColumns usedColumns;
     for (const auto& x : result->Tail().Children()) {
         AddColumnsFromType(x->Child(1)->GetTypeAnn(), usedColumns);
@@ -924,6 +947,21 @@ TUsedColumns GatherUsedColumns(const TExprNode::TPtr& result, const TExprNode::T
         for (ui32 i = 0; i < groupTuple->ChildrenSize(); ++i) {
             auto join = groupTuple->Child(i);
             auto joinType = join->Child(0)->Content();
+            if (join->ChildrenSize() > 2) {
+                Y_ENSURE(join->ChildrenSize() > 3, "Excepted at least 4 args there");
+                Y_ENSURE(join->Child(1)->IsAtom(), "Supported only USING clause there");
+                Y_ENSURE(join->Child(1)->Content() == "using", "Supported only USING clause there");
+                for (ui32 col = 0; col < join->Child(3)->ChildrenSize(); ++col) {
+                    auto lr = join->Child(3)->Child(col);
+                    if (lr->Child(0)->IsAtom()) {
+                        usedColumns.insert(std::make_pair(TString(lr->Child(0)->Content()), std::make_pair(Max<ui32>(), TString())));
+                    }
+                    usedColumns.insert(std::make_pair(TString(lr->Child(1)->Content()), std::make_pair(Max<ui32>(), TString())));
+                    usedColumns.erase(TString(join->Child(2)->Child(col)->Content()));
+                    joinUsingColumns.emplace_back(ToString(groupNo), join->Child(2)->Child(col)->Content());
+                }
+                continue;
+            }
             if (joinType != "cross") {
                 AddColumnsFromType(join->Tail().Child(0)->GetTypeAnn(), usedColumns);
             }
@@ -1335,7 +1373,7 @@ TExprNode::TPtr BuildSingleInputPredicateJoin(TPositionHandle pos, TStringBuf jo
         .Seal()
         .Build();
 
-    auto main = JoinColumns(pos, filteredLeft, right, nullptr, 0, ctx);
+    auto main = JoinColumns(pos, filteredLeft, right, nullptr, {}, ctx);
 
     auto extraLeft = [&]() {
         return ctx.Builder(pos)
@@ -1514,9 +1552,88 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
             // current = join current & with
             auto join = groupTuple->Child(i);
             auto joinType = join->Child(0)->Content();
-            auto cartesian = JoinColumns(pos, current, with, nullptr, 0, ctx);
+            auto cartesian = JoinColumns(pos, current, with, nullptr, {}, ctx);
             if (joinType == "cross") {
                 current = cartesian;
+                continue;
+            }
+            if (join->ChildrenSize() > 2) {
+                Y_ENSURE(join->Child(1)->IsAtom(), "expected only USING clause when join_ops children size > 2");
+                Y_ENSURE(join->Child(1)->Content() == "using", "expected only USING clause when join_ops children size > 2");
+                Y_ENSURE(join->ChildrenSize() > 3 && join->Child(3)->IsList(), "Excepted list of aliased columns in USING join");
+                auto left = current;
+                auto right = with;
+                TExprNode::TListType leftColumns;
+                TExprNode::TListType rightColumns;
+                TExprNode::TListType toRemove;
+                for (auto& col: join->Child(3)->ChildrenList()) {
+                    if (col->Child(0)->IsAtom()) {
+                        leftColumns.push_back(col->Child(0));
+                    } else {
+                        toRemove.push_back(col->Child(0)->Child(0));
+                        leftColumns.push_back(col->Child(0)->Child(0));
+                    }
+                    rightColumns.push_back(col->Child(1));
+                }
+                current = BuildEquiJoin(pos, joinType, left, right, leftColumns, rightColumns, ctx);
+                auto secondStruct = ctx.Builder(pos)
+                .Lambda()
+                    .Param("row")
+                    .Callable("AsStruct")
+                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                            for (size_t i = 0; i < leftColumns.size(); ++i) {
+                                parent.List(i)
+                                    .Add(0, join->Child(2)->Child(i))
+                                    .Callable(1, "Coalesce")
+                                        .Callable(0, "Member")
+                                            .Arg(0, "row")
+                                            .Add(1, leftColumns[i])
+                                        .Seal()
+                                        .Callable(1, "Member")
+                                            .Arg(0, "row")
+                                            .Add(1, rightColumns[i])
+                                        .Seal()
+                                    .Seal()
+                                .Seal();
+                            }
+                            return parent;
+                        })
+                    .Seal()
+                .Seal()
+                .Build();
+                auto removeProjection = ctx.Builder(pos)
+                    .Lambda()
+                        .Param("row")
+                        .Arg(0, "row")
+                    .Seal().Build();
+                current = ctx.Builder(pos)
+                    .Callable("OrderedMap")
+                        .Add(0, current)
+                        .Lambda(1)
+                            .Param("row")
+                            .Callable("FlattenMembers")
+                                .List(0)
+                                    .Atom(0, "")
+                                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                        if (toRemove.size()) {
+                                            parent.Callable(1, "RemoveMembers")
+                                                .Arg(0, "row")
+                                                .Add(1, ctx.NewList(pos, std::move(toRemove)))
+                                            .Seal();
+                                        } else {
+                                            parent.Arg(1, "row");
+                                        }
+                                        return parent;
+                                    })
+                                .Seal()
+                                .List(1)
+                                    .Atom(0, "")
+                                    .Apply(1, secondStruct).With(0, "row").Seal()
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                    .Build();
                 continue;
             }
 
@@ -1709,7 +1826,7 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
 }
 
 TExprNode::TPtr BuildCrossJoinsBetweenGroups(TPositionHandle pos, const TExprNode::TListType& joinGroups,
-    const TUsedColumns& usedColumns, const TVector<ui32>& groupForIndex, TExprContext& ctx) {
+    const TUsedColumns& usedColumns, const TVector<ui32>& groupForIndex, TExprContext& ctx, const TVector<std::pair<TString, TString>>& joinUsingColumns) {
     TExprNode::TListType args;
     for (ui32 i = 0; i < joinGroups.size(); ++i) {
         args.push_back(ctx.Builder(pos)
@@ -1738,6 +1855,16 @@ TExprNode::TPtr BuildCrossJoinsBetweenGroups(TPositionHandle pos, const TExprNod
                 .Atom(0, "rename")
                 .Atom(1, ToString(groupForIndex[x.second.first]) + "." + x.first)
                 .Atom(2, x.first)
+            .Seal()
+            .Build());
+    }
+
+    for (const auto& x: joinUsingColumns) {
+        settings.push_back(ctx.Builder(pos)
+            .List()
+                .Atom(0, "rename")
+                .Atom(1, x.first + "." + x.second)
+                .Atom(2, x.second)
             .Seal()
             .Build());
     }
@@ -1944,7 +2071,8 @@ TExprNode::TPtr BuildAggregationTraits(TPositionHandle pos, bool onWindow, const
 
 TExprNode::TPtr BuildGroup(TPositionHandle pos, TExprNode::TPtr list,
     const TAggs& aggs, const TExprNode::TPtr& groupExprs, const TExprNode::TPtr& groupSets,
-    const TExprNode::TPtr& finalExtTypes, TExprContext& ctx, TOptimizeContext& optCtx) {
+    const TExprNode::TPtr& finalExtTypes, const TExprNode::TPtr& joinedUniqueExt,
+    TExprContext& ctx, TOptimizeContext& optCtx) {
 
     bool needRemapForDistinct = false;
     for (ui32 i = 0; i < aggs.size(); ++i) {
@@ -2008,7 +2136,12 @@ TExprNode::TPtr BuildGroup(TPositionHandle pos, TExprNode::TPtr list,
         .Build();
 
     TExprNode::TListType payloadItems;
+    TVector<ui32> nonNullDefAggs;
     for (ui32 i = 0; i < aggs.size(); ++i) {
+        if (aggs[i].first->Head().Content() == "count") {
+            nonNullDefAggs.push_back(i);
+        }
+
         const bool distinct = GetSetting(*aggs[i].first->Child(1), "distinct") != nullptr;
         auto traits = BuildAggregationTraits(pos, false, distinct ? "_yql_distinct_" + ToString(i) : "", aggs[i], listTypeNode, nullptr, ctx, optCtx);
         if (distinct) {
@@ -2128,6 +2261,50 @@ TExprNode::TPtr BuildGroup(TPositionHandle pos, TExprNode::TPtr list,
                 .Seal()
             .Seal()
             .Build();
+
+        if (!extKeysItems.empty() && currentKeys.empty() && !nonNullDefAggs.empty()) {
+            // restore aggregation keys
+            auto joinColumns = ctx.NewList(pos, TExprNode::TListType(extKeysItems));
+            auto joined = JoinColumns(pos, joinedUniqueExt, aggregate, joinColumns, {}, ctx);
+
+            auto pgZero = ctx.Builder(pos)
+                .Callable("PgConst")
+                    .Atom(0, "0")
+                    .Callable(1, "PgType")
+                        .Atom(0, "int8")
+                    .Seal()
+                .Seal()
+                .Build();
+
+            auto arg = ctx.NewArgument(pos, "row");
+            auto root = arg;
+            for (ui32 i = 0; i < nonNullDefAggs.size(); ++i) {
+                auto column = ToString("_yql_agg_") + ToString(nonNullDefAggs[i]);
+                root = ctx.Builder(pos)
+                    .Callable("ReplaceMember")
+                        .Add(0, root)
+                        .Atom(1, column)
+                        .Callable(2, "Coalesce")
+                            .Callable(0, "Member")
+                                .Add(0, root)
+                                .Atom(1, column)
+                            .Seal()
+                            .Add(1, pgZero)
+                        .Seal()
+                    .Seal()
+                    .Build();
+            }
+
+            auto coalesceLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, { arg }), std::move(root));
+
+            // replace nulls with def values
+            aggregate = ctx.Builder(pos)
+                .Callable("OrderedMap")
+                    .Add(0, joined)
+                    .Add(1, coalesceLambda)
+                .Seal()
+                .Build();
+        }
 
         if (currentKeys.size() < groupExprs->Tail().ChildrenSize()) {
             // mark missing columns
@@ -2616,10 +2793,8 @@ TExprNode::TPtr BuildSortLambda(TPositionHandle pos, const TExprNode::TPtr& sort
     return lambda;
 }
 
-TExprNode::TPtr BuildSort(TPositionHandle pos, const TExprNode::TPtr& sort, const TExprNode::TPtr& list,
-    const TExprNode::TPtr& sortLambdaRoot, const TExprNode::TPtr& sortLambdaArgs, TExprContext& ctx) {
+TExprNode::TPtr BuildSortDirections(TPositionHandle pos, const TExprNode::TPtr& sort, TExprContext& ctx) {
     const auto& keys = sort->Tail();
-
     TExprNode::TListType dirItems;
     for (const auto& key : keys.Children()) {
         dirItems.push_back(ctx.Builder(pos)
@@ -2629,12 +2804,16 @@ TExprNode::TPtr BuildSort(TPositionHandle pos, const TExprNode::TPtr& sort, cons
             .Build());
     }
 
-    auto dir = ctx.NewList(pos, std::move(dirItems));
+    return ctx.NewList(pos, std::move(dirItems));
+}
+
+TExprNode::TPtr BuildSort(TPositionHandle pos, const TExprNode::TPtr& list, const TExprNode::TPtr& directions,
+    const TExprNode::TPtr& sortLambdaRoot, const TExprNode::TPtr& sortLambdaArgs, TExprContext& ctx) {
 
     return ctx.Builder(pos)
         .Callable("Sort")
             .Add(0, list)
-            .Add(1, dir)
+            .Add(1, directions)
             .Lambda(2)
                 .Param("row")
                 .ApplyPartial(sortLambdaArgs, sortLambdaRoot)
@@ -2851,8 +3030,146 @@ TExprNode::TPtr BuildLimit(TPositionHandle pos, const TExprNode::TPtr& limit, co
         .Build();
 }
 
-TExprNode::TPtr AddExtColumns(const TExprNode::TPtr& projectionRoot, const TExprNode::TPtr& projectionArg, const TExprNode::TPtr& finalExtTypes,
-    TExprNode::TListType& columns, ui32 subLinkId, TExprContext& ctx) {
+TExprNode::TPtr EnumerateForExtColumns(TPositionHandle pos, const TExprNode::TPtr& list, ui32 sublinkId,
+    const TMap<TString, ui32>& extColumns, const TExprNode::TPtr& directions, const TExprNode::TPtr& sortLambda,
+    TExprContext& ctx) {
+    TExprNode::TListType keysItems;
+    for (const auto& x : extColumns) {
+        keysItems.push_back(ctx.NewAtom(pos, TString("_yql_join_sublink_") + ToString(sublinkId) +
+                                    "_" + x.first));
+    }
+
+    auto value = ctx.Builder(pos)
+        .Callable("RowNumber")
+            .Callable(0, "TypeOf")
+                .Add(0, list)
+            .Seal()
+        .Seal()
+        .Build();
+
+    TExprNode::TListType args;
+    auto begin = ctx.NewCallable(pos, "Void", {});
+    auto end = ctx.NewCallable(pos, "Int32", { ctx.NewAtom(pos, "0") });
+    args.push_back(ctx.Builder(pos)
+        .List()
+            .List(0)
+                .Atom(0, "begin")
+                .Add(1, begin)
+            .Seal()
+            .List(1)
+                .Atom(0, "end")
+                .Add(1, end)
+            .Seal()
+        .Seal()
+        .Build());
+
+    args.push_back(ctx.Builder(pos)
+        .List()
+            .Atom(0, "_yql_row_number")
+            .Add(1, value)
+        .Seal()
+        .Build());
+
+    auto winOnRows = ctx.NewCallable(pos, "WinOnRows", std::move(args));
+
+    auto frames = ctx.Builder(pos)
+        .List()
+            .Add(0, winOnRows)
+        .Seal()
+        .Build();
+
+    auto keysNode = ctx.NewList(pos, std::move(keysItems));
+    auto sortNode = ctx.NewCallable(pos, "Void", {});
+    if (directions) {
+        YQL_ENSURE(sortLambda);
+        sortNode = ctx.Builder(pos)
+            .Callable("SortTraits")
+                .Callable(0, "TypeOf")
+                    .Add(0, list)
+                .Seal()
+                .Add(1, directions)
+                .Add(2, sortLambda)
+            .Seal()
+            .Build();
+    }
+
+    return ctx.Builder(pos)
+        .Callable("CalcOverWindow")
+            .Add(0, list)
+            .Add(1, keysNode)
+            .Add(2, sortNode)
+            .Add(3, frames)
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr ApplyOffsetLimitOverEnumerated(TPositionHandle pos, const TExprNode::TPtr& list,
+    const TExprNode::TPtr& offsetValue, const TExprNode::TPtr& limitValue, TExprContext& ctx) {
+    auto arg = ctx.NewArgument(pos, "row");
+    auto member = ctx.NewCallable(pos, "SafeCast", { 
+        ctx.NewCallable(pos, "Member", { arg, ctx.NewAtom(pos, "_yql_row_number") }),
+        ctx.NewAtom(pos, "Int64")});
+    auto int8type = ctx.NewCallable(pos, "PgType", { ctx.NewAtom(pos, "int8")});
+    auto null = ctx.NewCallable(pos, "PgCast", { ctx.NewCallable(pos, "Null", {}), int8type});
+    auto zero = ctx.NewCallable(pos, "PgConst", { ctx.NewAtom(pos, "0"), int8type });
+    auto truth = ctx.NewCallable(pos, "PgConst", { ctx.NewAtom(pos, "true"), ctx.NewCallable(pos, "PgType", { ctx.NewAtom(pos, "bool")}) });
+    auto replacedOffset = offsetValue ? ctx.NewCallable(pos, "Coalesce", { offsetValue, zero }) : zero;
+    auto replacedLimit = limitValue ? limitValue : null;
+    // enumeration values starts with 1
+    // predicate: enumeration > offset and if(exists(limit), enumeration <= offset + limit, pgbool(true))
+    auto root = ctx.Builder(pos)
+        .Callable("Coalesce")
+            .Callable(0, "FromPg")
+                .Callable(0, "PgAnd")
+                    .Callable(0, "PgOp")
+                        .Atom(0, ">")
+                        .Add(1, member)
+                        .Add(2, replacedOffset)
+                    .Seal()
+                    .Callable(1, "If")
+                        .Callable(0, "Exists")
+                            .Add(0, replacedLimit)
+                        .Seal()
+                        .Callable(1, "PgOp")
+                            .Atom(0, "<=")
+                            .Add(1, member)
+                            .Callable(2, "PgOp")
+                                .Atom(0, "+")
+                                .Add(1, replacedOffset)
+                                .Add(2, replacedLimit)
+                            .Seal()
+                        .Seal()
+                        .Add(2, truth)
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Callable(1, "Bool")
+                .Atom(0, "false")
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto lambda = ctx.NewLambda(pos, ctx.NewArguments(pos, { arg }), std::move(root));
+
+    return ctx.Builder(pos)
+        .Callable("Map")
+            .Callable(0, "Filter")
+                .Add(0, list)
+                .Add(1, lambda)
+            .Seal()
+            .Lambda(1)
+                .Param("row")
+                .Callable("RemoveMember")
+                    .Arg(0, "row")
+                    .Atom(1, "_yql_row_number")
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr AddExtColumns(const TExprNode::TPtr& projectionRoot, const TExprNode::TPtr& projectionArg,
+    const TExprNode::TPtr& finalExtTypes, ui32 subLinkId, TExprContext& ctx) {
     return ctx.Builder(projectionRoot->Pos())
         .Callable("FlattenMembers")
             .List(0)
@@ -2872,8 +3189,6 @@ TExprNode::TPtr AddExtColumns(const TExprNode::TPtr& projectionRoot, const TExpr
                                 for (const auto& item : type->GetItems()) {
                                     auto withAlias = NTypeAnnImpl::MakeAliasedColumn(alias, item->GetName());
                                     parent.Atom(i++, withAlias);
-                                    columns.push_back(ctx.NewAtom(projectionRoot->Pos(), TString("_yql_join_sublink_") +
-                                        ToString(subLinkId) + "_" + withAlias));
                                 }
                             }
 
@@ -2971,12 +3286,13 @@ TExprNode::TPtr RemoveExtraSortColumns(const TExprNode::TPtr& list, const TExprN
         .Build();
 }
 
-TExprNode::TPtr JoinOuter(TPositionHandle pos, TExprNode::TPtr list,
+std::pair<TExprNode::TPtr, TExprNode::TPtr> JoinOuter(TPositionHandle pos, TExprNode::TPtr list,
     const TExprNode::TPtr& finalExtTypes, const TExprNode::TListType& outerInputs,
     const TVector<TString>& outerInputAliases,
     TExprNode::TListType& cleanedInputs, TVector<TString>& inputAliases, TExprContext& ctx) {
     YQL_ENSURE(finalExtTypes);
     YQL_ENSURE(outerInputs.size() == finalExtTypes->Tail().ChildrenSize());
+    TExprNode::TPtr joinedUniqueExt;
     for (ui32 index = 0; index < finalExtTypes->Tail().ChildrenSize(); ++index) {
         const auto& input = finalExtTypes->Tail().Child(index);
         const auto& inputAlias = input->Head().Content();
@@ -3018,10 +3334,18 @@ TExprNode::TPtr JoinOuter(TPositionHandle pos, TExprNode::TPtr list,
             .Seal()
             .Build();
 
-        list = JoinColumns(pos, list, uniqueOuterInput, nullptr, 0, ctx);
+        if (!joinedUniqueExt) {
+            joinedUniqueExt = uniqueOuterInput;
+        } else {
+            joinedUniqueExt = JoinColumns(pos, joinedUniqueExt, uniqueOuterInput, nullptr, {}, ctx);
+        }
     }
 
-    return list;
+    if (joinedUniqueExt) {
+        list = JoinColumns(pos, list, joinedUniqueExt, nullptr, {}, ctx);
+    }
+
+    return { list, joinedUniqueExt };
 }
 
 TExprNode::TPtr CombineSetItems(TPositionHandle pos, const TExprNode::TPtr& left, const TExprNode::TPtr& right, const TStringBuf& op, TExprContext& ctx) {
@@ -3244,11 +3568,26 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
         columnsItems.push_back(ctx.NewAtom(node->Pos(), x));
     }
 
+    TMap<TString, ui32> extColumns;
+    TColumnOrder targetOrder = *order;
+    if (subLinkId) {
+        extColumns = NTypeAnnImpl::ExtractExternalColumns(*node);
+        for (const auto& x : extColumns) {
+            auto name = TString("_yql_join_sublink_") + ToString(*subLinkId) + "_" + x.first;
+            columnsItems.push_back(ctx.NewAtom(node->Pos(), name));
+            targetOrder.push_back(name);
+        }
+    }
+
+    auto columns = ctx.NewList(node->Pos(), std::move(columnsItems));
     auto setItems = GetSetting(node->Head(), "set_items");
     auto setOps = GetSetting(node->Head(), "set_ops");
     YQL_ENSURE(setItems);
     YQL_ENSURE(setOps);
     const bool onlyOneSetItem = (setItems->Tail().ChildrenSize() == 1);
+
+    TExprNode::TPtr finalSortLambda;
+    TExprNode::TPtr finalSortDirections;
 
     TExprNode::TListType setItemNodes;
     TVector<TColumnOrder> columnOrders;
@@ -3256,6 +3595,11 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
         auto childOrder = optCtx.Types->LookupColumnOrder(*setItem);
         YQL_ENSURE(childOrder);
         columnOrders.push_back(*childOrder);
+        if (subLinkId) {
+            auto& setOrder = columnOrders.back();
+            setOrder.insert(setOrder.end(), targetOrder.end() - extColumns.size(), targetOrder.end());
+        }
+
         auto finalExtTypes = GetSetting(setItem->Tail(), "final_ext_types");
         if (finalExtTypes && !subLinkId) {
             return node;
@@ -3307,7 +3651,8 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
                 cleanedInputs.push_back(list);
             } else {
                 // extract all used columns
-                auto usedColumns = GatherUsedColumns(result, joinOps, filter, groupExprs, having, extraSortColumns, window, winCtx);
+                TVector<std::pair<TString, TString>> joinUsingColumns;
+                auto usedColumns = GatherUsedColumns(result, joinOps, filter, groupExprs, having, extraSortColumns, window, winCtx, joinUsingColumns);
 
                 // fill index of input for each column
                 FillInputIndices(from, finalExtTypes, usedColumns, optCtx);
@@ -3323,13 +3668,14 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
                     if (joinGroups.size() == 1) {
                         list = joinGroups.front();
                     } else {
-                        list = BuildCrossJoinsBetweenGroups(node->Pos(), joinGroups, usedColumns, groupForIndex, ctx);
+                        list = BuildCrossJoinsBetweenGroups(node->Pos(), joinGroups, usedColumns, groupForIndex, ctx, joinUsingColumns);
                     }
                 }
             }
 
+            TExprNode::TPtr joinedUniqueExt;
             if (!outerInputs.empty() && finalExtTypes && 0 < finalExtTypes->Tail().ChildrenSize()) {
-                list = JoinOuter(node->Pos(), list, finalExtTypes, outerInputs, outerInputAliases, cleanedInputs, inputAliases, ctx);
+                std::tie(list, joinedUniqueExt) = JoinOuter(node->Pos(), list, finalExtTypes, outerInputs, outerInputAliases, cleanedInputs, inputAliases, ctx);
             }
 
             if (filter) {
@@ -3368,7 +3714,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
             }
 
             if (groupExprs) {
-                list = BuildGroup(node->Pos(), list, aggs, groupExprs, groupSets, finalExtTypes, ctx, optCtx);
+                list = BuildGroup(node->Pos(), list, aggs, groupExprs, groupSets, finalExtTypes, joinedUniqueExt, ctx, optCtx);
             }
 
             if (having) {
@@ -3387,7 +3733,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
             }
 
             if (finalExtTypes) {
-                projectionRoot = AddExtColumns(projectionRoot, projectionArg, finalExtTypes->TailPtr(), columnsItems, *subLinkId, ctx);
+                projectionRoot = AddExtColumns(projectionRoot, projectionArg, finalExtTypes->TailPtr(), *subLinkId, ctx);
             }
 
             bool hasExtraSortColumns = (extraSortColumns || extraSortKeys || (aggsSizeBeforeSort < aggs.size()));
@@ -3432,7 +3778,13 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
                         sortLambda->Head().HeadPtr(), sortSubLinks, inputAliases, cleanedInputs, ctx, optCtx, "_yql_extra_", &sublinkColumns);
                 }
 
-                list = BuildSort(node->Pos(), sort, list, sortLambdaRoot, sortLambda->HeadPtr(), ctx);
+                auto directions = BuildSortDirections(node->Pos(), sort, ctx);
+                if (!finalExtTypes) {
+                    list = BuildSort(node->Pos(), list, directions, sortLambdaRoot, sortLambda->HeadPtr(), ctx);    
+                } else if (onlyOneSetItem && finalExtTypes) {
+                    finalSortDirections = directions;
+                    finalSortLambda = sortLambda;
+                }
             }
 
             if (hasExtraSortColumns) {
@@ -3457,14 +3809,11 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
 
         if (hasNonUnionAll) {
             TExprNode::TListType stack;
-            auto targetColumnOrder = optCtx.Types->LookupColumnOrder(*node);
-            YQL_ENSURE(targetColumnOrder);
-
             ui32 inputIndex = 0;
             for (const auto& x : setOps->Tail().Children()) {
                 if (x->Content() == "push") {
                     YQL_ENSURE(inputIndex < setItemNodes.size());
-                    stack.push_back(NormalizeColumnOrder(setItemNodes[inputIndex], columnOrders[inputIndex], *targetColumnOrder, ctx));
+                    stack.push_back(NormalizeColumnOrder(setItemNodes[inputIndex], columnOrders[inputIndex], targetOrder, ctx));
                     ++inputIndex;
                     continue;
                 }
@@ -3479,30 +3828,55 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
             }
 
             YQL_ENSURE(stack.size() == 1);
-            list = KeepColumnOrder(stack.front(), *node, ctx, *optCtx.Types);
+            list = KeepColumnOrder(targetOrder, stack.front(), ctx);
         } else {
-            list = ExpandPositionalUnionAll(*node, columnOrders, setItemNodes, ctx, optCtx);
+            TExprNode::TListType children = setItemNodes;
+            for (ui32 childIndex = 0; childIndex < children.size(); ++childIndex) {
+                const auto& childColumnOrder = columnOrders[childIndex];
+                auto& child = children[childIndex];
+                child = NormalizeColumnOrder(child, childColumnOrder, targetOrder, ctx);
+            }
+
+            auto res = ctx.NewCallable(node->Pos(), "UnionAll", std::move(children));
+            list = KeepColumnOrder(targetOrder, res, ctx);
         }
     }
 
     auto finalSort = GetSetting(node->Head(), "sort");
-    if (finalSort && finalSort->Tail().ChildrenSize() > 0) {
-        auto finalSortLambda = BuildSortLambda(node->Pos(), finalSort, ctx);
-        list = BuildSort(node->Pos(), finalSort, list, finalSortLambda->TailPtr(), finalSortLambda->HeadPtr(), ctx);
-    }
-
     auto limit = GetSetting(node->Head(), "limit");
     auto offset = GetSetting(node->Head(), "offset");
 
-    if (offset) {
-        list = BuildOffset(node->Pos(), offset, list, ctx);
+    if (finalSort && finalSort->Tail().ChildrenSize() > 0) {
+        finalSortLambda = BuildSortLambda(node->Pos(), finalSort, ctx);
+        finalSortDirections = BuildSortDirections(node->Pos(), finalSort, ctx);
     }
 
-    if (limit) {
-        list = BuildLimit(node->Pos(), limit, list, ctx);
+    if (extColumns.empty()) {
+        if (finalSortLambda) {
+            list = BuildSort(node->Pos(), list, finalSortDirections, finalSortLambda->TailPtr(), finalSortLambda->HeadPtr(), ctx);
+        }
+
+        if (offset) {
+            list = BuildOffset(node->Pos(), offset, list, ctx);
+        }
+
+        if (limit) {
+            list = BuildLimit(node->Pos(), limit, list, ctx);
+        }
+    } else {
+        if (offset || limit) {
+            // sort doesn't matter in sublinks without limit/offset
+            TExprNode::TPtr offsetValue = offset ? WrapWithNonNegativeCheck(node->Pos(), offset->ChildPtr(1), ctx, "OFFSET must not be negative") : nullptr;
+            TExprNode::TPtr limitValue = limit ? WrapWithNonNegativeCheck(node->Pos(), limit->ChildPtr(1), ctx, "LIMIT must not be negative") : nullptr;
+
+            // enumerate all rows for each external key
+            auto enumerated = EnumerateForExtColumns(node->Pos(), list, *subLinkId, extColumns, finalSortDirections, finalSortLambda, ctx);
+
+            // apply limit & offset and drop a column used for enumeration
+            list = ApplyOffsetLimitOverEnumerated(node->Pos(), enumerated, offsetValue, limitValue, ctx);
+        }
     }
 
-    auto columns = ctx.NewList(node->Pos(), std::move(columnsItems));
     return ctx.Builder(node->Pos())
         .Callable("AssumeColumnOrder")
             .Add(0, list)

@@ -79,7 +79,7 @@ TEST_F(TTlsTest, SimplePingPong)
     config->SetDefaults();
     auto dialer = Context->CreateDialer(config, Poller, NetLogger);
 
-    auto context = New<TRemoteContext>();
+    auto context = New<TDialerContext>();
     context->Host = "localhost";
 
     auto asyncFirstSide = dialer->Dial(listener->GetAddress(), context);

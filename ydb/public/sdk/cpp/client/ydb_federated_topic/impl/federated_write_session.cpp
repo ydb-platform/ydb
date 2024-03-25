@@ -3,6 +3,10 @@
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/log_lazy.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
 
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
+#undef INCLUDE_YDB_INTERNAL_H
+
 #include <library/cpp/threading/future/future.h>
 
 #include <algorithm>
@@ -23,16 +27,23 @@ NTopic::TTopicClientSettings FromFederated(const TFederatedTopicClientSettings& 
 TFederatedWriteSession::TFederatedWriteSession(const TFederatedWriteSessionSettings& settings,
                                              std::shared_ptr<TGRpcConnectionsImpl> connections,
                                              const TFederatedTopicClientSettings& clientSetttings,
-                                             std::shared_ptr<TFederatedDbObserver> observer)
+                                             std::shared_ptr<TFederatedDbObserver> observer,
+                                             std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> codecs)
     : Settings(settings)
     , Connections(std::move(connections))
     , SubClientSetttings(FromFederated(clientSetttings))
+    , ProvidedCodecs(std::move(codecs))
     , Observer(std::move(observer))
     , AsyncInit(Observer->WaitForFirstState())
     , FederationState(nullptr)
+    , Log(Connections->GetLog())
     , ClientEventsQueue(std::make_shared<NTopic::TWriteSessionEventsQueue>(Settings))
     , BufferFreeSpace(Settings.MaxMemoryUsage_)
 {
+}
+
+TStringBuilder TFederatedWriteSession::GetLogPrefix() const {
+     return TStringBuilder() << GetDatabaseLogPrefix(SubClientSetttings.Database_.GetOrElse("")) << "[" << SessionId << "] ";
 }
 
 void TFederatedWriteSession::Start() {
@@ -62,10 +73,11 @@ void TFederatedWriteSession::OpenSubSessionImpl(std::shared_ptr<TDbInfo> db) {
         .Database(db->path())
         .DiscoveryEndpoint(db->endpoint());
     auto subclient = make_shared<NTopic::TTopicClient::TImpl>(Connections, clientSettings);
+    subclient->SetProvidedCodecs(ProvidedCodecs);
 
     auto handlers = NTopic::TWriteSessionSettings::TEventHandlers()
         .HandlersExecutor(Settings.EventHandlers_.HandlersExecutor_)
-        .ReadyToAcceptHander([self = shared_from_this()](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& ev){
+        .ReadyToAcceptHandler([self = shared_from_this()](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& ev){
             TDeferredWrite deferred(self->Subsession);
             with_lock(self->Lock) {
                 Y_ABORT_UNLESS(self->PendingToken.Empty());
@@ -164,6 +176,10 @@ void TFederatedWriteSession::OnFederatedStateUpdateImpl() {
     }
 
     if (!DatabasesAreSame(preferrableDb, CurrentDatabase)) {
+        LOG_LAZY(Log, TLOG_INFO, GetLogPrefix()
+            << "Start federated write session to database '" << preferrableDb->name()
+            << "' (previous was " << (CurrentDatabase ? CurrentDatabase->name() : "<empty>") << ")"
+            << " FederationState: " << *FederationState);
         OpenSubSessionImpl(preferrableDb);
     }
 

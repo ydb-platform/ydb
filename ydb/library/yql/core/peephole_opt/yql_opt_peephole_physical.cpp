@@ -2577,12 +2577,70 @@ TExprNode::TPtr ExpandListHas(const TExprNode::TPtr& input, TExprContext& ctx) {
     return RewriteSearchByKeyForTypesMismatch<true, true>(input, ctx);
 }
 
+TExprNode::TPtr ExpandPgArrayOp(const TExprNode::TPtr& input, TExprContext& ctx) {
+    const bool all = input->Content() == "PgAllResolvedOp";
+    auto list = ctx.Builder(input->Pos())
+        .Callable("PgCall")
+            .Atom(0, "unnest")
+            .List(1)
+            .Seal()
+            .Add(2, input->ChildPtr(3))
+        .Seal()
+        .Build();
+
+    auto value = ctx.Builder(input->Pos())
+        .Callable("Fold")
+            .Add(0, list)
+            .Callable(1, "PgConst")
+                .Atom(0, all ? "true" : "false")
+                .Callable(1, "PgType")
+                    .Atom(0, "bool")
+                .Seal()
+            .Seal()
+            .Lambda(2)
+                .Param("item")
+                .Param("state")
+                .Callable(all ? "PgAnd" : "PgOr")
+                    .Arg(0, "state")
+                    .Callable(1, "PgResolvedOp")
+                        .Add(0, input->ChildPtr(0))
+                        .Add(1, input->ChildPtr(1))
+                        .Add(2, input->ChildPtr(2))
+                        .Arg(3, "item")
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    return ctx.Builder(input->Pos())
+        .Callable("If")
+            .Callable(0, "Exists")
+                .Add(0, input->ChildPtr(3))
+            .Seal()
+            .Add(1, value)
+            .Callable(2, "Null")
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 template <bool Flat, bool List>
 TExprNode::TPtr ExpandContainerIf(const TExprNode::TPtr& input, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content();
     auto item = Flat ? input->TailPtr() : ctx.NewCallable(input->Tail().Pos(), List ? "AsList" : "Just", {input->TailPtr()});
     auto none = ctx.NewCallable(input->Tail().Pos(), "EmptyFrom", {item});
     return ctx.NewCallable(input->Pos(), "If", {input->HeadPtr(), std::move(item), std::move(none)});
+}
+
+TExprNode::TPtr DropDependsOnFromEmptyIterator(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (input->ChildrenSize() > 1) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Drop DependsOn from " << input->Content();
+        TExprNode::TListType newChildren;
+        newChildren.push_back(input->Child(0));
+        return ctx.ChangeChildren(*input, std::move(newChildren));
+    }
+    return input;
 }
 
 TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -7809,6 +7867,8 @@ struct TPeepHoleRules {
         {"Lookup", &RewriteSearchByKeyForTypesMismatch<false>},
         {"Contains", &RewriteSearchByKeyForTypesMismatch<true>},
         {"ListHas", &ExpandListHas},
+        {"PgAnyResolvedOp", &ExpandPgArrayOp},
+        {"PgAllResolvedOp", &ExpandPgArrayOp},
         {"Map", &CleckClosureOnUpperLambdaOverList},
         {"OrderedMap", &CleckClosureOnUpperLambdaOverList},
         {"FlatMap", &CleckClosureOnUpperLambdaOverList},
@@ -7868,6 +7928,7 @@ struct TPeepHoleRules {
         {"CheckedMinus", &ExpandCheckedMinus},
         {"JsonValue", &ExpandJsonValue},
         {"JsonExists", &ExpandJsonExists},
+        {"EmptyIterator", &DropDependsOnFromEmptyIterator},
     };
 
     const TExtPeepHoleOptimizerMap CommonStageExtRules = {

@@ -67,6 +67,7 @@
   Access Token | ydb::StaticToken(token)
   Metadata | ydb::GCEMetadata, ydb::YandexMetadata
   Service Account Key | не поддерживается
+  Static Credentials | [ydb::StaticCredentialsAuth](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/auth-static-credentials.rs)
   Определяется по переменным окружения | не поддерживается
   Выполнение внешней команды | ydb.CommandLineYcToken (например, для авторизации с помощью [IAM-токена]{% if lang == "ru"%}(https://cloud.yandex.ru/docs/iam/concepts/authorization/iam-token){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/en/docs/iam/concepts/authorization/iam-token){% endif %} {{ yandex-cloud }} с компьютера разработчика ```ydb::CommandLineYcToken.from_cmd("yc iam create-token")```)
 

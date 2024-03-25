@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/read_filter_merger.h>
 
 namespace NKikimr::NOlap {
 
@@ -115,12 +116,13 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
             if (!b) {
                 continue;
             }
+            std::optional<NArrow::NSerialization::TSerializerContainer> externalSaver;
             if (b->num_rows() < 100) {
-                SaverContext.SetExternalSerializer(NArrow::NSerialization::TSerializerContainer(std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::UNCOMPRESSED)));
+                externalSaver = NArrow::NSerialization::TSerializerContainer(std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::UNCOMPRESSED));
             } else {
-                SaverContext.SetExternalSerializer(NArrow::NSerialization::TSerializerContainer(std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::LZ4_FRAME)));
+                externalSaver = NArrow::NSerialization::TSerializerContainer(std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::LZ4_FRAME));
             }
-            auto portions = MakeAppendedPortions(b, pathId, maxSnapshot, nullptr, context);
+            auto portions = MakeAppendedPortions(b, pathId, maxSnapshot, nullptr, context, externalSaver);
             Y_ABORT_UNLESS(portions.size());
             for (auto& portion : portions) {
                 AppendedPortions.emplace_back(std::move(portion));

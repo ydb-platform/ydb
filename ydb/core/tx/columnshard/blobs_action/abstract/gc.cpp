@@ -16,7 +16,7 @@ void IBlobsGCAction::OnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self,
         if (!DoOnCompleteTxAfterCleaning(self, taskAction)) {
             return;
         }
-        taskAction->OnFinished();
+        OnFinished();
         NYDBTest::TControllers::GetColumnShardController()->OnAfterGCAction(self, *taskAction);
     }
 }

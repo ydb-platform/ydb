@@ -1031,6 +1031,28 @@ private:
     ui32 OptionalArgs;
 };
 
+class TCallablePayload : public NUdf::ICallablePayload {
+public:
+    TCallablePayload(NMiniKQL::TNode* node);
+
+    NUdf::TStringRef GetPayload() const override {
+        return Payload_;
+    }
+
+    NUdf::TStringRef GetArgumentName(ui32 index) const override {
+        return ArgsNames_[index];
+    }
+
+    ui64 GetArgumentFlags(ui32 index) const override {
+        return ArgsFlags_[index];
+    }
+
+private:
+    NUdf::TStringRef Payload_;
+    TVector<NUdf::TStringRef> ArgsNames_;
+    TVector<ui64> ArgsFlags_;
+};
+
 class TCallable : public TNode {
 friend class TNode;
 public:

@@ -11,14 +11,13 @@ private:
     using TBase = TColumnEngineChanges;
 
 protected:
-    TSplitSettings SplitSettings;
     TSaverContext SaverContext;
     virtual void DoCompile(TFinalizationContext& context) override;
     virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) override;
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     std::vector<TPortionInfoWithBlobs> MakeAppendedPortions(const std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule,
-        const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context) const;
+        const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context, const std::optional<NArrow::NSerialization::TSerializerContainer>& overrideSaver) const;
 
     virtual void DoDebugString(TStringOutput& out) const override {
         out << "remove=" << PortionsToRemove.size() << ";append=" << AppendedPortions.size() << ";";
@@ -38,13 +37,8 @@ protected:
     }
 
 public:
-    const TSplitSettings& GetSplitSettings() const {
-        return SplitSettings;
-    }
-
-    TChangesWithAppend(const TSplitSettings& splitSettings, const TSaverContext& saverContext, const TString& consumerId)
+    TChangesWithAppend(const TSaverContext& saverContext, const TString& consumerId)
         : TBase(saverContext.GetStoragesManager(), consumerId)
-        , SplitSettings(splitSettings)
         , SaverContext(saverContext)
     {
 

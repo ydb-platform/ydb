@@ -35,7 +35,7 @@ static constexpr int MaxEventsPerPoll = 1024;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TThreadPoolPoller;
+class TThreadPoolPollerImpl;
 
 namespace {
 
@@ -125,10 +125,10 @@ struct TPollableCookie
 {
     const TPromise<void> UnregisterPromise = NewPromise<void>();
 
-    TIntrusivePtr<TThreadPoolPoller> PollerThread;
+    TIntrusivePtr<TThreadPoolPollerImpl> PollerThread;
     IInvokerPtr Invoker;
 
-    explicit TPollableCookie(TThreadPoolPoller* pollerThread)
+    explicit TPollableCookie(TThreadPoolPollerImpl* pollerThread)
         : PollerThread(pollerThread)
     { }
 
@@ -184,12 +184,12 @@ EPollControl FromImplControl(int implControl)
 
 } // namespace
 
-class TThreadPoolPoller
+class TThreadPoolPollerImpl
     : public IThreadPoolPoller
     , public NThreading::TThread
 {
 public:
-    TThreadPoolPoller(
+    TThreadPoolPollerImpl(
         int threadCount,
         const TString& threadNamePrefix,
         TDuration pollingPeriod)
@@ -500,6 +500,78 @@ private:
     }
 };
 
+// TThreadPoolPollerImpl::ThreadMain holds strong reference to `this`.
+// therefore object cannot be removed until thread is running.
+// User MUST call Shutdown explicitly to destroy object.
+//
+// This wrapper class solves this problem. Thread is stopped in destructor and resources are released.
+class TThreadPoolPoller
+    : public IThreadPoolPoller
+{
+public:
+    TThreadPoolPoller(int threadCount, const TString& threadNamePrefix, TDuration pollingPeriod)
+        : Poller_(New<TThreadPoolPollerImpl>(threadCount, threadNamePrefix, pollingPeriod))
+    { }
+
+    ~TThreadPoolPoller()
+    {
+        Poller_->Shutdown();
+    }
+
+    void Start()
+    {
+        Poller_->Start();
+    }
+
+    void Reconfigure(int threadCount) override
+    {
+        return Poller_->Reconfigure(threadCount);
+    }
+
+    void Shutdown() override
+    {
+        Poller_->Shutdown();
+    }
+
+    bool TryRegister(const IPollablePtr& pollable, TString poolName = "default") override
+    {
+        return Poller_->TryRegister(pollable, std::move(poolName));
+    }
+
+    void SetExecutionPool(const IPollablePtr& pollable, TString poolName) override
+    {
+        Poller_->SetExecutionPool(pollable, std::move(poolName));
+    }
+
+    TFuture<void> Unregister(const IPollablePtr& pollable) override
+    {
+        return Poller_->Unregister(pollable);
+    }
+
+    void Arm(TFileDescriptor fd, const IPollablePtr& pollable, EPollControl control) override
+    {
+        Poller_->Arm(fd, pollable, control);
+    }
+
+    void Retry(const IPollablePtr& pollable) override
+    {
+        Poller_->Retry(pollable);
+    }
+
+    void Unarm(TFileDescriptor fd, const IPollablePtr& pollable) override
+    {
+        Poller_->Unarm(fd, pollable);
+    }
+
+    IInvokerPtr GetInvoker() const override
+    {
+        return Poller_->GetInvoker();
+    }
+
+private:
+    TIntrusivePtr<TThreadPoolPollerImpl> Poller_;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 IThreadPoolPollerPtr CreateThreadPoolPoller(
@@ -515,4 +587,3 @@ IThreadPoolPollerPtr CreateThreadPoolPoller(
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NConcurrency
-

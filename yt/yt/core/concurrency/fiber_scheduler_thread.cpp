@@ -845,13 +845,13 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 TFiberSchedulerThread::TFiberSchedulerThread(
-    const TString& threadGroupName,
-    const TString& threadName,
-    NThreading::EThreadPriority threadPriority,
-    int shutdownPriority)
-    : TThread(threadName, threadPriority, shutdownPriority)
-    , ThreadGroupName_(threadGroupName)
+    TString threadGroupName,
+    TString threadName,
+    NThreading::TThreadOptions options)
+    : TThread(std::move(threadName), std::move(options))
+    , ThreadGroupName_(std::move(threadGroupName))
 { }
+
 
 void TFiberSchedulerThread::ThreadMain()
 {

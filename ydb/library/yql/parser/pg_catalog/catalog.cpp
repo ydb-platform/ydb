@@ -9,6 +9,7 @@
 
 namespace NYql::NPg {
 
+constexpr ui32 FuncMaxArgs = 100;
 constexpr ui32 InvalidOid = 0;
 constexpr ui32 Int2VectorOid = 22;
 constexpr ui32 OidVectorOid = 30;
@@ -72,13 +73,13 @@ bool IsCompatibleTo(ui32 actualTypeId, ui32 expectedTypeId, const TTypes& types)
     if (expectedTypeId == AnyArrayOid) {
         const auto& actualDescPtr = types.FindPtr(actualTypeId);
         Y_ENSURE(actualDescPtr);
-        return actualDescPtr->ArrayTypeId == actualDescPtr->TypeId;
+        return actualDescPtr->ArrayTypeId && actualDescPtr->ArrayTypeId == actualDescPtr->TypeId;
     }
 
     if (expectedTypeId == AnyNonArrayOid) {
         const auto& actualDescPtr = types.FindPtr(actualTypeId);
         Y_ENSURE(actualDescPtr);
-        return actualDescPtr->ArrayTypeId != actualDescPtr->TypeId;
+        return actualDescPtr->ArrayTypeId && actualDescPtr->ArrayTypeId != actualDescPtr->TypeId;
     }
 
     return false;
@@ -157,6 +158,39 @@ TStringBuf GetCanonicalTypeName(TStringBuf name) {
     }
 
     return name;
+}
+
+bool ValidateArgs(const TVector<ui32>& descArgTypeIds, const TVector<ui32>& argTypeIds, const TTypes& types, ui32 variadicArgType = 0) {
+    if (argTypeIds.size() > FuncMaxArgs) {
+        return false;
+    }
+
+    if (argTypeIds.size() < descArgTypeIds.size()) {
+        return false;
+    }
+
+    if (!variadicArgType && argTypeIds.size() > descArgTypeIds.size()) {
+        return false;
+    }
+
+    if (variadicArgType && argTypeIds.size() == descArgTypeIds.size()) {
+        // at least one variadic argument is required
+        return false;
+    }
+
+    for (size_t i = 0; i < descArgTypeIds.size(); ++i) {
+        if (!IsCompatibleTo(argTypeIds[i], descArgTypeIds[i], types)) {
+            return false;
+        }
+    }
+
+    for (size_t i = descArgTypeIds.size(); i < argTypeIds.size(); ++i) {
+        if (!IsCompatibleTo(argTypeIds[i], variadicArgType, types)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 class TParser {
@@ -270,15 +304,21 @@ bool ValidateOperArgs(const TOperDesc& d, const TVector<ui32>& argTypeIds, const
     return true;
 }
 
+struct TLazyOperInfo {
+    TString Com;
+    TString Negate;
+};
+
 class TOperatorsParser : public TParser {
 public:
     TOperatorsParser(TOperators& operators, const THashMap<TString, ui32>& typeByName, const TTypes& types,
-        const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs)
+        const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs, THashMap<ui32, TLazyOperInfo>& lazyInfos)
         : Operators(operators)
         , TypeByName(typeByName)
         , Types(types)
         , ProcByName(procByName)
         , Procs(procs)
+        , LazyInfos(lazyInfos)
     {}
 
     void OnKey(const TString& key, const TString& value) override {
@@ -312,6 +352,10 @@ public:
             LastOperator.ResultType = *typeIdPtr;
         } else if (key == "oprcode") {
             LastCode = value;
+        } else if (key == "oprnegate") {
+            LastNegate = value;
+        } else if (key == "oprcom") {
+            LastCom = value;
         }
     }
 
@@ -338,11 +382,21 @@ public:
                     Y_ENSURE(!LastOperator.Name.empty());
                     Operators[LastOperator.OperId] = LastOperator;
                 }
+
+                if (!LastCom.empty()) {
+                    LazyInfos[LastOperator.OperId].Com = LastCom;
+                }
+
+                if (!LastNegate.empty()) {
+                    LazyInfos[LastOperator.OperId].Negate = LastNegate;
+                }
             }
         }
 
         LastOperator = TOperDesc();
         LastCode = "";
+        LastNegate = "";
+        LastCom = "";
         IsSupported = true;
     }
 
@@ -352,9 +406,12 @@ private:
     const TTypes& Types;
     const THashMap<TString, TVector<ui32>>& ProcByName;
     const TProcs& Procs;
+    THashMap<ui32, TLazyOperInfo>& LazyInfos;
     TOperDesc LastOperator;
     bool IsSupported = true;
     TString LastCode;
+    TString LastNegate;
+    TString LastCom;
 };
 
 class TProcsParser : public TParser {
@@ -368,7 +425,9 @@ public:
         if (key == "oid") {
             LastProc.ProcId = FromString<ui32>(value);
         } else if (key == "provariadic") {
-            IsSupported = false;
+            auto idPtr = TypeByName.FindPtr(value);
+            Y_ENSURE(idPtr);
+            LastProc.VariadicType = *idPtr;
         } else if (key == "descr") {
             LastProc.Descr = value;
         } else if (key == "prokind") {
@@ -419,35 +478,56 @@ public:
 
     void OnFinish() override {
         if (IsSupported) {
+            if (LastProc.VariadicType) {
+                Y_ENSURE(!ArgModesStr.empty());
+            }
+
             if (!ArgModesStr.empty()) {
-                Y_ENSURE(!AllArgTypesStr.empty());
                 Y_ENSURE(ArgModesStr.front() == '{');
                 Y_ENSURE(ArgModesStr.back() == '}');
                 TVector<TString> modes;
                 Split(ArgModesStr.substr(1, ArgModesStr.size() - 2), ",", modes);
                 Y_ENSURE(modes.size() >= LastProc.ArgTypes.size());
+                ui32 inputArgsCount = 0;
+                bool startedVarArgs = false;
+                bool startedOutArgs = false;
                 for (size_t i = 0; i < modes.size(); ++i) {
-                    if (i < LastProc.ArgTypes.size()) {
-                        if (modes[i] != "i") {
-                            IsSupported = false;
-                            break;
-                        }
-                    } else if (modes[i] != "o") {
-                        IsSupported = false;
-                        break;
+                    if (modes[i] == "i") {
+                        Y_ENSURE(!startedVarArgs && !startedOutArgs);
+                        inputArgsCount = i + 1;
+                    } else if (modes[i] == "o") {
+                        startedOutArgs = true;
+                    } else {
+                        Y_ENSURE(!startedVarArgs && !startedOutArgs);
+                        Y_ENSURE(modes[i] == "v");
+                        Y_ENSURE(LastProc.VariadicType);
+                        startedVarArgs = true;
                     }
                 }
+
+                if (LastProc.VariadicType) {
+                    Y_ENSURE(LastProc.ArgTypes.size() > inputArgsCount);
+                    LastProc.VariadicArgType = LastProc.ArgTypes[inputArgsCount];
+                    Y_ENSURE(LastProc.VariadicArgType);
+                }
+
+                LastProc.ArgTypes.resize(inputArgsCount);
             }
         }
 
         if (IsSupported) {
+            auto variadicDelta = LastProc.VariadicType ? 1 : 0;
             if (!ArgNamesStr.empty()) {
                 Y_ENSURE(ArgNamesStr.front() == '{');
                 Y_ENSURE(ArgNamesStr.back() == '}');
                 TVector<TString> names;
                 Split(ArgNamesStr.substr(1, ArgNamesStr.size() - 2), ",", names);
-                Y_ENSURE(names.size() >= LastProc.ArgTypes.size());
-                LastProc.OutputArgNames.insert(LastProc.OutputArgNames.begin(), names.begin() + LastProc.ArgTypes.size(), names.end());
+                Y_ENSURE(names.size() >= LastProc.ArgTypes.size() + variadicDelta);
+                LastProc.OutputArgNames.insert(LastProc.OutputArgNames.begin(), names.begin() + LastProc.ArgTypes.size() + variadicDelta, names.end());
+                if (LastProc.VariadicType) {
+                    LastProc.VariadicArgName = names[LastProc.ArgTypes.size()];
+                }
+
                 LastProc.InputArgNames.insert(LastProc.InputArgNames.begin(), names.begin(), names.begin() + LastProc.ArgTypes.size());
             }
 
@@ -457,9 +537,9 @@ public:
                 Y_ENSURE(AllArgTypesStr.back() == '}');
                 TVector<TString> types;
                 Split(AllArgTypesStr.substr(1, AllArgTypesStr.size() - 2), ",", types);
-                Y_ENSURE(types.size() >= LastProc.ArgTypes.size());
+                Y_ENSURE(types.size() >= LastProc.ArgTypes.size() + variadicDelta);
 
-                for (size_t i = LastProc.ArgTypes.size(); i < types.size(); ++i) {
+                for (size_t i = LastProc.ArgTypes.size() + variadicDelta; i < types.size(); ++i) {
                     auto idPtr = TypeByName.FindPtr(types[i]);
                     Y_ENSURE(idPtr);
                     LastProc.OutputArgTypes.push_back(*idPtr);
@@ -605,6 +685,14 @@ public:
         }
 
         LazyInfos[LastType.TypeId] = LastLazyTypeInfo;
+        if (LastType.ArrayTypeId) {
+            LastLazyTypeInfo.OutFunc = "array_out";
+            LastLazyTypeInfo.InFunc = "array_in";
+            LastLazyTypeInfo.SendFunc = "array_send";
+            LastLazyTypeInfo.ReceiveFunc = "array_recv";
+            LastLazyTypeInfo.ElementType = "";
+            LazyInfos[LastType.ArrayTypeId] = LastLazyTypeInfo;
+        }
 
         LastType = TTypeDesc();
         LastLazyTypeInfo = TLazyTypeInfo();
@@ -851,7 +939,7 @@ public:
             for (const auto id : *funcIdsPtr) {
                 auto procPtr = Procs.FindPtr(id);
                 Y_ENSURE(procPtr);
-                if (procPtr->ArgTypes == LastAggregation.ArgTypes) {
+                if (ValidateArgs(procPtr->ArgTypes, LastAggregation.ArgTypes, Types, procPtr->VariadicType)) {
                     LastAggregation.AggId = id;
                     break;
                 }
@@ -1297,11 +1385,65 @@ private:
 };
 
 TOperators ParseOperators(const TString& dat, const THashMap<TString, ui32>& typeByName,
-    const TTypes& types, const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs) {
+    const TTypes& types, const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs, THashMap<ui32, TLazyOperInfo>& lazyInfos) {
     TOperators ret;
-    TOperatorsParser parser(ret, typeByName, types, procByName, procs);
+    TOperatorsParser parser(ret, typeByName, types, procByName, procs, lazyInfos);
     parser.Do(dat);
     return ret;
+}
+
+ui32 FindOperator(const THashMap<TString, TVector<ui32>>& operatorsByName, const THashMap<TString, ui32>& typeByName, TOperators& operators, const TString& signature) {
+    auto pos1 = signature.find('(');
+    auto pos2 = signature.find(')');
+    Y_ENSURE(pos1 != TString::npos && pos1 > 0);
+    Y_ENSURE(pos2 != TString::npos && pos2 > pos1);
+    auto name = signature.substr(0, pos1);
+    auto operIdsPtr = operatorsByName.FindPtr(name);
+    Y_ENSURE(operIdsPtr);
+    TVector<TString> strArgs;
+    Split(signature.substr(pos1 + 1, pos2 - pos1 - 1), ",", strArgs);
+    Y_ENSURE(strArgs.size() >= 1 && strArgs.size() <= 2);
+    TVector<ui32> argTypes;
+    for (const auto& str : strArgs) {
+        auto typePtr = typeByName.FindPtr(str);
+        Y_ENSURE(typePtr);
+        argTypes.push_back(*typePtr);
+    }
+
+    for (const auto& operId : *operIdsPtr) {
+        auto operPtr = operators.FindPtr(operId);
+        Y_ENSURE(operPtr);
+        if (argTypes.size() == 1) {
+            if (operPtr->RightType != argTypes[0]) {
+                continue;
+            }
+        } else {
+            if (operPtr->LeftType != argTypes[0]) {
+                continue;
+            }
+
+            if (operPtr->RightType != argTypes[1]) {
+                continue;
+            }
+        }
+
+        return operId;
+    }
+    
+    // for example, some operators are based on SQL system_functions.sql
+    return 0;
+}
+
+void ApplyLazyOperInfos(TOperators& operators, const THashMap<TString, TVector<ui32>>& operatorsByName, const THashMap<TString, ui32>& typeByName, const THashMap<ui32, TLazyOperInfo>& lazyInfos) {
+    for (const auto& x : lazyInfos) {
+        if (!x.second.Com.empty()) {
+            operators[x.first].ComId = FindOperator(operatorsByName, typeByName, operators, x.second.Com);
+        }
+
+        if (!x.second.Negate.empty()) {
+            operators[x.first].NegateId = FindOperator(operatorsByName, typeByName, operators, x.second.Negate);
+        }
+    }
 }
 
 TAggregations ParseAggregations(const TString& dat, const THashMap<TString, ui32>& typeByName,
@@ -1617,11 +1759,13 @@ struct TCatalog {
             Y_ENSURE(CastsByDir.insert(std::make_pair(std::make_pair(v.SourceId, v.TargetId), k)).second);
         }
 
-        Operators = ParseOperators(opData, TypeByName, Types, ProcByName, Procs);
+        THashMap<ui32, TLazyOperInfo> lazyOperInfos;
+        Operators = ParseOperators(opData, TypeByName, Types, ProcByName, Procs, lazyOperInfos);
         for (const auto&[k, v] : Operators) {
             OperatorsByName[v.Name].push_back(k);
         }
 
+        ApplyLazyOperInfos(Operators, OperatorsByName, TypeByName, lazyOperInfos);
         Aggregations = ParseAggregations(aggData, TypeByName, Types, ProcByName, Procs);
         for (const auto&[k, v] : Aggregations) {
             AggregationsByName[v.Name].push_back(k);
@@ -1695,22 +1839,9 @@ struct TCatalog {
     THashMap<TTableInfoKey, TVector<TColumnInfo>> StaticColumns;
 };
 
-bool ValidateArgs(const TVector<ui32>& descArgTypeIds, const TVector<ui32>& argTypeIds) {
-    if (argTypeIds.size() != descArgTypeIds.size()) {
-        return false;
-    }
-
-    for (size_t i = 0; i < argTypeIds.size(); ++i) {
-        if (!IsCompatibleTo(argTypeIds[i], descArgTypeIds[i])) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
 bool ValidateProcArgs(const TProcDesc& d, const TVector<ui32>& argTypeIds) {
-    return ValidateArgs(d.ArgTypes, argTypeIds);
+    const auto& catalog = TCatalog::Instance();
+    return ValidateArgs(d.ArgTypes, argTypeIds, catalog.Types, d.VariadicType);
 }
 
 const TProcDesc& LookupProc(ui32 procId, const TVector<ui32>& argTypeIds) {
@@ -1804,6 +1935,11 @@ const TTypeDesc& LookupType(const TString& name) {
     const auto typePtr = catalog.Types.FindPtr(*typeIdPtr);
     Y_ENSURE(typePtr);
     return *typePtr;
+}
+
+bool HasType(ui32 typeId) {
+    const auto& catalog = TCatalog::Instance();
+    return catalog.Types.contains(typeId);
 }
 
 const TTypeDesc& LookupType(ui32 typeId) {
@@ -2083,15 +2219,56 @@ ui64 CalcUnaryOperatorScore(const TOperDesc& oper, ui32 argTypeId, const TCatalo
     return CalcArgumentMatchScore(oper.RightType, argTypeId, catalog);
 }
 
-ui64 CalcProcScore(const TVector<ui32>& procArgTypes, const TVector<ui32>& argTypeIds, const TCatalog& catalog) {
-    ui64 result = 0UL;
+bool IsExactMatch(const TVector<ui32>& procArgTypes, ui32 procVariadicType, const TVector<ui32>& argTypeIds) {
+    if (argTypeIds.size() < procArgTypes.size()) {
+        return false;
+    }
 
-    if (argTypeIds.size() != procArgTypes.size()) {
+    if (!procVariadicType && argTypeIds.size() > procArgTypes.size()) {
+        return false;
+    }
+
+    for (ui32 i = 0; i < procArgTypes.size(); ++i) {
+        if (procArgTypes[i] != argTypeIds[i]) {
+            return false;
+        }
+    }
+
+    if (procVariadicType) {
+        if (argTypeIds.size() == procArgTypes.size()) {
+            return false;
+        }
+
+        for (ui32 i = procArgTypes.size(); i < argTypeIds.size(); ++i) {
+            if (procVariadicType != argTypeIds[i]) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+ui64 CalcProcScore(const TVector<ui32>& procArgTypes, ui32 procVariadicType, const TVector<ui32>& argTypeIds, const TCatalog& catalog) {
+    ui64 result = 0UL;
+    if (!procVariadicType) {
+        ++result;
+    }
+
+    if (argTypeIds.size() < procArgTypes.size()) {
+        return ArgTypeMismatch;
+    }
+
+    if (!procVariadicType && argTypeIds.size() > procArgTypes.size()) {
+        return ArgTypeMismatch;
+    }
+
+    if (procVariadicType && argTypeIds.size() == procArgTypes.size()) {
         return ArgTypeMismatch;
     }
 
     for (size_t i = 0; i < argTypeIds.size(); ++i) {
-        auto score = CalcArgumentMatchScore(procArgTypes[i], argTypeIds[i], catalog);
+        auto score = CalcArgumentMatchScore(i >= procArgTypes.size() ? procVariadicType : procArgTypes[i], argTypeIds[i], catalog);
 
         if (score == ArgTypeMismatch) {
             return ArgTypeMismatch;
@@ -2188,7 +2365,11 @@ TVector<const C*> TryResolveUnknownsByCategory(const TVector<const C*>& candidat
         bool isPreferred = false;
 
         std::function<ui32(const C *)> typeGetter = [i] (const auto* candidate) {
-            return candidate->ArgTypes[i];
+            if constexpr (std::is_same_v<C, TProcDesc>) {
+                return i < candidate->ArgTypes.size() ? candidate->ArgTypes[i] : candidate->VariadicType;
+            } else {
+                return candidate->ArgTypes[i];
+            }
         };
 
         if (InvalidCategory != (category = NPrivate::FindCommonCategory<C>(candidates, typeGetter, catalog, isPreferred))) {
@@ -2205,7 +2386,12 @@ TVector<const C*> TryResolveUnknownsByCategory(const TVector<const C*>& candidat
         auto keepIt = true;
 
         for (const auto& category : argCommonCategory) {
-            const auto argTypeId = candidate->ArgTypes[category.Position];
+            ui32 argTypeId;
+            if constexpr (std::is_same_v<C, TProcDesc>) {
+                argTypeId = category.Position < candidate->ArgTypes.size() ? candidate->ArgTypes[category.Position] : candidate->VariadicType;
+            } else {
+                argTypeId = candidate->ArgTypes[category.Position];
+            }
 
             const auto& argTypePtr = catalog.Types.FindPtr(argTypeId);
             Y_ENSURE(argTypePtr);
@@ -2331,15 +2517,14 @@ std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TStri
         const auto& d = catalog.Procs.FindPtr(id);
         Y_ENSURE(d);
 
-        if (argTypeIds == d->ArgTypes) {
+        if (NPrivate::IsExactMatch(d->ArgTypes, d->VariadicType, argTypeIds)) {
             // At most one exact match is possible, so look no further
             // https://www.postgresql.org/docs/14/typeconv-func.html, step 2
             return d;
         }
 
         // https://www.postgresql.org/docs/14/typeconv-func.html, steps 4.a, 4.c, 4.d
-        auto score = NPrivate::CalcProcScore(d->ArgTypes, argTypeIds, catalog);
-
+        auto score = NPrivate::CalcProcScore(d->ArgTypes, d->VariadicType, argTypeIds, catalog);
         if (bestScore < score) {
             bestScore = score;
 
@@ -2428,7 +2613,7 @@ std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TStri
 
             for (const auto* candidate : candidates) {
                 for (size_t i = 0; i < argTypeIds.size(); ++i) {
-                    if (NPrivate::IsCoercible(commonType, candidate->ArgTypes[i], ECoercionCode::Implicit, catalog)) {
+                    if (NPrivate::IsCoercible(commonType, i >= candidate->ArgTypes.size() ? candidate->VariadicType : candidate->ArgTypes[i], ECoercionCode::Implicit, catalog)) {
                         if (finalCandidate) {
                             NPrivate::ThrowProcAmbiguity(name, argTypeIds);
                         }
@@ -2450,10 +2635,15 @@ TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::functio
 
     const auto& catalog = TCatalog::Instance();
 
-    const TTypeDesc* commonType = &LookupType(typeIds[0]);
-    char commonCategory = commonType->Category;
-    size_t unknownsCnt = (commonType->TypeId == UnknownOid) ? 1 : 0;
+    size_t unknownsCnt = (typeIds[0] == UnknownOid || typeIds[0] == InvalidOid) ? 1 : 0;
     castsNeeded = (unknownsCnt != 0);
+    const TTypeDesc* commonType = nullptr;
+    char commonCategory = 0;
+    if (typeIds[0] != InvalidOid) {
+        commonType = &LookupType(typeIds[0]);
+        commonCategory = commonType->Category;
+    }
+
     size_t i = 1;
     for (auto typeId = typeIds.cbegin() + 1; typeId != typeIds.cend(); ++typeId, ++i) {
         if (*typeId == UnknownOid || *typeId == InvalidOid) {
@@ -2461,11 +2651,11 @@ TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::functio
             castsNeeded = true;
             continue;
         }
-        if (Y_LIKELY(*typeId == commonType->TypeId)) {
+        if (commonType && *typeId == commonType->TypeId) {
             continue;
         }
         const TTypeDesc& otherType = LookupType(*typeId);
-        if (commonType->TypeId == UnknownOid) {
+        if (!commonType || commonType->TypeId == UnknownOid) {
             commonType = &otherType;
             commonCategory = otherType.Category;
             continue;
@@ -2641,13 +2831,27 @@ const TOperDesc& LookupOper(ui32 operId) {
     return *operPtr;
 }
 
-bool HasAggregation(const TString& name) {
+bool HasAggregation(const TString& name, EAggKind kind) {
     const auto& catalog = TCatalog::Instance();
-    return catalog.AggregationsByName.contains(to_lower(name));
+    auto aggIdPtr = catalog.AggregationsByName.FindPtr(to_lower(name));
+    if (!aggIdPtr) {
+        return false;
+    }
+
+    for (const auto& id : *aggIdPtr) {
+        const auto& d = catalog.Aggregations.FindPtr(id);
+        Y_ENSURE(d);
+        if (d->Kind == kind) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool ValidateAggregateArgs(const TAggregateDesc& d, const TVector<ui32>& argTypeIds) {
-    return ValidateArgs(d.ArgTypes, argTypeIds);
+    const auto& catalog = TCatalog::Instance();
+    return ValidateArgs(d.ArgTypes, argTypeIds, catalog.Types);
 }
 
 bool ValidateAggregateArgs(const TAggregateDesc& d, ui32 stateType, ui32 resultType) {
@@ -2678,14 +2882,14 @@ const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>
         const auto& d = catalog.Aggregations.FindPtr(id);
         Y_ENSURE(d);
 
-        if (argTypeIds == d->ArgTypes) {
+        if (NPrivate::IsExactMatch(d->ArgTypes, 0, argTypeIds)) {
             // At most one exact match is possible, so look no further
             // https://www.postgresql.org/docs/14/typeconv-func.html, step 2
             return *d;
         }
 
         // https://www.postgresql.org/docs/14/typeconv-func.html, steps 4.a, 4.c, 4.d
-        auto score = NPrivate::CalcProcScore(d->ArgTypes, argTypeIds, catalog);
+        auto score = NPrivate::CalcProcScore(d->ArgTypes, 0, argTypeIds, catalog);
 
         if (bestScore < score) {
             bestScore = score;

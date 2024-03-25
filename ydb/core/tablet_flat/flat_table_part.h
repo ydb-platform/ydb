@@ -49,11 +49,40 @@ namespace NTable {
 
         struct TIndexPages {
             using TPageId = NPage::TPageId;
+            using TGroupId = NPage::TGroupId;
             using TBtreeIndexMeta = NPage::TBtreeIndexMeta;
-            const TVector<TPageId> Groups;
-            const TVector<TPageId> Historic;
+            const TVector<TPageId> FlatGroups;
+            const TVector<TPageId> FlatHistoric;
             const TVector<TBtreeIndexMeta> BTreeGroups;
             const TVector<TBtreeIndexMeta> BTreeHistoric;
+
+            bool HasBTree() const noexcept {
+                return !BTreeGroups.empty();
+            }
+
+            bool HasFlat() const noexcept {
+                return !FlatGroups.empty();
+            }
+
+            const TBtreeIndexMeta& GetBTree(TGroupId groupId) const noexcept {
+                if (groupId.IsHistoric()) {
+                    Y_ABORT_UNLESS(groupId.Index < BTreeHistoric.size());
+                    return BTreeHistoric[groupId.Index];
+                } else {
+                    Y_ABORT_UNLESS(groupId.Index < BTreeGroups.size());
+                    return BTreeGroups[groupId.Index];
+                }
+            }
+
+            TPageId GetFlat(TGroupId groupId) const noexcept {
+                if (groupId.IsHistoric()) {
+                    Y_ABORT_UNLESS(groupId.Index < FlatHistoric.size());
+                    return FlatHistoric[groupId.Index];
+                } else {
+                    Y_ABORT_UNLESS(groupId.Index < FlatGroups.size());
+                    return FlatGroups[groupId.Index];
+                }
+            }
         };
 
         struct TParams {
@@ -92,8 +121,8 @@ namespace NTable {
             , GarbageStats(std::move(params.GarbageStats))
             , TxIdStats(std::move(params.TxIdStats))
             , Stat(stat)
-            , GroupsCount(IndexPages.Groups.size())
-            , HistoricGroupsCount(IndexPages.Historic.size())
+            , GroupsCount(Max(IndexPages.FlatGroups.size(), IndexPages.BTreeGroups.size()))
+            , HistoricGroupsCount(Max(IndexPages.FlatHistoric.size(), IndexPages.BTreeHistoric.size()))
             , IndexesRawSize(params.IndexesRawSize)
             , MinRowVersion(params.MinRowVersion)
             , MaxRowVersion(params.MaxRowVersion)

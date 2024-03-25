@@ -10,6 +10,11 @@ private:
     ui32 EntityId = 0;
     static inline auto Registrator = TFactory::TRegistrator<TOperator>(::ToString(EType::Max));
 protected:
+    virtual void DoCopyData(const TPortionStorageCursor& cursor, const TPortionStorage& portionStatsFrom, TPortionStorage& portionStatsTo) const override {
+        std::shared_ptr<arrow::Scalar> scalar = portionStatsFrom.GetScalarVerified(cursor);
+        portionStatsTo.AddScalar(scalar);
+    }
+
     virtual void DoFillStatisticsData(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, TPortionStorage& portionStats, const IIndexInfo& index) const override;
     virtual void DoShiftCursor(TPortionStorageCursor& cursor) const override {
         cursor.AddScalarsPosition(1);
@@ -33,6 +38,7 @@ public:
             case NScheme::NTypeIds::Uint64:
             case NScheme::NTypeIds::Timestamp:
             case NScheme::NTypeIds::Double:
+            case NScheme::NTypeIds::Float:
             case NScheme::NTypeIds::Datetime:
             case NScheme::NTypeIds::Date:
                 return true;

@@ -242,8 +242,6 @@ public:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusPersQueue>(&NGRpcProxy::TGRpcClient::PersQueueRequest, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_SCHEME_INITROOT:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusSchemeInitRoot>(&NGRpcProxy::TGRpcClient::SchemeInitRoot, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_BSADM:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusBSAdm>(&NGRpcProxy::TGRpcClient::BSAdm, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_BLOB_STORAGE_CONFIG_REQUEST:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusBlobStorageConfigRequest>(&NGRpcProxy::TGRpcClient::BlobStorageConfig, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_HIVE_CREATE_TABLET:

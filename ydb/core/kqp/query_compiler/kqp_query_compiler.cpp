@@ -438,6 +438,29 @@ void FillOlapProgram(const T& node, const NKikimr::NMiniKQL::TType* miniKqlResul
     CompileOlapProgram(node.Process(), tableMeta, readProto, resultColNames, ctx);
 }
 
+THashMap<TString, TString> FindSecureParams(const TExprNode::TPtr& node, const TTypeAnnotationContext& typesCtx, TSet<TString>& SecretNames) {
+    THashMap<TString, TString> secureParams;
+    NYql::NCommon::FillSecureParams(node, typesCtx, secureParams);
+    
+    for (auto& [secretName, structuredToken] : secureParams) {
+        const auto& tokenParser = CreateStructuredTokenParser(structuredToken);
+        tokenParser.ListReferences(SecretNames);
+        structuredToken = tokenParser.ToBuilder().RemoveSecrets().ToJson();
+    }
+
+    return secureParams;
+}
+
+std::optional<std::pair<TString, TString>> FindOneSecureParam(const TExprNode::TPtr& node, const TTypeAnnotationContext& typesCtx, const TString& nodeName, TSet<TString>& SecretNames) {
+    const auto& secureParams = FindSecureParams(node, typesCtx, SecretNames);
+    if (secureParams.empty()) {
+        return std::nullopt;
+    }
+
+    YQL_ENSURE(secureParams.size() == 1, "Only one SecureParams per " << nodeName << " allowed");
+    return *secureParams.begin();
+}
+
 class TKqpQueryCompiler : public IKqpQueryCompiler {
 public:
     TKqpQueryCompiler(const TString& cluster, const TIntrusivePtr<TKikimrTablesData> tablesData,
@@ -596,7 +619,7 @@ private:
     void CompileStage(const TDqPhyStage& stage, NKqpProto::TKqpPhyStage& stageProto, TExprContext& ctx,
         const TMap<ui64, ui32>& stagesMap, TRequestPredictor& rPredictor, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
     {
-        stageProto.SetIsEffectsStage(NOpt::IsKqpEffectsStage(stage));
+        const bool hasEffects = NOpt::IsKqpEffectsStage(stage);
 
         TStagePredictor& stagePredictor = rPredictor.BuildForStage(stage, ctx);
         stagePredictor.Scan(stage.Program().Ptr());
@@ -644,7 +667,7 @@ private:
                 auto upsertRows = maybeUpsertRows.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, upsertRows.Table().Path()).Metadata;
                 YQL_ENSURE(tableMeta);
-                YQL_ENSURE(stageProto.GetIsEffectsStage());
+                YQL_ENSURE(hasEffects);
 
                 auto settings = TKqpUpsertRowsSettings::Parse(upsertRows);
 
@@ -657,8 +680,7 @@ private:
                 auto deleteRows = maybeDeleteRows.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, deleteRows.Table().Path()).Metadata;
                 YQL_ENSURE(tableMeta);
-
-                YQL_ENSURE(stageProto.GetIsEffectsStage());
+                YQL_ENSURE(hasEffects);
 
                 auto& tableOp = *stageProto.AddTableOps();
                 FillTablesMap(deleteRows.Table(), tablesMap);
@@ -707,6 +729,9 @@ private:
             return true;
         });
 
+        const auto& secureParams = FindSecureParams(stage.Program().Ptr(), TypesCtx, SecretNames);
+        stageProto.MutableSecureParams()->insert(secureParams.begin(), secureParams.end());
+
         auto result = stage.Program().Body();
         auto resultType = result.Ref().GetTypeAnn();
         ui32 outputsCount = 0;
@@ -727,6 +752,7 @@ private:
         stageProto.SetOutputsCount(outputsCount);
 
         // Dq sinks
+        bool hasTableSink = false;
         if (auto maybeOutputsNode = stage.Outputs()) {
             auto outputsNode = maybeOutputsNode.Cast();
             for (size_t i = 0; i < outputsNode.Size(); ++i) {
@@ -737,8 +763,13 @@ private:
                 auto* sinkProto = stageProto.AddSinks();
                 FillSink(sinkNode, sinkProto, ctx);
                 sinkProto->SetOutputIndex(FromString(TStringBuf(sinkNode.Index())));
+
+                // Only sinks to ydb tables can be considered as effects.
+                hasTableSink |= IsTableSink(sinkNode.DataSink().Cast<TCoDataSink>().Category());
             }
         }
+
+        stageProto.SetIsEffectsStage(hasEffects || hasTableSink);
 
         auto paramsType = CollectParameters(stage, ctx);
         auto programBytecode = NDq::BuildProgram(stage.Program(), *paramsType, *KqlCompiler, TypeEnv, FuncRegistry,
@@ -976,15 +1007,9 @@ private:
                 externalSource.AddPartitionedTaskParams(partitionParam);
             }
 
-            THashMap<TString, TString> secureParams;
-            NYql::NCommon::FillSecureParams(source.Ptr(), TypesCtx, secureParams);
-            if (!secureParams.empty()) {
-                YQL_ENSURE(secureParams.size() == 1, "Only one SecureParams per source allowed");
-                auto it = secureParams.begin();
-                externalSource.SetSourceName(it->first);
-                auto token = it->second;
-                externalSource.SetAuthInfo(CreateStructuredTokenParser(token).ToBuilder().RemoveSecrets().ToJson());
-                CreateStructuredTokenParser(token).ListReferences(SecretNames);
+            if (const auto& secureParams = FindOneSecureParam(source.Ptr(), TypesCtx, "source", SecretNames)) {
+                externalSource.SetSourceName(secureParams->first);
+                externalSource.SetAuthInfo(secureParams->second);
             }
 
             google::protobuf::Any& settings = *externalSource.MutableSettings();
@@ -1042,12 +1067,16 @@ private:
         }
     }
 
+    bool IsTableSink(const TStringBuf dataSinkCategory) const {
+        return dataSinkCategory == NYql::KikimrProviderName
+            || dataSinkCategory == NYql::YdbProviderName
+            || dataSinkCategory == NYql::KqpTableSinkName;
+    }
+
     void FillSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, TExprContext& ctx) {
         Y_UNUSED(ctx);
         const TStringBuf dataSinkCategory = sink.DataSink().Cast<TCoDataSink>().Category();
-        if (dataSinkCategory == NYql::KikimrProviderName
-                || dataSinkCategory == NYql::YdbProviderName
-                || dataSinkCategory == NYql::KqpTableSinkName) {
+        if (IsTableSink(dataSinkCategory)) {
             FillKqpSink(sink, protoSink);
         } else {
             // Delegate sink filling to dq integration of specific provider
@@ -1062,15 +1091,9 @@ private:
             YQL_ENSURE(!settings.type_url().empty(), "Data sink provider \"" << dataSinkCategory << "\" did't fill dq sink settings for its dq sink node");
             YQL_ENSURE(sinkType, "Data sink provider \"" << dataSinkCategory << "\" did't fill dq sink settings type for its dq sink node");
 
-            THashMap<TString, TString> secureParams;
-            NYql::NCommon::FillSecureParams(sink.Ptr(), TypesCtx, secureParams);
-            if (!secureParams.empty()) {
-                YQL_ENSURE(secureParams.size() == 1, "Only one SecureParams per sink allowed");
-                auto it = secureParams.begin();
-                externalSink.SetSinkName(it->first);
-                auto token = it->second;
-                externalSink.SetAuthInfo(CreateStructuredTokenParser(token).ToBuilder().RemoveSecrets().ToJson());
-                CreateStructuredTokenParser(token).ListReferences(SecretNames);
+            if (const auto& secureParams = FindOneSecureParam(sink.Ptr(), TypesCtx, "sink", SecretNames)) {
+                externalSink.SetSinkName(secureParams->first);
+                externalSink.SetAuthInfo(secureParams->second);
             }
         }
     }

@@ -16,6 +16,14 @@ struct TMetricsData {
     TInstant Timestamp;
     std::unordered_map<TString, double> Values;
     std::unordered_map<TString, std::map<ui64, ui64>> HistogramValues;
+
+    struct TArithmeticMetric {
+        char Op = 0;
+        double ValueA = 0;
+        double ValueB = 0;
+    };
+
+    std::unordered_map<TString, TArithmeticMetric> ArithmeticValues;
 };
 
 struct TAggregateSettings {

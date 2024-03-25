@@ -13,10 +13,10 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
     Y_ABORT_UNLESS(Self->TablesManager.HasPrimaryIndex());
     txc.DB.NoMoreReadsForTx();
 
-    ACFL_DEBUG("event", "TTxWriteIndex::Execute")("change_type", changes->TypeString())("details", *changes);
+    ACFL_DEBUG("event", "TTxWriteIndex::Execute")("change_type", changes->TypeString())("details", changes->DebugString());
     if (Ev->Get()->GetPutStatus() == NKikimrProto::OK) {
         NOlap::TSnapshot snapshot(Self->LastPlannedStep, Self->LastPlannedTxId);
-        Y_ABORT_UNLESS(Ev->Get()->IndexInfo.GetLastSchema()->GetSnapshot() <= snapshot);
+        Y_ABORT_UNLESS(Ev->Get()->IndexInfo->GetLastSchema()->GetSnapshot() <= snapshot);
 
         TBlobGroupSelector dsGroupSelector(Self->Info());
         NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector);
@@ -51,7 +51,7 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
     TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID()));
     CompleteReady = true;
     auto changes = Ev->Get()->IndexChanges;
-    ACFL_DEBUG("event", "TTxWriteIndex::Complete")("change_type", changes->TypeString())("details", *changes);
+    ACFL_DEBUG("event", "TTxWriteIndex::Complete")("change_type", changes->TypeString())("details", changes->DebugString());
 
     const ui64 blobsWritten = changes->GetBlobsAction().GetWritingBlobsCount();
     const ui64 bytesWritten = changes->GetBlobsAction().GetWritingTotalSize();
@@ -61,12 +61,7 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
         Ev->Get()->IndexChanges->WriteIndexOnComplete(Self, context);
     }
 
-    if (Ev->Get()->GetPutStatus() == NKikimrProto::TRYLATER) {
-        ctx.Schedule(Self->FailActivationDelay, new TEvPrivate::TEvPeriodicWakeup(true));
-    } else {
-        Self->EnqueueBackgroundActivities(false, TriggerActivity);
-    }
-
+    Self->EnqueueBackgroundActivities(false, TriggerActivity);
     changes->MutableBlobsAction().OnCompleteTxAfterAction(*Self, Ev->Get()->GetPutStatus() == NKikimrProto::OK);
     NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexComplete(*changes, *Self);
 }

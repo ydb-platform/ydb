@@ -507,6 +507,34 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(res.Root);
     }
 
+    Y_UNIT_TEST(JoinStreamLookupStrategyHint) {
+        {
+            NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a JOIN /*+ StreamLookup() */ plato.Input AS b USING(key);");
+            UNIT_ASSERT(res.Root);
+        }
+        //case insensitive
+        {
+            NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a JOIN /*+ streamlookup() */ plato.Input AS b USING(key);");
+            UNIT_ASSERT(res.Root);
+        }
+    }
+
+    Y_UNIT_TEST(JoinConflictingStrategyHint) {
+        {
+            NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a JOIN /*+ StreamLookup() */ /*+ Merge() */   plato.Input AS b USING(key);");
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:91: Error: Conflicting join strategy hints\n");
+        }
+    }
+
+    Y_UNIT_TEST(JoinDuplicatingStrategyHint) {
+        {
+            NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a JOIN /*+ StreamLookup() */ /*+ StreamLookup() */   plato.Input AS b USING(key);");
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:98: Error: Duplicate join strategy hint\n");
+        }
+    }
+
     Y_UNIT_TEST(ReverseLabels) {
         NYql::TAstParseResult res = SqlToYql("select in.key as subkey, subkey as key from plato.Input as in;");
         UNIT_ASSERT(res.Root);
@@ -5607,6 +5635,31 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"auth_method" '"AWS") '('"aws_access_key_id_secret_name" '"secred_id_name") '('"aws_region" '"ru-central-1") '('"aws_secret_access_key_secret_name" '"secret_key_name") '('"location" '"protocol://host:port/") '('"source_type" '"PostgreSQL"))#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(CreateExternalDataSourceWithToken) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="YT",
+                    LOCATION="protocol://host:port/",
+                    AUTH_METHOD="TOKEN",
+                    TOKEN_SECRET_NAME="token_name"
+                );
+            )sql");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"auth_method" '"TOKEN") '('"location" '"protocol://host:port/") '('"source_type" '"YT") '('"token_secret_name" '"token_name"))#");
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
             }
         };

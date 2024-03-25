@@ -19,6 +19,7 @@ class TColumnShard;
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;
 class IBlobsGCAction;
+class TPortionInfo;
 namespace NStatistics {
 class TOperatorContainer;
 }
@@ -79,6 +80,19 @@ public:
     virtual bool IsTTLEnabled() const {
         return true;
     }
+    virtual void OnExportFinished() {
+
+    }
+    virtual void OnActualizationRefreshScheme() {
+
+    }
+    virtual void OnActualizationRefreshTiering() {
+
+    }
+    virtual void AddPortionForActualizer(const i32 /*portionsCount*/) {
+
+    }
+
     void OnDataSharingFinished(const ui64 tabletId, const TString& sessionId) {
         return DoOnDataSharingFinished(tabletId, sessionId);
     }
@@ -86,10 +100,18 @@ public:
         return DoOnDataSharingStarted(tabletId, sessionId);
     }
     virtual void OnStatisticsUsage(const NOlap::NStatistics::TOperatorContainer& /*statOperator*/) {
-        
+
+    }
+    virtual void OnPortionActualization(const NOlap::TPortionInfo& /*info*/) {
+
     }
     virtual void OnMaxValueUsage() {
     }
+
+    virtual TDuration GetLagForCompactionBeforeTierings(const TDuration def) const {
+        return def;
+    }
+
     void OnTabletInitCompleted(const NColumnShard::TColumnShard& shard) {
         DoOnTabletInitCompleted(shard);
     }

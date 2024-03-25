@@ -128,6 +128,8 @@ private:
 
         authConfig->SetUseBlackBox(false);
         authConfig->SetUseLoginProvider(true);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+        appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
 
         initLdapSettings(authConfig->MutableLdapAuthentication(), LdapPort, CaCertificateFile);
         return appConfig;
@@ -142,7 +144,7 @@ private:
 private:
     TTempFileHandle CaCertificateFile;
     ui16 LdapPort;
-    TBasicKikimrWithGrpcAndRootSchema<TKikimrTestSettings> Server;
+    TKikimrWithGrpcAndRootSchemaWithAuth Server;
     NYdb::TDriver Connection;
     NConsoleClient::TDummyClient Client;
 };

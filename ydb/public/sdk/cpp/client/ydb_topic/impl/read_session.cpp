@@ -90,7 +90,9 @@ void TReadSession::CreateClusterSessionsImpl(NPersQueue::TDeferredActions<false>
         Client->CreateReadSessionConnectionProcessorFactory(),
         EventsQueue,
         context,
-        1, 1
+        1,
+        1,
+        Client->GetProvidedCodecs()
     );
 
     deferred.DeferStartSession(CbContext);

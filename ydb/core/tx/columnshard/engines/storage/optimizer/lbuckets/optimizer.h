@@ -204,18 +204,21 @@ public:
     bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
         for (auto&& f : Futures) {
             for (auto&& p : f.second) {
-                if (dataLocksManager->IsLocked(*p.second)) {
+                if (auto lockInfo = dataLocksManager->IsLocked(*p.second)) {
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "optimization_locked")("reason", *lockInfo);
                     return true;
                 }
             }
         }
         for (auto&& i : PreActuals) {
-            if (dataLocksManager->IsLocked(*i.second)) {
+            if (auto lockInfo = dataLocksManager->IsLocked(*i.second)) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "optimization_locked")("reason", *lockInfo);
                 return true;
             }
         }
         for (auto&& i : Actuals) {
-            if (dataLocksManager->IsLocked(*i.second)) {
+            if (auto lockInfo = dataLocksManager->IsLocked(*i.second)) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "optimization_locked")("reason", *lockInfo);
                 return true;
             }
         }
@@ -741,7 +744,7 @@ public:
         }
     }
 
-    std::shared_ptr<TColumnEngineChanges> BuildOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule,
+    std::shared_ptr<TColumnEngineChanges> BuildOptimizationTask(std::shared_ptr<TGranuleMeta> granule,
         const std::shared_ptr<NDataLocks::TManager>& locksManager, const NArrow::TReplaceKey* nextBorder, const std::shared_ptr<arrow::Schema>& primaryKeysSchema,
         const std::shared_ptr<IStoragesManager>& storagesManager) const
     {
@@ -791,7 +794,7 @@ public:
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("stop_instant", stopInstant)("size", size)("next", NextBorder ? NextBorder->DebugString() : "")
             ("count", portions.size())("info", Others.DebugString())("event", "start_optimization")("stop_point", stopPoint ? stopPoint->DebugString() : "");
         TSaverContext saverContext(storagesManager);
-        auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(limits.GetSplitSettings(), granule, portions, saverContext);
+        auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, portions, saverContext);
         if (MainPortion) {
             NIndexedReader::TSortableBatchPosition pos(MainPortion->IndexKeyStart().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
             result->AddCheckPoint(pos, true, false);
@@ -1002,7 +1005,7 @@ public:
         }
     }
 
-    std::shared_ptr<TColumnEngineChanges> BuildOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
+    std::shared_ptr<TColumnEngineChanges> BuildOptimizationTask(std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
         AFL_VERIFY(BucketsByWeight.size());
         if (!BucketsByWeight.rbegin()->first) {
             return nullptr;
@@ -1011,18 +1014,18 @@ public:
         const TPortionsBucket* bucketForOptimization = *BucketsByWeight.rbegin()->second.begin();
         if (bucketForOptimization == LeftBucket.get()) {
             if (Buckets.size()) {
-                return bucketForOptimization->BuildOptimizationTask(limits, granule, locksManager, &Buckets.begin()->first, PrimaryKeysSchema, StoragesManager);
+                return bucketForOptimization->BuildOptimizationTask(granule, locksManager, &Buckets.begin()->first, PrimaryKeysSchema, StoragesManager);
             } else {
-                return bucketForOptimization->BuildOptimizationTask(limits, granule, locksManager, nullptr, PrimaryKeysSchema, StoragesManager);
+                return bucketForOptimization->BuildOptimizationTask(granule, locksManager, nullptr, PrimaryKeysSchema, StoragesManager);
             }
         } else {
             auto it = Buckets.find(bucketForOptimization->GetPortion()->IndexKeyStart());
             AFL_VERIFY(it != Buckets.end());
             ++it;
             if (it != Buckets.end()) {
-                return bucketForOptimization->BuildOptimizationTask(limits, granule, locksManager, &it->first, PrimaryKeysSchema, StoragesManager);
+                return bucketForOptimization->BuildOptimizationTask(granule, locksManager, &it->first, PrimaryKeysSchema, StoragesManager);
             } else {
-                return bucketForOptimization->BuildOptimizationTask(limits, granule, locksManager, nullptr, PrimaryKeysSchema, StoragesManager);
+                return bucketForOptimization->BuildOptimizationTask(granule, locksManager, nullptr, PrimaryKeysSchema, StoragesManager);
             }
         }
     }
@@ -1099,8 +1102,8 @@ protected:
             Buckets.AddPortion(i, now);
         }
     }
-    virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
-        return Buckets.BuildOptimizationTask(limits, granule, locksManager);
+    virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
+        return Buckets.BuildOptimizationTask(granule, locksManager);
 
     }
     virtual void DoActualize(const TInstant currentInstant) override {

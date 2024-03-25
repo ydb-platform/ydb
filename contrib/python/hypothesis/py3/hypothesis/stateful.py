@@ -15,7 +15,7 @@ a single value.
 Notably, the set of steps available at any point may depend on the
 execution to date.
 """
-
+import collections
 import inspect
 from copy import copy
 from functools import lru_cache
@@ -268,7 +268,8 @@ class RuleBasedStateMachine(metaclass=StateMachineMeta):
         if not self.rules():
             raise InvalidDefinition(f"Type {type(self).__name__} defines no rules")
         self.bundles: Dict[str, list] = {}
-        self.name_counter = 1
+        self.names_counters: collections.Counter = collections.Counter()
+        self.names_list: list[str] = []
         self.names_to_values: Dict[str, Any] = {}
         self.__stream = StringIO()
         self.__printer = RepresentationPrinter(
@@ -301,15 +302,16 @@ class RuleBasedStateMachine(metaclass=StateMachineMeta):
     def __repr__(self):
         return f"{type(self).__name__}({nicerepr(self.bundles)})"
 
-    def _new_name(self):
-        result = f"v{self.name_counter}"
-        self.name_counter += 1
+    def _new_name(self, target):
+        result = f"{target}_{self.names_counters[target]}"
+        self.names_counters[target] += 1
+        self.names_list.append(result)
         return result
 
     def _last_names(self, n):
-        assert self.name_counter > n
-        count = self.name_counter
-        return [f"v{i}" for i in range(count - n, count)]
+        len_ = len(self.names_list)
+        assert len_ >= n
+        return self.names_list[len_ - n :]
 
     def bundle(self, name):
         return self.bundles.setdefault(name, [])
@@ -358,14 +360,14 @@ class RuleBasedStateMachine(metaclass=StateMachineMeta):
         return cls._invariants_per_class[cls]
 
     def _repr_step(self, rule, data, result):
-        self.step_count = getattr(self, "step_count", 0) + 1
         output_assignment = ""
         if rule.targets:
             if isinstance(result, MultipleResults):
                 if len(result.values) == 1:
                     output_assignment = f"({self._last_names(1)[0]},) = "
                 elif result.values:
-                    output_names = self._last_names(len(result.values))
+                    number_of_last_names = len(rule.targets) * len(result.values)
+                    output_names = self._last_names(number_of_last_names)
                     output_assignment = ", ".join(output_names) + " = "
             else:
                 output_assignment = self._last_names(1)[0] + " = "
@@ -373,12 +375,14 @@ class RuleBasedStateMachine(metaclass=StateMachineMeta):
         return f"{output_assignment}state.{rule.function.__name__}({args})"
 
     def _add_result_to_targets(self, targets, result):
-        name = self._new_name()
-        self.__printer.singleton_pprinters.setdefault(
-            id(result), lambda obj, p, cycle: p.text(name)
-        )
-        self.names_to_values[name] = result
         for target in targets:
+            name = self._new_name(target)
+
+            def printer(obj, p, cycle, name=name):
+                return p.text(name)
+
+            self.__printer.singleton_pprinters.setdefault(id(result), printer)
+            self.names_to_values[name] = result
             self.bundles.setdefault(target, []).append(VarReference(name))
 
     def check_invariants(self, settings, output, runtimes):
@@ -431,7 +435,7 @@ class RuleBasedStateMachine(metaclass=StateMachineMeta):
         return StateMachineTestCase
 
 
-@attr.s()
+@attr.s(repr=False)
 class Rule:
     targets = attr.ib()
     function = attr.ib(repr=get_pretty_function_description)
@@ -450,6 +454,11 @@ class Rule:
                 v = BundleReferenceStrategy(v.name, consume=consume)
             self.arguments_strategies[k] = v
         self.bundles = tuple(bundles)
+
+    def __repr__(self) -> str:
+        rep = get_pretty_function_description
+        bits = [f"{k}={rep(v)}" for k, v in attr.asdict(self).items() if v]
+        return f"{self.__class__.__name__}({', '.join(bits)})"
 
 
 self_strategy = st.runner()
@@ -937,7 +946,8 @@ class RuleStrategy(SearchStrategy):
         self.rules = list(machine.rules())
 
         self.enabled_rules_strategy = st.shared(
-            FeatureStrategy(), key=("enabled rules", machine)
+            FeatureStrategy(at_least_one_of={r.function.__name__ for r in self.rules}),
+            key=("enabled rules", machine),
         )
 
         # The order is a bit arbitrary. Primarily we're trying to group rules
@@ -965,17 +975,16 @@ class RuleStrategy(SearchStrategy):
 
         feature_flags = data.draw(self.enabled_rules_strategy)
 
-        # Note: The order of the filters here is actually quite important,
-        # because checking is_enabled makes choices, so increases the size of
-        # the choice sequence. This means that if we are in a case where many
-        # rules are invalid we will make a lot more choices if we ask if they
-        # are enabled before we ask if they are valid, so our test cases will
-        # be artificially large.
-        rule = data.draw(
-            st.sampled_from(self.rules)
-            .filter(self.is_valid)
-            .filter(lambda r: feature_flags.is_enabled(r.function.__name__))
-        )
+        def rule_is_enabled(r):
+            # Note: The order of the filters here is actually quite important,
+            # because checking is_enabled makes choices, so increases the size of
+            # the choice sequence. This means that if we are in a case where many
+            # rules are invalid we would make a lot more choices if we ask if they
+            # are enabled before we ask if they are valid, so our test cases would
+            # be artificially large.
+            return self.is_valid(r) and feature_flags.is_enabled(r.function.__name__)
+
+        rule = data.draw(st.sampled_from(self.rules).filter(rule_is_enabled))
 
         arguments = {}
         for k, strat in rule.arguments_strategies.items():

@@ -184,6 +184,7 @@ struct TEvPQ {
         EvGetWriteInfoResponse,
         EvGetWriteInfoError,
         EvReadingPartitionStatusRequest,
+        EvProcessChangeOwnerRequests,
         EvEnd
     };
 
@@ -1086,6 +1087,9 @@ struct TEvPQ {
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
         }
+    };
+
+    struct TEvProcessChangeOwnerRequests : public TEventLocal<TEvProcessChangeOwnerRequests, EvProcessChangeOwnerRequests> {
     };
 };
 

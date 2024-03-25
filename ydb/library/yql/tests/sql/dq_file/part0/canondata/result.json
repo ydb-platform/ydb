@@ -2085,6 +2085,50 @@
         }
     ],
     "test.test[pg-avg_float_clone_init_value-default.txt-Results]": [],
+    "test.test[pg-is_predicate-default.txt-Analyze]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1925842/3305983375fd65f2565c804b57aadeec6345c6c4/resource.tar.gz#test.test_pg-is_predicate-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[pg-is_predicate-default.txt-Debug]": [
+        {
+            "checksum": "4ad65eb8fe2880068c3d7ea884bc97eb",
+            "size": 986,
+            "uri": "https://{canondata_backend}/1942671/a61647e4fb6545317a974a32bc21bca702b0e2f6/resource.tar.gz#test.test_pg-is_predicate-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg-is_predicate-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1925842/3305983375fd65f2565c804b57aadeec6345c6c4/resource.tar.gz#test.test_pg-is_predicate-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-is_predicate-default.txt-Results]": [],
+    "test.test[pg-join_using6-default.txt-Analyze]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1937027/b34cd762829e7bec8c91f56a9ebd21a8720c2fb7/resource.tar.gz#test.test_pg-join_using6-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[pg-join_using6-default.txt-Debug]": [
+        {
+            "checksum": "65ae441a106b6d5404557323f59f52b5",
+            "size": 773,
+            "uri": "https://{canondata_backend}/1600758/3e1c972b67010ef976f8710e1ee2f4efbc022be3/resource.tar.gz#test.test_pg-join_using6-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg-join_using6-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1937027/b34cd762829e7bec8c91f56a9ebd21a8720c2fb7/resource.tar.gz#test.test_pg-join_using6-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-join_using6-default.txt-Results]": [],
     "test.test[pg-parametrized--Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",

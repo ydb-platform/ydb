@@ -558,6 +558,10 @@ public:
         const TBuildMasterSnapshotsOptions& options),
         (options))
 
+    DELEGATE_METHOD(TFuture<TCellIdToSequenceNumberMap>, GetMasterConsistentState, (
+        const TGetMasterConsistentStateOptions& options),
+        (options))
+
     DELEGATE_METHOD(TFuture<void>, ExitReadOnly, (
         NHydra::TCellId cellId,
         const TExitReadOnlyOptions& options),

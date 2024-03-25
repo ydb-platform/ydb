@@ -320,7 +320,7 @@ private:
         Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), GetSnapshot(),
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, AppData()->EnableKqpSpilling,
             Request.RlPath, ExecuterSpan, std::move(ResourcesSnapshot), ExecuterRetriesConfig, /* useDataQueryPool */ false, /* localComputeTasks */ false,
-            Request.MkqlMemoryLimit, nullptr, false, GetUserRequestContext());
+            Request.MkqlMemoryLimit, nullptr, false, GetUserRequestContext(), std::nullopt);
 
         LOG_D("Execute scan tx, PendingComputeTasks: " << TasksGraph.GetTasks().size());
         auto err = Planner->PlanExecution();

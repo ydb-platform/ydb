@@ -80,6 +80,35 @@ INSERT INTO BOOLTBL2 (f1)
 -- BOOLTBL2 should be full of false's at this point
 SELECT BOOLTBL2.* FROM BOOLTBL2;
 --
+-- SQL syntax
+-- Try all combinations to ensure that we get nothing when we expect nothing
+-- - thomas 2000-01-04
+--
+SELECT f1
+   FROM BOOLTBL1
+   WHERE f1 IS TRUE;
+SELECT f1
+   FROM BOOLTBL1
+   WHERE f1 IS NOT FALSE;
+SELECT f1
+   FROM BOOLTBL1
+   WHERE f1 IS FALSE;
+SELECT f1
+   FROM BOOLTBL1
+   WHERE f1 IS NOT TRUE;
+SELECT f1
+   FROM BOOLTBL2
+   WHERE f1 IS TRUE;
+SELECT f1
+   FROM BOOLTBL2
+   WHERE f1 IS NOT FALSE;
+SELECT f1
+   FROM BOOLTBL2
+   WHERE f1 IS FALSE;
+SELECT f1
+   FROM BOOLTBL2
+   WHERE f1 IS NOT TRUE;
+--
 -- Tests for BooleanTest
 --
 CREATE TABLE BOOLTBL3 (d text, b bool, o int);

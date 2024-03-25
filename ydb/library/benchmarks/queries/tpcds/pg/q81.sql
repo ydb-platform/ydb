@@ -24,9 +24,22 @@ with customer_total_return as
        and ca_address_sk = c_current_addr_sk
        and ca_state = 'TX'
        and ctr1.ctr_customer_sk = c_customer_sk
- order by c_customer_id,c_salutation,c_first_name,c_last_name,ca_street_number,ca_street_name
-                   ,ca_street_type,ca_suite_number,ca_city,ca_county,ca_state,ca_zip,ca_country,ca_gmt_offset
-                  ,ca_location_type,ctr_total_return
+ order by c_customer_id nulls first
+ ,c_salutation nulls first
+ ,c_first_name nulls first
+ ,c_last_name nulls first
+ ,ca_street_number nulls first
+ ,ca_street_name nulls first
+ ,ca_street_type nulls first
+ ,ca_suite_number nulls first
+ ,ca_city nulls first
+ ,ca_county nulls first
+ ,ca_state nulls first
+ ,ca_zip nulls first
+ ,ca_country nulls first
+ ,ca_gmt_offset nulls first
+ ,ca_location_type nulls first
+ ,ctr_total_return nulls first
  limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query81.tpl

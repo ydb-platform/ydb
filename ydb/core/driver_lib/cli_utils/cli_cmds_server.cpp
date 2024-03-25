@@ -13,7 +13,7 @@ TClientCommandServer::TClientCommandServer(std::shared_ptr<TModuleFactories> fac
     , DynConfigClient(NConfig::MakeDefaultDynConfigClient())
     , Env(NConfig::MakeDefaultEnv())
     , Logger(NConfig::MakeDefaultInitLogger())
-    , InitCfg({
+    , DepsRecorder(NConfig::MakeDefaultInitialConfiguratorDepsRecorder({
         *ErrorCollector,
         *ProtoConfigFileProvider,
         *ConfigUpdateTracer,
@@ -22,33 +22,39 @@ TClientCommandServer::TClientCommandServer(std::shared_ptr<TModuleFactories> fac
         *DynConfigClient,
         *Env,
         *Logger
-    })
+    }))
+    , InitCfg(DepsRecorder->GetDeps())
 {}
 
-int TClientCommandServer::Run(TConfig& /*config*/) {
+int TClientCommandServer::Run(TConfig& config) {
     NKikimrConfig::TAppConfig appConfig;
 
-    TKikimrRunConfig RunConfig(appConfig);
+    TKikimrRunConfig runConfig(appConfig);
 
     InitCfg.Apply(
         appConfig,
-        RunConfig.NodeId,
-        RunConfig.ScopeId,
-        RunConfig.TenantName,
-        RunConfig.ServicesMask,
-        RunConfig.Labels,
-        RunConfig.ClusterName,
-        RunConfig.InitialCmsConfig,
-        RunConfig.InitialCmsYamlConfig,
-        RunConfig.ConfigInitInfo);
+        runConfig.NodeId,
+        runConfig.ScopeId,
+        runConfig.TenantName,
+        runConfig.ServicesMask,
+        runConfig.ClusterName,
+        runConfig.ConfigsDispatcherInitInfo);
 
-    Y_ABORT_UNLESS(RunConfig.NodeId);
-    return MainRun(RunConfig, Factories);
+    runConfig.ConfigsDispatcherInitInfo.RecordedInitialConfiguratorDeps =
+        std::make_shared<NConfig::TRecordedInitialConfiguratorDeps>(DepsRecorder->GetRecordedDeps());
+
+    for (int i = 0; i < config.ArgC; ++i) {
+        runConfig.ConfigsDispatcherInitInfo.Args.push_back(config.ArgV[i]);
+    }
+
+    Y_ABORT_UNLESS(runConfig.NodeId);
+    return MainRun(runConfig, Factories);
 }
 
 void TClientCommandServer::Config(TConfig& config) {
     TClientCommand::Config(config);
 
+    NConfig::AddProtoConfigOptions(DepsRecorder->GetDeps().ProtoConfigFileProvider);
     InitCfg.RegisterCliOptions(*config.Opts);
     ProtoConfigFileProvider->RegisterCliOptions(*config.Opts);
     config.SetFreeArgsMin(0);

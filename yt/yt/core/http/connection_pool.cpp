@@ -54,7 +54,7 @@ TConnectionPool::~TConnectionPool()
 
 TFuture<IConnectionPtr> TConnectionPool::Connect(
     const TNetworkAddress& address,
-    TRemoteContextPtr context)
+    TDialerContextPtr context)
 {
     {
         auto guard = Guard(SpinLock_);

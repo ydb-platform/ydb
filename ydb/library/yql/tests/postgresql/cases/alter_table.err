@@ -1,6 +1,7 @@
 Registering pre-existing tables
 	onek
 	tenk1
+	stud_emp
 <sql-statement>
 --
 -- ALTER_TABLE
@@ -5762,27 +5763,20 @@ select relname,
   where relname like 'at_partitioned%'
   order by relname;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Warning: Parse Sql
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
-    	select relname,
-	^
+    -stdin-:<main>:9:3: Warning: obj_description function forced to NULL
+    	  obj_description(c.oid, 'pg_class') as desc
+	  ^
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.old_oids
+    
 <sql-statement>
 select conname, obj_description(oid, 'pg_constraint') as desc
   from pg_constraint where conname like 'at_partitioned%'
   order by conname;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select conname, obj_description(oid, 'pg_constraint') as desc
-	^
-        -stdin-:<main>:1:17: Error: At function: PgCall
-        	select conname, obj_description(oid, 'pg_constraint') as desc
-	                ^
-            -stdin-:<main>:1:17: Error: No such proc: obj_description
-            	select conname, obj_description(oid, 'pg_constraint') as desc
-	                ^
 <sql-statement>
 alter table at_partitioned alter column name type varchar(127);
 </sql-statement>
@@ -5806,27 +5800,20 @@ select relname,
   where relname like 'at_partitioned%'
   order by relname;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Warning: Parse Sql
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
-    	-- Note: these tests currently show the wrong behavior for comments :-(
-	^
+    -stdin-:<main>:10:3: Warning: obj_description function forced to NULL
+    	  obj_description(c.oid, 'pg_class') as desc
+	  ^
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.old_oids
+    
 <sql-statement>
 select conname, obj_description(oid, 'pg_constraint') as desc
   from pg_constraint where conname like 'at_partitioned%'
   order by conname;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select conname, obj_description(oid, 'pg_constraint') as desc
-	^
-        -stdin-:<main>:1:17: Error: At function: PgCall
-        	select conname, obj_description(oid, 'pg_constraint') as desc
-	                ^
-            -stdin-:<main>:1:17: Error: No such proc: obj_description
-            	select conname, obj_description(oid, 'pg_constraint') as desc
-	                ^
 <sql-statement>
 -- Don't remove this DROP, it exposes bug #15672
 drop table at_partitioned;
@@ -8293,31 +8280,9 @@ SELECT col_description('comment_test'::regclass, 1) as comment;
 <sql-statement>
 SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test'::regclass ORDER BY 1, 2;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test'::regclass ORDER BY 1, 2;
-	^
-        -stdin-:<main>:1:45: Error: At function: PgCall
-        	SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test'::regclass ORDER BY 1, 2;
-	                                            ^
-            -stdin-:<main>:1:45: Error: No such proc: obj_description
-            	SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test'::regclass ORDER BY 1, 2;
-	                                            ^
 <sql-statement>
 SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test'::regclass ORDER BY 1, 2;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test'::regclass ORDER BY 1, 2;
-	^
-        -stdin-:<main>:1:31: Error: At function: PgCall
-        	SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test'::regclass ORDER BY 1, 2;
-	                              ^
-            -stdin-:<main>:1:31: Error: No such proc: obj_description
-            	SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test'::regclass ORDER BY 1, 2;
-	                              ^
 <sql-statement>
 -- Change the datatype of all the columns. ALTER TABLE is optimized to not
 -- rebuild an index if the new data type is binary compatible with the old
@@ -8388,31 +8353,9 @@ SELECT col_description('comment_test'::regclass, 1) as comment;
 <sql-statement>
 SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test'::regclass ORDER BY 1, 2;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test'::regclass ORDER BY 1, 2;
-	^
-        -stdin-:<main>:1:45: Error: At function: PgCall
-        	SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test'::regclass ORDER BY 1, 2;
-	                                            ^
-            -stdin-:<main>:1:45: Error: No such proc: obj_description
-            	SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test'::regclass ORDER BY 1, 2;
-	                                            ^
 <sql-statement>
 SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test'::regclass ORDER BY 1, 2;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test'::regclass ORDER BY 1, 2;
-	^
-        -stdin-:<main>:1:31: Error: At function: PgCall
-        	SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test'::regclass ORDER BY 1, 2;
-	                              ^
-            -stdin-:<main>:1:31: Error: No such proc: obj_description
-            	SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test'::regclass ORDER BY 1, 2;
-	                              ^
 <sql-statement>
 -- Check compatibility for foreign keys and comments. This is done
 -- separately as rebuilding the column type of the parent leads
@@ -8487,31 +8430,9 @@ SELECT col_description('comment_test_child'::regclass, 1) as comment;
 <sql-statement>
 SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test_child'::regclass ORDER BY 1, 2;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test_child'::regclass ORDER BY 1, 2;
-	^
-        -stdin-:<main>:1:45: Error: At function: PgCall
-        	SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test_child'::regclass ORDER BY 1, 2;
-	                                            ^
-            -stdin-:<main>:1:45: Error: No such proc: obj_description
-            	SELECT indexrelid::regclass::text as index, obj_description(indexrelid, 'pg_class') as comment FROM pg_index where indrelid = 'comment_test_child'::regclass ORDER BY 1, 2;
-	                                            ^
 <sql-statement>
 SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test_child'::regclass ORDER BY 1, 2;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test_child'::regclass ORDER BY 1, 2;
-	^
-        -stdin-:<main>:1:31: Error: At function: PgCall
-        	SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test_child'::regclass ORDER BY 1, 2;
-	                              ^
-            -stdin-:<main>:1:31: Error: No such proc: obj_description
-            	SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test_child'::regclass ORDER BY 1, 2;
-	                              ^
 <sql-statement>
 -- Check that we map relation oids to filenodes and back correctly.  Only
 -- display bad mappings so the test output doesn't change all the time.  A
@@ -8666,56 +8587,56 @@ UNION ALL
 SELECT 'toast index', ri.relkind, ri.relpersistence FROM pg_class r join pg_class t ON t.oid = r.reltoastrelid JOIN pg_index i ON i.indrelid = t.oid JOIN pg_class ri ON ri.oid = i.indexrelid WHERE r.relname ~ '^unlogged1'
 ORDER BY relname;
 </sql-statement>
-VERIFY failed (2024-03-07T20:04:42.142404+0300): 
+VERIFY failed (2024-03-20T11:57:08.065436+0300): 
   ydb/library/yql/minikql/comp_nodes/llvm14/mkql_join_dict.cpp:149
   JoinDicts(): requirement !HasNullInKey(key1) failed
-NPrivate::InternalPanicImpl(int, char const*, char const*, int, int, int, TBasicStringBuf<char, std::__y1::char_traits<char> >, char const*, unsigned long)+600 (0x9929598)
-NPrivate::Panic(NPrivate::TStaticBuf const&, int, char const*, char const*, char const*, ...)+285 (0x991F4FD)
-??+0 (0x1185F421)
-??+0 (0x7F665BEF82B5)
-??+0 (0x7F665BEF7C92)
-??+0 (0x7F665BEF787D)
-??+0 (0x11120148)
-std::__y1::back_insert_iterator<std::__y1::vector<NYql::NUdf::TUnboxedValue, NKikimr::NMiniKQL::TMKQLAllocator<NYql::NUdf::TUnboxedValue, (NKikimr::NMiniKQL::EMemorySubPool)0> > > std::__y1::transform[abi:ue170006]<NKikimr::NMiniKQL::IComputationNode* const*, std::__y1::back_insert_iterator<std::__y1::vector<NYql::NUdf::TUnboxedValue, NKikimr::NMiniKQL::TMKQLAllocator<NYql::NUdf::TUnboxedValue, (NKikimr::NMiniKQL::EMemorySubPool)0> > >, std::__y1::__bind<NYql::NUdf::TUnboxedValue (NKikimr::NMiniKQL::IComputationNode::*)(NKikimr::NMiniKQL::TComputationContext&) const, std::__y1::placeholders::__ph<1> const&, std::__y1::reference_wrapper<NKikimr::NMiniKQL::TComputationContext> > >(NKikimr::NMiniKQL::IComputationNode* const*, NKikimr::NMiniKQL::IComputationNode* const*, std::__y1::back_insert_iterator<std::__y1::vector<NYql::NUdf::TUnboxedValue, NKikimr::NMiniKQL::TMKQLAllocator<NYql::NUdf::TUnboxedValue, (NKikimr::NMiniKQL::EMemorySubPool)0> > >, std::__y1::__bind<NYql::NUdf::TUnboxedValue (NKikimr::NMiniKQL::+131 (0x110D6113)
-??+0 (0x110D7B16)
-??+0 (0x110D6F74)
-??+0 (0x1183070F)
-??+0 (0x1182F8BF)
-??+0 (0xF362217)
-NYql::TComputationGraphProxy::GetValue()+23 (0xF341777)
-NYql::NFile::TYtFileGateway::ExecuteResult(NYql::NFile::TSession&, NYson::TYsonWriter&, NYql::NNodes::TExprBase, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&, TVector<TBasicString<char, std::__y1::char_traits<char> >, std::__y1::allocator<TBasicString<char, std::__y1::char_traits<char> > > > const&) const+1930 (0xF314F4A)
-NYql::NFile::TYtFileGateway::ResOrPull(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&)+881 (0xF2FF821)
-??+0 (0xE4DE525)
-??+0 (0xE4E1B5A)
-NYql::TExecTransformerBase::CallbackTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+1098 (0xE4E5DDA)
-NYql::TAsyncCallbackTransformer<NYql::TExecTransformerBase>::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+37 (0xE4E1215)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xB038A78)
-??+0 (0xC67B620)
-??+0 (0xC67033F)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xB038A78)
-??+0 (0xC766BCF)
-??+0 (0xC76B440)
-??+0 (0xC7666F2)
-??+0 (0xC76B2DC)
-??+0 (0xC7666F2)
-??+0 (0xC76B2DC)
-??+0 (0xC7666F2)
-??+0 (0xC7631F4)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xB038A78)
-??+0 (0xB039245)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xB038A78)
-NYql::AsyncTransformStepImpl(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool, bool, TBasicStringBuf<char, std::__y1::char_traits<char> > const&)+290 (0xB0374E2)
-NYql::AsyncTransform(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool)+66 (0xB037E42)
-NYql::TProgram::AsyncTransformWithFallback(bool)+81 (0xBF7CC71)
-??+0 (0xBF8E3E0)
-NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+3119 (0xBF7AC3F)
-??+0 (0xBF77D1A)
-NYql::TProgram::Run(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+129 (0xBF79FD1)
-Main(int, char**)+6488 (0x98071A8)
-main+343 (0x9809B77)
-??+0 (0x7F665BC29D90)
-__libc_start_main+128 (0x7F665BC29E40)
-??+0 (0x979B029)
+NPrivate::InternalPanicImpl(int, char const*, char const*, int, int, int, TBasicStringBuf<char, std::__y1::char_traits<char> >, char const*, unsigned long)+600 (0x998E9F8)
+NPrivate::Panic(NPrivate::TStaticBuf const&, int, char const*, char const*, char const*, ...)+285 (0x998495D)
+??+0 (0x118EA551)
+??+0 (0x7208DD29E2B5)
+??+0 (0x7208DD29DC92)
+??+0 (0x7208DD29D87D)
+??+0 (0x111AB278)
+std::__y1::back_insert_iterator<std::__y1::vector<NYql::NUdf::TUnboxedValue, NKikimr::NMiniKQL::TMKQLAllocator<NYql::NUdf::TUnboxedValue, (NKikimr::NMiniKQL::EMemorySubPool)0> > > std::__y1::transform[abi:ue170006]<NKikimr::NMiniKQL::IComputationNode* const*, std::__y1::back_insert_iterator<std::__y1::vector<NYql::NUdf::TUnboxedValue, NKikimr::NMiniKQL::TMKQLAllocator<NYql::NUdf::TUnboxedValue, (NKikimr::NMiniKQL::EMemorySubPool)0> > >, std::__y1::__bind<NYql::NUdf::TUnboxedValue (NKikimr::NMiniKQL::IComputationNode::*)(NKikimr::NMiniKQL::TComputationContext&) const, std::__y1::placeholders::__ph<1> const&, std::__y1::reference_wrapper<NKikimr::NMiniKQL::TComputationContext> > >(NKikimr::NMiniKQL::IComputationNode* const*, NKikimr::NMiniKQL::IComputationNode* const*, std::__y1::back_insert_iterator<std::__y1::vector<NYql::NUdf::TUnboxedValue, NKikimr::NMiniKQL::TMKQLAllocator<NYql::NUdf::TUnboxedValue, (NKikimr::NMiniKQL::EMemorySubPool)0> > >, std::__y1::__bind<NYql::NUdf::TUnboxedValue (NKikimr::NMiniKQL::+131 (0x11161243)
+??+0 (0x11162C46)
+??+0 (0x111620A4)
+??+0 (0x118BB83F)
+??+0 (0x118BA9EF)
+??+0 (0xF3ED3E7)
+NYql::TComputationGraphProxy::GetValue()+23 (0xF3CC947)
+NYql::NFile::TYtFileGateway::ExecuteResult(NYql::NFile::TSession&, NYson::TYsonWriter&, NYql::NNodes::TExprBase, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&, TVector<TBasicString<char, std::__y1::char_traits<char> >, std::__y1::allocator<TBasicString<char, std::__y1::char_traits<char> > > > const&) const+1930 (0xF3A011A)
+NYql::NFile::TYtFileGateway::ResOrPull(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&)+881 (0xF38A9F1)
+??+0 (0xE560AA5)
+??+0 (0xE5640DA)
+NYql::TExecTransformerBase::CallbackTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+1098 (0xE56835A)
+NYql::TAsyncCallbackTransformer<NYql::TExecTransformerBase>::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+37 (0xE563795)
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xB09D948)
+??+0 (0xC6E2050)
+??+0 (0xC6D6D6F)
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xB09D948)
+??+0 (0xC7CDB9F)
+??+0 (0xC7D2410)
+??+0 (0xC7CD6C2)
+??+0 (0xC7D22AC)
+??+0 (0xC7CD6C2)
+??+0 (0xC7D22AC)
+??+0 (0xC7CD6C2)
+??+0 (0xC7CA1C4)
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xB09D948)
+??+0 (0xB09E115)
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xB09D948)
+NYql::AsyncTransformStepImpl(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool, bool, TBasicStringBuf<char, std::__y1::char_traits<char> > const&)+290 (0xB09C3B2)
+NYql::AsyncTransform(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool)+66 (0xB09CD12)
+NYql::TProgram::AsyncTransformWithFallback(bool)+81 (0xBFE3691)
+??+0 (0xBFF4E00)
+NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+3119 (0xBFE165F)
+??+0 (0xBFDE73A)
+NYql::TProgram::Run(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+129 (0xBFE09F1)
+Main(int, char**)+6488 (0x986C608)
+main+343 (0x986EFD7)
+??+0 (0x7208DD029D90)
+__libc_start_main+128 (0x7208DD029E40)
+??+0 (0x9800029)
 __GI___pthread_kill at ./nptl/pthread_kill.c:89:0
 __GI_raise at ../sysdeps/posix/raise.c:26:0
 __GI_abort at ./stdlib/abort.c:79:0
@@ -8733,15 +8654,15 @@ NKikimr::NMiniKQL::(anonymous namespace)::TAlgoBaseWrapper<NKikimr::NMiniKQL::(a
 NKikimr::NMiniKQL::TMutableComputationNode<NKikimr::NMiniKQL::(anonymous namespace)::TAlgoBaseWrapper<NKikimr::NMiniKQL::(anonymous namespace)::TAlgoWrapper, true> >::GetValue(NKikimr::NMiniKQL::TComputationContext&) const at /-S/ydb/library/yql/minikql/computation/mkql_computation_node_impl.h:214:0
 NKikimr::NMiniKQL::(anonymous namespace)::TComputationGraph::GetValue() at /-B/ydb/library/yql/minikql/computation/llvm14/mkql_computation_node_graph.cpp:623:0
 NYql::TComputationGraphProxy::GetValue() at /-S/ydb/library/yql/providers/yt/lib/lambda_builder/lambda_builder.cpp:116:0
-NYql::NFile::TYtFileGateway::ExecuteResult(NYql::NFile::TSession&, NYson::TYsonWriter&, NYql::NNodes::TExprBase, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&, TVector<TBasicString<char, std::__y1::char_traits<char> >, std::__y1::allocator<TBasicString<char, std::__y1::char_traits<char> > > > const&) const at /home/marsaly/ydbwork/ydb/ydb/library/yql/providers/yt/gateway/file/yql_yt_file.cpp:1201:0
-NYql::NFile::TYtFileGateway::ResOrPull(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&) at /home/marsaly/ydbwork/ydb/ydb/library/yql/providers/yt/gateway/file/yql_yt_file.cpp:644:0
-NYql::(anonymous namespace)::TYtDataSourceExecTransformer::HandleResOrPull(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&) at /home/marsaly/ydbwork/ydb/ydb/library/yql/providers/yt/provider/yql_yt_datasource_exec.cpp:181:0
-std::__y1::__function::__func<std::__y1::function<std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> NYql::TExecTransformerBase::Hndl<NYql::(anonymous namespace)::TYtDataSourceExecTransformer>(std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (NYql::(anonymous namespace)::TYtDataSourceExecTransformer::*)(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&))::'lambda'(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&), std::__y1::allocator<std::__y1::function<std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> NYql::TExecTransformerBase::Hndl<NYql::(anonymous namespace)::TYtDataSourceExecTransformer>(std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (NYql::(anonymous namespace)::TYtDataSourceExecTransformer::*)(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&))::'lambda'(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)>, std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)>::operator()(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /home/marsaly/ydbwork/ydb/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:363:0
-NYql::TExecTransformerBase::CallbackTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /home/marsaly/ydbwork/ydb/ydb/library/yql/providers/common/transform/yql_exec.cpp:27:0
-NYql::TAsyncCallbackTransformer<NYql::TExecTransformerBase>::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /home/marsaly/ydbwork/ydb/ydb/library/yql/core/yql_graph_transformer.h:332:0
+NYql::NFile::TYtFileGateway::ExecuteResult(NYql::NFile::TSession&, NYson::TYsonWriter&, NYql::NNodes::TExprBase, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&, TVector<TBasicString<char, std::__y1::char_traits<char> >, std::__y1::allocator<TBasicString<char, std::__y1::char_traits<char> > > > const&) const at /-S/ydb/library/yql/providers/yt/gateway/file/yql_yt_file.cpp:1201:0
+NYql::NFile::TYtFileGateway::ResOrPull(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&) at /-S/ydb/library/yql/providers/yt/gateway/file/yql_yt_file.cpp:644:0
+NYql::(anonymous namespace)::TYtDataSourceExecTransformer::HandleResOrPull(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&) at /-S/ydb/library/yql/providers/yt/provider/yql_yt_datasource_exec.cpp:181:0
+std::__y1::__function::__func<std::__y1::function<std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> NYql::TExecTransformerBase::Hndl<NYql::(anonymous namespace)::TYtDataSourceExecTransformer>(std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (NYql::(anonymous namespace)::TYtDataSourceExecTransformer::*)(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&))::'lambda'(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&), std::__y1::allocator<std::__y1::function<std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> NYql::TExecTransformerBase::Hndl<NYql::(anonymous namespace)::TYtDataSourceExecTransformer>(std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (NYql::(anonymous namespace)::TYtDataSourceExecTransformer::*)(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&))::'lambda'(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)>, std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)>::operator()(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:363:0
+NYql::TExecTransformerBase::CallbackTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/providers/common/transform/yql_exec.cpp:27:0
+NYql::TAsyncCallbackTransformer<NYql::TExecTransformerBase>::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_graph_transformer.h:332:0
 NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_graph_transformer.h:160:0
-NYql::IGraphTransformer::TStatus NYql::(anonymous namespace)::TResultCallableExecutionTransformer::HandleFillOrPull<NYql::NNodes::NGenerated::TResultStub<NYql::NNodes::TExprBase, NYql::NNodes::NGenerated::TResOrPullBaseStub<NYql::NNodes::TExprBase, NYql::NNodes::TCallable, NYql::NNodes::TCoAtom, NYql::NNodes::NGenerated::TCoNameValueTupleListStub<NYql::NNodes::TExprBase, NYql::NNodes::TListBase, NYql::NNodes::NGenerated::TCoNameValueTupleStub<NYql::NNodes::TExprBase, NYql::NNodes::TCoAtom> > > > >(NYql::NNodes::TExprBase, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, NYql::IDataProvider&) at /home/marsaly/ydbwork/ydb/ydb/library/yql/providers/result/provider/yql_result_provider.cpp:609:0
-NYql::(anonymous namespace)::TResultCallableExecutionTransformer::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /home/marsaly/ydbwork/ydb/ydb/library/yql/providers/result/provider/yql_result_provider.cpp:248:0
+NYql::IGraphTransformer::TStatus NYql::(anonymous namespace)::TResultCallableExecutionTransformer::HandleFillOrPull<NYql::NNodes::NGenerated::TResultStub<NYql::NNodes::TExprBase, NYql::NNodes::NGenerated::TResOrPullBaseStub<NYql::NNodes::TExprBase, NYql::NNodes::TCallable, NYql::NNodes::TCoAtom, NYql::NNodes::NGenerated::TCoNameValueTupleListStub<NYql::NNodes::TExprBase, NYql::NNodes::TListBase, NYql::NNodes::NGenerated::TCoNameValueTupleStub<NYql::NNodes::TExprBase, NYql::NNodes::TCoAtom> > > > >(NYql::NNodes::TExprBase, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, NYql::IDataProvider&) at /-S/ydb/library/yql/providers/result/provider/yql_result_provider.cpp:609:0
+NYql::(anonymous namespace)::TResultCallableExecutionTransformer::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/providers/result/provider/yql_result_provider.cpp:248:0
 NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_graph_transformer.h:160:0
 NYql::(anonymous namespace)::TExecutionTransformer::ExecuteNode(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, unsigned int) at /-S/ydb/library/yql/core/yql_execution.cpp:274:0
 NYql::(anonymous namespace)::TExecutionTransformer::ExecuteChildren(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, unsigned int) at /-S/ydb/library/yql/core/yql_execution.cpp:340:0
@@ -8756,13 +8677,13 @@ NYql::(anonymous namespace)::TCompositeGraphTransformer::DoTransform(TIntrusiveP
 NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_graph_transformer.h:160:0
 NYql::AsyncTransformStepImpl(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool, bool, TBasicStringBuf<char, std::__y1::char_traits<char> > const&) at /-S/ydb/library/yql/core/yql_graph_transformer.cpp:312:0
 NYql::AsyncTransform(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool) at /-S/ydb/library/yql/core/yql_graph_transformer.cpp:364:0
-NYql::TProgram::AsyncTransformWithFallback(bool) at /home/marsaly/ydbwork/ydb/ydb/library/yql/core/facade/yql_facade.cpp:1153:0
-NThreading::TFuture<NThreading::NImpl::TFutureType<NThreading::NImpl::TFutureCallResult<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0, void>::TType>::TType> NThreading::TFuture<void>::Apply<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0>(NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0&&) const::'lambda'(NThreading::TFuture<void> const&)::operator()(NThreading::TFuture<void> const&) at /home/marsaly/ydbwork/ydb/library/cpp/threading/future/core/future-inl.h:726:0
-NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool) at /home/marsaly/ydbwork/ydb/ydb/library/yql/core/facade/yql_facade.cpp:1018:0
-NYql::IGraphTransformer::TStatus NYql::(anonymous namespace)::SyncExecution<TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool, TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*&, IOutputStream*&, IOutputStream*&, bool&>(NYql::TProgram*, NThreading::TFuture<NYql::IGraphTransformer::TStatus> (NYql::TProgram::*)(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool), TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*&, IOutputStream*&, IOutputStream*&, bool&) at /home/marsaly/ydbwork/ydb/ydb/library/yql/core/facade/yql_facade.cpp:69:0
-NYql::TProgram::Run(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool) at /home/marsaly/ydbwork/ydb/ydb/library/yql/core/facade/yql_facade.cpp:953:0
-Main(int, char**) at /home/marsaly/ydbwork/ydb/ydb/library/yql/tools/pgrun/pgrun.cpp:1301:0
-main at /home/marsaly/ydbwork/ydb/ydb/library/yql/tools/pgrun/pgrun.cpp:1341:0
+NYql::TProgram::AsyncTransformWithFallback(bool) at /-S/ydb/library/yql/core/facade/yql_facade.cpp:1153:0
+NThreading::TFuture<NThreading::NImpl::TFutureType<NThreading::NImpl::TFutureCallResult<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0, void>::TType>::TType> NThreading::TFuture<void>::Apply<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0>(NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0&&) const::'lambda'(NThreading::TFuture<void> const&)::operator()(NThreading::TFuture<void> const&) at /-S/library/cpp/threading/future/core/future-inl.h:726:0
+NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool) at /-S/ydb/library/yql/core/facade/yql_facade.cpp:1018:0
+NYql::IGraphTransformer::TStatus NYql::(anonymous namespace)::SyncExecution<TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool, TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*&, IOutputStream*&, IOutputStream*&, bool&>(NYql::TProgram*, NThreading::TFuture<NYql::IGraphTransformer::TStatus> (NYql::TProgram::*)(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool), TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*&, IOutputStream*&, IOutputStream*&, bool&) at /-S/ydb/library/yql/core/facade/yql_facade.cpp:69:0
+NYql::TProgram::Run(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool) at /-S/ydb/library/yql/core/facade/yql_facade.cpp:953:0
+Main(int, char**) at /-S/ydb/library/yql/tools/pgrun/pgrun.cpp:1301:0
+main at /-S/ydb/library/yql/tools/pgrun/pgrun.cpp:1341:0
 __libc_start_call_main at ../sysdeps/nptl/libc_start_call_main.h:58:0
 __libc_start_main_impl at ../csu/libc-start.c:392:0
 ??? at ???:0:0

@@ -4,7 +4,7 @@ SRCS(
     batch_slice.cpp
     chunks.cpp
     simple.cpp
-    rb_splitter.cpp
+    similar_packer.cpp
     stats.cpp
     column_info.cpp
     settings.cpp
@@ -15,8 +15,8 @@ SRCS(
 
 PEERDIR(
     contrib/libs/apache/arrow
-    ydb/core/tx/columnshard/engines/storage
     ydb/core/tx/columnshard/splitter/abstract
+    ydb/core/tx/columnshard/engines/scheme
 )
 
 END()

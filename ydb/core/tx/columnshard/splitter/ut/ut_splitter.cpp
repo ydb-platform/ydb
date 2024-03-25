@@ -1,9 +1,17 @@
-#include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/tx/columnshard/splitter/rb_splitter.h>
+#include <ydb/core/tx/columnshard/splitter/batch_slice.h>
+#include <ydb/core/tx/columnshard/splitter/settings.h>
+#include <ydb/core/tx/columnshard/splitter/scheme_info.h>
+#include <ydb/core/tx/columnshard/splitter/similar_packer.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/saver.h>
+
 #include <ydb/core/formats/arrow/simple_builder/batch.h>
 #include <ydb/core/formats/arrow/simple_builder/filler.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
+#include <ydb/core/formats/arrow/simple_builder/array.h>
+
+#include <library/cpp/testing/unittest/registar.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
 Y_UNIT_TEST_SUITE(Splitter) {
@@ -13,16 +21,17 @@ Y_UNIT_TEST_SUITE(Splitter) {
     class TTestSnapshotSchema: public NKikimr::NOlap::ISchemaDetailInfo {
     private:
         mutable std::map<std::string, ui32> Decoder;
+    protected:
+        virtual NKikimr::NOlap::TColumnSaver DoGetColumnSaver(const ui32 columnId) const override {
+            return NKikimr::NOlap::TColumnSaver(nullptr, std::make_shared<NSerialization::TNativeSerializer>(arrow::ipc::IpcOptions::Defaults()));
+        }
+
     public:
         virtual bool NeedMinMaxForColumn(const ui32 /*columnId*/) const override {
             return true;
         }
         virtual bool IsSortedColumn(const ui32 /*columnId*/) const override {
             return false;
-        }
-
-        virtual NKikimr::NOlap::TColumnSaver GetColumnSaver(const ui32 columnId) const override {
-            return NKikimr::NOlap::TColumnSaver(nullptr, std::make_shared<NSerialization::TNativeSerializer>(arrow::ipc::IpcOptions::Defaults()));
         }
 
         virtual std::optional<NKikimr::NOlap::TColumnSerializationStat> GetColumnSerializationStats(const ui32 /*columnId*/) const override {
@@ -66,79 +75,98 @@ Y_UNIT_TEST_SUITE(Splitter) {
         std::shared_ptr<TTestSnapshotSchema> Schema = std::make_shared<TTestSnapshotSchema>();
         YDB_ACCESSOR_DEF(std::optional<ui32>, ExpectSlicesCount);
         YDB_ACCESSOR_DEF(std::optional<ui32>, ExpectBlobsCount);
-        YDB_ACCESSOR(bool, HasMultiSplit, false);
+        YDB_ACCESSOR(std::optional<ui32>, ExpectPortionsCount, 1);
+        YDB_ACCESSOR_DEF(std::optional<ui32>, ExpectChunksCount);
+        YDB_ACCESSOR(std::optional<ui32>, ExpectedInternalSplitsCount, 0);
+
     public:
-
-        void Execute(std::shared_ptr<arrow::RecordBatch> batch) {
+        void Execute(std::shared_ptr<arrow::RecordBatch> batch, 
+            const NKikimr::NOlap::NSplitter::TSplitSettings& settings = NKikimr::NOlap::NSplitter::TSplitSettings()
+            ) {
+            using namespace NKikimr::NOlap;
             NKikimr::NColumnShard::TIndexationCounters counters("test");
-            NKikimr::NOlap::TRBSplitLimiter limiter(counters.SplitterCounters, Schema, batch, NKikimr::NOlap::TSplitSettings());
-            std::vector<std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>>> chunksForBlob;
-            std::map<std::string, std::vector<std::shared_ptr<arrow::RecordBatch>>> restoredBatch;
-            std::vector<i64> blobsSize;
-            bool hasMultiSplit = false;
-            ui32 blobsCount = 0;
-            ui32 slicesCount = 0;
-            std::shared_ptr<arrow::RecordBatch> sliceBatch;
-            while (limiter.Next(chunksForBlob, sliceBatch, NKikimr::NOlap::TEntityGroups("default"))) {
-                ++slicesCount;
-                TStringBuilder sb;
-                std::map<ui32, ui32> recordsCountByColumn;
-                for (auto&& chunks : chunksForBlob) {
-                    ++blobsCount;
-                    ui64 blobSize = 0;
-                    sb << "[";
-                    std::set<ui32> blobColumnChunks;
-                    for (auto&& iData : chunks) {
-                        auto i = dynamic_pointer_cast<NKikimr::NOlap::IPortionColumnChunk>(iData);
-                        AFL_VERIFY(i);
-                        const ui32 columnId = i->GetColumnId();
-                        recordsCountByColumn[columnId] += i->GetRecordsCountVerified();
-                        restoredBatch[Schema->GetColumnName(columnId)].emplace_back(*Schema->GetColumnLoader(columnId).Apply(i->GetData()));
-                        blobSize += i->GetData().size();
-                        if (i->GetRecordsCount() != NKikimr::NOlap::TSplitSettings().GetMinRecordsCount() && !blobColumnChunks.emplace(columnId).second) {
-                            hasMultiSplit = true;
-                        }
-                        sb << "(" << i->DebugString() << ")";
-                    }
-                    blobsSize.emplace_back(blobSize);
-                    sb << "];";
+            std::vector<TGeneralSerializedSlice> generalSlices;
+            {
+                auto slices = TBatchSerializedSlice::BuildSimpleSlices(batch, settings, counters.SplitterCounters, Schema);
+                for (auto&& i : slices) {
+                    generalSlices.emplace_back(i);
                 }
-                std::optional<ui32> columnRecordsCount;
-                for (auto&& i : recordsCountByColumn) {
-                    if (!columnRecordsCount) {
-                        columnRecordsCount = i.second;
-                    } else {
-                        Y_ABORT_UNLESS(i.second == *columnRecordsCount);
-                    }
-                }
-                Cerr << sb << Endl;
             }
-            if (ExpectBlobsCount) {
-                Y_ABORT_UNLESS(*ExpectBlobsCount == blobsCount);
-            }
-            if (ExpectSlicesCount) {
-                Y_ABORT_UNLESS(*ExpectSlicesCount == slicesCount);
-            }
-            Y_ABORT_UNLESS(hasMultiSplit == HasMultiSplit);
-            for (auto&& i : blobsSize) {
-                Y_ABORT_UNLESS(i < NKikimr::NOlap::TSplitSettings().GetMaxBlobSize());
-                Y_ABORT_UNLESS(i + 10000 >= NKikimr::NOlap::TSplitSettings().GetMinBlobSize() || blobsSize.size() == 1);
-            }
-            Y_ABORT_UNLESS(restoredBatch.size() == (ui32)batch->num_columns());
-            for (auto&& i : batch->schema()->fields()) {
-                auto it = restoredBatch.find(i->name());
-                Y_ABORT_UNLESS(it != restoredBatch.end());
-                auto column = batch->GetColumnByName(i->name());
-                Y_ABORT_UNLESS(column);
-                ui64 recordsCount = 0;
-                for (auto&& c : it->second) {
-                    Y_ABORT_UNLESS(c->num_columns() == 1);
-                    Y_ABORT_UNLESS(c->column(0)->RangeEquals(column, 0, c->num_rows(), recordsCount, arrow::EqualOptions::Defaults()));
-                    recordsCount += c->num_rows();
-                }
-                Y_ABORT_UNLESS(recordsCount == (ui32)batch->num_rows());
 
+            TSimilarPacker packer(settings.GetExpectedPortionSize());
+            auto packs = packer.Split(generalSlices);
+            const NSplitter::TEntityGroups groups(settings, "default");
+            const ui32 portionsCount = packs.size();
+            ui32 blobsCount = 0;
+            ui32 chunksCount = 0;
+            ui32 pagesSum = 0;
+            ui32 portionShift = 0;
+            ui32 internalSplitsCount = 0;
+            for (auto&& i : packs) {
+                ui32 portionRecordsCount = 0;
+                for (auto&& rc : i) {
+                    portionRecordsCount += rc.GetRecordsCount();
+                }
+                const ui32 pagesOriginal = i.size();
+                pagesSum += pagesOriginal;
+                TGeneralSerializedSlice slice(std::move(i));
+                auto blobsLocal = slice.GroupChunksByBlobs(groups);
+                internalSplitsCount += slice.GetInternalSplitsCount();
+                blobsCount += blobsLocal.size();
+                THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> entityChunks;
+                ui32 portionSize = 0;
+                for (auto&& b : blobsLocal) {
+                    chunksCount += b.GetChunks().size();
+                    ui64 bSize = 0;
+                    for (auto&& c : b.GetChunks()) {
+                        bSize += c->GetData().size();
+                        AFL_VERIFY(c->GetEntityId());
+                        auto& v = entityChunks[c->GetEntityId()];
+                        if (v.size()) {
+                            AFL_VERIFY(v.back()->GetChunkIdxVerified() + 1 == c->GetChunkIdxVerified());
+                        }
+                        entityChunks[c->GetEntityId()].emplace_back(c);
+                    }
+                    portionSize += bSize;
+                    AFL_VERIFY(bSize < (ui64)settings.GetMaxBlobSize());
+                    AFL_VERIFY(bSize * 1.01 > (ui64)settings.GetMinBlobSize() || (packs.size() == 1 && blobsLocal.size() == 1))("blob_size", bSize);
+                }
+                AFL_VERIFY(portionSize >= settings.GetExpectedPortionSize() || packs.size() == 1)("size", portionSize)("limit", settings.GetMaxPortionSize());
+
+                THashMap<ui32, std::set<ui32>> entitiesByRecordsCount;
+                ui32 pagesRestore = 0;
+                for (auto&& e : entityChunks) {
+                    const std::shared_ptr<arrow::Array> arr = batch->GetColumnByName(Schema->GetColumnName(e.first));
+                    AFL_VERIFY(arr);
+                    ui32 count = 0;
+                    for (auto&& c : e.second) {
+                        auto slice = arr->Slice(count + portionShift, c->GetRecordsCountVerified());
+                        auto readBatch = *Schema->GetColumnLoader(e.first).Apply(c->GetData());
+                        AFL_VERIFY(slice->length() == readBatch->num_rows());
+                        Y_ABORT_UNLESS(readBatch->column(0)->RangeEquals(*slice, 0, readBatch->num_rows(), 0, arrow::EqualOptions::Defaults()));
+                        count += c->GetRecordsCountVerified();
+                        AFL_VERIFY(entitiesByRecordsCount[count].emplace(e.first).second);
+                        AFL_VERIFY(entitiesByRecordsCount[count].size() <= (ui32)batch->num_columns());
+                        if (entitiesByRecordsCount[count].size() == (ui32)batch->num_columns()) {
+                            ++pagesRestore;
+                        }
+                    }
+                    AFL_VERIFY(count == portionRecordsCount);
+                }
+                AFL_VERIFY(entitiesByRecordsCount.size() >= i.size());
+                AFL_VERIFY(pagesRestore == pagesOriginal || batch->num_columns() == 1)("restore", pagesRestore)("original", pagesOriginal);
+                for (auto&& c : entityChunks.begin()->second) {
+                    portionShift += c->GetRecordsCountVerified();
+                }
             }
+            AFL_VERIFY(portionShift = batch->num_rows());
+            AFL_VERIFY(pagesSum == generalSlices.size())("sum", pagesSum)("general_slices", generalSlices.size());
+            AFL_VERIFY(internalSplitsCount == ExpectedInternalSplitsCount.value_or(internalSplitsCount))("expected", *ExpectedInternalSplitsCount)("real", internalSplitsCount);
+            AFL_VERIFY(blobsCount == ExpectBlobsCount.value_or(blobsCount))("blobs_count", blobsCount)("expected", *ExpectBlobsCount);
+            AFL_VERIFY(pagesSum == ExpectSlicesCount.value_or(pagesSum))("sum", pagesSum)("expected", *ExpectSlicesCount);
+            AFL_VERIFY(portionsCount == ExpectPortionsCount.value_or(portionsCount))("portions_count", portionsCount)("expected", *ExpectPortionsCount);
+            AFL_VERIFY(chunksCount == ExpectChunksCount.value_or(chunksCount))("chunks_count", chunksCount)("expected", *ExpectChunksCount);
+            
         }
     };
 
@@ -157,7 +185,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         std::shared_ptr<arrow::RecordBatch> batch = NKikimr::NArrow::NConstruction::TRecordBatchConstructor({column}).BuildBatch(80048);
         NKikimr::NColumnShard::TIndexationCounters counters("test");
 
-        TSplitTester().SetExpectBlobsCount(1).SetExpectSlicesCount(1).SetHasMultiSplit(true).Execute(batch);
+        TSplitTester().SetExpectBlobsCount(1).SetExpectSlicesCount(8).Execute(batch);
     }
 
     Y_UNIT_TEST(Minimal) {
@@ -188,15 +216,36 @@ Y_UNIT_TEST_SUITE(Splitter) {
         TSplitTester().SetExpectBlobsCount(8).SetExpectSlicesCount(8).Execute(batch);
     }
 
-    Y_UNIT_TEST(Crit) {
+    Y_UNIT_TEST(CritSmallPortions) {
         NConstruction::IArrayBuilder::TPtr columnBig = std::make_shared<NKikimr::NArrow::NConstruction::TSimpleArrayConstructor<NKikimr::NArrow::NConstruction::TStringPoolFiller>>(
-            "field1", NKikimr::NArrow::NConstruction::TStringPoolFiller(8, 712));
+            "field1", NKikimr::NArrow::NConstruction::TStringPoolFiller(8, 7120));
         NConstruction::IArrayBuilder::TPtr columnSmall = std::make_shared<NKikimr::NArrow::NConstruction::TSimpleArrayConstructor<NKikimr::NArrow::NConstruction::TStringPoolFiller>>(
             "field2", NKikimr::NArrow::NConstruction::TStringPoolFiller(8, 128));
         std::shared_ptr<arrow::RecordBatch> batch = NKikimr::NArrow::NConstruction::TRecordBatchConstructor({columnBig, columnSmall}).BuildBatch(80048);
         NKikimr::NColumnShard::TIndexationCounters counters("test");
 
-        TSplitTester().SetExpectBlobsCount(16).SetExpectSlicesCount(8).Execute(batch);
+        TSplitTester().SetExpectBlobsCount(80).SetExpectSlicesCount(80).SetExpectedInternalSplitsCount(0).SetExpectPortionsCount(40)
+            .Execute(batch, NKikimr::NOlap::NSplitter::TSplitSettings().SetMinRecordsCount(1000).SetMaxPortionSize(8000000));
+    }
+
+    Y_UNIT_TEST(Crit) {
+        NConstruction::IArrayBuilder::TPtr columnBig = std::make_shared<NKikimr::NArrow::NConstruction::TSimpleArrayConstructor<NKikimr::NArrow::NConstruction::TStringPoolFiller>>(
+            "field1", NKikimr::NArrow::NConstruction::TStringPoolFiller(8, 7120));
+        NConstruction::IArrayBuilder::TPtr columnSmall = std::make_shared<NKikimr::NArrow::NConstruction::TSimpleArrayConstructor<NKikimr::NArrow::NConstruction::TStringPoolFiller>>(
+            "field2", NKikimr::NArrow::NConstruction::TStringPoolFiller(8, 128));
+        std::shared_ptr<arrow::RecordBatch> batch = NKikimr::NArrow::NConstruction::TRecordBatchConstructor({columnBig, columnSmall}).BuildBatch(80048);
+        NKikimr::NColumnShard::TIndexationCounters counters("test");
+
+        TSplitTester().SetExpectBlobsCount(80).SetExpectSlicesCount(8).SetExpectedInternalSplitsCount(8).SetExpectPortionsCount(8).Execute(batch);
+    }
+
+    Y_UNIT_TEST(CritSimple) {
+        NConstruction::IArrayBuilder::TPtr columnBig = std::make_shared<NKikimr::NArrow::NConstruction::TSimpleArrayConstructor<NKikimr::NArrow::NConstruction::TStringPoolFiller>>(
+            "field1", NKikimr::NArrow::NConstruction::TStringPoolFiller(8, 7120));
+        std::shared_ptr<arrow::RecordBatch> batch = NKikimr::NArrow::NConstruction::TRecordBatchConstructor({columnBig}).BuildBatch(80048);
+        NKikimr::NColumnShard::TIndexationCounters counters("test");
+
+        TSplitTester().SetExpectBlobsCount(72).SetExpectSlicesCount(8).SetExpectedInternalSplitsCount(0).SetExpectPortionsCount(8).Execute(batch);
     }
 
 };

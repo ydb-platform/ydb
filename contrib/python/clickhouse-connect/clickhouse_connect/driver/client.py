@@ -157,7 +157,7 @@ class Client(ABC):
 
     # pylint: disable=too-many-arguments,unused-argument,too-many-locals
     def query(self,
-              query: str = None,
+              query: Optional[str] = None,
               parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
               settings: Optional[Dict[str, Any]] = None,
               query_formats: Optional[Dict[str, str]] = None,
@@ -193,7 +193,7 @@ class Client(ABC):
         return self._query_with_context(query_context)
 
     def query_column_block_stream(self,
-                                  query: str = None,
+                                  query: Optional[str] = None,
                                   parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                                   settings: Optional[Dict[str, Any]] = None,
                                   query_formats: Optional[Dict[str, str]] = None,
@@ -212,7 +212,7 @@ class Client(ABC):
         return self._context_query(locals(), use_numpy=False, streaming=True).column_block_stream
 
     def query_row_block_stream(self,
-                               query: str = None,
+                               query: Optional[str] = None,
                                parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                                settings: Optional[Dict[str, Any]] = None,
                                query_formats: Optional[Dict[str, str]] = None,
@@ -231,7 +231,7 @@ class Client(ABC):
         return self._context_query(locals(), use_numpy=False, streaming=True).row_block_stream
 
     def query_rows_stream(self,
-                          query: str = None,
+                          query: Optional[str] = None,
                           parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                           settings: Optional[Dict[str, Any]] = None,
                           query_formats: Optional[Dict[str, str]] = None,
@@ -270,7 +270,7 @@ class Client(ABC):
 
     # pylint: disable=duplicate-code,too-many-arguments,unused-argument
     def query_np(self,
-                 query: str = None,
+                 query: Optional[str] = None,
                  parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                  settings: Optional[Dict[str, Any]] = None,
                  query_formats: Optional[Dict[str, str]] = None,
@@ -289,7 +289,7 @@ class Client(ABC):
 
     # pylint: disable=duplicate-code,too-many-arguments,unused-argument
     def query_np_stream(self,
-                        query: str = None,
+                        query: Optional[str] = None,
                         parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                         settings: Optional[Dict[str, Any]] = None,
                         query_formats: Optional[Dict[str, str]] = None,
@@ -308,7 +308,7 @@ class Client(ABC):
 
     # pylint: disable=duplicate-code,too-many-arguments,unused-argument
     def query_df(self,
-                 query: str = None,
+                 query: Optional[str] = None,
                  parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                  settings: Optional[Dict[str, Any]] = None,
                  query_formats: Optional[Dict[str, str]] = None,
@@ -331,7 +331,7 @@ class Client(ABC):
 
     # pylint: disable=duplicate-code,too-many-arguments,unused-argument
     def query_df_stream(self,
-                        query: str = None,
+                        query: Optional[str] = None,
                         parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                         settings: Optional[Dict[str, Any]] = None,
                         query_formats: Optional[Dict[str, str]] = None,
@@ -355,7 +355,7 @@ class Client(ABC):
                                    streaming=True).df_stream
 
     def create_query_context(self,
-                             query: str = None,
+                             query: Optional[str] = None,
                              parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                              settings: Optional[Dict[str, Any]] = None,
                              query_formats: Optional[Dict[str, str]] = None,

@@ -39,6 +39,7 @@ TPipeline::~TPipeline()
         pr.second->ClearSpecialDependencies();
         pr.second->ClearPlannedConflicts();
         pr.second->ClearImmediateConflicts();
+        pr.second->ClearRepeatableReadConflicts();
     }
 }
 
@@ -487,6 +488,7 @@ void TPipeline::UnblockNormalDependencies(const TOperation::TPtr &op)
     op->ClearDependencies();
     op->ClearPlannedConflicts();
     op->ClearImmediateConflicts();
+    op->ClearRepeatableReadConflicts();
     DepTracker.RemoveOperation(op);
 }
 
@@ -1783,7 +1785,7 @@ EExecutionStatus TPipeline::RunExecutionPlan(TOperation::TPtr op,
             return EExecutionStatus::Reschedule;
         }
 
-        NWilson::TSpan unitSpan(TWilsonTablet::TabletFull, txc.TransactionExecutionSpan.GetTraceId(), "Datashard.Unit");
+        NWilson::TSpan unitSpan(TWilsonTablet::TabletDetailed, txc.TransactionExecutionSpan.GetTraceId(), "Datashard.Unit");
         
         NCpuTime::TCpuTimer timer;
         auto status = unit.Execute(op, txc, ctx);

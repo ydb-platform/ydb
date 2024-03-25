@@ -1,36 +1,9 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include "ut_helpers.h"
 
 constexpr bool VERBOSE = false;
-
-TString MakeData(ui32 dataSize) {
-    TString data(dataSize, '\0');
-    for (ui32 i = 0; i < dataSize; ++i) {
-        data[i] = 'A' + (i % 26);
-    }
-    return data;
-}
-
-ui64 AggregateVDiskCounters(std::unique_ptr<TEnvironmentSetup>& env, TString storagePool, ui32 nodesCount, ui32 groupId,
-        const std::vector<ui32>& pdiskLayout, TString subsystem, TString counter, bool derivative = false) {
-    ui64 ctr = 0;
-
-    for (ui32 nodeId = 1; nodeId <= nodesCount; ++nodeId) {
-        auto* appData = env->Runtime->GetNode(nodeId)->AppData.get();
-        for (ui32 i = 0; i < nodesCount; ++i) {
-            ctr += GetServiceCounters(appData->Counters, "vdisks")->
-                    GetSubgroup("storagePool", storagePool)->
-                    GetSubgroup("group", std::to_string(groupId))->
-                    GetSubgroup("orderNumber", "0" + std::to_string(i))->
-                    GetSubgroup("pdisk", "00000" + std::to_string(pdiskLayout[i]))->
-                    GetSubgroup("media", "rot")->
-                    GetSubgroup("subsystem", subsystem)->
-                    GetCounter(counter, derivative)->Val();
-        }
-    }
-    return ctr;
-};
 
 void SetupEnv(const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<TEnvironmentSetup>& env,
         ui32& groupSize, TBlobStorageGroupType& groupType, ui32& groupId, std::vector<ui32>& pdiskLayout,
@@ -55,14 +28,7 @@ void SetupEnv(const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<
     const auto& baseConfig = response.GetStatus(0).GetBaseConfig();
     UNIT_ASSERT_VALUES_EQUAL(baseConfig.GroupSize(), 1);
     groupId = baseConfig.GetGroup(0).GetGroupId();
-    pdiskLayout.resize(groupSize);
-    for (const auto& vslot : baseConfig.GetVSlot()) {
-        const auto& vslotId = vslot.GetVSlotId();
-        ui32 orderNumber = topology.GetOrderNumber(TVDiskIdShort(vslot.GetFailRealmIdx(), vslot.GetFailDomainIdx(), vslot.GetVDiskIdx()));
-        if (vslot.GetGroupId() == groupId) {
-            pdiskLayout[orderNumber] = vslotId.GetPDiskId();
-        }
-    }
+    pdiskLayout = MakePDiskLayout(baseConfig, topology, groupId);
 }
 
 template <typename TInflightActor>
@@ -105,7 +71,7 @@ void TestDSProxyAndVDiskEqualCost(const TBlobStorageGroupInfo::TTopology& topolo
                     GetCounter("QueueItemsSent")->Val();
             }
         }
-        vdiskCost = AggregateVDiskCounters(env, env->StoragePoolName, groupSize, groupId, pdiskLayout,
+        vdiskCost = env->AggregateVDiskCounters(env->StoragePoolName, groupSize, groupSize, groupId, pdiskLayout,
                 "cost", "SkeletonFrontUserCostNs");
     };
 
@@ -263,7 +229,7 @@ void TestBurst(ui32 requests, ui32 inflight, TDuration delay, ELoadDistribution 
     env->Runtime->Register(actor, 1);
     env->Sim(TDuration::Minutes(10));
 
-    ui64 redMs = AggregateVDiskCounters(env, env->StoragePoolName, groupSize, groupId, pdiskLayout,
+    ui64 redMs = env->AggregateVDiskCounters(env->StoragePoolName, groupSize, groupSize, groupId, pdiskLayout,
             "advancedCost", "BurstDetector_redMs");
     
     if (loadDistribution == ELoadDistribution::DistributionBurst) {
@@ -297,7 +263,7 @@ void TestDiskTimeAvailableScaling() {
         std::vector<ui32> pdiskLayout;
         SetupEnv(topology, env, groupSize, groupType, groupId, pdiskLayout, 0, scale);
 
-        return AggregateVDiskCounters(env, env->StoragePoolName, groupSize, groupId, pdiskLayout,
+        return env->AggregateVDiskCounters(env->StoragePoolName, groupSize, groupSize, groupId, pdiskLayout,
                 "advancedCost", "DiskTimeAvailable");
     };
 

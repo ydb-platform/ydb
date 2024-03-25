@@ -328,6 +328,9 @@ struct TEvDataShard {
         EvOverloadReady,
         EvOverloadUnsubscribe,
 
+        EvStatisticsScanRequest,
+        EvStatisticsScanResponse,
+
         EvEnd
     };
 
@@ -1683,6 +1686,20 @@ struct TEvDataShard {
             Record.SetStatus(status);
             Record.SetErrorDescription(error);
         }
+    };
+
+    struct TEvStatisticsScanRequest
+        : public TEventPB<TEvStatisticsScanRequest,
+                          NKikimrTxDataShard::TEvStatisticsScanRequest,
+                          EvStatisticsScanRequest>
+    {
+    };
+
+    struct TEvStatisticsScanResponse
+        : public TEventPB<TEvStatisticsScanResponse,
+                          NKikimrTxDataShard::TEvStatisticsScanResponse,
+                          EvStatisticsScanResponse>
+    {
     };
 };
 

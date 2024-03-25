@@ -11,22 +11,44 @@ namespace NKikimr {
 
 using TPutResultVec = TPutImpl::TPutResultVec;
 
-void TPutImpl::RunStrategies(TLogContext &logCtx, TPutResultVec &outPutResults, const TBlobStorageGroupInfo::TGroupVDisks& expired) {
+void TPutImpl::RunStrategies(TLogContext &logCtx, TPutResultVec &outPutResults,
+        const TBlobStorageGroupInfo::TGroupVDisks& expired, bool accelerate) {
+    if (accelerate) {
+        ChangeAll();
+    }
+
     switch (Info->Type.GetErasure()) {
         case TBlobStorageGroupType::ErasureMirror3dc:
-            return RunStrategy(logCtx, TPut3dcStrategy(Tactic, EnableRequestMod3x3ForMinLatecy), outPutResults, expired);
+            return accelerate
+                ? RunStrategy(logCtx, TAcceleratePut3dcStrategy(Tactic, EnableRequestMod3x3ForMinLatecy), outPutResults, expired)
+                : RunStrategy(logCtx, TPut3dcStrategy(Tactic, EnableRequestMod3x3ForMinLatecy), outPutResults, expired);
         case TBlobStorageGroupType::ErasureMirror3of4:
-            return RunStrategy(logCtx, TPut3of4Strategy(Tactic), outPutResults, expired);
+            return accelerate
+                ? RunStrategy(logCtx, TPut3of4Strategy(Tactic, true), outPutResults, expired)
+                : RunStrategy(logCtx, TPut3of4Strategy(Tactic), outPutResults, expired);
         default:
-            return RunStrategy(logCtx, TRestoreStrategy(), outPutResults, expired);
+            return accelerate
+                ? RunStrategy(logCtx, TAcceleratePutStrategy(), outPutResults, expired)
+                : RunStrategy(logCtx, TRestoreStrategy(), outPutResults, expired);
     }
 }
 
 void TPutImpl::RunStrategy(TLogContext &logCtx, const IStrategy& strategy, TPutResultVec &outPutResults,
         const TBlobStorageGroupInfo::TGroupVDisks& expired) {
-    TBatchedVec<TBlackboard::TBlobStates::value_type*> finished;
+    Y_VERIFY_S(Blackboard.BlobStates.size(), "State# " << DumpFullState());
+    TBatchedVec<TBlackboard::TFinishedBlob> finished;
     const EStrategyOutcome outcome = Blackboard.RunStrategy(logCtx, strategy, &finished, &expired);
-    PrepareReply(logCtx, outcome.ErrorReason, finished, outPutResults);
+    for (const TBlackboard::TFinishedBlob& item : finished) {
+        Y_ABORT_UNLESS(item.BlobIdx < Blobs.size());
+        Y_ABORT_UNLESS(!IsDone[item.BlobIdx]);
+        PrepareOneReply(item.Status, item.BlobIdx, logCtx, item.ErrorReason, outPutResults);
+        Y_VERIFY_S(IsDone[item.BlobIdx], "State# " << DumpFullState());
+    }
+    if (outcome == EStrategyOutcome::DONE) {
+        for (const auto& done : IsDone) {
+            Y_VERIFY_S(done, "finished.size# " << finished.size() << " State# " << DumpFullState());
+        }
+    }
 }
 
 NLog::EPriority GetPriorityForReply(TAtomicLogPriorityMuteChecker<NLog::PRI_ERROR, NLog::PRI_DEBUG> &checker,
@@ -40,62 +62,23 @@ NLog::EPriority GetPriorityForReply(TAtomicLogPriorityMuteChecker<NLog::PRI_ERRO
     }
 }
 
-void TPutImpl::PrepareOneReply(NKikimrProto::EReplyStatus status, TLogoBlobID blobId, ui64 blobIdx, TLogContext &logCtx,
+void TPutImpl::PrepareOneReply(NKikimrProto::EReplyStatus status, size_t blobIdx, TLogContext &logCtx,
         TString errorReason, TPutResultVec &outPutResults) {
-    Y_ABORT_UNLESS(IsInitialized);
-    if (!IsDone[blobIdx]) {
-        outPutResults.emplace_back(blobIdx, new TEvBlobStorage::TEvPutResult(status, blobId, StatusFlags, Info->GroupID,
-                    ApproximateFreeSpaceShare));
-        outPutResults.back().second->ErrorReason = errorReason;
-        NLog::EPriority priority = GetPriorityForReply(Info->PutErrorMuteChecker, status);
-        A_LOG_LOG_SX(logCtx, true, priority, "BPP12", "Result# " << outPutResults.back().second->Print(false));
-        MarkBlobAsSent(blobIdx);
+    if (!std::exchange(IsDone[blobIdx], true)) {
+        auto ev = std::make_unique<TEvBlobStorage::TEvPutResult>(status, Blobs[blobIdx].BlobId, StatusFlags,
+            Info->GroupID, ApproximateFreeSpaceShare);
+        ev->ErrorReason = std::move(errorReason);
+        const NLog::EPriority priority = GetPriorityForReply(Info->PutErrorMuteChecker, status);
+        A_LOG_LOG_SX(logCtx, true, priority, "BPP12", "Result# " << ev->Print(false));
+        outPutResults.emplace_back(blobIdx, std::move(ev));
     }
 }
 
 void TPutImpl::PrepareReply(NKikimrProto::EReplyStatus status, TLogContext &logCtx, TString errorReason,
         TPutResultVec &outPutResults) {
     A_LOG_DEBUG_SX(logCtx, "BPP34", "PrepareReply status# " << status << " errorReason# " << errorReason);
-    for (ui64 idx = 0; idx < Blobs.size(); ++idx) {
-        if (IsDone[idx]) {
-            A_LOG_DEBUG_SX(logCtx, "BPP35", "blob# " << Blobs[idx].ToString() <<
-                " idx# " << idx << " is sent, skipped");
-            continue;
-        }
-
-        outPutResults.emplace_back(idx, new TEvBlobStorage::TEvPutResult(status, Blobs[idx].BlobId, StatusFlags,
-            Info->GroupID, ApproximateFreeSpaceShare));
-        outPutResults.back().second->ErrorReason = errorReason;
-
-        NLog::EPriority priority = GetPriorityForReply(Info->PutErrorMuteChecker, status);
-        A_LOG_LOG_SX(logCtx, true, priority, "BPP38",
-                "PrepareReply Result# " << outPutResults.back().second->Print(false));
-
-        if (IsInitialized) {
-            MarkBlobAsSent(idx);
-        }
-    }
-}
-
-void TPutImpl::PrepareReply(TLogContext &logCtx, TString errorReason,
-        TBatchedVec<TBlackboard::TBlobStates::value_type*>& finished, TPutResultVec &outPutResults) {
-    A_LOG_DEBUG_SX(logCtx, "BPP36", "PrepareReply errorReason# " << errorReason);
-    Y_ABORT_UNLESS(IsInitialized);
-    for (auto item : finished) {
-        auto &[blobId, state] = *item;
-        const ui64 idx = state.BlobIdx;
-        Y_ABORT_UNLESS(blobId == Blobs[idx].BlobId, "BlobIdx# %" PRIu64 " BlobState# %s Blackboard# %s",
-            idx, state.ToString().c_str(), Blackboard.ToString().c_str());
-        Y_ABORT_UNLESS(!IsDone[idx]);
-        Y_ABORT_UNLESS(state.Status != NKikimrProto::UNKNOWN);
-        outPutResults.emplace_back(idx, new TEvBlobStorage::TEvPutResult(state.Status, blobId, StatusFlags,
-            Info->GroupID, ApproximateFreeSpaceShare));
-        outPutResults.back().second->ErrorReason = errorReason;
-
-        NLog::EPriority priority = GetPriorityForReply(Info->PutErrorMuteChecker, state.Status);
-        A_LOG_LOG_SX(logCtx, true, priority, "BPP37",
-                "PrepareReply Result# " << outPutResults.back().second->Print(false));
-        MarkBlobAsSent(idx);
+    for (size_t blobIdx = 0; blobIdx < Blobs.size(); ++blobIdx) {
+        PrepareOneReply(status, blobIdx, logCtx, errorReason, outPutResults);
     }
 }
 
@@ -125,7 +108,7 @@ TString TPutImpl::DumpFullState() const {
     str << Endl;
     str << " Blobs# " << Blobs.ToString();
     str << Endl;
-    str << "IsDone# " << IsDone.ToString();
+    str << " IsDone# " << IsDone.ToString();
     str << Endl;
     str << " HandoffPartsSent# " << HandoffPartsSent;
     str << Endl;
@@ -141,15 +124,6 @@ TString TPutImpl::DumpFullState() const {
     str << Endl;
     str << "}";
     return str.Str();
-}
-
-bool TPutImpl::MarkBlobAsSent(ui64 idx) {
-    Y_ABORT_UNLESS(idx < Blobs.size());
-    Y_ABORT_UNLESS(!IsDone[idx]);
-    Blackboard.MoveBlobStateToDone(Blobs[idx].BlobId);
-    IsDone[idx] = true;
-    DoneBlobs++;
-    return true;
 }
 
 }//NKikimr

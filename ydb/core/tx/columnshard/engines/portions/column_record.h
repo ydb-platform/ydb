@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/splitter/stats.h>
 #include <ydb/core/tx/columnshard/splitter/chunks.h>
+#include <ydb/core/tx/columnshard/splitter/chunk_meta.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -30,7 +31,7 @@ struct TChunkMeta: public TSimpleChunkMeta {
 private:
     using TBase = TSimpleChunkMeta;
     TChunkMeta() = default;
-    TConclusionStatus DeserializeFromProto(const TChunkAddress& address, const NKikimrTxColumnShard::TIndexColumnMeta& proto, const TIndexInfo& indexInfo);
+    TConclusionStatus DeserializeFromProto(const TChunkAddress& address, const NKikimrTxColumnShard::TIndexColumnMeta& proto, const TSimpleColumnInfo& columnInfo);
     friend class TColumnRecord;
 public:
     TChunkMeta(TSimpleChunkMeta&& baseMeta)
@@ -39,9 +40,9 @@ public:
 
     }
 
-    static TConclusion<TChunkMeta> BuildFromProto(const TChunkAddress& address, const NKikimrTxColumnShard::TIndexColumnMeta& proto, const TIndexInfo& indexInfo) {
+    static TConclusion<TChunkMeta> BuildFromProto(const TChunkAddress& address, const NKikimrTxColumnShard::TIndexColumnMeta& proto, const TSimpleColumnInfo& columnInfo) {
         TChunkMeta result;
-        auto parse = result.DeserializeFromProto(address, proto, indexInfo);
+        auto parse = result.DeserializeFromProto(address, proto, columnInfo);
         if (!parse) {
             return parse;
         }
@@ -60,9 +61,9 @@ public:
         }
     };
 
-    TChunkMeta(const TColumnChunkLoadContext& context, const TIndexInfo& indexInfo);
+    TChunkMeta(const TColumnChunkLoadContext& context, const TSimpleColumnInfo& columnInfo);
 
-    TChunkMeta(const std::shared_ptr<arrow::Array>& column, const ui32 columnId, const TIndexInfo& indexInfo);
+    TChunkMeta(const std::shared_ptr<arrow::Array>& column, const TSimpleColumnInfo& columnInfo);
 };
 
 class TColumnRecord {
@@ -75,12 +76,15 @@ private:
     }
 
     TColumnRecord() = default;
-    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TColumnRecord& proto, const TIndexInfo& indexInfo);
+    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TColumnRecord& proto, const TSimpleColumnInfo& columnInfo);
 public:
     ui32 ColumnId = 0;
     ui16 Chunk = 0;
     TBlobRangeLink16 BlobRange;
 
+    void ResetBlobRange() {
+        BlobRange = TBlobRangeLink16();
+    }
 
     void RegisterBlobIdx(const ui16 blobIdx) {
 //        AFL_VERIFY(!BlobRange.BlobId.GetTabletId())("original", BlobRange.BlobId.ToStringNew())("new", blobId.ToStringNew());
@@ -119,9 +123,9 @@ public:
     }
 
     NKikimrColumnShardDataSharingProto::TColumnRecord SerializeToProto() const;
-    static TConclusion<TColumnRecord> BuildFromProto(const NKikimrColumnShardDataSharingProto::TColumnRecord& proto, const TIndexInfo& indexInfo) {
+    static TConclusion<TColumnRecord> BuildFromProto(const NKikimrColumnShardDataSharingProto::TColumnRecord& proto, const TSimpleColumnInfo& columnInfo) {
         TColumnRecord result;
-        auto parse = result.DeserializeFromProto(proto, indexInfo);
+        auto parse = result.DeserializeFromProto(proto, columnInfo);
         if (!parse) {
             return parse;
         }
@@ -161,9 +165,9 @@ public:
             ;
     }
 
-    TColumnRecord(const TChunkAddress& address, const std::shared_ptr<arrow::Array>& column, const TIndexInfo& info);
+    TColumnRecord(const TChunkAddress& address, const std::shared_ptr<arrow::Array>& column, const TSimpleColumnInfo& columnInfo);
 
-    TColumnRecord(const TBlobRangeLink16::TLinkId blobLinkId, const TColumnChunkLoadContext& loadContext, const TIndexInfo& info);
+    TColumnRecord(const TBlobRangeLink16::TLinkId blobLinkId, const TColumnChunkLoadContext& loadContext, const TSimpleColumnInfo& columnInfo);
 
     friend IOutputStream& operator << (IOutputStream& out, const TColumnRecord& rec) {
         out << '{';
@@ -184,7 +188,14 @@ private:
     YDB_READONLY_DEF(TString, Data);
 protected:
     virtual TString DoDebugString() const override {
-        return TStringBuilder() << "column_id=" << GetColumnId() << ";chunk=" << GetChunkIdx() << ";data_size=" << Data.size() << ";";
+        TStringBuilder sb;
+        sb << "column_id=" << GetColumnId() << ";data_size=" << Data.size() << ";";
+        if (GetChunkIdxOptional()) {
+            sb << "chunk=" << GetChunkIdxVerified() << ";";
+        } else {
+            sb << "chunk=NO_INITIALIZED;";
+        }
+        return sb;
     }
 
     virtual const TString& DoGetData() const override {

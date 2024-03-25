@@ -2,7 +2,6 @@
 #include "defs.h"
 
 #include "schemeshard_identificators.h"
-#include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

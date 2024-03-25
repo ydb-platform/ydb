@@ -1,9 +1,11 @@
 #pragma once
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/conclusion/status.h>
 #include <ydb/services/metadata/abstract/request_features.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
+
+#include <ydb/library/conclusion/result.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/status.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
@@ -31,6 +33,9 @@ public:
     using TFactory = NObjectFactory::TObjectFactory<ISerializer, TString>;
     using TProto = NKikimrSchemeOp::TOlapColumn::TSerializer;
     virtual ~ISerializer() = default;
+
+    virtual bool IsCompatibleForExchangeWithSameClass(const ISerializer& item) const = 0;
+    virtual bool IsEqualToSameClass(const ISerializer& item) const = 0;
 
     TConclusionStatus DeserializeFromRequest(NYql::TFeaturesExtractor& features) {
         return DoDeserializeFromRequest(features);
@@ -87,6 +92,32 @@ public:
 
     }
 
+    bool IsCompatibleForExchange(const TSerializerContainer& item) const {
+        if (!GetObjectPtr() && !!item.GetObjectPtr()) {
+            return false;
+        }
+        if (!!GetObjectPtr() && !item.GetObjectPtr()) {
+            return false;
+        }
+        if (GetObjectPtr()->GetClassName() != item.GetObjectPtr()->GetClassName()) {
+            return false;
+        }
+        return GetObjectPtr()->IsCompatibleForExchangeWithSameClass(*item.GetObjectPtr());
+    }
+
+    bool IsEqualTo(const TSerializerContainer& item) const {
+        if (!GetObjectPtr() && !!item.GetObjectPtr()) {
+            return false;
+        }
+        if (!!GetObjectPtr() && !item.GetObjectPtr()) {
+            return false;
+        }
+        if (GetObjectPtr()->GetClassName() != item.GetObjectPtr()->GetClassName()) {
+            return false;
+        }
+        return GetObjectPtr()->IsEqualToSameClass(*item.GetObjectPtr());
+    }
+
     TString DebugString() const {
         if (GetObjectPtr()) {
             return GetObjectPtr()->DebugString();
@@ -101,6 +132,23 @@ public:
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TCompressionOptions& proto);
 
     TConclusionStatus DeserializeFromRequest(NYql::TFeaturesExtractor& features);
+
+    static TConclusion<TSerializerContainer> BuildFromProto(const NKikimrSchemeOp::TOlapColumn::TSerializer& proto) {
+        TSerializerContainer result;
+        if (!result.DeserializeFromProto(proto)) {
+            return TConclusionStatus::Fail("cannot parse proto for serializer construction: " + proto.DebugString());
+        }
+        return result;
+    }
+
+    static TConclusion<TSerializerContainer> BuildFromProto(const NKikimrSchemeOp::TCompressionOptions& proto) {
+        TSerializerContainer result;
+        auto parsed = result.DeserializeFromProto(proto);
+        if (!parsed) {
+            return parsed;
+        }
+        return result;
+    }
 };
 
 }

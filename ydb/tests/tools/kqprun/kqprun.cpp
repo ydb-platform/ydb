@@ -11,6 +11,9 @@
 #include <util/system/env.h>
 
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
+#include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_comp_nodes.h>
+#include <ydb/library/yql/providers/yt/lib/yt_download/yt_download.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 
 
@@ -21,7 +24,7 @@ struct TExecutionOptions {
     bool ClearExecution = false;
     NKikimrKqp::EQueryAction ScriptQueryAction = NKikimrKqp::QUERY_ACTION_EXECUTE;
 
-    TString ScriptTraceId = "kqprun";
+    TString TraceId = "kqprun";
 
     bool HasResults() const {
         return ScriptQuery && ScriptQueryAction == NKikimrKqp::QUERY_ACTION_EXECUTE;
@@ -37,7 +40,7 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
 
     if (executionOptions.SchemeQuery) {
         Cout << colors.Yellow() << "Executing scheme query..." << colors.Default() << Endl;
-        if (!runner.ExecuteSchemeQuery(executionOptions.SchemeQuery)) {
+        if (!runner.ExecuteSchemeQuery(executionOptions.SchemeQuery, executionOptions.TraceId)) {
             ythrow yexception() << "Scheme query execution failed";
         }
     }
@@ -45,14 +48,15 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
     if (executionOptions.ScriptQuery) {
         Cout << colors.Yellow() << "Executing script..." << colors.Default() << Endl;
         if (!executionOptions.ClearExecution) {
-            if (!runner.ExecuteScript(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.ScriptTraceId)) {
+            if (!runner.ExecuteScript(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
                 ythrow yexception() << "Script execution failed";
             }
+            Cout << colors.Yellow() << "Fetching script results..." << colors.Default() << Endl;
             if (!runner.FetchScriptResults()) {
                 ythrow yexception() << "Fetch script results failed";
             }
         } else {
-            if (!runner.ExecuteQuery(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.ScriptTraceId)) {
+            if (!runner.ExecuteQuery(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
                 ythrow yexception() << "Query execution failed";
             }
         }
@@ -61,6 +65,8 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
     if (executionOptions.HasResults()) {
         runner.PrintScriptResults();
     }
+
+    Cout << colors.Yellow() << "Finalization of kqp runner..." << colors.Default() << Endl;
 }
 
 
@@ -73,6 +79,15 @@ THolder<TFileOutput> SetupDefaultFileOutput(const TString& filePath, IOutputStre
         stream = fileHolder.Get();
     }
     return fileHolder;
+}
+
+
+void ReplaceTemplate(const TString& variableName, const TString& variableValue, TString& query) {
+    TString variableTemplate = TStringBuilder() << "${" << variableName << "}";
+    for (size_t position = query.find(variableTemplate); position != TString::npos; position = query.find(variableTemplate, position)) {
+        query.replace(position, variableTemplate.size(), variableValue);
+        position += variableValue.size();
+    }
 }
 
 
@@ -102,12 +117,14 @@ void RunMain(int argc, const char* argv[]) {
     TString scriptQueryPlanFile;
     TString logFile = "-";
     TString appConfigFile = "./configuration/app_config.conf";
+    std::vector<TString> tablesMappingList;
 
     TString traceOptType = "disabled";
     TString scriptQueryAction = "execute";
     TString planOutputFormat = "pretty";
     TString resultOutputFormat = "rows";
     i64 resultsRowsLimit = 1000;
+    bool emulateYt = false;
 
     TVector<TString> udfsPaths;
     TString udfsDirectory;
@@ -126,6 +143,10 @@ void RunMain(int argc, const char* argv[]) {
         .RequiredArgument("FILE")
         .DefaultValue(appConfigFile)
         .StoreResult(&appConfigFile);
+    options.AddLongOption('t', "table", "File with table (can be used by YT with -E flag), table@file")
+        .Optional()
+        .RequiredArgument("FILE")
+        .AppendTo(&tablesMappingList);
 
     options.AddLongOption("log-file", "File with execution logs (use '-' to write in stderr)")
         .Optional()
@@ -178,6 +199,11 @@ void RunMain(int argc, const char* argv[]) {
         .RequiredArgument("INT")
         .DefaultValue(resultsRowsLimit)
         .StoreResult(&resultsRowsLimit);
+    options.AddLongOption('E', "emulate-yt", "Emulate YT tables")
+        .Optional()
+        .NoArgument()
+        .DefaultValue(emulateYt)
+        .SetFlag(&emulateYt);
 
     options.AddLongOption('u', "udf", "Load shared library with UDF by given path")
         .Optional()
@@ -190,6 +216,10 @@ void RunMain(int argc, const char* argv[]) {
 
     NLastGetopt::TOptsParseResult parsedOptions(&options, argc, argv);
 
+    // Environment variables
+
+    const TString& yqlToken = GetEnv(NKqpRun::YQL_TOKEN_VARIABLE);
+
     // Execution options
 
     if (!schemeQueryFile && !scriptQueryFile) {
@@ -197,6 +227,7 @@ void RunMain(int argc, const char* argv[]) {
     }
     if (schemeQueryFile) {
         executionOptions.SchemeQuery = TFileInput(schemeQueryFile).ReadAll();
+        ReplaceTemplate(NKqpRun::YQL_TOKEN_VARIABLE, yqlToken, executionOptions.SchemeQuery);
     }
     if (scriptQueryFile) {
         executionOptions.ScriptQuery = TFileInput(scriptQueryFile).ReadAll();
@@ -240,7 +271,7 @@ void RunMain(int argc, const char* argv[]) {
         std::remove(logFile.c_str());
     }
 
-    runnerOptions.YdbSettings.YqlToken = GetEnv("YQL_TOKEN");
+    runnerOptions.YdbSettings.YqlToken = yqlToken;
     runnerOptions.YdbSettings.FunctionRegistry = CreateFunctionRegistry(udfsDirectory, udfsPaths).Get();
 
     TString appConfigData = TFileInput(appConfigFile).ReadAll();
@@ -252,6 +283,27 @@ void RunMain(int argc, const char* argv[]) {
         ythrow yexception() << "Results rows limit less than zero";
     }
     runnerOptions.YdbSettings.AppConfig.MutableQueryServiceConfig()->SetScriptResultRowsLimit(resultsRowsLimit);
+
+    if (emulateYt) {
+        THashMap<TString, TString> tablesMapping;
+        for (const auto& tablesMappingItem: tablesMappingList) {
+            TStringBuf tableName;
+            TStringBuf filePath;
+            TStringBuf(tablesMappingItem).Split('@', tableName, filePath);
+            if (tableName.empty() || filePath.empty()) {
+                ythrow yexception() << "Incorrect table mapping, expected form table@file, e.g. yt.Root/plato.Input@input.txt";
+            }
+            tablesMapping[tableName] = filePath;
+        }
+
+        const auto& fileStorageConfig = runnerOptions.YdbSettings.AppConfig.GetQueryServiceConfig().GetFileStorage();
+        auto fileStorage = WithAsync(CreateFileStorage(fileStorageConfig, {MakeYtDownloader(fileStorageConfig)}));
+        auto ytFileServices = NYql::NFile::TYtFileServices::Make(runnerOptions.YdbSettings.FunctionRegistry.Get(), tablesMapping, fileStorage);
+        runnerOptions.YdbSettings.YtGateway = NYql::CreateYtFileGateway(ytFileServices);
+        runnerOptions.YdbSettings.ComputationFactory = NYql::NFile::GetYtFileFactory(ytFileServices);
+    } else if (!tablesMappingList.empty()) {
+        ythrow yexception() << "Tables mapping is not supported without emulate YT mode";
+    }
 
     RunScript(executionOptions, runnerOptions);
 }

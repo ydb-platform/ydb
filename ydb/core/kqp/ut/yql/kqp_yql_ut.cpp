@@ -504,6 +504,19 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         CompareYson(R"([[#]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST(EvaluateExprYsonAndType) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT FormatType(EvaluateType(TypeHandle(TypeOf(1)))), EvaluateExpr("[1;2;3]"y);
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([[Int32;"[1;2;3]"]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST(Discard) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
@@ -750,6 +763,94 @@ Y_UNIT_TEST_SUITE(KqpYql) {
                 UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Key").GetUuid().ToString(), testUuids[i]);
                 UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Value").GetOptionalInt32().GetRef(), i);
             }
+        }
+    }
+
+    Y_UNIT_TEST(TestUuidPrimaryKeyPrefixSearch) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetEnableUuidAsPrimaryKey(true)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TVector<TString> testUuids = {
+            "5b99a330-04ef-4f1a-9b64-ba6d5f44eafe",
+            "afcbef30-9ac3-481a-aa6a-8d9b785dbb0a",
+            "b91cd23b-861c-4cc1-9119-801a4dac1cb9",
+            "65df9ecc-a97d-47b2-ae56-3c023da6ee8c",
+        };
+
+        {
+            const auto query = Q_(R"(
+                CREATE TABLE test(
+                    key uuid NOT NULL,
+                    val int,
+                    PRIMARY KEY (key)
+                );
+            )");
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            int val = 0;
+            for (const auto& uuid : testUuids) {
+                const auto query = Sprintf("\
+                    INSERT INTO test (key, val)\n\
+                    VALUES (Uuid(\"%s\"), %u);\n\
+                ", uuid.Data(), val++);
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+        }
+        {
+            int val = 0;
+            for (const auto& uuid : testUuids) {
+                const auto query = Sprintf("SELECT * FROM test WHERE key=Uuid(\"%s\");", uuid.Data());
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+                TResultSetParser parser(result.GetResultSetParser(0));
+                UNIT_ASSERT(parser.TryNextRow());
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().GetRef(), val++);
+                UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TestUuidDefaultColumn) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetEnableUuidAsPrimaryKey(true)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            const auto query = Q_(R"(
+                CREATE TABLE test(
+                    key int NOT NULL,
+                    val uuid NOT NULL DEFAULT Uuid("65df9ecc-a97d-47b2-ae56-3c023da6ee8c"),
+                    PRIMARY KEY (key)
+                );
+            )");
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto query = "INSERT INTO test (key) VALUES (0);";
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     }
 

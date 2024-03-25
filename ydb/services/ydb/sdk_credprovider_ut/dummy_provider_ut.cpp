@@ -98,22 +98,23 @@ void RunTest(bool sync) {
     TString location = TStringBuilder() << "localhost:" << grpc;
 
     int runCnt = 0;
+    int maxWait = 10;
 
-    {
-        auto driver = NYdb::TDriver(
-            TDriverConfig()
-                .SetEndpoint(location)
-                .SetDiscoveryMode(sync ? EDiscoveryMode::Sync : EDiscoveryMode::Async)
-                .SetCredentialsProviderFactory(std::make_shared<TExampleDummyProviderFactory>(&runCnt)));
-        // Creates DbDriverState in case of empty database
-        auto client = NYdb::NTable::TTableClient(driver);
+    auto driver = NYdb::TDriver(
+        TDriverConfig()
+            .SetEndpoint(location)
+            .SetDiscoveryMode(sync ? EDiscoveryMode::Sync : EDiscoveryMode::Async)
+            .SetCredentialsProviderFactory(std::make_shared<TExampleDummyProviderFactory>(&runCnt)));
+    // Creates DbDriverState in case of empty database
+    auto client = NYdb::NTable::TTableClient(driver);
+    Y_UNUSED(client);
 
-        Y_UNUSED(client);
-        Sleep(TDuration::Seconds(5));
-    }
+    while (runCnt < 2 && maxWait--)
+        Sleep(TDuration::Seconds(1));
 
     Cerr << runCnt << Endl;
     UNIT_ASSERT_C(runCnt > 1, runCnt);
+    driver.Stop(true);
 }
 
 }

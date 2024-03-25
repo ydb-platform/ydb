@@ -11,6 +11,10 @@ SRCS(
     utils_ut.cpp
 )
 
+PEERDIR(
+    ydb/library/yql/public/udf/service/stub
+)
+
 YQL_LAST_ABI_VERSION()
 
 END()

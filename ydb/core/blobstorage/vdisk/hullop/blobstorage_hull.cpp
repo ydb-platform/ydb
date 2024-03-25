@@ -41,16 +41,15 @@ namespace NKikimr {
         TFields(TIntrusivePtr<THullDs> hullDs,
                 TIntrusivePtr<TLsnMngr> &&lsnMngr,
                 TPDiskCtxPtr &&pdiskCtx,
-                TIntrusivePtr<THandoffDelegate> &&handoffDelegate,
                 const TActorId skeletonId,
                 bool runHandoff,
                 TActorSystem *as,
                 bool barrierValidation)
-            : LogoBlobsRunTimeCtx(std::make_shared<TLogoBlobsRunTimeCtx>(lsnMngr, pdiskCtx, handoffDelegate,
+            : LogoBlobsRunTimeCtx(std::make_shared<TLogoBlobsRunTimeCtx>(lsnMngr, pdiskCtx,
                         skeletonId, runHandoff, hullDs->LogoBlobs))
-            , BlocksRunTimeCtx(std::make_shared<TBlocksRunTimeCtx>(lsnMngr, pdiskCtx, handoffDelegate,
+            , BlocksRunTimeCtx(std::make_shared<TBlocksRunTimeCtx>(lsnMngr, pdiskCtx,
                         skeletonId, runHandoff, hullDs->Blocks))
-            , BarriersRunTimeCtx(std::make_shared<TBarriersRunTimeCtx>(lsnMngr, pdiskCtx, handoffDelegate,
+            , BarriersRunTimeCtx(std::make_shared<TBarriersRunTimeCtx>(lsnMngr, pdiskCtx,
                         skeletonId, runHandoff, hullDs->Barriers))
             , LsnMngr(std::move(lsnMngr))
             , ActorSystem(as)
@@ -76,14 +75,13 @@ namespace NKikimr {
     THull::THull(
             TIntrusivePtr<TLsnMngr> lsnMngr,
             TPDiskCtxPtr pdiskCtx,
-            TIntrusivePtr<THandoffDelegate> handoffDelegate,
             const TActorId skeletonId,
             bool runHandoff,
             THullDbRecovery &&uncond,
             TActorSystem *as,
             bool barrierValidation)
         : THullDbRecovery(std::move(uncond))
-        , Fields(std::make_unique<TFields>(HullDs, std::move(lsnMngr), std::move(pdiskCtx), std::move(handoffDelegate),
+        , Fields(std::make_unique<TFields>(HullDs, std::move(lsnMngr), std::move(pdiskCtx),
                 skeletonId, runHandoff,  as, barrierValidation))
     {}
 
@@ -226,7 +224,7 @@ namespace NKikimr {
             Fields->AllowGarbageCollection);
     }
 
-    void THull::AddAnubisOsirisLogoBlob(
+    void THull::AddLogoBlob(
             const TActorContext &ctx,
             const TLogoBlobID &id,
             const TIngress &ingress,

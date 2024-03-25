@@ -4,6 +4,21 @@
 
 namespace NKikimr {
 
+TCountMinSketch* TCountMinSketch::Create(ui64 width, ui64 depth) {
+    auto size = StaticSize(width, depth);
+    auto* data = ::malloc(size);
+    auto* sketch = reinterpret_cast<TCountMinSketch*>(data);
+    std::memset(sketch, 0, size);
+    sketch->Width = width;
+    sketch->Depth = depth;
+    sketch->ElementCount = 0;
+    return sketch;
+}
+
+void TCountMinSketch::operator delete(void* data) noexcept {
+    ::free(data);
+}
+
 ui64 TCountMinSketch::Hash(const char* data, size_t size, size_t hashIndex) {
     // fnv1a
     ui64 hash = 14695981039346656037ULL + 31 * hashIndex;
@@ -16,7 +31,7 @@ ui64 TCountMinSketch::Hash(const char* data, size_t size, size_t hashIndex) {
 }
 
 void TCountMinSketch::Count(const char* data, size_t size) {
-    ui32* start = Buckets.data();
+    ui32* start = Buckets();
     for (size_t d = 0; d < Depth; ++d, start += Width) {
         ui64 hash = Hash(data, size, d);
         ui32* bucket = start + hash % Width;
@@ -29,7 +44,7 @@ void TCountMinSketch::Count(const char* data, size_t size) {
 
 ui32 TCountMinSketch::Probe(const char* data, size_t size) const {
     ui32 minValue = std::numeric_limits<ui32>::max();
-    const ui32* start = Buckets.data();
+    const ui32* start = Buckets();
     for (size_t d = 0; d < Depth; ++d, start += Width) {
         ui64 hash = Hash(data, size, d);
         const ui32* bucket = start + hash % Width;
@@ -38,12 +53,12 @@ ui32 TCountMinSketch::Probe(const char* data, size_t size) const {
     return minValue;
 }
 
-TCountMinSketch& TCountMinSketch::operator+=(TCountMinSketch& rhs) {
+TCountMinSketch& TCountMinSketch::operator+=(const TCountMinSketch& rhs) {
     if (Width != rhs.Width || Depth != rhs.Depth) {
         return *this;
     }
-    ui32* dst = Buckets.data();
-    ui32* src = rhs.Buckets.data();
+    ui32* dst = Buckets();
+    const ui32* src = rhs.Buckets();
     ui32* end = dst + Width * Depth;
     for (; dst != end; ++dst, ++src) {
         ui32 sum = *dst + *src;

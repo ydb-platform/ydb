@@ -8,6 +8,8 @@
 #include <ydb/core/tx/columnshard/data_locks/locks/abstract.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/composite.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
+#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
+#include <ydb/core/tx/columnshard/engines/storage/actualizer/common/address.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/portions/with_blobs.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
@@ -36,14 +38,69 @@ class TColumnEngineForLogs;
 class TVersionedIndex;
 class TPortionInfoWithBlobs;
 
-struct TPortionEvictionFeatures {
-    const TString TargetTierName;
-    const ui64 PathId;      // portion path id for cold-storage-key construct
+class TPortionEvictionFeatures {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, CurrentScheme);
+    YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, TargetScheme);
+    std::optional<TString> TargetTierName;
+    const TString CurrentTierName;
+    std::optional<NActualizer::TRWAddress> RWAddress;
+public:
+    TPortionEvictionFeatures(const std::shared_ptr<ISnapshotSchema>& currentScheme, const std::shared_ptr<ISnapshotSchema>& targetScheme, const TString& currentTierName)
+        : CurrentScheme(currentScheme)
+        , TargetScheme(targetScheme)
+        , CurrentTierName(currentTierName)
+    {
+        AFL_VERIFY(CurrentTierName);
+    }
 
-    TPortionEvictionFeatures(const TString& targetTierName, const ui64 pathId)
-        : TargetTierName(targetTierName)
-        , PathId(pathId)
-    {}
+    const TString& GetTargetTierName() const {
+        AFL_VERIFY(TargetTierName);
+        return *TargetTierName;
+    }
+
+    void SetTargetTierName(const TString& value) {
+        AFL_VERIFY(!TargetTierName);
+        TargetTierName = value;
+    }
+
+    void OnSkipPortionWithProcessMemory(const NColumnShard::TEngineLogsCounters& counters, const TDuration dWait) const {
+        if (TargetTierName == NTiering::NCommon::DeleteTierName) {
+            counters.OnSkipDeleteWithProcessMemory(dWait);
+        } else {
+            counters.OnSkipEvictionWithProcessMemory(dWait);
+        }
+    }
+
+    void OnSkipPortionWithTxLimit(const NColumnShard::TEngineLogsCounters& counters, const TDuration dWait) const {
+        if (TargetTierName == NTiering::NCommon::DeleteTierName) {
+            counters.OnSkipDeleteWithTxLimit(dWait);
+        } else {
+            counters.OnSkipEvictionWithTxLimit(dWait);
+        }
+    }
+
+    NActualizer::TRWAddress GetRWAddress() {
+        if (!RWAddress) {
+            AFL_VERIFY(TargetTierName);
+            RWAddress = NActualizer::TRWAddress(CurrentScheme->GetIndexInfo().GetUsedStorageIds(CurrentTierName), TargetScheme->GetIndexInfo().GetUsedStorageIds(*TargetTierName));
+        }
+        return *RWAddress;
+    }
+
+    bool NeedRewrite() const {
+        if (TargetTierName == NTiering::NCommon::DeleteTierName) {
+            return false;
+        }
+        if (CurrentTierName != TargetTierName) {
+            return true;
+        }
+        if (CurrentScheme->GetVersion() != TargetScheme->GetVersion()) {
+            return true;
+        }
+        AFL_VERIFY(false);
+        return false;
+    }
 };
 
 class TFinalizationContext: TNonCopyable {
@@ -141,6 +198,7 @@ public:
     };
 private:
     EStage Stage = EStage::Created;
+    std::shared_ptr<NDataLocks::TManager::TGuard> LockGuard;
 protected:
     virtual void DoDebugString(TStringOutput& out) const = 0;
     virtual void DoCompile(TFinalizationContext& context) = 0;

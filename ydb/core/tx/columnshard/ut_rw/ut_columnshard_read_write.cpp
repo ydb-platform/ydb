@@ -7,7 +7,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
-#include <ydb/core/tx/columnshard/engines/changes/cleanup.h>
+#include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
 #include <ydb/core/tx/columnshard/operations/write_data.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -1724,7 +1724,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
             auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
             TString blobData = NArrow::SerializeBatchNoCompression(batch);
             UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
-            auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
             evWrite->SetLockId(lockId, 1);
 
             ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
@@ -1751,7 +1751,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
             auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
             TString blobData = NArrow::SerializeBatchNoCompression(batch);
             UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
-            auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
             evWrite->SetLockId(lockId, 1);
 
             ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
@@ -1774,9 +1774,10 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         }
         {
             auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
-            evWrite->SetLockId(lockId, 1);
             evWrite->SetTxId(txId);
             evWrite->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+            auto* lock = evWrite->Record.MutableLocks()->AddLocks();
+            lock->SetLockId(lockId);
 
             TActorId sender = runtime.AllocateEdgeActor();
             ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
@@ -2532,7 +2533,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     }
                     Cerr << Endl;
                 }
-                if (auto cleanup = dynamic_pointer_cast<NOlap::TCleanupColumnEngineChanges>(msg->IndexChanges)) {
+                if (auto cleanup = dynamic_pointer_cast<NOlap::TCleanupPortionsColumnEngineChanges>(msg->IndexChanges)) {
                     Y_ABORT_UNLESS(cleanup->PortionsToDrop.size());
                     ++cleanupsHappened;
                     Cerr << "Cleanup old portions:";

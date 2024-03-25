@@ -11,8 +11,10 @@
 #include <ydb/core/formats/arrow/simple_builder/filler.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/portions/with_blobs.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/read_filter_merger.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/null_column.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
-#include <ydb/core/tx/columnshard/splitter/rb_splitter.h>
+#include <ydb/core/tx/columnshard/splitter/settings.h>
 
 namespace NKikimr::NOlap::NCompaction {
 
@@ -33,7 +35,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByFullBatches(TCon
     }
     Y_ABORT_UNLESS(batchResults.size());
     for (auto&& b : batchResults) {
-        auto portions = MakeAppendedPortions(b, GranuleMeta->GetPathId(), resultSchema->GetSnapshot(), GranuleMeta.get(), context);
+        auto portions = MakeAppendedPortions(b, GranuleMeta->GetPathId(), resultSchema->GetSnapshot(), GranuleMeta.get(), context, {});
         Y_ABORT_UNLESS(portions.size());
         for (auto& portion : portions) {
             AppendedPortions.emplace_back(std::move(portion));
@@ -48,10 +50,6 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
     static const std::shared_ptr<arrow::Field> portionRecordIndexField = std::make_shared<arrow::Field>(portionRecordIndexFieldName, std::make_shared<arrow::UInt32Type>());
 
     auto resultSchema = context.SchemaVersions.GetLastSchema();
-    TEntityGroups groups(IStoragesManager::DefaultStorageId);
-    for (auto&& i : resultSchema->GetIndexInfo().GetEntityIds()) {
-        groups.Add(i, resultSchema->GetIndexInfo().GetEntityStorageId(i, ""));
-    }
 
     std::vector<std::string> pkFieldNames = resultSchema->GetIndexInfo().GetReplaceKey()->field_names();
     std::set<std::string> pkFieldNamesSet(pkFieldNames.begin(), pkFieldNames.end());
@@ -109,7 +107,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
             if (!p.ExtractColumnChunks(columnId, records, chunks)) {
                 AFL_VERIFY(!loader);
                 records = {nullptr};
-                chunks.emplace_back(std::make_shared<TNullChunkPreparation>(columnId, p.GetPortionInfo().GetRecordsCount(), resultField, resultSchema->GetColumnSaver(columnId, SaverContext)));
+                chunks.emplace_back(std::make_shared<NChunks::TNullChunkPreparation>(columnId, p.GetPortionInfo().GetRecordsCount(), resultField, resultSchema->GetColumnSaver(columnId)));
                 loader = resultSchema->GetColumnLoaderVerified(columnId);
             }
             AFL_VERIFY(!!loader);
@@ -121,8 +119,8 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
         std::map<std::string, std::vector<TColumnPortionResult>> columnChunks;
         ui32 batchIdx = 0;
         for (auto&& batchResult : batchResults) {
-            const ui32 portionRecordsCountLimit = batchResult->num_rows() / (batchResult->num_rows() / GetSplitSettings().GetExpectedRecordsCountOnPage() + 1) + 1;
-            TColumnMergeContext context(columnId, resultSchema, portionRecordsCountLimit, GetSplitSettings().GetExpectedUnpackColumnChunkRawSize(), columnInfo, SaverContext);
+            const ui32 portionRecordsCountLimit = batchResult->num_rows() / (batchResult->num_rows() / NSplitter::TSplitSettings().GetExpectedRecordsCountOnPage() + 1) + 1;
+            TColumnMergeContext context(columnId, resultSchema, portionRecordsCountLimit, NSplitter::TSplitSettings().GetExpectedUnpackColumnChunkRawSize(), columnInfo);
             TMergedColumn mColumn(context);
 
             auto columnPortionIdx = batchResult->GetColumnByName(portionIdFieldName);
@@ -163,6 +161,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
     }
     ui32 batchIdx = 0;
 
+    const auto groups = resultSchema->GetIndexInfo().GetEntityGroupsByStorageId(IStoragesManager::DefaultStorageId, *SaverContext.GetStoragesManager());
     for (auto&& columnChunks : chunkGroups) {
         auto batchResult = batchResults[batchIdx];
         ++batchIdx;
@@ -178,7 +177,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
         }
 
         std::vector<TGeneralSerializedSlice> batchSlices;
-        std::shared_ptr<TDefaultSchemaDetails> schemaDetails(new TDefaultSchemaDetails(resultSchema, SaverContext, stats));
+        std::shared_ptr<TDefaultSchemaDetails> schemaDetails(new TDefaultSchemaDetails(resultSchema, stats));
 
         for (ui32 i = 0; i < columnChunks.begin()->second.size(); ++i) {
             THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> portionColumns;
@@ -186,17 +185,18 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
                 portionColumns.emplace(p.first, p.second[i].GetChunks());
             }
             resultSchema->GetIndexInfo().AppendIndexes(portionColumns);
-            batchSlices.emplace_back(portionColumns, schemaDetails, context.Counters.SplitterCounters, GetSplitSettings());
+            batchSlices.emplace_back(portionColumns, schemaDetails, context.Counters.SplitterCounters);
         }
-        TSimilarSlicer slicer(GetSplitSettings().GetExpectedPortionSize());
+        TSimilarPacker slicer(NSplitter::TSplitSettings().GetExpectedPortionSize());
         auto packs = slicer.Split(batchSlices);
 
         ui32 recordIdx = 0;
         for (auto&& i : packs) {
-            TGeneralSerializedSlice slice(std::move(i), GetSplitSettings());
+            TGeneralSerializedSlice slice(std::move(i));
             auto b = batchResult->Slice(recordIdx, slice.GetRecordsCount());
             AppendedPortions.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), nullptr, GranuleMeta->GetPathId(), 
-                resultSchema->GetSnapshot(), SaverContext.GetStoragesManager(), resultSchema));
+                resultSchema->GetSnapshot(), SaverContext.GetStoragesManager()));
+            AppendedPortions.back().FillStatistics(resultSchema->GetIndexInfo());
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultSchema->GetIndexInfo().GetReplaceKey()));
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
             AppendedPortions.back().GetPortionInfo().AddMetadata(*resultSchema, primaryKeys, snapshotKeys, IStoragesManager::DefaultStorageId);

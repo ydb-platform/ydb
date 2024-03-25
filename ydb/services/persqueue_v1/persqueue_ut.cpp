@@ -6691,6 +6691,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         auto topicClient = NYdb::NTopic::TTopicClient(*driver);
 
         NYdb::NTopic::TWriteSessionSettings wSettings {topicFullName, "srcId", "srcId"};
+        wSettings.DirectWriteToPartition(false);
         auto writer = topicClient.CreateSimpleBlockingWriteSession(wSettings);
         TVector<std::pair<TString, TString>> metadata = {{"key1", "val1"}, {"key2", "val2"}};
         {
@@ -6754,7 +6755,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             }
             UNIT_ASSERT(writeStream1->Read(&resp));
             Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
-            UNIT_ASSERT(resp.status() == Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT(resp.status() == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamWriteMessage::FromServer::kInitResponse);
+
         }
         {
             grpc::ClientContext rcontext1;
@@ -6783,6 +6786,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         auto topicClient = NYdb::NTopic::TTopicClient(*driver);
         NYdb::NTopic::TWriteSessionSettings wSettings;
         wSettings.Path(topicFullName).DeduplicationEnabled(false);
+        wSettings.DirectWriteToPartition(false);
 
         TVector<std::shared_ptr<NYdb::NTopic::ISimpleBlockingWriteSession>> writers;
         for (auto i = 0u; i < 3; i++) {

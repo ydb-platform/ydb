@@ -65,26 +65,10 @@ Y_UNIT_TEST_SUITE(Mirror3of4) {
                 UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
             }
             if (i == 500) {
-                const TActorId self = runtime->AllocateEdgeActor(1);
-                auto ev = std::make_unique<TEvBlobStorage::TEvControllerGroupReconfigureWipe>();
-                ev->Record.MutableVSlotId()->SetNodeId(2);
-                ev->Record.MutableVSlotId()->SetPDiskId(1000);
-                ev->Record.MutableVSlotId()->SetVSlotId(1000);
-                runtime->SendToPipe(env.TabletId, self, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
-                auto response = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerGroupReconfigureWipeResult>(self);
-                auto& r = response->Get()->Record;
-                UNIT_ASSERT_EQUAL(r.GetStatus(), NKikimrProto::OK);
+                env.Wipe(2, 1000, 1000, TVDiskID(groupId, 1, 0, 1, 0));
             }
             if (i == 600) {
-                const TActorId self = runtime->AllocateEdgeActor(1);
-                auto ev = std::make_unique<TEvBlobStorage::TEvControllerGroupReconfigureWipe>();
-                ev->Record.MutableVSlotId()->SetNodeId(3);
-                ev->Record.MutableVSlotId()->SetPDiskId(1000);
-                ev->Record.MutableVSlotId()->SetVSlotId(1000);
-                runtime->SendToPipe(env.TabletId, self, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
-                auto response = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerGroupReconfigureWipeResult>(self);
-                auto& r = response->Get()->Record;
-                UNIT_ASSERT_EQUAL(r.GetStatus(), NKikimrProto::OK);
+                env.Wipe(3, 1000, 1000, TVDiskID(groupId, 1, 0, 2, 0));
             }
         }
 

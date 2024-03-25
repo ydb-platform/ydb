@@ -460,7 +460,7 @@ TQueryInfoList TKvWorkloadGenerator::GetInitialData() {
 }
 
 TVector<std::string> TKvWorkloadGenerator::GetCleanPaths() const {
-    return { Params.TableName };
+    return { Params.DbPath + "/" + Params.TableName };
 }
 
 TVector<TRow> TKvWorkloadGenerator::GenerateRandomRows(bool randomValues) {

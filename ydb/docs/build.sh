@@ -5,7 +5,7 @@ echo Checking YFM installed...
 yfm --version
 if [[ $? -ge 1 ]]; then
   echo
-  echo "You need to have YFM builder (https://ydocs.tech/en/tools/docs/) installed to run this script, exiting"
+  echo "You need to have YFM builder (https://diplodoc.com/docs/en/tools/docs/) installed to run this script, exiting"
   exit
 fi
 

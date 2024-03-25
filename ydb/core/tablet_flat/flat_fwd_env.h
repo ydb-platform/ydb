@@ -287,7 +287,8 @@ namespace NFwd {
             if ((q.Grow = got.Grow) || bool(q.Fetch)) {
                 Queue.PushBack(&q);
             } else if (got.Need && got.Page == nullptr) {
-                Y_ABORT("Cache line head don't want to do fetch but should");
+                // temporary hack for index pages as they are always stored in group 0 
+                Y_ABORT_UNLESS(!Queue.Empty(), "Cache line head don't want to do fetch but should");
             }
 
             return { got.Need, got.Page };

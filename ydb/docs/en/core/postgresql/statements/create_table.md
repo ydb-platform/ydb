@@ -51,14 +51,7 @@ In this example, we created the "people" table with a constraint block (`CONSTRA
 
 ## Creating a temporary table {#create_table_temp_table}
 
-
-{% note warning %}
-
-The temporary table functionality is not fully implemented. Temporary tables may not be deleted. Therefore, they can be used for testing, but not for production.
-
-{% endnote %}
-
-{% include [create_table_temp](../_includes/statements/create_table/create_table_temp.md) %}
+{% include [create_table_temp.md](../../../_includes/postgresql/statements/create_table/create_table_temp.md) %}
 
 The temporary table is defined using the `TEMPORARY` or `TEMP` keywords. It exists until the end of the session, after which it is automatically deleted.
 

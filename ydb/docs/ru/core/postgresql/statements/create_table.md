@@ -88,14 +88,6 @@ CREATE TABLE people (
 
 ## Создание временной таблицы {#create_table_temp_table}
 
-
-{% note warning %}
-
-Функциональность временной таблицы реализована не полностью.
-
-{% endnote %}
-
-
 ```sql
 CREATE TEMPORARY TABLE people (
     id serial PRIMARY KEY,

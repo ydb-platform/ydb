@@ -187,10 +187,9 @@ void TPartitionHistogramWrapper::IncFor(ui64 key, ui64 value) {
 }
 TVector<ui64> TPartitionHistogramWrapper::GetValues() const {
     TVector<ui64> res;
-    res.resize(Values.size());
-    auto i = 0u;
-    for (auto iter = Values.begin(); iter != Values.end(); iter++, i++) {
-        res[i] = iter->second;
+    res.reserve(Values.size());
+    for (auto iter : Values) {
+        res.push_back(iter.second);
     }
     return res;
 }

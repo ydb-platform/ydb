@@ -372,12 +372,6 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
         for(const auto& v : MessageSize.GetValues()) {
             counterData->AddMessagesSizes(v);
         }
-        for(const auto& v : PartitionWriteQuotaWaitCounter.GetValues()) {
-            counterData->AddPartitionWriteQuotaWait(v);
-        }
-        for(const auto& v : TopicWriteQuotaWaitCounter.GetValues()) {
-            counterData->AddTopicWriteQuotaWait(v);
-        }
     }
 
     TString out;
@@ -999,9 +993,6 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorCon
     response->MessagesWrittenTotal = MsgsWrittenTotal.Value();
     response->MessagesWrittenGrpc = MsgsWrittenGrpc.Value();
     response->MessagesSizes = std::move(MessageSize.GetValues());
-
-    response->TopicWriteQuotaWait = std::move(TopicWriteQuotaWaitCounter.GetValues());
-    response->PartitionWriteQuotaWait = std::move(PartitionWriteQuotaWaitCounter.GetValues());
 
     ctx.Send(ev->Sender, response);
 }
@@ -2613,7 +2604,7 @@ void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorConte
     PartitionQuotaWaitTimeForCurrentBlob = ev->Get()->PartitionQuotaWaitTime;
 
     if (TopicWriteQuotaWaitCounter) {
-        TopicWriteQuotaWaitCounter.IncFor(TopicQuotaWaitTimeForCurrentBlob.MilliSeconds());
+        TopicWriteQuotaWaitCounter->IncFor(TopicQuotaWaitTimeForCurrentBlob.MilliSeconds());
     }
     if (CurrentStateFunc() == &TThis::StateIdle)
         HandleWrites(ctx);

@@ -720,7 +720,7 @@ private:
 
     TActorId ReadQuotaTrackerActor;
     TActorId WriteQuotaTrackerActor;
-    TPartitionHistogramWrapper PartitionWriteQuotaWaitCounter;
+    THolder<TPercentileCounter> PartitionWriteQuotaWaitCounter;
     TInstant QuotaDeadline = TInstant::Zero();
 
     TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgWriteBytes;
@@ -749,7 +749,6 @@ private:
     NKikimr::NPQ::TMultiCounter SLIBigLatency;
     NKikimr::NPQ::TMultiCounter WritesTotal;
 
-    //NKikimr::NPQ::TMultiCounter BytesWrittenTotal;
     TPartitionCounterWrapper BytesWrittenTotal;
 
     TPartitionCounterWrapper BytesWrittenGrpc;
@@ -765,7 +764,7 @@ private:
 
     // Wait topic quota metrics
     ui64 TotalPartitionWriteSpeed = 0;
-    TPartitionHistogramWrapper TopicWriteQuotaWaitCounter;
+    THolder<TPercentileCounter> TopicWriteQuotaWaitCounter;
     TInstant WriteStartTime;
     TDuration TopicQuotaWaitTimeForCurrentBlob;
     TDuration PartitionQuotaWaitTimeForCurrentBlob;

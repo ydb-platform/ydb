@@ -325,8 +325,6 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
             Partition()->MsgsWrittenTotal.SetSavedValue(counterData.GetMessagesWrittenTotal());
 
             Partition()->MessageSize.SetValues(counterData.GetMessagesSizes());
-            Partition()->PartitionWriteQuotaWaitCounter.SetValues(counterData.GetPartitionWriteQuotaWait());
-            Partition()->TopicWriteQuotaWaitCounter.SetValues(counterData.GetTopicWriteQuotaWait());
         }
     };
     handleReadResult(kvResponse.GetReadResult(0), loadMeta);
@@ -814,8 +812,7 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
     SLIBigLatency = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"WriteBigLatency"}, true, "sensor", false);
     WritesTotal = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"WritesTotal"}, true, "sensor", false);
     if (IsQuotingEnabled()) {
-        TopicWriteQuotaWaitCounter.Setup(
-            IsSupportive(),
+        TopicWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
             new NKikimr::NPQ::TPercentileCounter(
                 GetServiceCounters(counters, "pqproxy|topicWriteQuotaWait"), labels,
                     {{"sensor", "TopicWriteQuotaWait" + suffix}}, "Interval",
@@ -827,8 +824,7 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
         );
     }
 
-    PartitionWriteQuotaWaitCounter.Setup(
-        IsSupportive(),
+    PartitionWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
         new NKikimr::NPQ::TPercentileCounter(GetServiceCounters(counters, "pqproxy|partitionWriteQuotaWait"),
             labels, {{"sensor", "PartitionWriteQuotaWait" + suffix}}, "Interval",
                 TVector<std::pair<ui64, TString>>{
@@ -924,8 +920,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
     WritesTotal = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"WritesTotal"}, true, "name", false);
     if (IsQuotingEnabled()) {
         subgroups.push_back({"name", "topic.write.topic_throttled_milliseconds"});
-        TopicWriteQuotaWaitCounter.Setup(
-            IsSupportive(),
+        TopicWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
             new NKikimr::NPQ::TPercentileCounter(
                 NPersQueue::GetCountersForTopic(counters, IsServerless), {},
                             subgroups, "bin",
@@ -939,8 +934,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
     }
 
     subgroups.push_back({"name", "topic.write.partition_throttled_milliseconds"});
-    PartitionWriteQuotaWaitCounter.Setup(
-            IsSupportive(),
+    PartitionWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
         new NKikimr::NPQ::TPercentileCounter(
             NPersQueue::GetCountersForTopic(counters, IsServerless), {}, subgroups, "bin",
                         TVector<std::pair<ui64, TString>>{

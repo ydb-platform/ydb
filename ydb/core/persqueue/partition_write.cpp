@@ -358,7 +358,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             );
 
             if (PartitionWriteQuotaWaitCounter) {
-                PartitionWriteQuotaWaitCounter.IncFor(PartitionQuotaWaitTimeForCurrentBlob.MilliSeconds());
+                PartitionWriteQuotaWaitCounter->IncFor(PartitionQuotaWaitTimeForCurrentBlob.MilliSeconds());
             }
             if (!already && partNo + 1 == totalParts && !writeResponse.Msg.HeartbeatVersion)
                 ++offset;

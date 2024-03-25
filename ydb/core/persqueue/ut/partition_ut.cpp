@@ -92,10 +92,7 @@ void TPartitionTestWrapper::LoadMeta(const NKikimrPQ::TPartitionCounterData& cou
 
     auto actual = MetaStep->Partition()->MessageSize.GetValues();
     CMP_HISTOGRAM(MessagesSizes);
-    actual = MetaStep->Partition()->TopicWriteQuotaWaitCounter.GetValues();
-    CMP_HISTOGRAM(TopicWriteQuotaWait);
-    actual = MetaStep->Partition()->PartitionWriteQuotaWaitCounter.GetValues();
-    CMP_HISTOGRAM(PartitionWriteQuotaWait);
+
 }
 
 Y_UNIT_TEST_SUITE(TPartitionTests) {
@@ -1028,16 +1025,6 @@ void TPartitionFixture::ShadowPartitionCountersTest(bool isFirstClass) {
     }
     TVector<ui64> msgSizesExpected{2, 2, 1, 1, 1, 1, 1, 1};
     CompareVectors(msgSizesExpected, finalCounters.GetMessagesSizes());
-    TVector<ui64> topicQuotaExpected;
-    if (!isFirstClass)
-        topicQuotaExpected = {1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 3, 3};
-    CompareVectors(topicQuotaExpected, finalCounters.GetTopicWriteQuotaWait());
-    TVector<ui64> partQuotaExpected{1, 0, 0, 1, 1, 3, 3};
-    CompareVectors(partQuotaExpected, finalCounters.GetPartitionWriteQuotaWait());
-
-    if (!isFirstClass)
-        topicQuotaExpected.back() += 1;
-    partQuotaExpected.back() += 1;
     SendGetWriteInfo(100'001);
     {
         auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoResponse>(TDuration::Seconds(1));
@@ -1051,8 +1038,6 @@ void TPartitionFixture::ShadowPartitionCountersTest(bool isFirstClass) {
         UNIT_ASSERT_VALUES_EQUAL(event->BytesWrittenUncompressed, currUncSize);
 
         CompareVectors(msgSizesExpected, event->MessagesSizes);
-        CompareVectors(topicQuotaExpected, event->TopicWriteQuotaWait);
-        CompareVectors(partQuotaExpected, event->PartitionWriteQuotaWait);
     }
 
 }
@@ -1950,12 +1935,6 @@ Y_UNIT_TEST_F(ShadowPartitionCountersRestore, TPartitionFixture) {
     for(ui64 i = 0; i < 14; i++) {
         countersProto.AddMessagesSizes(i * 5);
     }
-    for(ui64 i = 0; i < 13; i++) {
-        countersProto.AddTopicWriteQuotaWait(100 - i*3);
-    }
-    for(ui64 i = 0; i < 13; i++) {
-        countersProto.AddPartitionWriteQuotaWait(5 + i*3);
-    };
     wrapper.LoadMeta(countersProto);
 
     metaStep.Reset();

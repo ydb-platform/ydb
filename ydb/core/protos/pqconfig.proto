@@ -23,8 +23,6 @@ message TPartitionCounterData {
     optional uint64 BytesWrittenUncompressed = 5;
     repeated uint64 MessagesSizes = 6;
     //ToDo: !! InputLag = 7
-    repeated uint64 TopicWriteQuotaWait = 7;
-    repeated uint64 PartitionWriteQuotaWait = 8;
 }
 
 message TPartitionMeta {

@@ -38,6 +38,16 @@ common:
   - from: /getting_started/yql.md
     to: /yql/reference/index.md
 
+# Redirects for ydb-dstoo
+  - from: /administration/ydb-dstool-device-list.md
+    to: /reference/ydb-dstool/device-list.md
+  - from: /administration/ydb-dstool-global-options.md
+    to: /reference/ydb-dstool/global-options.md
+  - from: /administration/ydb-dstool-overview.md
+    to: /reference/ydb-dstool/index.md
+  - from: /administration/ydb-dstool-setup.md
+    to: /reference/ydb-dstool/install.md
+
 # Redirect from export_import to export-import   
   - from: /reference/ydb-cli/export_import/s3_conn.md
     to: /reference/ydb-cli/export-import/auth-s3.md

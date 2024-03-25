@@ -1,12 +1,12 @@
 # Обзор утилиты {{ ydb-short-name }} DSTool
 
-С помощью утилиты {{ ydb-short-name }} DSTool вы можете управлять дисковой подсистемой кластера {{ ydb-short-name }}. Чтобы установить и настроить утилиту, выполните [инструкцию](ydb-dstool-setup.md).
+С помощью утилиты {{ ydb-short-name }} DSTool вы можете управлять дисковой подсистемой кластера {{ ydb-short-name }}. Чтобы установить и настроить утилиту, выполните [инструкцию](install.md).
 
 Утилита {{ ydb-short-name }} DSTool включает следующие команды:
 
 Команда | Описание
 --- | ---
-[device list](./ydb-dstool-device-list.md) | Вывести список устройств хранения.
+[device list](device-list.md) | Вывести список устройств хранения.
 pdisk add-by-serial | Добавить PDisk в набор по серийному номеру.
 pdisk remove-by-serial | Удалить PDisk из набора по серийному номеру.
 pdisk set | Задать параметры PDisk'а.

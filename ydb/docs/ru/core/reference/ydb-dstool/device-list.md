@@ -2,15 +2,13 @@
 
 С помощью подкоманды `device list` вы можете вывести список устройств хранения, доступных на кластере {{ ydb-short-name }}.
 
-{% include [trunk](../_includes/trunk.md) %}
-
 Общий вид команды:
 
 ```bash
 ydb-dstool [global options ...] device list [list options ...]
 ```
 
-* `global options` — [глобальные параметры](./ydb-dstool-global-options.md).
+* `global options` — [глобальные параметры](global-options.md).
 * `list options` — [параметры подкоманды](#options).
 
 Посмотрите описание команды вывода списка устройств:

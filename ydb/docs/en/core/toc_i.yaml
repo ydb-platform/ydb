@@ -18,14 +18,15 @@ items:
 - { name: Managing databases,                    include: { mode: link, path: db/toc_p.yaml } }
 - { name: Managing a cluster,                    include: { mode: link, path: cluster/toc_p.yaml } }
 
-# References
-- { name: YQL,                                             include: { mode: link, path: yql/toc_p.yaml } }
-- { name: Compatibility with PostgreSQL,                   include: { mode: link, path: postgresql/toc_p.yaml } }
-- { name: Integrations,                                    include: { mode: link, path: integrations/toc_p.yaml } }
-- { name: Working with the YDB CLI,                        include: { mode: link, path: reference/ydb-cli/toc_p.yaml } }
-- { name: Working with the YDB SDK,                        include: { mode: link, path: reference/ydb-sdk/toc_p.yaml } }
-- { name: Working with the Kafka API,                      include: { mode: link, path: reference/kafka-api/toc_p.yaml } }
-- { name: Development,                                     include: { mode: link, path: development/toc_p.yaml } }
+- name: For contributors
+  include:
+    mode: link
+    path: development/toc_p.yaml
+- name: Reference
+  include:
+    mode: link
+    path: reference/toc_p.yaml
+
 # Footer
 - { name: Questions and answers,                        include: { mode: link, path: faq/toc_p.yaml } }
 - include: { mode: link, path: downloads/toc_p.yaml }

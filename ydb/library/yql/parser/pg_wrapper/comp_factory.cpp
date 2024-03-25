@@ -468,13 +468,12 @@ public:
                 };
 
                 ApplyFillers(AllPgLanguageFillers, Y_ARRAY_SIZE(AllPgLanguageFillers), PgLanguageFillers_);
-            }
+            }            
         } else {
             if (Table_ == "tables") {
                 static const std::pair<const char*, TTablesFiller> AllTablesFillers[] = {
                     {"table_schema", [](const NPg::TTableInfo& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Schema, NAMEDATALEN)); }},
                     {"table_name", [](const NPg::TTableInfo& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN)); }},
-                    {"table_catalog", [](const NPg::TTableInfo& desc) { return PointerDatumToPod((Datum)MakeFixedString("local", NAMEDATALEN)); }}, // TODO: set database name
                 };
 
                 ApplyFillers(AllTablesFillers, Y_ARRAY_SIZE(AllTablesFillers), TablesFillers_);
@@ -731,7 +730,7 @@ public:
                 });
 
                 for (const auto& t : tables) {
-                    const ui32 amOid = (t.Kind == NPg::ERelKind::Relation) ? btreeAmOid : 0;
+                    const ui32 amOid = (t.Kind == NPg::ERelKind::Relation) ? btreeAmOid : 0;                    
                     NUdf::TUnboxedValue* items;
                     auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgClassFillers_.size(), items);
                     for (ui32 i = 0; i < PgClassFillers_.size(); ++i) {
@@ -1094,7 +1093,7 @@ protected:
     const TVector<TType*> ArgTypes;
     const TStructType* StructType;
     TVector<NPg::TTypeDesc> ArgDesc;
-
+    
     TPgArgsExprBuilder ArgsExprBuilder;
 };
 
@@ -1238,7 +1237,7 @@ private:
 
                     rsInfo.expectedDesc = BlessTupleDesc(rsInfo.expectedDesc);
                 }
-
+                
                 TupleSlot = MakeSingleTupleTableSlot(rsInfo.expectedDesc, &TTSOpsMinimalTuple);
                 for (ui32 i = 0; i < args.size(); ++i) {
                     const auto& value = args[i];
@@ -1304,7 +1303,7 @@ private:
                     FinishAndFree();
                     return false;
                 }
-
+                
                 slot_getallattrs(TupleSlot);
                 if (RetTypeDesc.TypeId == RECORDOID) {
                     if (StructType) {

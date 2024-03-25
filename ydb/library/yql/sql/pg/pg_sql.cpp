@@ -457,7 +457,6 @@ public:
                     "bytea_output",                        // zabbix
                     "datestyle",                           // pgadmin 4
                     "timezone",                            // mediawiki
-                    "search_path",                         // mediawiki
                     NULL,
                 };
 

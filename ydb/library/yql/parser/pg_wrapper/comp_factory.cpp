@@ -1044,7 +1044,7 @@ public:
         , Name(name)
         , Id(id)
         , ProcDesc(NPg::LookupProc(id))
-        , RetTypeDesc(NPg::LookupType(AS_TYPE(TPgType, returnType)->GetTypeId()))
+        , RetTypeDesc(NPg::LookupType(returnType->IsStruct() ? RECORDOID : AS_TYPE(TPgType, returnType)->GetTypeId()))
         , ArgNodes(std::move(argNodes))
         , ArgTypes(std::move(argTypes))
         , StructType(structType)

@@ -25,7 +25,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    datashard_ut_statistics.cpp
+    datashard_ut_column_stats.cpp
 )
 
 REQUIREMENTS(ram:32)

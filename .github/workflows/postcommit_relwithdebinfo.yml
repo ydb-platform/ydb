@@ -22,7 +22,7 @@ jobs:
     - name: Build and test
       uses: ./.github/actions/build_and_test_ya
       with:
-        build_preset: ${{ matrix.build_preset }}
+        build_preset: relwithdebinfo
         build_target: "ydb/"
         run_tests: true
         test_size: "small,medium"

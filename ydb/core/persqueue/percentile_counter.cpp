@@ -131,7 +131,73 @@ NKikimr::NPQ::TPercentileCounter CreateSLIDurationCounter(
     return NKikimr::NPQ::TPercentileCounter(counters->GetSubgroup("sensor", name), aggr, {}, "Duration", buckets, true, false);
 }
 
+TPartitionCounterWrapper::TPartitionCounterWrapper(NKikimr::NPQ::TMultiCounter&& counter, bool isSupportivePartition, bool doReport) {
+    Setup(isSupportivePartition, doReport, std::move(counter));
+}
 
+void TPartitionCounterWrapper::Setup(bool isSupportivePartition, bool doReport, NKikimr::NPQ::TMultiCounter&& counter) {
+    Inited = true;
+    DoSave = isSupportivePartition;
+    DoReport = !isSupportivePartition || doReport;
+    if (DoReport) {
+        Counter = std::move(counter);
+    }
+}
+
+void TPartitionCounterWrapper::Inc(ui64 value) {
+    if (DoSave) {
+        CounterValue += value;
+    }
+    if (DoReport) {
+        Counter->Inc(value);
+    }
+}
+
+ui64 TPartitionCounterWrapper::Value() const {
+    return CounterValue; //Getting counter value for non-supportive partition is unexpected and returns 0
+}
+
+void TPartitionCounterWrapper::SetSavedValue(ui64 value) {
+    CounterValue = value;
+}
+
+TPartitionCounterWrapper::operator bool() const {
+    return Inited && (!DoReport || Counter);
+}
+
+void TPartitionHistogramWrapper::Setup(bool isSupportivePartition, NKikimr::NPQ::TPercentileCounter* histogram) {
+    IsSupportivePartition = isSupportivePartition;
+    Inited = true;
+    if (!IsSupportivePartition) {
+        Histogram.Reset(histogram);
+    } else {
+        for (const auto& bucket : histogram->Ranges) {
+            Values.insert(std::make_pair(bucket, 0));
+        }
+    }
+}
+void TPartitionHistogramWrapper::IncFor(ui64 key, ui64 value) {
+    if (!IsSupportivePartition) {
+        return Histogram->IncFor(key, value);
+    }
+    auto bucket = Values.lower_bound(key);
+    if (bucket != Values.end()) {
+        bucket->second += value;
+    }
+}
+TVector<ui64> TPartitionHistogramWrapper::GetValues() const {
+    TVector<ui64> res;
+    res.resize(Values.size());
+    auto i = 0u;
+    for (auto iter = Values.begin(); iter != Values.end(); iter++, i++) {
+        res[i] = iter->second;
+    }
+    return res;
+}
+
+TPartitionHistogramWrapper::operator bool() const {
+    return Inited && (IsSupportivePartition || Histogram);
+}
 
 } // NPQ
 } // NKikimr

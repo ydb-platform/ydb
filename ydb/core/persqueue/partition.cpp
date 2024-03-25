@@ -1,9 +1,7 @@
 #include "event_helpers.h"
 #include "mirrorer.h"
-#include "partition_log.h"
 #include "partition_util.h"
 #include "partition.h"
-#include "read.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
@@ -363,6 +361,24 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     meta.SetStartOffset(StartOffset);
     meta.SetEndOffset(Max(NewHead.GetNextOffset(), EndOffset));
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
+
+    if (IsSupportive()) {
+        auto* counterData = meta.MutableCounterData();
+        counterData->SetMessagesWrittenGrpc(MsgsWrittenGrpc.Value());
+        counterData->SetMessagesWrittenTotal(MsgsWrittenTotal.Value());
+        counterData->SetBytesWrittenGrpc(BytesWrittenGrpc.Value());
+        counterData->SetBytesWrittenTotal(BytesWrittenTotal.Value());
+        counterData->SetBytesWrittenUncompressed(BytesWrittenUncompressed.Value());
+        for(const auto& v : MessageSize.GetValues()) {
+            counterData->AddMessagesSizes(v);
+        }
+        for(const auto& v : PartitionWriteQuotaWaitCounter.GetValues()) {
+            counterData->AddPartitionWriteQuotaWait(v);
+        }
+        for(const auto& v : TopicWriteQuotaWaitCounter.GetValues()) {
+            counterData->AddTopicWriteQuotaWait(v);
+        }
+    }
 
     TString out;
     Y_PROTOBUF_SUPPRESS_NODISCARD meta.SerializeToString(&out);
@@ -971,7 +987,22 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorCon
     ui32 rcount = 0, rsize = 0;
     ui64 insideHeadOffset = 0;
 
-    response->BlobsFromHead = std::move(GetReadRequestFromHead(0, 0, std::numeric_limits<ui32>::max(), std::numeric_limits<ui32>::max(), 0, &rcount, &rsize, &insideHeadOffset, 0));
+    response->BlobsFromHead = std::move(GetReadRequestFromHead(0, 0, std::numeric_limits<ui32>::max(),
+                                                               std::numeric_limits<ui32>::max(), 0, &rcount, &rsize,
+                                                               &insideHeadOffset, 0));
+
+
+    response->BytesWrittenGrpc = BytesWrittenGrpc.Value();
+    response->BytesWrittenUncompressed = BytesWrittenUncompressed.Value();
+    response->BytesWrittenTotal = BytesWrittenTotal.Value();
+
+    response->MessagesWrittenTotal = MsgsWrittenTotal.Value();
+    response->MessagesWrittenGrpc = MsgsWrittenGrpc.Value();
+    response->MessagesSizes = std::move(MessageSize.GetValues());
+
+    response->TopicWriteQuotaWait = std::move(TopicWriteQuotaWaitCounter.GetValues());
+    response->PartitionWriteQuotaWait = std::move(PartitionWriteQuotaWaitCounter.GetValues());
+
     ctx.Send(ev->Sender, response);
 }
 
@@ -1370,7 +1401,8 @@ void TPartition::Handle(NReadQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TAct
             userInfo->LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_BYTES].Set(quota);
         }
     }
-    PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_BYTES].Set(ev->Get()->UpdatedTotalPartitionReadQuota);
+    if (PartitionCountersLabeled)
+        PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_BYTES].Set(ev->Get()->UpdatedTotalPartitionReadQuota);
 }
 
 void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
@@ -2579,10 +2611,10 @@ void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorConte
     // Metrics
     TopicQuotaWaitTimeForCurrentBlob = ev->Get()->AccountQuotaWaitTime;
     PartitionQuotaWaitTimeForCurrentBlob = ev->Get()->PartitionQuotaWaitTime;
-    if (TopicWriteQuotaWaitCounter) {
-        TopicWriteQuotaWaitCounter->IncFor(TopicQuotaWaitTimeForCurrentBlob.MilliSeconds());
-    }
 
+    if (TopicWriteQuotaWaitCounter) {
+        TopicWriteQuotaWaitCounter.IncFor(TopicQuotaWaitTimeForCurrentBlob.MilliSeconds());
+    }
     if (CurrentStateFunc() == &TThis::StateIdle)
         HandleWrites(ctx);
 }
@@ -2593,7 +2625,7 @@ void TPartition::Handle(NReadQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, co
             ctx, NKikimrServices::PERSQUEUE,
             "Got TEvQuotaCountersUpdated for write counters, this is unexpected. Event ignored");
         return;
-    } else {
+    } else if (PartitionCountersLabeled) {
         PartitionCountersLabeled->GetCounters()[METRIC_READ_INFLIGHT_LIMIT_THROTTLED].Set(ev->Get()->AvgInflightLimitThrottledMicroseconds);
     }
 }

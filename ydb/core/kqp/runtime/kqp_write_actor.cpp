@@ -308,11 +308,13 @@ private:
         return result;
     }
 
-    void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64, const TMaybe<NYql::NDqProto::TCheckpoint>&, bool finished) final {
+    void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64 size, const TMaybe<NYql::NDqProto::TCheckpoint>&, bool finished) final {
         YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
         YQL_ENSURE(!Finished);
         Finished = finished;
         EgressStats.Resume();
+
+        CA_LOG_D("New data: size=" << size << ", finished=" << finished << ".");
 
         YQL_ENSURE(Serializer);
         try {

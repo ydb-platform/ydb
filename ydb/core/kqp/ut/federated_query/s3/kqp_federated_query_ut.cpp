@@ -1312,7 +1312,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(StreamExecuteScriptWithGenericAutoDetection) {
-        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
+        auto kikimr = MakeKikimrRunner(true);
         const TString sql = CreateSimpleGenericQuery(kikimr, "test_bucket_stream_execute_generic_auto_detection");
 
         auto driver = kikimr->GetDriver();

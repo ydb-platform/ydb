@@ -31,7 +31,7 @@ if [[ $? -ge 1 ]]; then
   echo YFM build completed with ERRORS!
   echo ================================
 fi
-
+exit 0
 echo
 echo Starting HTTP server, open the links in your browser:
 echo

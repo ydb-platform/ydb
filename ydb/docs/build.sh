@@ -18,7 +18,7 @@ if [[ $? -ge 1 ]]; then
   exit
 fi
 
-DIR=${1:-"$TMPDIR"docs}
+DIR=${1:-"$TMPDIR"/docs}
 
 echo Starting YFM builder
 echo Output directory: $DIR

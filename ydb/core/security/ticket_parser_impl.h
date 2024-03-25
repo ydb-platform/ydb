@@ -387,10 +387,20 @@ private:
     }
 
     template <>
-    static void AddResourcePath<nebius::iam::v1::ResourcePath*>(nebius::iam::v1::ResourcePath* pathsContainer, const TString& id, const TString& type) {
-        auto resourcePath = pathsContainer->add_path();
+    static void AddResourcePath<nebius::iam::v1::AuthorizeCheck*>(nebius::iam::v1::AuthorizeCheck* pathsContainer, const TString& id, const TString& type) {
+        auto resourcePath = pathsContainer->mutable_resource_path()->add_path();
         resourcePath->set_id(id);
         Y_UNUSED(type);
+    }
+
+    template <typename TPathsContainerPtr>
+    static void AddContainerId(TPathsContainerPtr pathsContainer, const TString& id) {
+        Y_UNUSED(pathsContainer, id);
+    }
+
+    template <>
+    static void AddContainerId<nebius::iam::v1::AuthorizeCheck*>(nebius::iam::v1::AuthorizeCheck* pathsContainer, const TString& id) {
+        pathsContainer->set_container_id(id);
     }
 
     template <typename TTokenRecord, typename TPathsContainerPtr>
@@ -411,6 +421,10 @@ private:
 
         if (const TString gizmoId = record.GetAttributeValue(permission, "gizmo_id"); gizmoId) {
             AddResourcePath(pathsContainer, gizmoId, "iam.gizmo");
+        }
+
+        if (const TString containerId = record.GetAttributeValue(permission, "container_id"); containerId) {
+            AddContainerId(pathsContainer, containerId);
         }
     }
 
@@ -452,7 +466,7 @@ private:
             auto& check = (*request->Request.mutable_checks())[i];
             check.set_iam_token(record.Ticket);
             check.mutable_permission()->set_name(permissionName);
-            addResourcePaths(record, permissionName, check.mutable_resource_path());
+            addResourcePaths(record, permissionName, &check);
             requestForPermissions << " " << permissionName;
             ++i;
         }
@@ -555,6 +569,10 @@ private:
     }
 
     bool ApplySubjectName(const nebius::iam::v1::AuthenticateResponse& response, TString& subject, TString& error) {
+        if (response.resultcode() != nebius::iam::v1::AuthenticateResponse::OK) {
+            error = nebius::iam::v1::AuthenticateResponse::ResultCode_Name(response.resultcode());
+            return false;
+        }
         return ApplySubjectName(response.account(), subject, error);
     }
 
@@ -1033,7 +1051,7 @@ private:
                         }
                         const auto& check = checkIt->second;
 
-                        if (!subjectIsResolved && result.authorized()) {
+                        if (!subjectIsResolved && result.resultcode() == nebius::iam::v1::AuthorizeResult::OK) {
                             const auto& account = result.account();
                             TString errorMessage;
                             if (!ApplySubjectName(account, record.Subject, errorMessage)) {
@@ -1056,7 +1074,7 @@ private:
                         if (permissionIt != examinedPermissions.end()) {
                             processedPermissions.insert(permissionIt->first);
                             auto& permissionRecord = permissionIt->second;
-                            if (!result.authorized()) {
+                            if (result.resultcode() != nebius::iam::v1::AuthorizeResult::OK) {
                                 permissionDeniedCount++;
                                 permissionRecord.Subject.clear();
                                 BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " permission " << permissionName << " access denied for subject \"" << (record.Subject ? record.Subject : "<not resolved>") << "\"");
@@ -1070,7 +1088,7 @@ private:
                                     errorMessage << " - ";
                                     requiredPermissions.push_back(permissionIt);
                                 }
-                                errorMessage << "Access Denied";
+                                errorMessage << nebius::iam::v1::AuthorizeResult::ResultCode_Name(result.resultcode());
                                 permissionRecord.Error = {.Message = errorMessage, .Retryable = false};
                             }
                         } else {

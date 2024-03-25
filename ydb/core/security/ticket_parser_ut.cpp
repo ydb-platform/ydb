@@ -216,23 +216,23 @@ void SetUseAccessService<NKikimr::TNebiusAccessServiceMock>(NKikimrProto::TAuthC
 }
 
 template <class TAccessServiceMock>
-bool IsApiKeySupported() {
-    return true;
+constexpr bool IsNebiusAccessService() {
+    return false;
 }
 
 template <>
-bool IsApiKeySupported<NKikimr::TNebiusAccessServiceMock>() {
-    return false;
+constexpr bool IsNebiusAccessService<NKikimr::TNebiusAccessServiceMock>() {
+    return true;
 }
 
 template <class TAccessServiceMock>
-bool IsSignatureSupported() {
-    return true;
+constexpr bool IsApiKeySupported() {
+    return !IsNebiusAccessService<TAccessServiceMock>();
 }
 
-template <>
-bool IsSignatureSupported<NKikimr::TNebiusAccessServiceMock>() {
-    return false;
+template <class TAccessServiceMock>
+constexpr bool IsSignatureSupported() {
+    return !IsNebiusAccessService<TAccessServiceMock>();
 }
 
 } // namespace
@@ -1626,10 +1626,16 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TActorId sender = runtime->AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
+        TVector<std::pair<TString, TString>> attrs = {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}};
+        if constexpr (IsNebiusAccessService<TAccessServiceMock>()) {
+            accessServiceMock.ContainerId = "my_container";
+            attrs.emplace_back("container_id", "my_container");
+        }
+
         // Authorization successful.
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
                                            userToken,
-                                           {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
+                                           attrs,
                                            {"something.read"})), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(result->Error.empty(), result->Error);
@@ -1639,7 +1645,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         accessServiceMock.AllowedUserPermissions.insert("user1-something.connect");
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
                                            userToken,
-                                           {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
+                                           attrs,
                                            {"something.read", "something.connect", "something.list", "something.update"})), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(result->Error.empty(), result->Error);
@@ -1649,15 +1655,29 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_C(!result->Token->IsExist("something.update-bbbb4554@as"), result->Token->ShortDebugString());
 
         // Authorization ApiKey successful.
-        if (IsApiKeySupported<TAccessServiceMock>()) {
+        if constexpr (IsApiKeySupported<TAccessServiceMock>()) {
             runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
                                             "ApiKey ApiKey-value-valid",
-                                            {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
+                                            attrs,
                                             {"something.read"})), 0);
             result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
             UNIT_ASSERT_C(result->Error.empty(), result->Error);
             UNIT_ASSERT_C(result->Token->IsExist("something.read-bbbb4554@as"), result->Token->ShortDebugString());
             UNIT_ASSERT_C(!result->Token->IsExist("something.write-bbbb4554@as"), result->Token->ShortDebugString());
+        }
+
+        if constexpr (IsNebiusAccessService<TAccessServiceMock>()) {
+            // check wrong container
+            accessServiceMock.ContainerId = "other_container";
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
+                                           userToken,
+                                           attrs,
+                                           {"something.read", "read.something", "something.connect", "something.list", "something.update"})), 0);
+            TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+            UNIT_ASSERT_C(!result->Error.empty(), result->Token->ShortDebugString());
+
+            // switch off this check
+            accessServiceMock.ContainerId = "";
         }
 
         // Authorization failure with not enough permissions.

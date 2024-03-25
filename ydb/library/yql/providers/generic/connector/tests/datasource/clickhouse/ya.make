@@ -5,6 +5,7 @@ NO_CHECK_IMPORTS()
 
 DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse/docker-compose.yml)
 DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/fq-connector-go)
+ENV(COMPOSE_PROJECT_NAME=clickhouse)
 
 IF (AUTOCHECK) 
     # Split tests to chunks only when they're running on different machines with distbuild,

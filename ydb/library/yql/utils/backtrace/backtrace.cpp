@@ -188,15 +188,16 @@ void EnableKikimrBacktraceFormat() {
 }
 
 namespace {
-    NYql::NBacktrace::TStackFrame sFrames[NYql::NBacktrace::Limit];
+    NYql::NBacktrace::TStackFrame SFrames[NYql::NBacktrace::Limit];
     void PrintFrames(IOutputStream* out, const NYql::NBacktrace::TCollectedFrame* frames, size_t count) {
         auto& outp = *out;
+        Y_UNUSED(SFrames);
 #if defined(_linux_) && defined(_x86_64_)
         if (KikimrSymbolize) {
             for (size_t i = 0; i < count; ++i) {
-                sFrames[i] = NYql::NBacktrace::TStackFrame{frames[i].File, frames[i].Address};
+                SFrames[i] = NYql::NBacktrace::TStackFrame{frames[i].File, frames[i].Address};
             }
-            NYql::NBacktrace::Symbolize(sFrames, count, out);
+            NYql::NBacktrace::Symbolize(SFrames, count, out);
             return;
         }
 #endif

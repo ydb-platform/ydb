@@ -4,7 +4,7 @@ runs:
   using: "composite"
   steps:
     - name: original_ref
-      if: oref
+      id: oref
       shell: bash
       run: |
         echo "value=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT

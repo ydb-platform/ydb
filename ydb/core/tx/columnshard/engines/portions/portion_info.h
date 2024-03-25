@@ -47,6 +47,11 @@ public:
 };
 
 class TPortionInfo {
+public:
+    using TRuntimeFeatures = ui8;
+    enum class ERuntimeFeature: TRuntimeFeatures {
+        Optimized = 1 /* "optimized" */
+    };
 private:
     TPortionInfo() = default;
     ui64 PathId = 0;
@@ -57,9 +62,29 @@ private:
     TPortionMeta Meta;
     ui64 DeprecatedGranuleId = 0;
     YDB_READONLY_DEF(std::vector<TIndexChunk>, Indexes);
+    YDB_READONLY(TRuntimeFeatures, RuntimeFeatures, 0);
     std::vector<TUnifiedBlobId> BlobIds;
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
 public:
+    void InitRuntimeFeature(const ERuntimeFeature feature, const bool activity) {
+        if (activity) {
+            AddRuntimeFeature(feature);
+        } else {
+            RemoveRuntimeFeature(feature);
+        }
+    }
+
+    void AddRuntimeFeature(const ERuntimeFeature feature) {
+        RuntimeFeatures |= (TRuntimeFeatures)feature;
+    }
+
+    void RemoveRuntimeFeature(const ERuntimeFeature feature) {
+        RuntimeFeatures &= (Max<TRuntimeFeatures>() - (TRuntimeFeatures)feature);
+    }
+
+    bool HasRuntimeFeature(const ERuntimeFeature feature) const {
+        return (RuntimeFeatures & (TRuntimeFeatures)feature);
+    }
 
     void FullValidation() const;
 

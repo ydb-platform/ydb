@@ -63,12 +63,12 @@ void TSchemeActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, con
             continue;
         }
         for (auto&& portionId : portions) {
+            auto portion = externalContext.GetPortionVerified(portionId);
             if (!address.WriteIs(NBlobOperations::TGlobal::DefaultStorageId) && !address.WriteIs(NTiering::NCommon::DeleteTierName)) {
-                if (externalContext.GetPortionsToCompact().contains(portionId)) {
+                if (!portion->HasRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized)) {
                     continue;
                 }
             }
-            auto portion = externalContext.GetPortionVerified(portionId);
             auto info = BuildActualizationInfo(*portion);
             AFL_VERIFY(info);
             auto portionScheme = VersionedIndex.GetSchema(portion->GetMinSnapshot());

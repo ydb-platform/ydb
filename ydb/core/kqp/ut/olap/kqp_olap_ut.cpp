@@ -4058,7 +4058,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             ui64 bytes2;
             helper.GetVolumes(rawBytes2, bytes2, false, {"new_column_ui64"});
             AFL_VERIFY(rawBytes2 == 6500041)("real", rawBytes2);
-            AFL_VERIFY(bytes2 == 44064)("b", bytes2);
+            AFL_VERIFY(bytes2 == 45360)("b", bytes2);
         }
     }
 

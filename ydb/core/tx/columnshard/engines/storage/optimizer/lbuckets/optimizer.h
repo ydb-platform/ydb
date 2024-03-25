@@ -201,6 +201,20 @@ private:
     }
 
 public:
+    void InitRuntimeFeature() const {
+        for (auto&& f : Futures) {
+            for (auto&& p : f.second) {
+                p.second->RemoveRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized);
+            }
+        }
+        for (auto&& i : PreActuals) {
+            i.second->RemoveRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized);
+        }
+        for (auto&& i : Actuals) {
+            i.second->RemoveRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized);
+        }
+    }
+
     bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
         for (auto&& f : Futures) {
             for (auto&& p : f.second) {
@@ -263,22 +277,6 @@ public:
             }
         }
         return true;
-    }
-
-    THashSet<ui64> GetAllPortionIds() const {
-        THashSet<ui64> result;
-        for (auto&& i : Actuals) {
-            result.emplace(i.first);
-        }
-        for (auto&& i : Futures) {
-            for (auto&& p : i.second) {
-                AFL_VERIFY(result.emplace(p.first).second);
-            }
-        }
-        for (auto&& i : PreActuals) {
-            AFL_VERIFY(result.emplace(i.first).second);
-        }
-        return result;
     }
 
     bool IsEmpty() const {
@@ -420,6 +418,7 @@ public:
     }
 
     void Add(const std::shared_ptr<TPortionInfo>& portion, const TInstant now) {
+        portion->RemoveRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized);
         auto portionMaxSnapshotInstant = TInstant::MilliSeconds(portion->RecordSnapshotMax().GetPlanStep());
         if (now - portionMaxSnapshotInstant < FutureDetector) {
             AFL_VERIFY(AddFuture(portion));
@@ -434,6 +433,7 @@ public:
     }
 
     bool Remove(const std::shared_ptr<TPortionInfo>& portion) Y_WARN_UNUSED_RESULT {
+        portion->AddRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized);
         if (RemovePreActual(portion)) {
             return true;
         }
@@ -626,14 +626,6 @@ private:
     mutable std::optional<i64> LastWeight;
     TPortionsPool Others;
     std::optional<NArrow::TReplaceKey> NextBorder;
-    THashSet<ui64> PortionsToCompact;
-
-    void RebuildPortionsToCompact() {
-        PortionsToCompact = Others.GetAllPortionIds();
-        if (!!MainPortion) {
-            AFL_VERIFY(PortionsToCompact.emplace(MainPortion->GetPortionId()).second);
-        }
-    }
 
     void MoveNextBorderTo(TPortionsBucket& dest) {
         dest.NextBorder = NextBorder;
@@ -646,6 +638,15 @@ private:
 
     bool Validate() const {
         return Others.Validate(MainPortion);
+    }
+
+    void RebuildOptimizedFeature(const TInstant currentInstant) const {
+        Others.InitRuntimeFeature();
+        if (!MainPortion) {
+            return;
+        }
+        MainPortion->InitRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized, Others.IsEmpty() && currentInstant > MainPortion->RecordSnapshotMax().GetPlanInstant() +
+            NYDBTest::TControllers::GetColumnShardController()->GetLagForCompactionBeforeTierings(TDuration::Minutes(60)));
     }
 public:
     class TModificationGuard: TNonCopyable {
@@ -681,10 +682,6 @@ public:
         }
     };
 
-    const THashSet<ui64>& GetPortionsToCompact() const {
-        return PortionsToCompact;
-    }
-
     bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
         if (MainPortion) {
             if (auto lockInfo = dataLocksManager->IsLocked(*MainPortion)) {
@@ -710,7 +707,6 @@ public:
     {
         if (MainPortion) {
             Counters->PortionsAlone->AddPortion(MainPortion);
-            PortionsToCompact.emplace(MainPortion->GetPortionId());
         }
     }
 
@@ -857,27 +853,24 @@ public:
                 ("bucket_from", MainPortion->IndexKeyStart().DebugString())("bucket_to", NextBorder->DebugString());
         }
         Others.Add(portion, now);
-        AFL_VERIFY(PortionsToCompact.emplace(portion->GetPortionId()).second);
     }
 
     void RemoveOther(const std::shared_ptr<TPortionInfo>& portion) {
         auto gChartsThis = StartModificationGuard();
         AFL_VERIFY(Others.Remove(portion))("portion", portion->DebugString())("bucket_start", MainPortion ? MainPortion->DebugString(true) : "-inf")("bucket_finish", NextBorder ? NextBorder->DebugString() : "undef");
-        AFL_VERIFY(PortionsToCompact.erase(portion->GetPortionId()));
     }
 
     void MergeOthersFrom(TPortionsBucket& dest) {
         auto gChartsDest = dest.StartModificationGuard();
         auto gChartsThis = StartModificationGuard();
         Others.MergeFrom(dest.Others);
-        RebuildPortionsToCompact();
         dest.MoveNextBorderTo(*this);
-        dest.RebuildPortionsToCompact();
     }
 
     void Actualize(const TInstant currentInstant) {
         auto gChartsThis = StartModificationGuard();
         Others.Actualize(currentInstant);
+        RebuildOptimizedFeature(currentInstant);
     }
 
     void SplitOthersWith(TPortionsBucket& dest) {
@@ -889,8 +882,6 @@ public:
             AFL_VERIFY(MainPortion->IndexKeyEnd() < dest.MainPortion->IndexKeyStart());
         }
         Others.SplitTo(dest.Others, dest.MainPortion->IndexKeyStart());
-        RebuildPortionsToCompact();
-        dest.RebuildPortionsToCompact();
     }
 };
 
@@ -995,17 +986,6 @@ public:
         , Counters(counters)
     {
         AddBucketToRating(LeftBucket);
-    }
-
-    const THashSet<ui64>& GetPortionsToCompact() const {
-        if (BucketsByWeight.empty()) {
-            return Default<THashSet<ui64>>();
-        }
-        if (BucketsByWeight.rbegin()->second.empty()) {
-            return Default<THashSet<ui64>>();
-        }
-        const TPortionsBucket* bucketForOptimization = *BucketsByWeight.rbegin()->second.begin();
-        return bucketForOptimization->GetPortionsToCompact();
     }
 
     bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
@@ -1157,9 +1137,6 @@ protected:
     }
     virtual void DoActualize(const TInstant currentInstant) override {
         Buckets.Actualize(currentInstant);
-    }
-    virtual const THashSet<ui64>& DoGetPortionsToCompact() const override {
-        return Buckets.GetPortionsToCompact();
     }
 
     virtual TOptimizationPriority DoGetUsefulMetric() const override {

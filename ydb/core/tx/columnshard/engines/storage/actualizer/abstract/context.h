@@ -34,12 +34,7 @@ public:
 class TExternalTasksContext {
 private:
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& Portions;
-    const THashSet<ui64>& PortionsToCompact;
 public:
-    const THashSet<ui64>& GetPortionsToCompact() const {
-        return PortionsToCompact;
-    }
-
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;
     }
@@ -50,9 +45,8 @@ public:
         return it->second;
     }
 
-    TExternalTasksContext(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& portions, const THashSet<ui64>& portionsToCompact)
+    TExternalTasksContext(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& portions)
         : Portions(portions)
-        , PortionsToCompact(portionsToCompact)
     {
 
     }

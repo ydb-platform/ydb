@@ -114,27 +114,18 @@ void TTieringActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, co
             }
             bool limitEnriched = false;
             for (auto&& p : portions) {
+                auto portion = externalContext.GetPortionVerified(p);
                 if (!address.WriteIs(NBlobOperations::TGlobal::DefaultStorageId) && !address.WriteIs(NTiering::NCommon::DeleteTierName)) {
-                    if (externalContext.GetPortionsToCompact().contains(p)) {
+                    if (!portion->HasRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized)) {
                         Counters.SkipEvictionForCompaction->Add(1);
                         continue;
                     }
                 }
-                auto portion = externalContext.GetPortionVerified(p);
                 auto info = BuildActualizationInfo(*portion, tasksContext.Now);
                 AFL_VERIFY(info);
                 auto portionScheme = VersionedIndex.GetSchema(portion->GetMinSnapshot());
                 TPortionEvictionFeatures features(portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
                 features.SetTargetTierName(info->GetTargetTierName());
-
-                const TInstant maxChangePortionInstant = portion->RecordSnapshotMax().GetPlanInstant();
-                if (info->GetTargetTierName() != IStoragesManager::DefaultStorageId && portion->GetTierNameDef(IStoragesManager::DefaultStorageId) == IStoragesManager::DefaultStorageId) {
-                    if (tasksContext.Now - maxChangePortionInstant < NYDBTest::TControllers::GetColumnShardController()->GetLagForCompactionBeforeTierings(TDuration::Minutes(60))) {
-                        tasksContext.GetCounters().OnActualizationSkipTooFreshPortion(tasksContext.Now - maxChangePortionInstant);
-                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_portion_to_evict")("reason", "too_fresh")("delta", tasksContext.Now - maxChangePortionInstant);
-                        continue;
-                    }
-                }
 
                 if (!tasksContext.AddPortion(*portion, std::move(features), info->GetLateness())) {
                     limitEnriched = true;

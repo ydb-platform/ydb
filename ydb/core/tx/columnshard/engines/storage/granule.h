@@ -218,7 +218,7 @@ public:
     }
 
     void BuildActualizationTasks(NActualizer::TTieringProcessContext& context) const {
-        NActualizer::TExternalTasksContext extTasks(Portions, OptimizerPlanner->GetPortionsToCompact());
+        NActualizer::TExternalTasksContext extTasks(Portions);
         ActualizationIndex->ExtractActualizationTasks(context, extTasks);
     }
 

@@ -42,8 +42,10 @@ std::shared_ptr<NKikimr::NOlap::TGranuleMeta> TGranulesStorage::GetGranuleForCom
         }
         NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("path_id", it->second->GetPathId());
         if (it->second->IsLockedOptimizer(dataLocksManager)) {
+            Counters.OnGranuleOptimizerLocked();
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_optimizer_throught_lock")("priority", it->first.DebugString());
         } else {
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "granule_compaction_weight")("priority", it->first.DebugString());
             return it->second;
         }
     }

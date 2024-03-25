@@ -67,7 +67,6 @@ protected:
         return NJson::JSON_NULL;
     }
     virtual bool DoIsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
-    virtual const THashSet<ui64>& DoGetPortionsToCompact() const = 0;
 
 public:
     using TFactory = NObjectFactory::TObjectFactory<IOptimizerPlanner, TString>;
@@ -75,13 +74,6 @@ public:
         : PathId(pathId)
     {
 
-    }
-
-    const THashSet<ui64>& GetPortionsToCompact() const {
-        if (GetUsefulMetric().IsZero()) {
-            return Default<THashSet<ui64>>();
-        }
-        return DoGetPortionsToCompact();
     }
 
     class TModificationGuard: TNonCopyable {

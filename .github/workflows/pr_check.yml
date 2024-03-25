@@ -204,6 +204,7 @@ jobs:
       uses: actions/checkout@v3
       with:
         ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
+        fetch-depth: 2
     - name: Build and test
       uses: ./.github/actions/build_and_test_ya
       with:

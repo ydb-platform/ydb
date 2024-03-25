@@ -26,9 +26,7 @@ runners_ids = ("dqrun", "kqprun")
 
 
 @pytest.mark.parametrize("runner_type", runners, ids=runners_ids)
-@pytest.mark.parametrize(
-    "test_case", tc_collection.get('select_positive_clickhouse'), ids=tc_collection.ids('select_positive_clickhouse')
-)
+@pytest.mark.parametrize("test_case", tc_collection.get('select_positive'), ids=tc_collection.ids('select_positive'))
 @pytest.mark.usefixtures("settings")
 @pytest.mark.usefixtures("clickhouse_client")
 def test_select_positive_clickhouse(

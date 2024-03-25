@@ -34,6 +34,8 @@ class TComputeDatabaseMonitoringActor : public NActors::TActorBootstrapped<TComp
         ::NMonitoring::TDynamicCounters::TCounterPtr InstantLoadPercentage;
         ::NMonitoring::TDynamicCounters::TCounterPtr AverageLoadPercentage;
         ::NMonitoring::TDynamicCounters::TCounterPtr QuotedLoadPercentage;
+        ::NMonitoring::TDynamicCounters::TCounterPtr AvailableLoadPercentage;
+        ::NMonitoring::TDynamicCounters::TCounterPtr TargetLoadPercentage;
         ::NMonitoring::TDynamicCounters::TCounterPtr PendingQueueSize;
         ::NMonitoring::TDynamicCounters::TCounterPtr PendingQueueOverload;
 
@@ -51,6 +53,8 @@ class TComputeDatabaseMonitoringActor : public NActors::TActorBootstrapped<TComp
             InstantLoadPercentage = subComponent->GetCounter("InstantLoadPercentage", false);
             AverageLoadPercentage = subComponent->GetCounter("AverageLoadPercentage", false);
             QuotedLoadPercentage = subComponent->GetCounter("QuotedLoadPercentage", false);
+            AvailableLoadPercentage = subComponent->GetCounter("AvailableLoadPercentage", false);
+            TargetLoadPercentage = subComponent->GetCounter("TargetLoadPercentage", false);
             PendingQueueSize = subComponent->GetCounter("PendingQueueSize", false);
             PendingQueueOverload = subComponent->GetCounter("PendingQueueOverload", true);
         }
@@ -78,7 +82,10 @@ public:
         , PendingQueueSize(config.GetPendingQueueSize())
         , Strict(config.GetStrict())
         , CpuNumber(config.GetCpuNumber())
-    {}
+    {
+        *Counters.AvailableLoadPercentage = 100;
+        *Counters.TargetLoadPercentage = static_cast<ui64>(MaxClusterLoad * 100);
+    }
 
     static constexpr char ActorName[] = "FQ_COMPUTE_DATABASE_MONITORING_ACTOR";
 

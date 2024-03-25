@@ -125,14 +125,14 @@ struct TEvYdbCompute {
             , Ready(ready)
         {}
 
-        TEvGetOperationResponse(NYdb::NQuery::EExecStatus execStatus, Ydb::StatusIds::StatusCode statusCode, const TVector<Ydb::Query::ResultSetMeta>& resultSetsMeta, const Ydb::TableStats::QueryStats& queryStats, NYql::TIssues issues)
+        TEvGetOperationResponse(NYdb::NQuery::EExecStatus execStatus, Ydb::StatusIds::StatusCode statusCode, const TVector<Ydb::Query::ResultSetMeta>& resultSetsMeta, const Ydb::TableStats::QueryStats& queryStats, NYql::TIssues issues, bool ready = true)
             : ExecStatus(execStatus)
             , StatusCode(statusCode)
             , ResultSetsMeta(resultSetsMeta)
             , QueryStats(queryStats)
             , Issues(std::move(issues))
             , Status(NYdb::EStatus::SUCCESS)
-            , Ready(true)
+            , Ready(ready)
         {}
 
         NYdb::NQuery::EExecStatus ExecStatus = NYdb::NQuery::EExecStatus::Unspecified;

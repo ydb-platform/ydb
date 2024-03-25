@@ -1279,6 +1279,7 @@ public:
             Response->Get()->Ready = false;
             Response->Get()->Status = Ydb::StatusIds::SUCCESS;
             Response->Get()->Issues.Clear();
+            Response->Get()->Metadata.set_exec_status(Ydb::Query::ExecStatus::EXEC_STATUS_UNSPECIFIED);
         } else {
             Response->Get()->Ready = true;
             Response->Get()->Status = GetOperationStatus();

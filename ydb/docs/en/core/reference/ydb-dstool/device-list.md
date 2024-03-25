@@ -2,15 +2,13 @@
 
 Use the `device list` subcommand to get a list of storage devices available on the {{ ydb-short-name }} cluster.
 
-{% include [trunk](../_includes/trunk.md) %}
-
 General format of the command:
 
 ```bash
 ydb-dstool [global options ...] device list [list options ...]
 ```
 
-* `global options`: [Global options](./ydb-dstool-global-options.md).
+* `global options`: [Global options](global-options.md).
 * `list options`: [Subcommand options](#options).
 
 View a description of the command to get a list of devices:

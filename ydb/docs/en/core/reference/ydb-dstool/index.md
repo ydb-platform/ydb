@@ -1,12 +1,12 @@
 # {{ ydb-short-name }} DSTool overview
 
-With the {{ ydb-short-name }} DSTool utility, you can manage your {{ ydb-short-name }} cluster's disk subsystem. To install and configure the utility, follow the [instructions](ydb-dstool-setup.md).
+With the {{ ydb-short-name }} DSTool utility, you can manage your {{ ydb-short-name }} cluster's disk subsystem. To install and configure the utility, follow the [instructions](install.md).
 
 {{ ydb-short-name }} DSTool includes the following commands:
 
 | Command | Description |
 --- | ---
-| [device list](./ydb-dstool-device-list.md) | List storage devices. |
+| [device list](device-list.md) | List storage devices. |
 | pdisk add-by-serial | Add a PDisk to a set by serial number. |
 | pdisk remove-by-serial | Remove a PDisk from the set by serial number. |
 | pdisk set | Set PDisk parameters. |

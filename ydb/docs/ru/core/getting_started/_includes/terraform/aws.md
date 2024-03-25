@@ -6,7 +6,7 @@
 * После создания пользователя – перейдите в него, откройте вкладку `Security credentials` и нажмите кнопку **Create access key** в секции **Access keys**.
 * Из предложенных вариантов наборов опций выберете `Command Line Interface`.
 * Далее придумайте тег для разметки ключа и нажмите кнопку **Create access key**. 
-* Скопируйте значение полей `Access key` и `Secret access key`.
+* Скопируйте значения полей `Access key` и `Secret access key`.
 
 Установите [AWS CLI](https://aws.amazon.com/cli/) и выполните команду `aws configure`. Введите значения полей `Access key` и `Secret access key` сохраненные ранее. Отредактируйте файлы `~/.aws/credentials` и `~/.aws/config` следующим образом:
 * Добавьте `[AWS_def_reg]` в `~/.aws/config` перед `region = ...`.

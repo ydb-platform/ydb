@@ -13,6 +13,8 @@ items:
   hidden: true
 - name: Вторичные индексы
   href: secondary_indexes.md
+- name: Автоматический выбор индексов
+  href: index_choosing.md
 - name: Change Data Capture
   href: cdc.md
   when: feature_changefeed

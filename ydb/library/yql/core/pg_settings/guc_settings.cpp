@@ -28,7 +28,7 @@ void TGUCSettings::RollBack() {
     Settings_ = SessionSettings_ = RollbackSettings_;
 }
 
-void TGUCSettings::ExportToJson(NJson::TJsonValue& message) const {
+void TGUCSettings::ExportToJson(NJson::TJsonValue& value) const {
     NJson::TJsonValue settings(NJson::JSON_MAP);
     for (const auto& setting : Settings_) {
         settings[setting.first] = setting.second;
@@ -45,16 +45,32 @@ void TGUCSettings::ExportToJson(NJson::TJsonValue& message) const {
     gucSettings.InsertValue("settings", std::move(settings));
     gucSettings.InsertValue("rollback_settings", std::move(rollbackSettings));
     gucSettings.InsertValue("session_settings", std::move(sessionSettings));
-    message.InsertValue("guc_settings", std::move(gucSettings));
+    value.InsertValue("guc_settings", std::move(gucSettings));
 }
 
-void TGUCSettings::ImportFromJson(const std::unordered_map<std::string, std::string>& settings,
-    const std::unordered_map<std::string, std::string>& rollbackSettings,
-    const std::unordered_map<std::string, std::string>& sessionSettings)
+void TGUCSettings::ImportFromJson(const NJson::TJsonValue& value)
 {
-    Settings_ = settings;
-    RollbackSettings_ = rollbackSettings;
-    SessionSettings_ = sessionSettings;
+    Settings_.clear();
+    RollbackSettings_.clear();
+    SessionSettings_.clear();
+    if (value.Has("guc_settings")) {
+        auto gucSettings = value["guc_settings"];
+        if (gucSettings.Has("settings")) {
+            for (const auto& [settingName, settingValue] : gucSettings["settings"].GetMapSafe()) {
+                Settings_[settingName] = settingValue.GetStringSafe();
+            }
+        }
+        if (gucSettings.Has("rollback_settings")) {
+            for (const auto& [settingName, settingValue] : gucSettings["rollback_settings"].GetMapSafe()) {
+                RollbackSettings_[settingName] = settingValue.GetStringSafe();
+            }
+        }
+        if (gucSettings.Has("session_settings")) {
+            for (const auto& [settingName, settingValue] : gucSettings["session_settings"].GetMapSafe()) {
+                SessionSettings_[settingName] = settingValue.GetStringSafe();
+            }
+        }
+    }
 }
 
 bool TGUCSettings::operator==(const TGUCSettings& other) const {

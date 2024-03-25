@@ -264,28 +264,7 @@ public:
                 : nullptr,
             GUCSettings ? *GUCSettings : TGUCSettings());
 
-        if (ReplayDetails.Has("guc_settings")) {
-            auto gucSettings = ReplayDetails["guc_settings"];
-            std::unordered_map<std::string, std::string> settings;
-            if (gucSettings.Has("settings")) {
-                for (const auto& [settingName, settingValue] : gucSettings["settings"].GetMapSafe()) {
-                    settings[settingName] = settingValue.GetStringSafe();
-                }
-            }
-            std::unordered_map<std::string, std::string> rollbackSettings;
-            if (gucSettings.Has("rollback_settings")) {
-                for (const auto& [settingName, settingValue] : gucSettings["rollback_settings"].GetMapSafe()) {
-                    rollbackSettings[settingName] = settingValue.GetStringSafe();
-                }
-            }
-            std::unordered_map<std::string, std::string> sessionSettings;
-            if (gucSettings.Has("session_settings")) {
-                for (const auto& [settingName, settingValue] : gucSettings["session_settings"].GetMapSafe()) {
-                    sessionSettings[settingName] = settingValue.GetStringSafe();
-                }
-            }
-            GUCSettings->ImportFromJson(settings, rollbackSettings, sessionSettings);
-        }
+        GUCSettings->ImportFromJson(ReplayDetails);
 
         Config->Init(KqpSettings.DefaultSettings.GetDefaultSettings(), ReplayDetails["query_cluster"].GetStringSafe(), KqpSettings.Settings, false);
         if (!Query->Database.empty()) {

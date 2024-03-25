@@ -9,18 +9,6 @@
 namespace NKikimr {
 namespace NBalancing {
 
-    NMatrix::TVectorType PartIdsToSendOnMain(
-        const TBlobStorageGroupInfo::TTopology& top,
-        const TVDiskIdShort &vdisk,
-        const TLogoBlobID &key,
-        const TIngress& ingress
-    );
-    NMatrix::TVectorType PartIdsToDelete(
-        const TBlobStorageGroupInfo::TTopology& top,
-        const TVDiskIdShort &vdisk,
-        const TLogoBlobID &key,
-        const TIngress& ingress
-    );
     TVDiskID GetMainReplicaVDiskId(const TBlobStorageGroupInfo& gInfo, const TLogoBlobID& key);
 
     struct TPartsCollectorMerger {

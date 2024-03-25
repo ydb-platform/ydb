@@ -18,7 +18,7 @@ namespace NBalancing {
         THashSet<TVDiskID> ConnectedVDisks;
 
         TQueue<TPartInfo> SendOnMainParts;
-        TQueue<TPartInfo> TryDeleteParts;
+        TQueue<TLogoBlobID> TryDeleteParts;
 
         TActorId SenderId;
         TActorId DeleterId;
@@ -97,28 +97,31 @@ namespace NBalancing {
                     return;
                 }
 
-                TPartsCollectorMerger merger(GInfo->GetTopology().GType);
+                const auto& top = GInfo->GetTopology();
+                const auto& key = It.GetCurKey().LogoBlobID();
+
+                TPartsCollectorMerger merger(top.GType);
                 It.PutToMerger(&merger);
 
+                auto [moveMask, delMask] = merger.Ingress.HandoffParts(&top, Ctx->VCtx->ShortSelfVDisk, key);
+                auto partsToSend = merger.Ingress.LocalParts(top.GType) & moveMask;
+                auto partsToDelete = merger.Ingress.LocalParts(top.GType) & delMask;
+
                 // collect parts to send on main
-                auto partsToSend = PartIdsToSendOnMain(GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, It.GetCurKey().LogoBlobID(), merger.Ingress);
                 for (const auto& [parts, data]: merger.Parts) {
                     if (!(partsToSend & parts).Empty()) {
                         SendOnMainParts.push(TPartInfo{
                             .Key=It.GetCurKey().LogoBlobID(),
-                            .LocalParts=parts,
+                            .PartsMask=parts,
                             .PartData=data
                         });
                     }
                 }
 
                 // collect parts to delete
-                auto partsToDelete = PartIdsToDelete(GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, It.GetCurKey().LogoBlobID(), merger.Ingress);
                 for (ui8 partIdx = partsToDelete.FirstPosition(); partIdx < partsToDelete.GetSize(); partIdx = partsToDelete.NextPosition(partIdx)) {
-                    TryDeleteParts.push(TPartInfo{
-                        .Key=TLogoBlobID(It.GetCurKey().LogoBlobID(), partIdx + 1),
-                    });
-                    STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB07, VDISKP(Ctx->VCtx, "Delete"), (LogoBlobId, TryDeleteParts.back().Key.ToString()));
+                    TryDeleteParts.push(TLogoBlobID(It.GetCurKey().LogoBlobID(), partIdx + 1));
+                    STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB07, VDISKP(Ctx->VCtx, "Delete"), (LogoBlobId, TryDeleteParts.back().ToString()));
                 }
 
                 merger.Clear();

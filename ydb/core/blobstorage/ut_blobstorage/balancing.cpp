@@ -450,7 +450,6 @@ Y_UNIT_TEST_SUITE(VDiskBalancing) {
     Y_UNIT_TEST(TwoPartsOnOneNodeTest_Block42) {
         TTwoPartsOnOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenData(100)}.RunTest();
     }
-
     Y_UNIT_TEST(TwoPartsOnOneNodeTest_Block42_HugeBlob) {
         TTwoPartsOnOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenData(521_KB * 6)}.RunTest();
     }

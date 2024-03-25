@@ -4,26 +4,6 @@
 namespace NKikimr {
 namespace NBalancing {
 
-    NMatrix::TVectorType PartIdsToSendOnMain(
-        const TBlobStorageGroupInfo::TTopology& top,
-        const TVDiskIdShort &vdisk,
-        const TLogoBlobID &key,
-        const TIngress& ingress
-    ) {
-        auto [moveMask, _] = ingress.HandoffParts(&top, vdisk, key);
-        return ingress.LocalParts(top.GType) & moveMask;
-    }
-
-    NMatrix::TVectorType PartIdsToDelete(
-        const TBlobStorageGroupInfo::TTopology& top,
-        const TVDiskIdShort &vdisk,
-        const TLogoBlobID &key,
-        const TIngress& ingress
-    ) {
-        auto [_, delMask] = ingress.HandoffParts(&top, vdisk, key);
-        return ingress.LocalParts(top.GType) & delMask;
-    }
-
     TVDiskID GetMainReplicaVDiskId(const TBlobStorageGroupInfo& gInfo, const TLogoBlobID& key) {
         TBlobStorageGroupInfo::TOrderNums orderNums;
         gInfo.GetTopology().PickSubgroup(key.Hash(), orderNums);
@@ -38,8 +18,7 @@ namespace NBalancing {
     {
     }
 
-    void TPartsCollectorMerger::AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key, ui64 /*lsn*/) {
-        Y_UNUSED(key);
+    void TPartsCollectorMerger::AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& /*key*/, ui64 /*lsn*/) {
         Ingress.Merge(memRec.GetIngress());
 
         const NMatrix::TVectorType local = memRec.GetLocalParts(GType);

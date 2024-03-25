@@ -10,6 +10,12 @@
 namespace NKikimr {
 namespace NBalancing {
 namespace {
+    struct TPart {
+        TLogoBlobID Key;
+        NMatrix::TVectorType PartsMask;
+        TVector<TRope> PartsData;
+    };
+
     class TReader {
     private:
         const size_t BatchSize;
@@ -42,12 +48,12 @@ namespace {
                 Parts.pop();
                 Result[i] = TPart{
                     .Key=item.Key,
-                    .LocalParts=item.LocalParts,
+                    .PartsMask=item.PartsMask,
                 };
                 std::visit(TOverloaded{
                     [&](const TRope& data) {
                         // part is already in memory, no need to read it from disk
-                        Y_DEBUG_ABORT_UNLESS(item.LocalParts.CountBits() == 1);
+                        Y_DEBUG_ABORT_UNLESS(item.PartsMask.CountBits() == 1);
                         Result[i].PartsData = {data};
                         ++Responses;
                     },
@@ -91,7 +97,7 @@ namespace {
             ui64 i = reinterpret_cast<ui64>(msg->Cookie);
             const auto& key = Result[i].Key;
             auto data = TRope(msg->Data.ToString());
-            auto localParts = Result[i].LocalParts;
+            auto localParts = Result[i].PartsMask;
             auto diskBlob = TDiskBlob(&data, localParts, GType, key);
 
             for (ui8 partIdx = localParts.FirstPosition(); partIdx < localParts.GetSize(); partIdx = localParts.NextPosition(partIdx)) {
@@ -147,14 +153,14 @@ namespace {
             STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB11, VDISKP(Ctx->VCtx, "Sending parts"), (BatchSize, batch.size()));
 
             for (const auto& part: batch) {
-                auto localParts = part.LocalParts;
+                auto localParts = part.PartsMask;
                 for (ui8 partIdx = localParts.FirstPosition(), i = 0; partIdx < localParts.GetSize(); partIdx = localParts.NextPosition(partIdx), ++i) {
                     auto key = TLogoBlobID(part.Key, partIdx + 1);
                     const auto& data = part.PartsData[i];
                     auto vDiskId = GetMainReplicaVDiskId(*GInfo, key);
                     STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB12, VDISKP(Ctx->VCtx, "Sending"), (LogoBlobId, key.ToString()),
                         (To, GInfo->GetTopology().GetOrderNumber(TVDiskIdShort(vDiskId))), (DataSize, data.size()));
-                    
+
                     auto& queue = (*QueueActorMapPtr)[TVDiskIdShort(vDiskId)];
                     auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(
                         key, data, vDiskId,

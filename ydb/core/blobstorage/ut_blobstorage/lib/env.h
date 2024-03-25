@@ -275,7 +275,7 @@ struct TEnvironmentSetup {
 //            NKikimrServices::LOCAL,
 //            NActorsServices::INTERCONNECT,
 //            NActorsServices::INTERCONNECT_SESSION,
-//           NKikimrServices::BS_VDISK_BALANCING,
+//            NKikimrServices::BS_VDISK_BALANCING,
         };
         for (const auto& comp : debug) {
             Runtime->SetLogPriority(comp, NLog::PRI_DEBUG);

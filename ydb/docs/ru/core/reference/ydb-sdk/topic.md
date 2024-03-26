@@ -1345,6 +1345,39 @@
 
 {% endlist %}
 
+### Чтение без указания Consumer'а {#no-consumer}
+
+Обычно прогресс чтения топика сохраняется на сервере в каждом `Consumer`е. Но можно не хранить такой прогресс на сервере и при создании читателя явно указать, что чтение будет происходить без `Consumer`а.
+
+{% list tabs %}
+
+- Java
+
+  Для чтения без `Consumer`а следует в настройках читателя это явно указать, вызвав `withoutConsumer()`:
+
+  ```java
+  ReaderSettings settings = ReaderSettings.newBuilder()
+          .withoutConsumer()
+          .addTopic(TopicReadSettings.newBuilder()
+                  .setPath(TOPIC_NAME)
+                  .build())
+          .build();
+  ```
+
+  В таком случае нужно учитывать, что при переустановке соединения прогресс на сервере будет сброшен. Поэтому, чтобы не начинать чтение сначала, в SDK следует передавать offset начала чтения при каждом старте сессии чтения партиции:
+
+  ```java
+  @Override
+  public void onStartPartitionSession(StartPartitionSessionEvent event) {
+      event.confirm(StartPartitionSessionSettings.newBuilder()
+              .setReadOffset(lastReadOffset) // last offset read by client
+              .build());
+  }
+  ```
+
+{% endlist %}
+
+
 ### Чтение в транзакции {#read-tx}
 
 {% list tabs %}

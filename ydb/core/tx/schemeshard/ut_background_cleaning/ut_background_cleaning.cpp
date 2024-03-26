@@ -49,9 +49,9 @@ void SetBackgroundCleaning(TTestActorRuntime &runtime, TTestEnv& env, ui64 schem
 }
 
 void AsyncCreateTempTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, ui32 nodeIdx) {
-    auto ev = CreateTableRequest(txId, workingDir, scheme);
+    auto ev = CreateIndexedTableRequest(txId, workingDir, scheme);
     auto* tx = ev->Record.MutableTransaction(0);
-    auto* desc = tx->MutableCreateTable();
+    auto* desc = tx->MutableCreateIndexedTable()->MutableTableDescription();
     desc->SetTemporary(true);
     ActorIdToProto(ownerActorId, tx->MutableTempTableOwnerActorId());
 
@@ -320,5 +320,45 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
 
         env.SimulateSleep(runtime, TDuration::Seconds(50));
         CheckTable(runtime, "/MyRoot/TempTable", TTestTxConfig::SchemeShard, false);
+    }
+
+    Y_UNIT_TEST(SchemeshardBackgroundCleaningTestSimpleDropIndex) {
+        TTestBasicRuntime runtime(3);
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        SetBackgroundCleaning(runtime, env, TTestTxConfig::SchemeShard);
+        env.SimulateSleep(runtime, TDuration::Seconds(30));
+
+        auto ownerActorId = runtime.AllocateEdgeActor(1);
+
+        ui64 txId = 100;
+        TestCreateTempTable(runtime, txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+            }
+        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+
+        env.TestWaitNotification(runtime, txId);
+
+        CheckTable(runtime, "/MyRoot/TempTable");
+
+        ++txId;
+        TestDropTempTable(runtime, txId, "/MyRoot", "TempTable", true);
+
+        env.SimulateSleep(runtime, TDuration::Seconds(50));
+        CheckTable(runtime, "/MyRoot/TempTable", TTestTxConfig::SchemeShard, false);
+
+        TestLs(runtime, "/MyRoot/TempTable/ValueIndex", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathNotExist);
     }
 };

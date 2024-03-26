@@ -15,6 +15,8 @@ inline IOutputStream& operator <<(IOutputStream& out, const NYdbGrpc::TGrpcStatu
     return out << status.GRpcStatusCode << " " << status.Msg;
 }
 
+namespace NGrpcActorClient {
+
 template <typename TGrpcService>
 class TGrpcServiceClient  {
     using TServiceConnection = NYdbGrpc::TServiceConnection<TGrpcService>;
@@ -114,7 +116,7 @@ public:
         Connection->DoRequest(request, std::move(callback), TCallType::Request, meta);
     }
 
-    static NYdbGrpc::TGRpcClientConfig InitGrpcConfig(const NCloud::TGrpcClientSettings& settings) {
+    static NYdbGrpc::TGRpcClientConfig InitGrpcConfig(const NGrpcActorClient::TGrpcClientSettings& settings) {
         NYdbGrpc::TGRpcClientConfig config(settings.Endpoint, DEFAULT_TIMEOUT, NYdbGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT, 0, settings.CertificateRootCA);
         config.EnableSsl = settings.EnableSsl;
         config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIME_MS] = settings.GrpcKeepAliveTimeMs;
@@ -126,8 +128,9 @@ public:
         return config;
     }
 
-    TGrpcServiceClient(const NCloud::TGrpcClientSettings& settings)
+    TGrpcServiceClient(const NGrpcActorClient::TGrpcClientSettings& settings)
         : Config(InitGrpcConfig(settings))
     {}
 };
 
+} // namespace NGrpcActorClient

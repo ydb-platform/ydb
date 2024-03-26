@@ -25,6 +25,7 @@ PEERDIR(
     contrib/restricted/nlohmann_json
     ydb/library/actors/http
     ydb/library/actors/core
+    ydb/library/grpc/actor_client
     ydb/core/base
     ydb/core/protos
     ydb/core/grpc_services/local_rpc

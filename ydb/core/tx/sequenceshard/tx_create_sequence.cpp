@@ -75,7 +75,7 @@ namespace NSequenceShard {
             }
 
 
-            if (msg->Record.OptionalSetVal_case() == NKikimrTxSequenceShard::TEvCreateSequence::kSetVal) {
+            if (msg->Record.HasSetVal()) {
                 sequence.NextValue = msg->Record.GetSetVal().GetNextValue();
                 sequence.NextUsed = msg->Record.GetSetVal().GetNextUsed();
             } else {

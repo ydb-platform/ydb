@@ -14,7 +14,7 @@ At the bottom of the [Hive web-viewer](../embedded_monitoring/hive.md#reassign_g
 As a result of some operations, such as [decommissioning](../../administration/decommissioning.md), VDisks can be distributed across block store volumes unevenly. You can distribute them more evenly in one of the following ways:
 
 * [Move VDisks](moving_vdisks.md#moving_vdisk) one by one from overloaded block store volumes.
-* Use [{{ ydb-short-name }} DSTool](../../administration/ydb-dstool-overview.md). The command below moves a VDisk from an overloaded block store volume to a less loaded one:
+* Use [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md). The command below moves a VDisk from an overloaded block store volume to a less loaded one:
 
    ```bash
    ydb-dstool -e <bs_endpoint> cluster balance

@@ -4,7 +4,7 @@
 
 ## Перевезти один из VDisk'ов с блочного устройства {#moving_vdisk}
 
-Получите список идентификаторов VDisk'ов с помощью утилиты [{{ ydb-short-name }} DSTool](../../administration/ydb-dstool-overview.md):
+Получите список идентификаторов VDisk'ов с помощью утилиты [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md):
 
 ```bash
 ydb-dstool -e <bs_endpoint> vdisk list --format tsv --columns VDiskId --no-header
@@ -29,7 +29,7 @@ ydbd admin bs config invoke --proto 'Command { ReassignGroupDisk { GroupId: <ID 
 В случае, если SelfHeal выключен или не перевозит VDisk'и автоматически, перевоз нужно выполнить вручную:
 
 1. Откройте [мониторинг](../../maintenance/embedded_monitoring/ydb_monitoring.md) и убедитесь, что VDisk в нерабочем состоянии.
-1. Получите `[NodeId:PDiskId]` нужного диска с помощью утилиты [{{ ydb-short-name }} DSTool](../../administration/ydb-dstool-overview.md):
+1. Получите `[NodeId:PDiskId]` нужного диска с помощью утилиты [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md):
 
     ```bash
     ydb-dstool -e <bs_endpoint> vdisk list | fgrep VDISK_ID
@@ -46,7 +46,7 @@ ydbd admin bs config invoke --proto 'Command { ReassignGroupDisk { GroupId: <ID 
 Чтобы вернуть PDisk после развоза:
 
 1. Откройте [мониторинг](../../maintenance/embedded_monitoring/ydb_monitoring.md) и убедитесь, что PDisk в рабочем состоянии.
-1. Получите `[NodeId:PDiskId]` нужного диска с помощью утилиты [{{ ydb-short-name }} DSTool](../../administration/ydb-dstool-overview.md):
+1. Получите `[NodeId:PDiskId]` нужного диска с помощью утилиты [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md):
 
     ```bash
     ydb-dstool -e <bs_endpoint> pdisk list

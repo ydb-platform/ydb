@@ -31,7 +31,7 @@
 >
 >Описанные шаги повторяются для следующего набора оборудования в ЦОД-1 до тех пор, пока все оборудование не будет перемещено.
 
-Чтобы задать нужное состояние декомиссии диска, воспользуйтесь утилитой [{{ ydb-short-name }} DSTool](ydb-dstool-overview.md). Следующая команда задаст статус `DECOMMIT_IMMINENT` диску с ID `1000` на ноде с ID `1`:
+Чтобы задать нужное состояние декомиссии диска, воспользуйтесь утилитой [{{ ydb-short-name }} DSTool](../reference/ydb-dstool/index.md). Следующая команда задаст статус `DECOMMIT_IMMINENT` диску с ID `1000` на ноде с ID `1`:
 
 ```bash
 ydb-dstool -e  <bs_endpoint> pdisk set --decommit-status DECOMMIT_IMMINENT --pdisk-ids "[1:1000]"

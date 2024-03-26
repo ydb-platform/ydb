@@ -1,14 +1,4 @@
 items:
-- name: "Утилита {{ ydb-short-name }} DSTool"
-  items:
-  - name: Обзор
-    href: ../../administration/ydb-dstool-overview.md
-  - name: Установка
-    href: ../../administration/ydb-dstool-setup.md
-  - name: Глобальные параметры
-    href: ../../administration/ydb-dstool-global-options.md
-  - name: device list
-    href: ../../administration/ydb-dstool-device-list.md
 - name: Расширение кластера
   href: cluster_expansion.md
 - name: Добавление групп хранения

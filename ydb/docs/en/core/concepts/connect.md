@@ -33,7 +33,7 @@ Applications should not in any way interpret the number and value of `database` 
 Examples:
 
 * `/ru-central1/b1g8skpblkos03malf3s/etn01q5ko6sh271beftr` is a {{ yandex-cloud }} database with `etn01q3ko8sh271beftr` as ID deployed in the `b1g8skpbljhs03malf3s` cloud in the `ru-central1` region.
-* `/local` is the default database for custom deployment [using Docker](../getting_started/self_hosted/ydb_docker.md).
+* `/local` is the default database for custom deployment [using Docker](../quickstart.md).
 
 ## A root certificate for TLS {#tls-cert}
 

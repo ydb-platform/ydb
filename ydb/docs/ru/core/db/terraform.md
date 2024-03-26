@@ -150,7 +150,7 @@ resource "ydb_table_index" "table_index" {
   type              = "global_sync" # "global_async"
   columns           = ["a", "b"]
 
-  depends_on = [ydb_table.table] #ссылка на ресурс создания таблицы.
+  depends_on = [ydb_table.table] # ссылка на ресурс создания таблицы
 }
 
 resource "ydb_table_changefeed" "table_changefeed" {

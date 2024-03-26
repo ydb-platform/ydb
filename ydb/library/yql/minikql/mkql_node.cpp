@@ -1726,15 +1726,15 @@ bool TCallableType::IsConvertableTo(const TCallableType& typeToCompare, bool ign
     if (IsMergeDisabled0 != typeToCompare.IsMergeDisabled0)
         return false;
 
-    if (ArgumentsCount != typeToCompare.ArgumentsCount)
+    if (ArgumentsCount < typeToCompare.ArgumentsCount)
         return false;
 
     // function with fewer optional args can't be converted to function
     // with more optional args
-    if (OptionalArgs < typeToCompare.OptionalArgs)
+    if (ArgumentsCount - OptionalArgs > typeToCompare.ArgumentsCount - typeToCompare.OptionalArgs)
         return false;
 
-    for (size_t index = 0; index < ArgumentsCount; ++index) {
+    for (size_t index = 0; index < typeToCompare.ArgumentsCount; ++index) {
         const auto arg = Arguments[index];
         const auto otherArg = typeToCompare.Arguments[index];
         if (!arg->IsConvertableTo(*otherArg, ignoreTagged))
@@ -1744,7 +1744,25 @@ bool TCallableType::IsConvertableTo(const TCallableType& typeToCompare, bool ign
     if (!ReturnType->IsConvertableTo(*typeToCompare.ReturnType, ignoreTagged))
         return false;
 
-    return !Payload || Payload->Equals(*typeToCompare.Payload);
+    if (!Payload) {
+        return true;
+    }
+
+    if (!typeToCompare.Payload) {
+        return false;
+    }
+
+    TCallablePayload parsedPayload(Payload), parsedPayloadToCompare(typeToCompare.Payload);
+    for (size_t index = 0; index < typeToCompare.ArgumentsCount; ++index) {
+        if (parsedPayload.GetArgumentName(index) != parsedPayloadToCompare.GetArgumentName(index)) {
+            return false;
+        }
+        if (parsedPayload.GetArgumentFlags(index) != parsedPayloadToCompare.GetArgumentFlags(index)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 void TCallableType::SetOptionalArgumentsCount(ui32 count) {
@@ -2001,6 +2019,26 @@ void TCallable::SetResult(TRuntimeNode result, const TTypeEnvironment& env) {
     InputsCount = 0;
     Inputs = nullptr;
     Result.Freeze();
+}
+
+TCallablePayload::TCallablePayload(NMiniKQL::TNode* node)
+{
+    auto structObj = AS_VALUE(NMiniKQL::TStructLiteral, NMiniKQL::TRuntimeNode(node, true));
+    auto argsIndex = structObj->GetType()->GetMemberIndex("Args");
+    auto payloadIndex = structObj->GetType()->GetMemberIndex("Payload");
+    Payload_ = AS_VALUE(NMiniKQL::TDataLiteral, structObj->GetValue(payloadIndex))->AsValue().AsStringRef();
+    auto args = structObj->GetValue(argsIndex);
+    auto argsList = AS_VALUE(NMiniKQL::TListLiteral, args);
+    auto itemType = AS_TYPE(NMiniKQL::TStructType, AS_TYPE(NMiniKQL::TListType, args)->GetItemType());
+    auto nameIndex = itemType->GetMemberIndex("Name");
+    auto flagsIndex = itemType->GetMemberIndex("Flags");
+    ArgsNames_.reserve(argsList->GetItemsCount());
+    ArgsFlags_.reserve(argsList->GetItemsCount());
+    for (ui32 i = 0; i < argsList->GetItemsCount(); ++i) {
+        auto arg = AS_VALUE(NMiniKQL::TStructLiteral, argsList->GetItems()[i]);
+        ArgsNames_.push_back(AS_VALUE(NMiniKQL::TDataLiteral, arg->GetValue(nameIndex))->AsValue().AsStringRef());
+        ArgsFlags_.push_back(AS_VALUE(NMiniKQL::TDataLiteral, arg->GetValue(flagsIndex))->AsValue().Get<ui64>());
+    }
 }
 
 bool TRuntimeNode::HasValue() const {

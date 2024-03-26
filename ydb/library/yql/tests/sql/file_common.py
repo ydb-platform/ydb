@@ -11,6 +11,7 @@ import ydb.library.yql.providers.common.proto.gateways_config_pb2 as gateways_co
 from google.protobuf import text_format
 from yql_utils import execute_sql, get_supported_providers, get_tables, get_files, get_http_files, \
     get_pragmas, log, KSV_ATTR, is_xfail, get_param, YQLExecResult, yql_binary_path
+from kqprun import KqpRun
 from yqlrun import YQLRun
 
 from utils import get_config, get_parameters_json, DATA_PATH
@@ -41,7 +42,11 @@ def get_gateways_config(http_files, yql_http_file_server, force_blocks=False, is
     return config
 
 
-def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server, yqlrun_binary=None, extra_args=[], force_blocks=False):
+def is_hybrid(provider):
+    return provider == 'hybrid'
+
+
+def get_sql_query(provider, suite, case, config):
     if provider not in get_supported_providers(config):
         pytest.skip('%s provider is not supported here' % provider)
 
@@ -51,30 +56,37 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server, 
         if "yson" in case or "regexp" in case or "match" in case:
             pytest.skip('yson/match/regexp is not supported on non-default target platform')
 
-    xfail = is_xfail(config)
-    if get_param('TARGET_PLATFORM') and xfail:
+    if get_param('TARGET_PLATFORM') and is_xfail(config):
         pytest.skip('xfail is not supported on non-default target platform')
 
-    in_tables, out_tables = get_tables(suite, config, DATA_PATH, def_attr=KSV_ATTR)
-    files = get_files(suite, config, DATA_PATH)
-    http_files = get_http_files(suite, config, DATA_PATH)
-    http_files_urls = yql_http_file_server.register_files({}, http_files)
-
     program_sql = os.path.join(DATA_PATH, suite, '%s.sql' % case)
-    is_hybrid = provider == 'hybrid'
 
     with codecs.open(program_sql, encoding='utf-8') as program_file_descr:
         sql_query = program_file_descr.read()
         if get_param('TARGET_PLATFORM'):
             if "Yson::" in sql_query:
                 pytest.skip('yson udf is not supported on non-default target platform')
-        if (provider + 'file can not' in sql_query) or (is_hybrid and ('ytfile can not' in sql_query)):
+        if (provider + 'file can not' in sql_query) or (is_hybrid(provider) and ('ytfile can not' in sql_query)):
             pytest.skip(provider + ' can not execute this')
 
     pragmas.append(sql_query)
     sql_query = ';\n'.join(pragmas)
     if 'Python' in sql_query or 'Javascript' in sql_query:
         pytest.skip('ScriptUdf')
+    
+    return sql_query
+
+
+def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server, yqlrun_binary=None, extra_args=[], force_blocks=False):
+    sql_query = get_sql_query(provider, suite, case, config)
+
+    xfail = is_xfail(config)
+
+    in_tables, out_tables = get_tables(suite, config, DATA_PATH, def_attr=KSV_ATTR)
+    files = get_files(suite, config, DATA_PATH)
+    http_files = get_http_files(suite, config, DATA_PATH)
+    http_files_urls = yql_http_file_server.register_files({}, http_files)
+
     for table in in_tables:
         if cyson.loads(table.attr).get("type") == "document":
             content = table.content
@@ -89,7 +101,7 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server, 
         prov=provider,
         keep_temp=not re.search(r"yt\.ReleaseTempData", sql_query),
         binary=yqlrun_binary,
-        gateway_config=get_gateways_config(http_files, yql_http_file_server, force_blocks=force_blocks, is_hybrid=is_hybrid),
+        gateway_config=get_gateways_config(http_files, yql_http_file_server, force_blocks=force_blocks, is_hybrid=is_hybrid(provider)),
         extra_args=extra_args,
         udfs_dir=yql_binary_path('ydb/library/yql/tests/common/test_framework/udfs_deps')
     )
@@ -129,6 +141,27 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server, 
     return fixed_result, tables_res
 
 
+def run_file_kqp_no_cache(suite, case, cfg):
+    config = get_config(suite, case, cfg)
+
+    if is_xfail(config):
+        pytest.skip('skip fail tests')
+
+    sql_query = get_sql_query('yt', suite, case, config)
+    in_tables = get_tables(suite, config, DATA_PATH, def_attr=KSV_ATTR)[0]
+
+    kqprun = KqpRun(
+        udfs_dir=yql_binary_path('ydb/library/yql/tests/common/test_framework/udfs_deps')
+    )
+
+    return kqprun.yql_exec(
+        program=sql_query,
+        verbose=True,
+        check_error=True,
+        tables=in_tables
+    )
+
+
 def run_file(provider, suite, case, cfg, config, yql_http_file_server, yqlrun_binary=None, extra_args=[], force_blocks=False):
     if (suite, case, cfg) not in run_file.cache:
         run_file.cache[(suite, case, cfg)] = run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server, yqlrun_binary, extra_args, force_blocks=force_blocks)
@@ -136,4 +169,12 @@ def run_file(provider, suite, case, cfg, config, yql_http_file_server, yqlrun_bi
     return run_file.cache[(suite, case, cfg)]
 
 
+def run_file_kqp(suite, case, cfg):
+    if (suite, case, cfg) not in run_file_kqp.cache:
+        run_file_kqp.cache[(suite, case, cfg)] = run_file_kqp_no_cache(suite, case, cfg)
+
+    return run_file_kqp.cache[(suite, case, cfg)]
+
+
 run_file.cache = {}
+run_file_kqp.cache = {}

@@ -1339,6 +1339,37 @@ When reading starts, the client code must transmit the starting consumer offset 
 
 {% endlist %}
 
+### Reading without a Consumer {#no-consumer}
+Usually reading progress is saved on server within each Consumer. Though such progres can not be saved if a reader is created without a `Consumer`
+
+{% list tabs %}
+
+- Java
+
+  To read without a Consumer, `withoutConsumer()` method should be called explicitly on `ReaderSettings` Builder:
+
+  ```java
+  ReaderSettings settings = ReaderSettings.newBuilder()
+          .withoutConsumer()
+          .addTopic(TopicReadSettings.newBuilder()
+                  .setPath(TOPIC_NAME)
+                  .build())
+          .build();
+  ```
+  In this case reading progress on server will be lost on PartitionSession restart.
+  To avoid reading from the beginning each time, starting offsets should be set each time on `PartitionSession` start:
+
+  ```java
+  @Override
+  public void onStartPartitionSession(StartPartitionSessionEvent event) {
+      event.confirm(StartPartitionSessionSettings.newBuilder()
+              .setReadOffset(lastReadOffset) // last offset read by client
+              .build());
+  }
+  ```
+
+{% endlist %}
+
 ### Processing a server read interrupt {#stop}
 
 {{ ydb-short-name }} uses server-based partition balancing between clients. This means that the server can interrupt the reading of messages from random partitions.

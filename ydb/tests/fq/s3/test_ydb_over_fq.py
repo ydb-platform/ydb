@@ -11,7 +11,7 @@ import ydb.public.api.protos.ydb_value_pb2 as ydb_pb
 from hamcrest import assert_that, calling, raises
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_v2
+from ydb.tests.tools.fq_runner.kikimr_utils import yq_all, yq_v1, yq_v2
 
 
 def to_str(value: typing.Union[bytes, int]) -> str:
@@ -70,107 +70,28 @@ class TestYdbOverFq(TestYdsBase):
     def put_s3_object(self, client, rows: typing.List[typing.Dict[str, typing.Any]], path: str):
         client.put_object(Body=to_csv(rows), Bucket="fbucket", Key=path, ContentType="text/plain")
 
-    @yq_v2
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_execute_data_query(self, kikimr, s3, client):
-        fruits = [
-            {"Fruit": b"Banana", "Price": 3, "Weight": 100},
-            {"Fruit": b"Apple", "Price": 2, "Weight": 22},
-            {"Fruit": b"Pear", "Price": 15, "Weight": 33},
-        ]
 
-        self.put_s3_object(self.make_s3_client(s3), fruits, "fruits.csv")
-
-        kikimr.control_plane.wait_bootstrap()
-        connection_id = client.create_storage_connection("fruitbucket", "fbucket").result.connection_id
-        self.make_binding(client, "fruits_bind", "fruits.csv", connection_id, [("Fruit", "STRING"), ("Price", "INT32"), ("Weight", "INT32")])
-
-        driver = self.make_yq_driver(kikimr.endpoint(), client.folder_id, "root@builtin")
-        session = driver.table_client.session().create()
-        with session.transaction() as tx:
-            result_set = tx.execute("select * from fruits_bind")[0]
-            for res_row, expected_row in zip(result_set.rows, fruits):
-                assert_dicts(res_row, expected_row)
-
-    @yq_v2
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_execute_data_query_results(self, kikimr, s3, client):
+    """
+    Since this test relies on being isolated (all the tables should be created by it exclusively),
+        we want to run each instance (v1/v2) in a separate yq folder. Folders should also
+        be separate by yq version
+    """
+    def list_directory_test_body(self, kikimr, s3, client):
         kikimr.control_plane.wait_bootstrap()
 
         driver = self.make_yq_driver(kikimr.endpoint(), client.folder_id, "root@builtin")
-        session = driver.table_client.session().create()
-        with session.transaction() as tx:
-            result_sets = tx.execute("select 42")
-            assert len(result_sets) == 1
-            assert result_sets[0].rows[0]["column0"] == 42
 
-            result_sets = tx.execute("select 41; select 42; select 43")
-            assert len(result_sets) == 3
-            for result_set, result in zip(result_sets, [41, 42, 43]):
-                assert len(result_set.rows) == 1
-                assert result_set.rows[0]["column0"] == result
-
-    @yq_v2
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_execute_data_query_error(self, kikimr, s3, client):
-        fruits = [
-            {"Fruit": b"Banana", "Price": 3, "Weight": 100},
-            {"Fruit": b"Apple", "Price": 2, "Weight": "WRONG-TYPE"},
-            {"Fruit": b"Pear", "Price": 15, "Weight": 33},
-        ]
-
-        self.put_s3_object(self.make_s3_client(s3), fruits, "fruits.csv")
-
-        kikimr.control_plane.wait_bootstrap()
-        connection_id = client.create_storage_connection("fruitbucket", "fbucket").result.connection_id
-        self.make_binding(client, "fruits_bind", "fruits.csv", connection_id, [("Fruit", "STRING"), ("Price", "INT32"), ("Weight", "INT32")])
-
-        driver = self.make_yq_driver(kikimr.endpoint(), client.folder_id, "root@builtin")
-        session = driver.table_client.session().create()
-        with session.transaction() as tx:
-            assert_that(
-                calling(tx.execute).with_args(""),
-                raises(ydb.issues.InternalError),
-            )
-        with session.transaction() as tx:
-            assert_that(
-                calling(tx.execute).with_args("BAD QUERY"),
-                raises(ydb.issues.InternalError),
-            )
-        with session.transaction() as tx:
-            assert_that(
-                calling(tx.execute).with_args("select * from WRONG_BIND"),
-                raises(ydb.issues.InternalError),
-            )
-        with session.transaction() as tx:
-            assert_that(
-                calling(tx.execute).with_args("select * from fruits_bind"),
-                raises(ydb.issues.InternalError),
-            )
-
-    @yq_v2
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_list_directory_empty(self, kikimr, s3, client):
-        kikimr.control_plane.wait_bootstrap()
-        driver = self.make_yq_driver(kikimr.endpoint(), client.folder_id, "root@builtin")
-
+        # empty result
         ls_res = driver.scheme_client.list_directory("/")
         assert ls_res.is_directory()
         assert len(ls_res.children) == 0
 
-    @yq_v2
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_list_directory_big(self, kikimr, s3, client):
         fruits = [{"Fruit": b"Banana", "Price": 3, "Weight": 100}]
         columns = [("Fruit", "STRING"), ("Price", "INT32"), ("Weight", "INT32")]
-
         self.put_s3_object(self.make_s3_client(s3), fruits, "fruits.csv")
 
-        kikimr.control_plane.wait_bootstrap()
         connection_id = client.create_storage_connection("fruitbucket", "fbucket").result.connection_id
         self.make_binding(client, "bind0000", "fruits.csv", connection_id, columns)
-
-        driver = self.make_yq_driver(kikimr.endpoint(), client.folder_id, "root@builtin")
 
         # 1 result
         ls_res = driver.scheme_client.list_directory("/")
@@ -190,47 +111,156 @@ class TestYdbOverFq(TestYdsBase):
             assert bindings[i].type == ydb.scheme.SchemeEntryType.TABLE
 
     @yq_v2
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder_v2"}], indirect=True)
+    def test_list_directory_v2(self, kikimr, s3, client):
+        self.list_directory_test_body(kikimr, s3, client)
+
+    @yq_v1
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder_v1"}], indirect=True)
+    def test_list_directory_v1(self, kikimr, s3, client):
+        self.list_directory_test_body(kikimr, s3, client)
+
+    @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_explain_data_query(self, kikimr, s3, client):
+    def test_execute_data_query(self, kikimr, s3, client, unique_prefix, yq_version):
+        fruits = [
+            {"Fruit": b"Banana", "Price": 3, "Weight": 100},
+            {"Fruit": b"Apple", "Price": 2, "Weight": 22},
+            {"Fruit": b"Pear", "Price": 15, "Weight": 33},
+        ]
+
+        self.put_s3_object(self.make_s3_client(s3), fruits, "fruits.csv")
+
+        kikimr.control_plane.wait_bootstrap()
+        connection_id = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket").result.connection_id
+        bind_name = unique_prefix + "fruits_bind"
+        self.make_binding(client, bind_name, "fruits.csv", connection_id, [("Fruit", "STRING"), ("Price", "INT32"), ("Weight", "INT32")])
+
+        driver = self.make_yq_driver(kikimr.endpoint(), client.folder_id, "root@builtin")
+        session = driver.table_client.session().create()
+        with session.transaction() as tx:
+            query = "select * from {}{}".format("bindings." if yq_version == "v1" else "", bind_name)
+            result_set = tx.execute(query)[0]
+            for res_row, expected_row in zip(result_set.rows, fruits):
+                assert res_row == expected_row
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_execute_data_query_results(self, kikimr, s3, client,):
+        kikimr.control_plane.wait_bootstrap()
+
+        driver = self.make_yq_driver(kikimr.endpoint(), client.folder_id, "root@builtin")
+        session = driver.table_client.session().create()
+        with session.transaction() as tx:
+            result_sets = tx.execute("select 42")
+            assert len(result_sets) == 1
+            assert result_sets[0].rows[0]["column0"] == 42
+
+            result_sets = tx.execute("select 41; select 42; select 43")
+            assert len(result_sets) == 3
+            for result_set, result in zip(result_sets, [41, 42, 43]):
+                assert len(result_set.rows) == 1
+                assert result_set.rows[0]["column0"] == result
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_execute_data_query_error(self, kikimr, s3, client, unique_prefix, yq_version):
+        kikimr.control_plane.wait_bootstrap()
+
+        fruits = [
+            {"Fruit": b"Banana", "Price": 3, "Weight": 100},
+            {"Fruit": b"Apple", "Price": 2, "Weight": "WRONG-TYPE"},
+            {"Fruit": b"Pear", "Price": 15, "Weight": 33},
+        ]
+        self.put_s3_object(self.make_s3_client(s3), fruits, "fruits.csv")
+
+        connection_id = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket").result.connection_id
+        bind_name = unique_prefix + "fruits_bind"
+        self.make_binding(client, bind_name, "fruits.csv", connection_id, [("Fruit", "STRING"), ("Price", "INT32"), ("Weight", "INT32")])
+
+        driver = self.make_yq_driver(kikimr.endpoint(), client.folder_id, "root@builtin")
+        session = driver.table_client.session().create()
+        with session.transaction() as tx:
+            assert_that(
+                calling(tx.execute).with_args(""),
+                raises(ydb.issues.InternalError, "length is not in \\[1; 102400\\]"),
+            )
+        with session.transaction() as tx:
+            assert_that(
+                calling(tx.execute).with_args("BAD QUERY"),
+                raises(ydb.issues.InternalError, "Unexpected token .* : cannot match to any predicted input"),
+            )
+        with session.transaction() as tx:
+            query = "select * from {}{}".format("bindings." if yq_version == "v1" else "", "WRONG_BIND")
+            error_pattern = "Table binding `WRONG_BIND` is not defined" if yq_version == "v1" else "Cannot find table"
+            assert_that(
+                calling(tx.execute).with_args(query),
+                raises(ydb.issues.InternalError, error_pattern),
+            )
+        with session.transaction() as tx:
+            query = "select * from {}{}".format("bindings." if yq_version == "v1" else "", bind_name)
+            assert_that(
+                calling(tx.execute).with_args(query),
+                raises(ydb.issues.InternalError, "Error while reading file"),
+            )
+
+    # @yq_all
+    # @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    # def test_list_directory_empty(self, kikimr, s3, client, unique_prefix):
+    #     kikimr.control_plane.wait_bootstrap()
+
+    #     driver = self.make_yq_driver(kikimr.endpoint(), client.folder_id, "root@builtin")
+
+    #     ls_res = driver.scheme_client.list_directory("/")
+    #     assert ls_res.is_directory()
+    #     assert len(ls_res.children) == 0
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_explain_data_query(self, kikimr, s3, client, unique_prefix, yq_version):
         fruits = [{"Fruit": b"Banana", "Price": 3, "Weight": 100}]
         columns = [("Fruit", "STRING"), ("Price", "INT32"), ("Weight", "INT32")]
 
         self.put_s3_object(self.make_s3_client(s3), fruits, "fruits.csv")
 
         kikimr.control_plane.wait_bootstrap()
-        connection_id = client.create_storage_connection("fruitbucket", "fbucket").result.connection_id
-        self.make_binding(client, "fruits_bind", "fruits.csv", connection_id, columns)
+        connection_id = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket").result.connection_id
+        bind_name = unique_prefix + "fruits_bind"
+        self.make_binding(client, bind_name, "fruits.csv", connection_id, columns)
 
         driver = self.make_yq_driver(kikimr.endpoint(), client.folder_id, "root@builtin")
         session = driver.table_client.session().create()
 
-        explanation = session.explain("select * from fruits_bind")
+        query = "select * from {}{}".format("bindings." if yq_version == "v1" else "", bind_name)
+        explanation = session.explain(query)
         assert len(explanation.query_ast) != 0
         assert json.loads(explanation.query_plan) is not None  # checking it doesn't throw
 
-    @yq_v2
+    @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_describe_table(self, kikimr, s3, client):
+    def test_describe_table(self, kikimr, s3, client, unique_prefix):
         fruits = [{"Fruit": b"Banana", "Price": 3, "Weight": 100}]
         columns = [("Fruit", "STRING"), ("Price", "INT32"), ("Weight", "INT32")]
 
         self.put_s3_object(self.make_s3_client(s3), fruits, "fruits.csv")
 
         kikimr.control_plane.wait_bootstrap()
-        connection_id = client.create_storage_connection("fruitbucket", "fbucket").result.connection_id
-        self.make_binding(client, "fruits_bind", "fruits.csv", connection_id, columns)
+        connection_id = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket").result.connection_id
+        bind_name = unique_prefix + "fruits_bind"
+        self.make_binding(client, bind_name, "fruits.csv", connection_id, columns)
 
         driver = self.make_yq_driver(kikimr.endpoint(), client.folder_id, "root@builtin")
         session = driver.table_client.session().create()
 
+        session.describe_table("BAD_PATH")
         assert_that(
             calling(session.describe_table).with_args("BAD_PATH"),
             raises(ydb.issues.NotFound)
         )
 
-        for path in ["fruits_bind", "/path/to/fruits_bind"]:
+        for path in [bind_name, "/path/to/" + bind_name]:
             description = session.describe_table(path)
-            assert description.name == "fruits_bind"
+            assert description.name == bind_name
             assert description.type == ydb.scheme.SchemeEntryType.TABLE
             for column in description.columns:
                 if column.name == "Fruit":

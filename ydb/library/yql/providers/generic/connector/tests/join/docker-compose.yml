@@ -19,7 +19,6 @@ services:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
     command: ["postgres", "-c", "log_statement=all", "-c", "log_connections=on", "-c", "log_disconnections=on"]
-    # network_mode: host
     ports:
       - 5432
   fq-connector-go:

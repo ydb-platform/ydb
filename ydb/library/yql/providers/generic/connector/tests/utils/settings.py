@@ -74,7 +74,7 @@ class Settings:
                 case EDataSourceKind.POSTGRESQL:
                     data_sources[data_source_kind] = cls.PostgreSQL(
                         cluster_name='postgresql_integration_test',
-                        host_external='localhost',
+                        host_external='0.0.0.0',
                         host_internal='postgresql',
                         port_external=endpoint_determiner.get_port('postgresql', 5432),
                         port_internal=5432,

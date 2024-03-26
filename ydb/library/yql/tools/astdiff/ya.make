@@ -10,12 +10,8 @@ PEERDIR(
     library/cpp/svnversion
     ydb/library/yql/ast
     ydb/library/yql/utils/backtrace
-)
 
-BUNDLE(
-    ydb/library/yql/tools/astdiff/differ NAME differ_bundled
+    contrib/libs/dtl
 )
-
-RESOURCE(differ_bundled /differ)
 
 END()

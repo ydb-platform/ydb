@@ -1726,12 +1726,12 @@ bool TCallableType::IsConvertableTo(const TCallableType& typeToCompare, bool ign
     if (IsMergeDisabled0 != typeToCompare.IsMergeDisabled0)
         return false;
 
-    if (ArgumentsCount + typeToCompare.OptionalArgs != typeToCompare.ArgumentsCount + OptionalArgs)
+    if (ArgumentsCount < typeToCompare.ArgumentsCount)
         return false;
 
     // function with fewer optional args can't be converted to function
     // with more optional args
-    if (OptionalArgs < typeToCompare.OptionalArgs)
+    if (ArgumentsCount - OptionalArgs > typeToCompare.ArgumentsCount - typeToCompare.OptionalArgs)
         return false;
 
     for (size_t index = 0; index < typeToCompare.ArgumentsCount; ++index) {

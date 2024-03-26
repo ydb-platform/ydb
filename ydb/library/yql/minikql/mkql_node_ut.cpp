@@ -1,5 +1,4 @@
 #include "mkql_node.h"
-#include "mkql_node_builder.h"
 #include "mkql_node_visitor.h"
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -304,50 +303,71 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT_EXCEPTION(ctype2optArg->SetOptionalArgumentsCount(3), yexception);
     }
 
+    template<typename... T>
+    struct TArgs { };
+
+    template<typename... T>
+    struct TOpt { };
+
+    template<>
+    struct TArgs<> {
+        void Build(bool inc, TVector<TType*>& types, int& opts, TTypeEnvironment& env) const {
+            Y_UNUSED(inc);
+            Y_UNUSED(types);
+            Y_UNUSED(opts);
+            Y_UNUSED(env);
+        }
+    };
+    
+    template<typename... T>
+    struct TArgs<TOpt<T...>>
+    {
+        void Build(bool, TVector<TType*>& types, int& opts, TTypeEnvironment& env) const {
+            TArgs<T...>().Build(true, types, opts, env);
+        }
+    };
+
+    template<typename H, typename... T>
+    struct TArgs<H, T...>
+    {
+        void Build(bool inc, TVector<TType*>& types, int& opts, TTypeEnvironment& env) const {
+            if (inc) {
+                opts ++;
+            }
+            auto* type = TOptionalType::Create(env.GetEmptyTupleLazy()->GetGenericType(), env);
+            types.push_back(type);
+            TArgs<T...>().Build(inc, types, opts, env);
+        }
+    };
+
+    template<typename... T1, typename... T2>
+    void IsConvertableTo(const TArgs<T1...>& f1, const TArgs<T2...>& f2, TTypeEnvironment& env, bool result) {
+        TVector<TType*> types1; int opts1 = 0;
+        TVector<TType*> types2; int opts2 = 0;
+        f1.Build(false, types1, opts1, env);
+        f2.Build(false, types2, opts2, env);
+
+        TCallableType* c1 = TCallableType::Create("c1", env.GetVoidLazy()->GetGenericType(), types1.size(), types1.data(), nullptr, env);
+        c1->SetOptionalArgumentsCount(opts1);
+
+        TCallableType* c2 = TCallableType::Create("c2", env.GetVoidLazy()->GetGenericType(), types2.size(), types2.data(), nullptr, env);
+        c2->SetOptionalArgumentsCount(opts2);
+
+        UNIT_ASSERT(c1->IsConvertableTo(*c2) == result);
+    }
+
     Y_UNIT_TEST(TestCallableTypeWithOptionalArguments) {
         TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
 
-        TVector<TType*> types;
-        types.push_back(env.GetVoidLazy()->GetGenericType());
-        types.push_back(env.GetEmptyStructLazy()->GetGenericType());
-        TCallableType* ctype2 = TCallableType::Create("c2", env.GetVoidLazy()->GetGenericType(), types.size(), types.data(), nullptr, env);
-
-        TOptionalType* opt1type = TOptionalType::Create(env.GetEmptyStructLazy()->GetGenericType(), env);
-        types.push_back(opt1type);
-        TCallableType* ctype2optArg1 = TCallableType::Create("c2", env.GetVoidLazy()->GetGenericType(), types.size(), types.data(), nullptr, env);
-        ctype2optArg1->SetOptionalArgumentsCount(1);
-        UNIT_ASSERT(!ctype2optArg1->IsSameType(*ctype2));
-        UNIT_ASSERT(ctype2optArg1->IsConvertableTo(*ctype2));
-        UNIT_ASSERT(!ctype2->IsConvertableTo(*ctype2optArg1));
-
-        auto callable1 = TCallableBuilder(env, "func1", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
-            .Add(TRuntimeNode(env.GetEmptyStructLazy(), true))
-            .Add(TRuntimeNode(env.GetVoidLazy(), true))
-            .SetArgumentName("Arg2")
-            .SetArgumentFlags(NUdf::ICallablePayload::TArgumentFlags::AutoMap)
-            .Add(TRuntimeNode(TOptionalLiteral::Create(TOptionalType::Create(env.GetEmptyTupleLazy()->GetGenericType(), env), env), true))
-            .SetArgumentName("Arg3")
-            .SetOptionalArgs(1)
-            .Build();
-
-        auto callable2 = TCallableBuilder(env, "func1", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
-            .Add(TRuntimeNode(env.GetEmptyStructLazy(), true))
-            .Add(TRuntimeNode(env.GetVoidLazy(), true))
-            .SetArgumentName("Arg2")
-            .SetArgumentFlags(NUdf::ICallablePayload::TArgumentFlags::AutoMap)
-            .Add(TRuntimeNode(TOptionalLiteral::Create(TOptionalType::Create(env.GetEmptyTupleLazy()->GetGenericType(), env), env), true))
-            .SetArgumentName("Arg3")
-            .Add(TRuntimeNode(TOptionalLiteral::Create(TOptionalType::Create(env.GetEmptyTupleLazy()->GetGenericType(), env), env), true))
-            .SetArgumentName("Arg4")
-            .SetOptionalArgs(2)
-            .Build();
-
-        auto* callable1Type = callable1->GetType();
-        auto* callable2Type = callable2->GetType();
-        UNIT_ASSERT(!callable2Type->IsSameType(*callable1Type));
-        UNIT_ASSERT(callable2Type->IsConvertableTo(*callable1Type));
-        UNIT_ASSERT(!callable1Type->IsConvertableTo(*callable2Type));
+        IsConvertableTo(TArgs<TOpt<int,int,int>>(), TArgs<int,int,int>(), env, true);
+        IsConvertableTo(TArgs<int,int>(), TArgs<int,int>(), env, true);
+        IsConvertableTo(TArgs<int,int>(), TArgs<int,TOpt<int>>(), env, false);
+        IsConvertableTo(TArgs<int,TOpt<int>>(), TArgs<int,int>(), env, true);
+        IsConvertableTo(TArgs<TOpt<int,int>>(), TArgs<int,int>(), env, true);
+        IsConvertableTo(TArgs<TOpt<int,int,int>>(), TArgs<int,TOpt<int>>(), env, true);
+        IsConvertableTo(TArgs<TOpt<int,int>>(), TArgs<int,TOpt<int,int>>(), env, false);
+        IsConvertableTo(TArgs<int,int,int>(), TArgs<int,TOpt<int>>(), env, false);
     }
 
     Y_UNIT_TEST(TestDictLiteral) {

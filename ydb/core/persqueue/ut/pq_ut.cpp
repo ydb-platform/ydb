@@ -12,7 +12,6 @@
 
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 
 namespace NKikimr::NPQ {
@@ -186,7 +185,6 @@ Y_UNIT_TEST(TestPartitionTotalQuota) {
 }
 
 Y_UNIT_TEST(TestAccountReadQuota) {
-    DBGTRACE("TestAccountReadQuota");
     TTestContext tc;
     TAtomic stop = 0;
     TAtomicCounter quoterRequests = 0;
@@ -222,27 +220,18 @@ Y_UNIT_TEST(TestAccountReadQuota) {
     data.push_back({1, s});
 
     auto runTest = [&]() {
-        DBGTRACE("runTest");
         Cerr << "CmdWrite\n";
-        DBGTRACE_LOG("begin CmdWrite");
         CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
-        DBGTRACE_LOG("end CmdWrite");
         data[0].first++;
         Cerr << "CmdRead\n";
-        DBGTRACE_LOG("begin CmdRead");
         CmdRead(0, 0, Max<i32>(), Max<i32>(), 1, false, tc, {0}, 0, 0, "user");
-        DBGTRACE_LOG("end CmdRead");
     };
     Cerr << "Run 1\n";
-    DBGTRACE_LOG("begin runTest");
     runTest();
-    DBGTRACE_LOG("end runTest");
     Sleep(TDuration::Seconds(1));
     Cerr << "Currently have " << quoterRequests.Val() << " quoter requests\n";
     Cerr << "Run 2\n";
-    DBGTRACE_LOG("begin runTest");
     runTest();
-    DBGTRACE_LOG("end runTest");
     Sleep(TDuration::Seconds(1));
     Cerr << "Currently have " << quoterRequests.Val() << " quoter requests\n";
     AtomicSet(stop, 1);

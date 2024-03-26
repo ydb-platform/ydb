@@ -20,7 +20,6 @@
 #include <util/system/types.h>
 
 #include "make_config.h"
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -451,7 +450,6 @@ void TPartitionFixture::SendGetOffset(ui64 cookie,
 
 void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
 {
-    DBGTRACE("TPartitionFixture::WaitCmdWrite");
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
     UNIT_ASSERT(event != nullptr);
 
@@ -552,8 +550,6 @@ void TPartitionFixture::SendCmdWriteResponse(NMsgBusProxy::EResponseStatus statu
 
 void TPartitionFixture::SendSubDomainStatus(bool subDomainOutOfSpace)
 {
-    DBGTRACE("TPartitionFixture::SendSubDomainStatus");
-    DBGTRACE_LOG("subDomainOutOfSpace=" << subDomainOutOfSpace);
     auto event = MakeHolder<TEvPQ::TEvSubDomainStatus>();
     event->Record.SetSubDomainOutOfSpace(subDomainOutOfSpace);
 
@@ -571,8 +567,6 @@ void TPartitionFixture::SendWrite
         bool ignoreQuotaDeadline, ui64 seqNo
 )
 {
-    DBGTRACE("TPartitionFixture::SendWrite");
-    DBGTRACE_LOG("cookie=" << cookie);
     TEvPQ::TEvWrite::TMsg msg;
     msg.SourceId = "SourceId";
     msg.SeqNo = seqNo ? seqNo : messageNo;
@@ -599,8 +593,6 @@ void TPartitionFixture::SendWrite
 
 void TPartitionFixture::SendChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const bool force)
 {
-    DBGTRACE("TPartitionFixture::SendChangeOwner");
-    DBGTRACE_LOG("cookie=" << cookie << ", owner=" << owner << ", force=" << force);
     auto event = MakeHolder<TEvPQ::TEvChangeOwner>(cookie, owner, pipeClient, Ctx->Edge, force, true);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
@@ -664,7 +656,6 @@ void TPartitionFixture::WaitConfigRequest()
 
 void TPartitionFixture::SendConfigResponse(const TConfigParams& config)
 {
-    DBGTRACE("TPartitionFixture::SendConfigResponse");
     auto event = MakeHolder<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
 
@@ -681,7 +672,6 @@ void TPartitionFixture::SendConfigResponse(const TConfigParams& config)
         read->SetValue(out);
     }
 
-    DBGTRACE_LOG("send TEvKeyValue::TEvResponse");
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -695,7 +685,6 @@ void TPartitionFixture::WaitDiskStatusRequest()
 
 void TPartitionFixture::SendDiskStatusResponse(TMaybe<ui64>* cookie)
 {
-    DBGTRACE("TPartitionFixture::SendDiskStatusResponse");
     auto event = MakeHolder<TEvKeyValue::TEvResponse>();
     if (cookie && cookie->Defined()) {
         event->Record.SetCookie(cookie->GetRef());
@@ -706,7 +695,6 @@ void TPartitionFixture::SendDiskStatusResponse(TMaybe<ui64>* cookie)
     result->SetStatus(NKikimrProto::OK);
     result->SetStatusFlags(NKikimrBlobStorage::StatusIsValid);
 
-    DBGTRACE_LOG("send TEvKeyValue::TEvResponse");
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -720,7 +708,6 @@ void TPartitionFixture::WaitMetaReadRequest()
 
 void TPartitionFixture::SendMetaReadResponse(TMaybe<ui64> step, TMaybe<ui64> txId)
 {
-    DBGTRACE("TPartitionFixture::SendMetaReadResponse");
     auto event = MakeHolder<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
 
@@ -753,7 +740,6 @@ void TPartitionFixture::SendMetaReadResponse(TMaybe<ui64> step, TMaybe<ui64> txI
         read->SetStatus(NKikimrProto::NODATA);
     }
 
-    DBGTRACE_LOG("send TEvKeyValue::TEvResponse");
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -768,7 +754,6 @@ void TPartitionFixture::WaitInfoRangeRequest()
 void TPartitionFixture::SendInfoRangeResponse(ui32 partition,
                                               const TVector<TCreateConsumerParams>& consumers)
 {
-    DBGTRACE("TPartitionFixture::SendInfoRangeResponse");
     auto event = MakeHolder<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
 
@@ -800,7 +785,6 @@ void TPartitionFixture::SendInfoRangeResponse(ui32 partition,
         }
     }
 
-    DBGTRACE_LOG("send TEvKeyValue::TEvResponse");
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -814,7 +798,6 @@ void TPartitionFixture::WaitDataRangeRequest()
 
 void TPartitionFixture::SendDataRangeResponse(ui64 begin, ui64 end)
 {
-    DBGTRACE("TPartitionFixture::SendDataRangeResponse");
     Y_ABORT_UNLESS(begin <= end);
 
     auto event = MakeHolder<TEvKeyValue::TEvResponse>();
@@ -829,7 +812,6 @@ void TPartitionFixture::SendDataRangeResponse(ui64 begin, ui64 end)
     //pair->SetValueSize();
     pair->SetCreationUnixTime(0);
 
-    DBGTRACE_LOG("send TEvKeyValue::TEvResponse");
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -1069,7 +1051,6 @@ void TPartitionFixture::ShadowPartitionCountersTest(bool isFirstClass) {
 
 void TPartitionFixture::WaitKeyValueRequest(TMaybe<ui64>& cookie)
 {
-    DBGTRACE("TPartitionFixture::WaitKeyValueRequest");
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
     UNIT_ASSERT(event != nullptr);
     if (event->Record.HasCookie()) {
@@ -1077,7 +1058,6 @@ void TPartitionFixture::WaitKeyValueRequest(TMaybe<ui64>& cookie)
     } else {
         cookie = Nothing();
     }
-    DBGTRACE_LOG("cookie=" << cookie);
 }
 
 void TPartitionFixture::TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration, bool ignoreQuotaDeadline)
@@ -1111,11 +1091,9 @@ void TPartitionFixture::TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration
     auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
     UNIT_ASSERT(ownerEvent != nullptr);
     auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
-    DBGTRACE_LOG("ownerCookie=" << ownerCookie);
 
     TAutoPtr<IEventHandle> handle;
     std::function<bool(const TEvPQ::TEvProxyResponse&)> truth = [&](const TEvPQ::TEvProxyResponse& e) {
-        DBGTRACE_LOG("cookie=" << cookie << ", e.Cookie=" << e.Cookie);
         return cookie == e.Cookie;
     };
 
@@ -1129,7 +1107,6 @@ void TPartitionFixture::TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration
     SendDiskStatusResponse(&kvCookie);
 
     {
-        DBGTRACE("wait TEvPQ::TEvProxyResponse (success)");
         auto event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
         UNIT_ASSERT(event != nullptr);
     }
@@ -1141,7 +1118,6 @@ void TPartitionFixture::TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration
     //SendDiskStatusResponse();
 
     {
-        DBGTRACE("wait TEvPQ::TEvProxyResponse (timeout)");
         auto event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
         UNIT_ASSERT(event == nullptr);
     }
@@ -1153,7 +1129,6 @@ void TPartitionFixture::TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration
     SendDiskStatusResponse(&kvCookie);
 
     {
-        DBGTRACE("wait TEvPQ::TEvProxyResponse (success)");
         auto event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
         UNIT_ASSERT(event != nullptr);
         UNIT_ASSERT_EQUAL(NMsgBusProxy::MSTATUS_OK, event->Response->GetStatus());
@@ -1736,7 +1711,6 @@ Y_UNIT_TEST_F(ReserveSubDomainOutOfSpace, TPartitionFixture)
 
 Y_UNIT_TEST_F(WriteSubDomainOutOfSpace, TPartitionFixture)
 {
-    DBGTRACE("WriteSubDomainOutOfSpace");
     Ctx->Runtime->GetAppData().FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
     Ctx->Runtime->GetAppData().PQConfig.MutableQuotingConfig()->SetQuotaWaitDurationMs(300);
     CreatePartition({
@@ -1764,11 +1738,9 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace, TPartitionFixture)
     auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
     UNIT_ASSERT(ownerEvent != nullptr);
     auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
-    DBGTRACE_LOG("ownerCookie=" << ownerCookie);
 
     TAutoPtr<IEventHandle> handle;
     std::function<bool(const TEvPQ::TEvError&)> truth = [&](const TEvPQ::TEvError& e) {
-        DBGTRACE_LOG("cookie=" << cookie << ", e.Cookie=" << e.Cookie);
         return cookie == e.Cookie;
     };
 
@@ -1782,7 +1754,6 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace, TPartitionFixture)
     SendDiskStatusResponse(&kvCookie);
 
     {
-        DBGTRACE("wait TEvPQ::TEvProxyResponse");
         auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
         UNIT_ASSERT(event != nullptr);
     }
@@ -1792,7 +1763,6 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace, TPartitionFixture)
     messageNo++;
 
     {
-        DBGTRACE("wait TEvPQ::TEvError");
         auto event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvError>(handle, truth, TDuration::Seconds(10));
         UNIT_ASSERT(event != nullptr);
         UNIT_ASSERT_EQUAL(NPersQueue::NErrorCode::OVERLOAD, event->ErrorCode);
@@ -1882,7 +1852,6 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoSuccess, TPartitionFixture) {
 } // GetPartitionWriteInfoSuccess
 
 Y_UNIT_TEST_F(GetPartitionWriteInfoError, TPartitionFixture) {
-    DBGTRACE("GetPartitionWriteInfoError");
     CreatePartition({
                     .Partition=TPartitionId{2, 10, 100'001},
                     .Begin=0, .End=10,
@@ -1899,23 +1868,19 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoError, TPartitionFixture) {
 
     ui64 cookie = 1;
 
-    DBGTRACE_LOG("SendChangeOwner");
     SendChangeOwner(cookie, "owner1", Ctx->Edge, true);
     auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
     UNIT_ASSERT(ownerEvent != nullptr);
     auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
-    DBGTRACE_LOG("ownerCookie=" << ownerCookie);
 
     TAutoPtr<IEventHandle> handle;
     std::function<bool(const TEvPQ::TEvError&)> truth = [&](const TEvPQ::TEvError& e) { return cookie == e.Cookie; };
 
     TString data = "data for write";
 
-    DBGTRACE_LOG("SendWrite");
     SendWrite(++cookie, 0, ownerCookie, 100, data, false, 1);
 
     {
-        DBGTRACE_LOG("SendGetWriteInfo");
         SendGetWriteInfo(100'001);
         auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoError>(TDuration::Seconds(1));
         UNIT_ASSERT(event != nullptr);
@@ -1929,7 +1894,6 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoError, TPartitionFixture) {
     }
 
     {
-        DBGTRACE_LOG("SendGetWriteInfo");
         SendGetWriteInfo(100'001);
         auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoError>(TDuration::Seconds(1));
         UNIT_ASSERT(event != nullptr);

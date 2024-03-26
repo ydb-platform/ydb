@@ -147,7 +147,7 @@ struct TDateTimeAddT {
 };
 
 template<typename TLeft, typename TRight, typename TOutput>
-struct TIntervalAdd {
+struct TBigIntervalAdd {
     static_assert(std::is_same_v<TLeft, i64>, "Left must be i64");
     static_assert(std::is_same_v<TRight, i64>, "Right must be i64");
     static_assert(std::is_same_v<TOutput, i64>, "Output must be i64");
@@ -165,8 +165,7 @@ struct TIntervalAdd {
         } else if (IsBadInterval<NUdf::TDataType<NUdf::TInterval64>>(ret)) {
             return NUdf::TUnboxedValuePod();
         }
-        auto data = NUdf::TUnboxedValuePod(ret);
-        return data;
+        return NUdf::TUnboxedValuePod(ret);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -260,13 +259,13 @@ void RegisterAdd(IBuiltinFunctionRegistry& registry) {
         NUdf::TDataType<NUdf::TInterval>, TDateTimeAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
 
     RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval64>,
-        NUdf::TDataType<NUdf::TInterval64>, TIntervalAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
+        NUdf::TDataType<NUdf::TInterval64>, TBigIntervalAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
 
     RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>,
-        NUdf::TDataType<NUdf::TInterval64>, TIntervalAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
+        NUdf::TDataType<NUdf::TInterval64>, TBigIntervalAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
 
     RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval64>,
-        NUdf::TDataType<NUdf::TInterval64>, TIntervalAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
+        NUdf::TDataType<NUdf::TInterval64>, TBigIntervalAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
 }
 
 void RegisterAdd(TKernelFamilyMap& kernelFamilyMap) {

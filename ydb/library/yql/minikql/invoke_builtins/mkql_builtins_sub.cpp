@@ -148,6 +148,58 @@ struct TIntervalSubInterval {
 #endif
 };
 
+template<typename TLeft, typename TRight, typename TOutput>
+struct TBigIntervalSub {
+    static_assert(std::is_same_v<TLeft, i64>, "Left must be i64");
+    static_assert(std::is_same_v<TRight, i64>, "Right must be i64");
+    static_assert(std::is_same_v<TOutput, i64>, "Output must be i64");
+
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
+    {
+        i64 lv = left.Get<i64>();
+        i64 rv = right.Get<i64>();
+        i64 ret = lv - rv;
+        // detect overflow
+        if (lv > 0 && rv < 0 && ret < 0) {
+            return NUdf::TUnboxedValuePod();
+        } else if (lv < 0 && rv > 0 && ret > 0) {
+            return NUdf::TUnboxedValuePod();
+        } else if (IsBadInterval<NUdf::TDataType<NUdf::TInterval64>>(ret)) {
+            return NUdf::TUnboxedValuePod();
+        }
+        return NUdf::TUnboxedValuePod(ret);
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
+    {
+        auto& context = ctx.Codegen.GetContext();
+        const auto lhs = GetterFor<i64>(left, context, block);
+        const auto rhs = GetterFor<i64>(right, context, block);
+        const auto sub = BinaryOperator::CreateSub(lhs, rhs, "sub", block);
+        const auto wide = SetterFor<i64>(sub, context, block);
+
+        const auto lneg = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLT, lhs, ConstantInt::get(lhs->getType(), 0), "lneg", block);
+        const auto rpos = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, rhs, ConstantInt::get(rhs->getType(), 0), "rpos", block);
+        const auto apos = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, sub, ConstantInt::get(sub->getType(), 0), "apos", block);
+        const auto npp = BinaryOperator::CreateAnd(apos, BinaryOperator::CreateAnd(lneg, rpos, "np", block), "npp", block);
+
+        const auto lpos = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, lhs, ConstantInt::get(lhs->getType(), 0), "lpos", block);
+        const auto rneg = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLT, rhs, ConstantInt::get(rhs->getType(), 0), "rneg", block);
+        const auto aneg = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLT, sub, ConstantInt::get(sub->getType(), 0), "aneg", block);
+        const auto pnn = BinaryOperator::CreateAnd(aneg, BinaryOperator::CreateAnd(lpos, rneg, "pn", block), "pnn", block);
+
+        const auto bad = BinaryOperator::CreateOr(
+                BinaryOperator::CreateOr(npp, pnn, "overflow", block),
+                GenIsBadInterval<NUdf::TDataType<NUdf::TInterval64>>(sub, context, block),
+                "bad", block);
+        const auto zero = ConstantInt::get(Type::getInt128Ty(context), 0);
+        const auto sel = SelectInst::Create(bad, zero, wide, "sel", block);
+        return sel;
+    }
+#endif
+};
+
 template<typename TLeft, typename TRight, typename TOutput, bool Tz>
 struct TAnyDateTimeSubIntervalT {
     static_assert(TRight::Features & NYql::NUdf::TimeIntervalType, "right must be interval type");
@@ -275,12 +327,12 @@ void RegisterSub(IBuiltinFunctionRegistry& registry) {
 
     RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>,
         NUdf::TDataType<NUdf::TInterval>, TIntervalSubInterval, TBinaryArgsOptWithNullableResult>(registry, "Sub");
-    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval64>,
-        NUdf::TDataType<NUdf::TInterval64>, TIntervalSubInterval, TBinaryArgsOptWithNullableResult>(registry, "Sub");
-    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>,
-        NUdf::TDataType<NUdf::TInterval64>, TIntervalSubInterval, TBinaryArgsOptWithNullableResult>(registry, "Sub");
-    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval64>,
-        NUdf::TDataType<NUdf::TInterval64>, TIntervalSubInterval, TBinaryArgsOptWithNullableResult>(registry, "Sub");
+    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval64>,
+        NUdf::TDataType<NUdf::TInterval64>, TBigIntervalSub, TBinaryArgsOptWithNullableResult>(registry, "Sub");
+    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>,
+        NUdf::TDataType<NUdf::TInterval64>, TBigIntervalSub, TBinaryArgsOptWithNullableResult>(registry, "Sub");
+    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval64>,
+        NUdf::TDataType<NUdf::TInterval64>, TBigIntervalSub, TBinaryArgsOptWithNullableResult>(registry, "Sub");
 
     RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TInterval>,
         NUdf::TDataType<NUdf::TDate>, TAnyDateTimeSubInterval, TBinaryArgsOptWithNullableResult>(registry, "Sub");

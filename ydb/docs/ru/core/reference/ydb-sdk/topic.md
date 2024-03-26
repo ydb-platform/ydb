@@ -1353,7 +1353,7 @@
 
 - Java
 
-  Для чтения без `Consumer`а следует в настройках читателя это явно указать, вызвав `withoutConsumer()`:
+  Для чтения без `Consumer`а следует в настройках читателя `ReaderSettings` это явно указать, вызвав `withoutConsumer()`:
 
   ```java
   ReaderSettings settings = ReaderSettings.newBuilder()
@@ -1444,9 +1444,63 @@
 
   Функциональность находится в разработке.
 
-- Java
+- Java (sync)
 
-  Функциональность находится в разработке.
+  В настройках `ReceiveSettings` метода `receive` можно указать транзакцию:
+
+  ```java
+  Message message = reader.receive(ReceiveSettings.newBuilder()
+          .setTransaction(transaction)
+          .build());
+  ```
+  Тогда полученное сообщение будет закоммичено вместе с транзакцией. Коммитить его отдельно не нужно.
+  Метод `receive` вернёт управление, когда "свяжет" на сервере сообщение с транзакцией вызовом `sendUpdateOffsetsInTransaction`.
+
+  Требование к транзакции:
+  Это должна быть активная (имеющая идентификатор) транзакция в одном из сервисов YDB. Например, Table или Query.
+
+- Java (async)
+  После получения сообщения в обработчике `onMessages` можно связать одно или несколько сообщений с транзакцией.
+  Для этого нужно вызвать отдельный метод `reader.updateOffsetsInTransaction` и дождаться его выполнения на сервере.
+  Этот метод принимает параметром список оффсетов. Для удобства у `Message` и `DataReceivedEvent` есть метод `getPartitionOffsets()`, возвращающий такой список.
+
+  ```java
+  @Override
+        public void onMessages(DataReceivedEvent event) {
+            for (Message message : event.getMessages()) {
+                // creating session in table service
+                Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
+                if (!sessionResult.isSuccess()) {
+                    logger.error("Couldn't get session from pool: {}", sessionResult);
+                    return; // retry or shutdown
+                }
+                Session session = sessionResult.getValue();
+                // creating transaction in table service
+                // this transaction is not yet active and has no id
+                TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+
+                // do something else in transaction
+                transaction.executeDataQuery("SELECT 1").join();
+                // now transaction is active and has id
+                // analyzeQueryResultIfNeeded();
+
+                Status updateStatus = reader.updateOffsetsInTransaction(transaction,
+                                message.getPartitionOffsets(), new UpdateOffsetsInTransactionSettings.Builder().build())
+                        // Do not commit transaction without waiting for updateOffsetsInTransaction result to avoid race condition
+                        .join();
+                if (!updateStatus.isSuccess()) {
+                    logger.error("Couldn't update offsets in transaction: {}", updateStatus);
+                    return; // retry or shutdown
+                }
+
+                Status commitStatus = transaction.commit().join();
+                analyzeCommitStatus(commitStatus);
+            }
+        }
+  ```
+
+  Требование к транзакции:
+  Это должна быть активная (имеющая идентификатор) транзакция в одном из сервисов YDB. Например, Table или Query.
 
 {% endlist %}
 

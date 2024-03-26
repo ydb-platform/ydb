@@ -33,7 +33,7 @@ class Client:
         start = datetime.now()
         attempt = 0
 
-        while (datetime.now() - start).total_seconds() < 5:
+        while (datetime.now() - start).total_seconds() < 10:
             attempt += 1
             try:
                 LOGGER.debug(
@@ -45,7 +45,7 @@ class Client:
                     host=self.settings.host_external,
                     port=self.settings.port_external,
                     database=dbname,
-                    timeout=1,
+                    timeout=10,
                 )
                 conn.autocommit = True
 

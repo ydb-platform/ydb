@@ -299,6 +299,7 @@ private:
         TVector<TOperator> Operators;
         THashSet<ui32> Plans;
         const NKqpProto::TKqpPhyStage* StageProto;
+        TMap<TString, TString> OptEstimates;
     };
 
     void WritePlanNodeToJson(const TQueryPlanNode& planNode, NJsonWriter::TBuf& writer) const {
@@ -307,6 +308,10 @@ private:
         writer.WriteKey("PlanNodeId").WriteInt(planNode.NodeId);
         writer.WriteKey("Node Type").WriteString(planNode.TypeName);
         writer.WriteKey("StageGuid").WriteString(planNode.Guid);
+
+        for (auto [k, v] : planNode.OptEstimates) {
+            writer.WriteKey(k).WriteString(v);
+        }
 
         if (auto type = GetPlanNodeType(planNode)) {
             writer.WriteKey("PlanNodeType").WriteString(type);
@@ -513,6 +518,20 @@ private:
             for (const auto keyColumn : lookupKeyColumnsStruct->GetItems()) {
                 lookupKeyColumns.AppendValue(keyColumn->GetName());
                 readInfo.LookupBy.push_back(TString(keyColumn->GetName()));
+            }
+
+            if (SerializerCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel)!=0) {
+
+                if (auto stats = SerializerCtx.TypeCtx.GetStats(tableLookup.Raw())) {
+                    planNode.OptEstimates["E-Rows"] = TStringBuilder() << stats->Nrows;
+                    planNode.OptEstimates["E-Cost"] = TStringBuilder() << stats->Cost;
+                    planNode.OptEstimates["E-Size"] = TStringBuilder() << stats->ByteSize;
+                }
+                else {
+                    planNode.OptEstimates["E-Rows"] = "No estimate";
+                    planNode.OptEstimates["E-Cost"] = "No estimate";
+                    planNode.OptEstimates["E-Size"] = "No estimate";
+                }
             }
 
             SerializerCtx.Tables[table].Reads.push_back(std::move(readInfo));
@@ -1427,9 +1446,9 @@ private:
         }
 
         if (auto stats = SerializerCtx.TypeCtx.GetStats(expr.Raw())) {
-            op.Properties["E-Rows"] = stats->Nrows;
-            op.Properties["E-Cost"] = stats->Cost;
-            op.Properties["E-Size"] = stats->ByteSize;
+            op.Properties["E-Rows"] = TStringBuilder() << stats->Nrows;
+            op.Properties["E-Cost"] = TStringBuilder() << stats->Cost;
+            op.Properties["E-Size"] = TStringBuilder() << stats->ByteSize;
         }
         else {
             op.Properties["E-Rows"] = "No estimate";
@@ -1968,6 +1987,16 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
             op["Columns"] = plan.GetMapSafe().at("Columns");
             op["LookupKeyColumns"] = plan.GetMapSafe().at("LookupKeyColumns");
             op["Table"] = plan.GetMapSafe().at("Table");
+
+            if (plan.GetMapSafe().contains("E-Cost")) {
+                op["E-Cost"] = plan.GetMapSafe().at("E-Cost");
+            } 
+            if (plan.GetMapSafe().contains("E-Rows")) {
+                op["E-Rows"] = plan.GetMapSafe().at("E-Rows");
+            }
+            if (plan.GetMapSafe().contains("E-Size")) {
+                op["E-Size"] = plan.GetMapSafe().at("E-Size");
+            }
 
             newOps.AppendValue(op);
 

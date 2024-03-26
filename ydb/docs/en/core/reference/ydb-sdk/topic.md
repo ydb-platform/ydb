@@ -792,6 +792,55 @@ All the metadata provided when writing a message is returned to a consumer with 
 
 {% endlist %}
 
+### Write in transaction {#write-tx}
+
+{% list tabs %}
+
+- Java (sync)
+
+  Transaction can be set in `SendSettings` of `send` method while sending a message.
+  Such message will be written on transaction commit.
+
+  ```java
+  // creating session in table service
+  Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
+  if (!sessionResult.isSuccess()) {
+      logger.error("Couldn't get session from pool: {}", sessionResult);
+      return; // retry or shutdown
+  }
+  Session session = sessionResult.getValue();
+  // creating transaction in table service
+  // this transaction is not yet active and has no id
+  TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+
+  // do something else in transaction
+  transaction.executeDataQuery("SELECT 1").join();
+  // now transaction is active and has id
+  // analyzeQueryResultIfNeeded();
+
+  writer.send(
+          Message.newBuilder()
+                  .setData(messageString.getBytes())
+                  .build(),
+          SendSettings.newBuilder()
+                  .setTransaction(transaction)
+                  .build(),
+          timeoutSeconds,
+          TimeUnit.SECONDS
+  );
+
+  // flush to wait until all messages reach server
+  writer.flush();
+
+  Status commitStatus = transaction.commit().join();
+  analyzeCommitStatus(commitStatus);
+  ```
+
+  Transaction requirements:
+  It should be an active transaction (that has id) from one of YDB services. I.e. Table or Query.
+
+{% endlist %}
+
 ## Reading messages {#reading}
 
 ### Connecting to a topic for message reads {#start-reader}

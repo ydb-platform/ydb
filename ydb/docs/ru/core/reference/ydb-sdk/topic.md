@@ -790,6 +790,55 @@
 
 {% endlist %}
 
+### Запись в транзакции {#write-tx}
+
+{% list tabs %}
+
+- Java (sync)
+
+  В настройках `SendSettings` метода `send` можно указать транзакцию.
+  Тогда сообщение будет записано вместе с коммитом этой транзакцией.
+
+  ```java
+  // creating session in table service
+  Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
+  if (!sessionResult.isSuccess()) {
+      logger.error("Couldn't get session from pool: {}", sessionResult);
+      return; // retry or shutdown
+  }
+  Session session = sessionResult.getValue();
+  // creating transaction in table service
+  // this transaction is not yet active and has no id
+  TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+
+  // do something else in transaction
+  transaction.executeDataQuery("SELECT 1").join();
+  // now transaction is active and has id
+  // analyzeQueryResultIfNeeded();
+
+  writer.send(
+          Message.newBuilder()
+                  .setData(messageString.getBytes())
+                  .build(),
+          SendSettings.newBuilder()
+                  .setTransaction(transaction)
+                  .build(),
+          timeoutSeconds,
+          TimeUnit.SECONDS
+  );
+
+  // flush to wait until all messages reach server
+  writer.flush();
+
+  Status commitStatus = transaction.commit().join();
+  analyzeCommitStatus(commitStatus);
+  ```
+
+  Требование к транзакции:
+  Это должна быть активная (имеющая идентификатор) транзакция в одном из сервисов YDB. Например, Table или Query.
+
+{% endlist %}
+
 
 ## Чтение сообщений {#reading}
 
@@ -1376,7 +1425,6 @@
   ```
 
 {% endlist %}
-
 
 ### Чтение в транзакции {#read-tx}
 

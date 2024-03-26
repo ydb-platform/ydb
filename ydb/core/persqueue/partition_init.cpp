@@ -915,9 +915,6 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
         NPersQueue::GetCountersForTopic(counters, IsServerless), {}, subgroups,
                     {"topic.write.discarded_bytes"} , true, "name");
 
-
-    BytesWrittenUncompressed = NKikimr::NPQ::TMultiCounter(
-
     BytesWrittenUncompressed.Setup(
         IsSupportive(), false,
         NKikimr::NPQ::TMultiCounter(

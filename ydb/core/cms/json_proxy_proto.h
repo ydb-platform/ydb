@@ -76,16 +76,6 @@ protected:
                 return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TSchemeShardControls::descriptor(), ctx);
             else if (name == ".NKikimrConfig.TImmediateControlsConfig.TTCMallocControls")
                 return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TTCMallocControls::descriptor(), ctx);
-            else if (name == ".NKikimrConfig.TImmediateControlsConfig.TTracingControls")
-                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TTracingControls::descriptor(), ctx);
-            else if (name == ".NKikimrConfig.TImmediateControlsConfig.TTracingControls.TSamplingThrottlingOptions")
-                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TTracingControls::TSamplingThrottlingOptions::descriptor(), ctx);
-            else if (name == ".NKikimrConfig.TImmediateControlsConfig.TTracingControls.TSamplingThrottlingOptions.TThrottlingOptions")
-                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TTracingControls::TSamplingThrottlingOptions::TThrottlingOptions::descriptor(), ctx);
-            else if (name == ".NKikimrConfig.TImmediateControlsConfig.TTracingControls.TSamplingThrottlingOptions.TSamplingOptions")
-                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TTracingControls::TSamplingThrottlingOptions::TSamplingOptions::descriptor(), ctx);
-            else if (name == ".NKikimrConfig.TImmediateControlsConfig.TTracingControls.TKeyValue")
-                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TTracingControls::TKeyValue::descriptor(), ctx);
         }
 
         ctx.Send(RequestEvent->Sender,

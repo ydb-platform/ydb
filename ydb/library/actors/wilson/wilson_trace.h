@@ -181,7 +181,7 @@ namespace NWilson {
             return TTraceId();
         }
 
-        static TTraceId FromTraceparentHeader(const TStringBuf header);
+        static TTraceId FromTraceparentHeader(const TStringBuf header, ui8 verbosity = 15);
 
         TTraceId Span(ui8 verbosity) const {
             Validate();

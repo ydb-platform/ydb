@@ -50,6 +50,7 @@ inline bool ValidateAndReplyOnError(IRequestProxyCtx* ctx) {
         const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_API_VALIDATION_ERROR, validationError);
         ctx->RaiseIssue(issue);
         ctx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+        ctx->FinishSpan();
         return false;
     } else {
         return true;

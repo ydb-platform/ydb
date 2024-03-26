@@ -19,15 +19,9 @@ SRCS(
     immediate_control_board_impl.cpp
     immediate_control_board_impl.h
     immediate_control_board_wrapper.h
-    immediate_control_board_throttler.h
-    immediate_control_board_sampler.h
 )
 
 END()
-
-RECURSE(
-    common_controls
-)
 
 RECURSE_FOR_TESTS(
     ut

@@ -92,3 +92,15 @@
 Доклад будет интересен разработчикам высоконагруженных бэкендов.
 
 [Слайды](https://presentations.ydb.tech/2022/ru/highload_foundation_deduplicate_5m_events_per_second/presentation.pdf)
+
+### Просто о сложном: как работает драйвер распределенной базы данных YDB {#2022-conf-hl-ydb-driver}
+
+{% include notitle [database_internals_tag](../../tags.md#database_internals) %}
+
+[ {{ team.myasnikov.name }} ]( {{ team.myasnikov.profile }} ) ( {{ team.myasnikov.position }} ) рассказал про опыт разработки драйверов для распределеной БД на разных языках, про проблемы, с которыми сталкивались и решали или митигировали, а также про вынесенные уроки и принятые решения.
+
+@[YouTube](https://youtu.be/bbdk2UGkWR8?si=RHQh4JxAUrFyHMdW)
+
+Доклад будет интересен разработчикам, интересующимся высоконагруженными системами.
+
+[Слайды](https://presentations.ydb.tech/2022/ru/highload_foundation_ydb_distributed_database_driver/presentation.pdf)

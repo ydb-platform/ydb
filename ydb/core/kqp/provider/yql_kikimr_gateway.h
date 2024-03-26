@@ -746,6 +746,7 @@ public:
         TMaybe<ui16> SqlVersion;
         google::protobuf::RepeatedPtrField<NKqpProto::TResultSetMeta> ResultSetsMeta;
         bool NeedToSplit = false;
+        bool AllowCache = true;
     };
 
     struct TExecuteLiteralResult : public TGenericResult {

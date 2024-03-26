@@ -357,10 +357,10 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 ", SeqNo: " << seqNo << ", partNo: " << partNo <<
                 ", Offset: " << offset << " is " << (already ? "already written" : "stored on disk")
             );
+
             if (PartitionWriteQuotaWaitCounter) {
                 PartitionWriteQuotaWaitCounter->IncFor(PartitionQuotaWaitTimeForCurrentBlob.MilliSeconds());
             }
-
             if (!already && partNo + 1 == totalParts && !writeResponse.Msg.HeartbeatVersion)
                 ++offset;
         } else if (response.IsOwnership()) {
@@ -490,6 +490,27 @@ void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContex
     HandleWriteResponse(ctx);
 }
 
+void TPartition::UpdateAfterWriteCounters(bool writeComplete) {
+    if (IsSupportive() == writeComplete) {
+        // If supportive - update counters only prior to write, otherwise - only after writes;
+        return;
+    }
+    if (BytesWrittenGrpc)
+        BytesWrittenGrpc.Inc(WriteNewSizeInternal);
+    if (BytesWrittenTotal)
+        BytesWrittenTotal.Inc(WriteNewSize);
+
+    if (BytesWrittenUncompressed)
+        BytesWrittenUncompressed.Inc(WriteNewSizeUncompressed);
+    if (BytesWrittenComp)
+        BytesWrittenComp.Inc(WriteCycleSize);
+    if (MsgsWrittenGrpc)
+        MsgsWrittenGrpc.Inc(WriteNewMessagesInternal);
+    if (MsgsWrittenTotal) {
+        MsgsWrittenTotal.Inc(WriteNewMessages);
+    }
+}
+
 void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::HandleWriteResponse.");
     Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateWrite);
@@ -508,19 +529,8 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_OK].Increment(WriteNewSize);
     TabletCounters.Percentile()[COUNTER_PQ_WRITE_CYCLE_BYTES].IncrementFor(WriteCycleSize);
     TabletCounters.Percentile()[COUNTER_PQ_WRITE_NEW_BYTES].IncrementFor(WriteNewSize);
-    if (BytesWrittenGrpc)
-        BytesWrittenGrpc.Inc(WriteNewSizeInternal);
-    if (BytesWrittenTotal)
-        BytesWrittenTotal.Inc(WriteNewSize);
 
-    if (BytesWrittenUncompressed)
-        BytesWrittenUncompressed.Inc(WriteNewSizeUncompressed);
-    if (BytesWrittenComp)
-        BytesWrittenComp.Inc(WriteCycleSize);
-    if (MsgsWrittenGrpc)
-        MsgsWrittenGrpc.Inc(WriteNewMessagesInternal);
-    if (MsgsWrittenTotal)
-        MsgsWrittenTotal.Inc(WriteNewMessages);
+    UpdateAfterWriteCounters(true);
 
     //All ok
     auto now = ctx.Now();
@@ -1053,7 +1063,7 @@ TPartition::ProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParame
         if (InputTimeLag) {
             InputTimeLag->IncFor(writeLagMs, 1);
             if (p.Msg.PartNo == 0) {
-                MessageSize->IncFor(p.Msg.TotalSize + p.Msg.SourceId.size(), 1);
+                MessageSize.IncFor(p.Msg.TotalSize + p.Msg.SourceId.size(), 1);
             }
         }
 
@@ -1614,6 +1624,7 @@ void TPartition::RequestBlobQuota() {
 }
 
 void TPartition::WritePendingBlob() {
+    UpdateAfterWriteCounters(false);
     Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateWrite);
     Y_ABORT_UNLESS(PendingWriteRequest);
 

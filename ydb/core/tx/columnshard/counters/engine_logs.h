@@ -261,6 +261,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr PortionNoBorderCount;
     NMonitoring::TDynamicCounters::TCounterPtr PortionNoBorderBytes;
 
+    NMonitoring::TDynamicCounters::TCounterPtr GranuleOptimizerLocked;
+
     TAgentGranuleDataCounters GranuleDataAgent;
     std::vector<std::shared_ptr<TIncrementalHistogram>> BlobSizeDistribution;
     std::vector<std::shared_ptr<TIncrementalHistogram>> PortionSizeDistribution;
@@ -357,6 +359,10 @@ public:
     void OnPortionNoBorder(const ui64 size) const {
         PortionNoBorderCount->Add(1);
         PortionNoBorderBytes->Add(size);
+    }
+
+    void OnGranuleOptimizerLocked() const {
+        GranuleOptimizerLocked->Add(1);
     }
 
     TEngineLogsCounters();

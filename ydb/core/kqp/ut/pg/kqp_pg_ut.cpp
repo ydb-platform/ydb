@@ -4196,9 +4196,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
         }
-   }
+    }
 
-      Y_UNIT_TEST(ExplainColumnsReorder) {
+    Y_UNIT_TEST(ExplainColumnsReorder) {
         TPortManager tp;
         ui16 mbusport = tp.GetPort(2134);
         auto settings = Tests::TServerSettings(mbusport)
@@ -4249,7 +4249,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         for (size_t i = 0; i < colNames.size(); i++) {
             UNIT_ASSERT_VALUES_EQUAL(ydbResults.begin()->Getcolumns().at(i).Getname(), colNames[i]);
         }
-   }
+    }
 }
 
 } // namespace NKqp

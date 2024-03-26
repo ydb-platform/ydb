@@ -1,5 +1,5 @@
 #include "counters.h"
 
-namespace NKikimr::NOlap::NStorageOptimizer::NBuckets {
+namespace NKikimr::NOlap::NActualizer {
 
 }

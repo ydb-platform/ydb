@@ -1,14 +1,14 @@
 import pytest
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
-from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
+from ydb.library.yql.providers.generic.connector.tests.utils.clients.clickhouse import Client
 from ydb.library.yql.providers.generic.connector.tests.utils.runner import Runner
+from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
 import ydb.library.yql.providers.generic.connector.tests.utils.dqrun as dqrun
 import ydb.library.yql.providers.generic.connector.tests.utils.kqprun as kqprun
+import ydb.library.yql.providers.generic.connector.tests.utils.scenario.clickhouse as scenario
 
-from client import Client
 from conftest import configure_runner, docker_compose_dir
-import scenario
 from collection import Collection
 
 import ydb.library.yql.providers.generic.connector.tests.test_cases.select_missing_database as select_missing_database
@@ -18,7 +18,7 @@ import ydb.library.yql.providers.generic.connector.tests.test_cases.select_posit
 
 # Global collection of test cases dependent on environment
 tc_collection = Collection(
-    Settings.from_env(docker_compose_dir=docker_compose_dir, data_source_kind=EDataSourceKind.CLICKHOUSE)
+    Settings.from_env(docker_compose_dir=docker_compose_dir, data_source_kinds=[EDataSourceKind.CLICKHOUSE])
 )
 
 runners = (dqrun.DqRunner, kqprun.KqpRunner)

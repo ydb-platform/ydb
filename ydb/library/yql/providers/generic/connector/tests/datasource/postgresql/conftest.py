@@ -12,7 +12,7 @@ from ydb.library.yql.providers.generic.connector.tests.utils.settings import Set
 from ydb.library.yql.providers.generic.connector.tests.utils.dqrun import DqRunner
 from ydb.library.yql.providers.generic.connector.tests.utils.kqprun import KqpRunner
 from ydb.library.yql.providers.generic.connector.tests.utils.runner import Runner
-from client import Client
+from ydb.library.yql.providers.generic.connector.tests.utils.clients.postgresql import Client
 
 
 docker_compose_dir: Final = pathlib.Path("ydb/library/yql/providers/generic/connector/tests/datasource/postgresql")
@@ -20,7 +20,7 @@ docker_compose_dir: Final = pathlib.Path("ydb/library/yql/providers/generic/conn
 
 @pytest.fixture
 def settings() -> Settings:
-    return Settings.from_env(docker_compose_dir=docker_compose_dir, data_source_kind=EDataSourceKind.POSTGRESQL)
+    return Settings.from_env(docker_compose_dir=docker_compose_dir, data_source_kinds=[EDataSourceKind.POSTGRESQL])
 
 
 @pytest.fixture

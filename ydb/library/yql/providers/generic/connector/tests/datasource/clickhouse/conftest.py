@@ -11,19 +11,19 @@ from ydb.library.yql.providers.generic.connector.tests.utils.settings import Set
 from ydb.library.yql.providers.generic.connector.tests.utils.dqrun import DqRunner
 from ydb.library.yql.providers.generic.connector.tests.utils.kqprun import KqpRunner
 from ydb.library.yql.providers.generic.connector.tests.utils.runner import Runner
-import client
+from ydb.library.yql.providers.generic.connector.tests.utils.clients.clickhouse import Client, make_client
 
 docker_compose_dir: Final = pathlib.Path("ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse")
 
 
 @pytest.fixture
 def settings() -> Settings:
-    return Settings.from_env(docker_compose_dir=docker_compose_dir, data_source_kind=EDataSourceKind.CLICKHOUSE)
+    return Settings.from_env(docker_compose_dir=docker_compose_dir, data_source_kinds=[EDataSourceKind.CLICKHOUSE])
 
 
 @pytest.fixture
-def clickhouse_client(settings) -> client.Client:
-    cl = client.make_client(settings.clickhouse)
+def clickhouse_client(settings) -> Client:
+    cl = make_client(settings.clickhouse)
     yield cl
     cl.close()
 

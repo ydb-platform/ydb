@@ -22,6 +22,7 @@ PEERDIR(
     library/cpp/yson
     library/cpp/json
     library/cpp/enumbitset
+    yt/yt/library/decimal
 )
 
 YQL_LAST_ABI_VERSION()

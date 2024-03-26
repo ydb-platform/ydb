@@ -441,9 +441,6 @@ private:
         actorId = as->Register(CreateIamTokenServiceActor(config));
         as->RegisterLocalService(MakeIamTokenServiceID(), actorId);
 
-        // actorId = as->Register(CreateTenantDiscoveryActor(credentialsProvider, config));
-        // as->RegisterLocalService(MakeTenantDiscoveryID(), actorId);
-
         actorId = as->Register(CreateDiscoveryProxyActor(credentialsProvider, config));
         as->RegisterLocalService(MakeDiscoveryProxyID(), actorId);
 

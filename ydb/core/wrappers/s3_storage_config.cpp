@@ -174,11 +174,38 @@ Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(co
     return config;
 }
 
+Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(const Ydb::Export::ExportToS3Settings& settings) {
+    Aws::Client::ClientConfiguration config;
+
+    config.endpointOverride = settings.endpoint();
+    config.executor = std::make_shared<Aws::Utils::Threading::PooledThreadExecutor>(1);
+    config.verifySSL = false;
+    config.connectTimeoutMs = 10000;
+    config.maxConnections = 5;
+
+    switch (settings.scheme()) {
+        case Ydb::Export::ExportToS3Settings::HTTP:
+            config.scheme = Http::Scheme::HTTP;
+            break;
+        case Ydb::Export::ExportToS3Settings::HTTPS:
+            config.scheme = Http::Scheme::HTTPS;
+            break;
+        default:
+            Y_ABORT("Unknown scheme");
+    }
+
+    return config;
+}
+
 Aws::Auth::AWSCredentials TS3ExternalStorageConfig::CredentialsFromSettings(const NKikimrSchemeOp::TS3Settings& settings) {
     return Aws::Auth::AWSCredentials(settings.GetAccessKey(), settings.GetSecretKey());
 }
 
 Aws::Auth::AWSCredentials TS3ExternalStorageConfig::CredentialsFromSettings(const Ydb::Import::ImportFromS3Settings& settings) {
+    return Aws::Auth::AWSCredentials(settings.access_key(), settings.secret_key());
+}
+
+Aws::Auth::AWSCredentials TS3ExternalStorageConfig::CredentialsFromSettings(const Ydb::Export::ExportToS3Settings& settings) {
     return Aws::Auth::AWSCredentials(settings.access_key(), settings.secret_key());
 }
 
@@ -191,6 +218,12 @@ IExternalStorageOperator::TPtr TS3ExternalStorageConfig::DoConstructStorageOpera
 }
 
 TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Import::ImportFromS3Settings& settings): Config(ConfigFromSettings(settings))
+, Credentials(CredentialsFromSettings(settings))
+{
+    Bucket = settings.bucket();
+}
+
+TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Export::ExportToS3Settings& settings): Config(ConfigFromSettings(settings))
 , Credentials(CredentialsFromSettings(settings))
 {
     Bucket = settings.bucket();

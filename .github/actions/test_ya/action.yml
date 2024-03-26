@@ -1,34 +1,24 @@
 name: Run tests (ya make)
-description: Run tests using ya make
+description: Run test targets listed in repository root ya.make (to be created previously)
 inputs:
   build_target:
-    required: false
-    description: "build target"
-
+    required: true
   build_preset:
     required: true
     default: "relwithdebinfo"
     description: "relwithdebinfo, release-asan, release-tsan"
-  
   test_size:
     required: false
     default: "small,medium,large"
     description: "small or small-medium or all"
-  
-  test_type:
-    required: false
-    default: "unittest,py3test,py2test,pytest"
-    description: "run "
-  
   test_threads:
     required: false
-    default: "28"
+    default: "56"
     description: "Test threads count"
   link_threads:
     required: false
-    default: "8"
+    default: "12"
     description: "link threads count"
-
   testman_token:
     required: false
     description: "test manager auth token"
@@ -38,15 +28,6 @@ inputs:
   testman_project_id:
     required: false
     description: "test manager project id"
-  bazel_remote_uri:
-    required: false
-    description: "bazel-remote endpoint"
-  bazel_remote_username:
-    required: false
-    description: "bazel-remote username"
-  bazel_remote_password:
-    required: false
-    description: "bazel-remote password"
 runs:
   using: "composite"
   steps:
@@ -161,13 +142,12 @@ runs:
       shell: bash
       run: |
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
-        readarray -d ',' -t test_type < <(printf "%s" "${{ inputs.test_type }}")
 
         params=(
-          -T -k -D'BUILD_LANGUAGES=CPP PY3 PY2 GO'
-          ${test_size[@]/#/--test-size=} ${test_type[@]/#/--test-type=}
+          -T -k
+          ${test_size[@]/#/--test-size=}
           --cache-size 512G --do-not-output-stderrs
-          --stat --canonization-backend=ydb-canondata.storage.yandexcloud.net
+          --stat
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
         )
         
@@ -203,36 +183,14 @@ runs:
             ;;
         esac
         
-        if [ ! -z "${{ inputs.build_target }}" ]; then
-          params+=(--target="${{ inputs.build_target }}")
-        fi
-
-        if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
-          params+=(--bazel-remote-store)
-          params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
-        fi
-        
         echo "::debug::get version"
         ./ya --version
         
         echo "Tests are running..." | .github/scripts/tests/comment-pr.py
-        
-        if [ ! -z "${{ inputs.bazel_remote_username }}" ]; then
-          echo "::debug::start tests"
 
-          ./ya test "${params[@]}" \
-            --bazel-remote-put --bazel-remote-username "${{ inputs.bazel_remote_username }}" --bazel-remote-password "${{ inputs.bazel_remote_password }}" -DCONSISTENT_DEBUG \
-            --log-file "$LOG_DIR/ya_log_prewarm.txt" --evlog-file "$LOG_DIR/ya_evlog_prewarm.jsonl" \
-            --dist-cache-evict-bins --cache-tests --no-dir-outputs --test-node-output-limit 1000000 --drop-graph-result-before-tests || (
-              RC=$?
-              echo "::debug::ya test RC=$RC"
-            )
-        fi
-        
-        echo "::debug::save tests reports"
-        ./ya test "${params[@]}" \
+        ./ya test ${{ inputs.build_target }} "${params[@]}" \
           --stat --log-file "$LOG_DIR/ya_log.txt" --evlog-file "$LOG_DIR/ya_evlog.jsonl" -DCONSISTENT_DEBUG \
-          --cache-tests --dist-cache-evict-bins --no-dir-outputs --test-node-output-limit 1000000 --drop-graph-result-before-tests \
+          --no-dir-outputs \
           --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" || (
             RC=$?
             if [ $RC -ne 0 ]; then

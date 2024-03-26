@@ -169,7 +169,7 @@ bool TPortionInfoWithBlobs::ExtractColumnChunks(const ui32 columnId, std::vector
 
 void TPortionInfoWithBlobs::FillStatistics(const TIndexInfo& index) {
     NStatistics::TPortionStorage storage;
-    for (auto&& i : index.GetStatistics()) {
+    for (auto&& i : index.GetStatisticsByName()) {
         THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> data;
         for (auto&& entityId : i.second->GetEntityIds()) {
             data.emplace(entityId, GetEntityChunks(entityId));
@@ -225,9 +225,9 @@ TPortionInfoWithBlobs TPortionInfoWithBlobs::SyncPortion(TPortionInfoWithBlobs&&
     result.GetPortionInfo().MutableMeta().SetTierName(targetTier);
 
     NStatistics::TPortionStorage storage;
-    for (auto&& i : to->GetIndexInfo().GetStatistics()) {
-        auto it = from->GetIndexInfo().GetStatistics().find(i.first);
-        if (it != from->GetIndexInfo().GetStatistics().end()) {
+    for (auto&& i : to->GetIndexInfo().GetStatisticsByName()) {
+        auto it = from->GetIndexInfo().GetStatisticsByName().find(i.first);
+        if (it != from->GetIndexInfo().GetStatisticsByName().end()) {
             i.second->CopyData(it->second.GetCursorVerified(), source.PortionInfo.GetMeta().GetStatisticsStorage(), storage);
         } else {
             i.second->FillStatisticsData(entityChunksNew, storage, to->GetIndexInfo());

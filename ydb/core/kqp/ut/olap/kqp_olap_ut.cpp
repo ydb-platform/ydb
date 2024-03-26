@@ -4130,7 +4130,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             helper.GetStats(stats, true);
             for (auto&& i : stats) {
                 AFL_VERIFY(i.ScalarsSize() == 2);
-                AFL_VERIFY(i.GetScalars()[1].GetUint32() == 3);
+                AFL_VERIFY(i.GetScalars()[0].GetUint32() == 3);
             }
         }
         {
@@ -4152,7 +4152,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             helper.GetStats(stats, true);
             for (auto&& i : stats) {
                 AFL_VERIFY(i.ScalarsSize() == 2);
-                AFL_VERIFY(i.GetScalars()[1].GetUint32() == 3);
+                AFL_VERIFY(i.GetScalars()[0].GetUint32() == 3);
             }
         }
     }

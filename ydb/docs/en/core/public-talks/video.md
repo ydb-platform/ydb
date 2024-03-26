@@ -40,6 +40,8 @@ Video recordings of {{ ydb-short-name}} team speakers' presentations from confer
 
 <p> – an overview of new features and released versions of {{ ydb-short-name }}.</p>
 
+</div>
+
 <div style="display:flex; flex-direction:row; column-gap: 10px;">
 
 {% include notitle [testing_tag](./_includes/tags.md#testing) %}

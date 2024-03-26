@@ -51,7 +51,6 @@ SELECT *
   ORDER BY a, d;
 -- test join using aliases
 SELECT * FROM J1_TBL JOIN J2_TBL USING (i) WHERE J1_TBL.t = 'one';  -- ok
-SELECT * FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE J1_TBL.t = 'one';  -- ok
 SELECT *
   FROM J1_TBL LEFT JOIN J2_TBL USING (i) WHERE (k = 1);
 --

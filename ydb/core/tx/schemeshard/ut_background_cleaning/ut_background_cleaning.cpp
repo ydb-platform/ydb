@@ -353,6 +353,8 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
 
         CheckTable(runtime, "/MyRoot/TempTable");
 
+        TestLs(runtime, "/MyRoot/TempTable/ValueIndex", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+
         ++txId;
         TestDropTempTable(runtime, txId, "/MyRoot", "TempTable", true);
 

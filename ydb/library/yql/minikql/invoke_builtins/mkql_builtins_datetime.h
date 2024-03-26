@@ -127,13 +127,8 @@ NUdf::TDataType<NUdf::TInterval64>::TLayout FromScaledDate<NUdf::TDataType<NUdf:
     return src;
 }
 
-// TODO remove
-inline bool IsBadDateTime(TScaledDate val) {
-    return val < 0 || val >= TScaledDate(NUdf::MAX_TIMESTAMP);
-}
-
 template<typename TDateType>
-inline bool IsBadDateTimeNew(TScaledDate val) {
+inline bool IsBadDateTime(TScaledDate val) {
     static_assert(TDateType::Features & (NYql::NUdf::DateType | NYql::NUdf::TzDateType), "Date type expected");
     if constexpr (TDateType::Features & NYql::NUdf::BigDateType) {
         return val < NUdf::MIN_TIMESTAMP64 || val > NUdf::MAX_TIMESTAMP64;
@@ -157,7 +152,7 @@ inline bool IsBadScaledDate(TScaledDate val) {
     if constexpr (TDateType::Features & NYql::NUdf::TimeIntervalType) {
         return IsBadInterval<TDateType>(val);
     } else {
-        return IsBadDateTimeNew<TDateType>(val);
+        return IsBadDateTime<TDateType>(val);
     }
 }
 

@@ -163,13 +163,6 @@ void RegisterDiv(IBuiltinFunctionRegistry& registry) {
     RegisterBinaryRealFunctionOpt<TDiv, TBinaryArgsOpt>(registry, "Div");
     RegisterBinaryIntegralFunctionOpt<TIntegralDiv, TBinaryArgsOptWithNullableResult>(registry, "Div");
 
-    /* select interval('P2D') / interval('P1D' => Cannot divide type Interval and Interval
-     * doesn't work actually
-     *
-    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>,
-        NUdf::TDataType<i64>, TIntegralDiv, TBinaryArgsOptWithNullableResult>(registry, "Div");
-    */
-
     RegisterIntegralDiv<NUdf::TDataType<NUdf::TInterval>>(registry);
     RegisterIntegralDiv<NUdf::TDataType<NUdf::TInterval64>>(registry);
 }

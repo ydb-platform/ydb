@@ -147,6 +147,59 @@ struct TDateTimeAddT {
 };
 
 template<typename TLeft, typename TRight, typename TOutput>
+struct TIntervalAdd {
+    static_assert(std::is_same_v<TLeft, i64>, "Left must be i64");
+    static_assert(std::is_same_v<TRight, i64>, "Right must be i64");
+    static_assert(std::is_same_v<TOutput, i64>, "Output must be i64");
+
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
+    {
+        i64 lv = left.Get<i64>();
+        i64 rv = right.Get<i64>();
+        i64 ret = lv + rv;
+        // detect overflow
+        if (lv > 0 && rv > 0 && ret < 0) {
+            return NUdf::TUnboxedValuePod();
+        } else if (lv < 0 && rv < 0 && ret > 0) {
+            return NUdf::TUnboxedValuePod();
+        } else if (IsBadInterval<NUdf::TDataType<NUdf::TInterval64>>(ret)) {
+            return NUdf::TUnboxedValuePod();
+        }
+        auto data = NUdf::TUnboxedValuePod(ret);
+        return data;
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
+    {
+        auto& context = ctx.Codegen.GetContext();
+        const auto lhs = GetterFor<i64>(left, context, block);
+        const auto rhs = GetterFor<i64>(right, context, block);
+        const auto add = BinaryOperator::CreateAdd(lhs, rhs, "add", block);
+        const auto wide = SetterFor<i64>(add, context, block);
+
+        const auto lneg = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLT, lhs, ConstantInt::get(lhs->getType(), 0), "lneg", block);
+        const auto rneg = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLT, rhs, ConstantInt::get(rhs->getType(), 0), "rneg", block);
+        const auto apos = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, add, ConstantInt::get(add->getType(), 0), "apos", block);
+        const auto posAddNegArg = BinaryOperator::CreateAnd(apos, BinaryOperator::CreateAnd(lneg, rneg, "negArg", block), "posAddNegArg", block);
+
+        const auto lpos = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, lhs, ConstantInt::get(lhs->getType(), 0), "lpos", block);
+        const auto rpos = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, rhs, ConstantInt::get(rhs->getType(), 0), "rpos", block);
+        const auto aneg = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLT, add, ConstantInt::get(add->getType(), 0), "aneg", block);
+        const auto negAddPosArg = BinaryOperator::CreateAnd(aneg, BinaryOperator::CreateAnd(lpos, rpos, "posArg", block), "negAddPosArg", block);
+
+        const auto bad = BinaryOperator::CreateOr(
+                BinaryOperator::CreateOr(posAddNegArg, negAddPosArg, "overflow", block),
+                GenIsBadInterval<NUdf::TDataType<NUdf::TInterval64>>(add, context, block),
+                "bad", block);
+        const auto zero = ConstantInt::get(Type::getInt128Ty(context), 0);
+        const auto sel = SelectInst::Create(bad, zero, wide, "sel", block);
+        return sel;
+    }
+#endif
+};
+
+template<typename TLeft, typename TRight, typename TOutput>
 using TDateTimeAdd = TDateTimeAddT<TLeft, TRight, TOutput, false>;
 
 template<typename TLeft, typename TRight, typename TOutput>
@@ -206,14 +259,14 @@ void RegisterAdd(IBuiltinFunctionRegistry& registry) {
     RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>,
         NUdf::TDataType<NUdf::TInterval>, TDateTimeAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
 
-    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval64>,
-        NUdf::TDataType<NUdf::TInterval64>, TDateTimeAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
+    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval64>,
+        NUdf::TDataType<NUdf::TInterval64>, TIntervalAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
 
-    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>,
-        NUdf::TDataType<NUdf::TInterval64>, TDateTimeAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
+    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>,
+        NUdf::TDataType<NUdf::TInterval64>, TIntervalAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
 
-    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval64>,
-        NUdf::TDataType<NUdf::TInterval64>, TDateTimeAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
+    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval64>,
+        NUdf::TDataType<NUdf::TInterval64>, TIntervalAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
 }
 
 void RegisterAdd(TKernelFamilyMap& kernelFamilyMap) {

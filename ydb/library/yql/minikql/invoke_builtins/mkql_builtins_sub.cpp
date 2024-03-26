@@ -158,7 +158,7 @@ struct TAnyDateTimeSubIntervalT {
         const auto lv = ToScaledDate<TLeft>(left.template Get<typename TLeft::TLayout>());
         const auto rv = ToScaledDate<TRight>(right.template Get<typename TRight::TLayout>());
         const auto ret = lv - rv;
-        if (IsBadDateTimeNew<TOutput>(ret)) {
+        if (IsBadDateTime<TOutput>(ret)) {
             return NUdf::TUnboxedValuePod();
         }
 

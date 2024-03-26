@@ -523,7 +523,7 @@ resource "ydb_table_changefeed" "ydb_table_changefeed" {
     name = "test_consumer"
   }
 
-  depends_on = [ydb_table.ydb_table] #ссылка на ресурс создания таблицы.
+  depends_on = [ydb_table.ydb_table] # ссылка на ресурс создания таблицы
 }
 
 resource "ydb_table_index" "ydb_table_index" {

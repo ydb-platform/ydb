@@ -302,7 +302,7 @@ public:
         }
 
         SharedQuota->SetName("SharedQuota");
-        TColorLimits chunkLimits = TColorLimits::MakeChunkLimits();
+        TColorLimits chunkLimits = TColorLimits::MakeChunkLimits(params.ChunkBaseLimit);
         SharedQuota->ForceHardLimit(GlobalQuota->GetHardLimit(OwnerBeginUser), chunkLimits);
         OwnerQuota->Reset(GlobalQuota->GetHardLimit(OwnerBeginUser), chunkLimits);
         OwnerQuota->SetExpectedOwnerCount(params.ExpectedOwnerCount);

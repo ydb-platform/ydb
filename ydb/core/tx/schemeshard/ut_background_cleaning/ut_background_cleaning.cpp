@@ -131,11 +131,13 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
 
         ui64 txId = 100;
         TestCreateTempTable(runtime, txId, "/MyRoot", R"(
-                  Name: "TempTable"
-                  Columns { Name: "key"   Type: "Uint64" }
-                  Columns { Name: "value" Type: "Utf8" }
-                  KeyColumnNames: ["key"]
-            )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+            TableDescription {
+                Name: "TempTable"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
 
         env.TestWaitNotification(runtime, txId);
 
@@ -165,12 +167,14 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         auto ownerActorId = runtime.AllocateEdgeActor(1);
 
         ui64 txId = 100;
-        TestCreateTempTable(runtime, txId, "/MyRoot", R"(
-                  Name: "TempTable"
-                  Columns { Name: "key"   Type: "Uint64" }
-                  Columns { Name: "value" Type: "Utf8" }
-                  KeyColumnNames: ["key"]
-            )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        TestCreateTempTable(runtime, txId, "/MyRoot",R"(
+            TableDescription {
+                Name: "TempTable"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
 
         env.TestWaitNotification(runtime, txId);
 
@@ -203,20 +207,24 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         auto ownerActorId = runtime.AllocateEdgeActor(1);
         ui64 txId = 100;
         TestCreateTempTable(runtime, txId, "/MyRoot", R"(
-                  Name: "TempTable1"
-                  Columns { Name: "key"   Type: "Uint64" }
-                  Columns { Name: "value" Type: "Utf8" }
-                  KeyColumnNames: ["key"]
-            )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+            TableDescription {
+                Name: "TempTable1"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
         env.TestWaitNotification(runtime, txId);
 
         ++txId;
         TestCreateTempTable(runtime, txId, "/MyRoot", R"(
-                  Name: "TempTable2"
-                  Columns { Name: "key"   Type: "Uint64" }
-                  Columns { Name: "value" Type: "Utf8" }
-                  KeyColumnNames: ["key"]
-            )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+            TableDescription {
+                Name: "TempTable2"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
         env.TestWaitNotification(runtime, txId);
 
         CheckTable(runtime, "/MyRoot/TempTable1");
@@ -252,21 +260,25 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         auto ownerActorId1 = runtime.AllocateEdgeActor(1);
         ui64 txId1 = 100;
         TestCreateTempTable(runtime, txId1, "/MyRoot", R"(
-                  Name: "TempTable1"
-                  Columns { Name: "key"   Type: "Uint64" }
-                  Columns { Name: "value" Type: "Utf8" }
-                  KeyColumnNames: ["key"]
-            )", ownerActorId1, { NKikimrScheme::StatusAccepted }, 1);
+            TableDescription {
+                Name: "TempTable1"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+        )", ownerActorId1, { NKikimrScheme::StatusAccepted }, 1);
         env.TestWaitNotification(runtime, txId1);
 
         auto ownerActorId2 = runtime.AllocateEdgeActor(2);
         ui64 txId2 = ++txId1;
         TestCreateTempTable(runtime, txId2, "/MyRoot", R"(
-                  Name: "TempTable2"
-                  Columns { Name: "key"   Type: "Uint64" }
-                  Columns { Name: "value" Type: "Utf8" }
-                  KeyColumnNames: ["key"]
-            )", ownerActorId2, { NKikimrScheme::StatusAccepted }, 2);
+            TableDescription {
+                Name: "TempTable2"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+        )", ownerActorId2, { NKikimrScheme::StatusAccepted }, 2);
         env.TestWaitNotification(runtime, txId2);
 
         CheckTable(runtime, "/MyRoot/TempTable1");
@@ -305,11 +317,13 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
 
         ui64 txId = 100;
         TestCreateTempTable(runtime, txId, "/MyRoot", R"(
-                  Name: "TempTable"
-                  Columns { Name: "key"   Type: "Uint64" }
-                  Columns { Name: "value" Type: "Utf8" }
-                  KeyColumnNames: ["key"]
-            )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+            TableDescription {
+                Name: "TempTable"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
 
         env.TestWaitNotification(runtime, txId);
 
@@ -338,7 +352,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         ui64 txId = 100;
         TestCreateTempTable(runtime, txId, "/MyRoot", R"(
             TableDescription {
-                Name: "Table"
+                Name: "TempTable"
                 Columns { Name: "key"   Type: "Uint64" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]

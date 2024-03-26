@@ -532,12 +532,12 @@ namespace NTable {
                 if (WriteBTreeIndex) {
                     Current.BTreeGroupIndexes.reserve(Groups.size());
                     for (auto& g : Groups) {
-                        Current.BTreeGroupIndexes.push_back(g.BTreeIndex.Flush(Pager, true).value());
+                        Current.BTreeGroupIndexes.push_back(g.BTreeIndex.Finish(Pager));
                     }
                     if (Current.HistoryWritten > 0) {
                         Current.BTreeHistoricIndexes.reserve(Histories.size());
                         for (auto& g : Histories) {
-                            Current.BTreeHistoricIndexes.push_back(g.BTreeIndex.Flush(Pager, true).value());
+                            Current.BTreeHistoricIndexes.push_back(g.BTreeIndex.Finish(Pager));
                         }
                     }
                 }
@@ -807,7 +807,7 @@ namespace NTable {
                     } else {
                         g.BTreeIndex.AddShortChild({page, dataPage->Count, raw.size()});
                     }
-                    g.BTreeIndex.Flush(Pager, false);
+                    g.BTreeIndex.Flush(Pager);
                 }
 
                 // N.B. hack to save the last row/key for the main group
@@ -1086,7 +1086,9 @@ namespace NTable {
                 , Codec(conf.Groups[groupId.Index].Codec)
                 , Data(scheme, conf, tags, groupId)
                 , Index(scheme, conf, groupId)
-                , BTreeIndex(scheme, groupId, conf.Groups[groupId.Index].BTreeIndexNodeTargetSize, conf.Groups[groupId.Index].BTreeIndexNodeKeysMin, conf.Groups[groupId.Index].BTreeIndexNodeKeysMax)
+                , BTreeIndex(scheme, groupId, conf.Groups[groupId.Index].BTreeIndexNodeTargetSize, 
+                    conf.Groups[groupId.Index].BTreeIndexNodeKeysMin, conf.Groups[groupId.Index].BTreeIndexNodeKeysMax,
+                    conf.Groups[groupId.Index].BTreeIndexLeafDataSizeMax, conf.Groups[groupId.Index].BTreeIndexLeafRowsCountMax)
             { }
         };
 

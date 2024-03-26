@@ -72,13 +72,13 @@ private:
     std::optional<TPortionStorageCursor> Cursor;
     using TBase = NBackgroundTasks::TInterfaceProtoContainer<IOperator>;
 public:
-    using TBase::TBase;
+    TOperatorContainer() = default;
 
     TOperatorContainer(const TString& name, const std::shared_ptr<IOperator>& object)
         : TBase(object)
         , Name(name)
     {
-
+        AFL_VERIFY(Name);
     }
 
     const TPortionStorageCursor& GetCursorVerified() const {

@@ -4,7 +4,6 @@ STYLE_PYTHON()
 
 PY_SRCS(
     base.py
-    join.py
     select_missing_database.py
     select_missing_table.py
     select_positive_common.py

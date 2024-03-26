@@ -49,40 +49,41 @@ class Settings:
     postgresql: PostgreSQL
 
     @classmethod
-    def from_env(cls, docker_compose_dir: pathlib.Path, data_source_kind: EDataSourceKind) -> 'Settings':
+    def from_env(cls, docker_compose_dir: pathlib.Path, data_source_kinds: Sequence[EDataSourceKind]) -> 'Settings':
         docker_compose_file_relative_path = str(docker_compose_dir / 'docker-compose.yml')
         docker_compose_file = yatest.common.source_path(docker_compose_file_relative_path)
         endpoint_determiner = EndpointDeterminer(docker_compose_file)
 
         data_sources = dict()
 
-        match data_source_kind:
-            case EDataSourceKind.CLICKHOUSE:
-                data_sources[data_source_kind] = cls.ClickHouse(
-                    cluster_name='clickhouse_integration_test',
-                    host_external='localhost',
-                    host_internal='clickhouse',
-                    http_port_external=endpoint_determiner.get_port('clickhouse', 8123),
-                    native_port_external=endpoint_determiner.get_port('clickhouse', 9000),
-                    http_port_internal=8123,
-                    native_port_internal=9000,
-                    username='user',
-                    password='password',
-                    protocol='native',
-                )
-            case EDataSourceKind.POSTGRESQL:
-                data_sources[data_source_kind] = cls.PostgreSQL(
-                    cluster_name='postgresql_integration_test',
-                    host_external='localhost',
-                    host_internal='postgresql',
-                    port_external=endpoint_determiner.get_port('postgresql', 5432),
-                    port_internal=5432,
-                    dbname='db',
-                    username='user',
-                    password='password',
-                )
-            case _:
-                raise Exception(f'invalid data source: {data_source_kind}')
+        for data_source_kind in data_source_kinds:
+            match data_source_kind:
+                case EDataSourceKind.CLICKHOUSE:
+                    data_sources[data_source_kind] = cls.ClickHouse(
+                        cluster_name='clickhouse_integration_test',
+                        host_external='localhost',
+                        host_internal='clickhouse',
+                        http_port_external=endpoint_determiner.get_port('clickhouse', 8123),
+                        native_port_external=endpoint_determiner.get_port('clickhouse', 9000),
+                        http_port_internal=8123,
+                        native_port_internal=9000,
+                        username='user',
+                        password='password',
+                        protocol='native',
+                    )
+                case EDataSourceKind.POSTGRESQL:
+                    data_sources[data_source_kind] = cls.PostgreSQL(
+                        cluster_name='postgresql_integration_test',
+                        host_external='localhost',
+                        host_internal='postgresql',
+                        port_external=endpoint_determiner.get_port('postgresql', 5432),
+                        port_internal=5432,
+                        dbname='db',
+                        username='user',
+                        password='password',
+                    )
+                case _:
+                    raise Exception(f'invalid data source: {data_source_kind}')
 
         print("CRAB", data_sources)
 

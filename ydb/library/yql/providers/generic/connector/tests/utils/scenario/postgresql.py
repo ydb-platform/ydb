@@ -10,8 +10,7 @@ from ydb.library.yql.providers.generic.connector.tests.utils.schema import Schem
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
 from ydb.library.yql.providers.generic.connector.tests.utils.runner import Runner
 from ydb.library.yql.providers.generic.connector.tests.utils.sql import format_values_for_bulk_sql_insert
-
-from client import Client
+from ydb.library.yql.providers.generic.connector.tests.utils.clients.postgresql import Client
 
 import ydb.library.yql.providers.generic.connector.tests.test_cases.select_positive_common as tc_select_positive_common
 import ydb.library.yql.providers.generic.connector.tests.test_cases.select_missing_database as tc_select_missing_database

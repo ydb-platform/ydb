@@ -3,9 +3,9 @@ PY3TEST()
 STYLE_PYTHON()
 NO_CHECK_IMPORTS()
 
-DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse/docker-compose.yml)
+DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/join/docker-compose.yml)
 DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/fq-connector-go)
-ENV(COMPOSE_PROJECT_NAME=clickhouse)
+ENV(COMPOSE_PROJECT_NAME=join)
 
 IF (AUTOCHECK) 
     # Split tests to chunks only when they're running on different machines with distbuild,
@@ -40,13 +40,11 @@ IF (OPENSOURCE)
 ENDIF()
 
 TEST_SRCS(
-    client.py
     collection.py
     conftest.py
     scenario.py
-    select_datetime.py
-    select_positive.py
     test.py
+    test_case.py
 )
 
 PEERDIR(
@@ -59,6 +57,9 @@ PEERDIR(
     ydb/library/yql/providers/generic/connector/api/service/protos
     ydb/library/yql/providers/generic/connector/tests/test_cases
     ydb/library/yql/providers/generic/connector/tests/utils
+    ydb/library/yql/providers/generic/connector/tests/utils/clients
+    ydb/library/yql/providers/generic/connector/tests/utils/scenario
+    ydb/library/yql/providers/generic/connector/tests/utils/types
     ydb/public/api/protos
     yt/python/yt/yson
 )

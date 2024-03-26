@@ -9,7 +9,7 @@ from ydb.library.yql.providers.generic.connector.tests.utils.settings import Set
 Client: TypeAlias = clickhouse_connect.driver.client.Client
 
 
-def make_client(s: Settings.ClickHouse) -> Client:
+def make_client(settings: Settings.ClickHouse) -> Client:
     start = datetime.now()
     attempt = 0
 
@@ -17,7 +17,10 @@ def make_client(s: Settings.ClickHouse) -> Client:
         attempt += 1
         try:
             client = clickhouse_connect.get_client(
-                host=s.host_external, port=s.http_port_external, username=s.username, password=s.password
+                host=settings.host_external,
+                port=settings.http_port_external,
+                username=settings.username,
+                password=settings.password,
             )
         except Exception as e:
             sys.stderr.write(f"attempt #{attempt}: {e}\n")

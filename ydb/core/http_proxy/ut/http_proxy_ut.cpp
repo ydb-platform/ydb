@@ -1,20 +1,14 @@
-// #include <kikimr/serverless_proxy/lib/driver_cache_actor.h>
-// #include <kikimr/serverless_proxy/lib/proxy_actor_system.h>
-
 #include <ydb/core/http_proxy/http_req.h>
-// #include <kikimr/yndx/security/ticket_parser.h>
+#include <ydb/core/testlib/test_client.h>
+
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
-// #include <kikimr/yndx/testlib/service_mocks/database_service_mock.h>
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>
 
 #include <library/cpp/json/json_reader.h>
-
 #include <library/cpp/testing/unittest/registar.h>
+
 #include <nlohmann/json.hpp>
 
-#include <ydb/core/testlib/test_client.h>
-
-#include <thread>
 
 using namespace NKikimr::NHttpProxy;
 using namespace NKikimr::Tests;
@@ -34,22 +28,6 @@ void openMonitoringsInBrowser(const auto& kikimrServer, ui16 monPort) {
 
 void PatchRateBins(NJson::TJsonValue& json)
 {
-    //
-    // {
-    //   "labels": {
-    //     "name": "topic.write.lag_milliseconds",
-    //     "topic": "test-counters-stream",
-    //     "cloud_id": "cloud4",
-    //     "bin": "100",
-    //     "database_id": "database4",
-    //     "folder_id": "folder4",
-    //     "database": "/Root"
-    //   },
-    //   "value": 5,
-    //   "kind": "RATE"
-    // }
-    //
-
     struct TValue {
         i64 Sum = 0; // sum of /value
         TString Bin; // min of /labels/bin

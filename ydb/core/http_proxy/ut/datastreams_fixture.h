@@ -81,9 +81,7 @@ public:
         AccessServicePort = PortManager.GetPort(8443);
         AccessServiceEndpoint = "127.0.0.1:" + ToString(AccessServicePort);
         InitKikimr();
-        // InitIamTokenService();
         InitAccessServiceService();
-        // InitDatabaseService();
         InitHttpServer();
     }
 

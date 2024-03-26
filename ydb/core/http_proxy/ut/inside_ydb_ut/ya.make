@@ -8,12 +8,9 @@ FORK_SUBTESTS()
 
 PEERDIR(
     contrib/restricted/nlohmann_json
-    # kikimr/serverless_proxy/lib
-    # kikimr/yndx/security
     ydb/library/actors/http
     ydb/library/grpc/server
     ydb/library/grpc/server/actors
-    # logbroker/unified_agent/client/cpp/logger
     ydb/core/base
     ydb/core/http_proxy
     ydb/core/testlib/default

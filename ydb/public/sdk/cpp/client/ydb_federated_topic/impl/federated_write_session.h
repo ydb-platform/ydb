@@ -70,32 +70,9 @@ private:
         NTopic::TWriteMessage Message;
         TWrappedWriteMessage(NTopic::TWriteMessage&& message)
             : Data(message.Data)
-            , Message(Data)
+            , Message(std::move(message))
         {
-            CopyMessageFields(message);
-        }
-
-        TWrappedWriteMessage(NTopic::TWriteMessage&& message, NTopic::ECodec codec)
-            : Data(message.Data)
-            , Message(NTopic::TWriteMessage::CompressedMessage(Data, codec, message.OriginalSize))
-        {
-            CopyMessageFields(message);
-        }
-
-        TWrappedWriteMessage(TStringBuf data, NTopic::ECodec codec, ui32 originalSize,
-                             TMaybe<ui64> seqNo, TMaybe<TInstant> createTimestamp)
-            : Data(data)
-            , Message(NTopic::TWriteMessage::CompressedMessage(Data, codec, originalSize))
-        {
-            Message.SeqNo(seqNo);
-            Message.CreateTimestamp(createTimestamp);
-        }
-    private:
-        void CopyMessageFields(const NTopic::TWriteMessage& message) {
-            Message.SeqNo(message.SeqNo_);
-            Message.CreateTimestamp(message.CreateTimestamp_);
-            Message.MessageMeta(std::move(message.MessageMeta_));
-            Message.Tx(message.Tx_);
+            Message.Data = Data;
         }
     };    
 

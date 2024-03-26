@@ -244,13 +244,16 @@ void TFederatedWriteSession::Write(NTopic::TContinuationToken&& token, NTopic::T
 
 void TFederatedWriteSession::WriteEncoded(NTopic::TContinuationToken&& token, TStringBuf data, NTopic::ECodec codec,
                                           ui32 originalSize, TMaybe<ui64> seqNo, TMaybe<TInstant> createTimestamp) {
-    TWrappedWriteMessage wrapped(data, codec, originalSize, seqNo, createTimestamp);
-    return WriteInternal(std::move(token), std::move(wrapped));
+    auto message = NTopic::TWriteMessage::CompressedMessage(std::move(data), codec, originalSize);
+    if (seqNo.Defined())
+        message.SeqNo(*seqNo);
+    if (createTimestamp.Defined())
+        message.CreateTimestamp(*createTimestamp);
+    return WriteInternal(std::move(token), TWrappedWriteMessage(std::move(message)));
 }
 
 void TFederatedWriteSession::WriteEncoded(NTopic::TContinuationToken&& token, NTopic::TWriteMessage&& message) {
-    auto codec = message.Codec;
-    return WriteInternal(std::move(token), TWrappedWriteMessage(std::move(message), *codec));
+    return WriteInternal(std::move(token), TWrappedWriteMessage(std::move(message)));
 }
 
 void TFederatedWriteSession::WriteInternal(NTopic::TContinuationToken&&, TWrappedWriteMessage&& wrapped) {

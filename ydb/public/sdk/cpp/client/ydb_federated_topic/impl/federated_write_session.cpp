@@ -239,7 +239,7 @@ void TFederatedWriteSession::Write(NTopic::TContinuationToken&& token, TStringBu
 }
 
 void TFederatedWriteSession::Write(NTopic::TContinuationToken&& token, NTopic::TWriteMessage&& message) {
-    return WriteInternal(std::move(token), std::move(message));
+    return WriteInternal(std::move(token), TWrappedWriteMessage(std::move(message)));
 }
 
 void TFederatedWriteSession::WriteEncoded(NTopic::TContinuationToken&& token, TStringBuf data, NTopic::ECodec codec,
@@ -249,24 +249,24 @@ void TFederatedWriteSession::WriteEncoded(NTopic::TContinuationToken&& token, TS
         message.SeqNo(*seqNo);
     if (createTimestamp.Defined())
         message.CreateTimestamp(*createTimestamp);
-    return WriteInternal(std::move(token), std::move(message));
+    return WriteInternal(std::move(token), TWrappedWriteMessage(std::move(message)));
 }
 
 void TFederatedWriteSession::WriteEncoded(NTopic::TContinuationToken&& token, NTopic::TWriteMessage&& message) {
-    return WriteInternal(std::move(token), std::move(message));
+    return WriteInternal(std::move(token), TWrappedWriteMessage(std::move(message)));
 }
 
-void TFederatedWriteSession::WriteInternal(NTopic::TContinuationToken&&, NTopic::TWriteMessage&& message) {
+void TFederatedWriteSession::WriteInternal(NTopic::TContinuationToken&&, TWrappedWriteMessage&& wrapped) {
     ClientHasToken = false;
-    if (!message.CreateTimestamp_.Defined()) {
-        message.CreateTimestamp_ = TInstant::Now();
+    if (!wrapped.Message.CreateTimestamp_.Defined()) {
+        wrapped.Message.CreateTimestamp_ = TInstant::Now();
     }
 
     {
         TDeferredWrite deferred(Subsession);
         with_lock(Lock) {
-            BufferFreeSpace -= message.Data.size();
-            OriginalMessagesToPassDown.emplace_back(std::move(message));
+            BufferFreeSpace -= wrapped.Message.Data.size();
+            OriginalMessagesToPassDown.emplace_back(std::move(wrapped));
 
             PrepareDeferredWrite(deferred);
         }
@@ -285,10 +285,10 @@ bool TFederatedWriteSession::PrepareDeferredWrite(TDeferredWrite& deferred) {
     if (OriginalMessagesToPassDown.empty()) {
         return false;
     }
-    OriginalMessagesToGetAck.push_back(OriginalMessagesToPassDown.front());
-    deferred.Token.ConstructInPlace(std::move(*PendingToken));
-    deferred.Message.ConstructInPlace(std::move(OriginalMessagesToPassDown.front()));
+    OriginalMessagesToGetAck.push_back(std::move(OriginalMessagesToPassDown.front()));
     OriginalMessagesToPassDown.pop_front();
+    deferred.Token.ConstructInPlace(std::move(*PendingToken));
+    deferred.Message.ConstructInPlace(std::move(OriginalMessagesToGetAck.back().Message));
     PendingToken.Clear();
     return true;
 }

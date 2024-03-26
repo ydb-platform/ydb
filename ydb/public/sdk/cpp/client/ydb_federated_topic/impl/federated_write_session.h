@@ -63,6 +63,20 @@ public:
     inline NTopic::TWriterCounters::TPtr GetCounters() override {Y_ABORT("Unimplemented"); } //ToDo - unimplemented;
 
 private:
+
+    class TWrappedWriteMessage {
+    public:
+        const TString Data;
+        NTopic::TWriteMessage Message;
+        TWrappedWriteMessage(NTopic::TWriteMessage&& message)
+            : Data(message.Data)
+            , Message(std::move(message))
+        {
+            Message.Data = Data;
+        }
+    };    
+
+private:
     void Start();
     void OpenSubSessionImpl(std::shared_ptr<TDbInfo> db);
 
@@ -71,7 +85,7 @@ private:
     void OnFederatedStateUpdateImpl();
     void ScheduleFederatedStateUpdateImpl(TDuration delay);
 
-    void WriteInternal(NTopic::TContinuationToken&&, NTopic::TWriteMessage&& message);
+    void WriteInternal(NTopic::TContinuationToken&&, TWrappedWriteMessage&& message);
     bool PrepareDeferredWrite(TDeferredWrite& deferred);
 
     void CloseImpl(EStatus statusCode, NYql::TIssues&& issues);
@@ -105,8 +119,8 @@ private:
 
     TMaybe<NTopic::TContinuationToken> PendingToken;  // from Subsession
     bool ClientHasToken = false;
-    std::deque<NTopic::TWriteMessage> OriginalMessagesToPassDown;
-    std::deque<NTopic::TWriteMessage> OriginalMessagesToGetAck;
+    std::deque<TWrappedWriteMessage> OriginalMessagesToPassDown;
+    std::deque<TWrappedWriteMessage> OriginalMessagesToGetAck;
     i64 BufferFreeSpace;
 
     // Exiting.

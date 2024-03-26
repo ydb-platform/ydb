@@ -1602,7 +1602,7 @@ public:
     }
 
     //! Message body.
-    const TStringBuf Data;
+    TStringBuf Data;
 
     //! Codec and original size for compressed message.
     //! Do not specify or change these options directly, use CompressedMessage()

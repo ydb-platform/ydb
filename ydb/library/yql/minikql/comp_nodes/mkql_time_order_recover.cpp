@@ -101,40 +101,34 @@ public:
 
     private:
         void Load(const NUdf::TStringRef& state) override {
-            TStringBuf in(state.Data(), state.Size());
+            TInputSerializer in(state, EMkqlStateType::SIMPLE_BLOB);
 
-            const auto stateVersion = ReadUi32(in);
-            if (stateVersion == 1) {
-                const auto heapSize = ReadUi32(in);
-                ClearState();
-                for (auto i = 0U; i < heapSize; ++i) {
-                    TTimestamp t = ReadUi64(in);
-                    MonotonicCounter = ReadUi64(in);
-                    NUdf::TUnboxedValue row = ReadUnboxedValue(in, Self->Packer.RefMutableObject(Ctx, false, Self->StateType), Ctx);
-                    Heap.emplace(THeapKey(t, MonotonicCounter), std::move(row));
-                }
-                Latest = ReadUi64(in);
-                Terminating = ReadBool(in);
-            } else {
-                THROW yexception() << "Invalid state version " << stateVersion;
+            const auto loadStateVersion = in.GetStateVersion();
+            if (loadStateVersion != StateVersion) {
+                THROW yexception() << "Invalid state version " << loadStateVersion;
             }
+            const auto heapSize = in.Read<ui32>();
+            ClearState();
+            for (auto i = 0U; i < heapSize; ++i) {
+                TTimestamp t = in.Read<ui64>();
+                in(MonotonicCounter);
+                NUdf::TUnboxedValue row = in.ReadUnboxedValue(Self->Packer.RefMutableObject(Ctx, false, Self->StateType), Ctx);
+                Heap.emplace(THeapKey(t, MonotonicCounter), std::move(row));
+            }
+            in(Latest, Terminating);
         }
 
         NUdf::TUnboxedValue Save() const override {
-            TString out;
-            WriteUi32(out, StateVersion);
-            WriteUi32(out, Heap.size());
+            TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, StateVersion);
+            out.Write<ui32>(Heap.size());
 
             for (const TEntry& entry : Heap) {
                 THeapKey key = entry.first;
-                WriteUi64(out, key.first);
-                WriteUi64(out, key.second);
-                WriteUnboxedValue(out, Self->Packer.RefMutableObject(Ctx, false, Self->StateType), entry.second);
+                out(key);
+                out.WriteUnboxedValue(Self->Packer.RefMutableObject(Ctx, false, Self->StateType), entry.second);
             }
-            WriteUi64(out, Latest);
-            WriteBool(out, Terminating);
-            auto strRef = NUdf::TStringRef(out.data(), out.size());
-            return MakeString(strRef);
+            out(Latest, Terminating);
+            return out.MakeState();
         }
 
         void ClearState() {

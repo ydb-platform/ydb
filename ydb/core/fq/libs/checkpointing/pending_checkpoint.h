@@ -3,6 +3,8 @@
 
 #include <ydb/library/actors/core/actor.h>
 
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
+
 namespace NFq {
 
 struct TPendingCheckpointStats {
@@ -12,10 +14,14 @@ struct TPendingCheckpointStats {
 
 class TPendingCheckpoint {
     THashSet<NActors::TActorId> NotYetAcknowledged;
+    NYql::NDqProto::TCheckpoint::EType Type;
     TPendingCheckpointStats Stats;
 
 public:
-    explicit TPendingCheckpoint(THashSet<NActors::TActorId> toBeAcknowledged, TPendingCheckpointStats stats = TPendingCheckpointStats());
+    explicit TPendingCheckpoint(
+        THashSet<NActors::TActorId> toBeAcknowledged,
+        NYql::NDqProto::TCheckpoint::EType type,
+        TPendingCheckpointStats stats = TPendingCheckpointStats());
 
     void Acknowledge(const NActors::TActorId& actorId);
 
@@ -29,6 +35,9 @@ public:
 
     [[nodiscard]]
     const TPendingCheckpointStats& GetStats() const;
+
+    [[nodiscard]]
+    NYql::NDqProto::TCheckpoint::EType GetType() const;
 };
 
 class TPendingRestoreCheckpoint {

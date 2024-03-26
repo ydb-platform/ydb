@@ -352,7 +352,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvGetTaskStateResult::TPt
 void TDqComputeActorCheckpoints::AfterStateLoading(const TMaybe<TString>& error) {
     auto& checkpoint = RestoringTaskRunnerForCheckpoint;
     if (error.Defined()) {
-        LOG_CP_E(checkpoint, "Failed to load state: " << error << "ABORTED");
+        LOG_CP_E(checkpoint, "Failed to load state: " << error << ", ABORTED");
         EventsQueue.Send(MakeHolder<TEvDqCompute::TEvRestoreFromCheckpointResult>(checkpoint, Task.GetId(), NDqProto::TEvRestoreFromCheckpointResult::INTERNAL_ERROR), RestoringTaskRunnerForEvent);
         return;
     }

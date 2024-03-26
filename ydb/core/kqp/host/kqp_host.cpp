@@ -1218,7 +1218,6 @@ private:
 
             for (const auto& resultPart : result.QueryExprs) {
                 YQL_CLOG(INFO, ProviderKqp) << "Splitted Compiled query part:\n" << KqpExprToPrettyString(*resultPart, ctx);
-                Cerr << "Splitted Compiled query part:\n" << KqpExprToPrettyString(*resultPart, ctx) << Endl;
             }
 
             return result;

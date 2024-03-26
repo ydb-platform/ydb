@@ -178,7 +178,7 @@ namespace {
             : (TStringBuilder()
                 << tableName
                 << "_cas_"
-                << TInstant::Now().MicroSeconds()
+                << TAppData::RandomProvider->GenRand()
                 << "_"
                 << sessionCtx->GetSessionId());
 

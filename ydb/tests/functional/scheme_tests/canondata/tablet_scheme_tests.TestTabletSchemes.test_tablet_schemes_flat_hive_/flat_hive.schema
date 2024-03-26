@@ -616,7 +616,7 @@
             {
                 "ColumnId": 2,
                 "ColumnName": "Down",
-                "ColumnType": "Byte"
+                "ColumnType": "Bool"
             },
             {
                 "ColumnId": 3,
@@ -650,8 +650,8 @@
             },
             {
                 "ColumnId": 10,
-                "ColumnName": "Name",
-                "ColumnType": "String"
+                "ColumnName": "BecomeUpOnRestart",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],

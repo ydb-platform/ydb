@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPartLarge) {
         UNIT_ASSERT_GE(part->Stat.Bytes, 1ull*1024*1024*1024);
         UNIT_ASSERT_LE(part->Stat.Bytes, 1ull*1024*1024*1024 + 100*1024*1024);
 
-        UNIT_ASSERT_VALUES_EQUAL(part->IndexPages.BTreeGroups[1].LevelCount, 2);
+        UNIT_ASSERT_VALUES_EQUAL(part->IndexPages.BTreeGroups[1].LevelCount, 3);
     }
 
     Y_UNIT_TEST(History) {

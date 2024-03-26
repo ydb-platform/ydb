@@ -83,13 +83,14 @@ private:
     i32 WaitingRangesCount = 0;
     THashMap<TBlobRange, TString> Replies;
     THashMap<TBlobRange, TErrorStatus> Fails;
+    THashMap<TBlobRange, std::vector<TBlobRange>> Groups;
     std::shared_ptr<NBlobOperations::TReadCounters> Counters;
     bool Started = false;
     bool DataExtracted = false;
     YDB_ACCESSOR(bool, IsBackgroundProcess, true);
 protected:
     virtual void DoStartReading(THashSet<TBlobRange>&& range) = 0;
-    void StartReading(THashSet<TBlobRange>&& ranges);
+    void StartReading(std::vector<TBlobRange>&& ranges);
 public:
 
     const THashSet<TBlobRange>& GetRangesForRead() const {

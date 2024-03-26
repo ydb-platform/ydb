@@ -38,7 +38,7 @@ common:
   - from: /getting_started/yql.md
     to: /yql/reference/index.md
 
-# Redirects for ydb-dstoo
+# Redirects for ydb-dstool
   - from: /administration/ydb-dstool-device-list.md
     to: /reference/ydb-dstool/device-list.md
   - from: /administration/ydb-dstool-global-options.md

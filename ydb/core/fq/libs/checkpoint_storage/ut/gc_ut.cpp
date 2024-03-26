@@ -77,7 +77,8 @@ struct TTestRuntime {
     {
         Runtime.reset(new TTestBasicRuntime(1));
         Runtime->SetLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG);
-        SetupTabletServices(*Runtime);
+        TAppPrepare app;
+        SetupTabletServices(*Runtime, &app, true);
 
         NConfig::TCheckpointCoordinatorConfig config;
         auto& storageConfig = *config.MutableStorage();

@@ -27,18 +27,16 @@ public:
                 Status = NKikimrProto::ALREADY; // another balancer is active on the node
             } else {
                 Status = NKikimrProto::OK;
-                if (!node->Drain && node->Down) {
-                    Settings.KeepDown = true;
-                }
                 node->Drain = true;
                 node->DrainInitiators.emplace_back(Initiator);
                 if (Settings.Persist) {
                     db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Drain, Schema::Node::DrainInitiators>(node->Drain, node->DrainInitiators);
                 }
-                if (Settings.KeepDown) {
+                if (Settings.KeepDown && !node->Down) {
                     node->SetDown(true);
+                    node->BecomeUpOnRestart = true;
                     if (Settings.Persist) {
-                        db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Down>(true);
+                        db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Down, Schema::Node::BecomeUpOnRestart>(true, true);
                     }
                 }
                 Self->StartHiveDrain(NodeId, std::move(Settings));

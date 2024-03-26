@@ -150,6 +150,26 @@ namespace NTi::NEq {
         }
 
         template <bool IgnoreHash>
+        bool StrictlyEqual(const TDate32Type&, const TDate32Type&) {
+            return true;
+        }
+
+        template <bool IgnoreHash>
+        bool StrictlyEqual(const TDatetime64Type&, const TDatetime64Type&) {
+            return true;
+        }
+
+        template <bool IgnoreHash>
+        bool StrictlyEqual(const TTimestamp64Type&, const TTimestamp64Type&) {
+            return true;
+        }
+
+        template <bool IgnoreHash>
+        bool StrictlyEqual(const TInterval64Type&, const TInterval64Type&) {
+            return true;
+        }
+
+        template <bool IgnoreHash>
         bool StrictlyEqual(const TOptionalType& lhs, const TOptionalType& rhs) {
             return StrictlyEqual<IgnoreHash>(lhs.GetItemTypeRaw(), rhs.GetItemTypeRaw());
         }

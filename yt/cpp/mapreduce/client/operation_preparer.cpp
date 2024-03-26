@@ -315,7 +315,7 @@ public:
         return FileName_;
     }
 
-    ui64 GetDataSize() const override
+    i64 GetDataSize() const override
     {
         return GetFileLength(FileName_);
     }
@@ -353,9 +353,9 @@ public:
         return Description_;
     }
 
-    ui64 GetDataSize() const override
+    i64 GetDataSize() const override
     {
-        return Data_.size();
+        return std::ssize(Data_);
     }
 
 private:
@@ -694,7 +694,10 @@ TString TJobPreparer::UploadToCacheUsingApi(const IItemToUpload& itemToUpload) c
         itemToUpload.GetDescription(),
         OperationPreparer_.GetPreparationId());
 
-    if (OperationPreparer_.GetContext().Config->CacheUploadDeduplicationMode != EUploadDeduplicationMode::Disabled) {
+    const auto& config = OperationPreparer_.GetContext().Config;
+
+    if (config->CacheUploadDeduplicationMode != EUploadDeduplicationMode::Disabled &&
+        itemToUpload.GetDataSize() > config->CacheUploadDeduplicationThreshold) {
         if (auto path = TryUploadWithDeduplication(itemToUpload)) {
             return *path;
         }

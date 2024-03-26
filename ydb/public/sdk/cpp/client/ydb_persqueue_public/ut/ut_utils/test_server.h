@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/core/testlib/test_pq_client.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 
 #include <ydb/library/grpc/server/grpc_server.h>
 
@@ -15,7 +15,7 @@ static constexpr int DEBUG_LOG_LEVEL = 7;
 
 class TTestServer {
 public:
-    TTestServer(const NKikimr::Tests::TServerSettings& settings, 
+    TTestServer(const NKikimr::Tests::TServerSettings& settings,
                 bool start = true,
                 const TVector<NKikimrServices::EServiceKikimr>& logServices = TTestServer::LOGGED_SERVICES,
                 NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG,

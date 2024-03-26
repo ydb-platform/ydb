@@ -21,11 +21,11 @@ struct TWriterCounters : public TThrRefBase {
         BytesInflightTotal = counters->GetCounter("bytesInflightTotal", false);
         MessagesInflight = counters->GetCounter("messagesInflight", false);
 
-#define HISTOGRAM_SETUP ::NMonitoring::ExplicitHistogram({0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100})
-        TotalBytesInflightUsageByTime = counters->GetHistogram("totalBytesInflightUsageByTime", HISTOGRAM_SETUP);
-        UncompressedBytesInflightUsageByTime = counters->GetHistogram("uncompressedBytesInflightUsageByTime", HISTOGRAM_SETUP);
-        CompressedBytesInflightUsageByTime = counters->GetHistogram("compressedBytesInflightUsageByTime", HISTOGRAM_SETUP);
-#undef HISTOGRAM_SETUP
+#define TOPIC_COUNTERS_HISTOGRAM_SETUP ::NMonitoring::ExplicitHistogram({0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100})
+        TotalBytesInflightUsageByTime = counters->GetHistogram("totalBytesInflightUsageByTime", TOPIC_COUNTERS_HISTOGRAM_SETUP);
+        UncompressedBytesInflightUsageByTime = counters->GetHistogram("uncompressedBytesInflightUsageByTime", TOPIC_COUNTERS_HISTOGRAM_SETUP);
+        CompressedBytesInflightUsageByTime = counters->GetHistogram("compressedBytesInflightUsageByTime", TOPIC_COUNTERS_HISTOGRAM_SETUP);
+#undef TOPIC_COUNTERS_HISTOGRAM_SETUP
     }
 
     TCounterPtr Errors;
@@ -70,11 +70,11 @@ struct TReaderCounters: public TThrRefBase {
         BytesInflightTotal = counters->GetCounter("bytesInflightTotal", false);
         MessagesInflight = counters->GetCounter("messagesInflight", false);
 
-#define HISTOGRAM_SETUP ::NMonitoring::ExplicitHistogram({0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100})
-        TotalBytesInflightUsageByTime = counters->GetHistogram("totalBytesInflightUsageByTime", HISTOGRAM_SETUP);
-        UncompressedBytesInflightUsageByTime = counters->GetHistogram("uncompressedBytesInflightUsageByTime", HISTOGRAM_SETUP);
-        CompressedBytesInflightUsageByTime = counters->GetHistogram("compressedBytesInflightUsageByTime", HISTOGRAM_SETUP);
-#undef HISTOGRAM_SETUP
+#define TOPIC_COUNTERS_HISTOGRAM_SETUP ::NMonitoring::ExplicitHistogram({0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100})
+        TotalBytesInflightUsageByTime = counters->GetHistogram("totalBytesInflightUsageByTime", TOPIC_COUNTERS_HISTOGRAM_SETUP);
+        UncompressedBytesInflightUsageByTime = counters->GetHistogram("uncompressedBytesInflightUsageByTime", TOPIC_COUNTERS_HISTOGRAM_SETUP);
+        CompressedBytesInflightUsageByTime = counters->GetHistogram("compressedBytesInflightUsageByTime", TOPIC_COUNTERS_HISTOGRAM_SETUP);
+#undef TOPIC_COUNTERS_HISTOGRAM_SETUP
     }
 
     TCounterPtr Errors;

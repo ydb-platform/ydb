@@ -176,7 +176,7 @@ class ScaleController:
             instance_id, created_at = runner_vms[runner_name]
             if datetime.datetime.now() - created_at > self.stale_runner_threshold:
                 self.logger.warning("remove stale VM %s (%s), created_at=%s", runner_name, instance_id, created_at)
-                # self.delete_vm(instance_id)
+                self.delete_vm(instance_id)
 
     def start_runner(self, preset_name: str):
         runner_name = f"{self.prefix}-{generate_short_id()}"

@@ -45,11 +45,11 @@ on:
         description: "run tests"
       test_threads:
         type: string
-        default: "28"
+        default: "56"
         description: "Test threads count"
       link_threads:
         type: string
-        default: "8"
+        default: "12"
         description: "link threads count"
       runner_label:
         type: string
@@ -80,11 +80,11 @@ on:
         default: true
       test_threads:
         type: string
-        default: 28
+        default: 56
         description: "Test threads count"
       link_threads:
         type: string
-        default: 8
+        default: 12
         description: "link threads count"
       runner_label:
         type: string

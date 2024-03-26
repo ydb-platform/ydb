@@ -163,7 +163,7 @@ resource "ydb_table_changefeed" "table_changefeed" {
     supported_codecs = ["raw", "gzip"]
   }
 
-  depends_on = [ydb_table.table] #ссылка на ресурс создания таблицы.
+  depends_on = [ydb_table.table] # ссылка на ресурс создания таблицы
 }
 
 resource "ydb_topic" "test" {

@@ -48,20 +48,14 @@ TEST_SRCS(
 )
 
 PEERDIR(
-    contrib/python/Jinja2
-    contrib/python/grpcio
     contrib/python/pytest
-    contrib/python/tzlocal
     ydb/library/yql/providers/generic/connector/api/common
-    ydb/library/yql/providers/generic/connector/api/service
     ydb/library/yql/providers/generic/connector/api/service/protos
     ydb/library/yql/providers/generic/connector/tests/test_cases
     ydb/library/yql/providers/generic/connector/tests/utils
     ydb/library/yql/providers/generic/connector/tests/utils/clients
     ydb/library/yql/providers/generic/connector/tests/utils/scenario
     ydb/library/yql/providers/generic/connector/tests/utils/types
-    ydb/public/api/protos
-    yt/python/yt/yson
 )
 
 DEPENDS(

@@ -1,12 +1,10 @@
-from typing import TypeAlias, Final
+from typing import Final
 import pathlib
 
-import grpc
 import pytest
 
 import yatest.common as yat
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
-import ydb.library.yql.providers.generic.connector.api.service.connector_pb2_grpc as api
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
 from ydb.library.yql.providers.generic.connector.tests.utils.dqrun import DqRunner
 from ydb.library.yql.providers.generic.connector.tests.utils.kqprun import KqpRunner
@@ -26,18 +24,6 @@ def clickhouse_client(settings) -> Client:
     cl = make_client(settings.clickhouse)
     yield cl
     cl.close()
-
-
-ConnectorClient: TypeAlias = api.ConnectorStub
-
-
-@pytest.fixture
-def connector_client(settings) -> ConnectorClient:
-    s = settings.connector
-
-    channel = grpc.insecure_channel(f'{s.host}:{s.port}')
-    stub = ConnectorClient(channel)
-    return stub
 
 
 def configure_runner(runner, settings) -> Runner:

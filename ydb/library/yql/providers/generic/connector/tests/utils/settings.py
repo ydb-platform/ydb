@@ -61,7 +61,7 @@ class Settings:
                 case EDataSourceKind.CLICKHOUSE:
                     data_sources[data_source_kind] = cls.ClickHouse(
                         cluster_name='clickhouse_integration_test',
-                        host_external='localhost',
+                        host_external='0.0.0.0',
                         host_internal='clickhouse',
                         http_port_external=endpoint_determiner.get_port('clickhouse', 8123),
                         native_port_external=endpoint_determiner.get_port('clickhouse', 9000),

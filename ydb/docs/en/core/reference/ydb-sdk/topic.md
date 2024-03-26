@@ -776,6 +776,20 @@ All the metadata provided when writing a message is returned to a consumer with 
 
   ```
 
+- Java
+
+ To take advantage of message metadata feature, build messages with builder. You can add `MetadataItem` to a message or set a `List` of `MetadataItem`s. Each item consists of a key of type `String` and value of type `byte[]`:
+
+  ```java
+  writer.send(
+          Message.newBuilder()
+                  .addMetadataItem(new MetadataItem("meta-key", "meta-value".getBytes()))
+                  .addMetadataItem(new MetadataItem("another-key", "value".getBytes()))
+                  .build()
+  ```
+
+ Metadata can be read from a `Message` using `getMetadataItems()` method.
+
 {% endlist %}
 
 ## Reading messages {#reading}

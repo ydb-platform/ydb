@@ -1925,9 +1925,6 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorC
 
     ProcessTxsAndUserActs(ctx);
 
-//    if (ChangeConfig && CurrentStateFunc() == &TThis::StateIdle) {
-//        HandleWrites(ctx);
-//    }
     HandleRequests(ctx);
 }
 

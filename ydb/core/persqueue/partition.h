@@ -215,12 +215,10 @@ private:
     void RequestBlobQuota(size_t quotaSize);
     void WritePendingBlob(THolder<TEvKeyValue::TEvRequest> request);
     void UpdateAfterWriteCounters(bool writeComplete);
-
-    void CancelReserveRequests(const TActorContext& ctx);
-    void CancelRequests(const TActorContext& ctx);
-
     void UpdateUserInfoEndOffset(const TInstant& now);
     void UpdateWriteBufferIsFullState(const TInstant& now);
+    void CancelReserveRequests(const TActorContext& ctx);
+    void CancelRequests(const TActorContext& ctx, std::deque<TMessage>& requests);
 
     TInstant GetWriteTimeEstimate(ui64 offset) const;
     bool AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx,

@@ -848,9 +848,6 @@ void TPartition::ProcessChangeOwnerRequests(const TActorContext& ctx) {
         WaitToChangeOwner.pop_front();
     }
 
-//    if (CurrentStateFunc() == &TThis::StateIdle) {
-//        HandleWrites(ctx);
-//    }
     HandlePendingRequests(ctx);
 }
 
@@ -1446,10 +1443,6 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant, const
     PQ_LOG_T("TPartition::ProcessWrites.");
     FilterDeadlinedWrites(ctx);
 
-//    if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota(ctx)) { // Waiting for topic quota.
-//        SetDeadlinesForWrites(ctx);
-//        return false;
-//    }
     QuotaDeadline = TInstant::Zero();
 
     if (Requests.empty()) {
@@ -1498,6 +1491,20 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant, const
     return true;
 }
 
+void TPartition::FilterDeadlinedWrites(const TActorContext& ctx) {
+    if (QuotaDeadline == TInstant::Zero() || QuotaDeadline > ctx.Now()) {
+        return;
+    }
+    PQ_LOG_T("TPartition::FilterDeadlinedWrites.");
+
+    FilterDeadlinedWrites(ctx, PendingRequests);
+    FilterDeadlinedWrites(ctx, Requests);
+
+    QuotaDeadline = TInstant::Zero();
+
+    UpdateWriteBufferIsFullState(ctx.Now());
+}
+
 void TPartition::FilterDeadlinedWrites(const TActorContext& ctx, std::deque<TMessage>& requests)
 {
     std::deque<TMessage> newRequests;
@@ -1519,20 +1526,6 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx, std::deque<TMes
     requests = std::move(newRequests);
 }
 
-void TPartition::FilterDeadlinedWrites(const TActorContext& ctx) {
-    if (QuotaDeadline == TInstant::Zero() || QuotaDeadline > ctx.Now()) {
-        return;
-    }
-    PQ_LOG_T("TPartition::FilterDeadlinedWrites.");
-
-    FilterDeadlinedWrites(ctx, PendingRequests);
-    FilterDeadlinedWrites(ctx, Requests);
-
-    QuotaDeadline = TInstant::Zero();
-
-    UpdateWriteBufferIsFullState(ctx.Now());
-}
-
 void TPartition::CancelReserveRequests(const TActorContext& ctx)
 {
     for(const auto& r : ReserveRequests) {
@@ -1542,13 +1535,13 @@ void TPartition::CancelReserveRequests(const TActorContext& ctx)
     ReserveRequests.clear();
 }
 
-void TPartition::CancelRequests(const TActorContext& ctx)
+void TPartition::CancelRequests(const TActorContext& ctx, std::deque<TMessage>& requests)
 {
-    for(const auto& r : Requests) {
+    for(const auto& r : requests) {
         ReplyError(ctx, r.GetCookie(), InactivePartitionErrorCode,
                    "Write to inactive partition");
     }
-    Requests.clear();
+    requests.clear();
 }
 
 void TPartition::RemoveMessages(std::deque<TMessage>& src, std::deque<TMessage>& dst)
@@ -1609,7 +1602,9 @@ void TPartition::HandleRequests(const TActorContext& ctx)
     if (!CanWrite()) {
         if (!CanEnqueue()) {
             CancelReserveRequests(ctx);
-            CancelRequests(ctx);
+            CancelRequests(ctx, PendingRequests);
+            CancelRequests(ctx, QuotaWaitingRequests);
+            CancelRequests(ctx, Requests);
         }
         return;
     }

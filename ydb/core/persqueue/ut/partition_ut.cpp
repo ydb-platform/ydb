@@ -1080,7 +1080,7 @@ void TPartitionFixture::TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration
                     {.Version=2, .Consumers={{.Consumer="client-1"}}});
 
     TMaybe<ui64> kvCookie;
-    WaitKeyValueRequest(kvCookie); // партиция сохраняет конфигурацию
+    WaitKeyValueRequest(kvCookie); // the partition saves the configuration
 
     SendSubDomainStatus(true);
 
@@ -1103,7 +1103,7 @@ void TPartitionFixture::TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration
     SendWrite(++cookie, messageNo, ownerCookie, (messageNo + 1) * 100, data, ignoreQuotaDeadline);
     messageNo++;
 
-    WaitKeyValueRequest(kvCookie); // событие TEvWrite
+    WaitKeyValueRequest(kvCookie); // the partition saves the TEvPQ::TEvWrite event
     SendDiskStatusResponse(&kvCookie);
 
     {
@@ -1115,8 +1115,6 @@ void TPartitionFixture::TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration
     SendWrite(++cookie, messageNo, ownerCookie, (messageNo + 1) * 100, data, ignoreQuotaDeadline);
     messageNo++;
 
-    //SendDiskStatusResponse();
-
     {
         auto event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
         UNIT_ASSERT(event == nullptr);
@@ -1125,7 +1123,7 @@ void TPartitionFixture::TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration
     // SudDomain quota available - second message will be processed..
     SendSubDomainStatus(false);
 
-    WaitKeyValueRequest(kvCookie); // событие TEvWrite
+    WaitKeyValueRequest(kvCookie); // the partition saves the TEvPQ::TEvWrite event
     SendDiskStatusResponse(&kvCookie);
 
     {
@@ -1750,7 +1748,7 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace, TPartitionFixture)
     SendWrite(++cookie, messageNo, ownerCookie, (messageNo + 1) * 100, data);
     messageNo++;
 
-    WaitKeyValueRequest(kvCookie); // событие TEvWrite
+    WaitKeyValueRequest(kvCookie); // the partition saves the TEvPQ::TEvWrite event
     SendDiskStatusResponse(&kvCookie);
 
     {
@@ -1763,7 +1761,7 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace, TPartitionFixture)
     messageNo++;
 
     {
-        auto event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvError>(handle, truth, TDuration::Seconds(10));
+        auto event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvError>(handle, truth, TDuration::Seconds(1));
         UNIT_ASSERT(event != nullptr);
         UNIT_ASSERT_EQUAL(NPersQueue::NErrorCode::OVERLOAD, event->ErrorCode);
     }

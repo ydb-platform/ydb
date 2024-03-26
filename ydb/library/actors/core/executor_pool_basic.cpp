@@ -117,15 +117,6 @@ namespace NActors {
         DefaultThreadCount = DefaultFullThreadCount + HasOwnSharedThread;
         MinThreadCount = MinFullThreadCount + HasOwnSharedThread;
         MaxThreadCount = MaxFullThreadCount + HasOwnSharedThread;
-
-        Cerr << (TStringBuilder() << "AS Pool# " << '"' << PoolName << '"'
-            << " DefaultThreadCount# " << DefaultThreadCount
-            << " MinThreadCount# " << MinThreadCount
-            << " MaxThreadCount# " << MaxThreadCount
-            << " DefaultFullThreadCount# " << DefaultFullThreadCount
-            << " MinFullThreadCount# " << MinFullThreadCount
-            << " MaxFullThreadCount# " << MaxFullThreadCount
-            << Endl);
     }
 
     TBasicExecutorPool::TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer)
@@ -198,10 +189,8 @@ namespace NActors {
         TlsThreadContext->Timers.Reset();
 
         if (workerId >= 0) {
-            // Cerr << "Get activation [common]\n";
             Threads[workerId].UnsetWork();
         } else {
-            // Cerr << "Get activation [shared]\n";
             Y_ABORT_UNLESS(wctx.SharedThread);
             wctx.SharedThread->UnsetWork();
         }
@@ -214,12 +203,10 @@ namespace NActors {
         TAtomic x = AtomicGet(Semaphore);
         TSemaphore semaphore = TSemaphore::GetSemaphore(x);
         while (!StopFlag.load(std::memory_order_acquire)) {
-            // Cerr << (TStringBuilder() << "Try to get activaition in loop " << GetCurrentThreadKind() << Endl);
             if (!semaphore.OldSemaphore || workerId >= 0 && semaphore.CurrentSleepThreadCount < 0) {
                 if (workerId < 0 || !wctx.IsNeededToWaitNextActivation) {
                     TlsThreadContext->Timers.HPNow = GetCycleCountFast();
                     wctx.AddElapsedCycles(ActorSystemIndex, TlsThreadContext->Timers.HPNow - TlsThreadContext->Timers.HPStart);
-                    // Cerr << (TStringBuilder() << "Leave without activation " << GetCurrentThreadKind()  << Endl);
                     return 0;
                 }
 
@@ -247,7 +234,6 @@ namespace NActors {
                         wctx.AddParkedCycles(TlsThreadContext->Timers.Parked);
                     }
 
-                    // Cerr << (TStringBuilder() << "Got activaition " << GetCurrentThreadKind() << Endl);
                     return activation;
                 }
             }
@@ -299,19 +285,15 @@ namespace NActors {
     }
 
     bool TBasicExecutorPool::WakeUpLoopShared() {
-        // Cerr << (TStringBuilder() << "Try to wake up some shared thread " << GetCurrentThreadKind()  << Endl);
         for (ui32 idx = 0; idx < MaxSharedThreadsForPool; ++idx) {
             TSharedExecutorThreadCtx *thread = SharedThreads[idx].load(std::memory_order_acquire);
             if (!thread) {
-                // Cerr << (TStringBuilder() << "Can't found any sleep " << GetCurrentThreadKind()  << Endl);
                 return false;
             }
             if (thread->WakeUp()) {
-                // Cerr << (TStringBuilder() << "We woke shared thread " << GetCurrentThreadKind()  << Endl);
                 return true;
             }
         }
-        // Cerr << (TStringBuilder() << "Can't found any sleep " << GetCurrentThreadKind()  << Endl);
         return false;
     }
 
@@ -351,10 +333,7 @@ namespace NActors {
         } while (true);
 
         if (needToWakeUp) { // we must find someone to wake-up
-            // Cerr << (TStringBuilder() << "Try to wake up some common thread | Sleep common: " << sleepThreads << " Shared threads: " << sharedThreads << ' ' << GetCurrentThreadKind() << Endl);
             WakeUpLoop(semaphore.CurrentThreadCount);
-        } else {
-            // Cerr << (TStringBuilder() << "Don't need to wake up anyone Shared threads: " << sharedThreads << ' ' << GetCurrentThreadKind() << Endl);
         }
     }
 
@@ -689,7 +668,6 @@ namespace NActors {
     }
 
     bool TExecutorThreadCtx::Wait(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag) {
-        // Cerr << "Go to wait [common]\n";
         EThreadState state = ExchangeState<EThreadState>(EThreadState::Spin);
         Y_ABORT_UNLESS(state == EThreadState::None, "WaitingFlag# %d", int(state));
         if (spinThresholdCycles > 0) {
@@ -707,7 +685,6 @@ namespace NActors {
         if (requestsForWakeUp) {
             return false;
         }
-        // Cerr << "Go to wait [shared]\n";
         TWaitState state = ExchangeState<TWaitState>(EThreadState::Spin);
         Y_ABORT_UNLESS(state.Flag == EThreadState::None, "WaitingFlag# %d", int(state.Flag));
         if (spinThresholdCycles > 0) {
@@ -727,7 +704,6 @@ namespace NActors {
                 case EThreadState::Spin:
                 case EThreadState::Sleep:
                     if (ReplaceState<EThreadState>(state, EThreadState::None)) {
-                        // Cerr << (TStringBuilder() <<  "Wake up <common> " << GetCurrentThreadKind() << Endl);
                         if (state == EThreadState::Sleep) {
                             ui64 beforeUnpark = GetCycleCountFast();
                             StartWakingTs = beforeUnpark;
@@ -749,11 +725,9 @@ namespace NActors {
     bool TSharedExecutorThreadCtx::WakeUp() {
         i64 requestsForWakeUp = RequestsForWakeUp.fetch_add(1, std::memory_order_acq_rel);
         if (requestsForWakeUp >= 0) {
-            // Cerr << (TStringBuilder() <<  "Try to wake up, but it couldn't <shared> " << GetCurrentThreadKind() << Endl);
             return false;
         }
 
-        // Cerr << (TStringBuilder() <<  "Try to wake up <shared> " << GetCurrentThreadKind() << Endl);
         for (;;) {
             TWaitState state = GetState<TWaitState>();
             switch (state.Flag) {
@@ -763,7 +737,6 @@ namespace NActors {
                 case EThreadState::Spin:
                 case EThreadState::Sleep:
                     if (ReplaceState<TWaitState>(state, {EThreadState::None})) {
-                        // Cerr << (TStringBuilder() << "Wake up <shared> " << GetCurrentThreadKind() << Endl);
                         if (state.Flag == EThreadState::Sleep) {
                             ui64 beforeUnpark = GetCycleCountFast();
                             StartWakingTs = beforeUnpark;

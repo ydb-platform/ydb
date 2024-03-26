@@ -476,7 +476,6 @@ namespace NActors {
                 return {IsSharedThread, wasWorking};
             }
             executeActivation(activation, false);
-            // Cerr << (TStringBuilder() << "Activation was executed " << (Ctx.WorkerId >= 0 ? "[common]" : "[shared]") << Endl);
         }
 
         if (IsSharedThread) {
@@ -549,8 +548,6 @@ namespace NActors {
                     wasWorking |= result.WasWorking;
                 }
             }
-
-            // Cerr << "Think about sleep [shared]\n";
 
             if (!wasWorking && !StopFlag.load(std::memory_order_relaxed)) {
                 TlsThreadContext->Timers.Reset();

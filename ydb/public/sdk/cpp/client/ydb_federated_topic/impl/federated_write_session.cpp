@@ -1,6 +1,6 @@
 #include "federated_write_session.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/log_lazy.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/log_lazy.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
 
 #define INCLUDE_YDB_INTERNAL_H

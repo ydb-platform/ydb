@@ -73,8 +73,8 @@ namespace NKikimr::NBsController {
             }
 
             void ApplyPDiskDiff(const TPDiskId &pdiskId, const TPDiskInfo &prev, const TPDiskInfo &cur) {
-                if (prev.Mood != cur.Mood) {
-                    // PDisk's mood has changed
+                if (prev.Mood != cur.Mood || prev.PDiskConfig != cur.PDiskConfig) {
+                    // PDisk's mood or config has changed
                     CreatePDiskEntry(pdiskId, cur);
                 }
             }

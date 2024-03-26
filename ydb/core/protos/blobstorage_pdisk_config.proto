@@ -89,5 +89,7 @@ message TPDiskConfig {
     optional uint64 InsaneLogChunksMultiplier = 2000;  // Log of cutThreshold * InsaneLogChunksMultiplier is insane
 
     optional uint64 ExpectedSlotCount = 2001; // Number of slots to calculate per-vdisk disk space limit.
+
+    optional uint32 ChunkBaseLimit = 2002; // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
 };
 

@@ -20,6 +20,7 @@ PY_SRCS(
 
 PEERDIR(
     contrib/python/Jinja2
+    contrib/python/PyYAML
     ydb/library/yql/providers/generic/connector/api/common
     ydb/library/yql/providers/generic/connector/tests/utils/types
     ydb/public/api/protos

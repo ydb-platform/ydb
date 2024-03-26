@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional, Sequence
 import pathlib
+import yaml
 
 import yatest.common
 
@@ -51,8 +52,10 @@ class Settings:
     @classmethod
     def from_env(cls, docker_compose_dir: pathlib.Path, data_source_kinds: Sequence[EDataSourceKind]) -> 'Settings':
         docker_compose_file_relative_path = str(docker_compose_dir / 'docker-compose.yml')
-        docker_compose_file = yatest.common.source_path(docker_compose_file_relative_path)
-        endpoint_determiner = EndpointDeterminer(docker_compose_file)
+        docker_compose_file_abs_path = yatest.common.source_path(docker_compose_file_relative_path)
+        with open(docker_compose_file_abs_path) as f:
+            docker_compose_file = yaml.load(f)
+        endpoint_determiner = EndpointDeterminer(docker_compose_file_abs_path)
 
         data_sources = dict()
 
@@ -62,7 +65,7 @@ class Settings:
                     data_sources[data_source_kind] = cls.ClickHouse(
                         cluster_name='clickhouse_integration_test',
                         host_external='0.0.0.0',
-                        host_internal='clickhouse',
+                        host_internal=docker_compose_file['services']['clickhouse']['container_name'],
                         http_port_external=endpoint_determiner.get_port('clickhouse', 8123),
                         native_port_external=endpoint_determiner.get_port('clickhouse', 9000),
                         http_port_internal=8123,
@@ -75,7 +78,7 @@ class Settings:
                     data_sources[data_source_kind] = cls.PostgreSQL(
                         cluster_name='postgresql_integration_test',
                         host_external='0.0.0.0',
-                        host_internal='postgresql',
+                        host_internal=docker_compose_file['services']['postgresql']['container_name'],
                         port_external=endpoint_determiner.get_port('postgresql', 5432),
                         port_internal=5432,
                         dbname='db',

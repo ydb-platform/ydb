@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
     TString DoS3Listing(ui16 grpcPort, ui64 bucket, const TString& pathPrefix, const TString& pathDelimiter, const TString& startAfter,
                     TString continuationToken,
                     const TVector<TString>& columnsToReturn, ui32 maxKeys,
-                    TVector<TString>& commonPrefixes, TVector<TString>& contents)
+                    TVector<TString>& commonPrefixes, TVector<TString>& contents, bool filter = false;)
     {
         std::shared_ptr<grpc::Channel> channel;
         TStringBuilder endpoint;
@@ -365,7 +365,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         }
         request->set_max_keys(maxKeys);
 
-        {
+        if (filter) {
             auto* filterMsg = request->mutable_filter();
 
             TString filter = R"(

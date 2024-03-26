@@ -244,7 +244,9 @@ public:
 
                         for (size_t i = 0; i < filterColumnIds.size(); i++) {
                             auto &columnId = filterColumnIds[i];
-                            if (value.Cells()[columnId].AsBuf() != filterColumnValues.GetCells()[i].AsBuf()) {
+                            int cmp = CompareTypedCells(value.Cells()[columnId], filterColumnValues.GetCells()[i], value.Types[columnId]);
+
+                            if (cmp != 0) {
                                 matches = false;
                                 break;
                             }

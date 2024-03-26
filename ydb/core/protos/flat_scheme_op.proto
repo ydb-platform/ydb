@@ -1293,12 +1293,11 @@ message TMoveIndex {
     optional bool AllowOverwrite = 4;
 }
 
-message TSetVal {
-    optional sint64 NextValue = 1;
-    optional bool NextUsed = 2;
-}
-
 message TSequenceDescription {
+    message TSetVal {
+        optional sint64 NextValue = 1;
+        optional bool NextUsed = 2;
+    }
     optional string Name = 1; // mandatory
     optional NKikimrProto.TPathID PathId = 2; // sequence path id, assigned by schemeshard
     optional uint64 Version = 3; // incremented every time sequence is altered
@@ -1619,6 +1618,7 @@ message TDescribeOptions {
     optional bool ShowPrivateTable = 7 [default = false];
     optional bool ReturnChannelsBinding = 8 [default = false];
     optional bool ReturnRangeKey = 9 [default = true];
+    optional bool ReturnSetVal = 10 [default = false];
 }
 
 // Request to read scheme for a specific path

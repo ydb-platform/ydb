@@ -333,12 +333,11 @@ message TableProfile {
     CachingPolicy caching_policy = 7;
 }
 
-message SetVal {
-    optional sint64 next_value = 1;
-    optional bool next_used = 2;
-}
-
 message SequenceDescription {
+    message SetVal {
+        optional sint64 next_value = 1;
+        optional bool next_used = 2;
+    }
     optional string name = 1; // mandatorys
     optional sint64 min_value = 2; // minimum value, defaults to 1 or Min<i64>
     optional sint64 max_value = 3; // maximum value, defaults to Max<i64> or -1

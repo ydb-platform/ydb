@@ -533,7 +533,7 @@ resource "ydb_table_index" "ydb_table_index" {
   cover = ["e"]
   type = "global_sync"
 
-  depends_on = [ydb_table.ydb_table] #ссылка на ресурс создания таблицы.
+  depends_on = [ydb_table.ydb_table] # ссылка на ресурс создания таблицы
 }
 ```
 

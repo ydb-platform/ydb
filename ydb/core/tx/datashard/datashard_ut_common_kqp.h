@@ -11,6 +11,9 @@ namespace NKqpHelpers {
     using TEvExecuteDataQueryRequest = NKikimr::NGRpcService::TGrpcRequestOperationCall<Ydb::Table::ExecuteDataQueryRequest,
         Ydb::Table::ExecuteDataQueryResponse>;
 
+    using TEvExecuteSchemeQueryRequest = NKikimr::NGRpcService::TGrpcRequestOperationCall<Ydb::Table::ExecuteSchemeQueryRequest,
+        Ydb::Table::ExecuteSchemeQueryResponse>;
+
     using TEvCreateSessionRequest = NKikimr::NGRpcService::TGrpcRequestOperationCall<Ydb::Table::CreateSessionRequest,
         Ydb::Table::CreateSessionResponse>;
 
@@ -222,6 +225,31 @@ namespace NKqpHelpers {
         response.operation().result().UnpackTo(&result);
         Y_ABORT_UNLESS(result.tx_meta().id().empty(), "must be empty transaction");
         return FormatResult(result);
+    }
+
+    inline Ydb::Table::ExecuteSchemeQueryRequest MakeSchemeRequestRPC(
+        const TString& sql, const TString& sessionId)
+    {
+        Ydb::Table::ExecuteSchemeQueryRequest request;
+        request.set_session_id(sessionId);
+        request.set_yql_text(sql);
+        return request;
+    }
+
+    inline NThreading::TFuture<Ydb::Table::ExecuteSchemeQueryResponse> SendRequest(
+        TTestActorRuntime& runtime, Ydb::Table::ExecuteSchemeQueryRequest&& request, const TString& database = {})
+    {
+        return NRpcService::DoLocalRpc<TEvExecuteSchemeQueryRequest>(
+            std::move(request), database, /* token */ "", runtime.GetActorSystem(0));
+    }
+
+    inline TString KqpSchemeExec(TTestActorRuntime& runtime, const TString& query) {
+        TString sessionId = CreateSessionRPC(runtime);
+        auto response = AwaitResponse(runtime, SendRequest(runtime, MakeSchemeRequestRPC(query, sessionId)));
+        if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
+            return TStringBuilder() << "ERROR: " << response.operation().status();
+        }
+        return "SUCCESS";
     }
 
 } // namespace NKqpHelpers

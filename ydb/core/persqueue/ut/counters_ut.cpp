@@ -7,6 +7,7 @@
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/testlib/fake_scheme_shard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/keyvalue/keyvalue_events.h>
 namespace NKikimr::NPQ {
 
 namespace {
@@ -119,7 +120,6 @@ Y_UNIT_TEST(PartitionWriteQuota) {
     TVector<std::pair<ui64, TString>> data;
     TString s{32_KB, 'c'};
     data.push_back({1, s});
-    TVector<std::function<void()>> validators;
     tc.Runtime->SetObserverFunc(
         [&](TAutoPtr<IEventHandle>& ev) {
             if (auto* msg = ev->CastAsLocal<TEvQuota::TEvRequest>()) {
@@ -196,6 +196,49 @@ Y_UNIT_TEST(PartitionFirstClass) {
     }
 }
 
+Y_UNIT_TEST(SupportivePartitionCountersPersist) {
+    TTestContext tc;
+
+    TFinalizer finalizer(tc);
+    bool activeZone{false};
+    tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, false, true);
+    tc.Runtime->SetScheduledLimit(100);
+    tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableQuoting(true);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 30_KB}, {}, tc);
+    TVector<std::pair<ui64, TString>> data;
+    TString s{32_KB, 'c'};
+    data.push_back({1, s});
+    tc.Runtime->SetObserverFunc(
+        [&](TAutoPtr<IEventHandle>& ev) {
+            if (auto* msg = ev->CastAsLocal<TEvQuota::TEvRequest>()) {
+                Cerr << "Captured kesus quota request event from " << ev->Sender.ToString() << Endl;
+                tc.Runtime->Send(new IEventHandle(
+                    ev->Sender, TActorId{},
+                    new TEvQuota::TEvClearance(TEvQuota::TEvClearance::EResult::Success), 0, ev->Cookie)
+                );
+                return TTestActorRuntimeBase::EEventAction::DROP;
+            } else if (auto* msg = ev->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+                Cerr << "Captured TEvRequest, cmd write size: " << msg->Record.CmdWriteSize() << Endl;
+                for (auto& w : msg->Record.GetCmdWrite()) {
+                    if (w.GetKey().StartsWith("J")) {
+                        NKikimrPQ::TPartitionMeta meta;
+                        bool res = meta.ParseFromString(w.GetValue());
+                        UNIT_ASSERT(res);
+                        UNIT_ASSERT(meta.HasCounterData());
+                        Cerr << "Write meta: " << meta.GetCounterData().ShortDebugString() << Endl;
+                    }
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+    for (auto i = 0u; i < 6; i++) {
+        CmdWrite(0, "sourceid0", data, tc);
+        data[0].first++;
+    }
+    PQGetPartInfo(0, 6, tc);
+}
 } // Y_UNIT_TEST_SUITE(PQCountersSimple)
 
 Y_UNIT_TEST_SUITE(PQCountersLabeled) {
@@ -507,6 +550,7 @@ Y_UNIT_TEST(ImportantFlagSwitching) {
         CheckLabeledCountersResponse(tc, 8, MakeTopics({"user/1"}));
     });
 }
+
 } // Y_UNIT_TEST_SUITE(PQCountersLabeled)
 
 } // namespace NKikimr::NPQ

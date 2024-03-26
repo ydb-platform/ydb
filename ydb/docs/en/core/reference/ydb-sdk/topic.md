@@ -1370,6 +1370,72 @@ Usually reading progress is saved on server within each Consumer. Though such pr
 
 {% endlist %}
 
+### Reading in transaction {#read-tx}
+
+{% list tabs %}
+
+- Java (sync)
+
+  Transaction can be set in `ReceiveSettings` for `receive` method:
+
+  ```java
+  Message message = reader.receive(ReceiveSettings.newBuilder()
+          .setTransaction(transaction)
+          .build());
+  ```
+  Such received message will be committed with this transaction. And shouldn't be committed directly.
+  `receive` method will send `sendUpdateOffsetsInTransaction` request on server to link message offset with this transaction and will be blocked until the response will be received.
+
+  Transaction requirements:
+  It should be an active transaction (that has id) from one of YDB services. I.e. Table or Query.
+
+- Java (async)
+  In `onMessages` one or more messages can be linked with transaction.
+  To do that request `reader.updateOffsetsInTransaction` should be called. And transaction chould not be committed untill response is received.
+  This merhod needs partition offsets list as a parameter.
+  Such list can be constructed manually or via helper method `getPartitionOffsets()` that `Message` and `DataReceivedEvent` both have.
+
+  ```java
+  @Override
+        public void onMessages(DataReceivedEvent event) {
+            for (Message message : event.getMessages()) {
+                // creating session in table service
+                Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
+                if (!sessionResult.isSuccess()) {
+                    logger.error("Couldn't get session from pool: {}", sessionResult);
+                    return; // retry or shutdown
+                }
+                Session session = sessionResult.getValue();
+                // creating transaction in table service
+                // this transaction is not yet active and has no id
+                TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+
+                // do something else in transaction
+                transaction.executeDataQuery("SELECT 1").join();
+                // now transaction is active and has id
+                // analyzeQueryResultIfNeeded();
+
+                Status updateStatus = reader.updateOffsetsInTransaction(transaction,
+                                message.getPartitionOffsets(), new UpdateOffsetsInTransactionSettings.Builder().build())
+                        // Do not commit transaction without waiting for updateOffsetsInTransaction result to avoid race condition
+                        .join();
+                if (!updateStatus.isSuccess()) {
+                    logger.error("Couldn't update offsets in transaction: {}", updateStatus);
+                    return; // retry or shutdown
+                }
+
+                Status commitStatus = transaction.commit().join();
+                analyzeCommitStatus(commitStatus);
+            }
+        }
+  ```
+
+  Transaction requirements:
+  It should be an active transaction (that has id) from one of YDB services. I.e. Table or Query.
+
+{% endlist %}
+
+
 ### Processing a server read interrupt {#stop}
 
 {{ ydb-short-name }} uses server-based partition balancing between clients. This means that the server can interrupt the reading of messages from random partitions.

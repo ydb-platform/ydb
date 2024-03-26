@@ -1,6 +1,12 @@
 ### Реализовать OLAP: как мы делали колоночное хранение в {{ ydb-short-name }} {#2023-conf-hl-olap}
 
+<div style="display:flex; flex-direction: row; justify-content: flex-start; flex-wrap: wrap; column-gap: 10px;">
+
 {% include notitle [overview_tag](../../tags.md#overview) %}
+
+{% include notitle [database_internals_tag](../../tags.md#database_internals) %}
+
+<div>
 
 {{ ydb-short-name }} – это платформа, которая умеет обрабатывать большой поток быстрых транзакций (OLTP, Online Transaction Processing). Команда, в которой работает {{ team.novozhilova.name }} ({{ team.novozhilova.position }}) захотела научить YDB обрабатывать другой тип запросов — аналитические (OLAP, Online Analytical Processing). 
 
@@ -42,7 +48,13 @@
 
 ### YDB Topic Service: как мы повышали производительность очереди сообщений {#2023-conf-hl-ydb-topic}
 
+<div style="display:flex; flex-direction: row; justify-content: flex-start; flex-wrap: wrap; column-gap: 10px;">
+
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
+
+{% include notitle [testing_tag](../../tags.md#testing) %}
+
+<div>
 
 5 лет назад Яндекс перешел с Kafka на собственную разработку поверх YDB. С тех пор Yandex Topic Service сильно подрос по нагрузке и вышел в Open Source. В этом докладе {{ team.zivaykin.name }} ({{ team.zivaykin.position }}) рассказывает про ускорение YDB Topic Service и приводит сравнение с конкурентами.
 

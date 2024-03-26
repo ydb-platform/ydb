@@ -287,6 +287,7 @@ public:
     }
 
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& /*columnIds*/) const override {
+        AFL_VERIFY(false);
         return 0;
     }
 

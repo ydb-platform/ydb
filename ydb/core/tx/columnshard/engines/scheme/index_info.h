@@ -138,6 +138,7 @@ public:
 
     /// Makes schema as set of the special columns.
     static std::shared_ptr<arrow::Schema> ArrowSchemaSnapshot();
+    static ui64 GetSpecialColumnsRecordSize();
 
     /// Matches name of the filed with names of the special columns.
     static bool IsSpecialColumn(const arrow::Field& field);

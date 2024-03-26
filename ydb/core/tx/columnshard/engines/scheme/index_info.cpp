@@ -48,6 +48,10 @@ std::shared_ptr<arrow::RecordBatch> TIndexInfo::AddSpecialColumns(const std::sha
     return *res;
 }
 
+ui64 TIndexInfo::GetSpecialColumnsRecordSize() {
+    return sizeof(ui64) + sizeof(ui64);
+}
+
 std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchemaSnapshot() {
     static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(arrow::FieldVector{
         arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()),

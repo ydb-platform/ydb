@@ -38,6 +38,9 @@ struct TS3Request {
     TString Buffer;
 };
 
+// TODO try to batch
+// TODO add external way to configure retries
+// TODO add sensors
 class TS3Writer
     : public TActor<TS3Writer>
 {
@@ -137,10 +140,6 @@ class TS3Writer
         TActor::PassAway();
     }
 
-    void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev) {
-        CB_LOG_D("Handle " << ev->Get()->ToString());
-    }
-
     void Handle(TEvWorker::TEvData::TPtr& ev) {
         CB_LOG_D("Handle " << ev->Get()->ToString());
 
@@ -208,7 +207,6 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, Handle);
-            hFunc(NChangeExchange::TEvChangeExchange::TEvRequestRecords, Handle);
             hFunc(TEvExternalStorage::TEvPutObjectResponse, Handle);
             sFunc(TEvents::TEvWakeup, SendS3Request);
             sFunc(TEvents::TEvPoison, PassAway);

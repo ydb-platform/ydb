@@ -14,7 +14,7 @@
 
 namespace NKikimr::NReplication::NService {
 
-Y_UNIT_TEST_SUITE(LocalTableWriter) {
+Y_UNIT_TEST_SUITE(S3Writer) {
     using namespace NTestHelpers;
 
     Y_UNIT_TEST(WriteTableS3) {
@@ -86,6 +86,8 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
                                  R"({"key":[2], "update":{"value":"20"}})" "\n"
                                  R"({"key":[3], "update":{"value":"30"}})" "\n");
     }
+
+    // TODO test all retry behavior
 }
 
 }

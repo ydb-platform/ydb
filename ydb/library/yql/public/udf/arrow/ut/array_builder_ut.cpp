@@ -108,10 +108,8 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
         const auto item1AfterRead = blockReader->GetItem(*datum.array(), 0);
         const auto item2AfterRead = blockReader->GetItem(*datum.array(), 1);
 
-        UNIT_ASSERT_VALUES_EQUAL_C(item1.AsStringRef(), item1AfterRead.GetEmbeddedStringRef(), 
-            "Expected UnboxedValue to equal to BlockItem");
-        UNIT_ASSERT_VALUES_EQUAL_C(item2.AsStringRef(), item2AfterRead.GetEmbeddedStringRef(), 
-            "Expected UnboxedValue to equal to BlockItem");
+        UNIT_ASSERT_C(std::memcmp(item1.GetRawPtr(), item1AfterRead.GetRawPtr(), sizeof(TBlockItem)) == 0, "Expected UnboxedValue to equal to BlockItem");
+        UNIT_ASSERT_C(std::memcmp(item2.GetRawPtr(), item2AfterRead.GetRawPtr(), sizeof(TBlockItem)) == 0, "Expected UnboxedValue to equal to BlockItem");
     }
     
     Y_UNIT_TEST(TestBoxedResourceReader) {

@@ -7,6 +7,7 @@
 
 namespace NYql::NUdf {
 
+// ABI stable
 class TBlockItem {
     using EMarkers = TUnboxedValuePod::EMarkers;
 
@@ -86,11 +87,6 @@ public:
         return TStringRef(Raw.String.Value, Raw.String.Size);
     }
 
-    inline TStringRef GetEmbeddedStringRef() const {
-        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::Embedded);
-        return TStringRef(Raw.Embedded.Buffer, Raw.Embedded.Size);
-    }
-
     inline TBlockItem MakeOptional() const
     {
         if (Raw.Simple.Meta)
@@ -120,6 +116,11 @@ public:
     }
 
     inline void* GetRawPtr()
+    {
+        return &Raw;
+    }
+
+    inline const void* GetRawPtr() const
     {
         return &Raw;
     }

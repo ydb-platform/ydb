@@ -321,18 +321,16 @@ T FromBlockItemDefault(TBlockItem item) {
 };
 }
 
-template<typename TLayout, bool Nullable, 
-TLayout FromUnboxedValuePod(TUnboxedValuePod) = FromUnboxedValuePodDefault, 
-TLayout FromBlockItem(TBlockItem) = FromBlockItemDefault>
-class TFixedSizeArrayBuilder final : public TArrayBuilderBase {
+template<typename TLayout, bool Nullable, typename TDerived>
+class TFixedSizeArrayBuilderBase : public TArrayBuilderBase {
 public:
-    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen)
+    TFixedSizeArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen)
         : TArrayBuilderBase(typeInfoHelper, std::move(arrowType), pool, maxLen)
     {
         Reserve();
     }
 
-    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen)
+    TFixedSizeArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen)
         : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen)
     {
         Reserve();
@@ -353,22 +351,19 @@ public:
     void DoAdd(NUdf::TUnboxedValuePod value) final {
         if constexpr (Nullable) {
             if (!value) {
-                NullPtr[GetCurrLen()] = 0;
-                return DoAdd(TLayout{});
+                return DoAddDefault();
             }
         }
-        DoAdd(FromUnboxedValuePod(value));
+        static_cast<TDerived*>(this)->DoAddNotNull(value);
     }
 
     void DoAdd(TBlockItem value) final {
         if constexpr (Nullable) {
             if (!value) {
-                NullPtr[GetCurrLen()] = 0;
-                return DoAdd(TLayout{});
+                return DoAddDefault();
             }
-            NullPtr[GetCurrLen()] = 1;
         }
-        DoAdd(FromBlockItem(value));
+        static_cast<TDerived*>(this)->DoAddNotNull(value);
     }
 
     void DoAdd(TBlockItem value, size_t count) final {
@@ -381,30 +376,23 @@ public:
             std::fill(NullPtr + GetCurrLen(), NullPtr + GetCurrLen() + count, 1);
         }
 
-        if constexpr (std::is_trivially_copy_assignable_v<TLayout>) {
-            std::fill(DataPtr + GetCurrLen(), DataPtr + GetCurrLen() + count, FromBlockItem(value));
-        } else {
-            const auto blockItem = FromBlockItem(value);
-            for (size_t i = 0; i < count; ++i) {
-                ::new(DataPtr + GetCurrLen() + i) TLayout(blockItem);
-            }
-        }
+        static_cast<TDerived*>(this)->DoAddNotNull(value, count);
     }
 
     void DoAdd(TInputBuffer &input) final {
         if constexpr (Nullable) {
             if (!input.PopChar()) {
-                return DoAdd(TBlockItem{});
+                return DoAddDefault();
             }
         }
-        DoAdd(input.PopNumber<TLayout>());
+        PlaceItem(input.PopNumber<TLayout>());
     }
 
     void DoAddDefault() final {
         if constexpr (Nullable) {
             NullPtr[GetCurrLen()] = 1;
         }
-        DoAdd(TLayout{});
+        PlaceItem(TLayout{});
     }
 
     void DoAddMany(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {
@@ -473,6 +461,13 @@ public:
         }
         return result;
     }
+    
+protected:
+    void PlaceItem(TLayout&& value)  {
+        ::new(DataPtr + GetCurrLen()) TLayout(std::move(value));
+    }
+
+    TLayout* DataPtr = nullptr;
 
 private:
     void Reserve() {
@@ -486,14 +481,66 @@ private:
         }
     }
 
-    void DoAdd(TLayout&& value)  {
-        ::new(DataPtr + GetCurrLen()) TLayout(std::move(value));
-    }
-
     std::unique_ptr<TTypedBufferBuilder<ui8>> NullBuilder;
     std::unique_ptr<TTypedBufferBuilder<TLayout>> DataBuilder;
     ui8* NullPtr = nullptr;
-    TLayout* DataPtr = nullptr;
+};
+
+template<typename TLayout, bool Nullable>
+class TFixedSizeArrayBuilder final: public TFixedSizeArrayBuilderBase<TLayout, Nullable, TFixedSizeArrayBuilder<TLayout, Nullable>> {
+    using TDerived = TFixedSizeArrayBuilder<TLayout, Nullable>;
+
+public:
+    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen)
+        : TFixedSizeArrayBuilderBase<TLayout, Nullable, TDerived>(typeInfoHelper, std::move(arrowType), pool, maxLen)
+    {}
+
+    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen)
+        : TFixedSizeArrayBuilderBase<TLayout, Nullable, TDerived>(typeInfoHelper, type, pool, maxLen)
+    {}
+    void DoAddNotNull(TUnboxedValuePod value) {
+        this->PlaceItem(value.Get<TLayout>());
+    }
+    void DoAddNotNull(TBlockItem value) {
+        this->PlaceItem(value.Get<TLayout>());
+    }
+
+    void DoAddNotNull(TBlockItem value, size_t count) {
+        std::fill(this->DataPtr + this->GetCurrLen(), this->DataPtr + this->GetCurrLen() + count, value.Get<TLayout>());
+    }
+};
+
+template<bool Nullable>
+class TResourceArrayBuilder final: public TFixedSizeArrayBuilderBase<TUnboxedValue, Nullable, TResourceArrayBuilder<Nullable>> {
+public:
+    TResourceArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen)
+        : TFixedSizeArrayBuilderBase<TUnboxedValue, Nullable, TResourceArrayBuilder<Nullable>>(typeInfoHelper, std::move(arrowType), pool, maxLen)
+    {}
+
+    TResourceArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen)
+        : TFixedSizeArrayBuilderBase<TUnboxedValue, Nullable, TResourceArrayBuilder<Nullable>>(typeInfoHelper, type, pool, maxLen)
+    {}
+
+    void DoAddNotNull(TUnboxedValuePod value) {
+        this->PlaceItem(TUnboxedValue(value));
+    }
+    
+    TUnboxedValue FromBlockItem(TBlockItem item) {
+        TUnboxedValue val;
+        std::memcpy(val.GetRawPtr(), item.GetRawPtr(), sizeof(val));
+        val.Ref();
+        return val;
+    }
+
+    void DoAddNotNull(TBlockItem item) {
+        this->PlaceItem(FromBlockItem(item));
+    }
+
+    void DoAddNotNull(TBlockItem item, size_t count) {
+        for (size_t i = 0; i < count; ++i) {
+            ::new(this->DataPtr + this->GetCurrLen() + i) TUnboxedValue(FromBlockItem(item));
+        }
+    }
 };
 
 template<typename TStringType, bool Nullable, EPgStringType PgString = EPgStringType::None>
@@ -1116,25 +1163,6 @@ std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderBase(
     size_t maxBlockLength, const IPgBuilder* pgBuilder);
 
 template<bool Nullable>
-std::unique_ptr<TArrayBuilderBase> MakeResourceArrayBuilder(
-    const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, 
-    size_t maxLen) {
-
-    using TBuilder = TFixedSizeArrayBuilder<TUnboxedValue, Nullable, 
-        [] (TUnboxedValuePod pod) {
-            return TUnboxedValue(pod);
-        },
-        [] (TBlockItem item) {
-            TUnboxedValue val;
-            std::memcpy(val.GetRawPtr(), item.GetRawPtr(), sizeof(val));
-            val.Ref();
-            return val;
-        }>;
-
-    return std::make_unique<TBuilder>(typeInfoHelper, type, pool, maxLen);
-}
-
-template<bool Nullable>
 inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(
     const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, 
     size_t maxLen, const IPgBuilder* pgBuilder) {
@@ -1198,7 +1226,7 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(
     
     TResourceTypeInspector resource(typeInfoHelper, type);
     if (resource) {
-        return MakeResourceArrayBuilder<Nullable>(typeInfoHelper, type, pool, maxLen);
+        return std::make_unique<TResourceArrayBuilder<Nullable>>(typeInfoHelper, type, pool, maxLen);
     }
 
     TPgTypeInspector typePg(typeInfoHelper, type);

@@ -104,6 +104,17 @@ public:
     }
 };
 
+namespace {
+    TBlockItem ConvertToBlockItemResource(TUnboxedValuePod pod) {
+        TBlockItem item;
+        std::memcpy(item.GetRawPtr(), pod.GetRawPtr(), sizeof(TBlockItem));
+        return item;
+    }
+}
+
+template<bool Nullable>
+using TResourceBlockReader = TFixedSizeBlockReader<TUnboxedValuePod, Nullable, ConvertToBlockItemResource>;
+
 template<typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot TOriginal = NKikimr::NUdf::EDataSlot::String>
 class TStringBlockReader final : public IBlockReader {
 public:
@@ -374,10 +385,8 @@ struct TReaderTraits {
     template <typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot TOriginal>
     using TStrings = TStringBlockReader<TStringType, Nullable, TOriginal>;
     using TExtOptional = TExternalOptionalBlockReader;
-    
-    static const bool ImplementedForResources = true;
-    template <typename T, bool Nullable, TBlockItem ToBlockItem(T)>
-    using TResource = TFixedSizeBlockReader<T, Nullable, ToBlockItem>;
+    template<bool Nullable>
+    using TResource = TResourceBlockReader<Nullable>;
 
     static std::unique_ptr<TResult> MakePg(const TPgTypeDescription& desc, const IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
@@ -385,6 +394,14 @@ struct TReaderTraits {
             return std::make_unique<TFixedSize<ui64, true>>();
         } else {
             return std::make_unique<TStrings<arrow::BinaryType, true, NKikimr::NUdf::EDataSlot::String>>();
+        }
+    }
+
+    static std::unique_ptr<TResult> MakeResource(bool isOptional) {
+        if (isOptional) {
+            return std::make_unique<TResource<true>>();
+        } else {
+            return std::make_unique<TResource<false>>();
         }
     }
 };
@@ -407,20 +424,6 @@ std::unique_ptr<typename TTraits::TResult> MakeFixedSizeBlockReaderImpl(bool isO
     }
 }
 
-template <typename TTraits, typename T>
-std::unique_ptr<typename TTraits::TResult> MakeResourceBlockReaderImpl(bool isOptional) {
-    const auto toBlockItem = [] (TUnboxedValuePod uv) {
-        TBlockItem item;
-        std::memcpy(item.GetRawPtr(), uv.GetRawPtr(), sizeof(TBlockItem));
-        return item;
-    };
-
-    if (isOptional) {
-        return std::make_unique<typename TTraits::template TResource<T, true, toBlockItem>>();
-    } else {
-        return std::make_unique<typename TTraits::template TResource<T, false, toBlockItem>>();
-    }
-}
 
 template <typename TTraits, typename T, NKikimr::NUdf::EDataSlot TOriginal>
 std::unique_ptr<typename TTraits::TResult> MakeStringBlockReaderImpl(bool isOptional) {
@@ -529,12 +532,11 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
         }
     }
 
-    if constexpr (TTraits::ImplementedForResources) {
-        TResourceTypeInspector resource(typeInfoHelper, type);
-        if (resource) {
-            return MakeResourceBlockReaderImpl<TTraits, TUnboxedValuePod>(isOptional);
-        }
+    TResourceTypeInspector resource(typeInfoHelper, type);
+    if (resource) {
+        return TTraits::MakeResource(isOptional);
     }
+
     TPgTypeInspector typePg(typeInfoHelper, type);
     if (typePg) {
         auto desc = typeInfoHelper.FindPgTypeDescription(typePg.GetTypeId());

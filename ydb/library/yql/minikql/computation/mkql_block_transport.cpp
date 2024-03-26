@@ -503,7 +503,6 @@ struct TSerializerTraits {
     template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>
     using TStrings = TStringBlockSerializer<TStringType, Nullable>;
     using TExtOptional = TExtOptionalBlockSerializer;
-    static const bool ImplementedForResources = false;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
@@ -511,6 +510,11 @@ struct TSerializerTraits {
             return std::make_unique<TFixedSize<ui64, true>>();
         }
         return std::make_unique<TStrings<arrow::BinaryType, true>>();
+    }
+
+    static std::unique_ptr<TResult> MakeResource(bool isOptional) {
+        Y_UNUSED(isOptional);
+        ythrow yexception() << "Serializer not implemented for block resources";
     }
 };
 
@@ -523,7 +527,6 @@ struct TDeserializerTraits {
     template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>
     using TStrings = TStringBlockDeserializer<TStringType, Nullable>;
     using TExtOptional = TExtOptionalBlockDeserializer;
-    static const bool ImplementedForResources = false;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
@@ -531,6 +534,11 @@ struct TDeserializerTraits {
             return std::make_unique<TFixedSize<ui64, true>>();
         }
         return std::make_unique<TStrings<arrow::BinaryType, true>>();
+    }
+
+    static std::unique_ptr<TResult> MakeResource(bool isOptional) {
+        Y_UNUSED(isOptional);
+        ythrow yexception() << "Deserializer not implemented for block resources";
     }
 };
 

@@ -51,7 +51,7 @@ public:
     void ExecuteTxMonitoring(NMon::TEvRemoteHttpInfo::TPtr ev);
     void ExecuteTxStoreMetrics(TMetricsData&& data);
     void ExecuteTxAggregateData(const TAggregateSettings& settings);
-    void ExecuteTxGetMetrics(TEvGraph::TEvGetMetrics::TPtr ev);
+    void ExecuteTxGetMetrics(TEvGraph::TEvGetMetrics::TPtr& ev);
     void ExecuteTxChangeBackend(EBackendType backend);
 
     STATEFN(StateWork);

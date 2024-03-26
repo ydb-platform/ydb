@@ -6,10 +6,10 @@ namespace NGraph {
 
 class TTxGetMetrics : public TTransactionBase<TGraphShard> {
 private:
-    TEvGraph::TEvGetMetrics::TPtr Event;
+    TEvGraph::TEvGetMetrics::TPtr& Event;
     NKikimrGraph::TEvMetricsResult Result;
 public:
-    TTxGetMetrics(TGraphShard* shard, TEvGraph::TEvGetMetrics::TPtr ev)
+    TTxGetMetrics(TGraphShard* shard, TEvGraph::TEvGetMetrics::TPtr& ev)
         : TBase(shard)
         , Event(ev)
     {}
@@ -28,7 +28,7 @@ public:
     }
 };
 
-void TGraphShard::ExecuteTxGetMetrics(TEvGraph::TEvGetMetrics::TPtr ev) {
+void TGraphShard::ExecuteTxGetMetrics(TEvGraph::TEvGetMetrics::TPtr& ev) {
     switch (BackendType) {
         case EBackendType::Memory: {
             NKikimrGraph::TEvMetricsResult result;

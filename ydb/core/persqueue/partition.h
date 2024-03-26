@@ -121,6 +121,7 @@ private:
     void FailBadClient(const TActorContext& ctx);
     void FillReadFromTimestamps(const TActorContext& ctx);
     void FilterDeadlinedWrites(const TActorContext& ctx);
+    void FilterDeadlinedWrites(const TActorContext& ctx, std::deque<TMessage>& requests);
 
     void Handle(NReadQuoterEvents::TEvAccountQuotaCountersUpdated::TPtr& ev, const TActorContext& ctx);
     void Handle(NReadQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const TActorContext& ctx);

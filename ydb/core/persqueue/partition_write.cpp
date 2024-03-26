@@ -1455,6 +1455,7 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
 }
 
 void TPartition::SetDeadlinesForWrites(const TActorContext& ctx) {
+    DBGTRACE("TPartition::SetDeadlinesForWrites");
     PQ_LOG_T("TPartition::SetDeadlinesForWrites.");
     if (AppData(ctx)->PQConfig.GetQuotingConfig().GetQuotaWaitDurationMs() > 0 && QuotaDeadline == TInstant::Zero()) {
         QuotaDeadline = ctx.Now() + TDuration::MilliSeconds(AppData(ctx)->PQConfig.GetQuotingConfig().GetQuotaWaitDurationMs());
@@ -1476,7 +1477,7 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant, const
     PQ_LOG_T("TPartition::ProcessWrites.");
     FilterDeadlinedWrites(ctx);
 
-//    if (/*WaitingForPreviousBlobQuota() || */WaitingForSubDomainQuota(ctx)) { // Waiting for topic quota.
+//    if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota(ctx)) { // Waiting for topic quota.
 //        DBGTRACE_LOG("no changes");
 //        SetDeadlinesForWrites(ctx);
 //        return false;
@@ -1533,17 +1534,11 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant, const
     return true;
 }
 
-void TPartition::FilterDeadlinedWrites(const TActorContext& ctx) {
+void TPartition::FilterDeadlinedWrites(const TActorContext& ctx, std::deque<TMessage>& requests)
+{
     DBGTRACE("TPartition::FilterDeadlinedWrites");
-    DBGTRACE_LOG("QuotaDeadline=" << QuotaDeadline << ", now=" << ctx.Now());
-    if (QuotaDeadline == TInstant::Zero() || QuotaDeadline > ctx.Now()) {
-        DBGTRACE_LOG("return");
-        return;
-    }
-    PQ_LOG_T("TPartition::FilterDeadlinedWrites.");
-
     std::deque<TMessage> newRequests;
-    for (auto& w : Requests) {
+    for (auto& w : requests) {
         if (!w.IsWrite() || w.GetWrite().Msg.IgnoreQuotaDeadline) {
             newRequests.emplace_back(std::move(w));
             continue;
@@ -1558,7 +1553,21 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx) {
 
         ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::OVERLOAD, "quota exceeded");
     }
-    Requests = std::move(newRequests);
+    requests = std::move(newRequests);
+}
+
+void TPartition::FilterDeadlinedWrites(const TActorContext& ctx) {
+    DBGTRACE("TPartition::FilterDeadlinedWrites");
+    DBGTRACE_LOG("QuotaDeadline=" << QuotaDeadline << ", now=" << ctx.Now());
+    if (QuotaDeadline == TInstant::Zero() || QuotaDeadline > ctx.Now()) {
+        DBGTRACE_LOG("return");
+        return;
+    }
+    PQ_LOG_T("TPartition::FilterDeadlinedWrites.");
+
+    FilterDeadlinedWrites(ctx, PendingRequests);
+    FilterDeadlinedWrites(ctx, Requests);
+
     QuotaDeadline = TInstant::Zero();
     DBGTRACE_QUEUES();
 
@@ -1634,7 +1643,7 @@ bool TPartition::RequestBlobQuota()
 void TPartition::HandlePendingRequests(const TActorContext& ctx)
 {
     DBGTRACE("TPartition::HandlePendingRequests");
-    if (WaitingForPreviousBlobQuota()) {
+    if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota(ctx)) {
         DBGTRACE_LOG("waiting for blob quota");
         return;
     }

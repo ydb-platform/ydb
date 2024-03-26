@@ -137,7 +137,7 @@ ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp
 
 void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error) {
     DBGTRACE("TPartition::ReplyError");
-    DBGTRACE_LOG("error=" << error);
+    DBGTRACE_LOG("dst=" << dst << ", error=" << error);
     ReplyPersQueueError(
         dst == 0 ? ctx.SelfID : Tablet, ctx, TabletID, TopicName(), Partition,
         TabletCounters, NKikimrServices::PERSQUEUE, dst, errorCode, error, true
@@ -2703,7 +2703,7 @@ void TPartition::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext
 //            if (CurrentStateFunc() == &TThis::StateIdle) {
 //                HandleWrites(ctx);
 //            }
-            HandleRequests(ctx);
+            HandlePendingRequests(ctx);
         }
     }
 }

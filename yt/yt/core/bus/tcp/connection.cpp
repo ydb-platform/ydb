@@ -328,7 +328,7 @@ void TTcpConnection::TryEnqueueHandshake()
 
 TSharedRefArray TTcpConnection::MakeHandshakeMessage(const NProto::THandshake& handshake)
 {
-    auto protoSize = handshake.ByteSize();
+    auto protoSize = handshake.ByteSizeLong();
     auto totalSize = sizeof(HandshakeMessageSignature) + protoSize;
 
     TSharedRefArrayBuilder builder(1, totalSize);

@@ -42,9 +42,6 @@
 
 </div>
 
-
-</div>
-
 <div style="display:flex; flex-direction:row; column-gap: 10px;">
 
 {% include notitle [testing_tag](./_includes/tags.md#testing) %}
@@ -52,7 +49,6 @@
 <p> – кейсы тестирования производительности {{ ydb-short-name }} и сравнения с другими одноклассовыми СУБД.</p>
 
 </div>
-
 
 
 {% list tabs %}
@@ -64,8 +60,6 @@
     {% include [JPoint](./_includes/conferences/2023/JPoint.md) %}
 
     {% include [YaTalks](./_includes/conferences/2023/YaTalks.md) %}
-
-    {% include [Fossasia](./_includes/conferences/2023/Fossasia.md) %}
 
     {% include [Webinars](./_includes/webinars/2023/webinars.md) %}
 

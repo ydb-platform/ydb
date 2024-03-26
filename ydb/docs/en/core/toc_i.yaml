@@ -31,6 +31,5 @@ items:
 # Footer
 - { name: Questions and answers,                        include: { mode: link, path: faq/toc_p.yaml } }
 - include: { mode: link, path: downloads/toc_p.yaml }
-- name: Public talks
-  href: public-talks.md
+- { name: Public talks,                                     include: { mode: link, path: public-talks/toc_p.yaml } }
 - { name: Changelog,                                     include: { mode: link, path: toc_changelog.yaml } }

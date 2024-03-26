@@ -99,15 +99,3 @@
 Доклад будет интересен разработчикам на Go и тимлидам. 
 
 [Слайды доклада](https://disk.yandex.ru/i/hPK4BTpN_22rZw)
-
-### Scale it easy: YDB's high performance in a nutshell (EN) {#2023-conf-hl-serbia-scale}
-
-{% include notitle [database_internals_tag](../../tags.md#database_internals) %}
-
-Реализация распределённой базы данных с сильной согласованностью не является сложной задачей. Сложность заключается в обеспечении скорости и масштабируемости. YDB отличается в этих аспектах. [{{ team.ivanov.name }}]({{ team.ivanov.profile }}) ({{ team.ivanov.position }}) рассказал об архитектуре YDB, показал на результатах бенчмарков её высокую производительность и сравнил YDB с конкурентами.
-
-@[YouTube](https://youtu.be/iMjq96GQTHQ?si=moMbI3Je90s3zY60)
-
-Доклад будет интересен разработчикам нагруженных систем и разработчикам платформ различного назначения.
-
-[Слайды доклада](https://www.dropbox.com/scl/fi/p7yeo3ic06vcxjmfa7mua/4.Scale-it-easy-YDB-s-high-performance-in-a-nutshell_Evgeniy-Ivanov-Yandex-_ver.4.pdf?rlkey=r5dmdh614jz48wmdg8jbs6uw2&dl=0)

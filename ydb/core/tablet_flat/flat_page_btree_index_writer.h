@@ -476,9 +476,7 @@ namespace NKikimr::NTable::NPage {
 
         void DoFlush(ui32 levelIndex, IPageWriter &pager, bool last) {
             Writer.EnsureEmpty();
-            auto prevDataSize = Levels[levelIndex].GetPrevDataSize();
-            auto prevRowCount = Levels[levelIndex].GetPrevRowCount();
-
+            
             if (last) {
                 // Note: for now we build last nodes from all remaining level's keys
                 // we may to try splitting them more evenly later
@@ -488,6 +486,9 @@ namespace NKikimr::NTable::NPage {
                     Writer.AddKey(Levels[levelIndex].PopKey());
                 }
             } else {
+                auto prevDataSize = Levels[levelIndex].GetPrevDataSize();
+                auto prevRowCount = Levels[levelIndex].GetPrevRowCount();
+
                 while (Writer.GetKeysCount() < NodeKeysMin || (
                     // can add more to writer if:
                         Levels[levelIndex].GetKeysCount() > 2 &&

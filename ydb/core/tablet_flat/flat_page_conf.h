@@ -63,11 +63,11 @@ namespace NPage {
         ui32 PageRows = Max<ui32>();    /* Max rows per page, for UTs   */
         ui32 IndexMin = 32 * 1024;      /* Index initial buffer size    */
 
-        ui32 BTreeIndexNodeTargetSize = 7 * 1024;   /* 1 GB of (up to) 140B keys leads to 3-level B-Tree index */
-        ui32 BTreeIndexNodeKeysMin = 6;             /* 1 GB of 7KB keys leads to 6-level B-Tree index (node size - ~42KB) */
-        ui32 BTreeIndexNodeKeysMax = Max<ui32>();   /* for UTs */
-        ui32 BTreeIndexLeafDataSizeMax = 1024*1024; /* gDbStatsDataSizeResolution / gDbStatsResolutionMultiplier */
-        ui32 BTreeIndexLeafRowsCountMax = 10000;    /* gDbStatsRowCountResolution / gDbStatsResolutionMultiplier */
+        ui32 BTreeIndexNodeTargetSize = 7 * 1024;     /* 1 GB of (up to) 140B keys leads to 3-level B-Tree index */
+        ui32 BTreeIndexNodeKeysMin = 6;               /* 1 GB of 7KB keys leads to 6-level B-Tree index (node size - ~42KB) */
+        ui32 BTreeIndexNodeKeysMax = Max<ui32>();     /* for UTs */
+        ui32 BTreeIndexLeafDataSizeMax = 1024 * 1024; /* gDbStatsDataSizeResolution / gDbStatsResolutionMultiplier */
+        ui32 BTreeIndexLeafRowsCountMax = 10000;      /* gDbStatsRowCountResolution / gDbStatsResolutionMultiplier */
     };
 
     struct TConf {

@@ -536,22 +536,6 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
 
     //All ok
     auto now = ctx.Now();
-    const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
-    if (WriteQuotaTrackerActor) {
-        ui64 size = 0;
-
-        if (quotingConfig.GetTopicWriteQuotaEntityToLimit() == NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE) {
-            size = WriteNewSize;
-        } else {
-            size = WriteCycleSize;
-        }
-        if (TopicQuotaConsumedCookie == 0) {
-            Send(WriteQuotaTrackerActor, new TEvPQ::TEvConsumed(size));
-        } else {
-            Send(WriteQuotaTrackerActor, new TEvPQ::TEvConsumed(size, TopicQuotaConsumedCookie, {}));
-        }
-        TopicQuotaConsumedCookie = 0;
-    }
     for (auto& avg : AvgWriteBytes) {
         avg.Update(WriteNewSize, now);
     }
@@ -1681,6 +1665,7 @@ void TPartition::RequestBlobQuota(size_t quotaSize)
     Y_ABORT_UNLESS(!WaitingForPreviousBlobQuota());
 
     TopicQuotaRequestCookie = NextTopicWriteQuotaRequestCookie++;
+    BlobQuotaSize = quotaSize;
     RequestQuotaForWriteBlobRequest(quotaSize, TopicQuotaRequestCookie);
 }
 
@@ -1697,6 +1682,16 @@ void TPartition::WritePendingBlob(THolder<TEvKeyValue::TEvRequest> request) {
 #else
     Send(Tablet, request.Release());
 #endif
+}
+
+void TPartition::ConsumeBlobQuota()
+{
+    if (!WriteQuotaTrackerActor) {
+        return;
+    }
+
+    Y_ABORT_UNLESS(TopicQuotaRequestCookie != 0);
+    Send(WriteQuotaTrackerActor, new TEvPQ::TEvConsumed(BlobQuotaSize, TopicQuotaRequestCookie, {}));
 }
 
 } // namespace NKikimr::NPQ

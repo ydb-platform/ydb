@@ -2599,7 +2599,7 @@ void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorConte
 
     // Search for proper request
     Y_ABORT_UNLESS(TopicQuotaRequestCookie == cookie);
-    TopicQuotaConsumedCookie = cookie;
+    ConsumeBlobQuota();
     TopicQuotaRequestCookie = 0;
     RemoveQuotaWaitingRequests();
 
@@ -2673,9 +2673,6 @@ void TPartition::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext
         );
 
         if (!SubDomainOutOfSpace) {
-//            if (CurrentStateFunc() == &TThis::StateIdle) {
-//                HandleWrites(ctx);
-//            }
             HandlePendingRequests(ctx);
         }
     }

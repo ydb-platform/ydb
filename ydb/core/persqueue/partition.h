@@ -213,6 +213,7 @@ private:
     void RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie);
     bool RequestBlobQuota();
     void RequestBlobQuota(size_t quotaSize);
+    void ConsumeBlobQuota();
     void WritePendingBlob(THolder<TEvKeyValue::TEvRequest> request);
     void UpdateAfterWriteCounters(bool writeComplete);
     void UpdateUserInfoEndOffset(const TInstant& now);
@@ -778,7 +779,7 @@ private:
     // Writing blob with topic quota variables
     ui64 TopicQuotaRequestCookie = 0;
     ui64 NextTopicWriteQuotaRequestCookie = 1;
-    ui64 TopicQuotaConsumedCookie = 0;
+    ui64 BlobQuotaSize = 0;
 
     // Wait topic quota metrics
     ui64 TotalPartitionWriteSpeed = 0;

@@ -79,6 +79,14 @@ namespace NKikimr::NBsController {
                 }
             }
 
+            void ApplyPDiskDiff(const TPDiskId &pdiskId, const TPDiskInfo &prev, const TPDiskInfo &cur) {
+                if (prev.PDiskConfig != cur.PDiskConfig) {
+                    // PDisk's config has changed
+                    NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk *pdisk = CreatePDiskEntry(pdiskId, cur);
+                    pdisk->SetEntityStatus(NKikimrBlobStorage::RESTART);
+                }
+            }
+
             void ApplyPDiskDeleted(const TPDiskId &pdiskId, const TPDiskInfo &pdiskInfo) {
                 DeletedPDiskIds.insert(pdiskId);
                 TNodeInfo *nodeInfo = Self->FindNode(pdiskId.NodeId);

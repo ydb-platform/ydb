@@ -211,7 +211,7 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
     bool returnBackupInfo = Params.GetBackupInfo();
     bool returnBoundaries = false;
     bool returnRangeKey = true;
-    bool returnSetVal = Params.GetReturnSetVal();
+    bool returnSetVal = Params.GetOptions().GetReturnSetVal();
     if (Params.HasOptions()) {
         returnConfig = Params.GetOptions().GetReturnPartitionConfig();
         returnPartitioning = Params.GetOptions().GetReturnPartitioningInfo();

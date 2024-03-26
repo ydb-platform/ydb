@@ -68,7 +68,6 @@ public:
     }
 
     const TMaybe<TString> GetPeerMetaValues(const TString&) const override {
-        Y_ABORT("Unimplemented");
         return TMaybe<TString>{};
     }
 

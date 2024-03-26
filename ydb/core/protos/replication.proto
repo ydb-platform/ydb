@@ -1,11 +1,12 @@
 import "ydb/core/scheme/protos/pathid.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 
 package NKikimrReplication;
 option java_package = "ru.yandex.kikimr.proto";
 
 message TStaticCredentials {
     optional string User = 1;
-    optional string Password = 2;
+    optional string Password = 2 [(Ydb.sensitive) = true];
 }
 
 message TConnectionParams {
@@ -14,7 +15,7 @@ message TConnectionParams {
     // credentials
     oneof Credentials {
         TStaticCredentials StaticCredentials = 3;
-        string OAuthToken = 4;
+        string OAuthToken = 4 [(Ydb.sensitive) = true];
     }
 }
 

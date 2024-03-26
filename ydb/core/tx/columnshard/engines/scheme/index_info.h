@@ -43,7 +43,7 @@ private:
     THashMap<ui32, TColumnFeatures> ColumnFeatures;
     THashMap<ui32, std::shared_ptr<arrow::Field>> ArrowColumnByColumnIdCache;
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
-    std::map<NStatistics::TIdentifier, NStatistics::TOperatorContainer> Statistics;
+    std::map<TString, NStatistics::TOperatorContainer> StatisticsByName;
     TIndexInfo(const TString& name);
     bool SchemeNeedActualization = false;
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators);
@@ -78,14 +78,15 @@ public:
 
     std::vector<std::shared_ptr<IPortionDataChunk>> MakeEmptyChunks(const ui32 columnId, const std::vector<ui32>& pages, const TSimpleColumnInfo& columnInfo) const;
 
-    const std::map<NStatistics::TIdentifier, NStatistics::TOperatorContainer>& GetStatistics() const {
-        return Statistics;
+    const std::map<TString, NStatistics::TOperatorContainer>& GetStatisticsByName() const {
+        return StatisticsByName;
     }
 
     NStatistics::TOperatorContainer GetStatistics(const NStatistics::TIdentifier& id) const {
-        auto it = Statistics.find(id);
-        if (it != Statistics.end()) {
-            return it->second;
+        for (auto&& i : StatisticsByName) {
+            if (i.second->GetIdentifier() == id) {
+                return i.second;
+            }
         }
         return NStatistics::TOperatorContainer();
     }
@@ -117,11 +118,6 @@ public:
         }
         return GetColumnStorageId(entityId, specialTier);
     }
-
-    enum class ESpecialColumn : ui32 {
-        PLAN_STEP = NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP_INDEX,
-        TX_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_TX_ID_INDEX
-    };
 
     TString DebugString() const {
         TStringBuilder sb;
@@ -309,16 +305,6 @@ public:
 
     std::shared_ptr<NArrow::TSortDescription> SortDescription() const;
     std::shared_ptr<NArrow::TSortDescription> SortReplaceDescription() const;
-
-    static const std::vector<std::string>& GetSpecialColumnNames() {
-        static const std::vector<std::string> result = { std::string(SPEC_COL_PLAN_STEP), std::string(SPEC_COL_TX_ID) };
-        return result;
-    }
-
-    static const std::vector<ui32>& GetSpecialColumnIds() {
-        static const std::vector<ui32> result = {(ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID};
-        return result;
-    }
 
     static const std::set<ui32>& GetSpecialColumnIdsSet() {
         static const std::set<ui32> result(GetSpecialColumnIds().begin(), GetSpecialColumnIds().end());

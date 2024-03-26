@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/data_locks/locks/abstract.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/composite.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
+#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/common/address.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/portions/with_blobs.h>
@@ -197,6 +198,7 @@ public:
     };
 private:
     EStage Stage = EStage::Created;
+    std::shared_ptr<NDataLocks::TManager::TGuard> LockGuard;
 protected:
     virtual void DoDebugString(TStringOutput& out) const = 0;
     virtual void DoCompile(TFinalizationContext& context) = 0;

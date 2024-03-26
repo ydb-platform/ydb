@@ -74,6 +74,7 @@ namespace NSequenceShard {
         struct TTxFreezeSequence;
         struct TTxRestoreSequence;
         struct TTxRedirectSequence;
+        struct TTxGetSequence;
 
         void RunTxInitSchema(const TActorContext& ctx);
         void RunTxInit(const TActorContext& ctx);
@@ -100,6 +101,7 @@ namespace NSequenceShard {
         void Handle(TEvSequenceShard::TEvFreezeSequence::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvSequenceShard::TEvRestoreSequence::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvSequenceShard::TEvRedirectSequence::TPtr& ev, const TActorContext& ctx);
+        void Handle(TEvSequenceShard::TEvGetSequence::TPtr& ev, const TActorContext& ctx);
 
     private:
         struct TPipeInfo {

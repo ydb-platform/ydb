@@ -30,16 +30,16 @@ from (select i_category
           and d_month_seq between 1185 and 1185+11
        group by  rollup(i_category, i_class, i_brand, i_product_name, d_year, d_qoy, d_moy,s_store_id))dw1) dw2
 where rk <= 100
-order by i_category
-        ,i_class
-        ,i_brand
-        ,i_product_name
-        ,d_year
-        ,d_qoy
-        ,d_moy
-        ,s_store_id
-        ,sumsales
-        ,rk
+order by i_category nulls first
+        ,i_class nulls first
+        ,i_brand nulls first
+        ,i_product_name nulls first
+        ,d_year nulls first
+        ,d_qoy nulls first
+        ,d_moy nulls first
+        ,s_store_id nulls first
+        ,sumsales nulls first
+        ,rk nulls first
 limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query67.tpl

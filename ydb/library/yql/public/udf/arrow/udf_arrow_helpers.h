@@ -408,6 +408,84 @@ struct TBinaryKernelExec {
     }
 };
 
+template <typename TDerived, size_t Argc>
+struct TGenericKernelExec {
+    static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        auto& state = dynamic_cast<TUdfKernelState&>(*ctx->state());
+        Y_ENSURE(batch.num_values() == Argc);
+        // XXX: Since Arrow arrays ought to have the valid length value, use
+        // this constant to check whether all the arrays in the given batch have
+        // the same length and also as an indicator whether there is no array
+        // arguments in the given batch.
+        int64_t alength = arrow::Datum::kUnknownLength;
+        // XXX: Allocate fixed-size buffer to pass the parameters into the
+        // Process routine (stored into BlockItem), since only the content
+        // of the particular cells will be updated in the main "process" loop.
+        std::array<TBlockItem, Argc> args;
+        const TBlockItem items(args.data());
+        // XXX: Introduce scalar/array mapping to avoid excess scalar copy ops
+        // in the main "process" loop.
+        std::array<bool, Argc> needUpdate;
+        needUpdate.fill(false);
+
+        for (size_t k = 0; k < Argc; k++) {
+            auto& arg = batch[k];
+            Y_ENSURE(arg.is_scalar() || arg.is_array());
+            if (arg.is_scalar()) {
+                continue;
+            }
+            if (alength == arrow::Datum::kUnknownLength) {
+                alength = arg.length();
+            } else {
+                Y_ENSURE(arg.length() == alength);
+            }
+            needUpdate[k] = true;
+        }
+        // Specialize the case, when all given arguments are scalar.
+        if (alength == arrow::Datum::kUnknownLength) {
+            auto& builder = state.GetScalarBuilder();
+            for (size_t k = 0; k < Argc; k++) {
+                args[k] = state.GetReader(k).GetScalarItem(*batch[k].scalar());
+            }
+            TDerived::Process(items, [&](TBlockItem out) {
+                *res = builder.Build(out);
+            });
+        } else {
+            auto& builder = state.GetArrayBuilder();
+            size_t maxBlockLength = builder.MaxLength();
+            Y_ENSURE(maxBlockLength > 0);
+            TVector<std::shared_ptr<arrow::ArrayData>> outputArrays;
+            // Initialize all scalar arguments before the main "process" loop.
+            for (size_t k = 0; k < Argc; k++) {
+                if (needUpdate[k]) {
+                    continue;
+                }
+                args[k] = state.GetReader(k).GetScalarItem(*batch[k].scalar());
+            }
+            for (int64_t i = 0; i < alength;) {
+                for (size_t j = 0; j < maxBlockLength && i < alength; ++j, ++i) {
+                    // Update array arguments and call the Process routine.
+                    for (size_t k = 0; k < Argc; k++) {
+                        if (!needUpdate[k]) {
+                            continue;
+                        }
+                        args[k] = state.GetReader(k).GetItem(*batch[k].array(), i);
+                    }
+                    TDerived::Process(items, [&](TBlockItem out) {
+                        builder.Add(out);
+                    });
+                }
+                auto outputDatum = builder.Build(false);
+                ForEachArrayData(outputDatum, [&](const auto& arr) { outputArrays.push_back(arr); });
+            }
+
+            *res = MakeArray(outputArrays);
+        }
+
+        return arrow::Status::OK();
+    }
+};
+
 template <typename TInput, typename TOutput, TOutput(*Core)(TInput)>
 arrow::Status UnaryPreallocatedExecImpl(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
     Y_UNUSED(ctx);

@@ -892,7 +892,8 @@ TMemoryUsageChange TWriteSessionImpl::OnMemoryUsageChangedImpl(i64 diff) {
 
 TBuffer CompressBuffer(std::shared_ptr<TPersQueueClient::TImpl> client, TVector<TStringBuf>& data, ECodec codec, i32 level) {
     TBuffer result;
-    THolder<IOutputStream> coder = client->GetCodecImplOrThrow(codec)->CreateCoder(result, level);
+    Y_UNUSED(client);
+    THolder<IOutputStream> coder = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow((ui32)codec)->CreateCoder(result, level);
     for (auto& buffer : data) {
         coder->Write(buffer.data(), buffer.size());
     }

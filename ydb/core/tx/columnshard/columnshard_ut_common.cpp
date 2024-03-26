@@ -1,7 +1,7 @@
 #include "columnshard_ut_common.h"
 
-#include "columnshard__stats_scan.h"
 #include "common/tests/shard_reader.h"
+#include "engines/reader/sys_view/chunks/chunks.h"
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
@@ -174,7 +174,7 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vec
 
     // Schema: pathId, kind, rows, bytes, rawBytes. PK: {pathId, kind}
     //record.SetSchemaVersion(0);
-    auto ydbSchema = PrimaryIndexStatsSchema;
+    auto ydbSchema = NOlap::NReader::NSysView::NChunks::TStatsIterator::StatsSchema;
     for (const auto& col : ydbSchema.Columns) {
         record.AddColumnTags(col.second.Id);
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(col.second.PType, col.second.PTypeMod);
@@ -410,7 +410,7 @@ namespace NKikimr::NColumnShard {
 
         auto storage = std::make_shared<NOlap::TTestStoragesManager>();
         storage->Initialize();
-        indexInfo.SetAllKeys(std::make_shared<NOlap::TTestStoragesManager>());
+        indexInfo.SetAllKeys(NOlap::TTestStoragesManager::GetInstance());
         return indexInfo;
     }
 

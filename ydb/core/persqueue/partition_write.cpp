@@ -140,7 +140,7 @@ void TPartition::FailBadClient(const TActorContext& ctx) {
     TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(WriteNewSize);
     Responses.clear();
 
-    ProcessChangeOwnerRequests(ctx);
+    StartProcessChangeOwnerRequests(ctx);
     ProcessReserveRequests(ctx);
 }
 
@@ -157,6 +157,7 @@ void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, c
             return ReplyError(ctx, ev->Cookie, NPersQueue::NErrorCode::SOURCEID_DELETED, "SourceId isn't registered");
         }
     }
+
     if (it->second.NeedResetOwner || ev->Force) { //change owner
         Y_ABORT_UNLESS(ReservedSize >= it->second.ReservedSize);
         ReservedSize -= it->second.ReservedSize;
@@ -356,10 +357,10 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 ", SeqNo: " << seqNo << ", partNo: " << partNo <<
                 ", Offset: " << offset << " is " << (already ? "already written" : "stored on disk")
             );
+
             if (PartitionWriteQuotaWaitCounter) {
                 PartitionWriteQuotaWaitCounter->IncFor(PartitionQuotaWaitTimeForCurrentBlob.MilliSeconds());
             }
-
             if (!already && partNo + 1 == totalParts && !writeResponse.Msg.HeartbeatVersion)
                 ++offset;
         } else if (response.IsOwnership()) {
@@ -489,6 +490,27 @@ void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContex
     HandleWriteResponse(ctx);
 }
 
+void TPartition::UpdateAfterWriteCounters(bool writeComplete) {
+    if (IsSupportive() == writeComplete) {
+        // If supportive - update counters only prior to write, otherwise - only after writes;
+        return;
+    }
+    if (BytesWrittenGrpc)
+        BytesWrittenGrpc.Inc(WriteNewSizeInternal);
+    if (BytesWrittenTotal)
+        BytesWrittenTotal.Inc(WriteNewSize);
+
+    if (BytesWrittenUncompressed)
+        BytesWrittenUncompressed.Inc(WriteNewSizeUncompressed);
+    if (BytesWrittenComp)
+        BytesWrittenComp.Inc(WriteCycleSize);
+    if (MsgsWrittenGrpc)
+        MsgsWrittenGrpc.Inc(WriteNewMessagesInternal);
+    if (MsgsWrittenTotal) {
+        MsgsWrittenTotal.Inc(WriteNewMessages);
+    }
+}
+
 void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::HandleWriteResponse.");
     Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateWrite);
@@ -507,19 +529,8 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_OK].Increment(WriteNewSize);
     TabletCounters.Percentile()[COUNTER_PQ_WRITE_CYCLE_BYTES].IncrementFor(WriteCycleSize);
     TabletCounters.Percentile()[COUNTER_PQ_WRITE_NEW_BYTES].IncrementFor(WriteNewSize);
-    if (BytesWrittenGrpc)
-        BytesWrittenGrpc.Inc(WriteNewSizeInternal);
-    if (BytesWrittenTotal)
-        BytesWrittenTotal.Inc(WriteNewSize);
 
-    if (BytesWrittenUncompressed)
-        BytesWrittenUncompressed.Inc(WriteNewSizeUncompressed);
-    if (BytesWrittenComp)
-        BytesWrittenComp.Inc(WriteCycleSize);
-    if (MsgsWrittenGrpc)
-        MsgsWrittenGrpc.Inc(WriteNewMessagesInternal);
-    if (MsgsWrittenTotal)
-        MsgsWrittenTotal.Inc(WriteNewMessages);
+    UpdateAfterWriteCounters(true);
 
     //All ok
     auto now = ctx.Now();
@@ -808,6 +819,15 @@ std::pair<TKey, ui32> TPartition::Compact(const TKey& key, const ui32 size, bool
     return res;
 }
 
+void TPartition::StartProcessChangeOwnerRequests(const TActorContext& ctx)
+{
+    ctx.Send(ctx.SelfID, new TEvPQ::TEvProcessChangeOwnerRequests());
+}
+
+void TPartition::Handle(TEvPQ::TEvProcessChangeOwnerRequests::TPtr&, const TActorContext& ctx)
+{
+    ProcessChangeOwnerRequests(ctx);
+}
 
 void TPartition::ProcessChangeOwnerRequests(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::ProcessChangeOwnerRequests.");
@@ -821,6 +841,7 @@ void TPartition::ProcessChangeOwnerRequests(const TActorContext& ctx) {
         }
         WaitToChangeOwner.pop_front();
     }
+
     if (CurrentStateFunc() == &TThis::StateIdle) {
         HandleWrites(ctx);
     }
@@ -1042,7 +1063,7 @@ TPartition::ProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParame
         if (InputTimeLag) {
             InputTimeLag->IncFor(writeLagMs, 1);
             if (p.Msg.PartNo == 0) {
-                MessageSize->IncFor(p.Msg.TotalSize + p.Msg.SourceId.size(), 1);
+                MessageSize.IncFor(p.Msg.TotalSize + p.Msg.SourceId.size(), 1);
             }
         }
 
@@ -1425,8 +1446,9 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant, const
     Y_ABORT_UNLESS(!PendingWriteRequest);
     QuotaDeadline = TInstant::Zero();
 
-    if (Requests.empty())
+    if (Requests.empty()) {
         return false;
+    }
 
     Y_ABORT_UNLESS(request->Record.CmdWriteSize() == 0);
     Y_ABORT_UNLESS(request->Record.CmdRenameSize() == 0);
@@ -1544,13 +1566,6 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
 
     ProcessReserveRequests(ctx);
     if (!haveData && !haveDrop && !haveCheckDisk) { //no data writed/deleted
-        if (!Requests.empty()) { //there could be change ownership requests that
-            bool res = ProcessWrites(request.Get(), now, ctx);
-            Y_ABORT_UNLESS(!res);
-        }
-        Y_ABORT_UNLESS(Requests.empty()
-                    || WaitingForPreviousBlobQuota()
-                    || WaitingForSubDomainQuota(ctx)); //in this case all writes must be processed or no quota left
         AnswerCurrentWrites(ctx); //in case if all writes are already done - no answer will be called on kv write, no kv write at all
         BecomeIdle(ctx);
         return;
@@ -1609,6 +1624,7 @@ void TPartition::RequestBlobQuota() {
 }
 
 void TPartition::WritePendingBlob() {
+    UpdateAfterWriteCounters(false);
     Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateWrite);
     Y_ABORT_UNLESS(PendingWriteRequest);
 

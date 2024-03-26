@@ -1931,6 +1931,20 @@
             "uri": "https://{canondata_backend}/1923547/94f377eaa1d93890e1345ac4940cc6fa07bddd4f/resource.tar.gz#test.test_pg-cbo_pragma1-default.txt-Plan_/plan.txt"
         }
     ],
+    "test.test[pg-join_using_tables2-default.txt-Debug]": [
+        {
+            "checksum": "a7d514ec76f25e8f85f892fc5da8f742",
+            "size": 4559,
+            "uri": "https://{canondata_backend}/1936273/9193d75f8d6b5367c9ef3700c0a94d57ec6a3352/resource.tar.gz#test.test_pg-join_using_tables2-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg-join_using_tables2-default.txt-Plan]": [
+        {
+            "checksum": "71cdb9f88024897318d55e55464fe9b1",
+            "size": 7043,
+            "uri": "https://{canondata_backend}/1936273/9193d75f8d6b5367c9ef3700c0a94d57ec6a3352/resource.tar.gz#test.test_pg-join_using_tables2-default.txt-Plan_/plan.txt"
+        }
+    ],
     "test.test[pg-order_by_agg_input_columns_prj_and_aggr-default.txt-Debug]": [
         {
             "checksum": "666b13e951ff59ae081fdda076199c1b",

@@ -315,6 +315,19 @@ TRestoreResult TRestoreClient::CheckSchema(const TString& dbPath, const TTableDe
     return Result<TRestoreResult>();
 }
 
+struct TWriterWaiter {
+    NPrivate::IDataWriter& Writer;
+
+    TWriterWaiter(NPrivate::IDataWriter& writer)
+        : Writer(writer)
+    {
+    }
+
+    ~TWriterWaiter() {
+        Writer.Wait();
+    }
+};
+
 TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const TTableDescription& desc) {
     if (desc.GetAttributes().contains(DOC_API_TABLE_VERSION_ATTR) && settings.SkipDocumentTables_) {
         return Result<TRestoreResult>();
@@ -354,6 +367,7 @@ TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString&
         }
     }
 
+    TWriterWaiter waiter(*writer);
     ui32 dataFileId = 0;
     TFsPath dataFile = fsPath.Child(DataFileName(dataFileId));
 
@@ -388,8 +402,6 @@ TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString&
             return Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR, "Cannot write data #3");
         }
     }
-
-    writer->Wait();
 
     return Result<TRestoreResult>();
 }

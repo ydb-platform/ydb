@@ -212,6 +212,10 @@ public:
         const Ydb::Table::TransactionSettings& txSettings) = 0;
 
     virtual NThreading::TFuture<TQueryResult> ExplainGenericQuery(const TString& cluster, const TString& query) = 0;
+
+    virtual NThreading::TFuture<TQueryResult> StreamExecGenericQuery(const TString& cluster, const TString& query,
+         TQueryData::TPtr params, const TAstQuerySettings& settings,
+        const Ydb::Table::TransactionSettings& txSettings, const NActors::TActorId& target) = 0;
 };
 
 TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, NKikimrKqp::EQueryType queryType, const TString& database,

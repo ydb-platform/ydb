@@ -82,6 +82,8 @@ class TPartition : public TActorBootstrapped<TPartition> {
 
     friend TPartitionSourceManager;
 
+    friend class TPartitionTestWrapper;
+
 public:
     const TString& TopicName() const;
 
@@ -207,7 +209,7 @@ private:
     void RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie);
     void RequestBlobQuota();
     void WritePendingBlob();
-
+    void UpdateAfterWriteCounters(bool writeComplete);
     void UpdateUserInfoEndOffset(const TInstant& now);
     void UpdateWriteBufferIsFullState(const TInstant& now);
 
@@ -354,6 +356,9 @@ private:
 
     TString LogPrefix() const;
 
+    void Handle(TEvPQ::TEvProcessChangeOwnerRequests::TPtr& ev, const TActorContext& ctx);
+    void StartProcessChangeOwnerRequests(const TActorContext& ctx);
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_PARTITION_ACTOR;
@@ -493,6 +498,7 @@ private:
             HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
+            HFuncTraced(TEvPQ::TEvProcessChangeOwnerRequests, Handle);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;
@@ -550,6 +556,7 @@ private:
             HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
+            HFuncTraced(TEvPQ::TEvProcessChangeOwnerRequests, Handle);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateWrite", ev));
             break;
@@ -738,18 +745,22 @@ private:
     TInstant WriteTimestampEstimate;
     bool ManageWriteTimestampEstimate = true;
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteLagMs;
+
+    //ToDo - counters.
     THolder<TPercentileCounter> InputTimeLag;
-    THolder<TPercentileCounter> MessageSize;
+    TPartitionHistogramWrapper MessageSize;
     TPercentileCounter WriteLatency;
 
     NKikimr::NPQ::TMultiCounter SLIBigLatency;
     NKikimr::NPQ::TMultiCounter WritesTotal;
-    NKikimr::NPQ::TMultiCounter BytesWrittenTotal;
-    NKikimr::NPQ::TMultiCounter BytesWrittenGrpc;
-    NKikimr::NPQ::TMultiCounter BytesWrittenUncompressed;
+
+    TPartitionCounterWrapper BytesWrittenTotal;
+
+    TPartitionCounterWrapper BytesWrittenGrpc;
+    TPartitionCounterWrapper BytesWrittenUncompressed;
     NKikimr::NPQ::TMultiCounter BytesWrittenComp;
-    NKikimr::NPQ::TMultiCounter MsgsWrittenTotal;
-    NKikimr::NPQ::TMultiCounter MsgsWrittenGrpc;;
+    TPartitionCounterWrapper MsgsWrittenTotal;
+    TPartitionCounterWrapper MsgsWrittenGrpc;
 
     // Writing blob with topic quota variables
     ui64 TopicQuotaRequestCookie = 0;

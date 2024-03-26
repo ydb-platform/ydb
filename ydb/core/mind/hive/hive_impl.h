@@ -566,9 +566,11 @@ protected:
     void Handle(TEvPrivate::TEvProcessStorageBalancer::TPtr& ev);
     void Handle(TEvPrivate::TEvProcessIncomingEvent::TPtr& ev);
     void Handle(TEvHive::TEvUpdateDomain::TPtr& ev);
+    void Handle(TEvPrivate::TEvDeleteNode::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
+    bool TryToDeleteNode(TNodeInfo* node);
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -601,7 +603,7 @@ protected:
         {}
     };
 
-    TBestNodeResult FindBestNode(const TTabletInfo& tablet);
+    TBestNodeResult FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId = 0);
 
     struct TSelectedNode {
         double Usage;
@@ -645,7 +647,7 @@ public:
     void ReportDeletedToWhiteboard(const TLeaderTabletInfo& tablet);
     TTabletCategoryInfo& GetTabletCategory(TTabletCategoryId tabletCategoryId);
     void KillNode(TNodeId nodeId, const TActorId& local);
-    void AddToBootQueue(TTabletInfo* tablet);
+    void AddToBootQueue(TTabletInfo* tablet, TNodeId node = 0);
     void UpdateDomainTabletsTotal(const TSubDomainKey& objectDomain, i64 tabletsTotalDiff);
     void UpdateDomainTabletsAlive(const TSubDomainKey& objectDomain, i64 tabletsAliveDiff, const TSubDomainKey& tabletNodeDomain);
     void SetCounterTabletsTotal(ui64 tabletsTotal);

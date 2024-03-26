@@ -800,6 +800,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
     Y_UNIT_TEST(TestUuidDefaultColumn) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)

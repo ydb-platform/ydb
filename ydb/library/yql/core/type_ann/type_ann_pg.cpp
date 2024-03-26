@@ -619,6 +619,106 @@ IGraphTransformer::TStatus PgOpWrapper(const TExprNode::TPtr& input, TExprNode::
     }
 }
 
+IGraphTransformer::TStatus PgArrayOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+    const bool isResolved = input->Content().EndsWith("ResolvedOp");
+    if (!EnsureArgsCount(*input, 3 + (isResolved ? 1 : 0), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureAtom(input->Head(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isResolved) {
+        if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
+    auto name = input->Head().Content();
+
+    TVector<ui32> argTypes;
+    bool needRetype = false;
+    for (ui32 i = 1 + (isResolved ? 1 : 0); i < input->ChildrenSize(); ++i) {
+        auto type = input->Child(i)->GetTypeAnn();
+        ui32 argType;
+        bool convertToPg;
+        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (convertToPg) {
+            input->ChildRef(i) = ctx.Expr.NewCallable(input->Child(i)->Pos(), "ToPg", { input->ChildPtr(i) });
+            needRetype = true;
+        }
+
+        argTypes.push_back(argType);
+    }
+
+    if (needRetype) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    ui32 elemType = NPg::UnknownOid;
+    if (argTypes[1] && argTypes[1] != NPg::UnknownOid) {
+        const auto& typeDesc = NPg::LookupType(argTypes[1]);
+        if (!typeDesc.ArrayTypeId && typeDesc.ArrayTypeId != typeDesc.TypeId) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Expected array as right argument"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        elemType = typeDesc.ElementTypeId;
+    }
+
+    argTypes[1] = elemType;
+    if (isResolved) {
+        auto operId = FromString<ui32>(input->Child(1)->Content());
+        const auto& oper = NPg::LookupOper(operId, argTypes);
+        if (oper.Name != name) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Mismatch of resolved operator name, expected: " << name << ", but got:" << oper.Name));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto& opResDesc = NPg::LookupType(oper.ResultType);
+        if (opResDesc.Name != "bool") {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << 
+                "Expected boolean operator result, but got: " << opResDesc.Name));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto result = ctx.Expr.MakeType<TPgExprType>(oper.ResultType);
+        input->SetTypeAnn(result);
+        return IGraphTransformer::TStatus::Ok;
+    } else {
+        try {
+            const auto& oper = NPg::LookupOper(TString(name), argTypes);
+
+            if (oper.Kind != NYql::NPg::EOperKind::Binary) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Expected binary operator"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            auto children = input->ChildrenList();
+            if (IsCastRequired(argTypes[0], oper.LeftType)) {
+                children[1] = WrapWithPgCast(std::move(children[1]), oper.LeftType, ctx.Expr);
+            }
+            if (IsCastRequired(argTypes[1], oper.RightType)) {
+                auto arrayType = NPg::LookupType(oper.RightType).ArrayTypeId;
+                children[2] = WrapWithPgCast(std::move(children[2]), arrayType, ctx.Expr);
+            }
+
+            auto idNode = ctx.Expr.NewAtom(input->Pos(), ToString(oper.OperId));
+            children.insert(children.begin() + 1, idNode);
+            output = ctx.Expr.NewCallable(input->Pos(), input->Content() == "PgAnyOp" ? "PgAnyResolvedOp" : "PgAllResolvedOp", std::move(children));
+            return IGraphTransformer::TStatus::Repeat;
+        } catch (const yexception& e) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), e.what()));
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+}
+
 IGraphTransformer::TStatus PgWindowCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureMinArgsCount(*input, 3, ctx.Expr)) {

@@ -12,7 +12,7 @@ private:
     static inline const auto Registrator = TFactory::TRegistrator<TConstructor>(::ToString(EType::Max));
     YDB_READONLY(TString, ColumnName, 0);
 protected:
-    virtual TConclusion<TOperatorContainer> DoCreateOperator(const NSchemeShard::TOlapSchema& currentSchema) const override;
+    virtual TConclusion<std::shared_ptr<IOperator>> DoCreateOperator(const NSchemeShard::TOlapSchema& currentSchema) const override;
     virtual bool DoDeserializeFromProto(const NKikimrColumnShardStatisticsProto::TConstructorContainer& proto) override;
     virtual void DoSerializeToProto(NKikimrColumnShardStatisticsProto::TConstructorContainer& proto) const override;
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonData) override;

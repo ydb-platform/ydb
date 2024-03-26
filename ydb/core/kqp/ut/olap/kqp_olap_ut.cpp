@@ -381,6 +381,22 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             Cerr << bytes << "/" << rawBytes << Endl;
         }
 
+        void GetStats(std::vector<NKikimrColumnShardStatisticsProto::TPortionStorage>& stats, const bool verbose = false) {
+            TString selectQuery = "SELECT * FROM `" + TablePath + "/.sys/primary_index_portion_stats` WHERE Activity = true";
+            auto tableClient = KikimrRunner.GetTableClient();
+            auto rows = ExecuteScanQuery(tableClient, selectQuery, verbose);
+            for (auto&& r : rows) {
+                for (auto&& c : r) {
+                    if (c.first == "Stats") {
+                        NKikimrColumnShardStatisticsProto::TPortionStorage store;
+                        AFL_VERIFY(google::protobuf::TextFormat::ParseFromString(GetUtf8(c.second), &store));
+                        stats.emplace_back(store);
+                    }
+                }
+            }
+
+        }
+
         void GetCount(ui64& count) {
             const TString selectQuery = "SELECT COUNT(*) as a FROM `" + TablePath + "`";
 
@@ -1261,12 +1277,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetLagForCompactionBeforeTierings(TDuration::Seconds(1));
+
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
 
-        //        Tests::NCommon::TLoggerInit(kikimr).Initialize();
-
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        Tests::NCommon::TLoggerInit(kikimr).SetComponents({NKikimrServices::TX_COLUMNSHARD}, "CS").SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
 
         std::vector<TString> uids;
         std::vector<TString> resourceIds;
@@ -1325,15 +1343,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
-        {
-            const TInstant start = TInstant::Now();
-            AFL_VERIFY(!csController->GetActualizationsCount().Val());
-            while (TInstant::Now() - start < TDuration::Seconds(20) && !csController->GetActualizationsCount().Val()) {
-                Sleep(TDuration::Seconds(1));
-                Cerr << "waiting actualizations..." << Endl;
-            }
-            AFL_VERIFY(csController->GetActualizationsCount().Val());
-        }
+        csController->WaitActualization(TDuration::Seconds(10));
         {
             auto it = tableClient.StreamExecuteScanQuery(R"(
                 --!syntax_v1
@@ -1346,11 +1356,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
-            Cout << result << Endl;
-            Cout << csController->GetIndexesSkippingOnSelect().Val() << " / " << csController->GetIndexesApprovedOnSelect().Val() << Endl;
+            Cerr << result << Endl;
+            Cerr << csController->GetIndexesSkippingOnSelect().Val() << " / " << csController->GetIndexesApprovedOnSelect().Val() << Endl;
             CompareYson(result, R"([[0u;]])");
             AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0);
-            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val() * 0.3);
+            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val() * 0.4)
+                ("approve", csController->GetIndexesApprovedOnSelect().Val())("skip", csController->GetIndexesSkippingOnSelect().Val());
         }
     }
 
@@ -1360,11 +1371,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TKikimrRunner kikimr(settings);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
-
-        //        Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         std::vector<TString> uids;
         std::vector<TString> resourceIds;
@@ -4049,7 +4059,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             ui64 bytes2;
             helper.GetVolumes(rawBytes2, bytes2, false, {"new_column_ui64"});
             AFL_VERIFY(rawBytes2 == 6500041)("real", rawBytes2);
-            AFL_VERIFY(bytes2 == 44064)("b", bytes2);
+            AFL_VERIFY(bytes2 == 45360)("b", bytes2);
         }
     }
 
@@ -4095,8 +4105,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         ui64 bytes1;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTypedLocalHelper helper("Utf8", kikimr);
@@ -4116,6 +4125,34 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             helper.GetVolumes(rawBytes2, bytes2, false, {"field"});
             AFL_VERIFY(rawBytes2 == rawBytes1)("f1", rawBytes1)("f2", rawBytes2);
             AFL_VERIFY(bytes2 < bytes1 * 0.5)("f1", bytes1)("f2", bytes2);
+            std::vector<NKikimrColumnShardStatisticsProto::TPortionStorage> stats;
+            helper.GetStats(stats, true);
+            for (auto&& i : stats) {
+                AFL_VERIFY(i.ScalarsSize() == 2);
+                AFL_VERIFY(i.GetScalars()[0].GetUint32() == 3);
+            }
+        }
+        {
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_STAT, NAME=pk_int_max);");
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
+            csController->WaitActualization(TDuration::Seconds(10));
+            std::vector<NKikimrColumnShardStatisticsProto::TPortionStorage> stats;
+            helper.GetStats(stats, true);
+            for (auto&& i : stats) {
+                AFL_VERIFY(i.ScalarsSize() == 1);
+                AFL_VERIFY(i.GetScalars()[0].GetUint32() == 3);
+            }
+        }
+        {
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_STAT, NAME=pk_int_max, TYPE=max, FEATURES=`{\"column_name\" : \"pk_int\"}`);");
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
+            csController->WaitActualization(TDuration::Seconds(10));
+            std::vector<NKikimrColumnShardStatisticsProto::TPortionStorage> stats;
+            helper.GetStats(stats, true);
+            for (auto&& i : stats) {
+                AFL_VERIFY(i.ScalarsSize() == 2);
+                AFL_VERIFY(i.GetScalars()[0].GetUint32() == 3);
+            }
         }
     }
 

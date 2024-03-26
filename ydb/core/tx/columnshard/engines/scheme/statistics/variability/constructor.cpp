@@ -3,12 +3,12 @@
 
 namespace NKikimr::NOlap::NStatistics::NVariability {
 
-NKikimr::TConclusion<TOperatorContainer> TConstructor::DoCreateOperator(const NSchemeShard::TOlapSchema& currentSchema) const {
+NKikimr::TConclusion<std::shared_ptr<IOperator>> TConstructor::DoCreateOperator(const NSchemeShard::TOlapSchema& currentSchema) const {
     auto column = currentSchema.GetColumns().GetByName(ColumnName);
     if (!TOperator::IsAvailableType(column->GetType())) {
         return TConclusionStatus::Fail("incorrect type for stat calculation");
     }
-    return TOperatorContainer(std::make_shared<TOperator>(column->GetId()));
+    return std::make_shared<TOperator>(column->GetId());
 }
 
 bool TConstructor::DoDeserializeFromProto(const NKikimrColumnShardStatisticsProto::TConstructorContainer& proto) {

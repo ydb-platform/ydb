@@ -65,8 +65,8 @@ namespace NKikimr {
             }
 
         public:
-            TDeferredItemQueue(TRopeArena& arena, TBlobStorageGroupType gtype)
-                : TDeferredItemQueueBase<TDeferredItemQueue>(arena, gtype)
+            TDeferredItemQueue(TRopeArena& arena, TBlobStorageGroupType gtype, bool addHeader)
+                : TDeferredItemQueueBase<TDeferredItemQueue>(arena, gtype, addHeader)
             {}
         };
 
@@ -283,12 +283,12 @@ namespace NKikimr {
             , LastLsn(lastLsn)
             , It(it)
             , IsFresh(isFresh)
-            , IndexMerger(GType)
+            , IndexMerger(GType, HullCtx->AddHeader)
             , ReadBatcher(PDiskCtx->Dsk->ReadBlockSize,
                     PDiskCtx->Dsk->SeekTimeUs * PDiskCtx->Dsk->ReadSpeedBps / 1000000,
                     HullCtx->HullCompReadBatchEfficiencyThreshold)
             , Arena(&TRopeArenaBackend::Allocate)
-            , DeferredItems(Arena, HullCtx->VCtx->Top->GType)
+            , DeferredItems(Arena, HullCtx->VCtx->Top->GType, HullCtx->AddHeader)
             , Statistics(HullCtx)
             , RestoreDeadline(restoreDeadline)
             , PartitionKey(partitionKey)
@@ -466,7 +466,7 @@ namespace NKikimr {
                         parts[numParts++] = std::move(item.Parts[i]);
                     }
                     DeferredItems.AddReadDiskBlob(item.Cookie, TDiskBlob::CreateFromDistinctParts(&parts[0],
-                        &parts[numParts], item.Needed, item.BlobId.BlobSize(), Arena), item.Needed);
+                        &parts[numParts], item.Needed, item.BlobId.BlobSize(), Arena, HullCtx->AddHeader), item.Needed);
                     return ProcessReadBatcher(now);
                 }
 
@@ -574,7 +574,8 @@ namespace NKikimr {
                 WriterPtr = std::make_unique<TWriter>(HullCtx->VCtx, IsFresh ? EWriterDataType::Fresh : EWriterDataType::Comp,
                         ChunksToUse, PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
                         (ui32)PDiskCtx->Dsk->ChunkSize, PDiskCtx->Dsk->AppendBlockSize,
-                        (ui32)PDiskCtx->Dsk->BulkWriteBlockSize, LevelIndex->AllocSstId(), false, ReservedChunks, Arena);
+                        (ui32)PDiskCtx->Dsk->BulkWriteBlockSize, LevelIndex->AllocSstId(), false, ReservedChunks, Arena,
+                        HullCtx->AddHeader);
             }
 
             // if we have PartitionKey, check it is time to split partitions by PartitionKey
@@ -603,7 +604,8 @@ namespace NKikimr {
             ui32 inplacedDataSize = 0;
             const NMatrix::TVectorType partsToStore = TransformedItem->MemRec->GetLocalParts(GType);
             if (TransformedItem->DataMerger->GetType() == TBlobType::DiskBlob && !partsToStore.Empty()) {
-                inplacedDataSize = TDiskBlob::CalculateBlobSize(GType, TransformedItem->Key.LogoBlobID(), partsToStore);
+                inplacedDataSize = TDiskBlob::CalculateBlobSize(GType, TransformedItem->Key.LogoBlobID(), partsToStore,
+                    HullCtx->AddHeader);
             }
 
             // try to push item into SST; in case of failure there is not enough space to fit this item

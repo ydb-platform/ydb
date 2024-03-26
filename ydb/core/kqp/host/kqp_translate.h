@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/library/yql/core/pg_settings/guc_settings.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -9,12 +10,13 @@ namespace NKqp {
 class TKqpTranslationSettingsBuilder {
 public:
     TKqpTranslationSettingsBuilder(NYql::EKikimrQueryType queryType, ui16 kqpYqlSyntaxVersion, const TString& cluster,
-            const TString& queryText, const NSQLTranslation::EBindingsMode& bindingsMode)
+            const TString& queryText, const NSQLTranslation::EBindingsMode& bindingsMode, const TGUCSettings::TPtr& gUCSettings)
         : QueryType(queryType)
         , KqpYqlSyntaxVersion(kqpYqlSyntaxVersion)
         , Cluster(cluster)
         , QueryText(queryText)
         , BindingsMode(bindingsMode)
+        , GUCSettings(gUCSettings)
     {}
 
     NSQLTranslation::TTranslationSettings Build(NYql::TExprContext& ctx);
@@ -59,11 +61,6 @@ public:
         return *this;
     }
 
-    TKqpTranslationSettingsBuilder& SetPerStatementResult(const bool value) {
-        PerStatementResult = value;
-        return *this;
-    }
-
 private:
     const NYql::EKikimrQueryType QueryType;
     const ui16 KqpYqlSyntaxVersion;
@@ -76,10 +73,10 @@ private:
     bool IsEnableExternalDataSources = false;
     bool IsEnablePgConstsToParams = false;
     TMaybe<bool> SqlAutoCommit = {};
+    TGUCSettings::TPtr GUCSettings;
     TMaybe<TString> ApplicationName = {};
     std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameters = {};
-    TMaybe<ui16> SqlVersion;
-    bool PerStatementResult = false;
+    TMaybe<ui16> SqlVersion = {};
 };
 
 NSQLTranslation::EBindingsMode RemapBindingsMode(NKikimrConfig::TTableServiceConfig::EBindingsMode mode);
@@ -87,9 +84,7 @@ NSQLTranslation::EBindingsMode RemapBindingsMode(NKikimrConfig::TTableServiceCon
 NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type);
 
 NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui16>& sqlVersion, bool& deprecatedSQL,
-    NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder);
-
-TQueryAst ParseQuery(const TString& queryText, const TMaybe<Ydb::Query::Syntax>& syntax, bool isSql, TKqpTranslationSettingsBuilder& settingsBuilder);
+    NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder, bool& keepInCache);
 
 TVector<TQueryAst> ParseStatements(const TString& queryText, const TMaybe<Ydb::Query::Syntax>& syntax, bool isSql, TKqpTranslationSettingsBuilder& settingsBuilder, bool perStatementExecution);
 

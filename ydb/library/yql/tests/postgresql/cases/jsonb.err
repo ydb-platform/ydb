@@ -1,3 +1,5 @@
+Registering pre-existing tables
+	testjsonb
 <sql-statement>
 -- Strings.
 SELECT '""'::jsonb;				-- OK.
@@ -302,50 +304,6 @@ CONTEXT:  JSON data, line 1: {"abc":1,3...
         	SELECT '{"abc":1,3}'::jsonb;		-- ERROR, no value
 	^
 <sql-statement>
--- Recursion.
-SET max_stack_depth = '100kB';
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: max_stack_depth
-    	-- Recursion.
-	^
-<sql-statement>
-SELECT repeat('[', 10000)::jsonb;
-</sql-statement>
--stdin-:<main>: Fatal: Execution
-
-    -stdin-:<main>:1:1: Fatal: Execution of node: Result
-    	SELECT repeat('[', 10000)::jsonb;
-	^
-        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type json
-DETAIL:  The input string ended unexpectedly.
-CONTEXT:  JSON data, line 1: ...[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[
-
-        	SELECT repeat('[', 10000)::jsonb;
-	^
-<sql-statement>
-SELECT repeat('{"a":', 10000)::jsonb;
-</sql-statement>
--stdin-:<main>: Fatal: Execution
-
-    -stdin-:<main>:1:1: Fatal: Execution of node: Result
-    	SELECT repeat('{"a":', 10000)::jsonb;
-	^
-        -stdin-:<main>:1:1: Fatal: ERROR:  stack depth limit exceeded
-HINT:  Increase the configuration parameter "max_stack_depth" (currently 100kB), after ensuring the platform's stack depth limit is adequate.
-
-        	SELECT repeat('{"a":', 10000)::jsonb;
-	^
-<sql-statement>
-RESET max_stack_depth;
-</sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
-    	RESET max_stack_depth;
-	^
-<sql-statement>
 -- Miscellaneous stuff.
 SELECT 'true'::jsonb;			-- OK
 </sql-statement>
@@ -516,10 +474,17 @@ where tablename = 'rows' and
       schemaname = pg_my_temp_schema()::regnamespace::text
 order by 1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_stats
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select attname, to_jsonb(histogram_bounds) histogram_bounds
+	^
+        -stdin-:<main>:1:17: Error: At function: PgCall
+        	select attname, to_jsonb(histogram_bounds) histogram_bounds
+	                ^
+            -stdin-:<main>:1:17: Error: Unable to find an overload for proc to_jsonb with given argument types: (anyarray)
+            	select attname, to_jsonb(histogram_bounds) histogram_bounds
+	                ^
 <sql-statement>
 -- to_jsonb, timestamps
 select to_jsonb(timestamp '2014-05-28 12:22:35.614298');
@@ -711,7 +676,7 @@ UPDATE rows SET x = NULL WHERE x = 1;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 SELECT jsonb_agg(q ORDER BY x NULLS FIRST, y)
@@ -1142,27 +1107,15 @@ SELECT jsonb '{"a":"null", "b":"qq"}' ? 'a';
 -- array exists - array elements should behave as keys
 SELECT count(*) from testjsonb  WHERE j->'array' ? 'bar';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 -- type sensitive array exists - should return no rows (since "exists" only
 -- matches strings that are either object keys or array elements)
 SELECT count(*) from testjsonb  WHERE j->'array' ? '5'::text;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 -- However, a raw scalar is *contained* within the array
 SELECT count(*) from testjsonb  WHERE j->'array' @> '5'::jsonb;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT jsonb_exists_any('{"a":null, "b":"qq"}', ARRAY['a','b']);
 </sql-statement>
@@ -1276,31 +1229,27 @@ SELECT jsonb_typeof('"1.0"') AS string;
 -- jsonb_build_array, jsonb_build_object, jsonb_object_agg
 SELECT jsonb_build_array('a',1,'b',1.2,'c',true,'d',null,'e',json '{"x": 3, "y": [1,2,3]}');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	-- jsonb_build_array, jsonb_build_object, jsonb_object_agg
 	^
-        -stdin-:<main>:2:8: Error: At function: PgCall
-        	SELECT jsonb_build_array('a',1,'b',1.2,'c',true,'d',null,'e',json '{"x": 3, "y": [1,2,3]}');
-	       ^
-            -stdin-:<main>:2:8: Error: Unable to find an overload for proc jsonb_build_array with given argument types: (unknown,int4,unknown,numeric,unknown,bool,unknown,unknown,unknown,json)
-            	SELECT jsonb_build_array('a',1,'b',1.2,'c',true,'d',null,'e',json '{"x": 3, "y": [1,2,3]}');
-	       ^
+        -stdin-:<main>:1:1: Fatal: ERROR:  could not determine data type for argument 1
+
+        	-- jsonb_build_array, jsonb_build_object, jsonb_object_agg
+	^
 <sql-statement>
 SELECT jsonb_build_array('a', NULL); -- ok
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	SELECT jsonb_build_array('a', NULL); -- ok
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  could not determine data type for argument 1
+
         	SELECT jsonb_build_array('a', NULL); -- ok
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc jsonb_build_array with given argument types: (unknown,unknown)
-            	SELECT jsonb_build_array('a', NULL); -- ok
-	       ^
+	^
 <sql-statement>
 SELECT jsonb_build_array(VARIADIC NULL::text[]); -- ok
 </sql-statement>
@@ -1360,97 +1309,91 @@ SELECT jsonb_build_array(VARIADIC '{{1,4},{2,5},{3,6}}'::int[][]); -- ok
 <sql-statement>
 SELECT jsonb_build_object('a',1,'b',1.2,'c',true,'d',null,'e',json '{"x": 3, "y": [1,2,3]}');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	SELECT jsonb_build_object('a',1,'b',1.2,'c',true,'d',null,'e',json '{"x": 3, "y": [1,2,3]}');
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  could not determine data type for argument 1
+
         	SELECT jsonb_build_object('a',1,'b',1.2,'c',true,'d',null,'e',json '{"x": 3, "y": [1,2,3]}');
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc jsonb_build_object with given argument types: (unknown,int4,unknown,numeric,unknown,bool,unknown,unknown,unknown,json)
-            	SELECT jsonb_build_object('a',1,'b',1.2,'c',true,'d',null,'e',json '{"x": 3, "y": [1,2,3]}');
-	       ^
+	^
 <sql-statement>
 SELECT jsonb_build_object(
        'a', jsonb_build_object('b',false,'c',99),
        'd', jsonb_build_object('e',array[9,8,7]::int[],
            'f', (select row_to_json(r) from ( select relkind, oid::regclass as name from pg_class where relname = 'pg_class') r)));
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_class
-    
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT jsonb_build_object(
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  could not determine data type for argument 1
+
+        	SELECT jsonb_build_object(
+	^
 <sql-statement>
 SELECT jsonb_build_object('{a,b,c}'::text[]); -- error
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	SELECT jsonb_build_object('{a,b,c}'::text[]); -- error
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  argument list must have even number of elements
+HINT:  The arguments of jsonb_build_object() must consist of alternating keys and values.
+
         	SELECT jsonb_build_object('{a,b,c}'::text[]); -- error
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc jsonb_build_object with given argument types: (_text)
-            	SELECT jsonb_build_object('{a,b,c}'::text[]); -- error
-	       ^
+	^
 <sql-statement>
 SELECT jsonb_build_object('{a,b,c}'::text[], '{d,e,f}'::text[]); -- error, key cannot be array
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	SELECT jsonb_build_object('{a,b,c}'::text[], '{d,e,f}'::text[]); -- error, key cannot be array
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  key value must be scalar, not array, composite, or json
+
         	SELECT jsonb_build_object('{a,b,c}'::text[], '{d,e,f}'::text[]); -- error, key cannot be array
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc jsonb_build_object with given argument types: (_text,_text)
-            	SELECT jsonb_build_object('{a,b,c}'::text[], '{d,e,f}'::text[]); -- error, key cannot be array
-	       ^
+	^
 <sql-statement>
 SELECT jsonb_build_object('a', 'b', 'c'); -- error
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	SELECT jsonb_build_object('a', 'b', 'c'); -- error
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  could not determine data type for argument 1
+
         	SELECT jsonb_build_object('a', 'b', 'c'); -- error
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc jsonb_build_object with given argument types: (unknown,unknown,unknown)
-            	SELECT jsonb_build_object('a', 'b', 'c'); -- error
-	       ^
+	^
 <sql-statement>
 SELECT jsonb_build_object(NULL, 'a'); -- error, key cannot be NULL
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	SELECT jsonb_build_object(NULL, 'a'); -- error, key cannot be NULL
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  could not determine data type for argument 1
+
         	SELECT jsonb_build_object(NULL, 'a'); -- error, key cannot be NULL
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc jsonb_build_object with given argument types: (unknown,unknown)
-            	SELECT jsonb_build_object(NULL, 'a'); -- error, key cannot be NULL
-	       ^
+	^
 <sql-statement>
 SELECT jsonb_build_object('a', NULL); -- ok
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	SELECT jsonb_build_object('a', NULL); -- ok
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  could not determine data type for argument 1
+
         	SELECT jsonb_build_object('a', NULL); -- ok
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc jsonb_build_object with given argument types: (unknown,unknown)
-            	SELECT jsonb_build_object('a', NULL); -- ok
-	       ^
+	^
 <sql-statement>
 SELECT jsonb_build_object(VARIADIC NULL::text[]); -- ok
 </sql-statement>
@@ -1526,71 +1469,55 @@ SELECT jsonb_build_object();
 -- make sure keys are quoted
 SELECT jsonb_build_object(1,2);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	-- make sure keys are quoted
-	^
-        -stdin-:<main>:2:8: Error: At function: PgCall
-        	SELECT jsonb_build_object(1,2);
-	       ^
-            -stdin-:<main>:2:8: Error: Unable to find an overload for proc jsonb_build_object with given argument types: (int4,int4)
-            	SELECT jsonb_build_object(1,2);
-	       ^
 <sql-statement>
 -- keys must be scalar and not null
 SELECT jsonb_build_object(null,2);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	-- keys must be scalar and not null
 	^
-        -stdin-:<main>:2:8: Error: At function: PgCall
-        	SELECT jsonb_build_object(null,2);
-	       ^
-            -stdin-:<main>:2:8: Error: Unable to find an overload for proc jsonb_build_object with given argument types: (unknown,int4)
-            	SELECT jsonb_build_object(null,2);
-	       ^
+        -stdin-:<main>:1:1: Fatal: ERROR:  could not determine data type for argument 1
+
+        	-- keys must be scalar and not null
+	^
 <sql-statement>
 SELECT jsonb_build_object(r,2) FROM (SELECT 1 AS a, 2 AS b) r;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	SELECT jsonb_build_object(r,2) FROM (SELECT 1 AS a, 2 AS b) r;
 	^
-        -stdin-:<main>:1:27: Error: No such column: r
+        -stdin-:<main>:1:1: Fatal: ERROR:  key value must be scalar, not array, composite, or json
+
         	SELECT jsonb_build_object(r,2) FROM (SELECT 1 AS a, 2 AS b) r;
-	                          ^
+	^
 <sql-statement>
 SELECT jsonb_build_object(json '{"a":1,"b":2}', 3);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	SELECT jsonb_build_object(json '{"a":1,"b":2}', 3);
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  key value must be scalar, not array, composite, or json
+
         	SELECT jsonb_build_object(json '{"a":1,"b":2}', 3);
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc jsonb_build_object with given argument types: (json,int4)
-            	SELECT jsonb_build_object(json '{"a":1,"b":2}', 3);
-	       ^
+	^
 <sql-statement>
 SELECT jsonb_build_object('{1,2,3}'::int[], 3);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	SELECT jsonb_build_object('{1,2,3}'::int[], 3);
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  key value must be scalar, not array, composite, or json
+
         	SELECT jsonb_build_object('{1,2,3}'::int[], 3);
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc jsonb_build_object with given argument types: (_int4,int4)
-            	SELECT jsonb_build_object('{1,2,3}'::int[], 3);
-	       ^
+	^
 <sql-statement>
 -- handling of NULL values
 SELECT jsonb_object_agg(1, NULL::jsonb);
@@ -1623,35 +1550,18 @@ INSERT INTO foo VALUES (847003,'sub-alpha','GESS90');
 SELECT jsonb_build_object('turbines',jsonb_object_agg(serial_num,jsonb_build_object('name',name,'type',type)))
 FROM foo;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT jsonb_build_object('turbines',jsonb_object_agg(serial_num,jsonb_build_object('name',name,'type',type)))
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	SELECT jsonb_build_object('turbines',jsonb_object_agg(serial_num,jsonb_build_object('name',name,'type',type)))
-	       ^
-            -stdin-:<main>:1:38: Error: At function: PgAgg
-            	SELECT jsonb_build_object('turbines',jsonb_object_agg(serial_num,jsonb_build_object('name',name,'type',type)))
-	                                     ^
-                -stdin-:<main>:1:66: Error: At function: PgCall
-                	SELECT jsonb_build_object('turbines',jsonb_object_agg(serial_num,jsonb_build_object('name',name,'type',type)))
-	                                                                 ^
-                    -stdin-:<main>:1:66: Error: Unable to find an overload for proc jsonb_build_object with given argument types: (unknown,text,unknown,text)
-                    	SELECT jsonb_build_object('turbines',jsonb_object_agg(serial_num,jsonb_build_object('name',name,'type',type)))
-	                                                                 ^
-<sql-statement>
-SELECT jsonb_object_agg(name, type) FROM foo;
-</sql-statement>
 -stdin-:<main>: Fatal: Execution
 
     -stdin-:<main>:1:1: Fatal: Execution of node: YtMapReduce!
-    	SELECT jsonb_object_agg(name, type) FROM foo;
+    	SELECT jsonb_build_object('turbines',jsonb_object_agg(serial_num,jsonb_build_object('name',name,'type',type)))
 	^
-        -stdin-:<main>:1:1: Fatal: ERROR:  field name must not be null
+        -stdin-:<main>:1:1: Fatal: ERROR:  could not determine data type for argument 1
 
-        	SELECT jsonb_object_agg(name, type) FROM foo;
+        	SELECT jsonb_build_object('turbines',jsonb_object_agg(serial_num,jsonb_build_object('name',name,'type',type)))
 	^
+<sql-statement>
+SELECT jsonb_object_agg(name, type) FROM foo;
+</sql-statement>
 <sql-statement>
 INSERT INTO foo VALUES (999999, NULL, 'bar');
 </sql-statement>
@@ -1799,184 +1709,40 @@ select jsonb_object('{a,b,"","d e f"}','{1,2,3,"a b c"}');
 -- extract_path, extract_path_as_text
 SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f4','f6');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	-- extract_path, extract_path_as_text
-	^
-        -stdin-:<main>:2:8: Error: At function: PgCall
-        	SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f4','f6');
-	       ^
-            -stdin-:<main>:2:8: Error: No such proc: jsonb_extract_path
-            	SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f4','f6');
-	       ^
 <sql-statement>
 SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f2');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f2');
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f2');
-	       ^
-            -stdin-:<main>:1:8: Error: No such proc: jsonb_extract_path
-            	SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f2');
-	       ^
 <sql-statement>
 SELECT jsonb_extract_path('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',0::text);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT jsonb_extract_path('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',0::text);
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	SELECT jsonb_extract_path('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',0::text);
-	       ^
-            -stdin-:<main>:1:8: Error: No such proc: jsonb_extract_path
-            	SELECT jsonb_extract_path('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',0::text);
-	       ^
 <sql-statement>
 SELECT jsonb_extract_path('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',1::text);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT jsonb_extract_path('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',1::text);
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	SELECT jsonb_extract_path('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',1::text);
-	       ^
-            -stdin-:<main>:1:8: Error: No such proc: jsonb_extract_path
-            	SELECT jsonb_extract_path('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',1::text);
-	       ^
 <sql-statement>
 SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f4','f6');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f4','f6');
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f4','f6');
-	       ^
-            -stdin-:<main>:1:8: Error: No such proc: jsonb_extract_path_text
-            	SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f4','f6');
-	       ^
 <sql-statement>
 SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f2');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f2');
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f2');
-	       ^
-            -stdin-:<main>:1:8: Error: No such proc: jsonb_extract_path_text
-            	SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f2');
-	       ^
 <sql-statement>
 SELECT jsonb_extract_path_text('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',0::text);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT jsonb_extract_path_text('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',0::text);
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	SELECT jsonb_extract_path_text('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',0::text);
-	       ^
-            -stdin-:<main>:1:8: Error: No such proc: jsonb_extract_path_text
-            	SELECT jsonb_extract_path_text('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',0::text);
-	       ^
 <sql-statement>
 SELECT jsonb_extract_path_text('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',1::text);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT jsonb_extract_path_text('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',1::text);
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	SELECT jsonb_extract_path_text('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',1::text);
-	       ^
-            -stdin-:<main>:1:8: Error: No such proc: jsonb_extract_path_text
-            	SELECT jsonb_extract_path_text('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',1::text);
-	       ^
 <sql-statement>
 -- extract_path nulls
 SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":{"f5":null,"f6":"stringy"}}','f4','f5') IS NULL AS expect_false;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	-- extract_path nulls
-	^
-        -stdin-:<main>:2:88: Error: At function: ToPg, At function: Not, At function: Exists
-        	SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":{"f5":null,"f6":"stringy"}}','f4','f5') IS NULL AS expect_false;
-	                                                                                       ^
-            -stdin-:<main>:2:8: Error: At function: PgCall
-            	SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":{"f5":null,"f6":"stringy"}}','f4','f5') IS NULL AS expect_false;
-	       ^
-                -stdin-:<main>:2:8: Error: No such proc: jsonb_extract_path
-                	SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":{"f5":null,"f6":"stringy"}}','f4','f5') IS NULL AS expect_false;
-	       ^
 <sql-statement>
 SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":{"f5":null,"f6":"stringy"}}','f4','f5') IS NULL AS expect_true;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":{"f5":null,"f6":"stringy"}}','f4','f5') IS NULL AS expect_true;
-	^
-        -stdin-:<main>:1:93: Error: At function: ToPg, At function: Not, At function: Exists
-        	SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":{"f5":null,"f6":"stringy"}}','f4','f5') IS NULL AS expect_true;
-	                                                                                            ^
-            -stdin-:<main>:1:8: Error: At function: PgCall
-            	SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":{"f5":null,"f6":"stringy"}}','f4','f5') IS NULL AS expect_true;
-	       ^
-                -stdin-:<main>:1:8: Error: No such proc: jsonb_extract_path_text
-                	SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":{"f5":null,"f6":"stringy"}}','f4','f5') IS NULL AS expect_true;
-	       ^
 <sql-statement>
 SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') IS NULL AS expect_false;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') IS NULL AS expect_false;
-	^
-        -stdin-:<main>:1:73: Error: At function: ToPg, At function: Not, At function: Exists
-        	SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') IS NULL AS expect_false;
-	                                                                        ^
-            -stdin-:<main>:1:8: Error: At function: PgCall
-            	SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') IS NULL AS expect_false;
-	       ^
-                -stdin-:<main>:1:8: Error: No such proc: jsonb_extract_path
-                	SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') IS NULL AS expect_false;
-	       ^
 <sql-statement>
 SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') IS NULL AS expect_true;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') IS NULL AS expect_true;
-	^
-        -stdin-:<main>:1:78: Error: At function: ToPg, At function: Not, At function: Exists
-        	SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') IS NULL AS expect_true;
-	                                                                             ^
-            -stdin-:<main>:1:8: Error: At function: PgCall
-            	SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') IS NULL AS expect_true;
-	       ^
-                -stdin-:<main>:1:8: Error: No such proc: jsonb_extract_path_text
-                	SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') IS NULL AS expect_true;
-	       ^
 <sql-statement>
 -- extract_path operators
 SELECT '{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}'::jsonb#>array['f4','f6'];
@@ -3900,192 +3666,84 @@ DROP TYPE jb_unordered_pair;
 -- indexing
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":null}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC"}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC", "public":true}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"age":25}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"age":25.0}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j ? 'public';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j ? 'bar';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j ?| ARRAY['public','disabled'];
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j ?& ARRAY['public','disabled'];
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.wait == null';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '"CC" == $.wait';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.wait == "CC" && true == $.public';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.age == 25';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.age == 25.0';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.public)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.bar)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.public) || exists($.disabled)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.public) && exists($.disabled)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? (@ == null)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? ("CC" == @)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.wait == "CC" && true == @.public)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.age ? (@ == 25)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.age == 25.0)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.public';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.bar';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 CREATE INDEX jidx ON testjsonb USING gin (j);
 </sql-statement>
@@ -4100,88 +3758,40 @@ SET enable_seqscan = off;
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":null}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC"}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC", "public":true}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"age":25}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"age":25.0}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"array":["foo"]}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"array":["bar"]}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 -- exercise GIN_SEARCH_MODE_ALL
 SELECT count(*) FROM testjsonb WHERE j @> '{}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j ? 'public';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j ? 'bar';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j ?| ARRAY['public','disabled'];
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j ?& ARRAY['public','disabled'];
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 EXPLAIN (COSTS OFF)
 SELECT count(*) FROM testjsonb WHERE j @@ '$.wait == null';
@@ -4194,122 +3804,54 @@ SELECT count(*) FROM testjsonb WHERE j @@ '$.wait == null';
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.wait == null';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($ ? (@.wait == null))';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.wait ? (@ == null))';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '"CC" == $.wait';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.wait == "CC" && true == $.public';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.age == 25';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.age == 25.0';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.array[*] == "foo"';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.array[*] == "bar"';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($ ? (@.array[*] == "bar"))';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.array ? (@[*] == "bar"))';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.array[*] ? (@ == "bar"))';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.public)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.bar)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.public) || exists($.disabled)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.public) && exists($.disabled)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 EXPLAIN (COSTS OFF)
 SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? (@ == null)';
@@ -4322,80 +3864,36 @@ SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? (@ == null)';
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? (@ == null)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? ("CC" == @)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.wait == "CC" && true == @.public)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.age ? (@ == 25)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.age == 25.0)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.array[*] == "bar")';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.array ? (@[*] == "bar")';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.array[*] ? (@ == "bar")';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.public';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.bar';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 -- array exists - array elements should behave as keys (for GIN index scans too)
 CREATE INDEX jidx_array ON testjsonb USING gin((j->'array'));
@@ -4408,27 +3906,15 @@ CREATE INDEX jidx_array ON testjsonb USING gin((j->'array'));
 <sql-statement>
 SELECT count(*) from testjsonb  WHERE j->'array' ? 'bar';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 -- type sensitive array exists - should return no rows (since "exists" only
 -- matches strings that are either object keys or array elements)
 SELECT count(*) from testjsonb  WHERE j->'array' ? '5'::text;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 -- However, a raw scalar is *contained* within the array
 SELECT count(*) from testjsonb  WHERE j->'array' @> '5'::jsonb;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 RESET enable_seqscan;
 </sql-statement>
@@ -4457,10 +3943,6 @@ SELECT key, count(*) FROM (SELECT (jsonb_each(j)).key FROM testjsonb) AS wow GRO
 -- sort/hash
 SELECT count(distinct j) FROM testjsonb;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SET enable_hashagg = off;
 </sql-statement>
@@ -4472,10 +3954,6 @@ SET enable_hashagg = off;
 <sql-statement>
 SELECT count(*) FROM (SELECT j FROM (SELECT * FROM testjsonb UNION ALL SELECT * FROM testjsonb) js GROUP BY j) js2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SET enable_hashagg = on;
 </sql-statement>
@@ -4495,10 +3973,6 @@ SET enable_sort = off;
 <sql-statement>
 SELECT count(*) FROM (SELECT j FROM (SELECT * FROM testjsonb UNION ALL SELECT * FROM testjsonb) js GROUP BY j) js2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT distinct * FROM (values (jsonb '{}' || ''::text),('{}')) v(j);
 </sql-statement>
@@ -4568,17 +4042,9 @@ SET enable_seqscan = off;
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j > '{"p":1}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j = '{"pos":98, "line":371, "node":"CBA", "indexed":true}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 --gin path opclass
 DROP INDEX jidx;
@@ -4602,137 +4068,61 @@ SET enable_seqscan = off;
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":null}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC"}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC", "public":true}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"age":25}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @> '{"age":25.0}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 -- exercise GIN_SEARCH_MODE_ALL
 SELECT count(*) FROM testjsonb WHERE j @> '{}';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.wait == null';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($ ? (@.wait == null))';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.wait ? (@ == null))';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '"CC" == $.wait';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.wait == "CC" && true == $.public';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.age == 25';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.age == 25.0';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.array[*] == "foo"';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ '$.array[*] == "bar"';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($ ? (@.array[*] == "bar"))';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.array ? (@[*] == "bar"))';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.array[*] ? (@ == "bar"))';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @@ 'exists($)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 EXPLAIN (COSTS OFF)
 SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? (@ == null)';
@@ -4745,80 +4135,36 @@ SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? (@ == null)';
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? (@ == null)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? ("CC" == @)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.wait == "CC" && true == @.public)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.age ? (@ == 25)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.age == 25.0)';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.array[*] == "bar")';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.array ? (@[*] == "bar")';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.array[*] ? (@ == "bar")';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.public';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 SELECT count(*) FROM testjsonb WHERE j @? '$.bar';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.testjsonb
-    
 <sql-statement>
 RESET enable_seqscan;
 </sql-statement>
@@ -6539,7 +5885,7 @@ update test_jsonb_subscript set test_json['a'] = '1' where id = 1;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 select * from test_jsonb_subscript;
@@ -6550,7 +5896,7 @@ update test_jsonb_subscript set test_json['a'] = '1' where id = 2;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 select * from test_jsonb_subscript;
@@ -6561,7 +5907,7 @@ update test_jsonb_subscript set test_json['a'] = '"test"';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 select * from test_jsonb_subscript;
@@ -6572,7 +5918,7 @@ update test_jsonb_subscript set test_json['a'] = '{"b": 1}'::jsonb;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 select * from test_jsonb_subscript;
@@ -6583,7 +5929,7 @@ update test_jsonb_subscript set test_json['a'] = '[1, 2, 3]'::jsonb;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 select * from test_jsonb_subscript;
@@ -6619,14 +5965,14 @@ update test_jsonb_subscript set test_json[NULL] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 update test_jsonb_subscript set test_json['another_key'] = NULL;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 select * from test_jsonb_subscript;
@@ -6640,7 +5986,7 @@ update test_jsonb_subscript set test_json['a'] = '1' where id = 3;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 select * from test_jsonb_subscript;
@@ -6650,14 +5996,14 @@ update test_jsonb_subscript set test_json = NULL where id = 3;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 update test_jsonb_subscript set test_json[0] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 select * from test_jsonb_subscript;
@@ -6668,7 +6014,7 @@ delete from test_jsonb_subscript;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 insert into test_jsonb_subscript values (1, '[0]');
@@ -6678,7 +6024,7 @@ update test_jsonb_subscript set test_json[5] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 select * from test_jsonb_subscript;
@@ -6688,7 +6034,7 @@ update test_jsonb_subscript set test_json[-4] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 select * from test_jsonb_subscript;
@@ -6698,7 +6044,7 @@ update test_jsonb_subscript set test_json[-8] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 select * from test_jsonb_subscript;
@@ -6709,7 +6055,7 @@ delete from test_jsonb_subscript;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 insert into test_jsonb_subscript values (1, '[]');
@@ -6719,7 +6065,7 @@ update test_jsonb_subscript set test_json[5] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 select * from test_jsonb_subscript;
@@ -6730,7 +6076,7 @@ delete from test_jsonb_subscript;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 insert into test_jsonb_subscript values (1, '{}');
@@ -6740,7 +6086,7 @@ update test_jsonb_subscript set test_json['a'][0]['b'][0]['c'] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 select * from test_jsonb_subscript;
@@ -6750,7 +6096,7 @@ delete from test_jsonb_subscript;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 insert into test_jsonb_subscript values (1, '{}');
@@ -6760,7 +6106,7 @@ update test_jsonb_subscript set test_json['a'][2]['b'][2]['c'][2] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 select * from test_jsonb_subscript;
@@ -6771,7 +6117,7 @@ delete from test_jsonb_subscript;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 insert into test_jsonb_subscript values (1, '{"b": 1}');
@@ -6781,7 +6127,7 @@ update test_jsonb_subscript set test_json['a'][0] = '2';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 select * from test_jsonb_subscript;
@@ -6792,7 +6138,7 @@ delete from test_jsonb_subscript;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 insert into test_jsonb_subscript values (1, '{}');
@@ -6802,7 +6148,7 @@ update test_jsonb_subscript set test_json[0]['a'] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 select * from test_jsonb_subscript;
@@ -6813,7 +6159,7 @@ delete from test_jsonb_subscript;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 insert into test_jsonb_subscript values (1, '[]');
@@ -6823,14 +6169,14 @@ update test_jsonb_subscript set test_json[0]['a'] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 update test_jsonb_subscript set test_json[2]['b'] = '2';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 select * from test_jsonb_subscript;
@@ -6841,7 +6187,7 @@ delete from test_jsonb_subscript;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 insert into test_jsonb_subscript values (1, '{}');
@@ -6851,14 +6197,14 @@ update test_jsonb_subscript set test_json['a']['b'][1] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 update test_jsonb_subscript set test_json['a']['b'][10] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 select * from test_jsonb_subscript;
@@ -6868,7 +6214,7 @@ delete from test_jsonb_subscript;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 insert into test_jsonb_subscript values (1, '[]');
@@ -6878,14 +6224,14 @@ update test_jsonb_subscript set test_json[0][0][0] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 update test_jsonb_subscript set test_json[0][0][1] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 select * from test_jsonb_subscript;
@@ -6895,7 +6241,7 @@ delete from test_jsonb_subscript;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 insert into test_jsonb_subscript values (1, '{}');
@@ -6905,14 +6251,14 @@ update test_jsonb_subscript set test_json['a']['b'][10] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 update test_jsonb_subscript set test_json['a'][10][10] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 select * from test_jsonb_subscript;
@@ -6923,7 +6269,7 @@ delete from test_jsonb_subscript;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 insert into test_jsonb_subscript values (1, '{"a": {}}');
@@ -6933,7 +6279,7 @@ update test_jsonb_subscript set test_json['a']['b']['c'][2] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 select * from test_jsonb_subscript;
@@ -6943,7 +6289,7 @@ delete from test_jsonb_subscript;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 insert into test_jsonb_subscript values (1, '{"a": []}');
@@ -6953,7 +6299,7 @@ update test_jsonb_subscript set test_json['a'][1]['c'][2] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 select * from test_jsonb_subscript;
@@ -6964,7 +6310,7 @@ delete from test_jsonb_subscript;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 insert into test_jsonb_subscript values (1, '{"a": 1}');
@@ -6974,35 +6320,35 @@ update test_jsonb_subscript set test_json['a']['b'] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 update test_jsonb_subscript set test_json['a']['b']['c'] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 update test_jsonb_subscript set test_json['a'][0] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 update test_jsonb_subscript set test_json['a'][0]['c'] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 update test_jsonb_subscript set test_json['a'][0][0] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 -- trying replace assuming a composite object, but it's a raw scalar
@@ -7010,7 +6356,7 @@ delete from test_jsonb_subscript;
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 insert into test_jsonb_subscript values (1, 'null');
@@ -7020,14 +6366,14 @@ update test_jsonb_subscript set test_json[0] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 update test_jsonb_subscript set test_json[0][0] = '1';
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 -- jsonb to tsvector

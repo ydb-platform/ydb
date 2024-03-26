@@ -52,8 +52,11 @@ public:
         1>;
     DEFINE_BYREF_RO_PROPERTY(TCodecToDuration, CodecToDuration);
 
+    DEFINE_BYREF_RO_PROPERTY(TDuration, ValueDictionaryCompressionDuration);
+
 public:
     TCodecStatistics& Append(const TCodecDuration& codecTime);
+    TCodecStatistics& AppendToValueDictionaryCompression(TDuration duration);
 
     TCodecStatistics& operator+=(const TCodecStatistics& other);
 

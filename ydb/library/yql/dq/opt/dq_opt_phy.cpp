@@ -8,6 +8,7 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/core/yql_cost_function.h>
 
 namespace NYql::NDq {
 
@@ -2646,23 +2647,44 @@ TMaybeNode<TDqJoin> DqFlipJoin(const TDqJoin& join, TExprContext& ctx) {
         .RightLabel(join.LeftLabel())
         .JoinType().Build(joinType)
         .JoinKeys(joinKeysBuilder.Done())
+        .LeftJoinKeyNames(join.RightJoinKeyNames())
+        .RightJoinKeyNames(join.LeftJoinKeyNames())
+        .JoinAlgo(join.JoinAlgo())
         .Done();
 }
 
 
 TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationContext& optCtx,
-                      const TParentsMap& parentsMap, bool allowStageMultiUsage, bool pushLeftStage, EHashJoinMode hashJoin)
+                      const TParentsMap& parentsMap, bool allowStageMultiUsage, bool pushLeftStage, EHashJoinMode hashJoin, bool useCBO)
 {
     if (!node.Maybe<TDqJoin>()) {
         return node;
     }
 
     auto join = node.Cast<TDqJoin>();
+    const auto joinType = join.JoinType().Value();
+    const bool leftIsUnionAll = join.LeftInput().Maybe<TDqCnUnionAll>().IsValid();
+    const bool rightIsUnionAll = join.RightInput().Maybe<TDqCnUnionAll>().IsValid();
+
+    bool useHashJoin = EHashJoinMode::Off != hashJoin
+        && joinType != "Cross"sv 
+        && leftIsUnionAll 
+        && rightIsUnionAll;
+
+    if (useCBO) {
+        auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
+        if (joinAlgo == EJoinAlgoType::MapJoin || joinAlgo == EJoinAlgoType::GraceJoin) {
+            useHashJoin = joinType != "Cross"sv && leftIsUnionAll && rightIsUnionAll;
+        }
+        else {
+            useHashJoin = false;
+        }
+    }
 
     if (DqValidateJoinInputs(join.LeftInput(), join.RightInput(), parentsMap, allowStageMultiUsage)) {
         // pass
     } else if (DqValidateJoinInputs(join.RightInput(), join.LeftInput(), parentsMap, allowStageMultiUsage)) {
-        if (EHashJoinMode::Off == hashJoin) {
+        if (!useHashJoin) {
             if (const auto maybeFlipJoin = DqFlipJoin(join, ctx)) {
                 join = maybeFlipJoin.Cast();
             } else {
@@ -2673,11 +2695,8 @@ TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationCon
         return node;
     }
 
-    const auto joinType = join.JoinType().Value();
-    const bool leftIsUnionAll = join.LeftInput().Maybe<TDqCnUnionAll>().IsValid();
-    const bool rightIsUnionAll = join.RightInput().Maybe<TDqCnUnionAll>().IsValid();
-    if (EHashJoinMode::Off != hashJoin && join.JoinType().Value() != "Cross"sv && leftIsUnionAll && rightIsUnionAll) {
-        return DqBuildHashJoin(join, hashJoin, ctx, optCtx);
+    if (useHashJoin) {
+        return DqBuildHashJoin(join, hashJoin, useCBO, ctx, optCtx);
     }
 
     if (joinType == "Full"sv || joinType == "Exclusion"sv) {
@@ -2922,6 +2941,49 @@ NNodes::TExprBase DqBuildStageWithSourceWrap(NNodes::TExprBase node, TExprContex
             .Build()
             .Index().Build("0")
         .Build().Done();
+}
+
+NNodes::TExprBase DqBuildStageWithReadWrap(NNodes::TExprBase node, TExprContext& ctx) {
+    const auto wrap = node.Cast<TDqReadWrap>();
+    const auto read = Build<TDqReadWideWrap>(ctx, node.Pos())
+            .Input(wrap.Input())
+            .Flags().Build()
+            .Token(wrap.Token())
+        .Done();
+
+    const auto structType = GetSeqItemType(*wrap.Ref().GetTypeAnn()).Cast<TStructExprType>();
+    auto narrow = ctx.Builder(node.Pos())
+        .Lambda()
+            .Callable("NarrowMap")
+                .Add(0, read.Ptr())
+                .Lambda(1)
+                    .Params("fields", structType->GetSize())
+                    .Callable("AsStruct")
+                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                            ui32 i = 0U;
+                            for (const auto& item : structType->GetItems()) {
+                                parent.List(i)
+                                    .Atom(0, item->GetName())
+                                    .Arg(1, "fields", i)
+                                .Seal();
+                                ++i;
+                            }
+                            return parent;
+                        })
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal().Build();
+
+    return Build<TDqCnUnionAll>(ctx, node.Pos())
+        .Output()
+            .Stage<TDqStage>()
+                .Inputs().Build()
+                .Program(narrow)
+                .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+            .Build()
+            .Index().Build("0")
+        .Build() .Done();
 }
 
 } // namespace NYql::NDq

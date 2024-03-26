@@ -22,6 +22,10 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+static const auto& Logger = TransactionClientLogger;
+
+////////////////////////////////////////////////////////////////////////////////
+
 IChannelPtr CreateTimestampProviderChannel(
     TRemoteTimestampProviderConfigPtr config,
     IChannelFactoryPtr channelFactory)
@@ -75,11 +79,14 @@ private:
 
     TTimestampServiceProxy Proxy_;
 
-    TFuture<TTimestamp> DoGenerateTimestamps(int count) override
+    TFuture<TTimestamp> DoGenerateTimestamps(int count, TCellTag clockClusterTag) override
     {
         auto req = Proxy_.GenerateTimestamps();
         req->SetResponseHeavy(true);
         req->set_count(count);
+        if (clockClusterTag != InvalidCellTag) {
+            req->set_clock_cluster_tag(ToProto<int>(clockClusterTag));
+        }
         return req->Invoke().Apply(BIND([] (const TTimestampServiceProxy::TRspGenerateTimestampsPtr& rsp) {
             return static_cast<TTimestamp>(rsp->timestamp());
         }));
@@ -103,6 +110,50 @@ ITimestampProviderPtr CreateBatchingRemoteTimestampProvider(
     return CreateBatchingTimestampProvider(
         std::move(underlying),
         config->BatchPeriod);
+}
+
+ITimestampProviderPtr CreateBatchingRemoteTimestampProvider(
+    const TRemoteTimestampProviderConfigPtr& config,
+    const IChannelFactoryPtr& channelFactory)
+{
+    return CreateBatchingRemoteTimestampProvider(
+        config,
+        CreateTimestampProviderChannel(config, channelFactory));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TAlienRemoteTimestampProvidersMap CreateAlienTimestampProvidersMap(
+    const std::vector<TAlienTimestampProviderConfigPtr>& configs,
+    ITimestampProviderPtr nativeProvider,
+    TCellTag nativeProviderClockClusterTag,
+    const IChannelFactoryPtr& channelFactory)
+{
+    TAlienRemoteTimestampProvidersMap alienProvidersMap;
+
+    if (nativeProviderClockClusterTag == InvalidCellTag) {
+        return alienProvidersMap;
+    }
+
+    alienProvidersMap.reserve(configs.size() + 1);
+    EmplaceOrCrash(alienProvidersMap, nativeProviderClockClusterTag, std::move(nativeProvider));
+
+    for (const auto& foreignProviderConfig : configs) {
+        auto alienClockCellTag = foreignProviderConfig->ClockClusterTag;
+
+        if (alienProvidersMap.contains(alienClockCellTag)) {
+            YT_LOG_ALERT("Duplicate entry for alien clock clusters (ClockClusterTag: %v)",
+                alienClockCellTag);
+            continue;
+        }
+
+        EmplaceOrCrash(
+            alienProvidersMap,
+            alienClockCellTag,
+            CreateBatchingRemoteTimestampProvider(foreignProviderConfig->TimestampProvider, channelFactory));
+    }
+
+    return alienProvidersMap;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

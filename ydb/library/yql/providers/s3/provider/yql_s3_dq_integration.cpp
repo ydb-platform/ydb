@@ -105,6 +105,8 @@ public:
         }
 
         auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
+
+        YQL_CLOG(DEBUG, ProviderS3) << " useRuntimeListing=" << useRuntimeListing;
         if (useRuntimeListing) {
             size_t partitionCount = hasDirectories ? maxPartitions : Min(parts.size(), maxPartitions);
             partitions.reserve(partitionCount);
@@ -117,6 +119,7 @@ public:
                 TStringOutput out(partitions.back());
                 range.Save(&out);
             }
+            YQL_CLOG(DEBUG, ProviderS3) << " hasDirectories=" << hasDirectories << ", partitionCount=" << partitionCount << ", maxPartitions=" << maxPartitions;
             return 0;
         }
 
@@ -158,6 +161,7 @@ public:
             range.Save(&out);
         }
 
+        YQL_CLOG(DEBUG, ProviderS3) << " hasDirectories=" << hasDirectories << ", partitionCount=" << partitions.size() << ", maxPartitions=" << maxPartitions;;
         return 0;
     }
 
@@ -334,7 +338,7 @@ public:
         return read;
     }
 
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType) override {
+    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t maxPartitions) override {
         const TDqSource source(&node);
         if (const auto maySettings = source.Settings().Maybe<TS3SourceSettingsBase>()) {
             const auto settings = maySettings.Cast();
@@ -405,6 +409,8 @@ public:
                 srcDesc.MutableSettings()->insert({"addPathIndex", "true"});
             }
 
+#if defined(_linux_) || defined(_darwin_)
+
             auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
             srcDesc.SetUseRuntimeListing(useRuntimeListing);
 
@@ -414,6 +420,8 @@ public:
             auto fileQueueBatchObjectCountLimit = State_->Configuration->FileQueueBatchObjectCountLimit.Get().GetOrElse(1000);
             srcDesc.MutableSettings()->insert({"fileQueueBatchObjectCountLimit", ToString(fileQueueBatchObjectCountLimit)});
             
+            YQL_CLOG(DEBUG, ProviderS3) << " useRuntimeListing=" << useRuntimeListing;
+
             if (useRuntimeListing) {
                 TPathList paths;
                 for (auto i = 0u; i < settings.Paths().Size(); ++i) {
@@ -479,13 +487,12 @@ public:
                             << "Unknown 'pathpatternvariant': " << pathPatternVariantValue->second;
                     }
                 }
-
-                size_t maxTasksPerStage = State_->MaxTasksPerStage.GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
-
-                auto consumersCount = hasDirectories ? maxTasksPerStage : Min(paths.size(), maxTasksPerStage);
+                auto consumersCount = hasDirectories ? maxPartitions : paths.size();
 
                 auto fileQueuePrefetchSize = State_->Configuration->FileQueuePrefetchSize.Get()
                     .GetOrElse(consumersCount * srcDesc.GetParallelDownloadCount() * 3);
+
+                YQL_CLOG(DEBUG, ProviderS3) << " hasDirectories=" << hasDirectories << ", consumersCount=" << consumersCount;
 
                 auto fileQueueActor = NActors::TActivationContext::ActorSystem()->Register(NDq::CreateS3FileQueueActor(
                     0ul,
@@ -498,14 +505,14 @@ public:
                     fileQueueBatchObjectCountLimit,
                     State_->Gateway,
                     connect.Url,
-                    GetAuthInfo(State_->CredentialsFactory, connect.Token),
+                    GetAuthInfo(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster)),
                     pathPattern,
                     pathPatternVariant,
                     NS3Lister::ES3PatternType::Wildcard
                 ));
                 srcDesc.MutableSettings()->insert({"fileQueueActor", fileQueueActor.ToString()});
             }
-
+#endif
             protoSettings.PackFrom(srcDesc);
             sourceType = "S3Source";
         }

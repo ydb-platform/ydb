@@ -407,6 +407,7 @@ Y_UNIT_TEST_SUITE(Scheme) {
                 CompareTypedCells(TCell(charArr, sizeof(ui16)), TCell(charArr, sizeof(ui16)), typeInfo);
                 break;
             case NScheme::NTypeIds::Int32:
+            case NScheme::NTypeIds::Date32:
                 GetValueHash(typeInfo, TCell(charArr, sizeof(i32)));
                 CompareTypedCells(TCell(charArr, sizeof(i32)), TCell(charArr, sizeof(i32)), typeInfo);
                 break;
@@ -415,6 +416,9 @@ Y_UNIT_TEST_SUITE(Scheme) {
                 CompareTypedCells(TCell(charArr, sizeof(ui32)), TCell(charArr, sizeof(ui32)), typeInfo);
                 break;
             case NScheme::NTypeIds::Int64:
+            case NScheme::NTypeIds::Datetime64:
+            case NScheme::NTypeIds::Timestamp64:
+            case NScheme::NTypeIds::Interval64:
                 GetValueHash(typeInfo, TCell(charArr, sizeof(i64)));
                 CompareTypedCells(TCell(charArr, sizeof(i64)), TCell(charArr, sizeof(i64)), typeInfo);
                 break;

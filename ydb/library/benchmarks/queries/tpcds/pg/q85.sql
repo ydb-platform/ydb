@@ -1,9 +1,9 @@
 {% include 'header.sql.jinja' %}
 
-select  substr(r_reason_desc,1,20)
-       ,avg(ws_quantity)
-       ,avg(wr_refunded_cash)
-       ,avg(wr_fee)
+select  substr(r_reason_desc,1,20) reason
+       ,avg(ws_quantity) avg_ws_q
+       ,avg(wr_refunded_cash) avg_wr_r
+       ,avg(wr_fee) avg_wr_f
  from {{web_sales}}, {{web_returns}}, {{web_page}}, {{customer_demographics}} cd1,
       {{customer_demographics}} cd2, {{customer_address}}, {{date_dim}}, {{reason}}
  where ws_web_page_sk = wp_web_page_sk

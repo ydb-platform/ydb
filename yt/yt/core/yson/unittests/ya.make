@@ -17,6 +17,7 @@ SRCS(
     protobuf_yson_schema_ut.cpp
     protobuf_yson_ut.cpp
     ypath_designated_yson_consumer_ut.cpp
+    ypath_filtering_yson_consumer_ut.cpp
     yson_parser_ut.cpp
     yson_pull_parser_ut.cpp
     yson_token_writer_ut.cpp

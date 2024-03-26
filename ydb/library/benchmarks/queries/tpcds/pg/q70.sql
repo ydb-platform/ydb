@@ -1,5 +1,6 @@
 {% include 'header.sql.jinja' %}
 
+select * from (
 select
     sum(ss_net_profit) as total_sum
    ,s_state
@@ -30,6 +31,7 @@ select
                where ranking <= 5
              )
  group by rollup(s_state,s_county)
+) as sub
  order by
    lochierarchy desc
   ,case when lochierarchy = 0 then s_state end

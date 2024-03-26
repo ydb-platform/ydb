@@ -1,7 +1,8 @@
 #include <ydb/core/tx/columnshard/engines/index_info.h>
+#include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/resolver.h>
 
-#include <ydb/core/tx/columnshard/columnshard__index_scan.h>
 #include <ydb/core/tx/columnshard/columnshard_ut_common.h>
+#include <ydb/core/tx/columnshard/test_helper/helper.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/formats/arrow/converter.h>
 
@@ -20,16 +21,16 @@ using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
 
 namespace {
-    static const std::vector<std::pair<TString, TTypeInfo>> testColumns = {
-        {"timestamp", TTypeInfo(NTypeIds::Timestamp) },
-        {"uid", TTypeInfo(NTypeIds::Utf8) },
-        {"sum", TTypeInfo(NTypeIds::Int32) },
-        {"vat", TTypeInfo(NTypeIds::Int32) },
+    static const std::vector<NArrow::NTest::TTestColumn> testColumns = {
+        NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) ),
+        NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) ),
+        NArrow::NTest::TTestColumn("sum", TTypeInfo(NTypeIds::Int32)),
+        NArrow::NTest::TTestColumn("vat", TTypeInfo(NTypeIds::Int32)),
     };
 
-    static const std::vector<std::pair<TString, TTypeInfo>> testKey = {
-        {"timestamp", TTypeInfo(NTypeIds::Timestamp) },
-        {"uid", TTypeInfo(NTypeIds::Utf8) }
+    static const std::vector<NArrow::NTest::TTestColumn> testKey = {
+        NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) ),
+        NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) )
     };
 }
 
@@ -133,7 +134,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(YqlKernel) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {
@@ -178,7 +179,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(YqlKernelStartsWithScalar) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {
@@ -232,7 +233,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(YqlKernelEndsWithScalar) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {
@@ -286,7 +287,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(YqlKernelStartsWith) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {
@@ -333,7 +334,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(YqlKernelEndsWith) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
 
@@ -381,7 +382,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(YqlKernelContains) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
 
@@ -434,7 +435,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(YqlKernelEquals) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
 
@@ -489,7 +490,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     void JsonExistsImpl(bool isBinaryType) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {
@@ -551,7 +552,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(Like) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {
@@ -657,7 +658,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     void JsonValueImpl(bool isBinaryType, NYql::EDataSlot resultType) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {
@@ -808,7 +809,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(SimpleFunction) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);;
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {

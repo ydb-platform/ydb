@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: clickhouse-connect
-Version: 0.6.23
+Version: 0.7.2
 Summary: ClickHouse Database Core Driver for Python, Pandas, and Superset
 Home-page: https://github.com/ClickHouse/clickhouse-connect
 Author: ClickHouse Inc.
@@ -10,12 +10,12 @@ Keywords: clickhouse,superset,sqlalchemy,http,driver
 Classifier: Development Status :: 4 - Beta
 Classifier: Intended Audience :: Developers
 Classifier: License :: OSI Approved :: Apache Software License
-Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
-Requires-Python: ~=3.7
+Classifier: Programming Language :: Python :: 3.12
+Requires-Python: ~=3.8
 Description-Content-Type: text/markdown
 License-File: LICENSE
 Requires-Dist: certifi
@@ -52,7 +52,7 @@ ClickHouse Connect currently uses the ClickHouse HTTP interface for maximum comp
 pip install clickhouse-connect
 ```
 
-ClickHouse Connect requires Python 3.7 or higher. 
+ClickHouse Connect requires Python 3.8 or higher. 
 
 
 ### Superset Connectivity

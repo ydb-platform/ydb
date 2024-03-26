@@ -1,6 +1,7 @@
 #include <ydb/core/fq/libs/actors/database_resolver.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
+#include <ydb/core/fq/libs/config/protos/checkpoint_coordinator.pb.h>
 
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>
@@ -14,7 +15,22 @@ namespace {
 using namespace NKikimr;
 using namespace NFq;
 
-TString NoPermissionStr = "You have no permission to resolve database id into database endpoint. ";
+TString MakeErrorPrefix(
+    const TString& host, 
+    const TString& url,
+    const TString& databaseId,
+    const NYql::EDatabaseType& databaseType) {
+    TStringBuilder ss;
+    
+    return TStringBuilder() 
+        << "Error while trying to resolve managed " << ToString(databaseType)
+        << " database with id " << databaseId << " via HTTP request to"
+        << ": endpoint '" << host << "'"
+        << ", url '" << url << "'"
+        << ": ";
+}
+
+TString NoPermissionStr = "you have no permission to resolve database id into database endpoint.";
 
 struct TTestBootstrap : public TTestActorRuntime {
     NConfig::TCheckpointCoordinatorConfig Settings;
@@ -113,7 +129,9 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
         const TString& status,
         const TString& responseBody,
         const NYql::TDatabaseResolverResponse::TDatabaseDescription& description,
-        const NYql::TIssues& issues)
+        const NYql::TIssues& issues,
+        const TString& error = ""
+        )
     {
         TTestBootstrap bootstrap;
 
@@ -122,16 +140,16 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
         databaseAuth.Protocol = protocol;
 
         TString databaseId{"etn021us5r9rhld1vgbh"};
-        auto requestIdAnddatabaseType = std::make_pair(databaseId, databaseType);
+        auto requestIdAndDatabaseType = std::make_pair(databaseId, databaseType);
 
         bootstrap.Send(new IEventHandle(
             bootstrap.DatabaseResolver,
             bootstrap.AsyncResolver,
             new NFq::TEvents::TEvEndpointRequest(
                 NYql::IDatabaseAsyncResolver::TDatabaseAuthMap(
-                    {std::make_pair(requestIdAnddatabaseType, databaseAuth)}),
+                    {std::make_pair(requestIdAndDatabaseType, databaseAuth)}),
                 TString("https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod"),
-                TString("mdbGateway"),
+                TString("https://mdb.api.cloud.yandex.net:443"),
                 TString("traceId"),
                 NFq::MakeMdbEndpointGeneratorGeneric(true))));
 
@@ -144,18 +162,21 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
 
         bootstrap.WaitForBootstrap();
 
-        auto response = std::make_unique<NHttp::THttpIncomingResponse>(nullptr);
-        response->Status = status;
-        response->Body = responseBody;
+        std::unique_ptr<NHttp::THttpIncomingResponse> httpIncomingResponse;
+        if (!error) {
+            httpIncomingResponse = std::make_unique<NHttp::THttpIncomingResponse>(nullptr);
+            httpIncomingResponse->Status = status;
+            httpIncomingResponse->Body = responseBody;
+        }
 
         bootstrap.Send(new IEventHandle(
             processorActorId,
             bootstrap.HttpProxy,
-            new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(httpOutgoingRequest->Request, response.release(), "")));
+            new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(httpOutgoingRequest->Request, httpIncomingResponse.release(), error)));
 
         NYql::TDatabaseResolverResponse::TDatabaseDescriptionMap result;
         if (status == "200") {
-            result[requestIdAnddatabaseType] = description;
+            result[requestIdAndDatabaseType] = description;
         }
         bootstrap.ExpectEvent<TEvents::TEvEndpointResponse>(bootstrap.AsyncResolver, 
             NFq::TEvents::TEvEndpointResponse(
@@ -174,12 +195,42 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
                 })",           
             NYql::TDatabaseResolverResponse::TDatabaseDescription{
                 TString{"ydb.serverless.yandexcloud.net:2135"},
-                TString{""},
-                0,
+                TString{"ydb.serverless.yandexcloud.net"},
+                2135,
                 TString("/ru-central1/b1g7jdjqd07qg43c4fmp/etn021us5r9rhld1vgbh"),
                 true
                 },
                 {}
+            );
+    }
+
+    Y_UNIT_TEST(Ydb_Serverless_Timeout) {
+        NYql::TIssues issues{
+            NYql::TIssue(
+                TStringBuilder{} << MakeErrorPrefix(
+                    "ydbc.ydb.cloud.yandex.net:8789",
+                    "/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgbh",
+                    "etn021us5r9rhld1vgbh",
+                    NYql::EDatabaseType::Ydb
+                ) << "Connection timeout"
+            )
+        };
+
+        Test(
+            NYql::EDatabaseType::Ydb,
+            NYql::NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED,
+            "https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgbh",
+            "",
+            "",           
+            NYql::TDatabaseResolverResponse::TDatabaseDescription{
+                TString{"ydb.serverless.yandexcloud.net:2135"},
+                TString{"ydb.serverless.yandexcloud.net"},
+                2135,
+                TString("/ru-central1/b1g7jdjqd07qg43c4fmp/etn021us5r9rhld1vgbh"),
+                true
+                },
+                issues,
+                "Connection timeout"
             );
     }
 
@@ -195,12 +246,12 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
                 })",
             NYql::TDatabaseResolverResponse::TDatabaseDescription{
                 TString{"yds.serverless.yandexcloud.net:2135"},
-                TString{""},
-                0,
+                TString{"yds.serverless.yandexcloud.net"},
+                2135,
                 TString("/ru-central1/b1g7jdjqd07qg43c4fmp/etn021us5r9rhld1vgbh"),
                 true
-                },
-                {}
+            },
+            {}
             );
     }
 
@@ -217,8 +268,8 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
                 })",
             NYql::TDatabaseResolverResponse::TDatabaseDescription{
                 TString{"u-lb.etn021us5r9rhld1vgbh.ydb.mdb.yandexcloud.net:2135"},
-                TString{""},
-                0,
+                TString{"u-lb.etn021us5r9rhld1vgbh.ydb.mdb.yandexcloud.net"},
+                2135,
                 TString("/ru-central1/b1g7jdjqd07qg43c4fmp/etn021us5r9rhld1vgbh"),
                 true
                 },
@@ -297,7 +348,12 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
     Y_UNIT_TEST(ClickHouse_PermissionDenied) {
         NYql::TIssues issues{
             NYql::TIssue(
-                TStringBuilder{} << NoPermissionStr << "Please check that your service account has role `managed-clickhouse.viewer`."
+                TStringBuilder{} << MakeErrorPrefix(
+                    "mdb.api.cloud.yandex.net:443",
+                    "/managed-clickhouse/v1/clusters/etn021us5r9rhld1vgbh/hosts",
+                    "etn021us5r9rhld1vgbh",
+                    NYql::EDatabaseType::ClickHouse
+                ) << NoPermissionStr << " Please check that your service account has role `managed-clickhouse.viewer`."
             )
         };
 
@@ -365,7 +421,12 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
     Y_UNIT_TEST(PostgreSQL_PermissionDenied) {
         NYql::TIssues issues{
             NYql::TIssue(
-                TStringBuilder{} << NoPermissionStr << "Please check that your service account has role `managed-postgresql.viewer`."
+                TStringBuilder{} << MakeErrorPrefix(
+                    "mdb.api.cloud.yandex.net:443",
+                    "/managed-postgresql/v1/clusters/etn021us5r9rhld1vgbh/hosts",
+                    "etn021us5r9rhld1vgbh",
+                    NYql::EDatabaseType::PostgreSQL
+                ) << NoPermissionStr << " Please check that your service account has role `managed-postgresql.viewer`."
             )
         };
 
@@ -395,7 +456,12 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
     Y_UNIT_TEST(DataStreams_PermissionDenied) {
         NYql::TIssues issues{
             NYql::TIssue(
-                NoPermissionStr
+                TStringBuilder{} << MakeErrorPrefix(
+                    "ydbc.ydb.cloud.yandex.net:8789",
+                    "/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgbh",
+                    "etn021us5r9rhld1vgbh",
+                    NYql::EDatabaseType::DataStreams
+                ) << NoPermissionStr 
             )
         };
         Test(
@@ -412,6 +478,87 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
                 issues
             );
     }
+
+    Y_UNIT_TEST(ResolveTwoDataStreamsFirstError) {
+       TTestBootstrap bootstrap;
+
+        NYql::TDatabaseAuth databaseAuth;
+        databaseAuth.UseTls = true;
+        databaseAuth.Protocol = NYql::NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED;
+
+        TString databaseId1{"etn021us5r9rhld1vgb1"};
+        TString databaseId2{"etn021us5r9rhld1vgb2"};
+        auto requestIdAndDatabaseType1 = std::make_pair(databaseId1, NYql::EDatabaseType::DataStreams);
+        auto requestIdAndDatabaseType2 = std::make_pair(databaseId2, NYql::EDatabaseType::DataStreams);
+
+        bootstrap.Send(new IEventHandle(
+            bootstrap.DatabaseResolver,
+            bootstrap.AsyncResolver,
+            new NFq::TEvents::TEvEndpointRequest(
+                NYql::IDatabaseAsyncResolver::TDatabaseAuthMap({
+                    std::make_pair(requestIdAndDatabaseType1, databaseAuth),
+                    std::make_pair(requestIdAndDatabaseType2, databaseAuth)}),
+                TString("https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod"),
+                TString("https://mdb.api.cloud.yandex.net:443"),
+                TString("traceId"),
+                NFq::MakeMdbEndpointGeneratorGeneric(true))));
+
+        auto httpRequest1 = NHttp::THttpOutgoingRequest::CreateRequestGet("https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgb1");
+        auto httpRequest2 = NHttp::THttpOutgoingRequest::CreateRequestGet("https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgb2");
+
+        NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr httpOutgoingRequestHolder1 = bootstrap.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(bootstrap.HttpProxy, TDuration::Seconds(10));
+        NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr httpOutgoingRequestHolder2 = bootstrap.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(bootstrap.HttpProxy, TDuration::Seconds(10));
+        NHttp::TEvHttpProxy::TEvHttpOutgoingRequest* httpOutgoingRequest1 = httpOutgoingRequestHolder1.Get()->Get();
+        NHttp::TEvHttpProxy::TEvHttpOutgoingRequest* httpOutgoingRequest2 = httpOutgoingRequestHolder2.Get()->Get();
+        if (httpOutgoingRequest1->Request->URL != httpRequest1->URL) {
+            std::swap(httpOutgoingRequest1, httpOutgoingRequest2);
+        }
+
+        NActors::TActorId processorActorId = httpOutgoingRequestHolder1->Sender;
+        bootstrap.WaitForBootstrap();
+
+        auto response1 = std::make_unique<NHttp::THttpIncomingResponse>(nullptr);
+        response1->Status = "404";
+        response1->Body = R"({"message":"Database not found"})";
+
+        bootstrap.Send(new IEventHandle(
+            processorActorId,
+            bootstrap.HttpProxy,
+            new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(httpOutgoingRequest1->Request, response1.release(), "")));
+
+        auto response2 = std::make_unique<NHttp::THttpIncomingResponse>(nullptr);
+        response2->Status = "200";
+        response2->Body = R"({"endpoint":"grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1g7jdjqd07qg43c4fmp/etn021us5r9rhld1vgbh"})";
+
+        bootstrap.Send(new IEventHandle(
+            processorActorId,
+            bootstrap.HttpProxy,
+            new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(httpOutgoingRequest2->Request, response2.release(), "")));
+
+        NYql::TDatabaseResolverResponse::TDatabaseDescriptionMap result;
+        result[requestIdAndDatabaseType2] = NYql::TDatabaseResolverResponse::TDatabaseDescription{
+                TString{"yds.serverless.yandexcloud.net:2135"},
+                TString{"yds.serverless.yandexcloud.net"},
+                2135,
+                TString("/ru-central1/b1g7jdjqd07qg43c4fmp/etn021us5r9rhld1vgbh"),
+                true
+            };
+
+        NYql::TIssues issues{
+            NYql::TIssue(
+                TStringBuilder() << MakeErrorPrefix(
+                    "ydbc.ydb.cloud.yandex.net:8789", 
+                    "/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgb1", 
+                    "etn021us5r9rhld1vgb1", 
+                    NYql::EDatabaseType::DataStreams)<< "\nStatus: 404\nResponse body: {\"message\":\"Database not found\"}"
+            )
+        };
+
+        bootstrap.ExpectEvent<TEvents::TEvEndpointResponse>(bootstrap.AsyncResolver, 
+            NFq::TEvents::TEvEndpointResponse(
+                NYql::TDatabaseResolverResponse(std::move(result), false, issues)));
+    }
+
 }
 
 } // namespace NFq

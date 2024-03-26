@@ -155,6 +155,7 @@ Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(co
     Aws::Client::ClientConfiguration config;
 
     config.endpointOverride = settings.endpoint();
+    config.executor = std::make_shared<Aws::Utils::Threading::PooledThreadExecutor>(1);
     config.verifySSL = false;
     config.connectTimeoutMs = 10000;
     config.maxConnections = 5;

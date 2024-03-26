@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(2023.3.post1)
+VERSION(2024.1)
 
 LICENSE(MIT)
 
@@ -628,6 +628,7 @@ RESOURCE_FILES(
     pytz/zoneinfo/tzdata.zi
     pytz/zoneinfo/zone.tab
     pytz/zoneinfo/zone1970.tab
+    pytz/zoneinfo/zonenow.tab
 )
 
 END()

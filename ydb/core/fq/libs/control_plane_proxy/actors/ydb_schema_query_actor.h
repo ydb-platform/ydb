@@ -7,8 +7,7 @@
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
 #include <ydb/core/fq/libs/signer/signer.h>
 
-namespace NFq {
-namespace NPrivate {
+namespace NFq::NPrivate {
 
 enum class ETaskCompletionStatus {
     NONE,
@@ -20,26 +19,28 @@ enum class ETaskCompletionStatus {
 
 /// Connection manipulation actors
 NActors::IActor* MakeCreateConnectionActor(
-    const NActors::TActorId& proxyActorId,
+    const TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
     TPermissions permissions,
     const NConfig::TCommonConfig& commonConfig,
+    const TComputeConfig& computeConfig,
     TSigner::TPtr signer,
     bool withoutRollback = false,
     TMaybe<TString> connectionId = Nothing());
 
 NActors::IActor* MakeModifyConnectionActor(
-    const NActors::TActorId& proxyActorId,
+    const TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
     const NConfig::TCommonConfig& commonConfig,
+    const TComputeConfig& computeConfig,
     TSigner::TPtr signer);
 
 NActors::IActor* MakeDeleteConnectionActor(
-    const NActors::TActorId& proxyActorId,
+    const TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvDeleteConnectionRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
@@ -48,25 +49,26 @@ NActors::IActor* MakeDeleteConnectionActor(
 
 /// Binding manipulation actors
 NActors::IActor* MakeCreateBindingActor(
-    const NActors::TActorId& proxyActorId,
+    const TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
     TPermissions permissions,
+    const TComputeConfig& computeConfig,
     bool withoutRollback = false,
     TMaybe<TString> bindingId = Nothing());
 
 NActors::IActor* MakeModifyBindingActor(
-    const NActors::TActorId& proxyActorId,
+    const TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr request,
     TDuration requestTimeout,
-    TCounters& counters);
+    TCounters& counters,
+    const TComputeConfig& computeConfig);
 
 NActors::IActor* MakeDeleteBindingActor(
-    const NActors::TActorId& proxyActorId,
+    const TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvDeleteBindingRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters);
 
-} // namespace NPrivate
-} // namespace NFq
+} // namespace NFq::NPrivate

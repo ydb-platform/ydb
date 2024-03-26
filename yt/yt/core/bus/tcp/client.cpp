@@ -141,9 +141,11 @@ class TTcpBusClient
 public:
     TTcpBusClient(
         TBusClientConfigPtr config,
-        IPacketTranscoderFactory* packetTranscoderFactory)
+        IPacketTranscoderFactory* packetTranscoderFactory,
+        IMemoryUsageTrackerPtr memoryUsageTracker)
         : Config_(std::move(config))
         , PacketTranscoderFactory_(packetTranscoderFactory)
+        , MemoryUsageTracker_(std::move(memoryUsageTracker))
     {
         if (Config_->Address) {
             EndpointDescription_ = *Config_->Address;
@@ -175,16 +177,18 @@ public:
 
         auto id = TConnectionId::Create();
 
-        YT_LOG_DEBUG("Connecting to server (Address: %v, ConnectionId: %v, MultiplexingBand: %v, EncryptionMode: %v)",
+        YT_LOG_DEBUG("Connecting to server (Address: %v, ConnectionId: %v, MultiplexingBand: %v, EncryptionMode: %v, VerificationMode: %v)",
             EndpointDescription_,
             id,
             options.MultiplexingBand,
-            Config_->EncryptionMode);
+            Config_->EncryptionMode,
+            Config_->VerificationMode);
 
         auto endpointAttributes = ConvertToAttributes(BuildYsonStringFluently()
             .BeginMap()
                 .Items(*EndpointAttributes_)
                 .Item("connection_id").Value(id)
+                .Item("connection_type").Value(EConnectionType::Client)
             .EndMap());
 
         auto poller = TTcpDispatcher::TImpl::Get()->GetXferPoller();
@@ -202,7 +206,8 @@ public:
             Config_->UnixDomainSocketPath,
             std::move(handler),
             std::move(poller),
-            PacketTranscoderFactory_);
+            PacketTranscoderFactory_,
+            MemoryUsageTracker_);
         connection->Start();
 
         return New<TTcpClientBusProxy>(std::move(connection));
@@ -213,6 +218,8 @@ private:
 
     IPacketTranscoderFactory* const PacketTranscoderFactory_;
 
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
+
     TString EndpointDescription_;
     IAttributeDictionaryPtr EndpointAttributes_;
 };
@@ -221,9 +228,13 @@ private:
 
 IBusClientPtr CreateBusClient(
     TBusClientConfigPtr config,
-    IPacketTranscoderFactory* packetTranscoderFactory)
+    IPacketTranscoderFactory* packetTranscoderFactory,
+    IMemoryUsageTrackerPtr memoryUsageTracker)
 {
-    return New<TTcpBusClient>(std::move(config), packetTranscoderFactory);
+    return New<TTcpBusClient>(
+        std::move(config),
+        packetTranscoderFactory,
+        std::move(memoryUsageTracker));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

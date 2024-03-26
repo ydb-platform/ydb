@@ -13,6 +13,6 @@ const defaultGOPPC64 = `power8`
 const defaultGOEXPERIMENT = ``
 const defaultGO_EXTLINK_ENABLED = ``
 const defaultGO_LDSO = ``
-const version = `go1.21.6`
+const version = `go1.21.8`
 const defaultGOOS = runtime.GOOS
 const defaultGOARCH = runtime.GOARCH

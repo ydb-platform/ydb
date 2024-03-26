@@ -1,6 +1,7 @@
+/* yt can not */
 use plato;
 
-evaluate parallel for $i in [5,2,7] do begin
+evaluate parallel for $i in [1,2,1,2,1] do begin
 insert into Output
 select $i as a;
 end do;

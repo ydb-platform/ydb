@@ -1,6 +1,7 @@
 #include "executor_pool_basic.h"
 #include "executor_pool_basic_feature_flags.h"
 #include "actor.h"
+#include "config.h"
 #include "executor_thread_ctx.h"
 #include "probes.h"
 #include "mailbox.h"
@@ -389,8 +390,8 @@ namespace NActors {
 
         ActorSystem = actorSystem;
 
-        ScheduleReaders.Reset(new NSchedulerQueue::TReader[PoolThreads]);
-        ScheduleWriters.Reset(new NSchedulerQueue::TWriter[PoolThreads]);
+        ScheduleReaders.Reset(new NSchedulerQueue::TReader[PoolThreads + 2]);
+        ScheduleWriters.Reset(new NSchedulerQueue::TWriter[PoolThreads + 2]);
 
         for (i16 i = 0; i != PoolThreads; ++i) {
             Threads[i].Thread.Reset(
@@ -406,8 +407,11 @@ namespace NActors {
             ScheduleWriters[i].Init(ScheduleReaders[i]);
         }
 
+        ScheduleWriters[PoolThreads].Init(ScheduleReaders[PoolThreads]);
+        ScheduleWriters[PoolThreads + 1].Init(ScheduleReaders[PoolThreads + 1]);
+
         *scheduleReaders = ScheduleReaders.Get();
-        *scheduleSz = PoolThreads;
+        *scheduleSz = PoolThreads + 2;
     }
 
     void TBasicExecutorPool::Start() {
@@ -447,14 +451,22 @@ namespace NActors {
         if (deadline < current)
             deadline = current;
 
-        ScheduleWriters[workerId].Push(deadline.MicroSeconds(), ev.Release(), cookie);
+        if (workerId >= 0) {
+            ScheduleWriters[workerId].Push(deadline.MicroSeconds(), ev.Release(), cookie);
+        } else {
+            ScheduleWriters[PoolThreads + 2 + workerId].Push(deadline.MicroSeconds(), ev.Release(), cookie);
+        }
     }
 
     void TBasicExecutorPool::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
         Y_DEBUG_ABORT_UNLESS(workerId < PoolThreads);
 
         const auto deadline = ActorSystem->Monotonic() + delta;
-        ScheduleWriters[workerId].Push(deadline.MicroSeconds(), ev.Release(), cookie);
+        if (workerId >= 0) {
+            ScheduleWriters[workerId].Push(deadline.MicroSeconds(), ev.Release(), cookie);
+        } else {
+            ScheduleWriters[PoolThreads + 2 + workerId].Push(deadline.MicroSeconds(), ev.Release(), cookie);
+        }
     }
 
     void TBasicExecutorPool::SetRealTimeMode() const {
@@ -474,7 +486,7 @@ namespace NActors {
     }
 
     i16 TBasicExecutorPool::GetThreadCount() const {
-        return AtomicGet(ThreadCount) + SharedThreadsCount.load(std::memory_order_acquire);
+        return AtomicGet(ThreadCount);
     }
 
     void TBasicExecutorPool::SetThreadCount(i16 threads) {

@@ -9,7 +9,7 @@
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/public/udf/arrow/block_builder.h>
+#include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
 
 #include <ydb/library/actors/core/log.h>
 
@@ -63,14 +63,20 @@ std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo&
             }
 
             const auto [type, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(name);
-            const auto builder = NUdf::MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), type, *arrow::default_memory_pool(), 1U, nullptr);
-            builder->Add(value);
-            const auto datum = builder->Build(true);
+            YQL_ENSURE(NYql::NArrow::IsArrowCompatible(type), "Incompatible parameter type. Can't convert to arrow");
 
-            auto field = std::make_shared<arrow::Field>(name, datum.type());
+            std::unique_ptr<arrow::ArrayBuilder> builder = NYql::NArrow::MakeArrowBuilder(type);
+            NYql::NArrow::AppendElement(value, builder.get(), type);
+
+            std::shared_ptr<arrow::Array> array;
+            const auto status = builder->Finish(&array);
+
+            YQL_ENSURE(status.ok(), "Failed to build arrow array of variables.");
+
+            auto field = std::make_shared<arrow::Field>(name, array->type());
 
             columns.emplace_back(std::move(field));
-            data.emplace_back(datum.make_array());
+            data.emplace_back(std::move(array));
         }
     }
 
@@ -431,7 +437,7 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, const TStageInfo& stageIn
 {
     auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
-    if (stage.GetIsEffectsStage()) {
+    if (stage.GetIsEffectsStage() && stage.GetSinks().empty()) {
         YQL_ENSURE(stageInfo.OutputsCount == 1);
 
         for (auto& taskId : stageInfo.Tasks) {
@@ -1098,9 +1104,14 @@ void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput&
         transformProto->SetOutputType(input.Transform->OutputType);
         if (input.Meta.StreamLookupSettings) {
             YQL_ENSURE(input.Meta.StreamLookupSettings);
-            YQL_ENSURE(snapshot.IsValid(), "stream lookup cannot be performed without the snapshot.");
-            input.Meta.StreamLookupSettings->MutableSnapshot()->SetStep(snapshot.Step);
-            input.Meta.StreamLookupSettings->MutableSnapshot()->SetTxId(snapshot.TxId);
+            if (snapshot.IsValid()) {
+                input.Meta.StreamLookupSettings->MutableSnapshot()->SetStep(snapshot.Step);
+                input.Meta.StreamLookupSettings->MutableSnapshot()->SetTxId(snapshot.TxId);
+            } else {
+                YQL_ENSURE(tasksGraph.GetMeta().AllowInconsistentReads, "Expected valid snapshot or enabled inconsistent read mode");
+                input.Meta.StreamLookupSettings->SetAllowInconsistentReads(true);
+            }
+
             if (lockTxId) {
                 input.Meta.StreamLookupSettings->SetLockTxId(*lockTxId);
             }

@@ -74,7 +74,7 @@ class HttpClient(Client):
         """
         self.url = f'{interface}://{host}:{port}'
         self.headers = {}
-        ch_settings = settings or {}
+        ch_settings = dict_copy(settings, self.params)
         self.http = pool_mgr
         if interface == 'https':
             if not https_proxy:
@@ -113,7 +113,11 @@ class HttpClient(Client):
         self._read_format = self._write_format = 'Native'
         self._transform = NativeTransform()
 
-        connect_timeout, send_receive_timeout = coerce_int(connect_timeout), coerce_int(send_receive_timeout)
+        # There is use cases when client need to disable timeouts.
+        if connect_timeout is not None:
+            connect_timeout = coerce_int(connect_timeout)
+        if send_receive_timeout is not None:
+            send_receive_timeout = coerce_int(send_receive_timeout)
         self.timeout = Timeout(connect=connect_timeout, read=send_receive_timeout)
         self.http_retries = 1
         self._send_progress = None
@@ -167,7 +171,7 @@ class HttpClient(Client):
         final_query = super()._prep_query(context)
         if context.is_insert:
             return final_query
-        return f'{final_query}\n FORMAT {self._write_format}'
+        return f'{final_query}\n FORMAT {self._read_format}'
 
     def _query_with_context(self, context: QueryContext) -> QueryResult:
         headers = {}

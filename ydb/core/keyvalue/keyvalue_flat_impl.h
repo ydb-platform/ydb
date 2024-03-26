@@ -52,6 +52,15 @@ protected:
 
         TTxType GetTxType() const override { return TXTYPE_INIT; }
 
+        void ApplyLogBatching(const TActorContext &ctx, auto &alter) {
+            if (NKikimr::AppData(ctx)->FeatureFlags.GetEnableKeyvalueLogBatching()) { 
+                alter.SetExecutorAllowLogBatching(true);
+                alter.SetExecutorLogFlushPeriod(TDuration::MicroSeconds(500));
+            } else {
+                alter.SetExecutorAllowLogBatching(false);
+            }
+        }
+
         bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << " TTxInit flat Execute");
             TSimpleDbFlat db(txc.DB, TrashBeingCommitted);
@@ -63,9 +72,7 @@ protected:
                 alter.AddColumn(TABLE_ID, "key", KEY_TAG, NScheme::TSmallBoundedString::TypeId, false);
                 alter.AddColumnToKey(TABLE_ID, KEY_TAG);
                 alter.AddColumn(TABLE_ID, "value", VALUE_TAG, NScheme::TString::TypeId, false);
-                // Init log batching settings
-                alter.SetExecutorAllowLogBatching(true);
-                alter.SetExecutorLogFlushPeriod(TDuration::MicroSeconds(500));
+                ApplyLogBatching(ctx, alter);
                 Self.State.Clear();
             } else {
                 LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << " TTxInit flat ReadDb Tree");
@@ -78,6 +85,8 @@ protected:
                     return true;
                 }
                 Self.State.UpdateResourceMetrics(ctx);
+                // auto &alter = txc.DB.Alter();
+                // ApplyLogBatching(ctx, alter);
             }
             Self.State.InitExecute(Self.TabletID(), KeyValueActorId, txc.Generation, db, ctx, Self.Info());
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet

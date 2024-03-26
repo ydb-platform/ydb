@@ -23,7 +23,7 @@
 |Балансировка среди всех нод всех локального ДЦ|\+|\+|\+|?|\-|\-|\-||
 |**Credentials providers**|||||||||
 |Anonymous (по умолчанию)|\+|\+|\+|\+|\+|\+|\+|\+|
-|Static (user - password)|\+|\+|\+|\+|\-|\-|\-|\+|
+|Static (user - password)|\+|\+|\+|\+|\-|\-|\+|\+|
 |Token: IAM, OAuth|\+|\+|\+|\+|\+|\+|\+|\+|
 |Service account (Yandex.Cloud specific)|\+|\+|\+|\+|\+|\+|\-|\+|
 |Metadata (Yandex.Cloud specific)|\+|\+|\+|\+|\+|\+|\+|\+|
@@ -130,7 +130,7 @@
 |\* environ|?|?|\+|\+|\+|\-|\-|\+|
 |\* metadata|?|?|\+|\+|\+|\+|\+|\+|
 |\* service_account|?|?|\+|\+|\+|\-|\-|\+|
-|\* static (username \+ password)|?|?|\+|\+|\+|\+|\-|\+|
+|\* static (username \+ password)|?|?|\+|\+|\+|\+|\+|\+|
 |Basic (series)|\+|?|\+|\+|\+|\+|\+|\+|
 |Bulk Upsert|\+/-|?|\+|\+|\+|\-|\-|\+|
 |Containers (Struct,Variant,List,Tuple)|\-|?|\+|\-|\-|\-|\+|\-|

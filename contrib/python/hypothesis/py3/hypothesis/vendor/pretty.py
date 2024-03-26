@@ -747,7 +747,7 @@ _type_pprinters = {
     type: _type_pprint,
     types.FunctionType: _function_pprint,
     types.BuiltinFunctionType: _function_pprint,
-    types.MethodType: _repr_pprint,
+    types.MethodType: _function_pprint,
     datetime.datetime: _repr_pprint,
     datetime.timedelta: _repr_pprint,
     BaseException: _exception_pprint,
@@ -764,7 +764,7 @@ def for_type_by_name(type_module, type_name, func):
     """Add a pretty printer for a type specified by the module and name of a
     type rather than the type object itself."""
     key = (type_module, type_name)
-    oldfunc = _deferred_type_pprinters.get(key, None)
+    oldfunc = _deferred_type_pprinters.get(key)
     _deferred_type_pprinters[key] = func
     return oldfunc
 

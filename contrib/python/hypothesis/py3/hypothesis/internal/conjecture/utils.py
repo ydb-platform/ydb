@@ -101,13 +101,12 @@ class Sampler:
 
     table: List[Tuple[int, int, float]]  # (base_idx, alt_idx, alt_chance)
 
-    def __init__(self, weights: Sequence[float]):
+    def __init__(self, weights: Sequence[float], *, observe: bool = True):
+        self.observe = observe
+
         n = len(weights)
-
         table: "list[list[int | float | None]]" = [[i, None, None] for i in range(n)]
-
         total = sum(weights)
-
         num_type = type(total)
 
         zero = num_type(0)  # type: ignore
@@ -167,18 +166,42 @@ class Sampler:
                 self.table.append((base, alternate, alternate_chance))
         self.table.sort()
 
-    def sample(self, data: "ConjectureData", forced: Optional[int] = None) -> int:
+    def sample(
+        self,
+        data: "ConjectureData",
+        *,
+        forced: Optional[int] = None,
+        fake_forced: bool = False,
+    ) -> int:
         data.start_example(SAMPLE_IN_SAMPLER_LABEL)
         forced_choice = (  # pragma: no branch # https://github.com/nedbat/coveragepy/issues/1617
             None
             if forced is None
-            else next((b, a, a_c) for (b, a, a_c) in self.table if forced in (b, a))
+            else next(
+                (base, alternate, alternate_chance)
+                for (base, alternate, alternate_chance) in self.table
+                if forced == base or (forced == alternate and alternate_chance > 0)
+            )
         )
         base, alternate, alternate_chance = data.choice(
-            self.table, forced=forced_choice
+            self.table,
+            forced=forced_choice,
+            fake_forced=fake_forced,
+            observe=self.observe,
         )
+        forced_use_alternate = None
+        if forced is not None:
+            # we maintain this invariant when picking forced_choice above.
+            # This song and dance about alternate_chance > 0 is to avoid forcing
+            # e.g. draw_boolean(p=0, forced=True), which is an error.
+            forced_use_alternate = forced == alternate and alternate_chance > 0
+            assert forced == base or forced_use_alternate
+
         use_alternate = data.draw_boolean(
-            alternate_chance, forced=None if forced is None else forced == alternate
+            alternate_chance,
+            forced=forced_use_alternate,
+            fake_forced=fake_forced,
+            observe=self.observe,
         )
         data.stop_example()
         if use_alternate:
@@ -190,7 +213,7 @@ class Sampler:
 
 
 INT_SIZES = (8, 16, 32, 64, 128)
-INT_SIZES_SAMPLER = Sampler((4.0, 8.0, 1.0, 1.0, 0.5))
+INT_SIZES_SAMPLER = Sampler((4.0, 8.0, 1.0, 1.0, 0.5), observe=False)
 
 
 class many:
@@ -213,6 +236,8 @@ class many:
         average_size: Union[int, float],
         *,
         forced: Optional[int] = None,
+        fake_forced: bool = False,
+        observe: bool = True,
     ) -> None:
         assert 0 <= min_size <= average_size <= max_size
         assert forced is None or min_size <= forced <= max_size
@@ -220,23 +245,24 @@ class many:
         self.max_size = max_size
         self.data = data
         self.forced_size = forced
+        self.fake_forced = fake_forced
         self.p_continue = _calc_p_continue(average_size - min_size, max_size - min_size)
         self.count = 0
         self.rejections = 0
         self.drawn = False
         self.force_stop = False
         self.rejected = False
+        self.observe = observe
 
     def more(self) -> bool:
         """Should I draw another element to add to the collection?"""
         if self.drawn:
-            self.data.stop_example(discard=self.rejected)
+            self.data.stop_example()
 
         self.drawn = True
         self.rejected = False
 
         self.data.start_example(ONE_FROM_MANY_LABEL)
-
         if self.min_size == self.max_size:
             # if we have to hit an exact size, draw unconditionally until that
             # point, and no further.
@@ -255,7 +281,10 @@ class many:
             elif self.forced_size is not None:
                 forced_result = self.count < self.forced_size
             should_continue = self.data.draw_boolean(
-                self.p_continue, forced=forced_result
+                self.p_continue,
+                forced=forced_result,
+                fake_forced=self.fake_forced,
+                observe=self.observe,
             )
 
         if should_continue:

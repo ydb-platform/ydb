@@ -10,6 +10,7 @@ namespace NSysView {
 
 constexpr TStringBuf PartitionStatsName = "partition_stats";
 constexpr TStringBuf NodesName = "nodes";
+constexpr TStringBuf QuerySessions = "query_sessions";
 
 constexpr TStringBuf TopQueriesByDuration1MinuteName = "top_queries_by_duration_one_minute";
 constexpr TStringBuf TopQueriesByDuration1HourName = "top_queries_by_duration_one_hour";
@@ -31,7 +32,9 @@ constexpr TStringBuf TabletsName = "hive_tablets";
 constexpr TStringBuf QueryMetricsName = "query_metrics_one_minute";
 
 constexpr TStringBuf StorePrimaryIndexStatsName = "store_primary_index_stats";
+constexpr TStringBuf StorePrimaryIndexPortionStatsName = "store_primary_index_portion_stats";
 constexpr TStringBuf TablePrimaryIndexStatsName = "primary_index_stats";
+constexpr TStringBuf TablePrimaryIndexPortionStatsName = "primary_index_portion_stats";
 
 constexpr TStringBuf TopPartitions1MinuteName = "top_partitions_one_minute";
 constexpr TStringBuf TopPartitions1HourName = "top_partitions_one_hour";
@@ -410,7 +413,7 @@ struct Schema : NIceDb::Schema {
             Rows,
             RawBytes,
             PortionId,
-            ChunkIdx, 
+            ChunkIdx,
             EntityName,
             InternalEntityId,
             BlobId,
@@ -463,6 +466,66 @@ struct Schema : NIceDb::Schema {
             IndexSize,
             InFlightTxCount>;
     };
+
+    struct QuerySessions : Table<13> {
+        struct SessionId : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct NodeId : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct State : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct Query : Column<4, NScheme::NTypeIds::Utf8> {};
+        struct QueryCount : Column<5, NScheme::NTypeIds::Uint32> {};
+        struct ClientAddress : Column<6, NScheme::NTypeIds::Utf8> {};
+        struct ClientPID : Column<7, NScheme::NTypeIds::Utf8> {};
+        struct ClientUserAgent : Column<8, NScheme::NTypeIds::Utf8> {};
+        struct ClientSdkBuildInfo : Column<9, NScheme::NTypeIds::Utf8> {};
+        struct ApplicationName : Column<10, NScheme::NTypeIds::Utf8> {};
+        struct SessionStartAt : Column<11, NScheme::NTypeIds::Timestamp> {};
+        struct QueryStartAt : Column<12, NScheme::NTypeIds::Timestamp> {};
+        struct StateChangeAt : Column<13, NScheme::NTypeIds::Timestamp> {};
+        struct UserSID : Column<14, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<SessionId>;
+        using TColumns = TableColumns<
+            SessionId,
+            NodeId,
+            State,
+            Query,
+            QueryCount,
+            ClientAddress,
+            ClientPID,
+            ClientUserAgent,
+            ClientSdkBuildInfo,
+            ApplicationName,
+            SessionStartAt,
+            QueryStartAt,
+            StateChangeAt,
+            UserSID>;
+    };
+
+    struct PrimaryIndexPortionStats: Table<14> {
+        struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Kind: Column<2, NScheme::NTypeIds::Utf8> {};
+        struct TabletId: Column<3, NScheme::NTypeIds::Uint64> {};
+        struct Rows: Column<4, NScheme::NTypeIds::Uint64> {};
+        struct RawBytes: Column<5, NScheme::NTypeIds::Uint64> {};
+        struct PortionId: Column<6, NScheme::NTypeIds::Uint64> {};
+        struct Activity: Column<7, NScheme::NTypeIds::Bool> {};
+        struct TierName: Column<8, NScheme::NTypeIds::Utf8> {};
+        struct Stats: Column<9, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<PathId, TabletId, PortionId>;
+        using TColumns = TableColumns<
+            PathId,
+            Kind,
+            TabletId,
+            Rows,
+            RawBytes,
+            PortionId,
+            Activity,
+            TierName,
+            Stats
+        >;
+    };
+
 };
 
 bool MaybeSystemViewPath(const TVector<TString>& path);

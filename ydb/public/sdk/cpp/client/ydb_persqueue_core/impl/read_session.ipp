@@ -35,10 +35,6 @@ namespace NYdb::NPersQueue::NCompressionDetails {
     extern TString Decompress(const Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::MessageData& data);
 }
 
-namespace NYdb::NTopic::NCompressionDetails {
-    extern TString Decompress(const Ydb::Topic::StreamReadMessage::ReadResponse::MessageData& data, Ydb::Topic::Codec codec);
-}
-
 namespace NYdb::NPersQueue {
 
 static const bool RangesMode = !GetEnv("PQ_OFFSET_RANGES_MODE").empty();
@@ -77,7 +73,7 @@ void TPartitionStreamImpl<UseMigrationProtocol>::Commit(ui64 startOffset, ui64 e
             Commits.EraseInterval(0, endOffset); // Drop only committed ranges;
         }
         for (auto range: toCommit) {
-            sessionShared->Commit(this, range.first, range.second);
+            sessionShared->Commit(this, range.first, Min(range.second, endOffset));
         }
     }
 }
@@ -224,6 +220,14 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDe
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TSingleClusterReadSessionImpl
+
+template<bool UseMigrationProtocol>
+TSingleClusterReadSessionImpl<UseMigrationProtocol>::~TSingleClusterReadSessionImpl() {
+    for (auto&& [_, partitionStream] : PartitionStreams) {
+        partitionStream->ClearQueue();
+    }
+}
+
 
 template<bool UseMigrationProtocol>
 TStringBuilder TSingleClusterReadSessionImpl<UseMigrationProtocol>::GetLogPrefix() const {
@@ -1057,6 +1061,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
         PartitionStreams[partitionStream->GetAssignId()];
     if (currentPartitionStream) {
         CookieMapping.RemoveMapping(currentPartitionStream->GetPartitionStreamId());
+
         bool pushRes = EventsQueue->PushEvent(
             currentPartitionStream,
              TReadSessionEvent::TPartitionStreamClosedEvent(
@@ -2559,13 +2564,13 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
             maxOffset = Max(maxOffset, static_cast<i64>(data.offset()));
 
             try {
-
                 if constexpr (UseMigrationProtocol) {
                     if (Parent->DoDecompress
                         && data.codec() != Ydb::PersQueue::V1::CODEC_RAW
                         && data.codec() != Ydb::PersQueue::V1::CODEC_UNSPECIFIED
                     ) {
-                        TString decompressed = NCompressionDetails::Decompress(data);
+                        const NYdb::NTopic::ICodec* codecImpl = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(data.codec()));
+                        TString decompressed = codecImpl->Decompress(data.data());
                         data.set_data(decompressed);
                         data.set_codec(Ydb::PersQueue::V1::CODEC_RAW);
                     }
@@ -2574,7 +2579,8 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
                         && static_cast<Ydb::Topic::Codec>(batch.codec()) != Ydb::Topic::CODEC_RAW
                         && static_cast<Ydb::Topic::Codec>(batch.codec()) != Ydb::Topic::CODEC_UNSPECIFIED
                     ) {
-                        TString decompressed = ::NYdb::NTopic::NCompressionDetails::Decompress(data, static_cast<Ydb::Topic::Codec>(batch.codec()));
+                        const NYdb::NTopic::ICodec* codecImpl = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(batch.codec()));
+                        TString decompressed = codecImpl->Decompress(data.data());
                         data.set_data(decompressed);
                     }
                 }

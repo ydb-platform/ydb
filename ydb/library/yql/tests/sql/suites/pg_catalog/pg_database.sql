@@ -5,7 +5,10 @@ datdba,
 datistemplate,
 datname,
 encoding,
-oid
+oid,
+datacl is null,
+datcollate,
+datctype
 from
 pg_catalog.pg_database
 order by oid

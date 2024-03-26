@@ -2,8 +2,6 @@
 
 #include "public.h"
 
-#include <yt/yt/core/misc/historic_usage_aggregator.h>
-
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -63,6 +61,7 @@ public:
     {
         i64 EnqueuedActionCount = 0;
         i64 DequeuedActionCount = 0;
+        i64 ExecutedActionCount = 0;
         i64 WaitingActionCount = 0;
         TDuration TotalTimeEstimate;
     };
@@ -77,7 +76,7 @@ public:
         requires TEnumTraits<E>::IsEnum
     TInvokerStatistics GetInvokerStatistics(E index) const;
 
-    virtual void UpdateActionTimeAggregatorParameters(THistoricUsageAggregationParameters newParameters) = 0;
+    virtual void UpdateActionTimeRelevancyHalflife(TDuration newHalflife) = 0;
 
 protected:
     virtual TInvokerStatistics DoGetInvokerStatistics(int index) const = 0;

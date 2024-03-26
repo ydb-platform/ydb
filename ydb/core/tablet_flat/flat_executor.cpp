@@ -4234,7 +4234,7 @@ TString TExecutor::CheckBorrowConsistency() {
 
 TTransactionWaitPad::TTransactionWaitPad(THolder<TSeat> seat)
     : Seat(std::move(seat))
-    , WaitingSpan(NWilson::TSpan(TWilsonTablet::Tablet, Seat->GetTxTraceId(), "Tablet.Transaction.Wait"))
+    , WaitingSpan(NWilson::TSpan(TWilsonTablet::TabletDetailed, Seat->GetTxTraceId(), "Tablet.Transaction.Wait"))
 {}
 
 TTransactionWaitPad::~TTransactionWaitPad()
@@ -4315,6 +4315,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     comp->Epoch = snapshot->Subset->Epoch(); /* narrows requested to actual */
     comp->Layout.Final = comp->Params->IsFinal;
     comp->Layout.WriteBTreeIndex = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
+    comp->Layout.WriteFlatIndex = AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
     comp->Writer.StickyFlatIndex = !comp->Layout.WriteBTreeIndex;
     comp->Layout.MaxRows = snapshot->Subset->MaxRows();
     comp->Layout.ByKeyFilter = tableInfo->ByKeyFilter;

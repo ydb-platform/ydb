@@ -476,7 +476,7 @@ namespace NTypeAnnImpl {
     IGraphTransformer::TStatus MapJoinCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         
-        if (!EnsureArgsCount(*input, 7, ctx.Expr)) {
+        if (!EnsureArgsCount(*input, 9, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -632,7 +632,7 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus GraceJoinCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (!EnsureArgsCount(*input, 8, ctx.Expr)) {
+        if (!EnsureArgsCount(*input, 10, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -662,7 +662,7 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus GraceSelfJoinCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (!EnsureArgsCount(*input, 7, ctx.Expr)) {
+        if (!EnsureArgsCount(*input, 9, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -896,6 +896,9 @@ namespace NTypeAnnImpl {
                     return IGraphTransformer::TStatus::Error;
                 }
 
+            }
+            else if (optionName == "join_algo") {
+                // do nothing
             }
             else {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() <<

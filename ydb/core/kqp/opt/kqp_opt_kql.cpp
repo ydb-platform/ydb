@@ -77,36 +77,6 @@ std::pair<TExprBase, TCoAtomList> CreateRowsToReplace(const TExprBase& input,
     return {writeData, columnList};
 }
 
-bool UseReadTableRanges(const TKikimrTableDescription& tableData, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx) {
-    /*
-     * OLAP tables can not work with ordinary ReadTable in case there is no support in physical
-     * optimizers for them.
-     */
-    if (tableData.Metadata->Kind == EKikimrTableKind::Olap) {
-        return true;
-    }
-
-    auto predicateExtractSetting = kqpCtx->Config->GetOptPredicateExtract();
-
-    if (predicateExtractSetting != EOptionalFlag::Auto) {
-        return predicateExtractSetting == EOptionalFlag::Enabled;
-    }
-
-    if (kqpCtx->IsScanQuery() && kqpCtx->Config->EnablePredicateExtractForScanQuery) {
-        return true;
-    }
-
-    if (kqpCtx->IsDataQuery() && kqpCtx->Config->EnablePredicateExtractForDataQuery) {
-        return true;
-    }
-
-    if (kqpCtx->IsGenericQuery()) {
-        return true;
-    }
-
-    return false;
-}
-
 bool HasIndexesToWrite(const TKikimrTableDescription& tableData) {
     bool hasIndexesToWrite = false;
     YQL_ENSURE(tableData.Metadata->Indexes.size() == tableData.Metadata->SecondaryGlobalIndexMetadata.size());
@@ -121,7 +91,7 @@ bool HasIndexesToWrite(const TKikimrTableDescription& tableData) {
 }
 
 TExprBase BuildReadTable(const TCoAtomList& columns, TPositionHandle pos, const TKikimrTableDescription& tableData, bool forcePrimary,
-    TExprContext& ctx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+    TExprContext& ctx)
 {
     TExprNode::TPtr readTable;
     const auto& tableMeta = BuildTableMeta(tableData, pos, ctx);
@@ -129,74 +99,44 @@ TExprBase BuildReadTable(const TCoAtomList& columns, TPositionHandle pos, const 
     TKqpReadTableSettings settings;
     settings.ForcePrimary = forcePrimary;
 
-    if (UseReadTableRanges(tableData, kqpCtx)) {
-        readTable = Build<TKqlReadTableRanges>(ctx, pos)
-            .Table(tableMeta)
-            .Ranges<TCoVoid>()
-                .Build()
-            .Columns(columns)
-            .Settings(settings.BuildNode(ctx, pos))
-            .ExplainPrompt()
-                .Build()
-            .Done().Ptr();
-    } else {
-        readTable = Build<TKqlReadTable>(ctx, pos)
-            .Table(tableMeta)
-            .Range()
-                .From<TKqlKeyInc>()
-                    .Build()
-                .To<TKqlKeyInc>()
-                    .Build()
-                .Build()
-            .Columns(columns)
-            .Settings(settings.BuildNode(ctx, pos))
-            .Done().Ptr();
-    }
+    readTable = Build<TKqlReadTableRanges>(ctx, pos)
+        .Table(tableMeta)
+        .Ranges<TCoVoid>()
+            .Build()
+        .Columns(columns)
+        .Settings(settings.BuildNode(ctx, pos))
+        .ExplainPrompt()
+            .Build()
+        .Done().Ptr();
 
     return TExprBase(readTable);
 
 }
 
 TExprBase BuildReadTable(const TKiReadTable& read, const TKikimrTableDescription& tableData, bool forcePrimary,
-    bool withSystemColumns, TExprContext& ctx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+    bool withSystemColumns, TExprContext& ctx)
 {
     const auto& columns = read.GetSelectColumns(ctx, tableData, withSystemColumns);
 
-    auto readNode = BuildReadTable(columns, read.Pos(), tableData, forcePrimary, ctx, kqpCtx);
+    auto readNode = BuildReadTable(columns, read.Pos(), tableData, forcePrimary, ctx);
 
     return readNode;
 }
 
 TExprBase BuildReadTableIndex(const TKiReadTable& read, const TKikimrTableDescription& tableData,
-    const TString& indexName, bool withSystemColumns, TExprContext& ctx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+    const TString& indexName, bool withSystemColumns, TExprContext& ctx)
 {
-    if (UseReadTableRanges(tableData, kqpCtx)) {
-        return Build<TKqlReadTableIndexRanges>(ctx, read.Pos())
-            .Table(BuildTableMeta(tableData, read.Pos(), ctx))
-            .Ranges<TCoVoid>()
-                .Build()
-            .ExplainPrompt()
-                .Build()
-            .Columns(read.GetSelectColumns(ctx, tableData, withSystemColumns))
-            .Settings()
-                .Build()
-            .Index().Build(indexName)
-            .Done();
-    } else {
-        return Build<TKqlReadTableIndex>(ctx, read.Pos())
-            .Table(BuildTableMeta(tableData, read.Pos(), ctx))
-            .Range()
-                .From<TKqlKeyInc>()
-                    .Build()
-                .To<TKqlKeyInc>()
-                    .Build()
-                .Build()
-            .Columns(read.GetSelectColumns(ctx, tableData, withSystemColumns))
-            .Settings()
-                .Build()
-            .Index().Build(indexName)
-            .Done();
-    }
+    return Build<TKqlReadTableIndexRanges>(ctx, read.Pos())
+        .Table(BuildTableMeta(tableData, read.Pos(), ctx))
+        .Ranges<TCoVoid>()
+            .Build()
+        .ExplainPrompt()
+            .Build()
+        .Columns(read.GetSelectColumns(ctx, tableData, withSystemColumns))
+        .Settings()
+            .Build()
+        .Index().Build(indexName)
+        .Done();
 }
 
 TExprNode::TPtr GetPgNotNullColumns(
@@ -444,12 +384,12 @@ TExprBase BuildDeleteTableWithIndex(const TKiWriteTable& write, const TKikimrTab
 }
 
 TExprBase BuildRowsToDelete(const TKikimrTableDescription& tableData, bool withSystemColumns, const TCoLambda& filter,
-    const TPositionHandle pos, TExprContext& ctx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+    const TPositionHandle pos, TExprContext& ctx)
 {
     const auto tableMeta = BuildTableMeta(tableData, pos, ctx);
-    const auto tableColumns = BuildColumnsList(tableData, pos, ctx, withSystemColumns);
+    const auto tableColumns = BuildColumnsList(tableData, pos, ctx, withSystemColumns, true /*ignoreWriteOnlyColumns*/);
 
-    const auto allRows = BuildReadTable(tableColumns, pos, tableData, false, ctx, kqpCtx);
+    const auto allRows = BuildReadTable(tableColumns, pos, tableData, false, ctx);
 
     return Build<TCoFilter>(ctx, pos)
         .Input(allRows)
@@ -458,9 +398,9 @@ TExprBase BuildRowsToDelete(const TKikimrTableDescription& tableData, bool withS
 }
 
 TExprBase BuildDeleteTable(const TKiDeleteTable& del, const TKikimrTableDescription& tableData, bool withSystemColumns,
-    TExprContext& ctx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+    TExprContext& ctx)
 {
-    auto rowsToDelete = BuildRowsToDelete(tableData, withSystemColumns, del.Filter(), del.Pos(), ctx, kqpCtx);
+    auto rowsToDelete = BuildRowsToDelete(tableData, withSystemColumns, del.Filter(), del.Pos(), ctx);
     auto keysToDelete = ProjectColumns(rowsToDelete, tableData.Metadata->KeyColumnNames, ctx);
 
     return Build<TKqlDeleteRows>(ctx, del.Pos())
@@ -471,9 +411,9 @@ TExprBase BuildDeleteTable(const TKiDeleteTable& del, const TKikimrTableDescript
 }
 
 TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTableDescription& tableData,
-    bool withSystemColumns, TExprContext& ctx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+    bool withSystemColumns, TExprContext& ctx)
 {
-    auto rowsToDelete = BuildRowsToDelete(tableData, withSystemColumns, del.Filter(), del.Pos(), ctx, kqpCtx);
+    auto rowsToDelete = BuildRowsToDelete(tableData, withSystemColumns, del.Filter(), del.Pos(), ctx);
 
     auto indexes = BuildSecondaryIndexVector(tableData, del.Pos(), ctx, nullptr,
         [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
@@ -520,9 +460,9 @@ TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTabl
 }
 
 TExprBase BuildRowsToUpdate(const TKikimrTableDescription& tableData, bool withSystemColumns, const TCoLambda& filter,
-    const TPositionHandle pos, TExprContext& ctx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+    const TPositionHandle pos, TExprContext& ctx)
 {
-    auto kqlReadTable = BuildReadTable(BuildColumnsList(tableData, pos, ctx, withSystemColumns), pos, tableData, false, ctx, kqpCtx);
+    auto kqlReadTable = BuildReadTable(BuildColumnsList(tableData, pos, ctx, withSystemColumns, true /*ignoreWriteOnlyColumns*/), pos, tableData, false, ctx);
 
     return Build<TCoFilter>(ctx, pos)
         .Input(kqlReadTable)
@@ -587,9 +527,9 @@ THashSet<TStringBuf> GetUpdateColumns(const TKikimrTableDescription& tableData, 
 }
 
 TExprBase BuildUpdateTable(const TKiUpdateTable& update, const TKikimrTableDescription& tableData,
-    bool withSystemColumns, TExprContext& ctx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+    bool withSystemColumns, TExprContext& ctx)
 {
-    auto rowsToUpdate = BuildRowsToUpdate(tableData, withSystemColumns, update.Filter(), update.Pos(), ctx, kqpCtx);
+    auto rowsToUpdate = BuildRowsToUpdate(tableData, withSystemColumns, update.Filter(), update.Pos(), ctx);
 
     auto updateColumns = GetUpdateColumns(tableData, update.Update());
     auto updatedRows = BuildUpdatedRows(rowsToUpdate, update.Update(), updateColumns, update.Pos(), ctx);
@@ -614,9 +554,9 @@ TExprBase BuildUpdateTable(const TKiUpdateTable& update, const TKikimrTableDescr
 }
 
 TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrTableDescription& tableData,
-    bool withSystemColumns, TExprContext& ctx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+    bool withSystemColumns, TExprContext& ctx)
 {
-    auto rowsToUpdate = BuildRowsToUpdate(tableData, withSystemColumns, update.Filter(), update.Pos(), ctx, kqpCtx);
+    auto rowsToUpdate = BuildRowsToUpdate(tableData, withSystemColumns, update.Filter(), update.Pos(), ctx);
 
     TVector<TExprBase> effects;
 
@@ -784,10 +724,10 @@ TExprNode::TPtr HandleReadTable(const TKiReadTable& read, TExprContext& ctx, con
             return nullptr;
         }
 
-        return BuildReadTableIndex(read, tableData, indexName, withSystemColumns, ctx, kqpCtx).Ptr();
+        return BuildReadTableIndex(read, tableData, indexName, withSystemColumns, ctx).Ptr();
     }
 
-    return BuildReadTable(read, tableData, view && view->PrimaryFlag, withSystemColumns, ctx, kqpCtx).Ptr();
+    return BuildReadTable(read, tableData, view && view->PrimaryFlag, withSystemColumns, ctx).Ptr();
 }
 
 TExprBase WriteTableSimple(const TKiWriteTable& write, const TCoAtomList& inputColumns,
@@ -867,25 +807,25 @@ TExprNode::TPtr HandleWriteTable(const TKiWriteTable& write, TExprContext& ctx, 
 }
 
 TExprBase HandleUpdateTable(const TKiUpdateTable& update, TExprContext& ctx,
-    const TKikimrTablesData& tablesData, bool withSystemColumns, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+    const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
     const auto& tableData = GetTableData(tablesData, update.DataSink().Cluster(), update.Table().Value());
 
     if (HasIndexesToWrite(tableData)) {
-        return BuildUpdateTableWithIndex(update, tableData, withSystemColumns, ctx, kqpCtx);
+        return BuildUpdateTableWithIndex(update, tableData, withSystemColumns, ctx);
     } else {
-        return BuildUpdateTable(update, tableData, withSystemColumns, ctx, kqpCtx);
+        return BuildUpdateTable(update, tableData, withSystemColumns, ctx);
     }
 }
 
 TExprBase HandleDeleteTable(const TKiDeleteTable& del, TExprContext& ctx, const TKikimrTablesData& tablesData,
-    bool withSystemColumns, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+    bool withSystemColumns)
 {
     auto& tableData = GetTableData(tablesData, del.DataSink().Cluster(), del.Table().Value());
     if (HasIndexesToWrite(tableData)) {
-        return BuildDeleteTableWithIndex(del, tableData, withSystemColumns, ctx, kqpCtx);
+        return BuildDeleteTableWithIndex(del, tableData, withSystemColumns, ctx);
     } else {
-        return BuildDeleteTable(del, tableData, withSystemColumns, ctx, kqpCtx);
+        return BuildDeleteTable(del, tableData, withSystemColumns, ctx);
     }
 }
 
@@ -953,11 +893,11 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
             }
 
             if (auto maybeUpdate = effect.Maybe<TKiUpdateTable>()) {
-                kqlEffects.push_back(HandleUpdateTable(maybeUpdate.Cast(), ctx, tablesData, withSystemColumns, kqpCtx));
+                kqlEffects.push_back(HandleUpdateTable(maybeUpdate.Cast(), ctx, tablesData, withSystemColumns));
             }
 
             if (auto maybeDelete = effect.Maybe<TKiDeleteTable>()) {
-                kqlEffects.push_back(HandleDeleteTable(maybeDelete.Cast(), ctx, tablesData, withSystemColumns, kqpCtx));
+                kqlEffects.push_back(HandleDeleteTable(maybeDelete.Cast(), ctx, tablesData, withSystemColumns));
             }
 
             if (TExprNode::TPtr result = HandleExternalWrite(effect, ctx, typesCtx)) {

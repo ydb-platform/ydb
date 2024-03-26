@@ -6,9 +6,11 @@ PEERDIR(
     ydb/core/engine/minikql
     ydb/core/protos
     ydb/core/tablet_flat
+    ydb/core/tx/replication/common
     ydb/core/tx/replication/ydb_proxy
     ydb/core/util
     ydb/core/ydb_convert
+    library/cpp/json
 )
 
 SRCS(
@@ -19,6 +21,7 @@ SRCS(
     nodes_manager.cpp
     private_events.cpp
     replication.cpp
+    session_info.cpp
     stream_creator.cpp
     stream_remover.cpp
     sys_params.cpp
@@ -44,3 +47,7 @@ GENERATE_ENUM_SERIALIZATION(replication.h)
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut_dst_creator
+)

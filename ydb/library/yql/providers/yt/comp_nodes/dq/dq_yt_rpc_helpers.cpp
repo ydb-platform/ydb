@@ -16,6 +16,9 @@ std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString&
     auto connectionConfig = NYT::New<NYT::NApi::NRpcProxy::TConnectionConfig>();
     connectionConfig->ClusterUrl = clusterName;
     connectionConfig->DefaultTotalStreamingTimeout = TDuration::MilliSeconds(timeout);
+    connectionConfig->EnableRetries = true;
+    connectionConfig->DefaultPingPeriod = TDuration::MilliSeconds(5000);
+
     auto connection = CreateConnection(connectionConfig);
     auto clientOptions = NYT::NApi::TClientOptions();
 

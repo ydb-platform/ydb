@@ -144,7 +144,7 @@ void TTransactionCache::TEntry::UpdateColumnarStat(NYT::TRichYPath ytPath, const
 ITransactionPtr TTransactionCache::TEntry::GetSnapshotTx(bool createTx) {
     auto guard = Guard(Lock_);
     if (createTx || !LastSnapshotTx) {
-        LastSnapshotTx = Tx->StartTransaction(TStartTransactionOptions().Attributes(TransactionSpec));
+        LastSnapshotTx = Tx->StartTransaction(TStartTransactionOptions().Attributes(TransactionSpec).PingAncestors(true));
         SnapshotTxs.emplace(LastSnapshotTx->GetId(), LastSnapshotTx);
     }
     return LastSnapshotTx;
@@ -454,6 +454,39 @@ void TTransactionCache::AbortAll() {
                     error = "Failed to shut down client: " + CurrentExceptionMessage();
                 }
             }
+        }
+    }
+
+    if (error) {
+        ythrow yexception() << error;
+    }
+}
+
+void TTransactionCache::DetachSnapshotTxs() {
+    TString error;
+    auto detachTx = [&] (const ITransactionPtr& tx) {
+        try {
+            tx->Detach();
+        } catch (...) {
+            YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+
+            // Store first detach error.
+            if (error.empty()) {
+                error = "Failed to detach transaction " + GetGuidAsString(tx->GetId()) + ": " + CurrentExceptionMessage();
+            }
+        }
+    };
+
+    for (auto& item : TxMap_) {
+        auto entry = item.second;
+
+        for (auto& item : entry->SnapshotTxs) {
+            YQL_CLOG(DEBUG, ProviderYt) << "DetachSnapshotTxs(): Detaching Snapshot tx " << GetGuidAsString(item.second->GetId());
+            detachTx(item.second);
+        }
+        if (entry->Tx) {
+            YQL_CLOG(INFO, ProviderYt) << "Detaching tx " << GetGuidAsString(entry->Tx->GetId())  << " on " << item.first;
+            detachTx(entry->Tx);
         }
     }
 

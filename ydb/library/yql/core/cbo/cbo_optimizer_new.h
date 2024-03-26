@@ -87,7 +87,7 @@ TString ConvertToJoinString(const EJoinKind kind);
 struct IProviderContext {
     virtual ~IProviderContext() = default;
 
-    virtual double ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, EJoinAlgoType joinAlgol) const = 0;
+    virtual double ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, EJoinAlgoType joinAlgol) const = 0;
 
     virtual bool IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left, 
         const std::shared_ptr<IBaseOptimizerNode>& right, 
@@ -105,9 +105,10 @@ struct IProviderContext {
 struct TDummyProviderContext : public IProviderContext {
     TDummyProviderContext() {}
 
-    double ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, EJoinAlgoType joinAlgo) const override {
+    double ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, EJoinAlgoType joinAlgo) const override {
+        Y_UNUSED(outputByteSize);
         Y_UNUSED(joinAlgo);
-        return leftStats.Nrows + 2.0 * rightStats.Nrows;
+        return leftStats.Nrows + 2.0 * rightStats.Nrows + outputRows;
     }
 
     bool IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left, 
@@ -122,9 +123,8 @@ struct TDummyProviderContext : public IProviderContext {
         Y_UNUSED(joinConditions);
         Y_UNUSED(leftJoinKeys);
         Y_UNUSED(rightJoinKeys);
-        Y_UNUSED(joinAlgo);
 
-        return true;
+        return joinAlgo == EJoinAlgoType::MapJoin;
     }
 
     static const TDummyProviderContext& instance() {

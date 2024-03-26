@@ -1,3 +1,8 @@
+Registering pre-existing tables
+	INT4_TBL
+	tenk2
+	int4_tbl
+	tenk1
 <sql-statement>
 --
 -- WINDOW FUNCTIONS
@@ -33,10 +38,6 @@ SELECT depname, empno, salary, rank() OVER (PARTITION BY depname ORDER BY salary
 SELECT four, ten, SUM(SUM(four)) OVER (PARTITION BY four), AVG(ten) FROM tenk1
 GROUP BY four, ten ORDER BY four, ten;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PARTITION BY depname);
 </sql-statement>
@@ -52,194 +53,211 @@ SELECT depname, empno, salary, rank() OVER w FROM empsalary WINDOW w AS (PARTITI
 -- empty window specification
 SELECT COUNT(*) OVER () FROM tenk1 WHERE unique2 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 SELECT COUNT(*) OVER w FROM tenk1 WHERE unique2 < 10 WINDOW w AS ();
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 -- no window operation
 SELECT four FROM tenk1 WHERE FALSE WINDOW w AS (PARTITION BY ten);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 -- cumulative aggregate
 SELECT sum(four) OVER (PARTITION BY ten ORDER BY unique2) AS sum_1, ten, four FROM tenk1 WHERE unique2 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 SELECT row_number() OVER (ORDER BY unique2) FROM tenk1 WHERE unique2 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 SELECT rank() OVER (PARTITION BY four ORDER BY ten) AS rank_1, ten, four FROM tenk1 WHERE unique2 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 SELECT dense_rank() OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 SELECT percent_rank() OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT percent_rank() OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+	^
+        -stdin-:<main>:1:8: Error: At function: PgWindowCall
+        	SELECT percent_rank() OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+	       ^
+            -stdin-:<main>:1:8: Error: Unsupported function: percent_rank
+            	SELECT percent_rank() OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+	       ^
 <sql-statement>
 SELECT cume_dist() OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT cume_dist() OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+	^
+        -stdin-:<main>:1:8: Error: At function: PgWindowCall
+        	SELECT cume_dist() OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+	       ^
+            -stdin-:<main>:1:8: Error: Unsupported function: cume_dist
+            	SELECT cume_dist() OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+	       ^
 <sql-statement>
 SELECT ntile(3) OVER (ORDER BY ten, four), ten, four FROM tenk1 WHERE unique2 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT ntile(3) OVER (ORDER BY ten, four), ten, four FROM tenk1 WHERE unique2 < 10;
+	^
+        -stdin-:<main>:1:8: Error: At function: PgWindowCall
+        	SELECT ntile(3) OVER (ORDER BY ten, four), ten, four FROM tenk1 WHERE unique2 < 10;
+	       ^
+            -stdin-:<main>:1:8: Error: Unsupported function: ntile
+            	SELECT ntile(3) OVER (ORDER BY ten, four), ten, four FROM tenk1 WHERE unique2 < 10;
+	       ^
 <sql-statement>
 SELECT ntile(NULL) OVER (ORDER BY ten, four), ten, four FROM tenk1 LIMIT 2;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT ntile(NULL) OVER (ORDER BY ten, four), ten, four FROM tenk1 LIMIT 2;
+	^
+        -stdin-:<main>:1:8: Error: At function: PgWindowCall
+        	SELECT ntile(NULL) OVER (ORDER BY ten, four), ten, four FROM tenk1 LIMIT 2;
+	       ^
+            -stdin-:<main>:1:8: Error: Unsupported function: ntile
+            	SELECT ntile(NULL) OVER (ORDER BY ten, four), ten, four FROM tenk1 LIMIT 2;
+	       ^
 <sql-statement>
 SELECT lag(ten) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 SELECT lag(ten, four) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT lag(ten, four) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+	^
+        -stdin-:<main>:1:8: Error: At function: PgWindowCall
+        	SELECT lag(ten, four) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+	       ^
+            -stdin-:<main>:1:8: Error: Expected one argument in functionlag
+            	SELECT lag(ten, four) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+	       ^
 <sql-statement>
 SELECT lag(ten, four, 0) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT lag(ten, four, 0) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+	^
+        -stdin-:<main>:1:8: Error: At function: PgWindowCall
+        	SELECT lag(ten, four, 0) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+	       ^
+            -stdin-:<main>:1:8: Error: Expected one argument in functionlag
+            	SELECT lag(ten, four, 0) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+	       ^
 <sql-statement>
 SELECT lag(ten, four, 0.7) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT lag(ten, four, 0.7) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten;
+	^
+        -stdin-:<main>:1:8: Error: At function: PgWindowCall
+        	SELECT lag(ten, four, 0.7) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten;
+	       ^
+            -stdin-:<main>:1:8: Error: Expected one argument in functionlag
+            	SELECT lag(ten, four, 0.7) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten;
+	       ^
 <sql-statement>
 SELECT lead(ten) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 SELECT lead(ten * 2, 1) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT lead(ten * 2, 1) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+	^
+        -stdin-:<main>:1:8: Error: At function: PgWindowCall
+        	SELECT lead(ten * 2, 1) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+	       ^
+            -stdin-:<main>:1:8: Error: Expected one argument in functionlead
+            	SELECT lead(ten * 2, 1) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+	       ^
 <sql-statement>
 SELECT lead(ten * 2, 1, -1) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT lead(ten * 2, 1, -1) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+	^
+        -stdin-:<main>:1:8: Error: At function: PgWindowCall
+        	SELECT lead(ten * 2, 1, -1) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+	       ^
+            -stdin-:<main>:1:8: Error: Expected one argument in functionlead
+            	SELECT lead(ten * 2, 1, -1) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+	       ^
 <sql-statement>
 SELECT lead(ten * 2, 1, -1.4) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT lead(ten * 2, 1, -1.4) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten;
+	^
+        -stdin-:<main>:1:8: Error: At function: PgWindowCall
+        	SELECT lead(ten * 2, 1, -1.4) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten;
+	       ^
+            -stdin-:<main>:1:8: Error: Expected one argument in functionlead
+            	SELECT lead(ten * 2, 1, -1.4) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten;
+	       ^
 <sql-statement>
 SELECT first_value(ten) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 -- last_value returns the last row of the frame, which is CURRENT ROW in ORDER BY window.
 SELECT last_value(four) OVER (ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 SELECT last_value(ten) OVER (PARTITION BY four), ten, four FROM
 	(SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten)s
 	ORDER BY four, ten;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 SELECT nth_value(ten, four + 1) OVER (PARTITION BY four), ten, four
 	FROM (SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten)s;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT nth_value(ten, four + 1) OVER (PARTITION BY four), ten, four
+	^
+        -stdin-:<main>:1:8: Error: At function: PgWindowCall
+        	SELECT nth_value(ten, four + 1) OVER (PARTITION BY four), ten, four
+	       ^
+            -stdin-:<main>:1:8: Error: Unsupported function: nth_value
+            	SELECT nth_value(ten, four + 1) OVER (PARTITION BY four), ten, four
+	       ^
 <sql-statement>
 SELECT ten, two, sum(hundred) AS gsum, sum(sum(hundred)) OVER (PARTITION BY two ORDER BY ten) AS wsum
 FROM tenk1 GROUP BY ten, two;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 SELECT count(*) OVER (PARTITION BY four), four FROM (SELECT * FROM tenk1 WHERE two = 1)s WHERE unique2 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 SELECT (count(*) OVER (PARTITION BY four ORDER BY ten) +
   sum(hundred) OVER (PARTITION BY four ORDER BY ten))::varchar AS cntsum
   FROM tenk1 WHERE unique2 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 -- opexpr with different windows evaluation.
 SELECT * FROM(
@@ -251,25 +269,13 @@ SELECT * FROM(
 )sub
 WHERE total <> fourcount + twosum;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 SELECT avg(four) OVER (PARTITION BY four ORDER BY thousand / 100) FROM tenk1 WHERE unique2 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 SELECT ten, two, sum(hundred) AS gsum, sum(sum(hundred)) OVER win AS wsum
 FROM tenk1 GROUP BY ten, two WINDOW win AS (PARTITION BY two ORDER BY ten);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 -- more than one window with GROUP BY
 SELECT sum(salary),
@@ -277,6 +283,14 @@ SELECT sum(salary),
 	sum(sum(salary)) OVER (ORDER BY depname DESC)
 FROM empsalary GROUP BY depname;
 </sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- more than one window with GROUP BY
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: sum
+        	-- more than one window with GROUP BY
+	^
 <sql-statement>
 -- identical windows with different names
 SELECT sum(salary) OVER w1, count(*) OVER w2
@@ -287,18 +301,21 @@ FROM empsalary WINDOW w1 AS (ORDER BY salary), w2 AS (ORDER BY salary);
 SELECT lead(ten, (SELECT two FROM tenk1 WHERE s.unique2 = unique2)) OVER (PARTITION BY four ORDER BY ten)
 FROM tenk1 s WHERE unique2 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	-- subplan
+	^
+        -stdin-:<main>:2:8: Error: At function: PgWindowCall
+        	SELECT lead(ten, (SELECT two FROM tenk1 WHERE s.unique2 = unique2)) OVER (PARTITION BY four ORDER BY ten)
+	       ^
+            -stdin-:<main>:2:8: Error: Expected one argument in functionlead
+            	SELECT lead(ten, (SELECT two FROM tenk1 WHERE s.unique2 = unique2)) OVER (PARTITION BY four ORDER BY ten)
+	       ^
 <sql-statement>
 -- empty table
 SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 WHERE FALSE)s;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 -- mixture of agg/wfunc in the same window
 SELECT sum(salary) OVER w, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary DESC);
@@ -328,10 +345,6 @@ SELECT empno, depname, salary, bonus, depadj, MIN(bonus) OVER (ORDER BY empno), 
 -- window function over ungrouped agg over empty row set (bug before 9.1)
 SELECT SUM(COUNT(f1)) OVER () FROM int4_tbl WHERE f1=42;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
-    
 <sql-statement>
 -- window function with ORDER BY an expression involving aggregates (9.1 bug)
 select ten,
@@ -340,10 +353,6 @@ select ten,
 from tenk1
 group by ten order by ten;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 -- window and aggregate with GROUP BY expression (9.2 bug)
 explain (costs off)
@@ -363,230 +372,335 @@ SELECT four, ten,
 	last_value(ten) over (partition by four order by ten)
 FROM (select distinct ten, four from tenk1) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 SELECT four, ten,
 	sum(ten) over (partition by four order by ten range between unbounded preceding and current row),
 	last_value(ten) over (partition by four order by ten range between unbounded preceding and current row)
 FROM (select distinct ten, four from tenk1) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT four, ten,
+	^
+        -stdin-:<main>:2:16: Error: At function: PgWindow
+        		sum(ten) over (partition by four order by ten range between unbounded preceding and current row),
+	               ^
+            -stdin-:<main>:2:16: Error: Unsupported frame type: range
+            		sum(ten) over (partition by four order by ten range between unbounded preceding and current row),
+	               ^
+        -stdin-:<main>:3:23: Error: At function: PgWindow
+        		last_value(ten) over (partition by four order by ten range between unbounded preceding and current row)
+	                      ^
+            -stdin-:<main>:3:23: Error: Unsupported frame type: range
+            		last_value(ten) over (partition by four order by ten range between unbounded preceding and current row)
+	                      ^
 <sql-statement>
 SELECT four, ten,
 	sum(ten) over (partition by four order by ten range between unbounded preceding and unbounded following),
 	last_value(ten) over (partition by four order by ten range between unbounded preceding and unbounded following)
 FROM (select distinct ten, four from tenk1) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT four, ten,
+	^
+        -stdin-:<main>:2:16: Error: At function: PgWindow
+        		sum(ten) over (partition by four order by ten range between unbounded preceding and unbounded following),
+	               ^
+            -stdin-:<main>:2:16: Error: Unsupported frame type: range
+            		sum(ten) over (partition by four order by ten range between unbounded preceding and unbounded following),
+	               ^
+        -stdin-:<main>:3:23: Error: At function: PgWindow
+        		last_value(ten) over (partition by four order by ten range between unbounded preceding and unbounded following)
+	                      ^
+            -stdin-:<main>:3:23: Error: Unsupported frame type: range
+            		last_value(ten) over (partition by four order by ten range between unbounded preceding and unbounded following)
+	                      ^
 <sql-statement>
 SELECT four, ten/4 as two,
 	sum(ten/4) over (partition by four order by ten/4 range between unbounded preceding and current row),
 	last_value(ten/4) over (partition by four order by ten/4 range between unbounded preceding and current row)
 FROM (select distinct ten, four from tenk1) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT four, ten/4 as two,
+	^
+        -stdin-:<main>:2:18: Error: At function: PgWindow
+        		sum(ten/4) over (partition by four order by ten/4 range between unbounded preceding and current row),
+	                 ^
+            -stdin-:<main>:2:18: Error: Unsupported frame type: range
+            		sum(ten/4) over (partition by four order by ten/4 range between unbounded preceding and current row),
+	                 ^
+        -stdin-:<main>:3:25: Error: At function: PgWindow
+        		last_value(ten/4) over (partition by four order by ten/4 range between unbounded preceding and current row)
+	                        ^
+            -stdin-:<main>:3:25: Error: Unsupported frame type: range
+            		last_value(ten/4) over (partition by four order by ten/4 range between unbounded preceding and current row)
+	                        ^
 <sql-statement>
 SELECT four, ten/4 as two,
 	sum(ten/4) over (partition by four order by ten/4 rows between unbounded preceding and current row),
 	last_value(ten/4) over (partition by four order by ten/4 rows between unbounded preceding and current row)
 FROM (select distinct ten, four from tenk1) ss;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 SELECT sum(unique1) over (order by four range between current row and unbounded following),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT sum(unique1) over (order by four range between current row and unbounded following),
+	^
+        -stdin-:<main>:1:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (order by four range between current row and unbounded following),
+	                         ^
+            -stdin-:<main>:1:26: Error: Unsupported frame type: range
+            	SELECT sum(unique1) over (order by four range between current row and unbounded following),
+	                         ^
 <sql-statement>
 SELECT sum(unique1) over (rows between current row and unbounded following),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 SELECT sum(unique1) over (rows between 2 preceding and 2 following),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude no others),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude current row),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude current row),
+	^
+        -stdin-:<main>:1:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude current row),
+	                         ^
+            -stdin-:<main>:1:26: Error: Excludes are not supported
+            	SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude current row),
+	                         ^
 <sql-statement>
 SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude group),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude group),
+	^
+        -stdin-:<main>:1:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude group),
+	                         ^
+            -stdin-:<main>:1:26: Error: Excludes are not supported
+            	SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude group),
+	                         ^
 <sql-statement>
 SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude ties),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude ties),
+	^
+        -stdin-:<main>:1:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude ties),
+	                         ^
+            -stdin-:<main>:1:26: Error: Excludes are not supported
+            	SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude ties),
+	                         ^
 <sql-statement>
 SELECT first_value(unique1) over (ORDER BY four rows between current row and 2 following exclude current row),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT first_value(unique1) over (ORDER BY four rows between current row and 2 following exclude current row),
+	^
+        -stdin-:<main>:1:34: Error: At function: PgWindow
+        	SELECT first_value(unique1) over (ORDER BY four rows between current row and 2 following exclude current row),
+	                                 ^
+            -stdin-:<main>:1:34: Error: Excludes are not supported
+            	SELECT first_value(unique1) over (ORDER BY four rows between current row and 2 following exclude current row),
+	                                 ^
 <sql-statement>
 SELECT first_value(unique1) over (ORDER BY four rows between current row and 2 following exclude group),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT first_value(unique1) over (ORDER BY four rows between current row and 2 following exclude group),
+	^
+        -stdin-:<main>:1:34: Error: At function: PgWindow
+        	SELECT first_value(unique1) over (ORDER BY four rows between current row and 2 following exclude group),
+	                                 ^
+            -stdin-:<main>:1:34: Error: Excludes are not supported
+            	SELECT first_value(unique1) over (ORDER BY four rows between current row and 2 following exclude group),
+	                                 ^
 <sql-statement>
 SELECT first_value(unique1) over (ORDER BY four rows between current row and 2 following exclude ties),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT first_value(unique1) over (ORDER BY four rows between current row and 2 following exclude ties),
+	^
+        -stdin-:<main>:1:34: Error: At function: PgWindow
+        	SELECT first_value(unique1) over (ORDER BY four rows between current row and 2 following exclude ties),
+	                                 ^
+            -stdin-:<main>:1:34: Error: Excludes are not supported
+            	SELECT first_value(unique1) over (ORDER BY four rows between current row and 2 following exclude ties),
+	                                 ^
 <sql-statement>
 SELECT last_value(unique1) over (ORDER BY four rows between current row and 2 following exclude current row),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT last_value(unique1) over (ORDER BY four rows between current row and 2 following exclude current row),
+	^
+        -stdin-:<main>:1:33: Error: At function: PgWindow
+        	SELECT last_value(unique1) over (ORDER BY four rows between current row and 2 following exclude current row),
+	                                ^
+            -stdin-:<main>:1:33: Error: Excludes are not supported
+            	SELECT last_value(unique1) over (ORDER BY four rows between current row and 2 following exclude current row),
+	                                ^
 <sql-statement>
 SELECT last_value(unique1) over (ORDER BY four rows between current row and 2 following exclude group),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT last_value(unique1) over (ORDER BY four rows between current row and 2 following exclude group),
+	^
+        -stdin-:<main>:1:33: Error: At function: PgWindow
+        	SELECT last_value(unique1) over (ORDER BY four rows between current row and 2 following exclude group),
+	                                ^
+            -stdin-:<main>:1:33: Error: Excludes are not supported
+            	SELECT last_value(unique1) over (ORDER BY four rows between current row and 2 following exclude group),
+	                                ^
 <sql-statement>
 SELECT last_value(unique1) over (ORDER BY four rows between current row and 2 following exclude ties),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT last_value(unique1) over (ORDER BY four rows between current row and 2 following exclude ties),
+	^
+        -stdin-:<main>:1:33: Error: At function: PgWindow
+        	SELECT last_value(unique1) over (ORDER BY four rows between current row and 2 following exclude ties),
+	                                ^
+            -stdin-:<main>:1:33: Error: Excludes are not supported
+            	SELECT last_value(unique1) over (ORDER BY four rows between current row and 2 following exclude ties),
+	                                ^
 <sql-statement>
 SELECT sum(unique1) over (rows between 2 preceding and 1 preceding),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 SELECT sum(unique1) over (rows between 1 following and 3 following),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 SELECT sum(unique1) over (rows between unbounded preceding and 1 following),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 SELECT sum(unique1) over (w range between current row and unbounded following),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT sum(unique1) over (w range between current row and unbounded following),
+	^
+        -stdin-:<main>:1:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (w range between current row and unbounded following),
+	                         ^
+            -stdin-:<main>:1:26: Error: Window reference is not supported
+            	SELECT sum(unique1) over (w range between current row and unbounded following),
+	                         ^
 <sql-statement>
 SELECT sum(unique1) over (w range between unbounded preceding and current row exclude current row),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT sum(unique1) over (w range between unbounded preceding and current row exclude current row),
+	^
+        -stdin-:<main>:1:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (w range between unbounded preceding and current row exclude current row),
+	                         ^
+            -stdin-:<main>:1:26: Error: Window reference is not supported
+            	SELECT sum(unique1) over (w range between unbounded preceding and current row exclude current row),
+	                         ^
 <sql-statement>
 SELECT sum(unique1) over (w range between unbounded preceding and current row exclude group),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT sum(unique1) over (w range between unbounded preceding and current row exclude group),
+	^
+        -stdin-:<main>:1:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (w range between unbounded preceding and current row exclude group),
+	                         ^
+            -stdin-:<main>:1:26: Error: Window reference is not supported
+            	SELECT sum(unique1) over (w range between unbounded preceding and current row exclude group),
+	                         ^
 <sql-statement>
 SELECT sum(unique1) over (w range between unbounded preceding and current row exclude ties),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT sum(unique1) over (w range between unbounded preceding and current row exclude ties),
+	^
+        -stdin-:<main>:1:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (w range between unbounded preceding and current row exclude ties),
+	                         ^
+            -stdin-:<main>:1:26: Error: Window reference is not supported
+            	SELECT sum(unique1) over (w range between unbounded preceding and current row exclude ties),
+	                         ^
 <sql-statement>
 SELECT first_value(unique1) over w,
 	nth_value(unique1, 2) over w AS nth_2,
@@ -594,10 +708,17 @@ SELECT first_value(unique1) over w,
 FROM tenk1 WHERE unique1 < 10
 WINDOW w AS (order by four range between current row and unbounded following);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT first_value(unique1) over w,
+	^
+        -stdin-:<main>:5:13: Error: At function: PgWindow
+        	WINDOW w AS (order by four range between current row and unbounded following);
+	            ^
+            -stdin-:<main>:5:13: Error: Unsupported frame type: range
+            	WINDOW w AS (order by four range between current row and unbounded following);
+	            ^
 <sql-statement>
 SELECT sum(unique1) over
 	(order by unique1
@@ -1292,10 +1413,16 @@ from
 window w as
   (order by x asc nulls first range between 2 preceding and 2 following);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:10:3: Error: sortby_nulls unsupported value: 1
-    	  (order by x asc nulls first range between 2 preceding and 2 following);
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- RANGE offset PRECEDING/FOLLOWING with null values
+	^
+        -stdin-:<main>:10:3: Error: At function: PgWindow
+        	  (order by x asc nulls first range between 2 preceding and 2 following);
+	  ^
+            -stdin-:<main>:10:3: Error: Unsupported frame type: range
+            	  (order by x asc nulls first range between 2 preceding and 2 following);
 	  ^
 <sql-statement>
 select x, y,
@@ -1308,10 +1435,16 @@ from
 window w as
   (order by x asc nulls last range between 2 preceding and 2 following);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:9:3: Error: sortby_nulls unsupported value: 2
-    	  (order by x asc nulls last range between 2 preceding and 2 following);
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select x, y,
+	^
+        -stdin-:<main>:9:3: Error: At function: PgWindow
+        	  (order by x asc nulls last range between 2 preceding and 2 following);
+	  ^
+            -stdin-:<main>:9:3: Error: Unsupported frame type: range
+            	  (order by x asc nulls last range between 2 preceding and 2 following);
 	  ^
 <sql-statement>
 select x, y,
@@ -1324,10 +1457,16 @@ from
 window w as
   (order by x desc nulls first range between 2 preceding and 2 following);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:9:3: Error: sortby_nulls unsupported value: 1
-    	  (order by x desc nulls first range between 2 preceding and 2 following);
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select x, y,
+	^
+        -stdin-:<main>:9:3: Error: At function: PgWindow
+        	  (order by x desc nulls first range between 2 preceding and 2 following);
+	  ^
+            -stdin-:<main>:9:3: Error: Unsupported frame type: range
+            	  (order by x desc nulls first range between 2 preceding and 2 following);
 	  ^
 <sql-statement>
 select x, y,
@@ -1340,10 +1479,16 @@ from
 window w as
   (order by x desc nulls last range between 2 preceding and 2 following);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:9:3: Error: sortby_nulls unsupported value: 2
-    	  (order by x desc nulls last range between 2 preceding and 2 following);
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select x, y,
+	^
+        -stdin-:<main>:9:3: Error: At function: PgWindow
+        	  (order by x desc nulls last range between 2 preceding and 2 following);
+	  ^
+            -stdin-:<main>:9:3: Error: Unsupported frame type: range
+            	  (order by x desc nulls last range between 2 preceding and 2 following);
 	  ^
 <sql-statement>
 -- Check overflow behavior for various integer sizes
@@ -1458,17 +1603,6 @@ insert into numerics values
 (8, 'infinity', 'infinity', 'infinity'),
 (9, 'NaN', 'NaN', 'NaN');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: AsList
-    	insert into numerics values
-	^
-        -stdin-:<main>:1:1: Error: Cannot infer common type for int4 and numeric
-        	insert into numerics values
-	^
-        -stdin-:<main>:1:1: Error: Cannot infer common type for numeric and int4
-        	insert into numerics values
-	^
 <sql-statement>
 select id, f_float4, first_value(id) over w, last_value(id) over w
 from numerics
@@ -1848,6 +1982,15 @@ insert into datetimes values
 (9, '19:00', '19:00 BST', '9 years', '2007-10-19 10:23:54+01', '2007-10-19 10:23:54'),
 (10, '20:00', '20:00 BST', '10 years', '2008-10-19 10:23:54+01', '2008-10-19 10:23:54');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	insert into datetimes values
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "11:00 BST"
+
+        	insert into datetimes values
+	^
 <sql-statement>
 select id, f_time, first_value(id) over w, last_value(id) over w
 from datetimes
@@ -2175,145 +2318,257 @@ SELECT sum(unique1) over (order by four groups between unbounded preceding and c
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- GROUPS tests
+	^
+        -stdin-:<main>:2:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (order by four groups between unbounded preceding and current row),
+	                         ^
+            -stdin-:<main>:2:26: Error: Unsupported frame type: groups
+            	SELECT sum(unique1) over (order by four groups between unbounded preceding and current row),
+	                         ^
 <sql-statement>
 SELECT sum(unique1) over (order by four groups between unbounded preceding and unbounded following),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT sum(unique1) over (order by four groups between unbounded preceding and unbounded following),
+	^
+        -stdin-:<main>:1:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (order by four groups between unbounded preceding and unbounded following),
+	                         ^
+            -stdin-:<main>:1:26: Error: Unsupported frame type: groups
+            	SELECT sum(unique1) over (order by four groups between unbounded preceding and unbounded following),
+	                         ^
 <sql-statement>
 SELECT sum(unique1) over (order by four groups between current row and unbounded following),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT sum(unique1) over (order by four groups between current row and unbounded following),
+	^
+        -stdin-:<main>:1:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (order by four groups between current row and unbounded following),
+	                         ^
+            -stdin-:<main>:1:26: Error: Unsupported frame type: groups
+            	SELECT sum(unique1) over (order by four groups between current row and unbounded following),
+	                         ^
 <sql-statement>
 SELECT sum(unique1) over (order by four groups between 1 preceding and unbounded following),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT sum(unique1) over (order by four groups between 1 preceding and unbounded following),
+	^
+        -stdin-:<main>:1:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (order by four groups between 1 preceding and unbounded following),
+	                         ^
+            -stdin-:<main>:1:26: Error: Unsupported frame type: groups
+            	SELECT sum(unique1) over (order by four groups between 1 preceding and unbounded following),
+	                         ^
 <sql-statement>
 SELECT sum(unique1) over (order by four groups between 1 following and unbounded following),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT sum(unique1) over (order by four groups between 1 following and unbounded following),
+	^
+        -stdin-:<main>:1:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (order by four groups between 1 following and unbounded following),
+	                         ^
+            -stdin-:<main>:1:26: Error: Unsupported frame type: groups
+            	SELECT sum(unique1) over (order by four groups between 1 following and unbounded following),
+	                         ^
 <sql-statement>
 SELECT sum(unique1) over (order by four groups between unbounded preceding and 2 following),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT sum(unique1) over (order by four groups between unbounded preceding and 2 following),
+	^
+        -stdin-:<main>:1:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (order by four groups between unbounded preceding and 2 following),
+	                         ^
+            -stdin-:<main>:1:26: Error: Unsupported frame type: groups
+            	SELECT sum(unique1) over (order by four groups between unbounded preceding and 2 following),
+	                         ^
 <sql-statement>
 SELECT sum(unique1) over (order by four groups between 2 preceding and 1 preceding),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT sum(unique1) over (order by four groups between 2 preceding and 1 preceding),
+	^
+        -stdin-:<main>:1:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (order by four groups between 2 preceding and 1 preceding),
+	                         ^
+            -stdin-:<main>:1:26: Error: Unsupported frame type: groups
+            	SELECT sum(unique1) over (order by four groups between 2 preceding and 1 preceding),
+	                         ^
 <sql-statement>
 SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following),
+	^
+        -stdin-:<main>:1:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following),
+	                         ^
+            -stdin-:<main>:1:26: Error: Unsupported frame type: groups
+            	SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following),
+	                         ^
 <sql-statement>
 SELECT sum(unique1) over (order by four groups between 0 preceding and 0 following),
 	unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT sum(unique1) over (order by four groups between 0 preceding and 0 following),
+	^
+        -stdin-:<main>:1:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (order by four groups between 0 preceding and 0 following),
+	                         ^
+            -stdin-:<main>:1:26: Error: Unsupported frame type: groups
+            	SELECT sum(unique1) over (order by four groups between 0 preceding and 0 following),
+	                         ^
 <sql-statement>
 SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following
 	exclude current row), unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following
+	^
+        -stdin-:<main>:1:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following
+	                         ^
+            -stdin-:<main>:1:26: Error: Excludes are not supported
+            	SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following
+	                         ^
 <sql-statement>
 SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following
 	exclude group), unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following
+	^
+        -stdin-:<main>:1:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following
+	                         ^
+            -stdin-:<main>:1:26: Error: Excludes are not supported
+            	SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following
+	                         ^
 <sql-statement>
 SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following
 	exclude ties), unique1, four
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following
+	^
+        -stdin-:<main>:1:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following
+	                         ^
+            -stdin-:<main>:1:26: Error: Excludes are not supported
+            	SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following
+	                         ^
 <sql-statement>
 SELECT sum(unique1) over (partition by ten
 	order by four groups between 0 preceding and 0 following),unique1, four, ten
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT sum(unique1) over (partition by ten
+	^
+        -stdin-:<main>:1:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (partition by ten
+	                         ^
+            -stdin-:<main>:1:26: Error: Unsupported frame type: groups
+            	SELECT sum(unique1) over (partition by ten
+	                         ^
 <sql-statement>
 SELECT sum(unique1) over (partition by ten
 	order by four groups between 0 preceding and 0 following exclude current row), unique1, four, ten
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT sum(unique1) over (partition by ten
+	^
+        -stdin-:<main>:1:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (partition by ten
+	                         ^
+            -stdin-:<main>:1:26: Error: Excludes are not supported
+            	SELECT sum(unique1) over (partition by ten
+	                         ^
 <sql-statement>
 SELECT sum(unique1) over (partition by ten
 	order by four groups between 0 preceding and 0 following exclude group), unique1, four, ten
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT sum(unique1) over (partition by ten
+	^
+        -stdin-:<main>:1:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (partition by ten
+	                         ^
+            -stdin-:<main>:1:26: Error: Excludes are not supported
+            	SELECT sum(unique1) over (partition by ten
+	                         ^
 <sql-statement>
 SELECT sum(unique1) over (partition by ten
 	order by four groups between 0 preceding and 0 following exclude ties), unique1, four, ten
 FROM tenk1 WHERE unique1 < 10;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT sum(unique1) over (partition by ten
+	^
+        -stdin-:<main>:1:26: Error: At function: PgWindow
+        	SELECT sum(unique1) over (partition by ten
+	                         ^
+            -stdin-:<main>:1:26: Error: Excludes are not supported
+            	SELECT sum(unique1) over (partition by ten
+	                         ^
 <sql-statement>
 select first_value(salary) over(order by enroll_date groups between 1 preceding and 1 following),
 	lead(salary) over(order by enroll_date groups between 1 preceding and 1 following),
@@ -2423,92 +2678,102 @@ select last_value(salary) over(order by enroll_date groups between 1 following a
 -- Show differences in offset interpretation between ROWS, RANGE, and GROUPS
 WITH cte (x) AS (
         SELECT * FROM generate_series(1, 35, 2)
+)
 SELECT x, (sum(x) over w)
 FROM cte
 WINDOW w AS (ORDER BY x rows between 1 preceding and 1 following);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:4:1: Error: ERROR:  syntax error at or near "SELECT"
-
-    	SELECT x, (sum(x) over w)
-	^
 <sql-statement>
 WITH cte (x) AS (
         SELECT * FROM generate_series(1, 35, 2)
+)
 SELECT x, (sum(x) over w)
 FROM cte
 WINDOW w AS (ORDER BY x range between 1 preceding and 1 following);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:3:1: Error: ERROR:  syntax error at or near "SELECT"
-
-    	SELECT x, (sum(x) over w)
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	WITH cte (x) AS (
 	^
+        -stdin-:<main>:6:13: Error: At function: PgWindow
+        	WINDOW w AS (ORDER BY x range between 1 preceding and 1 following);
+	            ^
+            -stdin-:<main>:6:13: Error: Unsupported frame type: range
+            	WINDOW w AS (ORDER BY x range between 1 preceding and 1 following);
+	            ^
 <sql-statement>
 WITH cte (x) AS (
         SELECT * FROM generate_series(1, 35, 2)
+)
 SELECT x, (sum(x) over w)
 FROM cte
 WINDOW w AS (ORDER BY x groups between 1 preceding and 1 following);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:3:1: Error: ERROR:  syntax error at or near "SELECT"
-
-    	SELECT x, (sum(x) over w)
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	WITH cte (x) AS (
 	^
+        -stdin-:<main>:6:13: Error: At function: PgWindow
+        	WINDOW w AS (ORDER BY x groups between 1 preceding and 1 following);
+	            ^
+            -stdin-:<main>:6:13: Error: Unsupported frame type: groups
+            	WINDOW w AS (ORDER BY x groups between 1 preceding and 1 following);
+	            ^
 <sql-statement>
 WITH cte (x) AS (
         select 1 union all select 1 union all select 1 union all
         SELECT * FROM generate_series(5, 49, 2)
+)
 SELECT x, (sum(x) over w)
 FROM cte
 WINDOW w AS (ORDER BY x rows between 1 preceding and 1 following);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:4:1: Error: ERROR:  syntax error at or near "SELECT"
-
-    	SELECT x, (sum(x) over w)
-	^
 <sql-statement>
 WITH cte (x) AS (
         select 1 union all select 1 union all select 1 union all
         SELECT * FROM generate_series(5, 49, 2)
+)
 SELECT x, (sum(x) over w)
 FROM cte
 WINDOW w AS (ORDER BY x range between 1 preceding and 1 following);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:4:1: Error: ERROR:  syntax error at or near "SELECT"
-
-    	SELECT x, (sum(x) over w)
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	WITH cte (x) AS (
 	^
+        -stdin-:<main>:7:13: Error: At function: PgWindow
+        	WINDOW w AS (ORDER BY x range between 1 preceding and 1 following);
+	            ^
+            -stdin-:<main>:7:13: Error: Unsupported frame type: range
+            	WINDOW w AS (ORDER BY x range between 1 preceding and 1 following);
+	            ^
 <sql-statement>
 WITH cte (x) AS (
         select 1 union all select 1 union all select 1 union all
         SELECT * FROM generate_series(5, 49, 2)
+)
 SELECT x, (sum(x) over w)
 FROM cte
 WINDOW w AS (ORDER BY x groups between 1 preceding and 1 following);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:4:1: Error: ERROR:  syntax error at or near "SELECT"
-
-    	SELECT x, (sum(x) over w)
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	WITH cte (x) AS (
 	^
+        -stdin-:<main>:7:13: Error: At function: PgWindow
+        	WINDOW w AS (ORDER BY x groups between 1 preceding and 1 following);
+	            ^
+            -stdin-:<main>:7:13: Error: Unsupported frame type: groups
+            	WINDOW w AS (ORDER BY x groups between 1 preceding and 1 following);
+	            ^
 <sql-statement>
 -- with UNION
 SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 UNION ALL SELECT * FROM tenk2)s LIMIT 0;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 -- check some degenerate cases
 create temp table t1 (f1 int, f2 int8);
@@ -2735,10 +3000,14 @@ DELETE FROM empsalary RETURNING rank() OVER (ORDER BY random());
 <sql-statement>
 SELECT count(*) OVER w FROM tenk1 WINDOW w AS (ORDER BY unique1), w AS (ORDER BY unique1);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT count(*) OVER w FROM tenk1 WINDOW w AS (ORDER BY unique1), w AS (ORDER BY unique1);
+	^
+        -stdin-:<main>:1:72: Error: Duplicated window name: w
+        	SELECT count(*) OVER w FROM tenk1 WINDOW w AS (ORDER BY unique1), w AS (ORDER BY unique1);
+	                                                                       ^
 <sql-statement>
 SELECT rank() OVER (PARTITION BY four, ORDER BY ten) FROM tenk1;
 </sql-statement>
@@ -2767,17 +3036,31 @@ SELECT generate_series(1, 100) OVER () FROM empsalary;
 <sql-statement>
 SELECT ntile(0) OVER (ORDER BY ten), ten, four FROM tenk1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT ntile(0) OVER (ORDER BY ten), ten, four FROM tenk1;
+	^
+        -stdin-:<main>:1:8: Error: At function: PgWindowCall
+        	SELECT ntile(0) OVER (ORDER BY ten), ten, four FROM tenk1;
+	       ^
+            -stdin-:<main>:1:8: Error: Unsupported function: ntile
+            	SELECT ntile(0) OVER (ORDER BY ten), ten, four FROM tenk1;
+	       ^
 <sql-statement>
 SELECT nth_value(four, 0) OVER (ORDER BY ten), ten, four FROM tenk1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT nth_value(four, 0) OVER (ORDER BY ten), ten, four FROM tenk1;
+	^
+        -stdin-:<main>:1:8: Error: At function: PgWindowCall
+        	SELECT nth_value(four, 0) OVER (ORDER BY ten), ten, four FROM tenk1;
+	       ^
+            -stdin-:<main>:1:8: Error: Unsupported function: nth_value
+            	SELECT nth_value(four, 0) OVER (ORDER BY ten), ten, four FROM tenk1;
+	       ^
 <sql-statement>
 -- filter
 SELECT sum(salary), row_number() OVER (ORDER BY depname), sum(
@@ -2906,10 +3189,17 @@ SELECT nth_value_def(n := 2, val := ten) OVER (PARTITION BY four), ten, four
 SELECT nth_value_def(ten) OVER (PARTITION BY four), ten, four
   FROM (SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten) s;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT nth_value_def(ten) OVER (PARTITION BY four), ten, four
+	^
+        -stdin-:<main>:1:8: Error: At function: PgWindowCall
+        	SELECT nth_value_def(ten) OVER (PARTITION BY four), ten, four
+	       ^
+            -stdin-:<main>:1:8: Error: Unsupported function: nth_value_def
+            	SELECT nth_value_def(ten) OVER (PARTITION BY four), ten, four
+	       ^
 <sql-statement>
 --
 -- Test the basic moving-aggregate machinery
@@ -2947,6 +3237,7 @@ LANGUAGE SQL IMMUTABLE;
 	^
 <sql-statement>
 CREATE AGGREGATE logging_agg_nonstrict (anyelement)
+(
 	stype = text,
 	sfunc = logging_sfunc_nonstrict,
 	mstype = text,
@@ -2956,12 +3247,12 @@ CREATE AGGREGATE logging_agg_nonstrict (anyelement)
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:2:2: Error: ERROR:  syntax error at or near "stype"
-
-    		stype = text,
-	 ^
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 255
+    	CREATE AGGREGATE logging_agg_nonstrict (anyelement)
+	^
 <sql-statement>
 CREATE AGGREGATE logging_agg_nonstrict_initcond (anyelement)
+(
 	stype = text,
 	sfunc = logging_sfunc_nonstrict,
 	mstype = text,
@@ -2973,10 +3264,9 @@ CREATE AGGREGATE logging_agg_nonstrict_initcond (anyelement)
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:2:2: Error: ERROR:  syntax error at or near "stype"
-
-    		stype = text,
-	 ^
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 255
+    	CREATE AGGREGATE logging_agg_nonstrict_initcond (anyelement)
+	^
 <sql-statement>
 CREATE FUNCTION logging_sfunc_strict(text, anyelement) RETURNS text AS
 $$ SELECT $1 || '*' || quote_nullable($2) $$
@@ -3009,6 +3299,7 @@ LANGUAGE SQL STRICT IMMUTABLE;
 	^
 <sql-statement>
 CREATE AGGREGATE logging_agg_strict (text)
+(
 	stype = text,
 	sfunc = logging_sfunc_strict,
 	mstype = text,
@@ -3018,12 +3309,12 @@ CREATE AGGREGATE logging_agg_strict (text)
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:2:2: Error: ERROR:  syntax error at or near "stype"
-
-    		stype = text,
-	 ^
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 255
+    	CREATE AGGREGATE logging_agg_strict (text)
+	^
 <sql-statement>
 CREATE AGGREGATE logging_agg_strict_initcond (anyelement)
+(
 	stype = text,
 	sfunc = logging_sfunc_strict,
 	mstype = text,
@@ -3035,10 +3326,9 @@ CREATE AGGREGATE logging_agg_strict_initcond (anyelement)
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:2:2: Error: ERROR:  syntax error at or near "stype"
-
-    		stype = text,
-	 ^
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 255
+    	CREATE AGGREGATE logging_agg_strict_initcond (anyelement)
+	^
 <sql-statement>
 -- test strict and non-strict cases
 SELECT
@@ -3066,9 +3356,42 @@ ORDER BY p, i;
     -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
     	-- test strict and non-strict cases
 	^
-        -stdin-:<main>:19:29: Error: No such column: P
-        	WINDOW wnd AS (PARTITION BY P ORDER BY i ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
-	                            ^
+        -stdin-:<main>:1:1: Error: At function: PgResultItem
+        	-- test strict and non-strict cases
+	^
+            -stdin-:<main>:4:2: Error: At function: PgWindowCall
+            		logging_agg_nonstrict(v) over wnd as nstrict,
+	 ^
+                -stdin-:<main>:4:2: Error: Unsupported function: logging_agg_nonstrict
+                		logging_agg_nonstrict(v) over wnd as nstrict,
+	 ^
+        -stdin-:<main>:1:1: Error: At function: PgResultItem
+        	-- test strict and non-strict cases
+	^
+            -stdin-:<main>:5:2: Error: At function: PgWindowCall
+            		logging_agg_nonstrict_initcond(v) over wnd as nstrict_init,
+	 ^
+                -stdin-:<main>:5:2: Error: Unsupported function: logging_agg_nonstrict_initcond
+                		logging_agg_nonstrict_initcond(v) over wnd as nstrict_init,
+	 ^
+        -stdin-:<main>:1:1: Error: At function: PgResultItem
+        	-- test strict and non-strict cases
+	^
+            -stdin-:<main>:6:2: Error: At function: PgWindowCall
+            		logging_agg_strict(v::text) over wnd as strict,
+	 ^
+                -stdin-:<main>:6:2: Error: Unsupported function: logging_agg_strict
+                		logging_agg_strict(v::text) over wnd as strict,
+	 ^
+        -stdin-:<main>:1:1: Error: At function: PgResultItem
+        	-- test strict and non-strict cases
+	^
+            -stdin-:<main>:7:2: Error: At function: PgWindowCall
+            		logging_agg_strict_initcond(v) over wnd as strict_init
+	 ^
+                -stdin-:<main>:7:2: Error: Unsupported function: logging_agg_strict_initcond
+                		logging_agg_strict_initcond(v) over wnd as strict_init
+	 ^
 <sql-statement>
 -- and again, but with filter
 SELECT
@@ -3195,6 +3518,7 @@ LANGUAGE SQL STRICT;
 	^
 <sql-statement>
 CREATE AGGREGATE sum_int_randomrestart (int4)
+(
 	stype = int4,
 	sfunc = int4pl,
 	mstype = int4,
@@ -3204,10 +3528,9 @@ CREATE AGGREGATE sum_int_randomrestart (int4)
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:2:2: Error: ERROR:  syntax error at or near "stype"
-
-    		stype = int4,
-	 ^
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 255
+    	CREATE AGGREGATE sum_int_randomrestart (int4)
+	^
 <sql-statement>
 WITH
 vs AS (
@@ -3218,6 +3541,7 @@ sum_following AS (
 	SELECT i, SUM(v) OVER
 		(ORDER BY i DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS s
 	FROM vs
+)
 SELECT DISTINCT
 	sum_following.s = sum_int_randomrestart(v) OVER fwd AS eq1,
 	-sum_following.s = sum_int_randomrestart(-v) OVER fwd AS eq2,
@@ -3228,12 +3552,50 @@ WINDOW fwd AS (
 	ORDER BY vs.i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING
 );
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:10:1: Error: ERROR:  syntax error at or near "SELECT"
-
-    	SELECT DISTINCT
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	WITH
 	^
+        -stdin-:<main>:1:1: Error: At function: PgResultItem
+        	WITH
+	^
+            -stdin-:<main>:12:18: Error: At function: PgOp
+            		sum_following.s = sum_int_randomrestart(v) OVER fwd AS eq1,
+	                 ^
+                -stdin-:<main>:12:20: Error: At function: PgWindowCall
+                		sum_following.s = sum_int_randomrestart(v) OVER fwd AS eq1,
+	                   ^
+                    -stdin-:<main>:12:20: Error: Unsupported function: sum_int_randomrestart
+                    		sum_following.s = sum_int_randomrestart(v) OVER fwd AS eq1,
+	                   ^
+        -stdin-:<main>:1:1: Error: At function: PgResultItem
+        	WITH
+	^
+            -stdin-:<main>:13:19: Error: At function: PgOp
+            		-sum_following.s = sum_int_randomrestart(-v) OVER fwd AS eq2,
+	                  ^
+                -stdin-:<main>:13:21: Error: At function: PgWindowCall
+                		-sum_following.s = sum_int_randomrestart(-v) OVER fwd AS eq2,
+	                    ^
+                    -stdin-:<main>:13:21: Error: Unsupported function: sum_int_randomrestart
+                    		-sum_following.s = sum_int_randomrestart(-v) OVER fwd AS eq2,
+	                    ^
+        -stdin-:<main>:1:1: Error: At function: PgResultItem
+        	WITH
+	^
+            -stdin-:<main>:14:19: Error: At function: PgOp
+            		100*3+(vs.i-1)*3 = length(logging_agg_nonstrict(''::text) OVER fwd) AS eq3
+	                  ^
+                -stdin-:<main>:14:21: Error: At function: PgCall
+                		100*3+(vs.i-1)*3 = length(logging_agg_nonstrict(''::text) OVER fwd) AS eq3
+	                    ^
+                    -stdin-:<main>:14:28: Error: At function: PgWindowCall
+                    		100*3+(vs.i-1)*3 = length(logging_agg_nonstrict(''::text) OVER fwd) AS eq3
+	                           ^
+                        -stdin-:<main>:14:28: Error: Unsupported function: logging_agg_nonstrict
+                        		100*3+(vs.i-1)*3 = length(logging_agg_nonstrict(''::text) OVER fwd) AS eq3
+	                           ^
 <sql-statement>
 --
 -- Test various built-in aggregates that have moving-aggregate support
@@ -3246,49 +3608,230 @@ SELECT i,AVG(v::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED 
 SELECT i,AVG(v::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
 </sql-statement>
-VERIFY failed (2024-01-19T19:50:47.838646+0300): Value is not boxed
-  ydb/library/yql/public/udf/udf_value_inl.h:379
-  AsBoxed(): requirement IsBoxed() failed
-NPrivate::InternalPanicImpl(int, char const*, char const*, int, int, int, TBasicStringBuf<char, std::__y1::char_traits<char> >, char const*, unsigned long)+524 (0x7F8407C)
-NPrivate::Panic(NPrivate::TStaticBuf const&, int, char const*, char const*, char const*, ...)+284 (0x7F7A38C)
-NYql::TPgResolvedCall<true>::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const+1098 (0xC88D5FA)
-NKikimr::NMiniKQL::TMutableComputationNode<NYql::TPgResolvedCall<true> >::GetValue(NKikimr::NMiniKQL::TComputationContext&) const+142 (0xC88CC7E)
-??+0 (0x7FFB2C51BC53)
-??+0 (0x7FFB2C51B47C)
-??+0 (0x7FFB2C519E01)
-NKikimr::NMiniKQL::TForwardListValue::TIterator::Next(NYql::NUdf::TUnboxedValue&)+39 (0xA4B6217)
-NYql::TYsonExecuteResOrPull::WriteValue(NYql::NUdf::TUnboxedValue const&, NKikimr::NMiniKQL::TType*)+224 (0xFA30D90)
-NYql::NFile::TYtFileGateway::ExecuteResult(NYql::NFile::TSession&, NYson::TYsonWriter&, NYql::NNodes::TExprBase, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&, TVector<TBasicString<char, std::__y1::char_traits<char> >, std::__y1::allocator<TBasicString<char, std::__y1::char_traits<char> > > > const&) const+2118 (0xD064E86)
-NYql::NFile::TYtFileGateway::ResOrPull(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&)+861 (0xD04F70D)
-??+0 (0xC2474C9)
-??+0 (0xC24A6CA)
-NYql::TExecTransformerBase::CallbackTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+1018 (0xC24EA6A)
-NYql::TAsyncCallbackTransformer<NYql::TExecTransformerBase>::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+37 (0xC249E55)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0x8A3CB28)
-??+0 (0xA16234D)
-??+0 (0xA1575AF)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0x8A3CB28)
-??+0 (0xA24906F)
-??+0 (0xA24D9F0)
-??+0 (0xA248B55)
-??+0 (0xA24D88C)
-??+0 (0xA248B55)
-??+0 (0xA245668)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0x8A3CB28)
-??+0 (0x8A3E332)
-??+0 (0x8A3D326)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0x8A3CB28)
-NYql::AsyncTransformStepImpl(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool, bool, TBasicStringBuf<char, std::__y1::char_traits<char> > const&)+290 (0x8A3B5B2)
-NYql::AsyncTransform(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool)+66 (0x8A3BEA2)
-NYql::TProgram::AsyncTransformWithFallback(bool)+81 (0x997C591)
-??+0 (0x998F6D0)
-NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+3039 (0x997A47F)
-??+0 (0x997747A)
-NYql::TProgram::Run(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+129 (0x9979861)
-Main(int, char**)+4464 (0x7E624E0)
-main+200 (0x7E64718)
-??+0 (0x7FFB2C229D90)
-__libc_start_main+128 (0x7FFB2C229E40)
-??+0 (0x7DF8029)
-pthread_kill at ./nptl/./nptl/pthread_kill.c:43:17
-?? at ??:0:0
+<sql-statement>
+SELECT i,AVG(v::smallint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT i,AVG(v::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1.5),(2,2.5),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT i,AVG(v::interval) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,'1 sec'),(2,'2 sec'),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT i,SUM(v::smallint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT i,SUM(v::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT i,SUM(v::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT i,SUM(v::money) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,'1.10'),(2,'2.20'),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT i,SUM(v::interval) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,'1 sec'),(2,'2 sec'),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT i,SUM(v::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1.1),(2,2.2),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT SUM(n::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1.01),(2,2),(3,3)) v(i,n);
+</sql-statement>
+<sql-statement>
+SELECT i,COUNT(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT i,COUNT(*) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT VAR_POP(n::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT VAR_POP(n::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT VAR_POP(n::smallint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT VAR_POP(n::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT VAR_SAMP(n::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT VAR_SAMP(n::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT VAR_SAMP(n::smallint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT VAR_SAMP(n::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT VARIANCE(n::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT VARIANCE(n::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT VARIANCE(n::smallint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT VARIANCE(n::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV_POP(n::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV_POP(n::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV_POP(n::smallint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV_POP(n::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV_SAMP(n::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV_SAMP(n::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV_SAMP(n::smallint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV_SAMP(n::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV(n::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(0,NULL),(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV(n::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(0,NULL),(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV(n::smallint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(0,NULL),(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+SELECT STDDEV(n::numeric) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(0,NULL),(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
+</sql-statement>
+<sql-statement>
+-- test that inverse transition functions work with various frame options
+SELECT i,SUM(v::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND CURRENT ROW)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT i,SUM(v::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT i,SUM(v::int) OVER (ORDER BY i ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,3),(4,4)) t(i,v);
+</sql-statement>
+<sql-statement>
+-- ensure aggregate over numeric properly recovers from NaN values
+SELECT a, b,
+       SUM(b) OVER(ORDER BY A ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
+FROM (VALUES(1,1::numeric),(2,2),(3,'NaN'),(4,3),(5,4)) t(a,b);
+</sql-statement>
+<sql-statement>
+-- It might be tempting for someone to add an inverse trans function for
+-- float and double precision. This should not be done as it can give incorrect
+-- results. This test should fail if anyone ever does this without thinking too
+-- hard about it.
+SELECT to_char(SUM(n::float8) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING),'999999999999999999999D9')
+  FROM (VALUES(1,1e20),(2,1)) n(i,n);
+</sql-statement>
+<sql-statement>
+SELECT i, b, bool_and(b) OVER w, bool_or(b) OVER w
+  FROM (VALUES (1,true), (2,true), (3,false), (4,false), (5,true)) v(i,b)
+  WINDOW w AS (ORDER BY i ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING);
+</sql-statement>
+<sql-statement>
+-- Tests for problems with failure to walk or mutate expressions
+-- within window frame clauses.
+-- test walker (fails with collation error if expressions are not walked)
+SELECT array_agg(i) OVER w
+  FROM generate_series(1,5) i
+WINDOW w AS (ORDER BY i ROWS BETWEEN (('foo' < 'foobar')::integer) PRECEDING AND CURRENT ROW);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:6:13: Error: At function: EvaluateExpr
+    	WINDOW w AS (ORDER BY i ROWS BETWEEN (('foo' < 'foobar')::integer) PRECEDING AND CURRENT ROW);
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:6:13: Error: At function: Unwrap
+            	WINDOW w AS (ORDER BY i ROWS BETWEEN (('foo' < 'foobar')::integer) PRECEDING AND CURRENT ROW);
+	            ^
+                -stdin-:<main>:6:59: Error: Can't unwrap PostgreSQL type
+                	WINDOW w AS (ORDER BY i ROWS BETWEEN (('foo' < 'foobar')::integer) PRECEDING AND CURRENT ROW);
+	                                                          ^
+<sql-statement>
+-- test mutator (fails when inlined if expressions are not mutated)
+CREATE FUNCTION pg_temp.f(group_size BIGINT) RETURNS SETOF integer[]
+AS $$
+    SELECT array_agg(s) OVER w
+      FROM generate_series(1,5) s
+    WINDOW w AS (ORDER BY s ROWS BETWEEN CURRENT ROW AND GROUP_SIZE FOLLOWING)
+$$ LANGUAGE SQL STABLE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	-- test mutator (fails when inlined if expressions are not mutated)
+	^
+<sql-statement>
+EXPLAIN (costs off) SELECT * FROM pg_temp.f(2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	EXPLAIN (costs off) SELECT * FROM pg_temp.f(2);
+	^
+<sql-statement>
+SELECT * FROM pg_temp.f(2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:15: Error: FuncCall: expected pg_catalog, but got: pg_temp
+    	SELECT * FROM pg_temp.f(2);
+	              ^

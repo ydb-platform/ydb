@@ -289,7 +289,7 @@ private:
             false, // keepSession
             false, // useCancelAfter
             syntax,
-            true);
+            true); // trailing support
 
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release())) {
             NYql::TIssues issues;
@@ -394,12 +394,18 @@ private:
             return;
         }
 
+        Ydb::Query::ExecuteQueryResponsePart response;
+
+        if (NeedReportStats(*Request_->GetProtoRequest())) {
+            hasTrailingMessage = true;
+            FillQueryStats(*response.mutable_exec_stats(), kqpResponse);
+            if (NeedReportAst(*Request_->GetProtoRequest())) {
+                response.mutable_exec_stats()->set_query_ast(kqpResponse.GetQueryAst());
+            }
+        }
+
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             Request_->SetRuHeader(record.GetConsumedRu());
-
-            auto& kqpResponse = record.GetResponse();
-
-            Ydb::Query::ExecuteQueryResponsePart response;
 
             if (QueryAction == NKikimrKqp::QUERY_ACTION_EXECUTE) {
                 for(int i = 0; i < kqpResponse.GetYdbResults().size(); i++) {
@@ -415,25 +421,15 @@ private:
                 hasTrailingMessage = true;
                 response.mutable_tx_meta()->set_id(kqpResponse.GetTxMeta().id());
             }
-
-            if (NeedReportStats(*Request_->GetProtoRequest())) {
-                hasTrailingMessage = true;
-                FillQueryStats(*response.mutable_exec_stats(), kqpResponse);
-                if (NeedReportAst(*Request_->GetProtoRequest())) {
-                    response.mutable_exec_stats()->set_query_ast(kqpResponse.GetQueryAst());
-                }
-            }
-
-            if (hasTrailingMessage) {
-                response.set_status(Ydb::StatusIds::SUCCESS);
-                response.mutable_issues()->CopyFrom(issueMessage);
-                TString out;
-                Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
-                ReplySerializedAndFinishStream(record.GetYdbStatus(), std::move(out));
-            }
         }
 
-        if (!hasTrailingMessage) {
+        if (hasTrailingMessage) {
+            response.set_status(record.GetYdbStatus());
+            response.mutable_issues()->CopyFrom(issueMessage);
+            TString out;
+            Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
+            ReplySerializedAndFinishStream(record.GetYdbStatus(), std::move(out));
+        } else {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(issueMessage, issues);
             ReplyFinishStream(record.GetYdbStatus(), issueMessage);

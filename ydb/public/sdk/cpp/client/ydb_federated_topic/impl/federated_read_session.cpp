@@ -17,7 +17,7 @@ NTopic::TTopicClientSettings FromFederated(const TFederatedTopicClientSettings& 
 template <typename TEvent, typename TFederatedEvent>
 typename std::function<void(TEvent&)> WrapFederatedHandler(std::function<void(TFederatedEvent&)> outerHandler, std::shared_ptr<TDbInfo> db, std::shared_ptr<TEventFederator> federator) {
     if (outerHandler) {
-        return [outerHandler, db = std::move(db), &federator](TEvent& ev) {
+        return [outerHandler, db = std::move(db), federator = std::move(federator)](TEvent& ev) {
             auto fev = federator->LocateFederate(ev, std::move(db));
             return outerHandler(fev);
         };
@@ -63,10 +63,12 @@ NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& 
 TFederatedReadSessionImpl::TFederatedReadSessionImpl(const TFederatedReadSessionSettings& settings,
                                                      std::shared_ptr<TGRpcConnectionsImpl> connections,
                                                      const TFederatedTopicClientSettings& clientSettings,
-                                                     std::shared_ptr<TFederatedDbObserver> observer)
+                                                     std::shared_ptr<TFederatedDbObserver> observer,
+                                                     std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> codecs)
     : Settings(settings)
     , Connections(std::move(connections))
     , SubClientSetttings(FromFederated(clientSettings))
+    , ProvidedCodecs(std::move(codecs))
     , Observer(std::move(observer))
     , AsyncInit(Observer->WaitForFirstState())
     , FederationState(nullptr)
@@ -96,12 +98,25 @@ void TFederatedReadSessionImpl::Start() {
 }
 
 void TFederatedReadSessionImpl::OpenSubSessionsImpl(const std::vector<std::shared_ptr<TDbInfo>>& dbInfos) {
+    {
+        TStringBuilder log(GetLogPrefix());
+        log << "Open read subsessions to databases: ";
+        bool first = true;
+        for (const auto& db : dbInfos) {
+            if (first) first = false; else log << ", ";
+            log << "{ name: " << db->name()
+                << ", endpoint: " << db->endpoint()
+                << ", path: " << db->path() << " }";
+        }
+        LOG_LAZY(Log, TLOG_INFO, log);
+    }
     for (const auto& db : dbInfos) {
         NTopic::TTopicClientSettings settings = SubClientSetttings;
         settings
             .Database(db->path())
             .DiscoveryEndpoint(db->endpoint());
         auto subclient = make_shared<NTopic::TTopicClient::TImpl>(Connections, settings);
+        subclient->SetProvidedCodecs(ProvidedCodecs);
         auto subsession = subclient->CreateReadSession(FromFederated(Settings, db, EventFederator));
         SubSessions.emplace_back(subsession, db);
     }
@@ -110,7 +125,7 @@ void TFederatedReadSessionImpl::OpenSubSessionsImpl(const std::vector<std::share
 
 void TFederatedReadSessionImpl::OnFederatedStateUpdateImpl() {
     if (!FederationState->Status.IsSuccess()) {
-        LOG_LAZY(Log, TLOG_ERR, GetLogPrefix() << "Federated state update failed.");
+        LOG_LAZY(Log, TLOG_ERR, GetLogPrefix() << "Federated state update failed. FederationState: " << *FederationState);
         CloseImpl();
         return;
     }
@@ -148,6 +163,27 @@ void TFederatedReadSessionImpl::OnFederatedStateUpdateImpl() {
         // TODO: investigate here, why empty list?
         // Reason (and returned status) could be BAD_REQUEST or UNAVAILABLE.
         LOG_LAZY(Log, TLOG_ERR, GetLogPrefix() << "No available databases to read.");
+        auto issues = FederationState->Status.GetIssues();
+        TStringBuilder issue;
+        issue << "Requested databases {";
+        bool first = true;
+        for (auto const& dbFromSettings : Settings.GetDatabasesToReadFrom()) {
+            if (first) first = false; else issue << ",";
+            issue << " " << dbFromSettings;
+        }
+        issue << " } not found. Available databases {";
+        first = true;
+        for (auto const& db : FederationState->DbInfos) {
+            if (db->status() == Ydb::FederationDiscovery::DatabaseInfo_Status_AVAILABLE) {
+                if (first) first = false; else issue << ",";
+                issue << " { name: " << db->name()
+                      << ", endpoint: " << db->endpoint()
+                      << ", path: " << db->path() << " }";
+            }
+        }
+        issue << " }";
+        issues.AddIssue(issue);
+        FederationState->Status = TStatus(EStatus::BAD_REQUEST, std::move(issues));
         CloseImpl();
         return;
     }
@@ -212,8 +248,7 @@ TVector<TReadSessionEvent::TEvent> TFederatedReadSessionImpl::GetEvents(bool blo
     }
     with_lock(Lock) {
         if (Closing) {
-            // TODO correct conversion
-            return {NTopic::TSessionClosedEvent(FederationState->Status.GetStatus(), {})};
+            return {NTopic::TSessionClosedEvent(FederationState->Status.GetStatus(), NYql::TIssues(FederationState->Status.GetIssues()))};
         }
         // TODO!!! handle aborting or closing state
         //         via handler on SessionClosedEvent {

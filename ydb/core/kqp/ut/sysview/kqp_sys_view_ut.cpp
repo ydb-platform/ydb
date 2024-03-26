@@ -1,6 +1,10 @@
+// we define this to allow using sdk build info.
+#define INCLUDE_YDB_INTERNAL_H
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
+#include <util/system/getpid.h>
 #include <ydb/core/sys_view/service/query_history.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -42,6 +46,175 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         CompareYson(R"([[["::1"];["/Root/KeyValue"];[2u]]])", StreamResultToYson(it));
+    }
+
+    Y_UNIT_TEST(Sessions) {
+        TKikimrRunner kikimr("root@builtin");
+        auto client = kikimr.GetQueryClient();
+        auto tableClient = kikimr.GetTableClient();
+        const size_t sessionsCount = 50;
+        std::vector<NYdb::NQuery::TSession> sessionsSet;
+        for(ui32 i = 0; i < sessionsCount; i++) {
+            sessionsSet.emplace_back(std::move(client.GetSession().GetValueSync().GetSession()));
+        }
+
+        Cerr << kikimr.GetTestServer().GetRuntime()->GetNodeId() << Endl;
+
+        ui32 nodeId = kikimr.GetTestServer().GetRuntime()->GetNodeId();
+
+        std::sort(sessionsSet.begin(), sessionsSet.end(), [](const NYdb::NQuery::TSession& a, const NYdb::NQuery::TSession& b){
+            return a.GetId() < b.GetId();
+        });
+
+        std::vector<TString> stringParts;
+        for(ui32 i = 0; i < sessionsCount - 1; i++) {
+            stringParts.push_back(Sprintf("[[\"%s\"];[\"IDLE\"];[\"<empty>\"];[%du];[\"\"]];", sessionsSet[i].GetId().data(), nodeId));
+        }
+
+        {
+            auto result = sessionsSet.front().ExecuteQuery(R"(--!syntax_v1
+select 1;)", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        TString otherSessions = JoinSeq("\n", stringParts);
+
+        Cerr << NYdb::CreateSDKBuildInfo() << Endl;
+
+        {
+            auto result = sessionsSet.back().ExecuteQuery(R"(--!syntax_v1
+select SessionId, State, ApplicationName, NodeId, Query from `/Root/.sys/query_sessions` order by SessionId;)", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(Sprintf(R"([
+                %s
+                [["%s"];["EXECUTING"];["<empty>"];[%du];["--!syntax_v1\nselect SessionId, State, ApplicationName, NodeId, Query from `/Root/.sys/query_sessions` order by SessionId;"]]
+            ])", otherSessions.data(), sessionsSet.back().GetId().data(), nodeId), FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto result = sessionsSet.back().ExecuteQuery(Sprintf(R"(--!syntax_v1
+select SessionId, State, ApplicationName, NodeId, Query from `/Root/.sys/query_sessions` WHERE StartsWith(SessionId, "ydb://session/3?node_id=%d");)", nodeId), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            CompareYson(Sprintf(R"([
+                %s
+                [["%s"];["EXECUTING"];["<empty>"];[%du];["--!syntax_v1\nselect SessionId, State, ApplicationName, NodeId, Query from `/Root/.sys/query_sessions` WHERE StartsWith(SessionId, \"ydb://session/3?node_id=%d\");"]]
+            ])", otherSessions.data(), sessionsSet.back().GetId().data(), nodeId, nodeId), FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto result = sessionsSet.back().ExecuteQuery(R"(--!syntax_v1
+select ClientSdkBuildInfo, Count(SessionId) from `/Root/.sys/query_sessions` group by ClientSdkBuildInfo;)", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(Sprintf(R"([
+                [["%s"];%du]
+            ])", NYdb::CreateSDKBuildInfo().data(), (ui32)sessionsSet.size()), FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto result = sessionsSet.back().ExecuteQuery(R"(--!syntax_v1
+select ClientPID, Count(SessionId) from `/Root/.sys/query_sessions` group by ClientPID;)", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(Sprintf(R"([
+                [["%d"];%du]
+            ])", (int)GetPID(), (ui32)sessionsSet.size()), FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto result = sessionsSet.back().ExecuteQuery(R"(--!syntax_v1
+select UserSID, Count(SessionId) from `/Root/.sys/query_sessions` group by UserSID;)", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(Sprintf(R"([
+                [["root@builtin"];%du]
+            ])", (ui32)sessionsSet.size()), FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto result = sessionsSet.back().ExecuteQuery(R"(--!syntax_v1
+select QueryCount, Count(SessionId) from `/Root/.sys/query_sessions` group by QueryCount order by QueryCount;)", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(Sprintf(R"([
+                [[0u];%du];
+                [[1u];1u];
+                [[6u];1u]
+            ])", (ui32)sessionsSet.size() - 2), FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto result = sessionsSet.back().ExecuteQuery(R"(--!syntax_v1
+select Count(SessionId) from `/Root/.sys/query_sessions` where ClientUserAgent LIKE 'grpc%';)", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(Sprintf(R"([
+                [%du]
+            ])", (ui32)sessionsSet.size()), FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto result = sessionsSet.back().ExecuteQuery(R"(--!syntax_v1
+select Count(SessionId) from `/Root/.sys/query_sessions` where ClientAddress LIKE '%:%';)", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(Sprintf(R"([
+                [%du]
+            ])", (ui32)sessionsSet.size()), FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+
+            auto result = sessionsSet.back().ExecuteQuery(Sprintf(R"(--!syntax_v1
+$date_format = DateTime::Format("%s");
+select SessionId from `/Root/.sys/query_sessions`
+where
+SessionId LIKE Utf8("%s") and
+StartsWith($date_format(SessionStartAt), cast(DateTime::GetYear(CurrentUtcTimestamp()) as utf8)) and
+StartsWith($date_format(StateChangeAt), cast(DateTime::GetYear(CurrentUtcTimestamp()) as utf8)) and
+StartsWith($date_format(QueryStartAt), cast(DateTime::GetYear(CurrentUtcTimestamp()) as utf8))
+order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.back().GetId().data()), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(Sprintf(R"([
+                [["%s"]]
+            ])", sessionsSet.back().GetId().data()), FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto result = sessionsSet.back().ExecuteQuery(Sprintf(R"(
+                --!syntax_v1
+                select SessionId
+                from `/Root/.sys/query_sessions`
+                where SessionId="%s"
+            )", sessionsSet.back().GetId().data()), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+            CompareYson(Sprintf(R"([
+                [["%s"]]
+            ])", sessionsSet.back().GetId().data()), FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto it = tableClient.StreamExecuteScanQuery(Sprintf(R"(
+                --!syntax_v1
+                select SessionId
+                from `/Root/.sys/query_sessions`
+                where SessionId="%s"
+            )", sessionsSet.back().GetId().data())).GetValueSync();
+
+            CompareYson(Sprintf(R"([
+                [["%s"]]
+            ])", sessionsSet.back().GetId().data()), StreamResultToYson(it));
+        }
     }
 
     Y_UNIT_TEST(PartitionStatsSimple) {
@@ -96,7 +269,6 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         auto client = kikimr.GetTableClient();
 
         auto it = client.StreamExecuteScanQuery(R"(
-            PRAGMA Kikimr.OptEnablePredicateExtract = "true";
             SELECT OwnerId, PartIdx, Path, PathId
             FROM `/Root/.sys/partition_stats`
             WHERE
@@ -137,7 +309,6 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
             DECLARE $l2 AS Int32;
             DECLARE $r2 AS Int32;
 
-            PRAGMA Kikimr.OptEnablePredicateExtract = "true";
             SELECT OwnerId, PartIdx, Path, PathId
             FROM `/Root/.sys/partition_stats`
             WHERE
@@ -164,10 +335,6 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
 
-        TString enablePredicateExtractor = R"(
-            PRAGMA Kikimr.OptEnablePredicateExtract = "true";
-        )";
-
         TString query = R"(
             SELECT OwnerId, PathId, PartIdx, Path
             FROM `/Root/.sys/partition_stats`
@@ -187,19 +354,11 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         auto it = client.StreamExecuteScanQuery(query).GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         CompareYson(expectedYson, StreamResultToYson(it));
-
-        it = client.StreamExecuteScanQuery(enablePredicateExtractor + query).GetValueSync();
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        CompareYson(expectedYson, StreamResultToYson(it));
     }
 
     Y_UNIT_TEST(PartitionStatsRange2) {
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
-        TString enablePredicateExtractor = R"(
-            PRAGMA Kikimr.OptEnablePredicateExtract = "true";
-        )";
-
         TString query = R"(
             SELECT OwnerId, PathId, PartIdx, Path
             FROM `/Root/.sys/partition_stats`
@@ -214,10 +373,6 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         ])";
 
         auto it = client.StreamExecuteScanQuery(query).GetValueSync();
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        CompareYson(expectedYson, StreamResultToYson(it));
-
-        it = client.StreamExecuteScanQuery(enablePredicateExtractor + query).GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         CompareYson(expectedYson, StreamResultToYson(it));
     }

@@ -1,13 +1,15 @@
 #include "cli.h"
 #include "cli_cmds.h"
 
+#include <ydb/core/protos/base.pb.h>
+
 namespace NKikimr {
 namespace NDriverClient {
 
-class TClientCommandKeyValueRequest : public TClientCommandConfig {
+class TClientCommandKeyValueRequest : public TClientCommandBase {
 public:
     TClientCommandKeyValueRequest()
-        : TClientCommandConfig("request", { "req" }, "Request to KV tablet")
+        : TClientCommandBase("request", { "req" }, "Request to KV tablet")
     {}
 
     TString ProtoBuf;
@@ -81,10 +83,10 @@ public:
     }
 };
 
-class TClientCommandTabletExec : public TClientCommandConfig {
+class TClientCommandTabletExec : public TClientCommandBase {
 public:
     TClientCommandTabletExec()
-        : TClientCommandConfig("execute", { "exec" })
+        : TClientCommandBase("execute", { "exec" })
     {
     }
 

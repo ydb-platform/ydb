@@ -50,6 +50,9 @@ public:
     public:
         virtual ~ITarget() = default;
 
+        virtual ui64 GetId() const = 0;
+        virtual ETargetKind GetKind() const = 0;
+
         virtual const TString& GetSrcPath() const = 0;
         virtual const TString& GetDstPath() const = 0;
 
@@ -68,8 +71,11 @@ public:
         virtual const TString& GetIssue() const = 0;
         virtual void SetIssue(const TString& value) = 0;
 
-        virtual void Progress(ui64 schemeShardId, const TActorId& proxy, const TActorContext& ctx) = 0;
+        virtual void Progress(TReplication::TPtr replication, const TActorContext& ctx) = 0;
         virtual void Shutdown(const TActorContext& ctx) = 0;
+
+    protected:
+        virtual IActor* CreateWorkerRegistar(TReplication::TPtr replication, const TActorContext& ctx) const = 0;
     };
 
     struct TDropOp {
@@ -93,6 +99,9 @@ public:
 
     ui64 GetId() const;
     const TPathId& GetPathId() const;
+    const TActorId& GetYdbProxy() const;
+    ui64 GetSchemeShardId() const;
+    const NKikimrReplication::TReplicationConfig& GetConfig() const;
     void SetState(EState state, TString issue = {});
     EState GetState() const;
     const TString& GetIssue() const;

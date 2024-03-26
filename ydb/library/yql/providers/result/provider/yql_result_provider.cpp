@@ -455,8 +455,8 @@ namespace {
                     TScopedAlloc alloc(__LOCATION__);
                     TTypeEnvironment env(alloc);
                     TStringStream err;
-                    TProgramBuilder pgmBuilder(env, Config->FunctionRegistry);
-                    TType* mkqlType = NCommon::BuildType(*itemsNode.GetTypeAnn(), pgmBuilder, err);
+                    NKikimr::NMiniKQL::TTypeBuilder typeBuilder(env);
+                    TType* mkqlType = NCommon::BuildType(*itemsNode.GetTypeAnn(), typeBuilder, err);
                     if (!mkqlType) {
                         ctx.AddError(TIssue(ctx.GetPosition(itemsNode.Pos()), TStringBuilder() << "Failed to process type: " << err.Str()));
                         return TStatus::Error;

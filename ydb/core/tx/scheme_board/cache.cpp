@@ -1,6 +1,7 @@
 #include "cache.h"
 #include "double_indexed.h"
 #include "events.h"
+#include "events_internal.h"
 #include "helpers.h"
 #include "monitorable_actor.h"
 #include "subscriber.h"
@@ -12,6 +13,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/persqueue/utils.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
@@ -541,11 +543,7 @@ namespace {
                 << ", tabletId# " << tabletId
                 << ", domainOwnerId# " << domainOwnerId);
 
-            const auto& domains = *AppData()->DomainsInfo;
-            const ui32 domainId = domains.GetDomainUidByTabletId(tabletId);
-            const ui32 boardSSId = domains.GetDomain(domainId).DefaultSchemeBoardGroup;
-
-            return Register(CreateSchemeBoardSubscriber(SelfId(), path, boardSSId, domainOwnerId));
+            return Register(CreateSchemeBoardSubscriber(SelfId(), path, domainOwnerId));
         }
 
         TActorId CreateSubscriber(const TPathId& pathId) const {
@@ -696,7 +694,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             return TResponseProps(ev->Cookie, false, false);
         }
 
-        static TResponseProps FromEvent(TSchemeBoardEvents::TEvSyncResponse::TPtr& ev) {
+        static TResponseProps FromEvent(NInternalEvents::TEvSyncResponse::TPtr& ev) {
             return TResponseProps(ev->Cookie, true, ev->Get()->Partial);
         }
 
@@ -774,6 +772,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     columnDesc.HasTypeInfo() ? &columnDesc.GetTypeInfo() : nullptr);
                 column.PType = typeInfoMod.TypeInfo;
                 column.PTypeMod = typeInfoMod.TypeMod;
+                column.IsBuildInProgress = columnDesc.GetIsBuildInProgress();
 
                 if (columnDesc.HasDefaultFromSequence()) {
                     column.SetDefaultFromSequence();
@@ -989,7 +988,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         void SendSyncRequest() const {
             Y_ABORT_UNLESS(Subscriber, "it hangs if no subscriber");
-            Owner->Send(Subscriber.Subscriber, new TSchemeBoardEvents::TEvSyncRequest(), 0, ++Subscriber.SyncCookie);
+            Owner->Send(Subscriber.Subscriber, new NInternalEvents::TEvSyncRequest(), 0, ++Subscriber.SyncCookie);
         }
 
         void ResendSyncRequests(THashMap<TVariantContextPtr, TVector<TRequest>>& inFlight) const {
@@ -1480,6 +1479,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 Kind = TNavigate::KindTopic;
                 IsPrivatePath = CalcPathIsPrivate(entryDesc.GetPathType(), entryDesc.GetPathSubType());
                 if (Created) {
+                    NPQ::Migrate(*pathDesc.MutablePersQueueGroup()->MutablePQTabletConfig());
                     FillInfo(Kind, PQGroupInfo, std::move(*pathDesc.MutablePersQueueGroup()));
                 }
                 break;
@@ -1619,7 +1619,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             }
         }
 
-        void Fill(TSchemeBoardEvents::TEvSyncResponse&) {
+        void Fill(NInternalEvents::TEvSyncResponse&) {
         }
 
         bool IsFilled() const {
@@ -2155,23 +2155,15 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
     }
 
     template <typename TPath>
-    TSubscriber CreateSubscriber(const TPath& path, const ui64 tabletId, const ui64 domainOwnerId) const {
+    TSubscriber CreateSubscriber(const TPath& path, const ui64 domainOwnerId) const {
         SBC_LOG_T("Create subscriber"
             << ": self# " << SelfId()
             << ", path# " << path
             << ", domainOwnerId# " << domainOwnerId);
 
-        const auto& domains = *AppData()->DomainsInfo;
-        const ui32 domainId = domains.GetDomainUidByTabletId(tabletId);
-        const ui32 boardSSId = domains.GetDomain(domainId).DefaultSchemeBoardGroup;
-
         return TSubscriber(
-            Register(CreateSchemeBoardSubscriber(SelfId(), path, boardSSId, domainOwnerId)), domainOwnerId, path
+            Register(CreateSchemeBoardSubscriber(SelfId(), path, domainOwnerId)), domainOwnerId, path
         );
-    }
-
-    TSubscriber CreateSubscriber(const TPathId& pathId, const ui64 domainOwnerId) const {
-        return CreateSubscriber(pathId, pathId.OwnerId, domainOwnerId);
     }
 
     template <typename TContextPtr, typename TEntry, typename TPathExtractor, typename TTabletIdExtractor>
@@ -2187,8 +2179,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             case EPathType::RegularPath:
             {
                 const ui64 tabletId = tabletIdExtractor(entry);
-                const ui32 domainId = AppData()->DomainsInfo->GetDomainUidByTabletId(tabletId);
-                if (tabletId == ui64(NSchemeShard::InvalidTabletId) || domainId == TDomainsInfo::BadDomainId) {
+                if (tabletId == ui64(NSchemeShard::InvalidTabletId) || (tabletId >> 56) != 1) {
                     return SetRootUnknown(context.Get(), entry);
                 }
 
@@ -2216,7 +2207,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     domainOwnerId = tabletId;
                 }
 
-                cacheItem = &Cache.Upsert(path, TCacheItem(this, CreateSubscriber(path, tabletId, domainOwnerId), false));
+                cacheItem = &Cache.Upsert(path, TCacheItem(this, CreateSubscriber(path, domainOwnerId), false));
                 break;
             }
             case EPathType::SysPath:
@@ -2274,7 +2265,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         if (!byPath) {
-            TSubscriber subscriber = CreateSubscriber(notifyPath, notifyPathId.OwnerId, byPathId->GetSubcriber().DomainOwnerId);
+            TSubscriber subscriber = CreateSubscriber(notifyPath, byPathId->GetSubcriber().DomainOwnerId);
             return &Cache.Upsert(notifyPath, notifyPathId, TCacheItem(this, subscriber, false));
         }
 
@@ -2418,7 +2409,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         return ResolveCacheItem(notify);
     }
 
-    TCacheItem* ResolveCacheItemForNotify(const TSchemeBoardEvents::TEvSyncResponse& notify) {
+    TCacheItem* ResolveCacheItemForNotify(const NInternalEvents::TEvSyncResponse& notify) {
         return ResolveCacheItem(notify);
     }
 
@@ -2740,7 +2731,7 @@ public:
 
             hFunc(TSchemeBoardEvents::TEvNotifyUpdate, HandleNotify);
             hFunc(TSchemeBoardEvents::TEvNotifyDelete, HandleNotify);
-            hFunc(TSchemeBoardEvents::TEvSyncResponse, HandleNotify);
+            hFunc(NInternalEvents::TEvSyncResponse, HandleNotify);
 
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
             hFunc(TSchemeBoardMonEvents::TEvDescribeRequest, Handle);

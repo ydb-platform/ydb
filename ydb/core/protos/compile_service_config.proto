@@ -1,0 +1,6 @@
+package NKikimrConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TCompileServiceConfig {
+    optional uint32 InflightLimit = 1 [default = 100000];
+}

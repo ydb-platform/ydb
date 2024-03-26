@@ -709,6 +709,13 @@ TYsonToSkiffConverter CreateSimpleYsonToSkiffConverter(
                 } else {
                     return CreatePrimitiveTypeYsonToSkiffConverter(std::move(descriptor), wireType);
                 }
+
+            case ESimpleLogicalValueType::Date32:
+            case ESimpleLogicalValueType::Datetime64:
+            case ESimpleLogicalValueType::Timestamp64:
+            case ESimpleLogicalValueType::Interval64:
+                CheckWireType(wireType, {EWireType::Int32, EWireType::Int64, EWireType::String32});
+                return CreatePrimitiveTypeYsonToSkiffConverter(std::move(descriptor), wireType);
         }
     } catch (const std::exception& ex) {
         RethrowCannotMatchField(descriptor, skiffSchema, ex);
@@ -1406,6 +1413,13 @@ TSkiffToYsonConverter CreateSimpleSkiffToYsonConverter(
                 } else {
                     return CreatePrimitiveTypeSkiffToYsonConverter(wireType);
                 }
+
+            case ESimpleLogicalValueType::Date32:
+            case ESimpleLogicalValueType::Datetime64:
+            case ESimpleLogicalValueType::Timestamp64:
+            case ESimpleLogicalValueType::Interval64:
+                CheckWireType(wireType, {EWireType::Int32, EWireType::Int64, EWireType::String32});
+                return CreatePrimitiveTypeSkiffToYsonConverter(wireType);
         }
         YT_ABORT();
     } catch (const std::exception& ex) {

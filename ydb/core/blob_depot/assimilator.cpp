@@ -465,7 +465,7 @@ namespace NKikimr::NBlobDepot {
 
     void TAssimilator::CreatePipe() {
         const TGroupID groupId(Self->Config.GetVirtualGroupId());
-        const ui64 tabletId = MakeBSControllerID(groupId.AvailabilityDomainID());
+        const ui64 tabletId = MakeBSControllerID();
         PipeId = Register(NTabletPipe::CreateClient(SelfId(), tabletId, NTabletPipe::TClientRetryPolicy::WithRetries()));
         NTabletPipe::SendData(SelfId(), PipeId, new TEvBlobStorage::TEvControllerGroupDecommittedNotify(groupId.GetRaw()));
     }

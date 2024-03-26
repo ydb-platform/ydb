@@ -506,6 +506,8 @@ TExprNode::TPtr ApplyExtractMembersToMapJoinCore(const TExprNode::TPtr& node, co
         .RightKeysColumns(mapJoin.RightKeysColumns())
         .LeftRenames(ctx.NewList(mapJoin.LeftInput().Pos(), std::move(left)))
         .RightRenames(ctx.NewList(mapJoin.RightRenames().Pos(), std::move(right)))
+        .LeftKeysColumnNames(mapJoin.LeftKeysColumnNames())
+        .RightKeysColumnNames(mapJoin.RightKeysColumnNames())
         .Done().Ptr();
 }
 

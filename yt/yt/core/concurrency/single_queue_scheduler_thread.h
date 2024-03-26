@@ -18,10 +18,9 @@ public:
     TSingleQueueSchedulerThread(
         TInvokerQueuePtr<TQueueImpl> queue,
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
-        const TString& threadGroupName,
-        const TString& threadName,
-        NThreading::EThreadPriority threadPriority = NThreading::EThreadPriority::Normal,
-        int shutdownPriority = 0);
+        TString threadGroupName,
+        TString threadName,
+        NThreading::TThreadOptions options = {});
 
 protected:
     const TInvokerQueuePtr<TQueueImpl> Queue_;
@@ -45,8 +44,9 @@ public:
     TSuspendableSingleQueueSchedulerThread(
         TInvokerQueuePtr<TQueueImpl> queue,
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
-        const TString& threadGroupName,
-        const TString& threadName);
+        TString threadGroupName,
+        TString threadName,
+        NThreading::TThreadOptions options);
 
     TFuture<void> Suspend(bool immediately);
 

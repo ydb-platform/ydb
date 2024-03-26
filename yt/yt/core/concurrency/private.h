@@ -52,7 +52,7 @@ using TMpscSuspendableSingleQueueSchedulerThreadPtr = TIntrusivePtr<TMpscSuspend
 
 DECLARE_REFCOUNTED_CLASS(TFiber)
 
-DECLARE_REFCOUNTED_CLASS(TSchedulerThreadBase)
+DECLARE_REFCOUNTED_CLASS(TSchedulerThread)
 
 DECLARE_REFCOUNTED_CLASS(TFairShareInvokerQueue)
 DECLARE_REFCOUNTED_CLASS(TFairShareQueueSchedulerThread)

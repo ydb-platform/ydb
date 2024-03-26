@@ -41,10 +41,10 @@
 #include "ldap-int.h"
 #include "ldap-tls.h"
 
-#include <gnutls/gnutls.h>
-#include <gnutls/x509.h>
+#error #include <gnutls/gnutls.h>
+#error #include <gnutls/x509.h>
 #error #include <gnutls/abstract.h>
-#include <gnutls/crypto.h>
+#error #include <gnutls/crypto.h>
 
 typedef struct tlsg_ctx {
 	gnutls_certificate_credentials_t cred;

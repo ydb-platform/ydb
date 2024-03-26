@@ -218,8 +218,8 @@ public:
                     break;
                 }
                 bool hasTxAllocators = false;
-                for (const auto& pair: domainsInfo->Domains) {
-                    if (!pair.second->TxAllocators.empty()) {
+                if (const auto& domain = domainsInfo->Domain) {
+                    if (!domain->TxAllocators.empty()) {
                         hasTxAllocators = true;
                         break;
                     }
@@ -432,15 +432,6 @@ public:
         return PipeClients.emplace(tabletId, pipeClient).first->second;
     }
 
-    TTabletId GetBscTabletId(TTabletId tabletId, const TActorContext& ctx) {
-        TDomainsInfo* domainsInfo = AppData(ctx)->DomainsInfo.Get();
-        ui64 hiveUid = HiveUidFromTabletID(tabletId);
-        ui32 hiveDomain = domainsInfo->GetHiveDomainUid(hiveUid);
-        ui64 defaultStateStorageGroup = domainsInfo->GetDefaultStateStorageGroup(hiveDomain);
-        TTabletId bscTabletId = MakeBSControllerID(defaultStateStorageGroup);
-        return bscTabletId;
-    }
-
     void Handle(TEvTablet::TEvGetCountersResponse::TPtr &ev, const TActorContext &ctx) {
         TabletCountersResults.emplace(ev->Cookie, ev->Release());
         ++Responses;
@@ -456,7 +447,7 @@ public:
             for (const auto& historyInfo : channelInfo.GetHistory()) {
                 ui32 groupId = historyInfo.GetGroupID();
                 if (GroupInfo.emplace(groupId, nullptr).second) {
-                    TTabletId bscTabletId = GetBscTabletId(lookupResult->Record.GetTabletID(), ctx);
+                    TTabletId bscTabletId = MakeBSControllerID();
                     TActorId pipeClient = GetTabletPipe(bscTabletId, ctx);
                     NTabletPipe::SendData(ctx, pipeClient, new TEvBlobStorage::TEvRequestControllerInfo(groupId));
                     ++Requests;

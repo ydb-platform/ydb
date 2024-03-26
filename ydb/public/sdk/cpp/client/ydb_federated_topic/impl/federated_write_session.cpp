@@ -3,6 +3,10 @@
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/log_lazy.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
 
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
+#undef INCLUDE_YDB_INTERNAL_H
+
 #include <library/cpp/threading/future/future.h>
 
 #include <algorithm>
@@ -23,20 +27,28 @@ NTopic::TTopicClientSettings FromFederated(const TFederatedTopicClientSettings& 
 TFederatedWriteSession::TFederatedWriteSession(const TFederatedWriteSessionSettings& settings,
                                              std::shared_ptr<TGRpcConnectionsImpl> connections,
                                              const TFederatedTopicClientSettings& clientSetttings,
-                                             std::shared_ptr<TFederatedDbObserver> observer)
+                                             std::shared_ptr<TFederatedDbObserver> observer,
+                                             std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> codecs)
     : Settings(settings)
     , Connections(std::move(connections))
     , SubClientSetttings(FromFederated(clientSetttings))
+    , ProvidedCodecs(std::move(codecs))
     , Observer(std::move(observer))
     , AsyncInit(Observer->WaitForFirstState())
     , FederationState(nullptr)
+    , Log(Connections->GetLog())
     , ClientEventsQueue(std::make_shared<NTopic::TWriteSessionEventsQueue>(Settings))
     , BufferFreeSpace(Settings.MaxMemoryUsage_)
 {
 }
 
+TStringBuilder TFederatedWriteSession::GetLogPrefix() const {
+     return TStringBuilder() << GetDatabaseLogPrefix(SubClientSetttings.Database_.GetOrElse("")) << "[" << SessionId << "] ";
+}
+
 void TFederatedWriteSession::Start() {
     // TODO validate settings?
+    Settings.EventHandlers_.HandlersExecutor_->Start();
     with_lock(Lock) {
         ClientEventsQueue->PushEvent(NTopic::TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
         ClientHasToken = true;
@@ -61,10 +73,11 @@ void TFederatedWriteSession::OpenSubSessionImpl(std::shared_ptr<TDbInfo> db) {
         .Database(db->path())
         .DiscoveryEndpoint(db->endpoint());
     auto subclient = make_shared<NTopic::TTopicClient::TImpl>(Connections, clientSettings);
+    subclient->SetProvidedCodecs(ProvidedCodecs);
 
     auto handlers = NTopic::TWriteSessionSettings::TEventHandlers()
         .HandlersExecutor(Settings.EventHandlers_.HandlersExecutor_)
-        .ReadyToAcceptHander([self = shared_from_this()](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& ev){
+        .ReadyToAcceptHandler([self = shared_from_this()](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& ev){
             TDeferredWrite deferred(self->Subsession);
             with_lock(self->Lock) {
                 Y_ABORT_UNLESS(self->PendingToken.Empty());
@@ -148,7 +161,7 @@ std::shared_ptr<TDbInfo> TFederatedWriteSession::SelectDatabaseImpl() {
 
 void TFederatedWriteSession::OnFederatedStateUpdateImpl() {
     if (!FederationState->Status.IsSuccess()) {
-        CloseImpl(FederationState->Status.GetStatus(), NYql::TIssues{});
+        CloseImpl(FederationState->Status.GetStatus(), NYql::TIssues(FederationState->Status.GetIssues()));
         return;
     }
 
@@ -163,6 +176,10 @@ void TFederatedWriteSession::OnFederatedStateUpdateImpl() {
     }
 
     if (!DatabasesAreSame(preferrableDb, CurrentDatabase)) {
+        LOG_LAZY(Log, TLOG_INFO, GetLogPrefix()
+            << "Start federated write session to database '" << preferrableDb->name()
+            << "' (previous was " << (CurrentDatabase ? CurrentDatabase->name() : "<empty>") << ")"
+            << " FederationState: " << *FederationState);
         OpenSubSessionImpl(preferrableDb);
     }
 
@@ -222,7 +239,7 @@ void TFederatedWriteSession::Write(NTopic::TContinuationToken&& token, TStringBu
 }
 
 void TFederatedWriteSession::Write(NTopic::TContinuationToken&& token, NTopic::TWriteMessage&& message) {
-    return WriteInternal(std::move(token), std::move(message));
+    return WriteInternal(std::move(token), TWrappedWriteMessage(std::move(message)));
 }
 
 void TFederatedWriteSession::WriteEncoded(NTopic::TContinuationToken&& token, TStringBuf data, NTopic::ECodec codec,
@@ -232,24 +249,24 @@ void TFederatedWriteSession::WriteEncoded(NTopic::TContinuationToken&& token, TS
         message.SeqNo(*seqNo);
     if (createTimestamp.Defined())
         message.CreateTimestamp(*createTimestamp);
-    return WriteInternal(std::move(token), std::move(message));
+    return WriteInternal(std::move(token), TWrappedWriteMessage(std::move(message)));
 }
 
 void TFederatedWriteSession::WriteEncoded(NTopic::TContinuationToken&& token, NTopic::TWriteMessage&& message) {
-    return WriteInternal(std::move(token), std::move(message));
+    return WriteInternal(std::move(token), TWrappedWriteMessage(std::move(message)));
 }
 
-void TFederatedWriteSession::WriteInternal(NTopic::TContinuationToken&&, NTopic::TWriteMessage&& message) {
+void TFederatedWriteSession::WriteInternal(NTopic::TContinuationToken&&, TWrappedWriteMessage&& wrapped) {
     ClientHasToken = false;
-    if (!message.CreateTimestamp_.Defined()) {
-        message.CreateTimestamp_ = TInstant::Now();
+    if (!wrapped.Message.CreateTimestamp_.Defined()) {
+        wrapped.Message.CreateTimestamp_ = TInstant::Now();
     }
 
     {
         TDeferredWrite deferred(Subsession);
         with_lock(Lock) {
-            BufferFreeSpace -= message.Data.size();
-            OriginalMessagesToPassDown.emplace_back(std::move(message));
+            BufferFreeSpace -= wrapped.Message.Data.size();
+            OriginalMessagesToPassDown.emplace_back(std::move(wrapped));
 
             PrepareDeferredWrite(deferred);
         }
@@ -268,10 +285,10 @@ bool TFederatedWriteSession::PrepareDeferredWrite(TDeferredWrite& deferred) {
     if (OriginalMessagesToPassDown.empty()) {
         return false;
     }
-    OriginalMessagesToGetAck.push_back(OriginalMessagesToPassDown.front());
-    deferred.Token.ConstructInPlace(std::move(*PendingToken));
-    deferred.Message.ConstructInPlace(std::move(OriginalMessagesToPassDown.front()));
+    OriginalMessagesToGetAck.push_back(std::move(OriginalMessagesToPassDown.front()));
     OriginalMessagesToPassDown.pop_front();
+    deferred.Token.ConstructInPlace(std::move(*PendingToken));
+    deferred.Message.ConstructInPlace(std::move(OriginalMessagesToGetAck.back().Message));
     PendingToken.Clear();
     return true;
 }

@@ -13,6 +13,7 @@
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/stat_service.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/scheme_board/events_schemeshard.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 #include <util/random/random.h>
 #include <util/system/byteorder.h>
@@ -1433,6 +1434,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateColumnTable:
     case TTxState::TxCreateCdcStream:
     case TTxState::TxCreateSequence:
+    case TTxState::TxCopySequence:
     case TTxState::TxCreateReplication:
     case TTxState::TxCreateBlobDepot:
     case TTxState::TxCreateExternalTable:
@@ -2504,6 +2506,18 @@ void TSchemeShard::PersistTableAlterVersion(NIceDb::TNiceDb& db, const TPathId p
     }
 }
 
+void TSchemeShard::PersistTableFinishColumnBuilding(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo, ui64 colId) {
+    const auto& cinfo = tableInfo->Columns.at(colId);
+    if (pathId.OwnerId == TabletID()) {
+        db.Table<Schema::Columns>().Key(pathId.LocalPathId, colId).Update(
+            NIceDb::TUpdate<Schema::Columns::IsBuildInProgress>(cinfo.IsBuildInProgress));
+
+    } else {
+        db.Table<Schema::MigratedColumns>().Key(pathId.OwnerId, pathId.LocalPathId, colId).Update(
+            NIceDb::TUpdate<Schema::MigratedColumns::IsBuildInProgress>(cinfo.IsBuildInProgress));
+    }
+}
+
 void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo) {
     TString partitionConfig;
     Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->PartitionConfig().SerializeToString(&partitionConfig);
@@ -2527,6 +2541,7 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             NIceDb::TUpdate<Schema::Tables::AlterTableFull>(TString()),
             NIceDb::TUpdate<Schema::Tables::TTLSettings>(ttlSettings),
             NIceDb::TUpdate<Schema::Tables::IsBackup>(tableInfo->IsBackup),
+            NIceDb::TUpdate<Schema::Tables::ReplicationConfig>(replicationConfig),
             NIceDb::TUpdate<Schema::Tables::IsTemporary>(tableInfo->IsTemporary),
             NIceDb::TUpdate<Schema::Tables::OwnerActorId>(tableInfo->OwnerActorId.ToString()));
     } else {
@@ -2562,7 +2577,8 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
                 NIceDb::TUpdate<Schema::Columns::Family>(cinfo.Family),
                 NIceDb::TUpdate<Schema::Columns::DefaultKind>(cinfo.DefaultKind),
                 NIceDb::TUpdate<Schema::Columns::DefaultValue>(cinfo.DefaultValue),
-                NIceDb::TUpdate<Schema::Columns::NotNull>(cinfo.NotNull));
+                NIceDb::TUpdate<Schema::Columns::NotNull>(cinfo.NotNull),
+                NIceDb::TUpdate<Schema::Columns::IsBuildInProgress>(cinfo.IsBuildInProgress));
 
             db.Table<Schema::ColumnAlters>().Key(pathId.LocalPathId, colId).Delete();
         } else {
@@ -2576,7 +2592,8 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
                 NIceDb::TUpdate<Schema::MigratedColumns::Family>(cinfo.Family),
                 NIceDb::TUpdate<Schema::MigratedColumns::DefaultKind>(cinfo.DefaultKind),
                 NIceDb::TUpdate<Schema::MigratedColumns::DefaultValue>(cinfo.DefaultValue),
-                NIceDb::TUpdate<Schema::MigratedColumns::NotNull>(cinfo.NotNull));
+                NIceDb::TUpdate<Schema::MigratedColumns::NotNull>(cinfo.NotNull),
+                NIceDb::TUpdate<Schema::MigratedColumns::IsBuildInProgress>(cinfo.IsBuildInProgress));
         }
         db.Table<Schema::MigratedColumnAlters>().Key(pathId.OwnerId, pathId.LocalPathId, colId).Delete();
     }
@@ -2620,7 +2637,8 @@ void TSchemeShard::PersistAddAlterTable(NIceDb::TNiceDb& db, TPathId pathId, con
                 NIceDb::TUpdate<Schema::ColumnAlters::Family>(cinfo.Family),
                 NIceDb::TUpdate<Schema::ColumnAlters::DefaultKind>(cinfo.DefaultKind),
                 NIceDb::TUpdate<Schema::ColumnAlters::DefaultValue>(cinfo.DefaultValue),
-                NIceDb::TUpdate<Schema::ColumnAlters::NotNull>(cinfo.NotNull));
+                NIceDb::TUpdate<Schema::ColumnAlters::NotNull>(cinfo.NotNull),
+                NIceDb::TUpdate<Schema::ColumnAlters::IsBuildInProgress>(cinfo.IsBuildInProgress));
         } else {
             db.Table<Schema::MigratedColumnAlters>().Key(pathId.OwnerId, pathId.LocalPathId, colId).Update(
                 NIceDb::TUpdate<Schema::MigratedColumnAlters::ColName>(cinfo.Name),
@@ -2632,7 +2650,8 @@ void TSchemeShard::PersistAddAlterTable(NIceDb::TNiceDb& db, TPathId pathId, con
                 NIceDb::TUpdate<Schema::MigratedColumnAlters::Family>(cinfo.Family),
                 NIceDb::TUpdate<Schema::MigratedColumnAlters::DefaultKind>(cinfo.DefaultKind),
                 NIceDb::TUpdate<Schema::MigratedColumnAlters::DefaultValue>(cinfo.DefaultValue),
-                NIceDb::TUpdate<Schema::MigratedColumnAlters::NotNull>(cinfo.NotNull));
+                NIceDb::TUpdate<Schema::MigratedColumnAlters::NotNull>(cinfo.NotNull),
+                NIceDb::TUpdate<Schema::MigratedColumnAlters::IsBuildInProgress>(cinfo.IsBuildInProgress));
         }
     }
 }
@@ -2771,7 +2790,8 @@ void TSchemeShard::PersistExternalTable(NIceDb::TNiceDb &db, TPathId pathId, con
             NIceDb::TUpdate<Schema::MigratedColumns::Family>(cinfo.Family),
             NIceDb::TUpdate<Schema::MigratedColumns::DefaultKind>(cinfo.DefaultKind),
             NIceDb::TUpdate<Schema::MigratedColumns::DefaultValue>(cinfo.DefaultValue),
-            NIceDb::TUpdate<Schema::MigratedColumns::NotNull>(cinfo.NotNull));
+            NIceDb::TUpdate<Schema::MigratedColumns::NotNull>(cinfo.NotNull),
+            NIceDb::TUpdate<Schema::MigratedColumns::IsBuildInProgress>(cinfo.IsBuildInProgress));
     }
 }
 
@@ -3835,15 +3855,7 @@ void TSchemeShard::PersistRemovePublishingPath(NIceDb::TNiceDb& db, TTxId txId, 
 }
 
 TTabletId TSchemeShard::GetGlobalHive(const TActorContext& ctx) const {
-    auto domainsInfo = AppData(ctx)->DomainsInfo;
-
-    ui32 domainUid = domainsInfo->GetDomainUidByTabletId(TabletID());
-    auto domain = domainsInfo->GetDomain(domainUid);
-
-    const ui32 hiveIdx = Max<ui32>();
-    ui32 hiveUid = domain.GetHiveUidByIdx(hiveIdx);
-
-    return TTabletId(domainsInfo->GetHive(hiveUid));
+    return TTabletId(AppData(ctx)->DomainsInfo->GetHive());
 }
 
 TShardIdx TSchemeShard::GetShardIdx(TTabletId tabletId) const {
@@ -4198,14 +4210,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
 }
 
 const TDomainsInfo::TDomain& TSchemeShard::GetDomainDescription(const TActorContext &ctx) const {
-    auto appdata = AppData(ctx);
-    Y_ABORT_UNLESS(appdata);
-
-    const ui32 selfDomain = appdata->DomainsInfo->GetDomainUidByTabletId(TabletID());
-    Y_ABORT_UNLESS(selfDomain != appdata->DomainsInfo->BadDomainId);
-    const auto& domain = appdata->DomainsInfo->GetDomain(selfDomain);
-
-    return domain;
+    return *AppData(ctx)->DomainsInfo->GetDomain();
 }
 
 const NKikimrConfig::TDomainsConfig& TSchemeShard::GetDomainsConfig() {
@@ -4293,8 +4298,7 @@ void TSchemeShard::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActor
 
 static TVector<ui64> CollectTxAllocators(const TAppData *appData) {
     TVector<ui64> allocators;
-    for (auto it: appData->DomainsInfo->Domains) {
-        auto &domain = it.second;
+    if (const auto& domain = appData->DomainsInfo->Domain) {
         for (auto tabletId: domain->TxAllocators) {
             allocators.push_back(tabletId);
         }
@@ -4489,6 +4493,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(NSequenceShard::TEvSequenceShard::TEvFreezeSequenceResult, Handle);
         HFuncTraced(NSequenceShard::TEvSequenceShard::TEvRestoreSequenceResult, Handle);
         HFuncTraced(NSequenceShard::TEvSequenceShard::TEvRedirectSequenceResult, Handle);
+        HFuncTraced(NSequenceShard::TEvSequenceShard::TEvGetSequenceResult, Handle);
 
         // replication
         HFuncTraced(NReplication::TEvController::TEvCreateReplicationResult, Handle);
@@ -4519,7 +4524,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         HFuncTraced(TEvSchemeShard::TEvUpdateTenantSchemeShard, Handle);
 
-        HFuncTraced(TSchemeBoardEvents::TEvUpdateAck, Handle);
+        HFuncTraced(NSchemeBoard::NSchemeshardEvents::TEvUpdateAck, Handle);
 
         HFuncTraced(TEvBlockStore::TEvUpdateVolumeConfigResponse, Handle);
         HFuncTraced(TEvFileStore::TEvUpdateConfigResponse, Handle);
@@ -5329,7 +5334,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr& ev, 
     Execute(CreateTxUpdateTenant(ev), ctx);
 }
 
-void TSchemeShard::Handle(TSchemeBoardEvents::TEvUpdateAck::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(NSchemeBoard::NSchemeshardEvents::TEvUpdateAck::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                "Handle TEvUpdateAck"
@@ -5762,6 +5767,17 @@ void TSchemeShard::Handle(NSequenceShard::TEvSequenceShard::TEvRestoreSequenceRe
 void TSchemeShard::Handle(NSequenceShard::TEvSequenceShard::TEvRedirectSequenceResult::TPtr &ev, const TActorContext &ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Handle TEvRedirectSequenceResult"
+                << ", at schemeshard: " << TabletID()
+                << ", message: " << ev->Get()->Record.ShortDebugString());
+
+    TTxId txId = TTxId(ev->Get()->Record.GetTxId());
+    TSubTxId partId = TSubTxId(ev->Get()->Record.GetTxPartId());
+    Execute(CreateTxOperationReply(TOperationId(txId, partId), ev), ctx);
+}
+
+void TSchemeShard::Handle(NSequenceShard::TEvSequenceShard::TEvGetSequenceResult::TPtr &ev, const TActorContext &ctx) {
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Handle TEvGetSequenceResult"
                 << ", at schemeshard: " << TabletID()
                 << ", message: " << ev->Get()->Record.ShortDebugString());
 

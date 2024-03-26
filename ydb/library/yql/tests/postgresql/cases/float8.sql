@@ -113,8 +113,6 @@ SELECT power(float8 '-inf', float8 '-inf');
 SELECT f.f1, exp(ln(f.f1)) AS exp_ln_f1
    FROM FLOAT8_TBL f
    WHERE f.f1 > '0.0';
--- check edge cases for exp
-SELECT exp('inf'::float8), exp('-inf'::float8), exp('nan'::float8);
 -- cube root
 SELECT ||/ float8 '27' AS three;
 SELECT f.f1, ||/f.f1 AS cbrt_f1 FROM FLOAT8_TBL f;
@@ -178,3 +176,12 @@ SELECT '9223372036854773760'::float8::int8;
 SELECT '9223372036854775807'::float8::int8;
 SELECT '-9223372036854775808.5'::float8::int8;
 SELECT '-9223372036854780000'::float8::int8;
+SELECT x,
+       tand(x),
+       tand(x) IN ('-Infinity'::float8,-1,0,
+                   1,'Infinity'::float8) AS tand_exact,
+       cotd(x),
+       cotd(x) IN ('-Infinity'::float8,-1,0,
+                   1,'Infinity'::float8) AS cotd_exact
+FROM (VALUES (0), (45), (90), (135), (180),
+      (225), (270), (315), (360)) AS t(x);

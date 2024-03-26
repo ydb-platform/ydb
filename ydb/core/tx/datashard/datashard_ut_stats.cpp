@@ -10,41 +10,6 @@ using namespace Tests;
 
 Y_UNIT_TEST_SUITE(DataShardStats) {
 
-    NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runtime, size_t minPartCount = 0, size_t minRows = 0) {
-        NKikimrTxDataShard::TEvPeriodicTableStats stats;
-        bool captured = false;
-
-        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
-            switch (ev->GetTypeRewrite()) {
-                case TEvDataShard::TEvPeriodicTableStats::EventType: {
-                    stats = ev->Get<TEvDataShard::TEvPeriodicTableStats>()->Record;
-                    if (stats.GetTableStats().GetPartCount() >= minPartCount && stats.GetTableStats().GetRowCount() >= minRows) {
-                        captured = true;
-                    }
-                    break;
-                }
-                default: {
-                    break;
-                }
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-        auto prevObserverFunc = runtime.SetObserverFunc(observerFunc);
-
-        for (int i = 0; i < 5 && !captured; ++i) {
-            TDispatchOptions options;
-            options.CustomFinalCondition = [&]() {
-                return captured;
-            };
-            runtime.DispatchEvents(options, TDuration::Seconds(5));
-        }
-
-        runtime.SetObserverFunc(prevObserverFunc);
-        UNIT_ASSERT(captured);
-
-        return stats;
-    }
-
     NKikimrTableStats::TTableStats GetTableStats(TTestActorRuntime& runtime, ui64 tabletId, ui64 tableId) {
         auto sender = runtime.AllocateEdgeActor();
         auto request = MakeHolder<TEvDataShard::TEvGetTableStats>(tableId);
@@ -73,6 +38,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
+        bool bTreeIndex = runtime.GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_TRACE);
@@ -86,7 +52,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         {
             Cerr << "... waiting for stats after upsert" << Endl;
-            auto stats = WaitTableStats(runtime);
+            auto stats = WaitTableStats(runtime, shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 3u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 0u);
@@ -99,24 +65,24 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         {
             Cerr << "... waiting for stats after compaction" << Endl;
-            auto stats = WaitTableStats(runtime, 1);
+            auto stats = WaitTableStats(runtime, shard1, 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 3u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetDataSize(), 65u);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetIndexSize(), 54u);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetIndexSize(), bTreeIndex ? 0u : 54u);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetChannel(), 1u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetDataSize(), 65u);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetIndexSize(), 54u);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetIndexSize(), bTreeIndex ? 0u : 54u);
         }
 
-        Write(runtime, sender, shard1, tableId1, TShardedTableOptions().Columns_, 1, 100, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        Upsert(runtime, sender, shard1, tableId1, TShardedTableOptions().Columns_, 1, 100, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
 
         {
             Cerr << "... waiting for stats after write" << Endl;
-            auto stats = WaitTableStats(runtime);
+            auto stats = WaitTableStats(runtime, shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 4u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetImmediateTxCompleted(), 2u);
@@ -134,13 +100,13 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
+        bool bTreeIndex = runtime.GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
 
         auto opts = TShardedTableOptions()
-            .Shards(1)
             .Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}, {"value2", "Uint32", false, false, "hdd"}})
             .Families({{.Name = "default", .LogPoolKind = "ssd", .SysLogPoolKind = "ssd", .DataPoolKind = "ssd"}, {.Name = "hdd", .DataPoolKind = "hdd"}});
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
@@ -151,7 +117,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         {
             Cerr << "... waiting for stats after upsert" << Endl;
-            auto stats = WaitTableStats(runtime);
+            auto stats = WaitTableStats(runtime, shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 3u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 0u);
@@ -163,17 +129,17 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         {
             Cerr << "... waiting for stats after compaction" << Endl;
-            auto stats = WaitTableStats(runtime, 1);
+            auto stats = WaitTableStats(runtime, shard1, 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 3u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetDataSize(), 115u);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetIndexSize(), 82u);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetIndexSize(), bTreeIndex ? 0u : 82u);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels().size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetChannel(), 1u); // ssd
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetDataSize(), 65u);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetIndexSize(), 82u);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetIndexSize(), bTreeIndex ? 0u : 82u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[1].GetChannel(), 2u); // hdd
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[1].GetDataSize(), 50u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[1].GetIndexSize(), 0u);
@@ -194,6 +160,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
+        bool bTreeIndex = runtime.GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
 
@@ -214,7 +181,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         {
             Cerr << "... waiting for stats after upsert" << Endl;
-            auto stats = WaitTableStats(runtime);
+            auto stats = WaitTableStats(runtime, shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), count);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 0u);
@@ -226,16 +193,16 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         {
             Cerr << "... waiting for stats after compaction" << Endl;
-            auto stats = WaitTableStats(runtime, 1);
+            auto stats = WaitTableStats(runtime, shard1, 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), count);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetDataSize(), 30100u);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetIndexSize(), 138u);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetIndexSize(), bTreeIndex ? 193u : 138u);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetChannel(), 1u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetDataSize(), 30100u);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetIndexSize(), 138u);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetIndexSize(), bTreeIndex ? 193u : 138u);
         }
 
         {
@@ -266,13 +233,13 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
+        bool bTreeIndex = runtime.GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
 
         auto opts = TShardedTableOptions()
-            .Shards(1)
             .Columns({
                 {"key", "Uint32", true, false}, 
                 {"value", "String", false, false}, 
@@ -296,7 +263,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         {
             Cerr << "... waiting for stats after upsert" << Endl;
-            auto stats = WaitTableStats(runtime);
+            auto stats = WaitTableStats(runtime, shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 5u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 0u);
@@ -308,17 +275,17 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         {
             Cerr << "... waiting for stats after compaction" << Endl;
-            auto stats = WaitTableStats(runtime, 1);
+            auto stats = WaitTableStats(runtime, shard1, 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 5u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetDataSize(), 3555u);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetIndexSize(), 82u);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetIndexSize(), bTreeIndex ? 0u : 82u);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels().size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetChannel(), 1u); // ssd
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetDataSize(), 440u); // two small values
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetIndexSize(), 82u);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetIndexSize(), bTreeIndex ? 0u : 82u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[2].GetChannel(), 3u); // hdd
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[2].GetDataSize(), 99u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[2].GetIndexSize(), 0u);
@@ -344,7 +311,6 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         InitRoot(server, sender);
 
         auto opts = TShardedTableOptions()
-            .Shards(1)
             .Columns({
                 {"key", "Uint32", true, false}, 
                 {"value", "String", true, false}});
@@ -366,7 +332,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             CompactTable(runtime, shard1, tableId1, false);
 
             Cerr << "... waiting for stats after compaction" << Endl;
-            auto stats = WaitTableStats(runtime, 1, (batch + 1) * batchItems);
+            auto stats = WaitTableStats(runtime, shard1, 1, (batch + 1) * batchItems);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), (batch + 1) * batchItems);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1);

@@ -39,7 +39,7 @@ struct TEnvironmentSetup {
     const ui32 NodeCount;
     const ui32 DataCenterCount;
     const ui32 Domain = 0;
-    const ui64 TabletId = MakeBSControllerID(Domain);
+    const ui64 TabletId = MakeBSControllerID();
     const TVector<ui64> TabletIds = {TabletId};
     const TDuration Timeout = TDuration::Seconds(30);
     const ui32 GroupId = 0;
@@ -102,10 +102,18 @@ struct TEnvironmentSetup {
 
     void RegisterNode() {
         for (ui32 i = 1; i <= NodeCount; ++i) {
-            const TActorId self = Runtime->AllocateEdgeActor();
-            auto ev = MakeHolder<TEvBlobStorage::TEvControllerRegisterNode>(i, TVector<ui32>{}, TVector<ui32>{}, TVector<NPDisk::TDriveData>{});
-            Runtime->SendToPipe(TabletId, self, ev.Release(), NodeId, GetPipeConfigWithRetries());
-            auto response = Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(self);
+            ui32 nodeIndex;
+            for (nodeIndex = 0; nodeIndex < Runtime->GetNodeCount(); ++nodeIndex) {
+                if (Runtime->GetNodeId(nodeIndex) == i) {
+                    break;
+                }
+            }
+            if (nodeIndex != Runtime->GetNodeCount()) {
+                const TActorId self = Runtime->AllocateEdgeActor(nodeIndex);
+                auto ev = MakeHolder<TEvBlobStorage::TEvControllerRegisterNode>(i, TVector<ui32>{}, TVector<ui32>{}, TVector<NPDisk::TDriveData>{});
+                Runtime->SendToPipe(TabletId, self, ev.Release(), nodeIndex, GetPipeConfigWithRetries());
+                auto response = Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(self);
+            }
         }
     }
 
@@ -200,7 +208,7 @@ struct TEnvironmentSetup {
         TAppPrepare app;
         app.AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dc-1").Release());
         for (ui32 i = 0; i < nodeCount; ++i) {
-            SetupStateStorage(*Runtime, i, 0, true);
+            SetupStateStorage(*Runtime, i, true);
             SetupTabletResolver(*Runtime, i);
         }
         Runtime->Initialize(app.Unwrap());
@@ -235,7 +243,7 @@ struct TEnvironmentSetup {
             {}
 
             void Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
-                Send(ev->Sender, new TEvNodeWardenStorageConfig(NKikimrBlobStorage::TStorageConfig()));
+                Send(ev->Sender, new TEvNodeWardenStorageConfig(NKikimrBlobStorage::TStorageConfig(), nullptr));
             }
 
             STATEFN(StateFunc) {

@@ -3,14 +3,15 @@
 #include "defs.h"
 #include "column_engine.h"
 #include <ydb/core/tx/columnshard/common/scalars.h>
+#include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/columnshard_ttl.h>
+
+#include "changes/actualization/controller/controller.h"
+
 #include "scheme/tier_info.h"
 #include "storage/granule.h"
 #include "storage/storage.h"
-#include "changes/indexation.h"
-#include "changes/ttl.h"
-#include "changes/with_appended.h"
 
 namespace NKikimr::NArrow {
 struct TSortDescription;
@@ -18,54 +19,21 @@ struct TSortDescription;
 
 namespace NKikimr::NOlap {
 
+class TCompactColumnEngineChanges;
+class TTTLColumnEngineChanges;
+class TChangesWithAppend;
+class TCompactColumnEngineChanges;
+class TCleanupPortionsColumnEngineChanges;
+class TCleanupTablesColumnEngineChanges;
+
+namespace NDataSharing {
+class TDestinationSession;
+}
+
 struct TReadMetadata;
 class TGranulesTable;
 class TColumnsTable;
 class TCountersTable;
-
-class TEvictionsController {
-public:
-    class TTieringWithPathId {
-    private:
-        const ui64 PathId;
-        TTiering TieringInfo;
-    public:
-        TTieringWithPathId(const ui64 pathId, TTiering&& tieringInfo)
-            : PathId(pathId)
-            , TieringInfo(std::move(tieringInfo))
-        {
-
-        }
-
-        ui64 GetPathId() const {
-            return PathId;
-        }
-
-        const TTiering& GetTieringInfo() const {
-            return TieringInfo;
-        }
-    };
-private:
-    THashMap<ui64, TTiering> OriginalTierings;
-    std::map<TMonotonic, std::vector<TTieringWithPathId>> NextCheckInstantForTierings;
-
-    std::map<TMonotonic, std::vector<TTieringWithPathId>> BuildNextInstantCheckers(THashMap<ui64, TTiering>&& info) {
-        std::map<TMonotonic, std::vector<TTieringWithPathId>> result;
-        std::vector<TTieringWithPathId> newTasks;
-        for (auto&& i : info) {
-            newTasks.emplace_back(i.first, std::move(i.second));
-        }
-        result.emplace(TMonotonic::Zero(), std::move(newTasks));
-        return result;
-    }
-public:
-    std::map<TMonotonic, std::vector<TTieringWithPathId>>& MutableNextCheckInstantForTierings() {
-        return NextCheckInstantForTierings;
-    }
-
-    void RefreshTierings(std::optional<THashMap<ui64, TTiering>>&& tierings, const NColumnShard::TTtl& ttl);
-};
-
 
 /// Engine with 2 tables:
 /// - Granules: PK -> granules (use part of PK)
@@ -77,40 +45,22 @@ class TColumnEngineForLogs : public IColumnEngine {
     friend class TTTLColumnEngineChanges;
     friend class TChangesWithAppend;
     friend class TCompactColumnEngineChanges;
-    friend class TCleanupColumnEngineChanges;
+    friend class TCleanupPortionsColumnEngineChanges;
+    friend class TCleanupTablesColumnEngineChanges;
+    friend class NDataSharing::TDestinationSession;
 private:
+    bool ActualizationStarted = false;
     const NColumnShard::TEngineLogsCounters SignalCounters;
     std::shared_ptr<TGranulesStorage> GranulesStorage;
     std::shared_ptr<IStoragesManager> StoragesManager;
-    TEvictionsController EvictionsController;
-    class TTieringProcessContext {
-    private:
-        const ui64 MemoryUsageLimit;
-        ui64 MemoryUsage = 0;
-        std::shared_ptr<TColumnEngineChanges::IMemoryPredictor> MemoryPredictor;
-    public:
-        bool AllowEviction = true;
-        bool AllowDrop = true;
-        const TInstant Now;
-        std::shared_ptr<TTTLColumnEngineChanges> Changes;
-        std::map<ui64, TDuration> DurationsForced;
-        const THashSet<TPortionAddress>& BusyPortions;
 
-        void AppPortionForCheckMemoryUsage(const TPortionInfo& info) {
-            MemoryUsage = MemoryPredictor->AddPortion(info);
-        }
+    std::shared_ptr<NActualizer::TController> ActualizationController;
 
-        bool HasMemoryForEviction() const {
-            return MemoryUsage < MemoryUsageLimit;
-        }
-
-        TTieringProcessContext(const ui64 memoryUsageLimit, std::shared_ptr<TTTLColumnEngineChanges> changes,
-            const THashSet<TPortionAddress>& busyPortions, const std::shared_ptr<TColumnEngineChanges::IMemoryPredictor>& memoryPredictor);
-    };
-
-    TDuration ProcessTiering(const ui64 pathId, const TTiering& tiering, TTieringProcessContext& context) const;
-    bool DrainEvictionQueue(std::map<TMonotonic, std::vector<TEvictionsController::TTieringWithPathId>>& evictionsQueue, TTieringProcessContext& context) const;
 public:
+    const std::shared_ptr<NActualizer::TController>& GetActualizationController() const {
+        return ActualizationController;
+    }
+
     ui64* GetLastPortionPointer() {
         return &LastPortion;
     }
@@ -132,9 +82,14 @@ public:
         ADD,
     };
 
-    TColumnEngineForLogs(ui64 tabletId, const TCompactionLimits& limits, const std::shared_ptr<IStoragesManager>& storagesManager);
+    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema);
+    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema);
 
-    virtual void OnTieringModified(std::shared_ptr<NColumnShard::TTiersManager> manager, const NColumnShard::TTtl& ttl) override;
+    virtual void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) override;
+
+    virtual std::shared_ptr<TVersionedIndex> CopyVersionedIndexPtr() const override {
+        return std::make_shared<TVersionedIndex>(VersionedIndex);
+    }
 
     const TVersionedIndex& GetVersionedIndex() const override {
         return VersionedIndex;
@@ -150,15 +105,24 @@ public:
     bool Load(IDbWrapper& db) override;
 
     std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept override;
-    std::shared_ptr<TColumnEngineChanges> StartCompaction(const TCompactionLimits& limits, const THashSet<TPortionAddress>& busyPortions) noexcept override;
-    std::shared_ptr<TCleanupColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, THashSet<ui64>& pathsToDrop, ui32 maxRecords) noexcept override;
-    std::shared_ptr<TTTLColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
-        const THashSet<TPortionAddress>& busyPortions, const ui64 memoryUsageLimit) noexcept override;
+    std::shared_ptr<TColumnEngineChanges> StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
+    std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshot& snapshot, const THashSet<ui64>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
+    std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(THashSet<ui64>& pathsToDrop) noexcept override;
+    std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
+        const std::shared_ptr<NDataLocks::TManager>& locksManager, const ui64 memoryUsageLimit) noexcept override;
 
+    void ReturnToIndexes(const THashMap<ui64, THashSet<ui64>>& portions) const {
+        for (auto&& [g, portionIds] : portions) {
+            auto it = Tables.find(g);
+            AFL_VERIFY(it != Tables.end());
+            it->second->ReturnToIndexes(portionIds);
+        }
+    }
     bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges,
                       const TSnapshot& snapshot) noexcept override;
 
     void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) override;
+    void RegisterSchemaVersion(const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema) override;
 
     std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot,
                                         const TPKRangesFilter& pkRangesFilter) const override;
@@ -198,10 +162,13 @@ public:
         return it->second;
     }
 
-    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const ui64 pathIdFrom, const ui64 pathIdTo) const {
+    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const std::optional<ui64> pathIdFrom, const std::optional<ui64> pathIdTo) const {
         std::vector<std::shared_ptr<TGranuleMeta>> result;
         for (auto&& i : Tables) {
-            if (i.first < pathIdFrom || i.first > pathIdTo) {
+            if (pathIdFrom && i.first < *pathIdFrom) {
+                continue;
+            }
+            if (pathIdTo && i.first > *pathIdTo) {
                 continue;
             }
             result.emplace_back(i.second);

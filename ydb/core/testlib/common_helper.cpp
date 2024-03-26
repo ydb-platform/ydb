@@ -32,7 +32,7 @@ TLoggerInit::TLoggerInit(NKqp::TKikimrRunner& kikimr)
 
 void TLoggerInit::Initialize() {
     for (auto&& i : Services) {
-        for (auto&& s : i) {
+        for (auto&& s : i.second) {
             Runtime->SetLogPriority(s, Priority);
         }
     }

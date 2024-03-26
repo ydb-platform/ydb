@@ -79,6 +79,9 @@ struct TProtobufScalarElement
 {
     YT_DEFINE_STRONG_TYPEDEF(TType, int);
     TType Type;
+
+    // Meaningful only when TYPE == TYPE_ENUM.
+    EEnumYsonStorageType EnumStorageType;
 };
 
 struct TProtobufAttributeDictionaryElement

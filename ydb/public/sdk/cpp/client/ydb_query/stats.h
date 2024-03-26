@@ -28,6 +28,7 @@ public:
     TString ToString(bool withPlan = false) const;
 
     TMaybe<TString> GetPlan() const;
+    TMaybe<TString> GetAst() const;
 
     TDuration GetTotalDuration() const;
     TDuration GetTotalCpuTime() const;

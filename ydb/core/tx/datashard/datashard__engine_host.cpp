@@ -305,7 +305,14 @@ public:
     }
 
     bool IsValidKey(TKeyDesc& key) const override {
-        TKeyValidator::TValidateOptions options(UserDb);
+        TKeyValidator::TValidateOptions options(
+            UserDb.GetLockTxId(),
+            UserDb.GetLockNodeId(),
+            UserDb.GetIsRepeatableSnapshot(),
+            UserDb.GetIsImmediateTx(),
+            UserDb.GetIsWriteTx(), 
+            Scheme
+        );
         return GetKeyValidator().IsValidKey(key, options);
     }
 
@@ -360,6 +367,14 @@ public:
 
     void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
         UserDb.UpdateRow(tableId, key, ops);
+    }
+
+    void ReplaceRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
+        UserDb.ReplaceRow(tableId, key, ops);
+    }
+
+    void InsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
+        UserDb.InsertRow(tableId, key, ops);
     }
 
     void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) override {
@@ -469,7 +484,7 @@ private:
 
 TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId)
     : StepTxId(stepTxId)
-    , KeyValidator(*self, txc.DB)
+    , KeyValidator(*self)
 {
     auto now = TAppData::TimeProvider->Now();
     EngineHost = MakeHolder<TDataShardEngineHost>(self, *this, txc.DB, stepTxId.TxId, EngineHostCounters, now);

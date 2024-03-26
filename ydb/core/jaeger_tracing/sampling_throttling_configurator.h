@@ -1,40 +1,46 @@
 #pragma once
 
-#include "control_wrapper.h"
 #include "sampling_throttling_control.h"
+
+#include "throttler.h"
+#include "settings.h"
 
 #include <ydb/core/protos/config.pb.h>
 
 #include <library/cpp/random_provider/random_provider.h>
+#include <library/cpp/time_provider/time_provider.h>
 
 #include <util/generic/maybe.h>
+#include <util/generic/vector.h>
 
 namespace NKikimr::NJaegerTracing {
 
+// Used to represent shared limits in throttlers and samplers
+template<class T>
+struct TWithTag {
+    T Value;
+    size_t Tag;
+};
+
 class TSamplingThrottlingConfigurator {
 public:
-    TSamplingThrottlingConfigurator(TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider)
-        : SamplingLevel(15)
-        , TimeProvider(std::move(timeProvider))
-        , RandomProvider(std::move(randomProvider))
-    {}
+    TSamplingThrottlingConfigurator(TIntrusivePtr<ITimeProvider> timeProvider,
+                                    TIntrusivePtr<IRandomProvider>& randomProvider);
 
     TIntrusivePtr<TSamplingThrottlingControl> GetControl();
 
-    TMaybe<TString> HandleConfigs(const NKikimrConfig::TTracingConfig& config);
+    void UpdateSettings(TSettings<double, TWithTag<TThrottlingSettings>> settings);
 
 private:
-    TControlWrapper SamplingPPM;
-    TControlWrapper SamplingLevel;
+    TSettings<double, TIntrusivePtr<TThrottler>> GenerateThrottlers(
+        TSettings<double, TWithTag<TThrottlingSettings>> settings);
+    
+    std::unique_ptr<TSamplingThrottlingControl::TSamplingThrottlingImpl> GenerateSetup();
 
-    TControlWrapper MaxSampledPerMinute;
-    TControlWrapper MaxSampledBurst;
-
-    TControlWrapper MaxExternalPerMinute;
-    TControlWrapper MaxExternalBurst;
-
+    TVector<TIntrusivePtr<TSamplingThrottlingControl>> IssuedControls;
     TIntrusivePtr<ITimeProvider> TimeProvider;
-    TIntrusivePtr<IRandomProvider> RandomProvider;
+    TFastRng64 Rng;
+    TSettings<double, TIntrusivePtr<TThrottler>> CurrentSettings;  
 };
 
 } // namespace NKikimr::NJaegerTracing

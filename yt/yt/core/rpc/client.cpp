@@ -443,7 +443,7 @@ void TClientRequest::PrepareHeader()
         return;
     }
 
-    // COMPAT(kiselyovp): legacy RPC codecs
+    // COMPAT(danilalexeev): legacy RPC codecs
     if (!EnableLegacyRpcCodecs_) {
         Header_.set_request_codec(ToProto<int>(RequestCodec_));
         Header_.set_response_codec(ToProto<int>(ResponseCodec_));
@@ -520,7 +520,7 @@ size_t TClientResponse::GetTotalSize() const
     return ResponseMessage_.ByteSize();
 }
 
-void TClientResponse::HandleError(const TError& error)
+void TClientResponse::HandleError(TError error)
 {
     auto prevState = State_.exchange(EState::Done);
     if (prevState == EState::Done) {
@@ -529,22 +529,15 @@ void TClientResponse::HandleError(const TError& error)
         return;
     }
 
-    auto invokeHandler = [&] (const TError& error) {
-        GetInvoker()->Invoke(
-            BIND(&TClientResponse::DoHandleError, MakeStrong(this), error));
-    };
-
-    auto optionalEnrichedError = TryEnrichClientRequestError(
-        error,
+    EnrichClientRequestError(
+        &error,
         ClientContext_->GetFeatureIdFormatter());
-    if (optionalEnrichedError) {
-        invokeHandler(*optionalEnrichedError);
-    } else {
-        invokeHandler(error);
-    }
+
+    GetInvoker()->Invoke(
+        BIND(&TClientResponse::DoHandleError, MakeStrong(this), std::move(error)));
 }
 
-void TClientResponse::DoHandleError(const TError& error)
+void TClientResponse::DoHandleError(TError error)
 {
     NProfiling::TWallTimer timer;
 
@@ -608,7 +601,7 @@ void TClientResponse::Deserialize(TSharedRefArray responseMessage)
         THROW_ERROR_EXCEPTION(NRpc::EErrorCode::ProtocolError, "Error deserializing response header");
     }
 
-    // COMPAT(kiselyovp): legacy RPC codecs
+    // COMPAT(danilalexeev): legacy RPC codecs
     std::optional<NCompression::ECodec> bodyCodecId;
     NCompression::ECodec attachmentCodecId;
     if (Header_.has_codec()) {

@@ -2,6 +2,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/log_lazy.h>
 
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/trace_lazy.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <library/cpp/string_utils/url/url.h>
 
@@ -19,10 +20,8 @@ using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
 
 
 const TDuration UPDATE_TOKEN_PERIOD = TDuration::Hours(1);
-
-namespace NCompressionDetails {
-    THolder<IOutputStream> CreateCoder(ECodec codec, TBuffer& result, int quality);
-}
+// Error code from file ydb/public/api/protos/persqueue_error_codes_v1.proto
+const ui64 WRITE_ERROR_PARTITION_INACTIVE = 500029;
 
 #define HISTOGRAM_SETUP ::NMonitoring::ExplicitHistogram({0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100})
 TWriterCounters::TWriterCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
@@ -71,7 +70,6 @@ TWriteSessionImpl::TWriteSessionImpl(
     } else {
         Counters = MakeIntrusive<TWriterCounters>(new ::NMonitoring::TDynamicCounters());
     }
-
 }
 
 void TWriteSessionImpl::Start(const TDuration& delay) {
@@ -103,12 +101,9 @@ void TWriteSessionImpl::Start(const TDuration& delay) {
         InitWriter();
     }
     Started = true;
-
-    if (Settings.PartitionId_.Defined() && Settings.DirectWriteToPartition_)
-    {
+    if (Settings.DirectWriteToPartition_ && (Settings.PartitionId_.Defined() || DirectWriteToPartitionId.Defined())) {
         with_lock (Lock) {
             PreferredPartitionLocation = {};
-
             return ConnectToPreferredPartitionLocation(delay);
         }
     }
@@ -118,8 +113,46 @@ void TWriteSessionImpl::Start(const TDuration& delay) {
     }
 }
 
+// Returns true if we need to switch to another DirectWriteToPartitionId.
+bool NeedToSwitchPartition(const TPlainStatus& status) {
+    switch (status.Status) {
+    // Server statuses:
+    case EStatus::OVERLOADED:
+        // In general OVERLOADED is temporary, but it's also returned on partition split/merge,
+        // in which case we need to switch to another partition.
+        for (auto const& issue : status.Issues) {
+            if (issue.IssueCode == WRITE_ERROR_PARTITION_INACTIVE) {
+                return true;
+            }
+        }
+    case EStatus::UNAUTHORIZED:
+    case EStatus::SUCCESS:
+    case EStatus::UNAVAILABLE:
+    case EStatus::SESSION_EXPIRED:
+    case EStatus::CANCELLED:
+    case EStatus::UNDETERMINED:
+    case EStatus::SESSION_BUSY:
+    case EStatus::TIMEOUT:
+
+    // Client statuses:
+    case EStatus::TRANSPORT_UNAVAILABLE:
+    case EStatus::CLIENT_RESOURCE_EXHAUSTED:
+    case EStatus::CLIENT_DEADLINE_EXCEEDED:
+    case EStatus::CLIENT_INTERNAL_ERROR:
+    case EStatus::CLIENT_OUT_OF_RANGE:
+    case EStatus::CLIENT_LIMITS_REACHED:
+    case EStatus::CLIENT_DISCOVERY_FAILED:
+        return false;
+    default:
+        return true;
+    }
+}
+
 TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStatus& status) {
     Y_ABORT_UNLESS(Lock.IsLocked());
+
+    TRACE_LAZY(DbDriverState->Log, "Error",
+        TRACE_KV("status", status.Status));
 
     THandleResult result;
     if (AtomicGet(Aborting)) {
@@ -128,6 +161,17 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
     }
     LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Got error. " << status.ToDebugString());
     SessionEstablished = false;
+
+    // Keep DirectWriteToPartitionId value on temporary errors.
+    if (DirectWriteToPartitionId.Defined() && NeedToSwitchPartition(status)) {
+        TRACE_LAZY(DbDriverState->Log, "ClearDirectWriteToPartitionId");
+        DirectWriteToPartitionId.Clear();
+        // We need to clear PreferredPartitionLocation here, because in Start,
+        // with both Settings.PartitionId_ and DirectWriteToPartitionId undefined,
+        // Connect is called, and PreferredPartitionLocation is used there to fill in the reqSettings.
+        PreferredPartitionLocation = {};
+    }
+
     TMaybe<TDuration> nextDelay = TDuration::Zero();
     if (!RetryState) {
         RetryState = Settings.RetryPolicy_->CreateRetryState();
@@ -148,16 +192,33 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
     return result;
 }
 
+TString FullTopicPath(TStringBuf dbPath, TStringBuf topic) {
+    if (topic.starts_with(dbPath)) {
+        return TString(topic);
+    }
+    TString full;
+    full.reserve(dbPath.size() + 1 + topic.size());
+    full.append(dbPath);
+    if (!full.EndsWith('/')) {
+        full.push_back('/');
+    }
+    topic.SkipPrefix("/");
+    full.append(topic);
+    return full;
+}
+
 void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& delay)
 {
     Y_ABORT_UNLESS(Lock.IsLocked());
-    Y_ABORT_UNLESS(Settings.PartitionId_.Defined() && Settings.DirectWriteToPartition_);
+    Y_ABORT_UNLESS(Settings.DirectWriteToPartition_ && (Settings.PartitionId_.Defined() || DirectWriteToPartitionId.Defined()));
 
     if (AtomicGet(Aborting)) {
         return;
     }
 
-    LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Get partition location async, partition " << *Settings.PartitionId_ << ", delay " << delay );
+    auto partition_id = Settings.PartitionId_.Defined() ? *Settings.PartitionId_ : *DirectWriteToPartitionId;
+
+    LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Get partition location async, partition " << partition_id << ", delay " << delay );
 
     NYdbGrpc::IQueueClientContextPtr prevDescribePartitionContext;
     NYdbGrpc::IQueueClientContextPtr describePartitionContext = Client->CreateContext();
@@ -172,16 +233,22 @@ void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& del
     NPersQueue::Cancel(prevDescribePartitionContext);
 
     Ydb::Topic::DescribePartitionRequest request;
-    request.set_path(Settings.Path_);
-    request.set_partition_id(*Settings.PartitionId_);
+    // Currently, the whole topic path needs to be sent in the DescribePartitionRequest.
+    request.set_path(FullTopicPath(DbDriverState->Database, Settings.Path_));
+    request.set_partition_id(partition_id);
     request.set_include_location(true);
+
+    TRACE_LAZY(DbDriverState->Log, "DescribePartitionRequest",
+        TRACE_KV("path", request.path()),
+        TRACE_KV("partition_id", request.partition_id()));
 
     auto extractor = [cbContext = SelfContext, context = describePartitionContext](Ydb::Topic::DescribePartitionResponse* response, TPlainStatus status) mutable {
         Ydb::Topic::DescribePartitionResult result;
         if (response)
             response->operation().result().UnpackTo(&result);
 
-        TStatus st(std::move(status));
+        TStatus st = status.Status == EStatus::SUCCESS ? NPersQueue::MakeErrorFromProto(response->operation()) : std::move(status);
+
         if (auto self = cbContext->LockShared()) {
             self->OnDescribePartition(st, result, context);
         }
@@ -190,7 +257,7 @@ void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& del
     auto callback = [req = std::move(request), extr = std::move(extractor),
                      connections = std::shared_ptr<TGRpcConnectionsImpl>(Connections), dbState = DbDriverState,
                      context = describePartitionContext, prefix = TString(LogPrefix()),
-                     partId = Settings.PartitionId_]() mutable {
+                     partId = partition_id]() mutable {
         LOG_LAZY(dbState->Log, TLOG_DEBUG, prefix + " Getting partition location, partition " + ToString(partId));
         connections->Run<Ydb::Topic::V1::TopicService, Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
             std::move(req),
@@ -227,7 +294,15 @@ void TWriteSessionImpl::OnDescribePartition(const TStatus& status, const Ydb::To
     }
 
     const Ydb::Topic::DescribeTopicResult_PartitionInfo& partition = proto.partition();
-    if (partition.partition_id() != Settings.PartitionId_ || !partition.has_partition_location() || partition.partition_location().node_id() == 0 || partition.partition_location().generation() == 0) {
+
+    TRACE_LAZY(DbDriverState->Log, "DescribePartitionResponse",
+        TRACE_KV("partition_id", partition.partition_id()),
+        TRACE_KV("active", partition.active()),
+        TRACE_KV("pl_node_id", partition.partition_location().node_id()),
+        TRACE_KV("pl_generation", partition.partition_location().generation()));
+
+    if (partition.partition_id() != Settings.PartitionId_ && Settings.PartitionId_.Defined() ||
+        !partition.has_partition_location() || partition.partition_location().node_id() == 0 || partition.partition_location().generation() == 0) {
         with_lock (Lock) {
             handleResult = OnErrorImpl({EStatus::INTERNAL_ERROR, "Wrong partition location"});
         }
@@ -237,7 +312,7 @@ void TWriteSessionImpl::OnDescribePartition(const TStatus& status, const Ydb::To
 
     TMaybe<TEndpointKey> preferredEndpoint;
     with_lock (Lock) {
-        preferredEndpoint = GetPreferredEndpointImpl(*Settings.PartitionId_, partition.partition_location().node_id());
+        preferredEndpoint = GetPreferredEndpointImpl(partition.partition_id(), partition.partition_location().node_id());
     }
 
     if (!preferredEndpoint.Defined()) {
@@ -251,6 +326,10 @@ void TWriteSessionImpl::OnDescribePartition(const TStatus& status, const Ydb::To
     with_lock (Lock) {
         PreferredPartitionLocation = {*preferredEndpoint, partition.partition_location().generation()};
     }
+    TRACE_LAZY(DbDriverState->Log, "PreferredPartitionLocation",
+        TRACE_KV("Endpoint", PreferredPartitionLocation.Endpoint.Endpoint),
+        TRACE_KV("NodeId", PreferredPartitionLocation.Endpoint.NodeId),
+        TRACE_KV("Generation", PreferredPartitionLocation.Generation));
 
     Connect(TDuration::Zero());
 }
@@ -280,17 +359,35 @@ TString GenerateProducerId() {
 
 void TWriteSessionImpl::InitWriter() { // No Lock, very initial start - no race yet as well.
     if (!Settings.DeduplicationEnabled_.Defined()) {
-        Settings.DeduplicationEnabled_ = !(Settings.ProducerId_.empty());
-    }
-    else if (Settings.DeduplicationEnabled_.GetRef()) {
+        // Deduplication settings not provided - will enable deduplication if ProducerId or MessageGroupId is provided.
+        Settings.DeduplicationEnabled_ = !Settings.ProducerId_.empty() || !Settings.MessageGroupId_.empty();
+    } else if (Settings.DeduplicationEnabled_.GetRef()) {
+        // Deduplication explicitly enabled.
+
+        // If both are provided, will validate they are equal in the check below.
         if (Settings.ProducerId_.empty()) {
-            Settings.ProducerId(GenerateProducerId());
+            if (Settings.MessageGroupId_.empty()) {
+                // Both ProducerId and MessageGroupId are empty, will generate random string and use it
+                Settings.MessageGroupId(GenerateProducerId());
+            }
+            // MessageGroupId is non-empty (either provided by user of generated above) and ProducerId is empty, copy value there.
+            Settings.ProducerId(Settings.MessageGroupId_);
+        } else if (Settings.MessageGroupId_.empty()) {
+            // MessageGroupId is empty, copy ProducerId value.
+            Settings.MessageGroupId(Settings.ProducerId_);
         }
     } else {
-        if (!Settings.ProducerId_.empty()) {
-            LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "ProducerId is not empty when deduplication is switched off");
-            ThrowFatalError("Cannot disable deduplication when non-empty ProducerId is provided");
+        // Deduplication explicitly disabled, ProducerId & MessageGroupId must be empty.
+        if (!Settings.ProducerId_.empty() || !Settings.MessageGroupId_.empty()) {
+            LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix()
+                     << "ProducerId or MessageGroupId is not empty when deduplication is switched off");
+            ThrowFatalError("Explicitly disabled deduplication conflicts with non-empty ProducerId or MessageGroupId");
         }
+    }
+    if (!Settings.ProducerId_.empty() && !Settings.MessageGroupId_.empty() && Settings.ProducerId_ != Settings.MessageGroupId_) {
+            LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix()
+                     << "ProducerId and MessageGroupId mismatch");
+            ThrowFatalError("ProducerId != MessageGroupId scenario is currently not supported");
     }
     CompressionExecutor = Settings.CompressionExecutor_;
     IExecutor::TPtr executor;
@@ -602,20 +699,16 @@ void TWriteSessionImpl::InitImpl() {
     init->set_path(Settings.Path_);
     init->set_producer_id(Settings.ProducerId_);
 
-    if (Settings.PartitionId_.Defined()) {
-        if (Settings.DirectWriteToPartition_) {
-            auto* partitionWithGeneration = init->mutable_partition_with_generation();
-            partitionWithGeneration->set_partition_id(*Settings.PartitionId_);
-            partitionWithGeneration->set_generation(PreferredPartitionLocation.Generation);
-            LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: direct write to partition: " << *Settings.PartitionId_ << ", generation " << PreferredPartitionLocation.Generation);
-        }
-        else {
-            init->set_partition_id(*Settings.PartitionId_);
-            LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: write to partition: " << *Settings.PartitionId_);
-        }
-    }
-    else
-    {
+    if (Settings.DirectWriteToPartition_ && (Settings.PartitionId_.Defined() || DirectWriteToPartitionId.Defined())) {
+        auto partition_id = Settings.PartitionId_.Defined() ? *Settings.PartitionId_ : *DirectWriteToPartitionId;
+        auto* p = init->mutable_partition_with_generation();
+        p->set_partition_id(partition_id);
+        p->set_generation(PreferredPartitionLocation.Generation);
+        LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: direct write to partition: " << partition_id << ", generation " << PreferredPartitionLocation.Generation);
+    } else if (Settings.PartitionId_.Defined()) {
+        init->set_partition_id(*Settings.PartitionId_);
+        LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: write to partition: " << *Settings.PartitionId_);
+    } else {
         init->set_message_group_id(Settings.MessageGroupId_);
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: write to message_group: " << Settings.MessageGroupId_);
     }
@@ -624,6 +717,14 @@ void TWriteSessionImpl::InitImpl() {
         (*init->mutable_write_session_meta())[attr.first] = attr.second;
     }
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: send init request: "<< req.ShortDebugString());
+
+    TRACE_LAZY(DbDriverState->Log, "InitRequest",
+        TRACE_KV_IF(init->has_partition_id(), "partition_id", init->partition_id()),
+        TRACE_IF(init->has_partition_with_generation(),
+            TRACE_KV("pwg_partition_id", init->partition_with_generation().partition_id()),
+            TRACE_KV("pwg_generation", init->partition_with_generation().generation())
+        ));
+
     WriteToProcessorImpl(std::move(req));
 }
 
@@ -741,10 +842,12 @@ TStringBuilder TWriteSessionImpl::LogPrefix() const {
     TStringBuilder ret;
     ret << " SessionId [" << SessionId << "] ";
 
-    if (Settings.PartitionId_.Defined()) {
-        ret << " PartitionId [" << *Settings.PartitionId_ << "] ";
-        if (Settings.DirectWriteToPartition_)
+    if (Settings.PartitionId_.Defined() || DirectWriteToPartitionId.Defined()) {
+        auto partition_id = Settings.PartitionId_.Defined() ? *Settings.PartitionId_ : *DirectWriteToPartitionId;
+        ret << " PartitionId [" << partition_id << "] ";
+        if (Settings.DirectWriteToPartition_) {
             ret << " Generation [" << PreferredPartitionLocation.Generation << "] ";
+        }
     } else {
         ret << " MessageGroupId [" << Settings.MessageGroupId_ << "] ";
     }
@@ -795,8 +898,18 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
         case TServerMessage::kInitResponse: {
             const auto& initResponse = ServerMessage->init_response();
             LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Write session established. Init response: " << initResponse.ShortDebugString());
+            TRACE_LAZY(DbDriverState->Log, "InitResponse",
+                TRACE_KV("partition_id", initResponse.partition_id()),
+                TRACE_KV("session_id", initResponse.session_id()));
             SessionId = initResponse.session_id();
+
+            auto prevDirectWriteToPartitionId = DirectWriteToPartitionId;
+            if (Settings.DirectWriteToPartition_ && !Settings.PartitionId_.Defined()) {
+                LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: set DirectWriteToPartitionId " << initResponse.partition_id());
+                DirectWriteToPartitionId = initResponse.partition_id();
+            }
             PartitionId = initResponse.partition_id();
+
             ui64 newLastSeqNo = initResponse.last_seq_no();
             if (!Settings.DeduplicationEnabled_.GetOrElse(true)) {
                 newLastSeqNo = 0;
@@ -806,10 +919,17 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
                 InitSeqNo = newLastSeqNo;
             }
 
+            OnErrorResolved();
+
+            if (Settings.DirectWriteToPartition_ && DirectWriteToPartitionId.Defined() && !prevDirectWriteToPartitionId.Defined()) {
+                result.HandleResult.DoRestart = true;
+                result.HandleResult.StartDelay = TDuration::Zero();
+                break;
+            }
+
             SessionEstablished = true;
             LastCountersUpdateTs = TInstant::Now();
             SessionStartedTs = TInstant::Now();
-            OnErrorResolved();
 
             if (!FirstTokenSent) {
                 result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
@@ -951,9 +1071,10 @@ TMemoryUsageChange TWriteSessionImpl::OnMemoryUsageChangedImpl(i64 diff) {
     return {wasOk, nowOk};
 }
 
-TBuffer CompressBuffer(TVector<TStringBuf>& data, ECodec codec, i32 level) {
+TBuffer CompressBuffer(std::shared_ptr<TTopicClient::TImpl> client, TVector<TStringBuf>& data, ECodec codec, i32 level) {
     TBuffer result;
-    THolder<IOutputStream> coder = NCompressionDetails::CreateCoder(codec, result, level);
+    Y_UNUSED(client);
+    THolder<IOutputStream> coder = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow((ui32)codec)->CreateCoder(result, level);
     for (auto& buffer : data) {
         coder->Write(buffer.data(), buffer.size());
     }
@@ -976,11 +1097,12 @@ void TWriteSessionImpl::CompressImpl(TBlock&& block_) {
                    codec = Settings.Codec_,
                    level = Settings.CompressionLevel_,
                    isSyncCompression = !CompressionExecutor->IsAsync(),
-                   blockPtr]() mutable {
+                   blockPtr,
+                   client = Client]() mutable {
         Y_ABORT_UNLESS(!blockPtr->Compressed);
 
         auto compressedData = CompressBuffer(
-                blockPtr->OriginalDataRefs, codec, level
+            std::move(client), blockPtr->OriginalDataRefs, codec, level
         );
         Y_ABORT_UNLESS(!compressedData.Empty());
         blockPtr->Data = std::move(compressedData);
@@ -1022,6 +1144,7 @@ TMemoryUsageChange TWriteSessionImpl::OnCompressedImpl(TBlock&& block) {
     return memoryUsage;
 }
 
+// Set SessionEstablished = false and bring back "sent" messages to proper queues
 void TWriteSessionImpl::ResetForRetryImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
 

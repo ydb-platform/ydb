@@ -129,7 +129,7 @@ TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& 
     Y_UNUSED(types);
     if (node->Head().IsCallable("WideFromBlocks")) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Content() << " over " << node->Head().Content();
-        return node->Head().HeadPtr();
+        return ctx.NewCallable(node->Pos(), "ReplicateScalars", { node->Head().HeadPtr() });
     }
 
     if (const auto& input = node->Head(); input.IsCallable({"Extend", "OrderedExtend"})) {
@@ -140,6 +140,118 @@ TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& 
             newChildren.emplace_back(ctx.ChangeChild(*node, 0, std::move(child)));
         }
         return ctx.NewCallable(input.Pos(), input.IsCallable("Extend") ? "BlockExtend" : "BlockOrderedExtend", std::move(newChildren));
+    }
+
+    return node;
+}
+
+TExprNode::TPtr OptimizeWideFromBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    Y_UNUSED(types);
+    if (node->Head().IsCallable("WideToBlocks")) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Content() << " over " << node->Head().Content();
+        return node->Head().HeadPtr();
+    }
+
+    if (node->Head().IsCallable("ReplicateScalars")) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Head().Content() << " as input of " << node->Content();
+        return ctx.ChangeChild(*node, 0, node->Head().HeadPtr());
+    }
+
+    return node;
+}
+
+TExprNode::TPtr OptimizeWideTakeSkipBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    Y_UNUSED(types);
+    if (node->Head().IsCallable("ReplicateScalars")) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << node->Head().Content();
+        return ctx.SwapWithHead(*node);
+    }
+
+    return node;
+}
+
+TExprNode::TPtr OptimizeBlockCompress(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    Y_UNUSED(types);
+    if (node->Head().IsCallable("ReplicateScalars")) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << node->Head().Content();
+        if (node->Head().ChildrenSize() == 1) {
+            return ctx.SwapWithHead(*node);
+        }
+
+        const ui32 compressIndex = FromString<ui32>(node->Child(1)->Content());
+        TExprNodeList newReplicateIndexes;
+        for (auto atom : node->Head().Child(1)->ChildrenList()) {
+            ui32 idx = FromString<ui32>(atom->Content());
+            if (idx != compressIndex) {
+                newReplicateIndexes.push_back((idx < compressIndex) ? atom : ctx.NewAtom(atom->Pos(), idx - 1));
+            }
+        }
+        return ctx.Builder(node->Pos())
+            .Callable("ReplicateScalars")
+                .Add(0, ctx.ChangeChild(*node, 0, node->Head().HeadPtr()))
+                .Add(1, ctx.NewList(node->Head().Child(1)->Pos(), std::move(newReplicateIndexes)))
+            .Seal()
+            .Build();
+    }
+
+    return node;
+}
+
+TExprNode::TPtr OptimizeBlocksTopOrSort(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    Y_UNUSED(types);
+    if (node->Head().IsCallable("ReplicateScalars")) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << node->Head().Content();
+        return ctx.SwapWithHead(*node);
+    }
+
+    return node;
+}
+
+TExprNode::TPtr OptimizeBlockExtend(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    Y_UNUSED(types);
+    TExprNodeList inputs = node->ChildrenList();
+    bool hasReplicateScalars = false;
+    for (auto& input : inputs) {
+        if (input->IsCallable("ReplicateScalars")) {
+            hasReplicateScalars = true;
+            input = input->HeadPtr();
+        }
+    }
+
+    if (hasReplicateScalars) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Drop ReplicateScalars as input of " << node->Content();
+        return ctx.ChangeChildren(*node, std::move(inputs));
+    }
+
+    return node;
+}
+
+TExprNode::TPtr OptimizeReplicateScalars(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    Y_UNUSED(types);
+    if (node->Head().IsCallable("ReplicateScalars")) {
+        if (node->ChildrenSize() == 1) {
+            YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Head().Content() << " as input of " << node->Content();
+            return ctx.ChangeChild(*node, 0, node->Head().HeadPtr());
+        }
+
+        // child ReplicateScalar should also have indexes
+        YQL_ENSURE(node->Head().ChildrenSize() == 2);
+
+        TSet<ui32> mergedIndexes;
+        for (auto atom : node->Child(1)->ChildrenList()) {
+            mergedIndexes.insert(FromString<ui32>(atom->Content()));
+        }
+        for (auto atom : node->Head().Child(1)->ChildrenList()) {
+            mergedIndexes.insert(FromString<ui32>(atom->Content()));
+        }
+
+        TExprNodeList newIndexes;
+        for (auto& i : mergedIndexes) {
+            newIndexes.push_back(ctx.NewAtom(node->Child(1)->Pos(), i));
+        }
+
+        YQL_CLOG(DEBUG, CorePeepHole) << "Merge nested " << node->Content();
+        return ctx.ChangeChildren(*node, { node->Head().HeadPtr(), ctx.NewList(node->Child(1)->Pos(), std::move(newIndexes)) });
     }
 
     return node;
@@ -156,38 +268,10 @@ TExprNode::TPtr ExpandBlockExtend(const TExprNode::TPtr& node, TExprContext& ctx
         const auto& items = child->GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
         const ui32 width = items.size();
         YQL_ENSURE(width > 0);
-        if (AllOf(items.begin(), items.end() - 1, [](const auto& item) { return item->IsBlock(); })) {
-            newChildren.push_back(child);
-            continue;
-        }
 
-        seenScalars = true;
-
-        TExprNodeList args;
-        TExprNodeList bodyItems;
-
-        args.reserve(width);
-        bodyItems.reserve(width);
-        auto lastColumn = ctx.NewArgument(child->Pos(), "height");
-        for (ui32 i = 0; i < width; ++i) {
-            auto arg = (i + 1 == width) ? lastColumn : ctx.NewArgument(child->Pos(), "arg");
-            args.push_back(arg);
-
-            if (i + 1 == width || items[i]->IsBlock()) {
-                bodyItems.push_back(arg);
-            } else {
-                YQL_ENSURE(items[i]->IsScalar());
-                bodyItems.push_back(ctx.NewCallable(child->Pos(), "ReplicateScalar", { arg, lastColumn}));
-            }
-        }
-
-        newChildren.push_back(ctx.Builder(child->Pos())
-            .Callable("WideMap")
-                .Add(0, child)
-                .Add(1, ctx.NewLambda(child->Pos(), ctx.NewArguments(child->Pos(), std::move(args)), std::move(bodyItems)))
-            .Seal()
-            .Build()
-        );
+        const bool hasScalars = AnyOf(items.begin(), items.end() - 1, [](const auto& item) { return item->IsScalar(); });
+        seenScalars = seenScalars || hasScalars;
+        newChildren.push_back(ctx.WrapByCallableIf(hasScalars, "ReplicateScalars", std::move(child)));
     }
 
     const TStringBuf newName = node->IsCallable("BlockOrdredExtend") ? "OrdredExtend" : "Extend";
@@ -195,6 +279,48 @@ TExprNode::TPtr ExpandBlockExtend(const TExprNode::TPtr& node, TExprContext& ctx
         return ctx.RenameNode(*node, newName);
     }
     return ctx.NewCallable(node->Pos(), newName, std::move(newChildren));
+}
+
+TExprNode::TPtr ExpandReplicateScalars(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    Y_UNUSED(types);
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
+    const auto& items = node->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+    const ui32 width = items.size();
+
+    TExprNodeList args;
+    TExprNodeList bodyItems;
+
+    args.reserve(width);
+    bodyItems.reserve(width);
+    auto lastColumn = ctx.NewArgument(node->Pos(), "height");
+
+    TMaybe<THashSet<ui32>> replicateIndexes;
+    if (node->ChildrenSize() == 2) {
+        replicateIndexes.ConstructInPlace();
+        for (auto atom : node->Head().Child(1)->ChildrenList()) {
+            replicateIndexes->insert(FromString<ui32>(atom->Content()));
+        }
+    }
+
+    for (ui32 i = 0; i < width; ++i) {
+        auto arg = (i + 1 == width) ? lastColumn : ctx.NewArgument(node->Pos(), "arg");
+        args.push_back(arg);
+
+        if (i + 1 == width || items[i]->IsBlock()) {
+            bodyItems.push_back(arg);
+        } else {
+            YQL_ENSURE(items[i]->IsScalar());
+            bool doReplicate = !replicateIndexes.Defined() || replicateIndexes->contains(i);
+            bodyItems.push_back(doReplicate ? ctx.NewCallable(node->Pos(), "ReplicateScalar", { arg, lastColumn}) : arg);
+        }
+    }
+
+    return ctx.Builder(node->Pos())
+        .Callable("WideMap")
+            .Add(0, node->HeadPtr())
+            .Add(1, ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), std::move(args)), std::move(bodyItems)))
+        .Seal()
+        .Build();
 }
 
 TExprNode::TPtr SplitEquiJoinToPairsRecursive(const TExprNode& node, const TExprNode& joinTree, TExprContext& ctx,
@@ -2451,12 +2577,70 @@ TExprNode::TPtr ExpandListHas(const TExprNode::TPtr& input, TExprContext& ctx) {
     return RewriteSearchByKeyForTypesMismatch<true, true>(input, ctx);
 }
 
+TExprNode::TPtr ExpandPgArrayOp(const TExprNode::TPtr& input, TExprContext& ctx) {
+    const bool all = input->Content() == "PgAllResolvedOp";
+    auto list = ctx.Builder(input->Pos())
+        .Callable("PgCall")
+            .Atom(0, "unnest")
+            .List(1)
+            .Seal()
+            .Add(2, input->ChildPtr(3))
+        .Seal()
+        .Build();
+
+    auto value = ctx.Builder(input->Pos())
+        .Callable("Fold")
+            .Add(0, list)
+            .Callable(1, "PgConst")
+                .Atom(0, all ? "true" : "false")
+                .Callable(1, "PgType")
+                    .Atom(0, "bool")
+                .Seal()
+            .Seal()
+            .Lambda(2)
+                .Param("item")
+                .Param("state")
+                .Callable(all ? "PgAnd" : "PgOr")
+                    .Arg(0, "state")
+                    .Callable(1, "PgResolvedOp")
+                        .Add(0, input->ChildPtr(0))
+                        .Add(1, input->ChildPtr(1))
+                        .Add(2, input->ChildPtr(2))
+                        .Arg(3, "item")
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    return ctx.Builder(input->Pos())
+        .Callable("If")
+            .Callable(0, "Exists")
+                .Add(0, input->ChildPtr(3))
+            .Seal()
+            .Add(1, value)
+            .Callable(2, "Null")
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 template <bool Flat, bool List>
 TExprNode::TPtr ExpandContainerIf(const TExprNode::TPtr& input, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content();
     auto item = Flat ? input->TailPtr() : ctx.NewCallable(input->Tail().Pos(), List ? "AsList" : "Just", {input->TailPtr()});
     auto none = ctx.NewCallable(input->Tail().Pos(), "EmptyFrom", {item});
     return ctx.NewCallable(input->Pos(), "If", {input->HeadPtr(), std::move(item), std::move(none)});
+}
+
+TExprNode::TPtr DropDependsOnFromEmptyIterator(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (input->ChildrenSize() > 1) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Drop DependsOn from " << input->Content();
+        TExprNode::TListType newChildren;
+        newChildren.push_back(input->Child(0));
+        return ctx.ChangeChildren(*input, std::move(newChildren));
+    }
+    return input;
 }
 
 TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -5804,7 +5988,97 @@ TExprNode::TPtr OptimizeBlockCombine(const TExprNode::TPtr& node, TExprContext& 
         return UpdateBlockCombineColumns(node, filterIndex, argIndices, ctx);
     }
 
+    if (node->Head().IsCallable("ReplicateScalars")) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Head().Content() << " as input of " << node->Content();
+        return ctx.ChangeChild(*node, 0, node->Head().HeadPtr());
+    }
+
     return node;
+}
+
+TExprNode::TPtr OptimizeBlockMerge(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    Y_UNUSED(types);
+    if (node->Head().IsCallable("ReplicateScalars")) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Head().Content() << " as input of " << node->Content();
+        return ctx.ChangeChild(*node, 0, node->Head().HeadPtr());
+    }
+
+    return node;
+}
+
+TExprNode::TPtr SwapReplicateScalarsWithWideMap(const TExprNode::TPtr& wideMap, TExprContext& ctx) {
+    YQL_ENSURE(wideMap->IsCallable("WideMap") && wideMap->Head().IsCallable("ReplicateScalars"));
+    const auto& input = wideMap->Head();
+    auto inputTypes = input.GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+    YQL_ENSURE(inputTypes.size() > 0);
+
+    THashSet<ui32> replicatedInputIndexes;
+    auto replicateScalarsInputTypes = input.Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+    YQL_ENSURE(replicateScalarsInputTypes.size() > 0);
+    if (input.ChildrenSize() == 1) {
+        for (ui32 i = 0; i + 1 < replicateScalarsInputTypes.size(); ++i) {
+            if (replicateScalarsInputTypes[i]->IsScalar()) {
+                replicatedInputIndexes.insert(i);
+            }
+        }
+    } else {
+        for (auto& indexNode : input.Child(1)->ChildrenList()) {
+            YQL_ENSURE(indexNode->IsAtom());
+            ui32 idx = FromString<ui32>(indexNode->Content());
+            YQL_ENSURE(idx + 1 < replicatedInputIndexes.size() && replicateScalarsInputTypes[idx]->IsScalar());
+            replicatedInputIndexes.insert(idx);
+        }
+    }
+
+    YQL_ENSURE(!replicatedInputIndexes.empty(), "ReplicateScalars should be dropped earlier");
+
+    const auto& lambda = wideMap->Tail();
+    const auto& lambdaArgs = lambda.Head();
+
+    YQL_ENSURE(lambdaArgs.ChildrenSize() == inputTypes.size());
+
+    TNodeMap<ui32> arg2index;
+    for (ui32 i = 0; i < lambdaArgs.ChildrenSize(); ++i) {
+        YQL_ENSURE(arg2index.emplace(lambdaArgs.Child(i), i).second);
+    }
+
+    TVector<THashSet<ui32>> bodyItemDeps;
+    for (ui32 i = 1; i + 1 < lambda.ChildrenSize(); ++i) {
+        bodyItemDeps.emplace_back();
+        VisitExpr(lambda.ChildPtr(i), [&](const TExprNode::TPtr& node) {
+            if (node->IsArgument()) {
+                auto it = arg2index.find(node.Get());
+                if (it != arg2index.end()) {
+                    bodyItemDeps.back().insert(it->second);
+                }
+            }
+            return true;
+        });
+    }
+
+    TExprNodeList replicatedOutputIndexes;
+    for (ui32 i = 0; i < bodyItemDeps.size(); ++i) {
+        const auto& currDeps = bodyItemDeps[i];
+        if (!AnyOf(replicatedInputIndexes, [&](ui32 idx) { return currDeps.contains(idx); })) {
+            continue;
+        }
+
+        // output body item depends on some of replicated scalars
+        if (AllOf(currDeps, [&](ui32 idx) { return replicatedInputIndexes.contains(idx) || inputTypes[idx]->IsScalar(); })) {
+            // output body items only depends on scalars or replicated scalars
+            replicatedOutputIndexes.push_back(ctx.NewAtom(input.Pos(), i));
+        }
+    }
+
+    return ctx.Builder(wideMap->Pos())
+        .Callable("ReplicateScalars")
+            .Callable(0, "WideMap")
+                .Add(0, input.HeadPtr())
+                .Add(1, ctx.DeepCopyLambda(lambda))
+            .Seal()
+            .Add(1, ctx.NewList(input.Pos(), std::move(replicatedOutputIndexes)))
+        .Seal()
+        .Build();
 }
 
 TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -5901,6 +6175,9 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
                         .Add(1, DropUnusedArgs(node->Tail(), unusedState, ctx))
                     .Seal().Build();
             }
+        } else if (node->IsCallable("WideMap") && input.IsCallable("ReplicateScalars")) {
+            YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content();
+            return SwapReplicateScalarsWithWideMap(node, ctx);
         }
     }
 
@@ -7590,6 +7867,8 @@ struct TPeepHoleRules {
         {"Lookup", &RewriteSearchByKeyForTypesMismatch<false>},
         {"Contains", &RewriteSearchByKeyForTypesMismatch<true>},
         {"ListHas", &ExpandListHas},
+        {"PgAnyResolvedOp", &ExpandPgArrayOp},
+        {"PgAllResolvedOp", &ExpandPgArrayOp},
         {"Map", &CleckClosureOnUpperLambdaOverList},
         {"OrderedMap", &CleckClosureOnUpperLambdaOverList},
         {"FlatMap", &CleckClosureOnUpperLambdaOverList},
@@ -7649,6 +7928,7 @@ struct TPeepHoleRules {
         {"CheckedMinus", &ExpandCheckedMinus},
         {"JsonValue", &ExpandJsonValue},
         {"JsonExists", &ExpandJsonExists},
+        {"EmptyIterator", &DropDependsOnFromEmptyIterator},
     };
 
     const TExtPeepHoleOptimizerMap CommonStageExtRules = {
@@ -7760,10 +8040,22 @@ struct TPeepHoleRules {
         {"NarrowMap", &OptimizeWideMapBlocks},
         {"WideFilter", &OptimizeWideFilterBlocks},
         {"WideToBlocks", &OptimizeWideToBlocks},
+        {"WideFromBlocks", &OptimizeWideFromBlocks},
+        {"WideTakeBlocks", &OptimizeWideTakeSkipBlocks},
+        {"WideSkipBlocks", &OptimizeWideTakeSkipBlocks},
+        {"BlockCompress", &OptimizeBlockCompress},
+        {"WideTopBlocks", &OptimizeBlocksTopOrSort},
+        {"WideTopSortBlocks", &OptimizeBlocksTopOrSort},
+        {"WideSortBlocks", &OptimizeBlocksTopOrSort},
+        {"BlockExtend", &OptimizeBlockExtend},
+        {"BlockOrderedExtend", &OptimizeBlockExtend},
+        {"ReplicateScalars", &OptimizeReplicateScalars},
         {"Skip", &OptimizeSkipTakeToBlocks},
         {"Take", &OptimizeSkipTakeToBlocks},
         {"BlockCombineAll", &OptimizeBlockCombine},
         {"BlockCombineHashed", &OptimizeBlockCombine},
+        {"BlockMergeFinalizeHashed", &OptimizeBlockMerge},
+        {"BlockMergeManyFinalizeHashed", &OptimizeBlockMerge},
         {"WideTop", &OptimizeTopOrSortBlocks},
         {"WideTopSort", &OptimizeTopOrSortBlocks},
         {"WideSort", &OptimizeTopOrSortBlocks},
@@ -7772,6 +8064,7 @@ struct TPeepHoleRules {
     const TExtPeepHoleOptimizerMap BlockStageExtFinalRules = {
         {"BlockExtend", &ExpandBlockExtend},
         {"BlockOrderedExtend", &ExpandBlockExtend},
+        {"ReplicateScalars", &ExpandReplicateScalars} 
     };
 
     static const TPeepHoleRules& Instance() {
@@ -7865,6 +8158,10 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
         "PeepHoleBlock",
         issueCode);
 
+    if (peepholeSettings.FinalConfig) {
+        peepholeSettings.FinalConfig->AfterOptimize(&pipeline);
+    }
+
     pipeline.Add(
         CreateFunctorTransformer(
             [&types](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
@@ -7879,10 +8176,6 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
         ),
         "PeepHoleFinalBlock",
         issueCode);
-
-    if (peepholeSettings.FinalConfig) {
-        peepholeSettings.FinalConfig->AfterOptimize(&pipeline);
-    }
 
     return pipeline.BuildWithNoArgChecks(false);
 }

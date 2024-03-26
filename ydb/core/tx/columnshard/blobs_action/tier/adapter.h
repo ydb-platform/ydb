@@ -4,7 +4,15 @@
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
 class TRepliesAdapter: public NWrappers::NExternalStorage::IReplyAdapter {
+private:
+    const TString StorageId;
 public:
+    TRepliesAdapter(const TString& storageId)
+        : StorageId(storageId)
+    {
+
+    }
+
     virtual std::unique_ptr<IEventBase> RebuildReplyEvent(std::unique_ptr<NWrappers::NExternalStorage::TEvGetObjectResponse>&& ev) const override;
     virtual std::unique_ptr<IEventBase> RebuildReplyEvent(std::unique_ptr<NWrappers::NExternalStorage::TEvPutObjectResponse>&& ev) const override;
     virtual std::unique_ptr<IEventBase> RebuildReplyEvent(std::unique_ptr<NWrappers::NExternalStorage::TEvListObjectsResponse>&& ev) const override {

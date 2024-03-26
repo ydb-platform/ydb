@@ -20,6 +20,7 @@ public:
             IYtGateway::TFinalizeOptions(State_->SessionId)
                 .Config(State_->Configuration->Snapshot())
                 .Abort(State_->Types->HiddenMode == EHiddenMode::Force)
+                .DetachSnapshotTxs(State_->PassiveExecution)
         );
         return WrapFuture(future, [](const IYtGateway::TFinalizeResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
             Y_UNUSED(res);

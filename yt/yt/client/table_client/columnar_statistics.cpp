@@ -296,13 +296,12 @@ void TColumnarStatistics::Update(TRange<TVersionedRow> rows)
     }
 }
 
-TColumnarStatistics TColumnarStatistics::SelectByColumnNames(const TNameTablePtr& nameTable, const std::vector<TStableName>& columnStableNames) const
+TColumnarStatistics TColumnarStatistics::SelectByColumnNames(const TNameTablePtr& nameTable, const std::vector<TColumnStableName>& columnStableNames) const
 {
     auto result = MakeEmpty(columnStableNames.size(), HasValueStatistics());
 
     for (const auto& [columnIndex, columnName] : Enumerate(columnStableNames)) {
-        if (auto id = nameTable->FindId(columnName.Get()); id && *id < GetColumnCount()) {
-
+        if (auto id = nameTable->FindId(columnName.Underlying()); id && *id < GetColumnCount()) {
             result.ColumnDataWeights[columnIndex] = ColumnDataWeights[*id];
 
             if (HasValueStatistics()) {

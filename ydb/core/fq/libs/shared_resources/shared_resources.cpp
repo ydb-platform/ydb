@@ -7,6 +7,7 @@
 
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/sdk/cpp/client/extensions/discovery_mutator/discovery_mutator.h>
+#include <ydb/public/sdk/cpp/client/extensions/solomon_stats/pull_client.h>
 
 #include <util/generic/cast.h>
 #include <util/generic/strbuf.h>
@@ -32,7 +33,7 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
         const NFq::NConfig::TConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters)
-        : TYqSharedResources(NYdb::TDriver(GetYdbDriverConfig(config.GetCommon().GetYdbDriverConfig())))
+        : TYqSharedResources(CreateDriver(config.GetCommon().GetYdbDriverConfig()))
     {
         CreateDbPoolHolder(PrepareDbPoolConfig(config), credentialsProviderFactory, counters);
         AddUnderlayDiscoveryMutator();
@@ -60,6 +61,15 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
     void Stop() override {
         CoreYdbDriver.Stop(true);
         // UserSpaceYdbDriver.Stop(true); // For now it points to the same driver as CoreYdbDriver, so don't call Stop
+    }
+
+    NYdb::TDriver CreateDriver(const NFq::NConfig::TYdbDriverConfig& config) {
+        NYdb::TDriver driver(GetYdbDriverConfig(config));
+        if (config.GetMonitoringPort()) {
+            NSolomonStatExtension::TSolomonStatPullExtension::TParams params(TString{}, config.GetMonitoringPort(), "yq", "ydb_driver", TString{});
+            driver.AddExtension<NSolomonStatExtension::TSolomonStatPullExtension>(params);
+        }
+        return driver;
     }
 
     NYdb::TDriverConfig GetYdbDriverConfig(const NFq::NConfig::TYdbDriverConfig& config) {

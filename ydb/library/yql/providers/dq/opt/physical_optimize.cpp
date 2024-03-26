@@ -98,46 +98,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> BuildStageWithReadWrap(TExprBase node, TExprContext& ctx) {
-        const auto wrap = node.Cast<TDqReadWrap>();
-        const auto read = Build<TDqReadWideWrap>(ctx, node.Pos())
-                .Input(wrap.Input())
-                .Flags().Build()
-                .Token(wrap.Token())
-            .Done();
-
-        const auto structType = GetSeqItemType(*wrap.Ref().GetTypeAnn()).Cast<TStructExprType>();
-        auto narrow = ctx.Builder(node.Pos())
-            .Lambda()
-                .Callable("NarrowMap")
-                    .Add(0, read.Ptr())
-                    .Lambda(1)
-                        .Params("fields", structType->GetSize())
-                        .Callable("AsStruct")
-                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                                ui32 i = 0U;
-                                for (const auto& item : structType->GetItems()) {
-                                    parent.List(i)
-                                        .Atom(0, item->GetName())
-                                        .Arg(1, "fields", i)
-                                    .Seal();
-                                    ++i;
-                                }
-                                return parent;
-                            })
-                        .Seal()
-                    .Seal()
-                .Seal()
-            .Seal().Build();
-
-        return Build<TDqCnUnionAll>(ctx, node.Pos())
-            .Output()
-                .Stage<TDqStage>()
-                    .Inputs().Build()
-                    .Program(narrow)
-                    .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
-                .Build()
-                .Index().Build("0")
-            .Build() .Done();
+        return DqBuildStageWithReadWrap(node, ctx);
     }
 
     template <bool IsGlobal>

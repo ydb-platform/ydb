@@ -22,6 +22,11 @@ TYsonStructFinalClassHolder::TYsonStructFinalClassHolder(std::type_index typeInd
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TYsonStructBase::TYsonStructBase()
+{
+    TYsonStructRegistry::Get()->OnBaseCtorCalled();
+}
+
 IMapNodePtr TYsonStructBase::GetLocalUnrecognized() const
 {
     return LocalUnrecognized_;
@@ -98,7 +103,7 @@ void TYsonStructBase::Save(IOutputStream* output) const
 
 void TYsonStructBase::Postprocess(const TYPath& path)
 {
-    Meta_->Postprocess(this, path);
+    Meta_->PostprocessStruct(this, path);
 }
 
 void TYsonStructBase::SetDefaults()
@@ -112,9 +117,9 @@ void TYsonStructBase::SaveParameter(const TString& key, IYsonConsumer* consumer)
     Meta_->GetParameter(key)->Save(this, consumer);
 }
 
-void TYsonStructBase::LoadParameter(const TString& key, const NYTree::INodePtr& node, EMergeStrategy mergeStrategy)
+void TYsonStructBase::LoadParameter(const TString& key, const NYTree::INodePtr& node)
 {
-    Meta_->LoadParameter(this, key, node, mergeStrategy);
+    Meta_->LoadParameter(this, key, node);
 }
 
 void TYsonStructBase::ResetParameter(const TString& key)
@@ -144,6 +149,7 @@ void TYsonStructBase::WriteSchema(IYsonConsumer* consumer) const
 
 void TYsonStruct::InitializeRefCounted()
 {
+    TYsonStructRegistry::Get()->OnFinalCtorCalled();
     if (!TYsonStructRegistry::InitializationInProgress()) {
         SetDefaults();
     }
@@ -159,6 +165,20 @@ TYsonStructRegistry* TYsonStructRegistry::Get()
 bool TYsonStructRegistry::InitializationInProgress()
 {
     return CurrentlyInitializingMeta_ != nullptr;
+}
+
+void TYsonStructRegistry::OnBaseCtorCalled()
+{
+    if (CurrentlyInitializingMeta_ != nullptr) {
+        ++RegistryDepth_;
+    }
+}
+
+void TYsonStructRegistry::OnFinalCtorCalled()
+{
+    if (CurrentlyInitializingMeta_ != nullptr) {
+        --RegistryDepth_;
+    }
 }
 
 TYsonStructRegistry::TForbidCachedDynamicCastGuard::TForbidCachedDynamicCastGuard(TYsonStructBase* target)

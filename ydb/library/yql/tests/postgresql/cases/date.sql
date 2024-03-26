@@ -9,6 +9,7 @@ INSERT INTO DATE_TBL VALUES ('1996-02-29');
 INSERT INTO DATE_TBL VALUES ('1996-03-01');
 INSERT INTO DATE_TBL VALUES ('1996-03-02');
 INSERT INTO DATE_TBL VALUES ('1997-02-28');
+INSERT INTO DATE_TBL VALUES ('1997-02-29');
 INSERT INTO DATE_TBL VALUES ('1997-03-01');
 INSERT INTO DATE_TBL VALUES ('1997-03-02');
 INSERT INTO DATE_TBL VALUES ('2000-04-01');
@@ -18,6 +19,11 @@ INSERT INTO DATE_TBL VALUES ('2038-04-08');
 INSERT INTO DATE_TBL VALUES ('2039-04-09');
 INSERT INTO DATE_TBL VALUES ('2040-04-10');
 INSERT INTO DATE_TBL VALUES ('2040-04-10 BC');
+--
+-- Check all the documented input formats
+--
+SET datestyle TO iso;  -- display results in ISO
+SET datestyle TO ymd;
 SELECT date 'January 8, 1999';
 SELECT date '1999-01-08';
 SELECT date '1999-01-18';
@@ -39,6 +45,7 @@ SELECT date '1999-01-08';
 SELECT date '1999-08-01';
 SELECT date '1999 01 08';
 SELECT date '1999 08 01';
+SET datestyle TO dmy;
 SELECT date 'January 8, 1999';
 SELECT date '1999-01-08';
 SELECT date '1999-01-18';
@@ -70,6 +77,7 @@ SELECT date '99 01 08';
 SELECT date '1999 01 08';
 SELECT date '99 08 01';
 SELECT date '1999 08 01';
+SET datestyle TO mdy;
 SELECT date 'January 8, 1999';
 SELECT date '1999-01-08';
 SELECT date '1999-01-18';
@@ -119,6 +127,13 @@ SELECT date '4714-11-24 BC';
 SELECT date '4714-11-23 BC';  -- out of range
 SELECT date '5874897-12-31';
 SELECT date '5874898-01-01';  -- out of range
+RESET datestyle;
+--
+-- Simple math
+-- Leave most of it for the horology tests
+--
+SELECT f1 - date '2000-01-01' AS "Days From 2K" FROM DATE_TBL;
+SELECT f1 - date 'epoch' AS "Days From Epoch" FROM DATE_TBL;
 SELECT date 'yesterday' - date 'today' AS "One day";
 SELECT date 'today' - date 'tomorrow' AS "One day";
 SELECT date 'yesterday' - date 'tomorrow' AS "Two days";
@@ -191,7 +206,6 @@ SELECT EXTRACT(JULIAN        FROM DATE '2020-08-11');
 select 'infinity'::date, '-infinity'::date;
 select 'infinity'::date > 'today'::date as t;
 select '-infinity'::date < 'today'::date as t;
-select isfinite('infinity'::date), isfinite('-infinity'::date), isfinite('today'::date);
 --
 -- oscillating fields from non-finite date:
 --

@@ -15,10 +15,21 @@ package NKikimrPQ;
 option java_package = "ru.yandex.kikimr.proto";
 
 
+message TPartitionCounterData {
+    optional uint64 MessagesWrittenTotal = 1;
+    optional uint64 MessagesWrittenGrpc = 2;
+    optional uint64 BytesWrittenTotal = 3;
+    optional uint64 BytesWrittenGrpc = 4;
+    optional uint64 BytesWrittenUncompressed = 5;
+    repeated uint64 MessagesSizes = 6;
+    //ToDo: !! InputLag = 7
+}
+
 message TPartitionMeta {
     optional uint64 StartOffset = 1;
     optional uint64 EndOffset = 2;
     optional bool SubDomainOutOfSpace = 3 [default = false];
+    optional TPartitionCounterData CounterData = 4;
 }
 
 message TPartitionTxMeta {
@@ -235,7 +246,7 @@ message TPartitionConfig {
     optional uint64 StorageLimitBytes = 16;
 
     // List of ClientIds, for which we don't delete data until they are read by these clients
-    repeated string ImportantClientId = 4; //can be empty
+    repeated string ImportantClientId = 4; //can be empty . Deprecated. Use Consumer.Important
     optional uint32 LowWatermark = 5 [default = 6291456]; //6Mb, compact blobs if they at least this big.
     optional uint32 SourceIdLifetimeSeconds = 6 [ default = 1382400]; //16 days
     optional uint32 SourceIdMaxCounts = 31 [default = 6000000]; // Maximum number of stored sourceId records in partition
@@ -283,6 +294,15 @@ enum ETopicPartitionStatus {
     Deleted = 3; // the partition can't be written and read
 }
 
+enum EConsumerScalingSupport {
+    // The consumer can't work with scaling.
+    NOT_SUPPORT = 1;
+    // The consumer does not commit offsets. The order of messages may be disrupted at the time of scaling.
+    PARTIAL_SUPPORT = 2;
+    // The consumer fully supports scaling: during the reading process, offsets are regularly committed.
+    FULL_SUPPORT = 3;
+}
+
 message TPQTabletConfig {
     optional uint64 CacheSize = 1 [default = 104857600]; //100Mb, per tablet
     optional TPartitionConfig PartitionConfig = 2; //mandatory
@@ -297,22 +317,36 @@ message TPQTabletConfig {
     optional string Topic = 11;
     optional string DC = 12;
 
-    // ReadRules, ReadTopicTimestampMs, ReadRuleVersions, ConsumerFormatVersions and ConsumersCodecs form a consumer data array stored by columns
-    repeated string ReadRules = 13;
-    repeated uint64 ReadFromTimestampsMs = 14;
-    repeated uint64 ConsumerFormatVersions = 15;
+    // ReadRules, ReadTopicTimestampMs, ReadRuleVersions, ConsumerFormatVersions, ConsumersCodecs and ConsumerScalingSupport form a consumer data array stored by columns
+    repeated string ReadRules = 13; // Deprecated. Use Consumers.Name
+    repeated uint64 ReadFromTimestampsMs = 14; // Deprecated. Use Consumers.ReadFromTimestampsMs
+    repeated uint64 ConsumerFormatVersions = 15; // Deprecated. Use Consumers.FormatVersion
     message TCodecs {
         repeated int64 Ids = 1;
         repeated string Codecs = 2;
     }
-    repeated TCodecs ConsumerCodecs = 16;
-    repeated string ReadRuleServiceTypes = 17;
+    repeated TCodecs ConsumerCodecs = 16; // Deprecated. Use Consumers.Codec
+    repeated string ReadRuleServiceTypes = 17; // Deprecated. Use Consumers.ServiceType
 
     optional uint64 FormatVersion = 20;
     optional TCodecs Codecs = 21;
 
-    repeated uint64 ReadRuleVersions = 22;
-    repeated uint64 ReadRuleGenerations = 32;
+    repeated uint64 ReadRuleVersions = 22; // Deprecated. Use Consumers.Version
+    repeated uint64 ReadRuleGenerations = 32; // Deprecated. Use Consumers.Generation
+
+    message TConsumer {
+        optional string Name = 1;
+        optional uint64 ReadFromTimestampsMs = 2 [default = 0];
+        optional uint64 FormatVersion = 3 [default = 0];
+        optional TCodecs Codec = 4;
+        optional string ServiceType = 5;
+        optional EConsumerScalingSupport ScalingSupport = 6;
+        optional uint64 Version = 7 [default = 0];
+        optional uint64 Generation = 8 [default = 0];
+        optional bool Important = 9 [default = false];
+    }
+
+    repeated TConsumer Consumers = 37;
 
     optional string TopicPath = 23;
 
@@ -359,8 +393,7 @@ message TPQTabletConfig {
     }
     optional TPartitionStrategy PartitionStrategy = 35;
 
-    repeated TPartition AllPartitions = 36;
-
+    repeated TPartition AllPartitions = 36; // filled by schemeshard
 }
 
 message THeartbeat {
@@ -377,6 +410,7 @@ message TMessageGroupInfo {
     }
 
     optional uint64 SeqNo = 1;
+    optional uint64 MinSeqNo = 9;
     optional uint64 Offset = 2;
     optional uint64 WriteTimestamp = 3; // TInstant::TValue
     optional uint64 CreateTimestamp = 4; // TInstant::TValue
@@ -764,7 +798,10 @@ message TStatusResponse {
         optional uint64 LastReadTimestampMs = 7;
         optional NPersQueue.NErrorCode.EErrorCode ErrorCode = 8;
         optional uint64 CommitedOffset = 9;
+
+        optional bool ReadingFinished = 10;
     }
+
 
     optional uint64 TabletId = 1;
     repeated TPartResult PartResult = 2;
@@ -946,6 +983,12 @@ message TEvCheckPartitionStatusResponse {
     optional uint64 SeqNo = 2;
 };
 
+// The consumer's reading of the partition is finished
+message TEvReadingPartitionStatusRequest {
+    optional string Consumer = 1;
+    optional uint32 PartitionId = 2;
+};
+
 message TTransaction {
     enum EKind {
         KIND_UNKNOWN = 0;
@@ -992,9 +1035,19 @@ message TTransaction {
     // получатель результата
     //
     optional NActorsProto.TActorId SourceActor = 14;
+
+    optional uint64 WriteId = 15;
 };
 
 message TTabletTxInfo {
+    message TTxWriteInfo {
+        optional uint64 WriteId = 1;
+        optional uint32 OriginalPartitionId = 2;
+        optional uint32 InternalPartitionId = 3;
+    };
+
     optional uint64 LastStep = 2;
     optional uint64 LastTxId = 3;
+    repeated TTxWriteInfo TxWrites = 4;
+    optional uint64 NextSupportivePartitionId = 5;
 }

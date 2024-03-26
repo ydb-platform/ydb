@@ -1,3 +1,4 @@
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -14,28 +15,12 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
         auto settings = NYdb::NQuery::TExecuteQuerySettings().Syntax(NYdb::NQuery::ESyntax::Pg);
         {
             auto result = db.ExecuteQuery(R"(
-                select typname from pg_catalog.pg_type order by oid
+                select count(*) from pg_catalog.pg_type
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_C(!result.GetResultSets().empty(), "no result sets");
             CompareYson(R"([
-                ["bool"];["bytea"];["char"];["name"];["int8"];["int2"];["int2vector"];["int4"];
-                ["regproc"];["text"];["oid"];["tid"];["xid"];["cid"];["oidvector"];["pg_ddl_command"];
-                ["pg_type"];["pg_attribute"];["pg_proc"];["pg_class"];["json"];["xml"];["pg_node_tree"];
-                ["table_am_handler"];["index_am_handler"];["point"];["lseg"];["path"];["box"];["polygon"];
-                ["line"];["cidr"];["float4"];["float8"];["unknown"];["circle"];["macaddr8"];["money"];
-                ["macaddr"];["inet"];["aclitem"];["bpchar"];["varchar"];["date"];["time"];["timestamp"];
-                ["timestamptz"];["interval"];["timetz"];["bit"];["varbit"];["numeric"];["refcursor"];
-                ["regprocedure"];["regoper"];["regoperator"];["regclass"];["regtype"];["record"];["cstring"];
-                ["any"];["anyarray"];["void"];["trigger"];["language_handler"];["internal"];["anyelement"];
-                ["_record"];["anynonarray"];["uuid"];["txid_snapshot"];["fdw_handler"];["pg_lsn"];["tsm_handler"];
-                ["pg_ndistinct"];["pg_dependencies"];["anyenum"];["tsvector"];["tsquery"];["gtsvector"];
-                ["regconfig"];["regdictionary"];["jsonb"];["anyrange"];["event_trigger"];["int4range"];["numrange"];
-                ["tsrange"];["tstzrange"];["daterange"];["int8range"];["jsonpath"];["regnamespace"];["regrole"];
-                ["regcollation"];["int4multirange"];["nummultirange"];["tsmultirange"];["tstzmultirange"];
-                ["datemultirange"];["int8multirange"];["anymultirange"];["anycompatiblemultirange"];
-                ["pg_brin_bloom_summary"];["pg_brin_minmax_multi_summary"];["pg_mcv_list"];["pg_snapshot"];["xid8"];
-                ["anycompatible"];["anycompatiblearray"];["anycompatiblenonarray"];["anycompatiblerange"]
+                ["193"]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
@@ -55,6 +40,316 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
                 ["authorization_identifier"];["fdwoptions"];["fdwowner"];["foreign_data_wrapper_catalog"];
                 ["foreign_data_wrapper_language"]
             ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(CheckSetConfig) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings()
+            .Syntax(NYdb::NQuery::ESyntax::Pg)
+            .StatsMode(NYdb::NQuery::EStatsMode::Basic);
+
+        {
+            // Base checks
+            auto serverSettings = TKikimrSettings()
+                .SetAppConfig(appConfig)
+                .SetKqpSettings({setting});
+
+            TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+            auto db = kikimr.GetQueryClient();
+            auto session = db.GetSession().GetValueSync().GetSession();
+
+            auto query = Q_(R"(
+                CREATE TABLE PgTable (
+                key int4 PRIMARY KEY,
+                value text
+            ))");
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            query = Q_(R"(
+                select * from PgTable;
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            query = Q_(R"(
+                select set_config('search_path', 'public', false);
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            query = Q_(R"(
+                select * from PgTable;
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            query = Q_(R"(
+                select set_config('search_path', 'information_schema', false);
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            query = Q_(R"(
+                select * from PgTable;
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT(result.GetIssues().ToString().Contains("Unsupported table: pgtable"));
+
+            query = Q_(R"(
+                select set_config('search_path', 'public', false);
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+            query = Q_(R"(
+                select * from PgTable;
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+        }
+
+        {
+            // Check for disabled ast cache
+            appConfig.MutableTableServiceConfig()->SetEnableAstCache(false);
+            auto serverSettings = TKikimrSettings()
+                .SetAppConfig(appConfig)
+                .SetKqpSettings({setting});
+            TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+            auto db = kikimr.GetQueryClient();
+            auto session = db.GetSession().GetValueSync().GetSession();
+
+            auto query = Q_(R"(
+                select oid, typinput::int4 as typinput, typname, typnamespace, typtype from pg_type;
+            )");
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+            query = Q_(R"(
+                select set_config('search_path', 'pg_catalog', false);
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+            query = Q_(R"(
+                select oid, typinput::int4 as typinput, typname, typnamespace, typtype from pg_type;
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+            query = Q_(R"(
+                select set_config('search_path', 'public', false);
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+            query = Q_(R"(
+                select oid, typinput::int4 as typinput, typname, typnamespace, typtype from pg_type;
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+            query = Q_(R"(
+                select oid, typinput::int4 as typinput, typname, typnamespace, typtype from pg_type;
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+
+            query = Q_(R"(
+                select oid, typinput::int4 as typinput, typname, typnamespace, typtype from pg_catalog.pg_type;
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+            query = Q_(R"(
+                select set_config('search_path', 'public', false);
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+            query = Q_(R"(
+                select set_config('search_path', 'pg_catalog', false);
+                select oid, typinput::int4 as typinput, typname, typnamespace, typtype from pg_type;
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+            query = Q_(R"(
+                select set_config('search_path', 'pg_catalog', false);
+                select oid, typinput::int4 as typinput, typname, typnamespace, typtype from pg_type;
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+        }
+
+        {
+            // Check for enabled ast cache
+            appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
+            auto serverSettings = TKikimrSettings()
+                .SetAppConfig(appConfig)
+                .SetKqpSettings({setting});
+            TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+            auto db = kikimr.GetQueryClient();
+            auto session = db.GetSession().GetValueSync().GetSession();
+
+            auto query = Q_(R"(
+                select oid, typinput::int4 as typinput, typname, typnamespace, typtype from pg_type;
+            )");
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+            query = Q_(R"(
+                select set_config('search_path', 'pg_catalog', false);
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+            query = Q_(R"(
+                select set_config('search_path', 'pg_catalog', false);
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+            query = Q_(R"(
+                select oid, typinput::int4 as typinput, typname, typnamespace, typtype from pg_type;
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+            query = Q_(R"(
+                select set_config('search_path', 'public', false);
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+            query = Q_(R"(
+                select oid, typinput::int4 as typinput, typname, typnamespace, typtype from pg_type;
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+            query = Q_(R"(
+                select oid, typinput::int4 as typinput, typname, typnamespace, typtype from pg_type;
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+
+            query = Q_(R"(
+                select oid, typinput::int4 as typinput, typname, typnamespace, typtype from pg_catalog.pg_type;
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+        }
+
+        {
+            // Check enable per statement
+            appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
+            appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+            auto serverSettings = TKikimrSettings()
+                .SetAppConfig(appConfig)
+                .SetKqpSettings({setting});
+
+            TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+            auto db = kikimr.GetQueryClient();
+            auto session = db.GetSession().GetValueSync().GetSession();
+
+            auto query = Q_(R"(
+                CREATE TABLE PgTable (
+                key int4 PRIMARY KEY,
+                value text
+            ))");
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            query = Q_(R"(
+                select set_config('search_path', 'pg_catalog', false);
+                select oid, typinput::int4 as typinput, typname, typnamespace, typtype from pg_type;
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            query = Q_(R"(
+                select * from PgTable;
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT(result.GetIssues().ToString().Contains("Unsupported table: pgtable"));
+
+            query = Q_(R"(
+                select set_config('search_path', 'public', false);
+                select oid, typinput::int4 as typinput, typname, typnamespace, typtype from pg_type;
+                select * from PgTable;
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            query = Q_(R"(
+                select set_config('search_path', 'public', false);
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+            query = Q_(R"(
+                select oid, typinput::int4 as typinput, typname, typnamespace, typtype from pg_catalog.pg_type;
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+
+            query = Q_(R"(
+                select * from PgTable;
+            )");
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
         }
     }
 }

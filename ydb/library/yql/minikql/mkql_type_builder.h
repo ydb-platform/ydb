@@ -236,5 +236,58 @@ ui64 CalcMaxBlockLength(T beginIt, T endIt, const NUdf::ITypeInfoHelper& helper)
     return (maxBlockLen == Max<ui64>()) ? 0 : maxBlockLen;
 }
 
+class TTypeBuilder : public TMoveOnly {
+public:
+    TTypeBuilder(const TTypeEnvironment& env) 
+        : Env(env)
+    {}
+
+    const TTypeEnvironment& GetTypeEnvironment() const {
+        return Env;
+    }
+
+    TType* NewVoidType() const;
+    TType* NewNullType() const;
+
+    TType* NewDataType(NUdf::TDataTypeId schemeType, bool optional = false) const;
+    TType* NewDataType(NUdf::EDataSlot slot, bool optional = false) const {
+        return NewDataType(NUdf::GetDataTypeInfo(slot).TypeId, optional);
+    }
+
+    TType* NewDecimalType(ui8 precision, ui8 scale) const;
+    TType* NewPgType(ui32 typeId) const;
+
+    TType* NewOptionalType(TType* itemType) const;
+
+    TType* NewEmptyStructType() const;
+    TType* NewStructType(TType* baseStructType, const std::string_view& memberName, TType* memberType) const;
+    TType* NewStructType(const TArrayRef<const std::pair<std::string_view, TType*>>& memberTypes) const;
+    TType* NewArrayType(const TArrayRef<const std::pair<std::string_view, TType*>>& memberTypes) const;
+
+    TType* NewListType(TType* itemType) const;
+
+    TType* NewDictType(TType* keyType, TType* payloadType, bool multi) const;
+
+    TType* NewStreamType(TType* itemType) const;
+    TType* NewFlowType(TType* itemType) const;
+    TType* NewTaggedType(TType* baseType, const std::string_view& tag) const;
+    TType* NewBlockType(TType* itemType, TBlockType::EShape shape) const;
+
+    TType* NewEmptyTupleType() const;
+    TType* NewTupleType(const TArrayRef<TType* const>& elements) const;
+    TType* NewArrayType(const TArrayRef<TType* const>& elements) const;
+
+    TType* NewEmptyMultiType() const;
+    TType* NewMultiType(const TArrayRef<TType* const>& elements) const;
+
+    TType* NewResourceType(const std::string_view& tag) const;
+    TType* NewVariantType(TType* underlyingType) const;
+
+protected:
+    const TTypeEnvironment& Env;
+    bool UseNullType = true;
+};
+
+
 } // namespace NMiniKQL
 } // namespace Nkikimr

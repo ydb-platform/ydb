@@ -9,9 +9,11 @@
 #include <ydb/core/kqp/runtime/kqp_read_table.h>
 #include <ydb/core/kqp/runtime/kqp_sequencer_factory.h>
 #include <ydb/core/kqp/runtime/kqp_stream_lookup_factory.h>
-#include <ydb/library/yql/providers/generic/actors/yql_generic_source_factory.h>
+#include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_sink_factory.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
+#include <ydb/core/protos/ssa.pb.h>
+#include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 
 
 namespace NKikimr {
@@ -21,10 +23,13 @@ using TCallableActorBuilderFunc = std::function<
     IComputationNode*(
         TCallable& callable, const TComputationNodeFactoryContext& ctx, TKqpScanComputeContext& computeCtx)>;
 
-TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* computeCtx) {
+TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* computeCtx, const std::optional<NKqp::TKqpFederatedQuerySetup>& federatedQuerySetup) {
     MKQL_ENSURE_S(computeCtx);
 
-    auto computeFactory = GetKqpBaseComputeFactory(computeCtx);
+    auto computeFactory = NKqp::MakeKqpFederatedQueryComputeFactory(
+        GetKqpBaseComputeFactory(computeCtx),
+        federatedQuerySetup
+    );
 
     return [computeFactory, computeCtx]
         (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
@@ -76,7 +81,7 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
         RegisterS3WriteActorFactory(*factory,  federatedQuerySetup->CredentialsFactory, federatedQuerySetup->HttpGateway);
 
         if (federatedQuerySetup->ConnectorClient) {
-            RegisterGenericReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->ConnectorClient);
+            RegisterGenericProviderFactories(*factory, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->ConnectorClient);
         }
     }
 

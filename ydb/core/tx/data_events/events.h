@@ -5,6 +5,7 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/base/events.h>
+#include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/event_pb.h>
@@ -38,11 +39,27 @@ struct TDataEvents {
     public:
         TEvWrite() = default;
 
-        TEvWrite(ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode) {
-            Y_ABORT_UNLESS(txMode != NKikimrDataEvents::TEvWrite::MODE_UNSPECIFIED);
 
-            Record.SetTxId(txId);
+        TEvWrite(const ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode) {
+            Y_ABORT_UNLESS(txMode != NKikimrDataEvents::TEvWrite::MODE_UNSPECIFIED);
             Record.SetTxMode(txMode);
+            Record.SetTxId(txId);
+        }
+
+        TEvWrite(NKikimrDataEvents::TEvWrite::ETxMode txMode) {
+            Y_ABORT_UNLESS(txMode != NKikimrDataEvents::TEvWrite::MODE_UNSPECIFIED);
+            Record.SetTxMode(txMode);
+        }
+
+        TEvWrite& SetTxId(const ui64 txId) {
+            Record.SetTxId(txId);
+            return *this;
+        }
+
+        TEvWrite& SetLockId(const ui64 lockTxId, const ui64 lockNodeId) {
+            Record.SetLockTxId(lockTxId);
+            Record.SetLockNodeId(lockNodeId);
+            return *this;
         }
 
         void AddOperation(NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, const TTableId& tableId, const std::vector<ui32>& columnIds,
@@ -92,6 +109,15 @@ struct TDataEvents {
             result->Record.SetOrigin(origin);
             result->Record.SetTxId(txId);
             result->Record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            return result;
+        }
+
+        static std::unique_ptr<TEvWriteResult> BuildCompleted(const ui64 origin, const ui64 txId, const NKikimrDataEvents::TLock& lock) {
+            auto result = std::make_unique<TEvWriteResult>();
+            result->Record.SetOrigin(origin);
+            result->Record.SetTxId(txId);
+            result->Record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            *result->Record.AddTxLocks() = lock;
             return result;
         }
 

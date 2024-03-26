@@ -295,7 +295,7 @@ struct IClientResponseHandler
     /*!
      *  \param error An error that has occurred.
      */
-    virtual void HandleError(const TError& error) = 0;
+    virtual void HandleError(TError error) = 0;
 
     //! Enables passing streaming data from the service to clients.
     virtual void HandleStreamingPayload(const TStreamingPayload& payload) = 0;
@@ -346,7 +346,7 @@ protected:
     virtual bool TryDeserializeBody(TRef data, std::optional<NCompression::ECodec> codecId = {}) = 0;
 
     // IClientResponseHandler implementation.
-    void HandleError(const TError& error) override;
+    void HandleError(TError error) override;
     void HandleAcknowledgement() override;
     void HandleResponse(TSharedRefArray message, TString address) override;
     void HandleStreamingPayload(const TStreamingPayload& payload) override;
@@ -364,7 +364,7 @@ private:
     TSharedRefArray ResponseMessage_;
 
     void TraceResponse();
-    void DoHandleError(const TError& error);
+    void DoHandleError(TError error);
 
     void DoHandleResponse(TSharedRefArray message, TString address);
     void Deserialize(TSharedRefArray responseMessage);

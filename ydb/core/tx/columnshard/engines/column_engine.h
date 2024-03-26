@@ -1,10 +1,11 @@
 #pragma once
 #include "db_wrapper.h"
-#include "portions/portion_info.h"
 #include "scheme/snapshot_scheme.h"
 #include "predicate/filter.h"
 #include "changes/abstract/settings.h"
 #include "changes/abstract/compaction_info.h"
+#include "scheme/versions/versioned_index.h"
+
 #include <ydb/core/tx/columnshard/common/reverse_accessor.h>
 
 namespace NKikimr::NColumnShard {
@@ -17,7 +18,12 @@ class TInsertColumnEngineChanges;
 class TCompactColumnEngineChanges;
 class TColumnEngineChanges;
 class TTTLColumnEngineChanges;
-class TCleanupColumnEngineChanges;
+class TCleanupPortionsColumnEngineChanges;
+class TCleanupTablesColumnEngineChanges;
+class TPortionInfo;
+namespace NDataLocks {
+class TManager;
+}
 
 struct TSelectInfo {
     struct TStats {
@@ -60,12 +66,9 @@ struct TSelectInfo {
             out.Records += portionInfo->NumChunks();
             out.Rows += portionInfo->NumRows();
             for (auto& rec : portionInfo->Records) {
-                uniqBlob.insert(rec.BlobRange.BlobId);
+                out.Bytes += rec.BlobRange.Size;
             }
-        }
-        out.Blobs += uniqBlob.size();
-        for (auto blobId : uniqBlob) {
-            out.Bytes += blobId.BlobSize();
+            out.Blobs += portionInfo->GetBlobIdsCount();
         }
         return out;
     }
@@ -286,74 +289,6 @@ public:
     }
 };
 
-class TVersionedIndex {
-    std::map<TSnapshot, ISnapshotSchema::TPtr> Snapshots;
-    std::shared_ptr<arrow::Schema> PrimaryKey;
-    std::map<ui64, ISnapshotSchema::TPtr> SnapshotByVersion;
-    ui64 LastSchemaVersion = 0;
-public:
-    TString DebugString() const {
-        TStringBuilder sb;
-        for (auto&& i : Snapshots) {
-            sb << i.first << ":" << i.second->DebugString() << ";";
-        }
-        return sb;
-    }
-
-    ISnapshotSchema::TPtr GetSchema(const ui64 version) const {
-        auto it = SnapshotByVersion.find(version);
-        return it == SnapshotByVersion.end() ? nullptr : it->second;
-    }
-
-    ISnapshotSchema::TPtr GetSchemaVerified(const ui64 version) const {
-        auto it = SnapshotByVersion.find(version);
-        Y_ABORT_UNLESS(it != SnapshotByVersion.end(), "no schema for version %lu", version);
-        return it->second;
-    }
-
-    ISnapshotSchema::TPtr GetSchema(const TSnapshot& version) const {
-        for (auto it = Snapshots.rbegin(); it != Snapshots.rend(); ++it) {
-            if (it->first <= version) {
-                return it->second;
-            }
-        }
-        Y_ABORT_UNLESS(!Snapshots.empty());
-        Y_ABORT_UNLESS(version.IsZero());
-        return Snapshots.begin()->second; // For old compaction logic compatibility
-    }
-
-    ISnapshotSchema::TPtr GetLastSchema() const {
-        Y_ABORT_UNLESS(!Snapshots.empty());
-        return Snapshots.rbegin()->second;
-    }
-
-    bool IsEmpty() const {
-        return Snapshots.empty();
-    }
-
-    const std::shared_ptr<arrow::Schema>& GetPrimaryKey() const noexcept {
-        return PrimaryKey;
-    }
-
-    void AddIndex(const TSnapshot& snapshot, TIndexInfo&& indexInfo) {
-        if (Snapshots.empty()) {
-            PrimaryKey = indexInfo.GetPrimaryKey();
-        } else {
-            Y_ABORT_UNLESS(PrimaryKey->Equals(indexInfo.GetPrimaryKey()));
-        }
-
-        auto newVersion = indexInfo.GetVersion();
-        auto itVersion = SnapshotByVersion.emplace(newVersion, std::make_shared<TSnapshotSchema>(std::move(indexInfo), snapshot));
-        if (!itVersion.second) {
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("message", "Skip registered version")("version", LastSchemaVersion);
-        }
-        auto itSnap = Snapshots.emplace(snapshot, itVersion.first->second);
-        Y_ABORT_UNLESS(itSnap.second);
-        LastSchemaVersion = std::max(newVersion, LastSchemaVersion);
-    }
-};
-
-
 class IColumnEngine {
 protected:
     virtual void DoRegisterTable(const ui64 pathId) = 0;
@@ -361,7 +296,8 @@ public:
     virtual ~IColumnEngine() = default;
 
     virtual const TVersionedIndex& GetVersionedIndex() const = 0;
-    virtual const std::shared_ptr<arrow::Schema>& GetReplaceKey() const { return GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetReplaceKey(); }
+    virtual std::shared_ptr<TVersionedIndex> CopyVersionedIndexPtr() const = 0;
+    virtual const std::shared_ptr<arrow::Schema>& GetReplaceKey() const;
 
     virtual bool HasDataInPathId(const ui64 pathId) const = 0;
     virtual bool Load(IDbWrapper& db) = 0;
@@ -372,18 +308,20 @@ public:
     virtual std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot,
                                                 const TPKRangesFilter& pkRangesFilter) const = 0;
     virtual std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept = 0;
-    virtual std::shared_ptr<TColumnEngineChanges> StartCompaction(const TCompactionLimits& limits, const THashSet<TPortionAddress>& busyPortions) noexcept = 0;
-    virtual std::shared_ptr<TCleanupColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, THashSet<ui64>& pathsToDrop,
-                                                               ui32 maxRecords) noexcept = 0;
-    virtual std::shared_ptr<TTTLColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
-        const THashSet<TPortionAddress>& busyPortions, const ui64 memoryUsageLimit) noexcept = 0;
+    virtual std::shared_ptr<TColumnEngineChanges> StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
+    virtual std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshot& snapshot, const THashSet<ui64>& pathsToDrop,
+        const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
+    virtual std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(THashSet<ui64>& pathsToDrop) noexcept = 0;
+    virtual std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
+        const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit) noexcept = 0;
     virtual bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) = 0;
+    virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema) = 0;
     virtual const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const = 0;
     virtual const TColumnEngineStats& GetTotalStats() = 0;
     virtual ui64 MemoryUsage() const { return 0; }
     virtual TSnapshot LastUpdate() const { return TSnapshot::Zero(); }
-    virtual void OnTieringModified(std::shared_ptr<NColumnShard::TTiersManager> manager, const NColumnShard::TTtl& ttl) = 0;
+    virtual void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) = 0;
 };
 
 }

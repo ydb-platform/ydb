@@ -13,6 +13,7 @@ from typing import Any, Iterable, Tuple, overload
 
 from hypothesis.errors import InvalidArgument
 from hypothesis.internal.conjecture import utils as cu
+from hypothesis.internal.conjecture.engine import BUFFER_SIZE
 from hypothesis.internal.conjecture.junkdrawer import LazySequenceCopy
 from hypothesis.internal.conjecture.utils import combine_labels
 from hypothesis.internal.filtering import get_integer_predicate_bounds
@@ -22,7 +23,7 @@ from hypothesis.strategies._internal.strategies import (
     T4,
     T5,
     Ex,
-    MappedSearchStrategy,
+    MappedStrategy,
     SearchStrategy,
     T,
     check_strategy,
@@ -147,6 +148,13 @@ class ListStrategy(SearchStrategy):
             0.5 * (self.min_size + self.max_size),
         )
         self.element_strategy = elements
+        if min_size > BUFFER_SIZE:
+            raise InvalidArgument(
+                f"{self!r} can never generate an example, because min_size is larger "
+                "than Hypothesis supports.  Including it is at best slowing down your "
+                "tests for no benefit; at worst making them fail (maybe flakily) with "
+                "a HealthCheck error."
+            )
 
     def calc_label(self):
         return combine_labels(self.class_label, self.element_strategy.label)
@@ -188,8 +196,9 @@ class ListStrategy(SearchStrategy):
         return result
 
     def __repr__(self):
-        return "{}({!r}, min_size={!r}, max_size={!r})".format(
-            self.__class__.__name__, self.element_strategy, self.min_size, self.max_size
+        return (
+            f"{self.__class__.__name__}({self.element_strategy!r}, "
+            f"min_size={self.min_size:_}, max_size={self.max_size:_})"
         )
 
     def filter(self, condition):
@@ -206,6 +215,9 @@ class ListStrategy(SearchStrategy):
             new = copy.copy(self)
             new.min_size = max(self.min_size, kwargs.get("min_value", self.min_size))
             new.max_size = min(self.max_size, kwargs.get("max_value", self.max_size))
+            # Unsatisfiable filters are easiest to understand without rewriting.
+            if new.min_size > new.max_size:
+                return SearchStrategy.filter(self, condition)
             # Recompute average size; this is cheaper than making it into a property.
             new.average_size = min(
                 max(new.min_size * 2, new.min_size + 5),
@@ -297,7 +309,7 @@ class UniqueSampledListStrategy(UniqueListStrategy):
         return result
 
 
-class FixedKeysDictStrategy(MappedSearchStrategy):
+class FixedKeysDictStrategy(MappedStrategy):
     """A strategy which produces dicts with a fixed set of keys, given a
     strategy for each of their equivalent values.
 
@@ -306,18 +318,18 @@ class FixedKeysDictStrategy(MappedSearchStrategy):
     """
 
     def __init__(self, strategy_dict):
-        self.dict_type = type(strategy_dict)
+        dict_type = type(strategy_dict)
         self.keys = tuple(strategy_dict.keys())
-        super().__init__(strategy=TupleStrategy(strategy_dict[k] for k in self.keys))
+        super().__init__(
+            strategy=TupleStrategy(strategy_dict[k] for k in self.keys),
+            pack=lambda value: dict_type(zip(self.keys, value)),
+        )
 
     def calc_is_empty(self, recur):
         return recur(self.mapped_strategy)
 
     def __repr__(self):
         return f"FixedKeysDictStrategy({self.keys!r}, {self.mapped_strategy!r})"
-
-    def pack(self, value):
-        return self.dict_type(zip(self.keys, value))
 
 
 class FixedAndOptionalKeysDictStrategy(SearchStrategy):

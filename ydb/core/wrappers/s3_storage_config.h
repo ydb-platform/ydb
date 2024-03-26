@@ -8,6 +8,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
+#include <ydb/public/api/protos/ydb_export.pb.h>
 
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/auth/AWSCredentials.h>
 

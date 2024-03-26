@@ -855,17 +855,17 @@ private:
     }
 
     void HandleWork(TEvPrivate::TEvTakeResourcesSnapshot::TPtr& ev) {
-        if (WbState.StateStorageGroupId == std::numeric_limits<ui32>::max()) {
+        if (WbState.DomainNotFound) {
             LOG_E("Can not take resources snapshot, ssGroupId not set. Tenant: " << WbState.Tenant
-                << ", Board: " << WbState.BoardPath << ", ssGroupId: " << WbState.StateStorageGroupId);
+                << ", Board: " << WbState.BoardPath);
             ev->Get()->Callback({});
             return;
         }
 
-        LOG_D("Create Snapshot actor, board: " << WbState.BoardPath << ", ssGroupId: " << WbState.StateStorageGroupId);
+        LOG_D("Create Snapshot actor, board: " << WbState.BoardPath);
 
         Register(
-            CreateTakeResourcesSnapshotActor(WbState.BoardPath, WbState.StateStorageGroupId, std::move(ev->Get()->Callback)));
+            CreateTakeResourcesSnapshotActor(WbState.BoardPath, std::move(ev->Get()->Callback)));
     }
 
     void HandleWork(TEvResourceBroker::TEvConfigResponse::TPtr& ev) {
@@ -920,14 +920,11 @@ private:
         WbState.Tenant = tenant;
         WbState.BoardPath = MakeKqpRmBoardPath(tenant);
 
-        if (auto* domainInfo = AppData()->DomainsInfo->GetDomainByName(ExtractDomain(tenant))) {
-            WbState.StateStorageGroupId = domainInfo->DefaultStateStorageGroup;
-        } else {
-            WbState.StateStorageGroupId = std::numeric_limits<ui32>::max();
+        if (auto *domain = AppData()->DomainsInfo->GetDomain(); domain->Name != ExtractDomain(tenant)) {
+            WbState.DomainNotFound = true;
         }
 
-        LOG_I("Received tenant pool status, serving tenant: " << tenant << ", board: " << WbState.BoardPath
-            << ", ssGroupId: " << WbState.StateStorageGroupId);
+        LOG_I("Received tenant pool status, serving tenant: " << tenant << ", board: " << WbState.BoardPath);
 
         PublishResourceUsage("tenant updated");
     }
@@ -1193,20 +1190,19 @@ private:
 
         WbState.BoardPublisherActorId = TActorId();
 
-        if (WbState.StateStorageGroupId == std::numeric_limits<ui32>::max()) {
+        if (WbState.DomainNotFound) {
             LOG_E("Can not find default state storage group for database " << WbState.Tenant);
             return;
         }
 
         auto boardPublisher = CreateBoardPublishActor(WbState.BoardPath, payload.SerializeAsString(), SelfId(),
-            WbState.StateStorageGroupId, /* ttlMs */ 0, /* reg */ true);
+            /* ttlMs */ 0, /* reg */ true);
         WbState.BoardPublisherActorId = Register(boardPublisher);
 
         WbState.LastPublishTime = now;
 
         LOG_I("Publish resource usage for '" << WbState.BoardPath << "' at " << WbState.BoardPublisherActorId
-            << ", reason: " << reason << ", groupId: " << WbState.StateStorageGroupId
-            << ", payload: " << payload.ShortDebugString());
+            << ", reason: " << reason << ", payload: " << payload.ShortDebugString());
     }
 
 private:
@@ -1216,7 +1212,7 @@ private:
     struct TWhiteBoardState {
         TString Tenant;
         TString BoardPath;
-        ui32 StateStorageGroupId = std::numeric_limits<ui32>::max();
+        bool DomainNotFound = false;
         TActorId BoardPublisherActorId;
         std::optional<TInstant> LastPublishTime;
     };

@@ -283,6 +283,25 @@ TSharedRef PushEnvelope(const TSharedRef& data)
     return MergeRefsToRef<TDefaultSharedBlobTag>(std::vector<TSharedRef>{headerRef, data});
 }
 
+TSharedRef PushEnvelope(const TSharedRef& data, NCompression::ECodec codec)
+{
+    NYT::NProto::TSerializedMessageEnvelope envelope;
+    envelope.set_codec(static_cast<int>(codec));
+
+    TEnvelopeFixedHeader header;
+    header.EnvelopeSize = CheckedCastToI32(envelope.ByteSizeLong());
+    header.MessageSize = static_cast<ui32>(data.Size());
+
+    auto headerRef = TSharedMutableRef::Allocate(
+        sizeof (header) +
+        header.EnvelopeSize);
+
+    memcpy(headerRef.Begin(), &header, sizeof(header));
+    YT_VERIFY(envelope.SerializeToArray(headerRef.Begin() + sizeof(header), header.EnvelopeSize));
+
+    return MergeRefsToRef<TDefaultSharedBlobTag>(std::vector<TSharedRef>{headerRef, data});
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TProtobufExtensionRegistry
@@ -383,7 +402,7 @@ void FromProto(TExtensionSet* extensionSet, const NYT::NProto::TExtensionSet& pr
         if (IProtobufExtensionRegistry::Get()->FindDescriptorByTag(protoExtension.tag())) {
             TExtension extension{
                 .Tag = protoExtension.tag(),
-                .Data = protoExtension.data()
+                .Data = FromProto<TString>(protoExtension.data()),
             };
             extensionSet->Extensions.push_back(std::move(extension));
         }
@@ -431,11 +450,15 @@ void Deserialize(TExtensionSet& extensionSet, NYTree::INodePtr node)
         auto& extension = extensionSet.Extensions.emplace_back();
         extension.Tag = extensionDescriptor->Tag;
 
-        StringOutputStream stream(&extension.Data);
+        TProtobufString serializedExtension;
+        StringOutputStream stream(&serializedExtension);
+
         auto writer = CreateProtobufWriter(
             &stream,
             ReflectProtobufMessageType(extensionDescriptor->MessageDescriptor));
-        VisitTree(value, writer.get(), /*stable=*/false);
+        VisitTree(value, writer.get(), /*stable*/ false);
+
+        extension.Data = FromProto<TString>(std::move(serializedExtension));
     }
 }
 
@@ -456,9 +479,9 @@ TString DumpProto(::google::protobuf::Message& message)
 {
     ::google::protobuf::TextFormat::Printer printer;
     printer.SetSingleLineMode(true);
-    TString result;
+    TProtobufString result;
     YT_VERIFY(printer.PrintToString(message, &result));
-    return result;
+    return FromProto<TString>(std::move(result));
 }
 
 } // namespace
@@ -536,6 +559,61 @@ google::protobuf::Timestamp GetProtoNow()
     // Unfortunately TimeUtil::GetCurrentTime provides only one second accuracy, so we use TInstant::Now.
     return google::protobuf::util::TimeUtil::MicrosecondsToTimestamp(TInstant::Now().MicroSeconds());
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+TProtobufInputStream::TProtobufInputStream(IInputStream* stream)
+    : Stream_(stream)
+{ }
+
+int TProtobufInputStream::Read(void* buffer, int size)
+{
+    try {
+        return Stream_->Read(buffer, size);
+    } catch (...) {
+        HasError_ = true;
+    }
+
+    return -1;
+}
+
+bool TProtobufInputStream::HasError() const
+{
+    return HasError_;
+}
+
+TProtobufInputStreamAdaptor::TProtobufInputStreamAdaptor(IInputStream* stream)
+    : TProtobufInputStream(stream)
+    , CopyingInputStreamAdaptor(this)
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
+TProtobufOutputStream::TProtobufOutputStream(IOutputStream* stream)
+    : Stream_(stream)
+{ }
+
+bool TProtobufOutputStream::Write(const void* buffer, int size)
+{
+    try {
+        Stream_->Write(buffer, size);
+        return true;
+    } catch (...) {
+        HasError_ = true;
+    }
+
+    return false;
+}
+
+bool TProtobufOutputStream::HasError() const
+{
+    return HasError_;
+}
+
+TProtobufOutputStreamAdaptor::TProtobufOutputStreamAdaptor(IOutputStream* stream)
+    : TProtobufOutputStream(stream)
+    , CopyingOutputStreamAdaptor(this)
+{ }
 
 ////////////////////////////////////////////////////////////////////////////////
 

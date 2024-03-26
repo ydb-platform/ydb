@@ -34,10 +34,10 @@
 #include <mutex>
 #include <atomic>
 #include <Activation.h>
-#include <wrl\client.h>
-#include <wrl\event.h>
-#include <wrl\wrappers\corewrappers.h>
-#include <wrl\ftm.h>
+#include <wrl/client.h>
+#include <wrl/event.h>
+#include <wrl/wrappers/corewrappers.h>
+#include <wrl/ftm.h>
 #include <windows.system.threading.h>
 #pragma comment(lib, "runtimeobject.lib")
 #endif

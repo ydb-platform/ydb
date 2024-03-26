@@ -155,7 +155,7 @@ public:
 
             switch (DescribeResult->GetRecord().GetStatus()) {
             case NKikimrScheme::StatusAccessDenied:
-                headers = HTTPFORBIDDENJSON;
+                headers = Viewer->GetHTTPFORBIDDEN(Event->Get());
                 break;
             default:
                 break;

@@ -1,4 +1,3 @@
-#include "events.h"
 #include "replica.h"
 #include "ut_helpers.h"
 
@@ -119,7 +118,7 @@ void TReplicaTest::HandshakeWithStaleGeneration() {
     Context->HandshakeReplica(Replica, edge, 1, 2);
     Context->HandshakeReplica(Replica, edge, 1, 1, false);
 
-    ui64 counter = Context->CountEdgeEvents<TSchemeBoardEvents::TEvHandshakeResponse>();
+    ui64 counter = Context->CountEdgeEvents<NInternalEvents::TEvHandshakeResponse>();
     UNIT_ASSERT_VALUES_EQUAL(0, counter);
 }
 
@@ -283,14 +282,14 @@ void TReplicaTest::Subscribe() {
 
     Context->SubscribeReplica(Replica, edge, "path", false);
     {
-        auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(edge);
+        auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(edge);
         UNIT_ASSERT_VALUES_EQUAL("path", ev->Get()->GetRecord().GetPath());
         UNIT_ASSERT_VALUES_EQUAL(false, ev->Get()->GetRecord().GetIsDeletion());
     }
 
     Context->Send(Replica, edge, GenerateUpdate(describe, 1, 1, true));
     {
-        auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(edge);
+        auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(edge);
         UNIT_ASSERT_VALUES_EQUAL("path", ev->Get()->GetRecord().GetPath());
         UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion());
     }
@@ -301,7 +300,7 @@ void TReplicaTest::SubscribeUnknownPath() {
 
     Context->SubscribeReplica(Replica, edge, "path", false);
     {
-        auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(edge);
+        auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(edge);
         UNIT_ASSERT_VALUES_EQUAL("path", ev->Get()->GetRecord().GetPath());
         UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion());
     }
@@ -321,13 +320,13 @@ void TReplicaTest::Unsubscribe() {
     Context->SubscribeReplica(Replica, subscriberB, "path");
 
     Context->Send(Replica, edge, GenerateUpdate(describe, 1, 1));
-    ui64 counter = Context->CountEdgeEvents<TSchemeBoardEvents::TEvNotify>();
+    ui64 counter = Context->CountEdgeEvents<NInternalEvents::TEvNotify>();
     UNIT_ASSERT_VALUES_EQUAL(2, counter);
 
     Context->UnsubscribeReplica(Replica, subscriberA, "path");
 
     Context->Send(Replica, edge, GenerateUpdate(describe, 1, 1, true));
-    counter = Context->CountEdgeEvents<TSchemeBoardEvents::TEvNotify>();
+    counter = Context->CountEdgeEvents<NInternalEvents::TEvNotify>();
     UNIT_ASSERT_VALUES_EQUAL(1, counter);
 }
 
@@ -377,12 +376,12 @@ void TReplicaTest::Merge() {
     Context->HandshakeReplica(Replica, populator);
 
     Context->Send(Replica, populator, GenerateUpdate(describe));
-    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriberA);
-    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriberB);
+    Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(subscriberA);
+    Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(subscriberB);
 
     Context->Send(Replica, populator, GenerateUpdate(describe, 1, 1, true));
-    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriberA);
-    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriberB);
+    Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(subscriberA);
+    Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(subscriberB);
 }
 
 void TReplicaTest::DoubleDelete() {
@@ -395,10 +394,10 @@ void TReplicaTest::DoubleDelete() {
     Context->SubscribeReplica(Replica, subscriberA, "path");
 
     Context->Send(Replica, populator, GenerateUpdate(describe));
-    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriberA);
+    Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(subscriberA);
 
     Context->Send(Replica, populator, GenerateUpdate(describe, 1, 1, true));
-    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriberA);
+    Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(subscriberA);
 
     const TActorId subscriberB = Context->AllocateEdgeActor();
     Context->SubscribeReplica(Replica, subscriberB, "path");
@@ -414,8 +413,8 @@ void TReplicaTest::SyncVersion() {
     Context->Send(Replica, edge, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1), version)));
 
     Context->SubscribeReplica(Replica, edge, "path");
-    Context->Send(Replica, edge, new TSchemeBoardEvents::TEvSyncVersionRequest("path"), 0, 1);
-    auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvSyncVersionResponse>(edge);
+    Context->Send(Replica, edge, new NInternalEvents::TEvSyncVersionRequest("path"), 0, 1);
+    auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvSyncVersionResponse>(edge);
 
     UNIT_ASSERT_VALUES_EQUAL(version, ev->Get()->Record.GetVersion());
     UNIT_ASSERT_VALUES_EQUAL(false, ev->Get()->Record.GetPartial());
@@ -480,12 +479,12 @@ void TReplicaTest::AckNotifications() {
     Context->HandshakeReplica(Replica, populator);
 
     Context->Send(Replica, populator, GenerateUpdate(describe));
-    Context->Send(Replica, subscriber, new TSchemeBoardEvents::TEvNotifyAck(0));
-    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriber);
+    Context->Send(Replica, subscriber, new NInternalEvents::TEvNotifyAck(0));
+    Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(subscriber);
 
     Context->Send(Replica, populator, GenerateUpdate(describe, 1, 1, true));
-    Context->Send(Replica, subscriber, new TSchemeBoardEvents::TEvNotifyAck(1));
-    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriber);
+    Context->Send(Replica, subscriber, new NInternalEvents::TEvNotifyAck(1));
+    Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(subscriber);
 }
 
 void TReplicaTest::AckNotificationsUponPathRecreation() {
@@ -503,7 +502,7 @@ void TReplicaTest::AckNotificationsUponPathRecreation() {
     // update to version 3 & omit ack
     Context->Send(Replica, populator, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1), 3)));
     {
-        auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriber);
+        auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(subscriber);
         UNIT_ASSERT_VALUES_EQUAL(1, ev->Get()->GetRecord().GetLocalPathId());
         UNIT_ASSERT_VALUES_EQUAL(3, ev->Get()->GetRecord().GetVersion());
     }
@@ -511,10 +510,10 @@ void TReplicaTest::AckNotificationsUponPathRecreation() {
     // recreate path with version 1
     Context->Send(Replica, populator, GenerateUpdate(GenerateDescribe("path", TPathId(1, 2), 1)));
     // ack previous version
-    Context->Send(Replica, subscriber, new TSchemeBoardEvents::TEvNotifyAck(3));
+    Context->Send(Replica, subscriber, new NInternalEvents::TEvNotifyAck(3));
     // should receive notification about recreated path
     while (true) {
-        auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriber);
+        auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(subscriber);
 
         if (ev->Get()->GetRecord().GetIsDeletion()) {
             // deletion of previous version
@@ -525,7 +524,7 @@ void TReplicaTest::AckNotificationsUponPathRecreation() {
             break;
         }
 
-        Context->Send(Replica, subscriber, new TSchemeBoardEvents::TEvNotifyAck(ev->Get()->GetRecord().GetVersion()));
+        Context->Send(Replica, subscriber, new NInternalEvents::TEvNotifyAck(ev->Get()->GetRecord().GetVersion()));
     }
 }
 
@@ -535,7 +534,7 @@ void TReplicaTest::StrongNotificationAfterCommit() {
 
     Context->SubscribeReplica(Replica, subscriber, "path", false, 1);
     {
-        auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriber);
+        auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(subscriber);
         UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion());
         UNIT_ASSERT_VALUES_EQUAL(false, ev->Get()->GetRecord().GetStrong());
     }
@@ -543,7 +542,7 @@ void TReplicaTest::StrongNotificationAfterCommit() {
     Context->HandshakeReplica(Replica, populator);
     Context->CommitReplica(Replica, populator, 1, 1);
     {
-        auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriber);
+        auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(subscriber);
         UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion());
         UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetStrong());
     }
@@ -678,13 +677,11 @@ void TReplicaCombinationTest::UpdatesCombinationsDomainRoot() {
                 UNIT_ASSERT_VALUES_EQUAL(std::get<2>(winId), TPathId(ev->Get()->GetRecord().GetPathOwnerId(), ev->Get()->GetRecord().GetLocalPathId()));
                 UNIT_ASSERT_VALUES_EQUAL(std::get<3>(winId), ev->Get()->GetRecord().GetVersion());
 
-                UNIT_ASSERT(ev->Get()->GetRecord().HasDescribeSchemeResult());
-                const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->GetRecord().GetDescribeSchemeResult();
-                auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-                UNIT_ASSERT_VALUES_EQUAL(std::get<0>(winId), TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
+                UNIT_ASSERT(ev->Get()->GetRecord().HasDescribeSchemeResultSerialized());
+                UNIT_ASSERT(ev->Get()->GetRecord().HasPathSubdomainPathId());
+
+                UNIT_ASSERT_VALUES_EQUAL(std::get<0>(winId), PathIdFromPathId(ev->Get()->GetRecord().GetPathSubdomainPathId()));
             }
-
-
         }
     }
 }
@@ -731,7 +728,7 @@ void TReplicaCombinationTest::MigratedPathRecreation() {
          << " DomainId: " << std::get<0>(winId)
          << " IsDeletion: " << std::get<1>(winId)
          << " PathId: " << std::get<2>(winId)
-         << " Verions: " << std::get<3>(winId)
+         << " Versions: " << std::get<3>(winId)
          << Endl;
 
     UNIT_ASSERT_VALUES_EQUAL("/root/db/dir_inside", ev->Get()->GetRecord().GetPath());
@@ -740,10 +737,10 @@ void TReplicaCombinationTest::MigratedPathRecreation() {
     UNIT_ASSERT_VALUES_EQUAL(std::get<2>(winId), TPathId(ev->Get()->GetRecord().GetPathOwnerId(), ev->Get()->GetRecord().GetLocalPathId()));
     UNIT_ASSERT_VALUES_EQUAL(std::get<3>(winId), ev->Get()->GetRecord().GetVersion());
 
-    UNIT_ASSERT(ev->Get()->GetRecord().HasDescribeSchemeResult());
-    const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->GetRecord().GetDescribeSchemeResult();
-    auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-    UNIT_ASSERT_VALUES_EQUAL(std::get<0>(winId), TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
+    UNIT_ASSERT(ev->Get()->GetRecord().HasDescribeSchemeResultSerialized());
+    UNIT_ASSERT(ev->Get()->GetRecord().HasPathSubdomainPathId());
+
+    UNIT_ASSERT_VALUES_EQUAL(std::get<0>(winId), PathIdFromPathId(ev->Get()->GetRecord().GetPathSubdomainPathId()));
 }
 
 void TReplicaCombinationTest::UpdatesCombinationsMigratedPath() {
@@ -776,9 +773,6 @@ void TReplicaCombinationTest::UpdatesCombinationsMigratedPath() {
             auto finalSubscriber = Context->AllocateEdgeActor();
             auto ev = Context->SubscribeReplica(replica, finalSubscriber, "/Root/Tenant/table_inside");
 
-            const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->GetRecord().GetDescribeSchemeResult();
-            auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-
             Cerr << "=========== Left ==" << argsLeft.GenerateDescribe().ShortDebugString()
                  << "\n=========== Right ==" << argsRight.GenerateDescribe().ShortDebugString()
                  << "\n=========== super id =="
@@ -792,7 +786,7 @@ void TReplicaCombinationTest::UpdatesCombinationsMigratedPath() {
                  << " PathID: " <<  TPathId(ev->Get()->GetRecord().GetPathOwnerId(), ev->Get()->GetRecord().GetLocalPathId())
                  << " deleted: " <<  ev->Get()->GetRecord().GetIsDeletion()
                  << " version: " << ev->Get()->GetRecord().GetVersion()
-                 << " domainId: " <<  TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId())
+                 << " domainId: " << PathIdFromPathId(ev->Get()->GetRecord().GetPathSubdomainPathId())
                  << Endl;
 
             if (argsLeft.PathId == TPathId(gssID, gssLocalId) && !argsLeft.IsDeletion && argsLeft.DomainId == TPathId(gssID, 2)
@@ -813,10 +807,10 @@ void TReplicaCombinationTest::UpdatesCombinationsMigratedPath() {
                 UNIT_ASSERT_VALUES_EQUAL(std::get<2>(argsRight.GetSuperId()), TPathId(ev->Get()->GetRecord().GetPathOwnerId(), ev->Get()->GetRecord().GetLocalPathId()));
                 UNIT_ASSERT_VALUES_EQUAL(std::get<3>(argsRight.GetSuperId()), ev->Get()->GetRecord().GetVersion());
 
-                UNIT_ASSERT(ev->Get()->GetRecord().HasDescribeSchemeResult());
-                const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->GetRecord().GetDescribeSchemeResult();
-                auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-                UNIT_ASSERT_VALUES_EQUAL(std::get<0>(argsRight.GetSuperId()), TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
+                UNIT_ASSERT(ev->Get()->GetRecord().HasDescribeSchemeResultSerialized());
+                UNIT_ASSERT(ev->Get()->GetRecord().HasPathSubdomainPathId());
+
+                UNIT_ASSERT_VALUES_EQUAL(std::get<0>(argsRight.GetSuperId()), PathIdFromPathId(ev->Get()->GetRecord().GetPathSubdomainPathId()));
 
                 continue;
             }
@@ -832,10 +826,10 @@ void TReplicaCombinationTest::UpdatesCombinationsMigratedPath() {
                 UNIT_ASSERT_VALUES_EQUAL(std::get<2>(argsLeft.GetSuperId()), TPathId(ev->Get()->GetRecord().GetPathOwnerId(), ev->Get()->GetRecord().GetLocalPathId()));
                 UNIT_ASSERT_VALUES_EQUAL(std::get<3>(argsLeft.GetSuperId()), ev->Get()->GetRecord().GetVersion());
 
-                UNIT_ASSERT(ev->Get()->GetRecord().HasDescribeSchemeResult());
-                const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->GetRecord().GetDescribeSchemeResult();
-                auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-                UNIT_ASSERT_VALUES_EQUAL(std::get<0>(argsLeft.GetSuperId()), TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
+                UNIT_ASSERT(ev->Get()->GetRecord().HasDescribeSchemeResultSerialized());
+                UNIT_ASSERT(ev->Get()->GetRecord().HasPathSubdomainPathId());
+
+                UNIT_ASSERT_VALUES_EQUAL(std::get<0>(argsLeft.GetSuperId()), PathIdFromPathId(ev->Get()->GetRecord().GetPathSubdomainPathId()));
 
                 continue;
             }
@@ -882,10 +876,10 @@ void TReplicaCombinationTest::UpdatesCombinationsMigratedPath() {
                 UNIT_ASSERT_VALUES_EQUAL(std::get<2>(winId), TPathId(ev->Get()->GetRecord().GetPathOwnerId(), ev->Get()->GetRecord().GetLocalPathId()));
                 UNIT_ASSERT_VALUES_EQUAL(std::get<3>(winId), ev->Get()->GetRecord().GetVersion());
 
-                UNIT_ASSERT(ev->Get()->GetRecord().HasDescribeSchemeResult());
-                const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->GetRecord().GetDescribeSchemeResult();
-                auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-                UNIT_ASSERT_VALUES_EQUAL(std::get<0>(winId), TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
+                UNIT_ASSERT(ev->Get()->GetRecord().HasDescribeSchemeResultSerialized());
+                UNIT_ASSERT(ev->Get()->GetRecord().HasPathSubdomainPathId());
+
+                UNIT_ASSERT_VALUES_EQUAL(std::get<0>(winId), PathIdFromPathId(ev->Get()->GetRecord().GetPathSubdomainPathId()));
             }
         }
     }

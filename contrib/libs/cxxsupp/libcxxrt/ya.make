@@ -11,9 +11,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2023-10-11)
+VERSION(2024-02-06)
 
-ORIGINAL_SOURCE(https://github.com/libcxxrt/libcxxrt/archive/03c83f5a57be8c5b1a29a68de5638744f17d28ba.tar.gz)
+ORIGINAL_SOURCE(https://github.com/libcxxrt/libcxxrt/archive/bd4fa85d7f772f2ad32146d5681c91612fc93842.tar.gz)
 
 ADDINCL(
     contrib/libs/cxxsupp/libcxxrt
@@ -23,14 +23,10 @@ NO_COMPILER_WARNINGS()
 
 NO_RUNTIME()
 
-CXXFLAGS(
-    -nostdinc++
-)
+CXXFLAGS(-nostdinc++)
 
 IF (CXX_UNWIND == "glibcxx_dynamic" OR ARCH_PPC64LE)
-    LDFLAGS(
-        -lgcc_s
-    )
+    LDFLAGS(-lgcc_s)
 ELSE()
     PEERDIR(
         contrib/libs/libunwind
@@ -39,7 +35,6 @@ ENDIF()
 
 IF (SANITIZER_TYPE == undefined OR FUZZING)
     NO_SANITIZE()
-
     NO_SANITIZE_COVERAGE()
 ENDIF()
 

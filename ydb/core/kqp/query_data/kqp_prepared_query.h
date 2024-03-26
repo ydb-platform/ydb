@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
 
 #include <util/generic/vector.h>
 

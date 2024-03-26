@@ -17,11 +17,11 @@ struct TStatHyperLogLog {
     // TODO:
 };
 
-// TODO: other stats
 enum EStatType {
     SIMPLE = 0,
     HYPER_LOG_LOG = 1,
-    // TODO...
+    COUNT_MIN_SKETCH = 2,
+    // ...
 };
 
 struct TRequest {
@@ -55,6 +55,11 @@ struct TEvStatistics {
         EvRequestStats,
         EvPropagateStatistics,
         EvStatisticsIsDisabled,
+        EvPropagateStatisticsResponse,
+
+        EvStatTableCreationResponse,
+        EvSaveStatisticsQueryResponse,
+        EvLoadStatisticsQueryResponse,
 
         EvEnd
     };
@@ -115,6 +120,35 @@ struct TEvStatistics {
         NKikimrStat::TEvStatisticsIsDisabled,
         EvStatisticsIsDisabled>
     {};
+
+    struct TEvPropagateStatisticsResponse : public TEventPB<
+        TEvPropagateStatisticsResponse,
+        NKikimrStat::TEvPropagateStatisticsResponse,
+        EvPropagateStatisticsResponse>
+    {};
+
+    struct TEvStatTableCreationResponse : public TEventLocal<
+        TEvStatTableCreationResponse,
+        EvStatTableCreationResponse>
+    {
+        bool Success = true;
+    };
+
+    struct TEvSaveStatisticsQueryResponse : public TEventLocal<
+        TEvSaveStatisticsQueryResponse,
+        EvSaveStatisticsQueryResponse>
+    {
+        bool Success = true;
+    };
+
+    struct TEvLoadStatisticsQueryResponse : public TEventLocal<
+        TEvLoadStatisticsQueryResponse,
+        EvLoadStatisticsQueryResponse>
+    {
+        bool Success = true;
+        TMaybe<TString> Data;
+    };
+
 };
 
 } // NStat

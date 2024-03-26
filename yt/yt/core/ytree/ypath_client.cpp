@@ -243,37 +243,23 @@ bool TYPathResponse::TryDeserializeBody(TRef /*data*/, std::optional<NCompressio
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifdef YT_USE_VANILLA_PROTOBUF
-
-TYPath GetRequestTargetYPath(const NRpc::NProto::TRequestHeader& header)
+TYPathMaybeRef GetRequestTargetYPath(const NRpc::NProto::TRequestHeader& header)
 {
     const auto& ypathExt = header.GetExtension(NProto::TYPathHeaderExt::ypath_header_ext);
-    return FromProto<TYPath>(ypathExt.target_path());
+    // NB: If Arcadia protobuf is used, the cast is no-op `const TYPath&` -> `const TYPath&`.
+    // If vanilla protobuf is used, the cast is `std::string` -> `TString`.
+    // So in both cases the cast is correct and the most effective possible.
+    return TYPathMaybeRef(ypathExt.target_path());
 }
 
-TYPath GetOriginalRequestTargetYPath(const NRpc::NProto::TRequestHeader& header)
+TYPathMaybeRef GetOriginalRequestTargetYPath(const NRpc::NProto::TRequestHeader& header)
 {
     const auto& ypathExt = header.GetExtension(NProto::TYPathHeaderExt::ypath_header_ext);
+    // NB: TYPathMaybeRef cast is described above in `GetRequestTargetYPath`.
     return ypathExt.has_original_target_path()
-        ? FromProto<TYPath>(ypathExt.original_target_path())
-        : FromProto<TYPath>(ypathExt.target_path());
+        ? TYPathMaybeRef(ypathExt.original_target_path())
+        : TYPathMaybeRef(ypathExt.target_path());
 }
-
-#else
-
-const TYPath& GetRequestTargetYPath(const NRpc::NProto::TRequestHeader& header)
-{
-    const auto& ypathExt = header.GetExtension(NProto::TYPathHeaderExt::ypath_header_ext);
-    return ypathExt.target_path();
-}
-
-const TYPath& GetOriginalRequestTargetYPath(const NRpc::NProto::TRequestHeader& header)
-{
-    const auto& ypathExt = header.GetExtension(NProto::TYPathHeaderExt::ypath_header_ext);
-    return ypathExt.has_original_target_path() ? ypathExt.original_target_path() : ypathExt.target_path();
-}
-
-#endif
 
 void SetRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPath path)
 {
@@ -403,7 +389,7 @@ void ExecuteVerb(
     SetRequestTargetYPath(requestHeader.get(), suffixPath);
     context->SetRequestHeader(std::move(requestHeader));
 
-    // This should never throw.
+    // This should never throw or yield.
     suffixService->Invoke(context);
 }
 
@@ -428,7 +414,7 @@ TString SyncYPathGetKey(const IYPathServicePtr& service, const TYPath& path)
     auto future = ExecuteVerb(service, request);
     auto optionalResult = future.TryGetUnique();
     YT_VERIFY(optionalResult);
-    return optionalResult->ValueOrThrow()->value();
+    return FromProto<TString>(optionalResult->ValueOrThrow()->value());
 }
 
 TYsonString SyncYPathGet(
@@ -912,29 +898,29 @@ TNodeWalkOptions GetNodeByYPathOptions {
 };
 
 TNodeWalkOptions FindNodeByYPathOptions {
-    .MissingAttributeHandler = [] (const TString& /* key */) {
+    .MissingAttributeHandler = [] (const TString& /*key*/) {
         return nullptr;
     },
-    .MissingChildKeyHandler = [] (const IMapNodePtr& /* node */, const TString& /* key */) {
+    .MissingChildKeyHandler = [] (const IMapNodePtr& /*node*/, const TString& /*key*/) {
         return nullptr;
     },
-    .MissingChildIndexHandler = [] (const IListNodePtr& /* node */, int /* index */) {
+    .MissingChildIndexHandler = [] (const IListNodePtr& /*node*/, int /*index*/) {
         return nullptr;
     },
     .NodeCannotHaveChildrenHandler = GetNodeByYPathOptions.NodeCannotHaveChildrenHandler
 };
 
 TNodeWalkOptions FindNodeByYPathNoThrowOptions {
-    .MissingAttributeHandler = [] (const TString& /* key */) {
+    .MissingAttributeHandler = [] (const TString& /*key*/) {
         return nullptr;
     },
-    .MissingChildKeyHandler = [] (const IMapNodePtr& /* node */, const TString& /* key */) {
+    .MissingChildKeyHandler = [] (const IMapNodePtr& /*node*/, const TString& /*key*/) {
         return nullptr;
     },
-    .MissingChildIndexHandler = [] (const IListNodePtr& /* node */, int /* index */) {
+    .MissingChildIndexHandler = [] (const IListNodePtr& /*node*/, int /*index*/) {
         return nullptr;
     },
-    .NodeCannotHaveChildrenHandler = [] (const INodePtr& /* node */) {
+    .NodeCannotHaveChildrenHandler = [] (const INodePtr& /*node*/) {
         return nullptr;
     },
 };

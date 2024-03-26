@@ -214,6 +214,18 @@ public:
 
     static void ResetGlobalsUT();
 
+    void EnableMemoryYellowZone() noexcept {
+        IsMemoryYellowZoneReached = true;
+    }
+
+    void DisableMemoryYellowZone() noexcept {
+        IsMemoryYellowZoneReached = false;
+    }
+
+    bool IsMemoryYellowZoneEnabled() const noexcept {
+        return IsMemoryYellowZoneReached;
+    }
+    
 protected:
     void* Alloc(size_t size);
     void Free(void* ptr, size_t size) noexcept;
@@ -221,6 +233,16 @@ protected:
     void UpdatePeaks() {
         PeakAllocated = Max(PeakAllocated, GetAllocated());
         PeakUsed = Max(PeakUsed, GetUsed());
+
+        UpdateMemoryYellowZone();
+    }
+
+    void UpdateMemoryYellowZone() {
+        if (IncreaseMemoryLimitCallback) return;
+
+        if (Limit != 0) {
+            IsMemoryYellowZoneReached = (100 * GetUsed() / Limit) > MemoryYellowZoneThreshold;
+        }
     }
 
     bool TryIncreaseLimit(ui64 required);
@@ -253,6 +275,12 @@ protected:
 
     TIncreaseMemoryLimitCallback IncreaseMemoryLimitCallback;
     const TSourceLocation DebugInfo;
+
+    // Indicates when memory limit is almost reached.
+    bool IsMemoryYellowZoneReached = false;
+    // This theshold is used to determine is memory limit is almost reached.
+    // If TIncreaseMemoryLimitCallback is set this threshold should be ignored.
+    const ui8 MemoryYellowZoneThreshold = 80;
 };
 
 using TAlignedPagePool = TAlignedPagePoolImpl<>;

@@ -1,8 +1,12 @@
 #pragma once
 
+#include <memory>
+
+#include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/compute/common/config.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
+
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 namespace NFq {
@@ -26,10 +30,12 @@ inline std::shared_ptr<NYdb::NTable::TTableClient> CreateNewTableClient(const TS
 
 TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage = nullptr);
 TString GetV1StatFromV2PlanV2(const TString& plan);
+TString GetPrettyStatistics(const TString& statistics);
 
 TString FormatDurationMs(ui64 durationMs);
 TString FormatDurationUs(ui64 durationUs);
 TString FormatInstant(TInstant instant);
+TDuration ParseDuration(TStringBuf str);
 
 struct TPublicStat {
     std::optional<int> MemoryUsageBytes = 0;
@@ -42,5 +48,34 @@ struct TPublicStat {
 };
 
 TPublicStat GetPublicStat(const TString& statistics);
+
+struct IPlanStatProcessor {
+    virtual ~IPlanStatProcessor() = default;
+    virtual Ydb::Query::StatsMode GetStatsMode() = 0;
+    virtual TString ConvertPlan(TString& plan)  = 0;
+    virtual TString GetQueryStat(TString& plan, double& cpuUsage) = 0;
+    virtual TPublicStat GetPublicStat(TString& stat) = 0;
+};
+
+std::unique_ptr<IPlanStatProcessor> CreateStatProcessor(const TString& statViewName);
+
+class PingTaskRequestBuilder {
+public:
+    PingTaskRequestBuilder(const NConfig::TCommonConfig& commonConfig, std::unique_ptr<IPlanStatProcessor>&& processor);
+    Fq::Private::PingTaskRequest Build(
+        const Ydb::TableStats::QueryStats& queryStats, 
+        const NYql::TIssues& issues, 
+        std::optional<FederatedQuery::QueryMeta::ComputeStatus> computeStatus = std::nullopt,
+        std::optional<NYql::NDqProto::StatusIds::StatusCode> pendingStatusCode = std::nullopt
+    );
+    Fq::Private::PingTaskRequest Build(const Ydb::TableStats::QueryStats& queryStats);
+    Fq::Private::PingTaskRequest Build(const TString& queryPlan, const TString& queryAst);
+    NYql::TIssues Issues;
+    double CpuUsage = 0.0;
+    TPublicStat PublicStat;
+private:
+    const TCompressor Compressor;
+    std::unique_ptr<IPlanStatProcessor> Processor;
+};
 
 } // namespace NFq

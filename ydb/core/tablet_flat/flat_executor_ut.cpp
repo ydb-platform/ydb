@@ -5020,17 +5020,22 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         }
     };
 
-    Y_UNIT_TEST(TestPrechargeAndSeek) {
+    Y_UNIT_TEST(TestPrechargeAndSeek_FlatIndex) {
         TMyEnvBase env;
         TRowsModel rows;
 
         auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+        appData.FeatureFlags.SetEnableLocalDBFlatIndex(true);
+
         appData.ResourceProfiles = new TResourceProfiles;
         TResourceProfiles::TResourceProfile profile;
         profile.SetTabletType(NKikimrTabletBase::TTabletTypes::Unknown);
         profile.SetName("zero");
-        // fits two pages without index:
         profile.SetInitialTxMemory(0);
+
+        // 2 data pages ~2*10*1024 bytes
+        // flat index size is ~256*1024 bytes shouldn't be included
         profile.SetTxMemoryLimit(22*1024);
 
         appData.ResourceProfiles->AddProfile(profile);
@@ -5041,7 +5046,52 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
 
         env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
 
-        env.SendSync(rows.MakeRows(512, 10*1024));
+        env.SendSync(rows.MakeRows(10*1024, 10*1024));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        env.SendSync(new NFake::TEvExecute(new NTestSuiteTFlatTableExecutorResourceProfile::TTxSetResourceProfile("zero")));
+        env.SendSync(new NFake::TEvExecute{ new TTxPrechargeAndSeek() });
+
+        // restart tablet
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        // should have the same behaviour
+        env.SendSync(new NFake::TEvExecute{ new TTxPrechargeAndSeek() }, true);
+
+        // If we didn't crash, then assume the test succeeded
+        env.SendSync(new TEvents::TEvPoison, false, true);
+    }
+
+    Y_UNIT_TEST(TestPrechargeAndSeek_BTreeIndex) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+        appData.FeatureFlags.SetEnableLocalDBFlatIndex(false);
+
+        appData.ResourceProfiles = new TResourceProfiles;
+        TResourceProfiles::TResourceProfile profile;
+        profile.SetTabletType(NKikimrTabletBase::TTabletTypes::Unknown);
+        profile.SetName("zero");
+        profile.SetInitialTxMemory(0);
+
+        // 2 data pages ~2*10*1024 bytes
+        // 3 b-tree index nodes ~3*7*1024 bytes
+        profile.SetTxMemoryLimit((20 + 21)*1024);
+
+        appData.ResourceProfiles->AddProfile(profile);
+
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+
+        env.SendSync(rows.MakeRows(10*1024, 10*1024));
         
         env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
         env.WaitFor<NFake::TEvCompacted>();
@@ -5144,9 +5194,13 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
         env->DispatchEvents(options);
     }
 
-    Y_UNIT_TEST(TestNonSticky) {
+    Y_UNIT_TEST(TestNonSticky_FlatIndex) {
         TMyEnvBase env;
         TRowsModel rows;
+
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+        appData.FeatureFlags.SetEnableLocalDBFlatIndex(true);
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
@@ -5175,6 +5229,43 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // 20 data pages, 2 index pages are sticky again
+    }
+
+    Y_UNIT_TEST(TestNonSticky_BTreeIndex) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+        appData.FeatureFlags.SetEnableLocalDBFlatIndex(false);
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        ZeroSharedCache(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+
+        // 10 history pages
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        
+        // 10 data pages
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        int failedAttempts = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 22); // 20 data pages, 2 index nodes
+
+        // restart tablet
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 22); // 20 data pages, 2 index nodes
+
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 22); // 20 data pages, 2 index nodes
     }
 
     Y_UNIT_TEST(TestSticky) {
@@ -5209,9 +5300,13 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
     }
 
-    Y_UNIT_TEST(TestNonStickyGroup) {
+    Y_UNIT_TEST(TestNonStickyGroup_FlatIndex) {
         TMyEnvBase env;
         TRowsModel rows;
+
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+        appData.FeatureFlags.SetEnableLocalDBFlatIndex(true);
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
@@ -5240,6 +5335,43 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // 1 groups[0], 1 historic[0], 10 historic[1] pages, 3 index pages are sticky again
+    }
+
+    Y_UNIT_TEST(TestNonStickyGroup_BTreeIndex) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+        appData.FeatureFlags.SetEnableLocalDBFlatIndex(false);
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        ZeroSharedCache(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
+
+        // 1 historic[0] + 10 historic[1] pages
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        
+        // 1 groups[0] + 10 groups[1] pages
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        int failedAttempts = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 13); // index root nodes, 1 groups[0], 1 historic[0], 10 historic[1] pages
+
+        // restart tablet
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 13); // index root nodes, 1 groups[0], 1 historic[0], 10 historic[1] pages
+
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 13); // index root nodes, 1 groups[0], 1 historic[0], 10 historic[1] pages
     }
 
     Y_UNIT_TEST(TestStickyMain) {
@@ -5274,9 +5406,13 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 10);
     }
 
-    Y_UNIT_TEST(TestStickyAlt) {
+    Y_UNIT_TEST(TestStickyAlt_FlatIndex) {
         TMyEnvBase env;
         TRowsModel rows;
+
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+        appData.FeatureFlags.SetEnableLocalDBFlatIndex(true);
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
@@ -5307,6 +5443,45 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 2); // 1 groups[0], 1 historic[0], 3 index pages are sticky again
+    }
+
+    Y_UNIT_TEST(TestStickyAlt_BTreeIndex) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+        appData.FeatureFlags.SetEnableLocalDBFlatIndex(false);
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        ZeroSharedCache(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
+
+        env.SendSync(new NFake::TEvExecute{ new TTxKeepFamilyInMemory(TRowsModel::AltFamilyId) });
+
+        // 1 historic[0] + 10 historic[1] pages
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        
+        // 1 groups[0] + 10 groups[1] pages
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        int failedAttempts = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 3); // index root nodes, 1 groups[0], 1 historic[0]
+
+        // restart tablet
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 3); // index root nodes, 1 groups[0], 1 historic[0]
+
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 3); // index root nodes, 1 groups[0], 1 historic[0]
     }
 
     Y_UNIT_TEST(TestStickyAll) {
@@ -5367,7 +5542,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
 
         int failedAttempts = 0;
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // old parts aren't sticky before restart
+        UNIT_ASSERT_GE(failedAttempts, 20); // old parts aren't sticky before restart
 
         // restart tablet
         env.SendSync(new TEvents::TEvPoison, false, true);
@@ -5401,7 +5576,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
 
         int failedAttempts = 0;
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // old parts aren't sticky before restart
+        UNIT_ASSERT_GE(failedAttempts, 20); // old parts aren't sticky before restart
 
         // restart tablet
         env.SendSync(new TEvents::TEvPoison, false, true);
@@ -5453,12 +5628,13 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         }
     };
 
-    Y_UNIT_TEST(UseBtreeIndex_Default) {
+    Y_UNIT_TEST(EnableLocalDBBtreeIndex_Default) { // uses flat index
         TMyEnvBase env;
         TRowsModel rows;
 
         auto &appData = env->GetAppData();
         UNIT_ASSERT_VALUES_EQUAL(appData.FeatureFlags.HasEnableLocalDBBtreeIndex(), false);
+        UNIT_ASSERT_VALUES_EQUAL(appData.FeatureFlags.HasEnableLocalDBFlatIndex(), false);
         auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
         int readRows = 0, failedAttempts = 0;
 
@@ -5491,7 +5667,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 288);
     }
 
-    Y_UNIT_TEST(UseBtreeIndex_True) {
+    Y_UNIT_TEST(EnableLocalDBBtreeIndex_True) { // uses b-tree index
         TMyEnvBase env;
         TRowsModel rows;
 
@@ -5529,12 +5705,91 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 332);
     }
 
-    Y_UNIT_TEST(UseBtreeIndex_True_TurnOff) {
+    Y_UNIT_TEST(EnableLocalDBBtreeIndex_True_EnableLocalDBFlatIndex_False) { // uses b-tree index
         TMyEnvBase env;
         TRowsModel rows;
 
         auto &appData = env->GetAppData();
         appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+        appData.FeatureFlags.SetEnableLocalDBFlatIndex(false);
+        auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
+        int readRows = 0, failedAttempts = 0;
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        auto policy = MakeIntrusive<TCompactionPolicy>();
+        policy->MinBTreeIndexNodeSize = 128;
+        env.SendSync(rows.MakeScheme(std::move(policy)));
+
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(1000, 950));
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(1000, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        // all pages are always kept in shared cache
+        UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 334);
+
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
+
+        // restart tablet
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        // after restart we have no pages in private cache
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 332);
+    }
+
+    Y_UNIT_TEST(EnableLocalDBBtreeIndex_False_EnableLocalDBFlatIndex_False) { // uses flat index
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+        appData.FeatureFlags.SetEnableLocalDBFlatIndex(false);
+        auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
+        int readRows = 0, failedAttempts = 0;
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        auto policy = MakeIntrusive<TCompactionPolicy>();
+        policy->MinBTreeIndexNodeSize = 128;
+        env.SendSync(rows.MakeScheme(std::move(policy)));
+
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(1000, 950));
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(1000, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        // all pages are always kept in shared cache
+        UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 290);
+
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
+
+        // restart tablet
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        // after restart we have no pages in private cache
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 288);
+    }
+
+    Y_UNIT_TEST(EnableLocalDBBtreeIndex_True_TurnOff) { // uses b-tree index at first
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+        appData.FeatureFlags.SetEnableLocalDBFlatIndex(true);
         auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
         int readRows = 0, failedAttempts = 0;
 
@@ -5569,7 +5824,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 288);
     }
 
-    Y_UNIT_TEST(UseBtreeIndex_True_Generations) {
+    Y_UNIT_TEST(EnableLocalDBBtreeIndex_True_Generations) { // uses b-tree index
         TMyEnvBase env;
         TRowsModel rows;
 

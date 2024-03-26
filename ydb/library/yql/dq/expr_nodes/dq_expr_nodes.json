@@ -33,7 +33,9 @@
             {"Index": 3, "Name": "RightLabel", "Type": "TExprBase",
                 "NB": "Atom - if right is real table, Void - otherwise"},
             {"Index": 4, "Name": "JoinType", "Type": "TCoAtom"},
-            {"Index": 5, "Name": "JoinKeys", "Type": "TDqJoinKeyTupleList"}
+            {"Index": 5, "Name": "JoinKeys", "Type": "TDqJoinKeyTupleList"},
+            {"Index": 6, "Name": "LeftJoinKeyNames", "Type": "TCoAtomList"},
+            {"Index": 7, "Name": "RightJoinKeyNames", "Type": "TCoAtomList"}
         ]
     },
     {
@@ -41,7 +43,8 @@
         "Base": "TDqJoinBase",
         "Match": {"Type": "Callable", "Name": "DqJoin"},
         "Children": [
-            {"Index": 6, "Name": "Flags", "Type": "TCoAtomList", "Optional": true}
+            {"Index": 8, "Name": "JoinAlgo", "Type": "TCoAtom"},
+            {"Index": 9, "Name": "Flags", "Type": "TCoAtomList", "Optional": true}
         ]
     },
     {
@@ -257,6 +260,32 @@
             {"Index": 0, "Name": "Input", "Type": "TExprBase"},
             {"Index": 1, "Name": "Name", "Type": "TCoAtom"}
         ]
+    },
+    {
+      "Name": "TDqReadWrapBase",
+      "Base": "TExprBase",
+      "Match": {"Type": "CallableBase"},
+      "Builder": {"Generate": "None"},
+      "Children": [
+        {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+        {"Index": 1, "Name": "Flags", "Type": "TCoAtomList"},
+        {"Index": 2, "Name": "Token", "Type": "TCoSecureParam", "Optional": true}
+      ]
+    },
+    {
+      "Name": "TDqReadWrap",
+      "Base": "TDqReadWrapBase",
+      "Match": {"Type": "Callable", "Name": "DqReadWrap"}
+    },
+    {
+      "Name": "TDqReadWideWrap",
+      "Base": "TDqReadWrapBase",
+      "Match": {"Type": "Callable", "Name": "DqReadWideWrap"}
+    },
+    {
+      "Name": "TDqReadBlockWideWrap",
+      "Base": "TDqReadWrapBase",
+      "Match": {"Type": "Callable", "Name": "DqReadBlockWideWrap"}
     }
     ]
 }

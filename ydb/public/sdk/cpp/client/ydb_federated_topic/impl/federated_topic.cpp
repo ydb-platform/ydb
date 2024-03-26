@@ -40,16 +40,35 @@ TFederatedReadSessionSettings& TFederatedReadSessionSettings::ReadMirrored(TStri
 
 // TFederatedTopicClient
 
-NTopic::TTopicClientSettings FromFederated(const TFederatedTopicClientSettings& settings) {
-    return NTopic::TTopicClientSettings()
-        .DefaultCompressionExecutor(settings.DefaultCompressionExecutor_)
-        .DefaultHandlersExecutor(settings.DefaultHandlersExecutor_);
+NTopic::TTopicClientSettings FromFederated(const TFederatedTopicClientSettings& fedSettings) {
+    auto settings = NTopic::TTopicClientSettings()
+        .DefaultCompressionExecutor(fedSettings.DefaultCompressionExecutor_)
+        .DefaultHandlersExecutor(fedSettings.DefaultHandlersExecutor_);
+
+    if (fedSettings.CredentialsProviderFactory_) {
+        settings.CredentialsProviderFactory(*fedSettings.CredentialsProviderFactory_);
+    }
+    if (fedSettings.SslCredentials_) {
+        settings.SslCredentials(*fedSettings.SslCredentials_);
+    }
+    if (fedSettings.DiscoveryMode_) {
+        settings.DiscoveryMode(*fedSettings.DiscoveryMode_);
+    }
+    return settings;
 }
 
 TFederatedTopicClient::TFederatedTopicClient(const TDriver& driver, const TFederatedTopicClientSettings& settings)
     : Impl_(std::make_shared<TImpl>(CreateInternalInterface(driver), settings))
 {
+    ProvideCodec(NTopic::ECodec::GZIP, MakeHolder<NTopic::TGzipCodec>());
+    ProvideCodec(NTopic::ECodec::LZOP, MakeHolder<NTopic::TUnsupportedCodec>());
+    ProvideCodec(NTopic::ECodec::ZSTD, MakeHolder<NTopic::TZstdCodec>());
 }
+
+void TFederatedTopicClient::ProvideCodec(NTopic::ECodec codecId, THolder<NTopic::ICodec>&& codecImpl) {
+    return Impl_->ProvideCodec(codecId, std::move(codecImpl));
+}
+
 
 std::shared_ptr<IFederatedReadSession> TFederatedTopicClient::CreateReadSession(const TFederatedReadSessionSettings& settings) {
     return Impl_->CreateReadSession(settings);
@@ -62,6 +81,10 @@ std::shared_ptr<IFederatedReadSession> TFederatedTopicClient::CreateReadSession(
 
 std::shared_ptr<NTopic::IWriteSession> TFederatedTopicClient::CreateWriteSession(const TFederatedWriteSessionSettings& settings) {
     return Impl_->CreateWriteSession(settings);
+}
+
+void TFederatedTopicClient::OverrideCodec(NTopic::ECodec codecId, THolder<NTopic::ICodec>&& codecImpl) {
+    return Impl_->OverrideCodec(codecId, std::move(codecImpl));
 }
 
 } // namespace NYdb::NFederatedTopic

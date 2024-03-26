@@ -8,6 +8,36 @@
                         "StructType";
                         [
                             [
+                                "interval_to_days";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Int32"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "interval_to_hours";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Int32"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "interval_to_minutes";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Int32"
+                                    ]
+                                ]
+                            ];
+                            [
                                 "interval_to_seconds";
                                 [
                                     "OptionalType";
@@ -216,12 +246,41 @@
                                         "Uint64"
                                     ]
                                 ]
+                            ];
+                            [
+                                "interval_null";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Int32"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "negative_1d";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Int32"
+                                    ]
+                                ]
                             ]
                         ]
                     ]
                 ];
                 "Data" = [
                     [
+                        [
+                            "2"
+                        ];
+                        [
+                            "58"
+                        ];
+                        [
+                            "3480"
+                        ];
                         [
                             "208800"
                         ];
@@ -284,6 +343,10 @@
                         ];
                         [
                             "1542910819345678"
+                        ];
+                        #;
+                        [
+                            "-1"
                         ]
                     ]
                 ]

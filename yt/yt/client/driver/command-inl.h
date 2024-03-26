@@ -413,20 +413,6 @@ void TSelectRowsCommandBase<
         })
         .Optional(/*init*/ false);
 
-    registrar.template ParameterWithUniversalAccessor<bool>(
-        "use_canonical_null_relations",
-        [] (TThis* command) -> auto& {
-            return command->Options.UseCanonicalNullRelations;
-        })
-        .Optional(/*init*/ false);
-
-    registrar.template ParameterWithUniversalAccessor<bool>(
-        "merge_versioned_rows",
-        [] (TThis* command) -> auto& {
-            return command->Options.MergeVersionedRows;
-        })
-        .Optional(/*init*/ false);
-
     registrar.template ParameterWithUniversalAccessor<int>(
         "syntax_version",
         [] (TThis* command) -> auto& {

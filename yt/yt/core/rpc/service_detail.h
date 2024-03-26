@@ -197,24 +197,7 @@ public:
         Request_->Context_ = underlyingContext.Get();
 
         const auto& requestHeader = this->GetRequestHeader();
-        auto body = underlyingContext->GetRequestBody();
-        if (requestHeader.has_request_format()) {
-            auto format = static_cast<EMessageFormat>(requestHeader.request_format());
-
-            NYson::TYsonString formatOptionsYson;
-            if (requestHeader.has_request_format_options()) {
-                formatOptionsYson = NYson::TYsonString(requestHeader.request_format_options());
-            }
-            if (format != EMessageFormat::Protobuf) {
-                body = ConvertMessageFromFormat(
-                    body,
-                    format,
-                    NYson::ReflectProtobufMessageType<TRequestMessage>(),
-                    formatOptionsYson);
-            }
-        }
-
-        // COMPAT(kiselyovp): legacy RPC codecs
+        // COMPAT(danilalexeev): legacy RPC codecs
         std::optional<NCompression::ECodec> bodyCodecId;
         NCompression::ECodec attachmentCodecId;
         if (requestHeader.has_request_codec()) {
@@ -232,6 +215,24 @@ public:
         } else {
             bodyCodecId = std::nullopt;
             attachmentCodecId = NCompression::ECodec::None;
+        }
+
+        auto body = underlyingContext->GetRequestBody();
+        if (requestHeader.has_request_format()) {
+            auto format = static_cast<EMessageFormat>(requestHeader.request_format());
+
+            NYson::TYsonString formatOptionsYson;
+            if (requestHeader.has_request_format_options()) {
+                formatOptionsYson = NYson::TYsonString(requestHeader.request_format_options());
+            }
+            if (format != EMessageFormat::Protobuf) {
+                body = ConvertMessageFromFormat(
+                    body,
+                    format,
+                    NYson::ReflectProtobufMessageType<TRequestMessage>(),
+                    formatOptionsYson,
+                    !bodyCodecId.has_value());
+            }
         }
 
         bool deserializationSucceeded = bodyCodecId
@@ -325,18 +326,9 @@ protected:
         const auto& underlyingContext = this->GetUnderlyingContext();
         const auto& requestHeader = underlyingContext->GetRequestHeader();
 
-        // COMPAT(kiselyovp): legacy RPC codecs
-        NCompression::ECodec attachmentCodecId;
-        auto bodyCodecId = underlyingContext->GetResponseCodec();
-        TSharedRef serializedBody;
-        if (requestHeader.has_response_codec()) {
-            serializedBody = SerializeProtoToRefWithCompression(*Response_, bodyCodecId, false);
-            attachmentCodecId = bodyCodecId;
-            underlyingContext->SetResponseBodySerializedWithCompression();
-        } else {
-            serializedBody = SerializeProtoToRefWithEnvelope(*Response_, bodyCodecId);
-            attachmentCodecId = NCompression::ECodec::None;
-        }
+        auto codecId = underlyingContext->GetResponseCodec();
+        auto serializedBody = SerializeProtoToRefWithCompression(*Response_, codecId);
+        underlyingContext->SetResponseBodySerializedWithCompression();
 
         if (requestHeader.has_response_format()) {
             int intFormat = requestHeader.response_format();
@@ -362,7 +354,7 @@ protected:
             }
         }
 
-        auto responseAttachments = CompressAttachments(Response_->Attachments(), attachmentCodecId);
+        auto responseAttachments = CompressAttachments(Response_->Attachments(), codecId);
 
         return TSerializedResponse{
             .Body = std::move(serializedBody),
@@ -484,6 +476,24 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TDynamicConcurrencyByteLimit
+{
+public:
+    DEFINE_SIGNAL(void(), Updated);
+
+    void Reconfigure(i64 limit);
+    i64 GetByteLimitFromConfiguration() const;
+
+    i64 GetDynamicByteLimit() const;
+    void SetDynamicByteLimit(std::optional<i64> dynamicLimit);
+
+private:
+    std::atomic<i64> ConfigByteLimit_ = 0;
+    std::atomic<i64> DynamicByteLimit_ = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! Provides a base for implementing IService.
 class TServiceBase
     : public virtual IService
@@ -568,8 +578,14 @@ protected:
         //! Maximum number of requests in queue (both waiting and executing).
         int QueueSizeLimit = 10'000;
 
+        //! Maximum total size of requests in queue (both waiting and executing).
+        i64 QueueByteSizeLimit = 2_GB;
+
         //! Maximum number of requests executing concurrently.
         int ConcurrencyLimit = 10'000;
+
+        //! Maximum total size of requests executing concurrently.
+        i64 ConcurrencyByteLimit = 4_GB;
 
         //! System requests are completely transparent to derived classes;
         //! in particular, |BeforeInvoke| is not called.
@@ -599,13 +615,18 @@ protected:
         //! If |true| then requests and responses are pooled.
         bool Pooled = true;
 
+        // If |true| then method exception will be handled by |OnMethodError|.
+        bool HandleMethodError = false;
+
         TMethodDescriptor SetRequestQueueProvider(IRequestQueueProviderPtr value) const;
         TMethodDescriptor SetInvoker(IInvokerPtr value) const;
         TMethodDescriptor SetInvokerProvider(TInvokerProvider value) const;
         TMethodDescriptor SetHeavy(bool value) const;
         TMethodDescriptor SetResponseCodec(NCompression::ECodec value) const;
         TMethodDescriptor SetQueueSizeLimit(int value) const;
+        TMethodDescriptor SetQueueByteSizeLimit(i64 value) const;
         TMethodDescriptor SetConcurrencyLimit(int value) const;
+        TMethodDescriptor SetConcurrencyByteLimit(i64 value) const;
         TMethodDescriptor SetSystem(bool value) const;
         TMethodDescriptor SetLogLevel(NLogging::ELogLevel value) const;
         TMethodDescriptor SetLoggingSuppressionTimeout(TDuration value) const;
@@ -613,6 +634,7 @@ protected:
         TMethodDescriptor SetGenerateAttachmentChecksums(bool value) const;
         TMethodDescriptor SetStreamingEnabled(bool value) const;
         TMethodDescriptor SetPooled(bool value) const;
+        TMethodDescriptor SetHandleMethodError(bool value) const;
     };
 
     struct TErrorCodesCounter
@@ -708,11 +730,14 @@ protected:
         std::atomic<bool> Pooled = true;
 
         std::atomic<int> QueueSizeLimit = 0;
+        std::atomic<i64> QueueByteSizeLimit = 0;
 
         TDynamicConcurrencyLimit ConcurrencyLimit;
+        TDynamicConcurrencyByteLimit ConcurrencyByteLimit;
         std::atomic<double> WaitingTimeoutFraction = 0;
 
         NProfiling::TCounter RequestQueueSizeLimitErrorCounter;
+        NProfiling::TCounter RequestQueueByteSizeLimitErrorCounter;
         NProfiling::TCounter UnauthenticatedRequestsCounter;
 
         std::atomic<NLogging::ELogLevel> LogLevel = {};
@@ -825,6 +850,14 @@ protected:
     virtual bool IsUp(const TCtxDiscoverPtr& context);
 
     //! Used by peer discovery.
+    //! Fills response message extensions with additional info.
+    /*!
+     *  \note
+     *  Thread affinity: any
+     */
+    virtual void EnrichDiscoverResponse(TRspDiscover* response);
+
+    //! Used by peer discovery.
     //! Returns addresses of neighboring peers to be suggested to the client.
     /*!
      *  \note
@@ -851,6 +884,8 @@ protected:
         TError error,
         const NProto::TRequestHeader& header,
         const NYT::NBus::IBusPtr& replyBus);
+
+    virtual void OnMethodError(const TError& error, const TString& method);
 
 private:
     friend class TRequestQueue;
@@ -948,9 +983,10 @@ private:
     TError DoCheckRequestCompatibility(const NRpc::NProto::TRequestHeader& header);
     TError DoCheckRequestProtocol(const NRpc::NProto::TRequestHeader& header);
     TError DoCheckRequestFeatures(const NRpc::NProto::TRequestHeader& header);
+    TError DoCheckRequestCodecs(const NRpc::NProto::TRequestHeader& header);
 
     void OnRequestTimeout(TRequestId requestId, ERequestProcessingStage stage, bool aborted);
-    void OnReplyBusTerminated(const NYT::NBus::IBusPtr& bus, const TError& error);
+    void OnReplyBusTerminated(const NYT::TWeakPtr<NYT::NBus::IBus>& busWeak, const TError& error);
 
     void OnRequestAuthenticated(
         const NProfiling::TWallTimer& timer,
@@ -1026,13 +1062,16 @@ public:
     bool Register(TServiceBase* service, TServiceBase::TRuntimeMethodInfo* runtimeInfo);
     void Configure(const TMethodConfigPtr& config);
 
-    bool IsQueueLimitSizeExceeded() const;
+    bool IsQueueSizeLimitExceeded() const;
+    bool IsQueueByteSizeLimitExceeded() const;
 
     int GetQueueSize() const;
+    i64 GetQueueByteSize() const;
     int GetConcurrency() const;
+    i64 GetConcurrencyByte() const;
 
-    void OnRequestArrived(TServiceBase::TServiceContextPtr context);
-    void OnRequestFinished();
+    void OnRequestArrived(const TServiceBase::TServiceContextPtr& context);
+    void OnRequestFinished(i64 requestTotalSize);
 
     void ConfigureWeightThrottler(const NConcurrency::TThroughputThrottlerConfigPtr& config);
     void ConfigureBytesThrottler(const NConcurrency::TThroughputThrottlerConfigPtr& config);
@@ -1047,6 +1086,7 @@ private:
     TServiceBase::TRuntimeMethodInfo* RuntimeInfo_ = nullptr;
 
     std::atomic<int> Concurrency_ = 0;
+    std::atomic<i64> ConcurrencyByte_ = 0;
 
     struct TRequestThrottler
     {
@@ -1061,23 +1101,27 @@ private:
     std::atomic<bool> Throttled_ = false;
 
     std::atomic<int> QueueSize_ = 0;
+    std::atomic<i64> QueueByteSize_ = 0;
     moodycamel::ConcurrentQueue<TServiceBase::TServiceContextPtr> Queue_;
 
 
     void ScheduleRequestsFromQueue();
     void RunRequest(TServiceBase::TServiceContextPtr context);
 
-    int IncrementQueueSize();
-    void DecrementQueueSize();
+    i64 GetTotalRequestSize(const TServiceBase::TServiceContextPtr& context);
 
-    int IncrementConcurrency();
-    void DecrementConcurrency();
+    void IncrementQueueSize(const TServiceBase::TServiceContextPtr& context);
+    void DecrementQueueSize(const TServiceBase::TServiceContextPtr& context);
+
+    bool IncrementConcurrency(const TServiceBase::TServiceContextPtr& context);
+    void DecrementConcurrency(i64 requestTotalSize);
 
     bool AreThrottlersOverdrafted() const;
     void AcquireThrottlers(const TServiceBase::TServiceContextPtr& context);
     void SubscribeToThrottlers();
 
     void OnConcurrencyLimitChanged();
+    void OnConcurrencyByteLimitChanged();
 };
 
 DEFINE_REFCOUNTED_TYPE(TRequestQueue)

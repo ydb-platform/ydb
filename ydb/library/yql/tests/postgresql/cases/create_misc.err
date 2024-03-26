@@ -1,3 +1,8 @@
+Registering pre-existing tables
+	hobbies_r
+	equipment_r
+	tenk2
+	tenk1
 <sql-statement>
 --
 -- CREATE_MISC
@@ -7,10 +12,6 @@
 --
 INSERT INTO tenk2 SELECT * FROM tenk1;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
-    
 <sql-statement>
 CREATE TABLE onek2 AS SELECT * FROM onek;
 </sql-statement>
@@ -60,38 +61,18 @@ INSERT INTO hobbies_r (name, person)
 <sql-statement>
 INSERT INTO hobbies_r (name) VALUES ('skywalking');
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.hobbies_r
-    
 <sql-statement>
 INSERT INTO equipment_r (name, hobby) VALUES ('advil', 'posthacking');
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.equipment_r
-    
 <sql-statement>
 INSERT INTO equipment_r (name, hobby) VALUES ('peet''s coffee', 'posthacking');
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.equipment_r
-    
 <sql-statement>
 INSERT INTO equipment_r (name, hobby) VALUES ('hightops', 'basketball');
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.equipment_r
-    
 <sql-statement>
 INSERT INTO equipment_r (name, hobby) VALUES ('guts', 'skywalking');
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.equipment_r
-    
 <sql-statement>
 INSERT INTO city VALUES
 ('Podunk', '(1,2),(3,4)', '100,127,1000'),
@@ -145,7 +126,7 @@ UPDATE shighway
 </sql-statement>
 -stdin-:<main>: Fatal: Pre type annotation
 
-    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
     
 <sql-statement>
 INSERT INTO a_star (class, a) VALUES ('a', 1);

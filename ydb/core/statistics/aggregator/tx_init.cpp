@@ -89,6 +89,8 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
         Self->EnableStatistics = AppData(ctx)->FeatureFlags.GetEnableStatistics();
         Self->SubscribeForConfigChanges(ctx);
 
+        Self->Schedule(Self->PropagateInterval, new TEvPrivate::TEvPropagate());
+
         Self->Become(&TThis::StateWork);
     }
 };

@@ -236,20 +236,38 @@ private:
     using TBase = TCommonCountersOwner;
     NMonitoring::TDynamicCounters::TCounterPtr PortionToDropCount;
     NMonitoring::TDynamicCounters::TCounterPtr PortionToDropBytes;
+    NMonitoring::THistogramPtr PortionToDropLag;
+    NMonitoring::THistogramPtr SkipDeleteWithProcessMemory;
+    NMonitoring::THistogramPtr SkipDeleteWithTxLimit;
 
     NMonitoring::TDynamicCounters::TCounterPtr PortionToEvictCount;
     NMonitoring::TDynamicCounters::TCounterPtr PortionToEvictBytes;
+    NMonitoring::THistogramPtr PortionToEvictLag;
+    NMonitoring::THistogramPtr SkipEvictionWithProcessMemory;
+    NMonitoring::THistogramPtr SkipEvictionWithTxLimit;
+
+    NMonitoring::THistogramPtr ActualizationTaskSizeRemove;
+    NMonitoring::THistogramPtr ActualizationTaskSizeEvict;
+
+    NMonitoring::TDynamicCounters::TCounterPtr ActualizationSkipRWProgressCount;
+    NMonitoring::THistogramPtr ActualizationSkipTooFreshPortion;
 
     NMonitoring::TDynamicCounters::TCounterPtr PortionNoTtlColumnCount;
     NMonitoring::TDynamicCounters::TCounterPtr PortionNoTtlColumnBytes;
 
+    NMonitoring::TDynamicCounters::TCounterPtr StatUsageForTTLCount;
+    NMonitoring::TDynamicCounters::TCounterPtr ChunkUsageForTTLCount;
+
     NMonitoring::TDynamicCounters::TCounterPtr PortionNoBorderCount;
     NMonitoring::TDynamicCounters::TCounterPtr PortionNoBorderBytes;
+
+    NMonitoring::TDynamicCounters::TCounterPtr GranuleOptimizerLocked;
 
     TAgentGranuleDataCounters GranuleDataAgent;
     std::vector<std::shared_ptr<TIncrementalHistogram>> BlobSizeDistribution;
     std::vector<std::shared_ptr<TIncrementalHistogram>> PortionSizeDistribution;
     std::vector<std::shared_ptr<TIncrementalHistogram>> PortionRecordsDistribution;
+
 public:
 
     class TPortionsInfoGuard {
@@ -279,6 +297,8 @@ public:
 
     };
 
+    void OnActualizationTask(const ui32 evictCount, const ui32 removeCount) const;
+
     TPortionsInfoGuard BuildPortionBlobsGuard() const {
         return TPortionsInfoGuard(BlobSizeDistribution, PortionSizeDistribution, PortionRecordsDistribution);
     }
@@ -287,14 +307,40 @@ public:
         return GranuleDataAgent.RegisterClient();
     }
 
-    void OnPortionToEvict(const ui64 size) const {
-        PortionToEvictCount->Add(1);
-        PortionToEvictBytes->Add(size);
+    void OnActualizationSkipRWProgress() const {
+        ActualizationSkipRWProgressCount->Add(1);
     }
 
-    void OnPortionToDrop(const ui64 size) const {
+    void OnActualizationSkipTooFreshPortion(const TDuration dWait) const {
+        ActualizationSkipTooFreshPortion->Collect(dWait.Seconds());
+    }
+
+    void OnSkipDeleteWithProcessMemory(const TDuration lag) const {
+        SkipDeleteWithProcessMemory->Collect(lag.Seconds());
+    }
+
+    void OnSkipDeleteWithTxLimit(const TDuration lag) const {
+        SkipDeleteWithTxLimit->Collect(lag.Seconds());
+    }
+
+    void OnSkipEvictionWithProcessMemory(const TDuration lag) const {
+        SkipEvictionWithProcessMemory->Collect(lag.Seconds());
+    }
+
+    void OnSkipEvictionWithTxLimit(const TDuration lag) const {
+        SkipEvictionWithTxLimit->Collect(lag.Seconds());
+    }
+
+    void OnPortionToEvict(const ui64 size, const TDuration lag) const {
+        PortionToEvictCount->Add(1);
+        PortionToEvictBytes->Add(size);
+        PortionToEvictLag->Collect(lag.Seconds());
+    }
+
+    void OnPortionToDrop(const ui64 size, const TDuration lag) const {
         PortionToDropCount->Add(1);
         PortionToDropBytes->Add(size);
+        PortionToDropLag->Collect(lag.Seconds());
     }
 
     void OnPortionNoTtlColumn(const ui64 size) const {
@@ -302,9 +348,21 @@ public:
         PortionNoTtlColumnBytes->Add(size);
     }
 
+    void OnChunkUsageForTTL() const {
+        ChunkUsageForTTLCount->Add(1);
+    }
+
+    void OnStatUsageForTTL() const {
+        StatUsageForTTLCount->Add(1);
+    }
+
     void OnPortionNoBorder(const ui64 size) const {
         PortionNoBorderCount->Add(1);
         PortionNoBorderBytes->Add(size);
+    }
+
+    void OnGranuleOptimizerLocked() const {
+        GranuleOptimizerLocked->Add(1);
     }
 
     TEngineLogsCounters();

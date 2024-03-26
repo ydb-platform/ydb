@@ -30,6 +30,7 @@ struct TSysTables {
         TString DefaultFromSequence;
         EDefaultKind DefaultKind;
         Ydb::TypedValue DefaultFromLiteral;
+        bool IsBuildInProgress = false;
 
         TTableColumnInfo() = default;
 
@@ -53,7 +54,7 @@ struct TSysTables {
             const TString& typeMod = {}, i32 keyOrder = -1,
             const TString& defaultFromSequence = {},
             EDefaultKind defaultKind = EDefaultKind::DEFAULT_UNDEFINED,
-            const Ydb::TypedValue& defaultFromLiteral = {})
+            const Ydb::TypedValue& defaultFromLiteral = {}, bool isBuildInProgress = false)
             : Name(name)
             , Id(colId)
             , PType(type)
@@ -62,6 +63,7 @@ struct TSysTables {
             , DefaultFromSequence(defaultFromSequence)
             , DefaultKind(defaultKind)
             , DefaultFromLiteral(defaultFromLiteral)
+            , IsBuildInProgress(isBuildInProgress)
         {}
     };
 

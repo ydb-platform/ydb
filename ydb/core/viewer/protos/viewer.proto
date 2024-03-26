@@ -1,5 +1,6 @@
 syntax = "proto3";
 
+import "ydb/core/graph/protos/graph.proto";
 import "ydb/core/protos/tablet_counters.proto";
 import "ydb/core/protos/node_whiteboard.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
@@ -401,6 +402,7 @@ message TStoragePoolInfo {
     float MaximumIOPS = 9;
     uint64 MaximumThroughput = 10;
     uint64 MaximumSize = 11;
+    string MediaType = 12;
 }
 
 message TStorageInfo {
@@ -519,10 +521,16 @@ message TNodeLocation {
     repeated uint32 NodeId = 1;
 }
 
-message TQueryRequest {
+message THttpProxyRequest {
     string Uri = 1;
     bytes Content = 2;
     bytes UserToken = 3;
+}
+
+message TSchemeCacheRequest {
+    string Database = 1;
+    repeated string Tables = 2;
+    string Prefix = 3;
 }
 
 message TEvViewerRequest {
@@ -531,10 +539,12 @@ message TEvViewerRequest {
     oneof Request {
         NKikimrWhiteboard.TEvTabletStateRequest TabletRequest = 11;
         NKikimrWhiteboard.TEvSystemStateRequest SystemRequest = 12;
-        TQueryRequest QueryRequest = 13;
-        bytes Reserved14 = 14;
-        bytes Reserved15 = 15;
+        THttpProxyRequest QueryRequest = 13;
+        THttpProxyRequest RenderRequest = 14;
+        TSchemeCacheRequest AutocompleteRequest = 15;
         bytes Reserved16 = 16;
+        bytes Reserved17 = 17;
+        bytes Reserved18 = 18;
     }
 }
 
@@ -544,9 +554,11 @@ message TEvViewerResponse {
         NKikimrWhiteboard.TEvTabletStateResponse TabletResponse = 11;
         NKikimrWhiteboard.TEvSystemStateResponse SystemResponse = 12;
         NKikimrKqp.TEvQueryResponse QueryResponse = 13;
-        bytes Reserved14 = 14;
-        bytes Reserved15 = 15;
+        NKikimrGraph.TEvMetricsResult RenderResponse = 14;
+        TQueryAutocomplete AutocompleteResponse = 15;
         bytes Reserved16 = 16;
+        bytes Reserved17 = 17;
+        bytes Reserved18 = 18;
     }
 }
 
@@ -561,7 +573,7 @@ message TEvDescribeSchemeInfo {
     optional string Reason = 2;
     optional string Path = 3;
     optional NKikimrSchemeOp.TPathDescription PathDescription = 4;
-    optional fixed64 PathOwner = 5;
+    optional fixed64 DEPRECATED_PathOwner = 5;  // replaced by PathOwnerId
     optional fixed64 PathId = 6;
 
     optional string LastExistedPrefixPath = 7;
@@ -569,4 +581,20 @@ message TEvDescribeSchemeInfo {
     optional NKikimrSchemeOp.TPathDescription LastExistedPrefixDescription = 9;
     optional fixed64 PathOwnerId = 10;
     optional ESource Source = 11;
+}
+
+message TQueryAutocomplete {
+    message TResult {
+        message TEntity {
+            string Name = 1;
+            string Type = 2;
+            string Parent = 3;
+        }
+        uint32 Total = 1;
+        repeated TEntity Entities = 2;
+    }
+
+    bool Success = 1;
+    TResult Result = 2;
+    repeated string Error = 3;
 }

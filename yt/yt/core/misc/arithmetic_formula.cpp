@@ -12,6 +12,8 @@
 
 #include <util/generic/hash.h>
 
+#include <algorithm>
+
 namespace NYT {
 
 using namespace NYson;
@@ -31,11 +33,8 @@ bool IsSymbolAllowedInName(char c, EEvaluationContext context, bool isFirst)
     if (std::isalpha(c) || c == '_') {
         return true;
     }
-    if (isFirst) {
-        return false;
-    }
     if (std::isdigit(c)) {
-        return true;
+        return !isFirst || context == EEvaluationContext::Boolean;
     }
     if (context == EEvaluationContext::Boolean && extraAllowedBooleanVariableTokens.contains(c)) {
         return true;
@@ -49,11 +48,16 @@ void ValidateFormulaVariable(const TString& variable, EEvaluationContext context
         THROW_ERROR_EXCEPTION("Variable should not be empty");
     }
     for (char c : variable) {
-        if (!IsSymbolAllowedInName(c, context, false)) {
+        if (!IsSymbolAllowedInName(c, context, /*isFirst*/ false)) {
             THROW_ERROR_EXCEPTION("Invalid character %Qv in variable %Qv", c, variable);
         }
     }
-    if (!IsSymbolAllowedInName(variable[0], context, true)) {
+    if (context == EEvaluationContext::Boolean) {
+        if (std::all_of(variable.begin(), variable.end(), [] (char c) {return std::isdigit(c);})) {
+            THROW_ERROR_EXCEPTION("All digits characters are prohibited for boolean variable %Qv", variable);
+        }
+    }
+    if (!IsSymbolAllowedInName(variable[0], context, /*isFirst*/ true)) {
         THROW_ERROR_EXCEPTION("Invalid first character in variable %Qv", variable);
     }
     if (variable == "in") {
@@ -416,7 +420,7 @@ std::vector<TFormulaToken> TGenericFormulaImpl::Tokenize(const TString& formula,
         char second = pos + 1 < formula.size() ? formula[pos + 1] : '\0';
         if (first == 'i' && second == 'n') {
             char third = pos + 2 < formula.size() ? formula[pos + 2] : '\0';
-            if (IsSymbolAllowedInName(third, context, false)) {
+            if (IsSymbolAllowedInName(third, context, /*isFirst*/ false)) {
                 return std::nullopt;
             } else {
                 pos += 2;
@@ -523,9 +527,10 @@ std::vector<TFormulaToken> TGenericFormulaImpl::Tokenize(const TString& formula,
 
     auto extractVariable = [&] {
         TString name;
-        while (pos < formula.size() && IsSymbolAllowedInName(formula[pos], context, name.empty())) {
+        while (pos < formula.size() && IsSymbolAllowedInName(formula[pos], context, /*isFirst*/ name.empty())) {
             name += formula[pos++];
         }
+        ValidateFormulaVariable(name, context);
         return name;
     };
 
@@ -564,7 +569,7 @@ std::vector<TFormulaToken> TGenericFormulaImpl::Tokenize(const TString& formula,
         TFormulaToken token;
         token.Position = pos;
 
-        if (std::isdigit(c) || (c == '-' && !expectBinaryOperator)) {
+        if (context == EEvaluationContext::Arithmetic && (std::isdigit(c) || (c == '-' && !expectBinaryOperator))) {
             token.Type = EFormulaTokenType::Number;
             token.Number = extractNumber();
             expectBinaryOperator = true;
@@ -907,7 +912,7 @@ TString ToString(const TBooleanFormulaTags& tags)
     return ToStringViaBuilder(tags);
 }
 
-void FormatValue(TStringBuilderBase* builder, const TBooleanFormulaTags& tags, TStringBuf /* format */)
+void FormatValue(TStringBuilderBase* builder, const TBooleanFormulaTags& tags, TStringBuf /*format*/)
 {
     builder->AppendFormat("%v", tags.GetSourceTags());
 }

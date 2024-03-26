@@ -69,6 +69,9 @@ message TKqpPhyColumn {
         Ydb.TypedValue DefaultFromLiteral = 5;
     }
     bool NotNull = 6;
+    // flag that indicates that column is currently under the build
+    // operation.
+    optional bool IsBuildInProgress = 7;
 }
 
 enum EKqpPhyTableKind {
@@ -370,6 +373,7 @@ message TKqpPhyStage {
     repeated TKqpSource Sources = 9;
     bool IsSinglePartition = 10;
     repeated TKqpSink Sinks = 11;
+    map<string, string> SecureParams = 12;
 }
 
 message TKqpPhyResult {
@@ -504,4 +508,6 @@ message TKqpPhyQuery {
     bool HasUncommittedChangesRead = 9;
 
     string QueryDiagnostics = 10;
+
+    repeated TKqpTableInfo ViewInfos = 11;
 }

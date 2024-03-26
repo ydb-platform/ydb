@@ -82,6 +82,13 @@ SRCS(
     query/rpc_attach_session.cpp
     query/rpc_kqp_tx.cpp
     query/service_query.h
+
+    ydb_over_fq/create_session.cpp
+    ydb_over_fq/describe_table.cpp
+    ydb_over_fq/execute_data_query.cpp
+    ydb_over_fq/explain_data_query.cpp
+    ydb_over_fq/keep_alive.cpp
+    ydb_over_fq/list_directory.cpp
 )
 
 PEERDIR(
@@ -95,8 +102,7 @@ PEERDIR(
     ydb/core/discovery
     ydb/core/engine
     ydb/core/formats
-    ydb/core/fq/libs/actors
-    ydb/core/fq/libs/control_plane_proxy
+    ydb/core/fq/libs/events
     ydb/core/fq/libs/control_plane_proxy/events
     ydb/core/grpc_services/base
     ydb/core/grpc_services/counters
@@ -115,6 +121,7 @@ PEERDIR(
     ydb/core/tx/sharding
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/data_events
+    ydb/core/util
     ydb/core/ydb_convert
     ydb/core/security
     ydb/library/aclib

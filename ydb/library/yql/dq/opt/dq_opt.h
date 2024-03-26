@@ -25,9 +25,11 @@ bool IsSingleConsumerConnection(const NNodes::TDqConnection& node, const TParent
 ui32 GetStageOutputsCount(const NNodes::TDqStageBase& stage);
 
 void FindDqConnections(const NNodes::TExprBase& node, TVector<NNodes::TDqConnection>& connections, bool& isPure);
+bool DqStageFirstInputIsBroadcast(const NNodes::TDqStageBase& stage);
 bool IsDqPureExpr(const NNodes::TExprBase& node, bool isPrecomputePure = true);
 bool IsDqSelfContainedExpr(const NNodes::TExprBase& node);
 bool IsDqDependsOnStage(const NNodes::TExprBase& node, const NNodes::TDqStageBase& stage);
+bool IsDqDependsOnStageOutput(const NNodes::TExprBase& node, const NNodes::TDqStageBase& stage, ui32 outputIndex);
 
 bool CanPushDqExpr(const NNodes::TExprBase& expr, const NNodes::TDqStageBase& stage);
 bool CanPushDqExpr(const NNodes::TExprBase& expr, const NNodes::TDqConnection& connection);

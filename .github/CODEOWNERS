@@ -1,9 +1,12 @@
+/*.md @ydb-platform/docs
+
 /ydb/core/fq/ @ydb-platform/fq
 /ydb/core/public_http/ @ydb-platform/fq
 
 /ydb/docs/ @ydb-platform/docs
 
 /ydb/library/yql/ @ydb-platform/yql
+/ydb/library/yql/dq @ydb-platform/yql @ydb-platform/qp
 /ydb/library/yql/providers/generic @ydb-platform/fq
 /ydb/library/yql/providers/pq @ydb-platform/fq
 /ydb/library/yql/providers/s3 @ydb-platform/fq

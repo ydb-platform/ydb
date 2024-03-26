@@ -38,7 +38,7 @@ public:
     void SetDeletedColumnSchema(const TDeletedColumn& deletedColumnSchema);
 
 private:
-    std::optional<TString> SerializedStableName_;
+    std::optional<TColumnStableName> SerializedStableName_;
 
     std::optional<ESimpleLogicalValueType> LogicalTypeV1_;
     std::optional<bool> RequiredV1_;

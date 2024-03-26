@@ -8,6 +8,8 @@ items:
     href: getting_started/quickstart.md
   - name: Kubernetes
     href: getting_started/kubernetes.md
+  - name: Ansible
+    href: getting_started/ansible.md
 
 # Main
 - { name: Concepts,                               include: { mode: link, path: concepts/toc_p.yaml } }
@@ -33,11 +35,4 @@ items:
 - include: { mode: link, path: downloads/toc_p.yaml }
 - name: Public talks
   href: public-talks.md
-- name: Changelog
-  items:
-  - name: "{{ ydb-short-name }} Server"
-    href: changelog-server.md
-  - name: "{{ ydb-short-name }} CLI"
-    href: changelog-cli.md
-  - name: Security changelog
-    href: security-changelog.md
+- { name: Changelog,                                     include: { mode: link, path: toc_changelog.yaml } }

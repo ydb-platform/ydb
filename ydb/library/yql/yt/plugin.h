@@ -11,8 +11,6 @@
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
 
-#include <optional>
-
 namespace NYT::NYqlPlugin {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -26,6 +24,8 @@ class TYqlPluginOptions
 public:
     NYson::TYsonString SingletonsConfig;
     NYson::TYsonString GatewayConfig;
+    NYson::TYsonString DqGatewayConfig;
+    NYson::TYsonString DqManagerConfig;
     NYson::TYsonString FileStorageConfig;
     NYson::TYsonString OperationAttributes;
 
@@ -43,6 +43,14 @@ struct TQueryResult
     std::optional<TString> Statistics;
     std::optional<TString> Progress;
     std::optional<TString> TaskInfo;
+
+    //! YSON representation of a YT error.
+    std::optional<TString> YsonError;
+};
+
+struct TClustersResult
+{
+    std::vector<TString> Clusters;
 
     //! YSON representation of a YT error.
     std::optional<TString> YsonError;
@@ -70,13 +78,22 @@ struct TAbortResult
 */
 struct IYqlPlugin
 {
+    virtual void Start() = 0;
+
+    virtual TClustersResult GetUsedClusters(
+        TString queryText,
+        NYson::TYsonString settings,
+        std::vector<TQueryFile> files) noexcept = 0;
+
     virtual TQueryResult Run(
         TQueryId queryId,
-        TString impersonationUser,
+        TString user,
+        TString token,
         TString queryText,
         NYson::TYsonString settings,
         std::vector<TQueryFile> files,
         int executeMode) noexcept = 0;
+
     virtual TQueryResult GetProgress(TQueryId queryId) noexcept = 0;
 
     virtual TAbortResult Abort(TQueryId queryId) noexcept = 0;

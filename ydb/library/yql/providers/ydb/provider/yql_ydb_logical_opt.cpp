@@ -1,5 +1,6 @@
 #include "yql_ydb_provider_impl.h"
 
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/ydb/expr_nodes/yql_ydb_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>

@@ -26,6 +26,8 @@ PEERDIR(
     ydb/core/client/minikql_compile
     ydb/core/formats
     ydb/core/kqp/common
+    ydb/core/kqp/compute_actor
+    ydb/core/kqp/federated_query
     ydb/core/kqp/query_compiler
     ydb/core/kqp/rm_service
     ydb/core/kqp/topics
@@ -40,6 +42,10 @@ PEERDIR(
     ydb/library/yql/dq/runtime
     ydb/library/yql/dq/tasks
     ydb/library/yql/providers/common/http_gateway
+)
+
+GENERATE_ENUM_SERIALIZATION(
+    kqp_executer.h
 )
 
 YQL_LAST_ABI_VERSION()

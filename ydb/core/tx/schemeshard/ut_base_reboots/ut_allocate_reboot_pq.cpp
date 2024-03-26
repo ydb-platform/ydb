@@ -95,9 +95,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardAllocatePQRebootTest) {
             {
                 TInactiveZone inactive(activeZone);
 
-                auto balancerDescr = GetDescribeFromPQBalancer(runtime, 9437195);
+                auto balancerDescr = GetDescribeFromPQBalancer(runtime, 72075186233409547);
                 Cerr << balancerDescr.ShortUtf8DebugString();
-                TString expected = R"(TopicName: "PQGroup" Version: 2 Config { PartitionConfig { LifetimeSeconds: 10 } YdbDatabasePath: "/MyRoot/Database" } PartitionPerTablet: 10 Partitions { Partition: 0 TabletId: 9437194 } Partitions { Partition: 1 TabletId: 9437194 } Partitions { Partition: 2 TabletId: 9437194 } Partitions { Partition: 3 TabletId: 9437194 } Partitions { Partition: 4 TabletId: 9437194 } Partitions { Partition: 5 TabletId: 9437194 } Partitions { Partition: 6 TabletId: 9437194 } Partitions { Partition: 7 TabletId: 9437194 } Partitions { Partition: 8 TabletId: 9437194 } Partitions { Partition: 9 TabletId: 9437194 } SchemeShardId: 9437196 BalancerTabletId: 9437195 SecurityObject: "\022\000")";
+                TString expected = R"(TopicName: "PQGroup" Version: 2 Config { PartitionConfig { LifetimeSeconds: 10 } YdbDatabasePath: "/MyRoot/Database" } PartitionPerTablet: 10 Partitions { Partition: 0 TabletId: 72075186233409546 } Partitions { Partition: 1 TabletId: 72075186233409546 } Partitions { Partition: 2 TabletId: 72075186233409546 } Partitions { Partition: 3 TabletId: 72075186233409546 } Partitions { Partition: 4 TabletId: 72075186233409546 } Partitions { Partition: 5 TabletId: 72075186233409546 } Partitions { Partition: 6 TabletId: 72075186233409546 } Partitions { Partition: 7 TabletId: 72075186233409546 } Partitions { Partition: 8 TabletId: 72075186233409546 } Partitions { Partition: 9 TabletId: 72075186233409546 } SchemeShardId: 72075186233409548 BalancerTabletId: 72075186233409547 SecurityObject: "\022\000")";
                 UNIT_ASSERT_NO_DIFF(expected, balancerDescr.ShortUtf8DebugString());
 
                 // there are nothing to wait: operation DeallocatePersQueueGroup does not delete any tablets/shards

@@ -1,0 +1,5 @@
+{"key"="1";"subkey"="1";"value"="qwertyui";"biguint"=1234567890u;"negint"=-123};
+{"key"="2";"subkey"="2";"value"="asdfghjl";"biguint"=9876543210u;"negint"=-456};
+{"key"="3";"subkey"="3";"value"="zxcvbnm?";"biguint"=9999999999u;"negint"=-789};
+{"key"="4";"subkey"="4";"value"="12345678";"biguint"=0000000000u;"negint"=-000};
+{"key"="5";"subkey"="5";"value"="!@#$%^&*";"biguint"=9182737465u;"negint"=-999};

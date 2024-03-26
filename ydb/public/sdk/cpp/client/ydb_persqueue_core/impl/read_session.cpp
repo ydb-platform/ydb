@@ -57,6 +57,8 @@ TReadSession::TReadSession(const TReadSessionSettings& settings,
 }
 
 TReadSession::~TReadSession() {
+    Close(TDuration::Zero());
+
     {
         TDeferredActions<true> deferred;
         NYql::TIssues issues;
@@ -216,7 +218,8 @@ void TReadSession::CreateClusterSessionsImpl(TDeferredActions<true>& deferred) {
             EventsQueue,
             context,
             partitionStreamIdStart++,
-            clusterSessionsCount
+            clusterSessionsCount,
+            Client->GetProvidedCodecs()
         ));
 
         clusterSessionInfo.Session = CbContexts.back()->TryGet();

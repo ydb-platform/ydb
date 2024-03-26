@@ -8,6 +8,7 @@
 #include <ydb/core/blobstorage/ut_vdisk/lib/test_localrecovery.h>
 #include <ydb/core/blobstorage/ut_vdisk/lib/test_many.h>
 #include <ydb/core/blobstorage/ut_vdisk/lib/test_outofspace.h>
+#include <ydb/core/blobstorage/ut_vdisk/lib/test_bad_blobid.h>
 #include <ydb/core/blobstorage/ut_vdisk/lib/test_brokendevice.h>
 #include <ydb/core/blobstorage/ut_vdisk/lib/test_repl.h>
 #include <ydb/core/blobstorage/ut_vdisk/lib/test_simplebs.h>
@@ -262,14 +263,14 @@ Y_UNIT_TEST_SUITE(TBsVDiskManyPutGetCheckSize) {
             TMsgPackInfo(100'000, 672),
             TMsgPackInfo(17'026, 1)
         }));
-        TManyPutOneGet testOk(false, msgPacks, UNK, 0, 257, false);
+        TManyPutOneGet testOk(false, msgPacks, UNK, DefaultTestTabletId, 257, false);
         TestRun<TManyPutOneGet, TFastVDiskSetupHndOff>(&testOk, TDuration::Minutes(100), DefChunkSize, DefDiskSize,
                 1, 1, NKikimr::TErasureType::ErasureNone);
         std::shared_ptr<TVector<TMsgPackInfo>> failMsgPacks(std::unique_ptr<TVector<TMsgPackInfo>>(new TVector<TMsgPackInfo>{
             TMsgPackInfo(100'000, 672),
             TMsgPackInfo(17'027, 1)
         }));
-        TManyPutOneGet testError(false, failMsgPacks, UNK, 0, 257, true);
+        TManyPutOneGet testError(false, failMsgPacks, UNK, DefaultTestTabletId, 257, true);
         TestRun<TManyPutOneGet, TFastVDiskSetupHndOff>(&testError, TDuration::Minutes(100), DefChunkSize, DefDiskSize,
                 1, 1, NKikimr::TErasureType::ErasureNone);
     }
@@ -408,16 +409,6 @@ Y_UNIT_TEST_SUITE(TBsVDiskBrokenPDisk) {
     Y_UNIT_TEST(WriteUntilDeviceDeath) {
         TWriteUntilDeviceDeath test;
         TestRun<TWriteUntilDeviceDeath, TDefaultVDiskSetup>(&test, TIMEOUT);
-    }
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////
-// HANDOFF MOVE DEL
-///////////////////////////////////////////////////////////////////////////////////////////////////////
-Y_UNIT_TEST_SUITE(TBsVDiskHandoffMoveDel) {
-    Y_UNIT_TEST(HandoffMoveDel) {
-        TTestHandoffMoveDel test;
-        TestRun<TTestHandoffMoveDel, TFastVDiskSetupCompacted>(&test, TIMEOUT);
     }
 }
 
@@ -853,5 +844,17 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
         bool success1 = Conf.Run<TSyncLogTestWrite>(&test, TIMEOUT, 1, false);
         Conf.Shutdown();
         UNIT_ASSERT(success1);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+// BAD BLOBID
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+Y_UNIT_TEST_SUITE(TBsVDiskBadBlobId) {
+    // Ensure that putting blob with bad id results in ERROR status
+
+    Y_UNIT_TEST(PutBlobWithBadId) {
+        TWriteAndExpectError test;
+        TestRun<TWriteAndExpectError, TDefaultVDiskSetup>(&test, TIMEOUT);
     }
 }

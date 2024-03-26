@@ -507,6 +507,34 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(res.Root);
     }
 
+    Y_UNIT_TEST(JoinStreamLookupStrategyHint) {
+        {
+            NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a JOIN /*+ StreamLookup() */ plato.Input AS b USING(key);");
+            UNIT_ASSERT(res.Root);
+        }
+        //case insensitive
+        {
+            NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a JOIN /*+ streamlookup() */ plato.Input AS b USING(key);");
+            UNIT_ASSERT(res.Root);
+        }
+    }
+
+    Y_UNIT_TEST(JoinConflictingStrategyHint) {
+        {
+            NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a JOIN /*+ StreamLookup() */ /*+ Merge() */   plato.Input AS b USING(key);");
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:91: Error: Conflicting join strategy hints\n");
+        }
+    }
+
+    Y_UNIT_TEST(JoinDuplicatingStrategyHint) {
+        {
+            NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a JOIN /*+ StreamLookup() */ /*+ StreamLookup() */   plato.Input AS b USING(key);");
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:98: Error: Duplicate join strategy hint\n");
+        }
+    }
+
     Y_UNIT_TEST(ReverseLabels) {
         NYql::TAstParseResult res = SqlToYql("select in.key as subkey, subkey as key from plato.Input as in;");
         UNIT_ASSERT(res.Root);
@@ -893,7 +921,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write!") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (DataType 'Int32) '('columnConstrains '('('not_null))) '())))))))__"));
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create) '('columns '('('"a" (DataType 'Int32) '('columnConstrains '('('not_null))) '())))))))__"));
             }
         };
 
@@ -910,7 +938,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write!") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))))))__"));
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))))))__"));
             }
         };
 
@@ -927,7 +955,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write!") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (PgType '_int4) '('columnConstrains '('('not_null))) '())))))))__"));
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create) '('columns '('('"a" (PgType '_int4) '('columnConstrains '('('not_null))) '())))))))__"));
             }
         };
 
@@ -946,7 +974,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
                 if (word == "Write!") {
                     UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                                               line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (AsOptionalType (PgType '_int4)) '('columnConstrains '()) '()))))))__"));
+                                               line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create) '('columns '('('"a" (AsOptionalType (PgType '_int4)) '('columnConstrains '()) '()))))))__"));
                 }
             };
 
@@ -963,7 +991,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write!") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))) '('primarykey '('"a")))))__"));
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))) '('primarykey '('"a")))))__"));
             }
         };
 
@@ -980,7 +1008,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write!") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (DataType 'Int32) '('columnConstrains '('('not_null))) '()))) '('primarykey '('"a"))))))__"));
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create) '('columns '('('"a" (DataType 'Int32) '('columnConstrains '('('not_null))) '()))) '('primarykey '('"a"))))))__"));
             }
         };
 
@@ -997,7 +1025,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write!") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create_if_not_exists) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))) '('primarykey '('"a")))))__"));
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create_if_not_exists) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))) '('primarykey '('"a")))))__"));
             }
         };
 
@@ -1014,7 +1042,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write!") {
                 UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
-                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))) '('primarykey '('"a")) '('temporary))))__"), line);
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))) '('primarykey '('"a")) '('temporary))))__"), line);
             }
         };
 
@@ -1031,7 +1059,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write!") {
                 UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
-                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))) '('primarykey '('"a")) '('temporary))))__"), line);
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))) '('primarykey '('"a")) '('temporary))))__"), line);
             }
         };
 
@@ -1039,6 +1067,65 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+    }
+
+    Y_UNIT_TEST(CreateTableWithoutTypes) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a, primary key(a));");
+        UNIT_ASSERT(!res.Root);
+    }
+
+    Y_UNIT_TEST(CreateTableAsSelectWithTypes) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a int32, primary key(a)) AS SELECT * FROM ts;");
+        UNIT_ASSERT(!res.Root);
+    }
+
+    Y_UNIT_TEST(CreateTableAsSelect) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a, b, primary key(a)) AS SELECT * FROM ts;");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
+                                           line.find(R"__((let world (Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create) '('columns '('('"a") '('"b"))) '('primarykey '('"a"))))))__"));
+            }
+            if (word == "Read!") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
+                                           line.find(R"__((Read! world (DataSource '"yt" '"plato") (MrTableConcat (Key '('table (String '"ts")))))__"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write!"), 0}, {TString("Read!"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Read!"]);
+    }
+
+    Y_UNIT_TEST(CreateTableAsSelectOnlyPrimary) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (primary key(a)) AS SELECT * FROM ts;");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
+                                           line.find(R"__((let world (Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create) '('columns '()) '('primarykey '('"a"))))))__"));
+            }
+            if (word == "Read!") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
+                                           line.find(R"__((Read! world (DataSource '"yt" '"plato") (MrTableConcat (Key '('table (String '"ts")))))__"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write!"), 0}, {TString("Read!"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Read!"]);
+    }
+
+    Y_UNIT_TEST(CreateTableAsValuesFail) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a, primary key(a)) AS VALUES (1), (2);");
+        UNIT_ASSERT(!res.Root);
     }
 
     Y_UNIT_TEST(CreateTableDuplicatedPkColumnsFail) {
@@ -2395,7 +2482,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(AlterTableAddIndexWithIsNotSupported) {
         ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx LOCAL WITH (a=b, c=d, e=f) ON (col)",
-            "<main>:1:40: Error: local: alternative is not implemented yet: 714:7: local_index\n");
+            "<main>:1:40: Error: local: alternative is not implemented yet: 717:7: local_index\n");
     }
 
     Y_UNIT_TEST(OptionalAliases) {
@@ -3428,7 +3515,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(GroupByFewBigCubes) {
         NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input GROUP BY CUBE(key, subkey, key + subkey as sum), CUBE(value, value + key + subkey as total);");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Unable to GROUP BY more than 32 groups, you try use 80 groups\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Unable to GROUP BY more than 64 groups, you try use 80 groups\n");
     }
 
     Y_UNIT_TEST(GroupByFewBigCubesWithPragmaLimit) {
@@ -4374,6 +4461,22 @@ select FormatType($f());
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res),
             "<main>:1:15: Error: Selecting data from monitoring source is not supported\n");
+    }
+
+    Y_UNIT_TEST(SessionStartAndSessionStateShouldSurviveSessionWindowArgsError){
+        TString query = R"(
+            $init = ($_row) -> (min(1, 2)); -- error: aggregation func min() can not be used here
+            $calculate = ($_row, $_state) -> (1);
+            $update = ($_row, $_state) -> (2);
+            SELECT
+                SessionStart() over w as session_start,
+                SessionState() over w as session_state,
+            FROM plato.Input as t
+            WINDOW w AS (
+                PARTITION BY user, SessionWindow(ts + 1, $init, $update, $calculate)
+            )
+        )";
+        ExpectFailWithError(query, "<main>:2:33: Error: Aggregation function Min requires exactly 1 argument(s), given: 2\n");
     }
 }
 
@@ -5542,6 +5645,31 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
+    Y_UNIT_TEST(CreateExternalDataSourceWithToken) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="YT",
+                    LOCATION="protocol://host:port/",
+                    AUTH_METHOD="TOKEN",
+                    TOKEN_SECRET_NAME="token_name"
+                );
+            )sql");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"auth_method" '"TOKEN") '('"location" '"protocol://host:port/") '('"source_type" '"YT") '('"token_secret_name" '"token_name"))#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
     Y_UNIT_TEST(CreateExternalDataSourceWithTablePrefix) {
         NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
@@ -6052,7 +6180,7 @@ Y_UNIT_TEST_SUITE(ExternalTable) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#('actions '('('dropColumns '('"my_column")#");
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('setTableSettings '('('location (String '"abc")) '('other_prop (String '"42")) '('x (String '"y")))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('setTableSettings '('('location (String '"abc")) '('Other_Prop (String '"42")) '('x (String '"y")))))#");
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#(('tableType 'externalTable))#");
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alter))#");
             }

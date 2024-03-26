@@ -456,7 +456,7 @@ TString GetTypesHtml(const std::set<TTabletTypes::EType>& typesToShow, const std
                 << "' onclick='applySetting(this,\"DefaultTabletLimit\",\"" << shortTypeName
                 << ":0\")'>";
         } else {
-            str << "<span class='box disabled' title='" << longTypeName
+            str << "<span class='box box-disabled' title='" << longTypeName
                 << "' onclick='applySetting(this, \"DefaultTabletLimit\", \"" << shortTypeName
                 << ":" << TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE << "\")'>";
         }

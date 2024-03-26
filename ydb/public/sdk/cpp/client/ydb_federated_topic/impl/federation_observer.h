@@ -51,6 +51,8 @@ public:
         }
         return nullptr;
     }
+
+    friend IOutputStream& operator<<(IOutputStream& out, TFederatedDbState const& state);
 };
 
 

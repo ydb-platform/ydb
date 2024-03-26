@@ -1272,7 +1272,7 @@ void WriteStatistics(NYson::TYsonWriter& writer, const TOperationStatistics& sta
     writer.OnEndMap();
 }
 
-void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics, bool addExternalMap) {
+void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics, bool addTotalKey, bool addExternalMap) {
     if (statistics.empty()) {
         return;
     }
@@ -1316,8 +1316,10 @@ void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<
     std::transform(total.cbegin(), total.cend(), std::back_inserter(statKeys), [](const decltype(total)::value_type& v) { return v.first; });
     std::sort(statKeys.begin(), statKeys.end());
 
-    writer.OnKeyedItem("total");
-    writer.OnBeginMap();
+    if (addTotalKey) {
+        writer.OnKeyedItem("total");
+        writer.OnBeginMap();
+    }
     for (auto& key: statKeys) {
         auto& totalEntry = total[key];
         writer.OnKeyedItem(key);
@@ -1340,7 +1342,9 @@ void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<
 
         writer.OnEndMap();
     }
-    writer.OnEndMap(); // total
+    if (addTotalKey) {
+        writer.OnEndMap(); // total
+    }
     if (addExternalMap) {
         writer.OnEndMap();
     }
@@ -1475,7 +1479,7 @@ bool NeedToRenamePgSelectColumns(const TCoPgSelect& pgSelect) {
 bool RenamePgSelectColumns(
     const TCoPgSelect& node,
     TExprNode::TPtr& output,
-    TMaybe<TVector<TString>> tableColumnOrder,
+    const TMaybe<TColumnOrder>& tableColumnOrder,
     TExprContext& ctx,
     TTypeAnnotationContext& types) {
 
@@ -1485,7 +1489,7 @@ bool RenamePgSelectColumns(
     TString optionName = (hasValues) ? "values" : "projection_order";
 
     auto selectorColumnOrder = types.LookupColumnOrder(node.Ref());
-    TVector<TString> insertColumnOrder;
+    TColumnOrder insertColumnOrder;
     if (auto targetColumnsOption = GetSetItemOption(node, "target_columns")) {
         auto targetColumns = GetSetItemOptionValue(TExprBase(targetColumnsOption));
         for (const auto& child : targetColumns->ChildrenList()) {

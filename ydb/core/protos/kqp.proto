@@ -8,6 +8,7 @@ import "ydb/core/scheme/protos/type_info.proto";
 import "ydb/core/protos/kqp_physical.proto";
 import "ydb/core/protos/kqp_stats.proto";
 import "ydb/core/protos/query_stats.proto";
+import "ydb/core/protos/data_events.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
@@ -108,6 +109,12 @@ message TQueryRequest {
     optional bool IsInternalCall = 25;
     optional Ydb.Query.Syntax Syntax = 26;
     optional bool CollectDiagnostics = 27;
+    optional string ClientAddress = 28;
+    optional string ClientPID = 29;
+    optional string ClientUserAgent = 30;
+    optional string ClientSdkBuildInfo = 31;
+    optional string ApplicationName = 32;
+    optional string UserSID = 33;
 }
 
 message TKqpPathIdProto {
@@ -144,6 +151,9 @@ message TKqpColumnMetadataProto {
     optional string DefaultFromSequence = 8;
     optional EDefaultKind DefaultKind = 9;
     optional Ydb.TypedValue DefaultFromLiteral = 10;
+    // flag that indicates that column is currently under the build
+    // operation.
+    optional bool IsBuildInProgress = 11 [default = false];
 };
 
 message TKqpTableMetadataProto {
@@ -304,6 +314,41 @@ message TEvProcessResponse {
     optional bool WorkerIsClosing = 4 [default = false];
 }
 
+message TSessionInfo {
+    optional string SessionId = 1;
+    /// optional ui32 NodeId = 2;
+    optional string ClientAddress = 3;
+    optional string ClientPID = 4;
+    optional string ClientUserAgent = 5;
+    optional string ClientSdkBuildInfo = 6;
+    optional string ApplicationName = 7;
+    optional string Query = 8;
+    optional int64 QueryCount = 9;
+    optional string State = 10;
+    optional int64 SessionStartAt = 11;
+    optional int64 QueryStartAt = 12;
+    optional int64 StateChangeAt = 13;
+    optional string UserSID = 14;
+    optional bool PgWire = 15 [default = false];
+}
+
+message TEvListSessionsRequest {
+    optional string SessionIdStart = 1;
+    optional bool SessionIdStartInclusive = 2;
+    optional string SessionIdEnd = 3;
+    optional bool SessionIdEndInclusive = 4;
+    repeated uint32 Columns = 5;
+    optional int64 FreeSpace = 6;
+    optional int64 Limit = 7;
+}
+
+message TEvListSessionsResponse {
+    optional int64 NodeId = 1;
+    repeated TSessionInfo Sessions = 2;
+    optional bool Finished = 3;
+    optional string ContinuationToken = 4;
+}
+
 message TKqpSetting {
     required string Name = 1;
     required string Value = 2;
@@ -315,6 +360,7 @@ message TKqpDefaultSettings {
 
 message TCreateSessionRequest {
     optional string Database = 1;
+    optional string ApplicationName = 2;
 }
 
 message TEvCreateSessionRequest {
@@ -328,6 +374,13 @@ message TEvCreateSessionRequest {
     optional bool CanCreateRemoteSession = 4 [default = false];
     optional bool SupportsBalancing = 5 [default = false];
     optional bool PgWire = 6 [default = false];
+
+    optional string ClientAddress = 7;
+    optional string ClientPID = 8;
+    optional string ClientUserAgent = 9;
+    optional string ClientSdkBuildInfo = 10;
+    optional string ApplicationName = 11;
+    optional string UserSID = 12;
 }
 
 message TCreateSessionResponse {
@@ -648,6 +701,10 @@ message TEvRemoteCostData {
 message TEvKillScanTablet {
 }
 
+message TEvKqpOutputActorResultInfo {
+    repeated NKikimrDataEvents.TLock Locks = 1;
+}
+
 message TKqpTableSinkSettings {
     optional NKqpProto.TKqpPhyTableId Table = 3;
     repeated TKqpColumnMetadataProto KeyColumns = 4;
@@ -665,6 +722,7 @@ message TKqpStreamLookupSettings {
      optional bool ImmediateTx = 6;
      repeated string LookupKeyColumns = 7;
      optional NKqpProto.EStreamLookupStrategy LookupStrategy = 8;
+     optional bool AllowInconsistentReads = 9 [default = false];
 }
 
 message TKqpSequencerSettings {

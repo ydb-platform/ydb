@@ -57,7 +57,7 @@ public:
     bool AddData(TWideSerializedBatch& batch) {
         if (BlobData.size() + batch.GetSplittedBlobs().GetSize() < 8 * 1024 * 1024) {
             Ranges.emplace_back(&batch);
-            batch.SetRange(TBlobRange(TUnifiedBlobId(0, 0, 0, 0, BlobData.size() + batch.GetSplittedBlobs().GetSize()), BlobData.size(), batch.GetSplittedBlobs().GetSize()));
+            batch.SetRange(TBlobRange(TUnifiedBlobId(0, 0, 0, 0, 0, 0, BlobData.size() + batch.GetSplittedBlobs().GetSize()), BlobData.size(), batch.GetSplittedBlobs().GetSize()));
             BlobData += batch.GetSplittedBlobs().GetData();
             return true;
         } else {
@@ -136,7 +136,7 @@ public:
                         if (!DeclareRemoveAction) {
                             DeclareRemoveAction = bOperator->StartDeclareRemovingAction("WRITING_BUFFER");
                         }
-                        DeclareRemoveAction->DeclareRemove(s.GetRange().BlobId);
+                        DeclareRemoveAction->DeclareRemove(bOperator->GetSelfTabletId(), s.GetRange().BlobId);
                     }
                 }
                 Aggregations.erase(Aggregations.begin() + i);
@@ -160,24 +160,9 @@ public:
 
     void InitReadyInstant(const TMonotonic instant);
     void InitStartSending(const TMonotonic instant);
+    void InitReplyReceived(const TMonotonic instant);
 
-    std::vector<TWritingBlob> GroupIntoBlobs() {
-        std::vector<TWritingBlob> result;
-        TWritingBlob currentBlob;
-        for (auto&& aggr : Aggregations) {
-            for (auto&& bInfo : aggr->MutableSplittedBlobs()) {
-                if (!currentBlob.AddData(bInfo)) {
-                    result.emplace_back(std::move(currentBlob));
-                    currentBlob = TWritingBlob();
-                    AFL_VERIFY(currentBlob.AddData(bInfo));
-                }
-            }
-        }
-        if (currentBlob.GetSize()) {
-            result.emplace_back(std::move(currentBlob));
-        }
-        return result;
-    }
+    std::vector<TWritingBlob> GroupIntoBlobs();
 };
 
 class TIndexedWriteController : public NColumnShard::IWriteController, public NColumnShard::TMonitoringObjectsCounter<TIndexedWriteController, true> {

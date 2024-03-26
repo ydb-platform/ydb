@@ -25,6 +25,16 @@
 namespace NYdb::NPersQueue {
 
 template <bool UseMigrationProtocol>
+using TClientImpl = std::conditional_t<UseMigrationProtocol,
+    NYdb::NPersQueue::TPersQueueClient::TImpl,
+    NYdb::NTopic::TTopicClient::TImpl>;
+
+template <bool UseMigrationProtocol>
+using ECodecAlias = std::conditional_t<UseMigrationProtocol,
+    NYdb::NPersQueue::ECodec,
+    NYdb::NTopic::ECodec>;
+
+template <bool UseMigrationProtocol>
 using TClientMessage = std::conditional_t<UseMigrationProtocol,
     Ydb::PersQueue::V1::MigrationStreamingReadClientMessage,
     Ydb::Topic::StreamReadMessage::FromClient>;
@@ -518,6 +528,11 @@ public:
         (NotReady.empty() ? Ready : NotReady).pop_back();
     }
 
+    void clear() noexcept {
+        NotReady.clear();
+        Ready.clear();
+    }
+
     void SignalReadyEvents(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> stream,
                            TReadSessionEventsQueue<UseMigrationProtocol>& queue,
                            TDeferredActions<UseMigrationProtocol>& deferred);
@@ -539,6 +554,7 @@ private:
                                  TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator,
                                  std::deque<TRawPartitionStreamEvent<UseMigrationProtocol>>& queue);
 
+private:
     std::deque<TRawPartitionStreamEvent<UseMigrationProtocol>> Ready;
     std::deque<TRawPartitionStreamEvent<UseMigrationProtocol>> NotReady;
 };
@@ -719,6 +735,14 @@ public:
 
     void DeleteNotReadyTail(TDeferredActions<UseMigrationProtocol>& deferred);
 
+    void ClearQueue() noexcept {
+        EventsQueue.clear();
+    }
+
+    TRawPartitionStreamEventQueue<UseMigrationProtocol> ExtractQueue() noexcept {
+        return std::move(EventsQueue);
+    }
+
     static void GetDataEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
                                  size_t& maxEventsCount,
                                  size_t& maxByteSize,
@@ -776,13 +800,26 @@ public:
 
     bool Close(const TASessionClosedEvent<UseMigrationProtocol>& event, TDeferredActions<UseMigrationProtocol>& deferred) {
         TWaiter waiter;
+        TVector<TRawPartitionStreamEventQueue<UseMigrationProtocol>> deferredDelete;
         with_lock (TParent::Mutex) {
-            if (TParent::Closed)
+            if (TParent::Closed) {
                 return false;
+            }
+            deferredDelete.reserve(TParent::Events.size());
+            while (!TParent::Events.empty()) {
+                auto& event = TParent::Events.front();
+                if (!event.IsEmpty()) {
+                    deferredDelete.push_back(event.PartitionStream->ExtractQueue());
+                }
+                TParent::Events.pop();
+            }
             TParent::CloseEvent = event;
             TParent::Closed = true;
             waiter = TWaiter(TParent::Waiter.ExtractPromise(), this);
         }
+
+        // Delayed deletion is necessary to avoid deadlock with PushEvent
+        deferredDelete.clear();
 
         TReadSessionEventInfo<UseMigrationProtocol> info(event);
         ApplyHandler(info, deferred);
@@ -941,7 +978,8 @@ public:
         std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> eventsQueue,
         NYdbGrpc::IQueueClientContextPtr clientContext,
         ui64 partitionStreamIdStart,
-        ui64 partitionStreamIdStep
+        ui64 partitionStreamIdStep,
+        std::shared_ptr<std::unordered_map<ECodecAlias<UseMigrationProtocol>, THolder<NTopic::ICodec>>> codecs
     )
         : Settings(settings)
         , Database(database)
@@ -950,6 +988,7 @@ public:
         , Log(log)
         , NextPartitionStreamId(partitionStreamIdStart)
         , PartitionStreamIdStep(partitionStreamIdStep)
+        , Codecs(std::move(codecs))
         , ConnectionFactory(std::move(connectionFactory))
         , EventsQueue(std::move(eventsQueue))
         , ClientContext(std::move(clientContext))
@@ -958,6 +997,8 @@ public:
         , ReadSizeServerDelta(0)
     {
     }
+
+    ~TSingleClusterReadSessionImpl();
 
     void Start();
     void ConfirmPartitionStreamCreate(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset);
@@ -1007,6 +1048,13 @@ public:
 
     const TLog& GetLog() const {
         return Log;
+    }
+
+    const NTopic::ICodec* GetCodecImplOrThrow(ECodecAlias<UseMigrationProtocol> codecId) const {
+        if (!Codecs->contains(codecId)) {
+            throw yexception() << "codec with id " << ui32(codecId) << " not provided";
+        }
+        return Codecs->at(codecId).Get();
     }
 
 private:
@@ -1158,6 +1206,7 @@ private:
     TLog Log;
     ui64 NextPartitionStreamId;
     ui64 PartitionStreamIdStep;
+    std::shared_ptr<std::unordered_map<ECodecAlias<UseMigrationProtocol>, THolder<NTopic::ICodec>>> Codecs;
     std::shared_ptr<IReadSessionConnectionProcessorFactory<UseMigrationProtocol>> ConnectionFactory;
     std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> EventsQueue;
     NYdbGrpc::IQueueClientContextPtr ClientContext; // Common client context.

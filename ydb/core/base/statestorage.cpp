@@ -1,5 +1,6 @@
 #include "statestorage.h"
 #include "tabletid.h"
+#include <ydb/core/blobstorage/base/utility.h>
 #include <util/generic/xrange.h>
 #include <util/generic/mem_copy.h>
 #include <util/generic/algorithm.h>
@@ -133,6 +134,32 @@ ui32 TStateStorageInfo::ContentHash() const {
     return static_cast<ui32>(hash);
 }
 
+TString TStateStorageInfo::ToString() const {
+    TStringStream s;
+    s << '{';
+    s << "NToSelect# " << NToSelect;
+    s << " Rings# [";
+    for (size_t ring = 0; ring < Rings.size(); ++ring) {
+        if (ring) {
+            s << ' ';
+        }
+        s << ring << ":{";
+        const auto& r = Rings[ring];
+        s << FormatList(r.Replicas);
+        if (r.IsDisabled) {
+            s << " Disabled";
+        }
+        if (r.UseRingSpecificNodeSelection) {
+            s << " UseRingSpecificNodeSelection";
+        }
+        s << '}';
+    }
+    s << "] StateStorageVersion# " << StateStorageVersion;
+    s << " CompatibleVersions# " << FormatList(CompatibleVersions);
+    s << '}';
+    return s.Str();
+}
+
 void TStateStorageInfo::TSelection::MergeReply(EStatus status, EStatus *owner, ui64 targetCookie, bool resetOld) {
     ui32 unknown = 0;
     ui32 ok = 0;
@@ -245,7 +272,7 @@ static void CopyStateStorageRingInfo(
 
 TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActorId::MaxServiceIDLength], const NKikimrConfig::TDomainsConfig::TStateStorage& config) {
     TIntrusivePtr<TStateStorageInfo> info = new TStateStorageInfo();
-    info->StateStorageGroup = config.GetSSId();
+    Y_ABORT_UNLESS(config.GetSSId() == 1);
     info->StateStorageVersion = config.GetStateStorageVersion();
     
     info->CompatibleVersions.reserve(config.CompatibleVersionsSize());
@@ -256,7 +283,8 @@ TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActor
     const size_t offset = FindIndex(namePrefix, char());
     Y_ABORT_UNLESS(offset != NPOS && (offset + sizeof(ui32)) < TActorId::MaxServiceIDLength);
 
-    memcpy(namePrefix + offset, reinterpret_cast<const char *>(&info->StateStorageGroup), sizeof(ui32));
+    const ui32 stateStorageGroup = 1;
+    memcpy(namePrefix + offset, reinterpret_cast<const char *>(&stateStorageGroup), sizeof(ui32));
     CopyStateStorageRingInfo(config.GetRing(), info.Get(), namePrefix, offset + sizeof(ui32));
 
     return info;

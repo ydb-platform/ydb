@@ -100,6 +100,33 @@ void TBaseBackend::FillResult(TMetricsValues& values, const NKikimrGraph::TEvGet
     }
 }
 
+double TBaseBackend::GetTimingForPercentile(double percentile, const TVector<ui64>& values, const TVector<ui64>& /*upper*/bounds, ui64 total) {
+    ui64 ppMark = total * percentile;
+    ui64 accm = 0;
+    ui32 n = 0;
+    while (n < bounds.size() && accm < ppMark) {
+        if (accm + values[n] >= ppMark) {
+            ui64 lowerBound = 0;
+            if (n > 0) {
+                lowerBound = bounds[n - 1];
+            }
+            ui64 upperBound = bounds[n];
+            if (upperBound == std::numeric_limits<ui64>::max()) {
+                return lowerBound; // workaround for INF bucket
+            }
+            ui64 currentValue = values[n];
+            ui64 ppValue = ppMark - accm;
+            if (currentValue == 0) {
+                return NAN;
+            }
+            return (static_cast<double>(ppValue) / currentValue) * (upperBound - lowerBound) + lowerBound;
+        }
+        accm += values[n];
+        n++;
+    }
+    return NAN;
+}
+
 void TMemoryBackend::StoreMetrics(TMetricsData&& data) {
     if (!MetricsValues.empty() && MetricsValues.back().Timestamp >= data.Timestamp) {
         BLOG_ERROR("Invalid timestamp ordering for " << data.Timestamp << " and " << MetricsValues.back().Timestamp);
@@ -140,6 +167,17 @@ void TMemoryBackend::GetMetrics(const NKikimrGraph::TEvGetMetrics& get, NKikimrG
     }
     TMetricsValues metricValues;
     metricValues.Values.resize(indexes.size());
+    if (!get.GetSkipBorders()) {
+        if (get.HasTimeFrom()) {
+            TInstant from(TInstant::Seconds(get.GetTimeFrom()));
+            if (itLeft == MetricsValues.end() || itLeft->Timestamp > from) {
+                metricValues.Timestamps.push_back(from);
+                for (size_t num = 0; num < indexes.size(); ++num) {
+                    metricValues.Values[num].push_back(NAN);
+                }
+            }
+        }
+    }
     for (auto it = itLeft; it != itRight; ++it) {
         metricValues.Timestamps.push_back(it->Timestamp);
         for (size_t num = 0; num < indexes.size(); ++num) {
@@ -148,6 +186,17 @@ void TMemoryBackend::GetMetrics(const NKikimrGraph::TEvGetMetrics& get, NKikimrG
                 metricValues.Values[num].push_back(it->Values[idx]);
             } else {
                 metricValues.Values[num].push_back(NAN);
+            }
+        }
+    }
+    if (!get.GetSkipBorders()) {
+        if (get.HasTimeTo()) {
+            TInstant to(TInstant::Seconds(get.GetTimeTo()));
+            if (metricValues.Timestamps.empty() || std::prev(itRight)->Timestamp < to) {
+                metricValues.Timestamps.push_back(to);
+                for (size_t num = 0; num < indexes.size(); ++num) {
+                    metricValues.Values[num].push_back(NAN);
+                }
             }
         }
     }
@@ -188,8 +237,9 @@ void TMemoryBackend::DownsampleData(TInstant now, const TAggregateSettings& sett
 
     TMetricsValues values;
     TInstant prevTimestamp = {};
+    const TInstant itStopTs = itStop->Timestamp;
 
-    for (auto it = itStart; it->Timestamp < itStop->Timestamp; ++it) {
+    for (auto it = itStart; it->Timestamp < itStopTs; ++it) {
         TDuration step = it->Timestamp - prevTimestamp;
         if (prevTimestamp == TInstant() || step >= settings.SampleSize) {
             prevTimestamp = it->Timestamp;
@@ -197,8 +247,8 @@ void TMemoryBackend::DownsampleData(TInstant now, const TAggregateSettings& sett
         }
         values.Clear();
         values.Values.resize(MetricsIndex.size());
-        TInstant stop = std::min(TInstant::FromValue(prevTimestamp.GetValue() / settings.SampleSize.GetValue() * settings.SampleSize.GetValue()) + settings.SampleSize, itStop->Timestamp);
-        auto point = std::prev(it);
+        TInstant stop = std::min(TInstant::FromValue(prevTimestamp.GetValue() / settings.SampleSize.GetValue() * settings.SampleSize.GetValue()) + settings.SampleSize, itStopTs);
+        const auto point = std::prev(it);
         auto jt = point;
         for (; jt->Timestamp < stop; ++jt) {
             values.Timestamps.emplace_back(jt->Timestamp);
@@ -222,7 +272,7 @@ void TMemoryBackend::DownsampleData(TInstant now, const TAggregateSettings& sett
         }
         prevTimestamp = it->Timestamp;
     }
-    settings.StartTimestamp = itStop->Timestamp;
+    settings.StartTimestamp = itStopTs;
     BLOG_D("Downsampled " << before - MetricsValues.size() << " logical rows");
 }
 
@@ -245,6 +295,7 @@ bool TLocalBackend::StoreMetrics(NTabletFlatExecutor::TTransactionContext& txc, 
         if (itId == MetricsIndex.end()) {
             itId = MetricsIndex.emplace(name, MetricsIndex.size()).first;
             db.Table<Schema::MetricsIndex>().Key(name).Update<Schema::MetricsIndex::Id>(itId->second);
+            BLOG_TRACE("Metric " << name << " has id " << itId->second);
         }
         ui64 id = itId->second;
         db.Table<Schema::MetricsValues>().Key(data.Timestamp.Seconds(), id).Update<Schema::MetricsValues::Value>(value);
@@ -279,6 +330,12 @@ bool TLocalBackend::GetMetrics(NTabletFlatExecutor::TTransactionContext& txc, co
     }
     ui64 lastTime = std::numeric_limits<ui64>::max();
     metricValues.Values.resize(get.MetricsSize());
+    if (get.HasTimeFrom() && !get.GetSkipBorders() && (rowset.EndOfSet() || rowset.GetValue<Schema::MetricsValues::Timestamp>() > minTime)) {
+        metricValues.Timestamps.push_back(TInstant::Seconds(minTime));
+        for (auto& vals : metricValues.Values) {
+            vals.emplace_back(NAN);
+        }
+    }
     while (!rowset.EndOfSet()) {
         ui64 time = rowset.GetValue<Schema::MetricsValues::Timestamp>();
         if (time != lastTime) {
@@ -295,6 +352,12 @@ bool TLocalBackend::GetMetrics(NTabletFlatExecutor::TTransactionContext& txc, co
         }
         if (!rowset.Next()) {
             return false;
+        }
+    }
+    if (get.HasTimeTo() && !get.GetSkipBorders() && (lastTime < maxTime)) {
+        metricValues.Timestamps.push_back(TInstant::Seconds(maxTime));
+        for (auto& vals : metricValues.Values) {
+            vals.emplace_back(NAN);
         }
     }
     FillResult(metricValues, get, result);
@@ -367,8 +430,11 @@ bool TLocalBackend::DownsampleData(NTabletFlatExecutor::TTransactionContext& txc
                     }
                     if (!values.Timestamps.empty()) {
                         BLOG_TRACE("Result time is " << values.Timestamps.front().Seconds());
-                        for (ui64 id = 0; id < values.Values.size(); ++id) {
-                            db.Table<Schema::MetricsValues>().Key(values.Timestamps.front().Seconds(), id).Update<Schema::MetricsValues::Value>(values.Values.front()[id]);
+                        for (ui64 id : ids) {
+                            if (!values.Values[id].empty()) {
+                                BLOG_TRACE("Updating values with id " << id);
+                                db.Table<Schema::MetricsValues>().Key(values.Timestamps.front().Seconds(), id).Update<Schema::MetricsValues::Value>(values.Values[id].front());
+                            }
                         }
                     }
                     ids.clear();
@@ -400,8 +466,11 @@ bool TLocalBackend::DownsampleData(NTabletFlatExecutor::TTransactionContext& txc
     }
     if (!values.Timestamps.empty()) {
         BLOG_TRACE("Result time is " << values.Timestamps.front().Seconds());
-        for (ui64 id = 0; id < values.Values.size(); ++id) {
-            db.Table<Schema::MetricsValues>().Key(values.Timestamps.front().Seconds(), id).Update<Schema::MetricsValues::Value>(values.Values.front()[id]);
+        for (ui64 id : ids) {
+            if (!values.Values[id].empty()) {
+                BLOG_TRACE("Updating values with id " << id);
+                db.Table<Schema::MetricsValues>().Key(values.Timestamps.front().Seconds(), id).Update<Schema::MetricsValues::Value>(values.Values[id].front());
+            }
         }
     }
 

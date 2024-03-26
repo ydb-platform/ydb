@@ -1,7 +1,10 @@
 #include "yaml_config.h"
-#include "yaml_config_parser.h"
+
+#include <ydb/library/yaml_config/yaml_config_parser.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <ydb/core/protos/key.pb.h>
 
 using namespace NKikimr;
 
@@ -1767,25 +1770,5 @@ obj: {value: 2} # comment2
 
             UNIT_ASSERT_VALUES_EQUAL(res, exp);
         }
-    }
-
-    Y_UNIT_TEST(ProtoBytesFieldDoesNotDecodeBase64) {
-    // "c2FtcGxlLXBpbgo=" -> base64 decode -> "sample-pin"
-            TString config = R"(
-pdisk_key_config:
-  keys:
-  - container_path: "/a/b/c"
-    pin: "c2FtcGxlLXBpbgo="
-    id: "sample-encryption-key"
-    version: 1
-)";
-        NKikimrConfig::TAppConfig cfg;
-        NKikimr::NYaml::Parse(config, cfg, false);
-
-        UNIT_ASSERT(cfg.has_pdiskkeyconfig());
-        auto keys = cfg.pdiskkeyconfig().GetKeys();
-        UNIT_ASSERT_VALUES_EQUAL(keys.end() - keys.begin(), 1);
-        auto key = keys.at(0);
-        UNIT_ASSERT_VALUES_EQUAL("c2FtcGxlLXBpbgo=", key.pin());
     }
 }

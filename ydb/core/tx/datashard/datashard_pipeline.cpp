@@ -9,6 +9,7 @@
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/tx/balance_coverage/balance_coverage_builder.h>
+#include <ydb/core/protos/kqp.pb.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -38,6 +39,7 @@ TPipeline::~TPipeline()
         pr.second->ClearSpecialDependencies();
         pr.second->ClearPlannedConflicts();
         pr.second->ClearImmediateConflicts();
+        pr.second->ClearRepeatableReadConflicts();
     }
 }
 
@@ -59,7 +61,6 @@ bool TPipeline::Load(NIceDb::TNiceDb& db) {
         return false;
     }
 
-    Config.Validate();
     UtmostCompleteTx = LastCompleteTx;
 
     return true;
@@ -487,6 +488,7 @@ void TPipeline::UnblockNormalDependencies(const TOperation::TPtr &op)
     op->ClearDependencies();
     op->ClearPlannedConflicts();
     op->ClearImmediateConflicts();
+    op->ClearRepeatableReadConflicts();
     DepTracker.RemoveOperation(op);
 }
 
@@ -539,8 +541,12 @@ bool TPipeline::LoadTxDetails(TTransactionContext &txc,
 {
     auto it = DataTxCache.find(tx->GetTxId());
     if (it != DataTxCache.end()) {
-        it->second->SetStep(tx->GetStep());
-        tx->FillTxData(it->second);
+        auto baseTx = it->second;
+        Y_ABORT_UNLESS(baseTx->GetType() == TValidatedTx::EType::DataTx, "Wrong tx type in cache");
+        TValidatedDataTx::TPtr dataTx = std::static_pointer_cast<TValidatedDataTx>(baseTx);
+
+        dataTx->SetStep(tx->GetStep());
+        tx->FillTxData(dataTx);
         // Remove tx from cache.
         ForgetTx(tx->GetTxId());
 
@@ -586,6 +592,55 @@ bool TPipeline::LoadTxDetails(TTransactionContext &txc,
                     "LoadTxDetails at " << Self->TabletID() << " loaded tx from db "
                     << tx->GetStep() << ":" << tx->GetTxId() << " keys extracted: "
                     << keysCount);
+    }
+
+    return true;
+}
+
+bool TPipeline::LoadWriteDetails(TTransactionContext& txc, const TActorContext& ctx, TWriteOperation::TPtr writeOp)
+{
+    auto it = DataTxCache.find(writeOp->GetTxId());
+    if (it != DataTxCache.end()) {
+        auto baseTx = it->second;
+        Y_ABORT_UNLESS(baseTx->GetType() == TValidatedTx::EType::WriteTx, "Wrong writeOp type in cache");
+        TValidatedWriteTx::TPtr writeTx = std::static_pointer_cast<TValidatedWriteTx>(baseTx);
+
+        writeOp->FillTxData(writeTx);
+        // Remove writeOp from cache.
+        ForgetTx(writeOp->GetTxId());
+
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "LoadWriteDetails at " << Self->TabletID() << " got data writeOp from cache " << writeOp->GetStep() << ":" << writeOp->GetTxId());
+    } else if (writeOp->HasVolatilePrepareFlag()) {
+        // Since transaction is volatile it was never stored on disk, and it
+        // shouldn't have any artifacts yet.
+        writeOp->FillVolatileTxData(Self);
+
+        ui32 keysCount = 0;
+        keysCount = writeOp->ExtractKeys(txc.DB.GetScheme());
+
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "LoadWriteDetails at " << Self->TabletID() << " loaded writeOp from memory " << writeOp->GetStep() << ":" << writeOp->GetTxId() << " keys extracted: " << keysCount);
+    } else {
+        NIceDb::TNiceDb db(txc.DB);
+        TActorId target;
+        TString txBody;
+        TVector<TSysTables::TLocksTable::TLock> locks;
+        ui64 artifactFlags = 0;
+        bool ok = Self->TransQueue.LoadTxDetails(db, writeOp->GetTxId(), target, txBody, locks, artifactFlags);
+        if (!ok)
+            return false;
+
+        // Check we have enough memory to parse writeOp.
+        ui64 requiredMem = txBody.size() * 10;
+        if (MaybeRequestMoreTxMemory(requiredMem, txc))
+            return false;
+
+        writeOp->FillTxData(Self, target, txBody, std::move(locks), artifactFlags);
+
+        ui32 keysCount = 0;
+        //if (Config.LimitActiveTx > 1)
+        keysCount = writeOp->ExtractKeys(txc.DB.GetScheme());
+
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "LoadWriteDetails at " << Self->TabletID() << " loaded writeOp from db " << writeOp->GetStep() << ":" << writeOp->GetTxId() << " keys extracted: " << keysCount);
     }
 
     return true;
@@ -1122,11 +1177,10 @@ void TPipeline::ProposeTx(TOperation::TPtr op, const TStringBuf &txBody, TTransa
         PreserveSchema(db, op->GetMaxStep());
     }
     Self->TransQueue.ProposeTx(db, op, op->GetTarget(), txBody);
+
     if (Self->IsStopping() && op->GetTarget()) {
         // Send notification if we prepared a tx while shard was stopping
-        auto notify = MakeHolder<TEvDataShard::TEvProposeTransactionRestart>(
-            Self->TabletID(), op->GetTxId());
-        ctx.Send(op->GetTarget(), notify.Release(), 0, op->GetCookie());
+        op->OnStopping(*Self, ctx);
     }
 }
 
@@ -1186,7 +1240,7 @@ ECleanupStatus TPipeline::CleanupOutdated(NIceDb::TNiceDb& db, const TActorConte
 {
     const ui32 OUTDATED_BATCH_SIZE = 100;
     TVector<ui64> outdatedTxs;
-    auto status = Self->TransQueue.CleanupOutdated(db, outdatedStep, OUTDATED_BATCH_SIZE, outdatedTxs, replies);
+    auto status = Self->TransQueue.CleanupOutdated(db, outdatedStep, OUTDATED_BATCH_SIZE, outdatedTxs);
     switch (status) {
         case ECleanupStatus::None:
         case ECleanupStatus::Restart:
@@ -1202,8 +1256,10 @@ ECleanupStatus TPipeline::CleanupOutdated(NIceDb::TNiceDb& db, const TActorConte
     for (ui64 txId : outdatedTxs) {
         auto op = Self->TransQueue.FindTxInFly(txId);
         if (op && !op->IsExecutionPlanFinished()) {
+            op->OnCleanup(*Self, replies);
             GetExecutionUnit(op->GetCurrentUnit()).RemoveOperation(op);
         }
+        Self->TransQueue.RemoveTxInFly(txId, &replies);
 
         ForgetTx(txId);
         LOG_INFO(ctx, NKikimrServices::TX_DATASHARD,
@@ -1219,12 +1275,14 @@ ECleanupStatus TPipeline::CleanupOutdated(NIceDb::TNiceDb& db, const TActorConte
 bool TPipeline::CleanupVolatile(ui64 txId, const TActorContext& ctx,
         std::vector<std::unique_ptr<IEventHandle>>& replies)
 {
-    if (Self->TransQueue.CleanupVolatile(txId, replies)) {
+    if (Self->TransQueue.CleanupVolatile(txId)) {
         auto op = Self->TransQueue.FindTxInFly(txId);
         if (op && !op->IsExecutionPlanFinished()) {
+            op->OnCleanup(*Self, replies);
             GetExecutionUnit(op->GetCurrentUnit()).RemoveOperation(op);
         }
-        
+        Self->TransQueue.RemoveTxInFly(txId, &replies);
+
         ForgetTx(txId);
 
         Self->CheckDelayedProposeQueue(ctx);
@@ -1242,6 +1300,25 @@ bool TPipeline::CleanupVolatile(ui64 txId, const TActorContext& ctx,
     }
 
     return false;
+}
+
+size_t TPipeline::CleanupWaitingVolatile(const TActorContext& ctx, std::vector<std::unique_ptr<IEventHandle>>& replies)
+{
+    std::vector<ui64> cleanupTxs;
+    for (const auto& pr : Self->TransQueue.GetTxsInFly()) {
+        if (pr.second->HasVolatilePrepareFlag() && !pr.second->GetStep()) {
+            cleanupTxs.push_back(pr.first);
+        }
+    }
+
+    size_t cleaned = 0;
+    for (ui64 txId : cleanupTxs) {
+        if (CleanupVolatile(txId, ctx, replies)) {
+            ++cleaned;
+        }
+    }
+
+    return cleaned;
 }
 
 ui64 TPipeline::PlannedTxInFly() const
@@ -1280,16 +1357,19 @@ ui64 TPipeline::GetInactiveTxSize() const {
     return res;
 }
 
-bool TPipeline::SaveForPropose(TValidatedDataTx::TPtr tx) {
-    Y_ABORT_UNLESS(tx && tx->TxId());
-    if (DataTxCache.size() <= Config.LimitDataTxCache) {
-        ui64 quota = tx->GetTxSize() + tx->GetMemoryAllocated();
-        if (Self->TryCaptureTxCache(quota)) {
-            tx->SetTxCacheUsage(quota);
-            DataTxCache[tx->TxId()] = tx;
-            return true;
-        }
+bool TPipeline::SaveForPropose(TValidatedTx::TPtr tx) {
+    Y_ABORT_UNLESS(tx && tx->GetTxId());
+
+    if (DataTxCache.size() >= Config.LimitDataTxCache)
+        return false;
+
+    ui64 quota = tx->GetMemoryConsumption();
+    if (Self->TryCaptureTxCache(quota)) {
+        tx->SetTxCacheUsage(quota);
+        DataTxCache[tx->GetTxId()] = tx;
+        return true;
     }
+
     return false;
 }
 
@@ -1571,14 +1651,14 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
     return tx;
 }
 
-TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr& ev,
+TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&& ev,
                                            TInstant receivedAt, ui64 tieBreakerIndex,
                                            NTabletFlatExecutor::TTransactionContext& txc,
-                                           const TActorContext& ctx, NWilson::TSpan &&operationSpan)
+                                           NWilson::TSpan &&operationSpan)
 {
     const auto& rec = ev->Get()->Record;
-    TBasicOpInfo info(rec.GetTxId(), EOperationKind::WriteTx, EvWrite::Convertor::GetProposeFlags(rec.GetTxMode()), 0, receivedAt, tieBreakerIndex);
-    auto writeOp = MakeIntrusive<TWriteOperation>(info, ev, Self, txc, ctx);
+    TBasicOpInfo info(rec.GetTxId(), EOperationKind::WriteTx, NEvWrite::TConvertor::GetProposeFlags(rec.GetTxMode()), 0, receivedAt, tieBreakerIndex);
+    auto writeOp = MakeIntrusive<TWriteOperation>(info, std::move(ev), Self);
     writeOp->OperationSpan = std::move(operationSpan);
     auto writeTx = writeOp->GetWriteTx();
     Y_ABORT_UNLESS(writeTx);
@@ -1589,14 +1669,14 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
     };
 
     if (!writeTx->Ready()) {
-        badRequest(EvWrite::Convertor::ConvertErrCode(writeOp->GetWriteTx()->GetErrCode()), TStringBuilder() << "Cannot parse tx " << writeOp->GetTxId() << ". " << writeOp->GetWriteTx()->GetErrCode() << ": " << writeOp->GetWriteTx()->GetErrStr());
+        badRequest(NEvWrite::TConvertor::ConvertErrCode(writeOp->GetWriteTx()->GetErrCode()), TStringBuilder() << "Cannot parse tx " << writeOp->GetTxId() << ". " << writeOp->GetWriteTx()->GetErrCode() << ": " << writeOp->GetWriteTx()->GetErrStr());
         return writeOp;
     }
 
-    writeTx->ExtractKeys(true);
+    writeTx->ExtractKeys(txc.DB.GetScheme(), true);
 
     if (!writeTx->Ready()) {
-        badRequest(EvWrite::Convertor::ConvertErrCode(writeOp->GetWriteTx()->GetErrCode()), TStringBuilder() << "Cannot parse tx keys " << writeOp->GetTxId() << ". " << writeOp->GetWriteTx()->GetErrCode() << ": " << writeOp->GetWriteTx()->GetErrStr());
+        badRequest(NEvWrite::TConvertor::ConvertErrCode(writeOp->GetWriteTx()->GetErrCode()), TStringBuilder() << "Cannot parse tx keys " << writeOp->GetTxId() << ". " << writeOp->GetWriteTx()->GetErrCode() << ": " << writeOp->GetWriteTx()->GetErrStr());
         return writeOp;
     }
 
@@ -1728,7 +1808,7 @@ EExecutionStatus TPipeline::RunExecutionPlan(TOperation::TPtr op,
             return EExecutionStatus::Reschedule;
         }
 
-        NWilson::TSpan unitSpan(TWilsonTablet::Tablet, txc.TransactionExecutionSpan.GetTraceId(), "Datashard.Unit");
+        NWilson::TSpan unitSpan(TWilsonTablet::TabletDetailed, txc.TransactionExecutionSpan.GetTraceId(), "Datashard.Unit");
         
         NCpuTime::TCpuTimer timer;
         auto status = unit.Execute(op, txc, ctx);

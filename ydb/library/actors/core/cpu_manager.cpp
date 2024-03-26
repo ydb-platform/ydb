@@ -29,10 +29,11 @@ namespace NActors {
             }
         }
         Shared.reset(new TSharedExecutorPool(Config.Shared, ExecutorPoolCount, poolsWithSharedThreads));
-        // auto sharedPool = static_cast<TSharedExecutorPool*>(Shared.get());
+        auto sharedPool = static_cast<TSharedExecutorPool*>(Shared.get());
 
         ui64 ts = GetCycleCountFast();
         Harmonizer.reset(MakeHarmonizer(ts));
+        Harmonizer->SetSharedPool(sharedPool);
 
         Executors.Reset(new TAutoPtr<IExecutorPool>[ExecutorPoolCount]);
 
@@ -154,6 +155,24 @@ namespace NActors {
             }
         }
         return pools;
+    }
+
+    void TCpuManager::GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy, TVector<TExecutorThreadStats>& sharedStatsCopy) const {
+        if (poolId < ExecutorPoolCount) {
+            Executors[poolId]->GetCurrentStats(poolStats, statsCopy);
+        }
+        if (Shared) {
+            Shared->GetSharedStats(poolId, sharedStatsCopy);
+            auto state = Shared->GetState();
+            if (i16 threadIdx = state.BorrowedThreadByPool[poolId]; threadIdx != -1) {
+                poolStats.CurrentThreadCount += 0.5;
+            }
+            if (i16 threadIdx = state.ThreadByPool[poolId]; threadIdx != -1) {
+                if (state.PoolByBorrowedThread[threadIdx] == -1) {
+                    poolStats.CurrentThreadCount -= 0.5;
+                }
+            }
+        }
     }
 
 }

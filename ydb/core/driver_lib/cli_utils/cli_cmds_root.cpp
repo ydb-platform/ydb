@@ -26,6 +26,7 @@ public:
         AddCommand(std::make_unique<TClientCommandWhoAmI>());
         AddCommand(std::make_unique<TClientCommandDiscovery>());
         AddClientCommandServer(*this, std::move(factories));
+        AddCommand(std::make_unique<TClientCommandConfig>());
     }
 
     void Config(TConfig& config) override {

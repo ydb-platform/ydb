@@ -145,6 +145,7 @@ bool EnsureDryType(TPositionHandle position, const TTypeAnnotationNode& type, TE
 bool EnsureDryType(const TExprNode& node, TExprContext& ctx);
 bool EnsureDictType(const TExprNode& node, TExprContext& ctx);
 bool EnsureDictType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureValidJsonPath(const TExprNode& node, TExprContext& ctx);
 
 bool IsVoidType(const TExprNode& node, TExprContext& ctx);
 bool EnsureVoidType(const TExprNode& node, TExprContext& ctx);
@@ -217,10 +218,10 @@ const TTypeAnnotationNode* JoinDryKeyType(const TTypeAnnotationNode* primary, co
 const TTypeAnnotationNode* JoinCommonDryKeyType(TPositionHandle position, bool outer, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx);
 
 template <bool Strict, bool Silent = false> // Strict + DryType before - common type for join key.
-const TTypeAnnotationNode* CommonType(TPositionHandle position, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx);
+const TTypeAnnotationNode* CommonType(TPositionHandle position, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx, bool warn = false);
 
-const TTypeAnnotationNode* CommonType(TPositionHandle position, const TTypeAnnotationNode::TSpanType& types, TExprContext& ctx);
-const TTypeAnnotationNode* CommonTypeForChildren(const TExprNode& node, TExprContext& ctx);
+const TTypeAnnotationNode* CommonType(TPositionHandle position, const TTypeAnnotationNode::TSpanType& types, TExprContext& ctx, bool warn = false);
+const TTypeAnnotationNode* CommonTypeForChildren(const TExprNode& node, TExprContext& ctx, bool warn = false);
 
 size_t GetOptionalLevel(const TTypeAnnotationNode* type);
 
@@ -246,7 +247,7 @@ IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TType
     TConvertFlags flags = {});
 IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
     const TTypeAnnotationNode& expectedType, TExprContext& ctx, TConvertFlags flags = {});
-TMaybe<EDataSlot> GetSuperType(EDataSlot dataSlot1, EDataSlot dataSlot2);
+TMaybe<EDataSlot> GetSuperType(EDataSlot dataSlot1, EDataSlot dataSlot2, bool warn = false, TExprContext* ctx = nullptr, TPositionHandle* pos = nullptr);
 IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, TExprNode::TPtr& node2, TExprContext& ctx,
     const TTypeAnnotationNode*& commonType, TConvertFlags flags = {});
 IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const TTypeAnnotationNode& type1,
@@ -338,6 +339,7 @@ bool GetMinMaxResultType(const TPositionHandle& pos, const TTypeAnnotationNode& 
 IGraphTransformer::TStatus ExtractPgTypesFromMultiLambda(TExprNode::TPtr& lambda, TVector<ui32>& argTypes,
     bool& needRetype, TExprContext& ctx);
 
+void AdjustReturnType(ui32& returnType, const TVector<ui32>& procArgTypes, ui32 procVariadicType, const TVector<ui32>& argTypes);
 TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggregateDesc& aggDesc, bool onWindow,
     const TExprNode::TPtr& lambda, const TVector<ui32>& argTypes, const TTypeAnnotationNode* itemType, TExprContext& ctx);
 
@@ -348,4 +350,7 @@ TExprNode::TPtr ConvertToMultiLambda(const TExprNode::TPtr& lambda, TExprContext
 const TStringBuf BlockLengthColumnName = "_yql_block_length";
 
 TStringBuf NormalizeCallableName(TStringBuf name);
+
+void CheckExpectedTypeAndColumnOrder(const TExprNode& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx);
+
 }

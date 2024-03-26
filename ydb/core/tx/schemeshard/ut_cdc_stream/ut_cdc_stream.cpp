@@ -1559,7 +1559,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
             }
 
             UNIT_ASSERT_STRINGS_EQUAL(meteringRecord, TBillRecord()
-                .Id("cdc_stream_scan-9437197-3-9437197-4")
+                .Id("cdc_stream_scan-72075186233409549-3-72075186233409549-4")
                 .CloudId("CLOUD_ID_VAL")
                 .FolderId("FOLDER_ID_VAL")
                 .ResourceId("DATABASE_ID_VAL")

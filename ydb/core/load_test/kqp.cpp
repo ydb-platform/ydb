@@ -3,6 +3,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/protos/kqp_stats.pb.h>
 
 #include <ydb/library/workload/workload_factory.h>
 #include <ydb/library/workload/stock_workload.h>

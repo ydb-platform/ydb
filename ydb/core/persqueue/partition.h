@@ -762,8 +762,8 @@ private:
     TPartitionCounterWrapper MsgsWrittenTotal;
     TPartitionCounterWrapper MsgsWrittenGrpc;
 
-    NKikimr::NPQ::TMultiCounter MsgsDiscarded;;
-    NKikimr::NPQ::TMultiCounter BytesDiscarded;;
+    NKikimr::NPQ::TMultiCounter MsgsDiscarded;
+    NKikimr::NPQ::TMultiCounter BytesDiscarded;
 
     // Writing blob with topic quota variables
     ui64 TopicQuotaRequestCookie = 0;

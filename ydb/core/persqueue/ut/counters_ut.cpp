@@ -197,14 +197,6 @@ Y_UNIT_TEST(PartitionFirstClass) {
         const TString referenceCounters = NResource::Find(TStringBuf("counters_datastreams.html"));
         UNIT_ASSERT_VALUES_EQUAL(countersStr.Str() + "\n", referenceCounters);
     }
-    // CmdWrite(0, "sourceid2", TestData(), tc, false);
-    // {
-    //     auto counters = tc.Runtime->GetAppData(0).Counters;
-    //     auto dbGroup = GetServiceCounters(counters, "pqproxy");
-    //     TStringStream countersStr;
-    //     dbGroup->OutputHtml(countersStr);
-    //     Cerr << "Counters: ==========================\n" << countersStr.Str() << "==================================" << Endl;;
-    // }
 }
 
 Y_UNIT_TEST(SupportivePartitionCountersPersist) {

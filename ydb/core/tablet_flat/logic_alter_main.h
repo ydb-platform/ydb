@@ -41,7 +41,6 @@ namespace NTabletFlatExecutor {
             for (const auto &logo : ObsoleteLog) {
                 LogoBlobIDFromLogoBlobID(logo, deleted->Add());
             }
-            ObsoleteLog.clear();
         }
 
         void WriteLog(TLogCommit &commit, TString alter) noexcept

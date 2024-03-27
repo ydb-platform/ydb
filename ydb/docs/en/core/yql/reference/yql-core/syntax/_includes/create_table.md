@@ -114,13 +114,14 @@ CREATE TABLE my_table (
 {% endif %}
 
 {% if feature_temp_tables %}
-{% if feature_olap_tables %}#{%endif%}## Creating a temporary table {#row-additional}
+{% if feature_olap_tables %}#{%endif%}## Creating a temporary table {#temporary_tables}
 ```sql
 CREATE TEMPORARY TABLE table_name (
     ...
 );
 ```
-`TEMPORARY` / `TEMP` – a temporary table that is automatically deleted at the regular end of the session, otherwise it will no longer be available and will be automatically deleted after the time has elapsed. If this parameter is not set (left empty), a permanent table is created.
+
+{% include [x](../../../../../_includes/temp_table_description.md) %}
 
 {% endif %}
 

@@ -668,7 +668,7 @@ private:
     template <class T> T& GetCurrentEvent();
     TTransaction& GetCurrentTransaction();
 
-    template <class T> void EnsureWhatUserActionAndTransactionEventsFrontIs() const;
+    template <class T> void EnsureUserActionAndTransactionEventsFrontIs() const;
 
     bool ProcessUserActionOrTransaction(TEvPQ::TEvSetClientInfo& event, const TActorContext& ctx);
     bool ProcessUserActionOrTransaction(const TEvPersQueue::TEvProposeTransaction& event, const TActorContext& ctx);

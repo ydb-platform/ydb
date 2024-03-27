@@ -406,7 +406,12 @@ public:
     }
 
     TMaybe<TString> GetCommandTagName() {
-        return Statements ? Statements[CurrentStatementId].CommandTagName : CompileResult->CommandTagName;
+        if (!Statements && !CompileResult) {
+            return Nothing();
+        }
+        return Statements ?
+            Statements[CurrentStatementId].CommandTagName :
+            CompileResult->CommandTagName;
     }
 
     void PrepareCurrentStatement() {

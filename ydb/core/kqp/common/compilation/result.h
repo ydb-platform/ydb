@@ -23,7 +23,7 @@ struct TKqpCompileResult {
         , MaxReadType(maxReadType)
         , Ast(std::move(ast))
         , NeedToSplit(needToSplit)
-        , CommandTagName(std::move(commandTagName)) {}
+        , CommandTagName(commandTagName) {}
 
     static std::shared_ptr<TKqpCompileResult> Make(const TString& uid, const Ydb::StatusIds::StatusCode& status,
         const NYql::TIssues& issues, ETableReadType maxReadType, TMaybe<TKqpQueryId> query = {},

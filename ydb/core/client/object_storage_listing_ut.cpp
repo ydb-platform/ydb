@@ -16,7 +16,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
 
     static int GRPC_PORT = 0;
 
-    void S3WriteRow(TFlatMsgBusClient& annoyingClient, ui64 hash, TString name, TString path, ui64 version, ui64 ts, TString data, TString table) {
+    void S3WriteRow(TFlatMsgBusClient& annoyingClient, ui64 hash, TString name, TString path, ui64 version, ui64 ts, TString data, TString table, bool someBool = true) {
         TString insertRowQuery =  R"(
                     (
                     (let key '(
@@ -29,6 +29,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
                         '('Timestamp (Uint64 '%llu))
                         '('Data (String '"%s"))
                         '('Int32Data (Null))
+                        '('SomeBool (Bool '"%s"))
                     ))
                     (let ret_ (AsList
                         (UpdateRow '/dc-1/Dir/%s key value)
@@ -37,7 +38,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
                     )
                 )";
 
-        annoyingClient.FlatQuery(Sprintf(insertRowQuery.data(), hash, name.data(), path.data(), version, ts, data.data(), table.data()));
+        annoyingClient.FlatQuery(Sprintf(insertRowQuery.data(), hash, name.data(), path.data(), version, ts, data.data(), someBool ? "true" : "false", table.data()));
     }
 
     void S3DeleteRow(TFlatMsgBusClient& annoyingClient, ui64 hash, TString name, TString path, ui64 version, TString table) {
@@ -59,7 +60,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         annoyingClient.FlatQuery(Sprintf(eraseRowQuery.data(), hash, name.data(), path.data(), version, table.data()));
     }
 
-    void PrepareS3Data(TFlatMsgBusClient& annoyingClient) {
+    void CreateS3Table(TFlatMsgBusClient& annoyingClient) {
         annoyingClient.InitRoot();
         annoyingClient.MkDir("/dc-1", "Dir");
         annoyingClient.CreateTable("/dc-1/Dir",
@@ -73,6 +74,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
                 Columns { Name: "ExtraData" Type: "String"}
                 Columns { Name: "Int32Data" Type: "Int32"}
                 Columns { Name: "Unused1"   Type: "Uint32"}
+                Columns { Name: "SomeBool"  Type: "Bool"}
                 KeyColumnNames: [
                     "Hash",
                     "Name",
@@ -134,6 +136,10 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
 
                 }
             )");
+    }
+
+    void PrepareS3Data(TFlatMsgBusClient& annoyingClient) {
+        CreateS3Table(annoyingClient);
 
         S3WriteRow(annoyingClient, 50, "Bucket50", "Music/AC DC/Shoot to Thrill.mp3", 1, 10, "", "Table");
         S3WriteRow(annoyingClient, 50, "Bucket50", "Music/AC DC/Thunderstruck.mp3", 1, 10, "", "Table");
@@ -300,7 +306,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
     TString DoS3Listing(ui16 grpcPort, ui64 bucket, const TString& pathPrefix, const TString& pathDelimiter, const TString& startAfter,
                     TString continuationToken,
                     const TVector<TString>& columnsToReturn, ui32 maxKeys,
-                    TVector<TString>& commonPrefixes, TVector<TString>& contents)
+                    TVector<TString>& commonPrefixes, TVector<TString>& contents, bool filter = false)
     {
         std::shared_ptr<grpc::Channel> channel;
         TStringBuilder endpoint;
@@ -358,6 +364,31 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
             request->Addcolumns_to_return(c);
         }
         request->set_max_keys(maxKeys);
+
+        if (filter) {
+            auto* filterMsg = request->mutable_filter();
+
+            TString filter = R"(
+                type {
+                    tuple_type {
+                        elements {
+                            type_id: BOOL
+                        }
+                    }
+                }
+                value {
+                    items {
+                        bool_value: )" + ToString(true) + R"(
+                    }
+                }
+            )";
+
+            bool parseOk = ::google::protobuf::TextFormat::ParseFromString(filter, filterMsg->mutable_values());
+            UNIT_ASSERT(parseOk);
+            
+            filterMsg->add_columns("SomeBool");
+        }
+
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(keyPrefix, request->mutable_key_prefix());
         UNIT_ASSERT(parseOk);
         parseOk = ::google::protobuf::TextFormat::ParseFromString(pbStartAfterSuffix, request->mutable_start_after_key_suffix());
@@ -831,6 +862,73 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         UNIT_ASSERT(!continuationToken);
         UNIT_ASSERT_EQUAL(0, contents.size());
         UNIT_ASSERT_EQUAL(0, commonPrefixes.size());
+    }
+
+    Y_UNIT_TEST(TestFilter) {
+        TPortManager pm;
+        ui16 port = pm.GetPort(2134);
+        TServer cleverServer = TServer(TServerSettings(port));
+        GRPC_PORT = pm.GetPort(2135);
+        cleverServer.EnableGRpc(GRPC_PORT);
+
+        TFlatMsgBusClient annoyingClient(port);
+
+        CreateS3Table(annoyingClient);
+
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/b.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/c.jpg", 1, 10, "", "Table");
+
+        // This folder should not be shown, as boolean flag is false
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/folder/a.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/folder/b.jpg", 1, 10, "", "Table", false);
+
+        // This folder should be shown
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/games/a.jpg", 1, 10, "", "Table");
+
+        // This folder should be shown, as one file is hidden, and one is not
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/inner/a.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/inner/b.jpg", 1, 10, "", "Table");
+
+        // This folder should be shown, as one file in nested folder is hidden, and one is not
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test/inner/a.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test/inner/b.jpg", 1, 10, "", "Table");
+
+        // This folder should not be shown
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test2/inner/a.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test2/inner/b.jpg", 1, 10, "", "Table", false);
+
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test3/inner/inner2/a.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test3/inner/inner2/b.jpg", 1, 10, "", "Table");
+
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test4/inner/inner2/a.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test4/inner/inner2/b.jpg", 1, 10, "", "Table", false);
+
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/a.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/c.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/d.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/e.jpg", 1, 10, "", "Table", false);
+
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/a.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/b.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/a.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/b.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/inner2/a.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/inner2/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/inner2/c.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/xyz.io", 1, 10, "", "Table", false);
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/yyyyy.txt", 1, 10, "", "Table", false);
+
+        TVector<TString> folders;
+        TVector<TString> files;
+        DoS3Listing(GRPC_PORT, 100, "/Photos/", "/", nullptr, nullptr, {}, 1000, folders, files, true);
+
+        TVector<TString> expectedFolders = {"/Photos/games/", "/Photos/inner/", "/Photos/test/", "/Photos/test3/", "/Photos/test5/", "/Photos/test6/"};
+        TVector<TString> expectedFiles = {"/Photos/a.jpg", "/Photos/c.jpg"};
+
+        UNIT_ASSERT_EQUAL(expectedFolders, folders);
+        UNIT_ASSERT_EQUAL(expectedFiles, files);
     }
 }
 

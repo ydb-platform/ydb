@@ -22,7 +22,7 @@ namespace NGRpcService {
 
 using TEvObjectStorageListingRequest = TGrpcRequestOperationCall<Ydb::ObjectStorage::ListingRequest, Ydb::ObjectStorage::ListingResponse>;
 
-// NOTE: TCell's can reference memomry from tupleValue
+// NOTE: TCell's can reference memory from tupleValue
 bool CellsFromTuple(const Ydb::Type* tupleType,
                     const Ydb::Value& tupleValue,
                     const TConstArrayRef<NScheme::TTypeInfo>& types,
@@ -187,6 +187,11 @@ bool CellsFromTuple(const Ydb::Type* tupleType,
     return true;
 }
 
+struct TFilter {
+    TVector<ui32> ColumnIds;
+    TSerializedCellVec FilterValues;
+};
+
 class TObjectStorageListingRequestGrpc : public TActorBootstrapped<TObjectStorageListingRequestGrpc> {
 private:
     typedef TActorBootstrapped<TThis> TBase;
@@ -215,6 +220,7 @@ private:
     TSerializedCellVec StartAfterSuffixColumns;
     TSerializedCellVec KeyRangeFrom;
     TSerializedCellVec KeyRangeTo;
+    TFilter Filter;
     ui32 CurrentShardIdx;
     TVector<TString> CommonPrefixesRows;
     TVector<TSerializedCellVec> ContentsRows;
@@ -447,6 +453,51 @@ private:
             ContentsColumns.push_back(entry.Columns[columnByName[name]]);
         }
 
+        if (Request->has_filter()) {
+            THashMap<TString, ui32> columnToRequestIndex;
+
+            for (size_t i = 0; i < ContentsColumns.size(); i++) {
+                columnToRequestIndex[ContentsColumns[i].Name] = i;
+            }
+
+            const auto filter = Request->filter();
+
+            TVector<NScheme::TTypeInfo> types;
+
+            for (const auto& colName : filter.columns()) {
+                const auto& columnInfo = entry.Columns[columnByName[colName]];
+                const auto& type = columnInfo.PType;
+
+                types.push_back(type);
+
+                const auto [it, inserted] = columnToRequestIndex.try_emplace(colName, columnToRequestIndex.size());
+
+                if (inserted) {
+                    ContentsColumns.push_back(columnInfo);
+                }
+
+                Filter.ColumnIds.push_back(it->second);
+            }
+
+            TConstArrayRef<NScheme::TTypeInfo> typesRef(types.data(), types.size());
+
+            TVector<TCell> cells;
+            TVector<TString> owner;
+
+            TString err;
+
+            const auto& values = filter.values();
+
+            CellsFromTuple(&values.Gettype(), values.Getvalue(), typesRef, true, cells, err, owner);
+            
+            if (!err.empty()) {
+                ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Sprintf("Invalid filter: '%s'", err.data()), ctx);
+                return false;
+            }
+
+            Filter.FilterValues.Parse(TSerializedCellVec::Serialize(cells));
+        }
+
         return true;
     }
 
@@ -591,7 +642,7 @@ private:
     void MakeShardRequest(ui32 idx, const NActors::TActorContext& ctx) {
         ui64 shardId = KeyRange->GetPartitions()[idx].ShardId;
 
-        THolder<TEvDataShard::TEvS3ListingRequest> ev(new TEvDataShard::TEvS3ListingRequest());
+        THolder<TEvDataShard::TEvObjectStorageListingRequest> ev(new TEvDataShard::TEvObjectStorageListingRequest());
         ev->Record.SetTableId(KeyRange->TableId.PathId.LocalPathId);
         ev->Record.SetSerializedKeyPrefix(PrefixColumns.GetBuffer());
         ev->Record.SetPathColumnPrefix(Request->Getpath_column_prefix());
@@ -613,6 +664,16 @@ private:
 
         for (const auto& ci : ContentsColumns) {
             ev->Record.AddColumnsToReturn(ci.Id);
+        }
+
+        if (!Filter.ColumnIds.empty()) {
+            auto* filter = ev->Record.mutable_filter();
+            
+            for (const auto& colId : Filter.ColumnIds) {
+                filter->add_columns(colId);
+            }
+
+            filter->set_values(Filter.FilterValues.GetBuffer());
         }
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Sending request to shards " << shardId);
@@ -637,7 +698,7 @@ private:
 
     STFUNC(StateWaitResults) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvDataShard::TEvS3ListingResponse, Handle);
+            HFunc(TEvDataShard::TEvObjectStorageListingResponse, Handle);
             HFunc(TEvents::TEvUndelivered, Handle);
             HFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
@@ -647,7 +708,7 @@ private:
         }
     }
 
-    void Handle(TEvDataShard::TEvS3ListingResponse::TPtr& ev, const NActors::TActorContext& ctx) {
+    void Handle(TEvDataShard::TEvObjectStorageListingResponse::TPtr& ev, const NActors::TActorContext& ctx) {
         const auto& shardResponse = ev->Get()->Record;
 
         // Notify the cache that we are done with the pipe

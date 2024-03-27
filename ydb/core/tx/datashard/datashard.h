@@ -241,8 +241,8 @@ struct TEvDataShard {
         EvGetTableStatsResult,
         EvPeriodicTableStats,
 
-        EvS3ListingRequest,
-        EvS3ListingResponse,
+        EvObjectStorageListingRequest,
+        EvObjectStorageListingResponse,
 
         EvUploadRowsRequest,
         EvUploadRowsResponse,
@@ -1380,20 +1380,20 @@ struct TEvDataShard {
         }
     };
 
-    struct TEvS3ListingRequest
-        : public TEventPB<TEvS3ListingRequest,
-                            NKikimrTxDataShard::TEvS3ListingRequest,
-                            TEvDataShard::EvS3ListingRequest> {
-        TEvS3ListingRequest() = default;
+    struct TEvObjectStorageListingRequest
+        : public TEventPB<TEvObjectStorageListingRequest,
+                            NKikimrTxDataShard::TEvObjectStorageListingRequest,
+                            TEvDataShard::EvObjectStorageListingRequest> {
+        TEvObjectStorageListingRequest() = default;
     };
 
-    struct TEvS3ListingResponse
-         : public TEventPB<TEvS3ListingResponse,
-                            NKikimrTxDataShard::TEvS3ListingResponse,
-                            TEvDataShard::EvS3ListingResponse> {
-        TEvS3ListingResponse() = default;
+    struct TEvObjectStorageListingResponse
+         : public TEventPB<TEvObjectStorageListingResponse,
+                            NKikimrTxDataShard::TEvObjectStorageListingResponse,
+                            TEvDataShard::EvObjectStorageListingResponse> {
+        TEvObjectStorageListingResponse() = default;
 
-        explicit TEvS3ListingResponse(ui64 tabletId, ui32 status = NKikimrTxDataShard::TError::OK) {
+        explicit TEvObjectStorageListingResponse(ui64 tabletId, ui32 status = NKikimrTxDataShard::TError::OK) {
             Record.SetTabletID(tabletId);
             Record.SetStatus(status);
         }

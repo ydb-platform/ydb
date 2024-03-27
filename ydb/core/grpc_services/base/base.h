@@ -505,7 +505,9 @@ public:
 
     void StartTracing(NWilson::TSpan&& /*span*/) override {}
     void FinishSpan() override {}
-    bool* IsTracingDecided() override {}
+    bool* IsTracingDecided() override {
+        return nullptr;
+    }
 
     void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) override {
         State_.State = state;

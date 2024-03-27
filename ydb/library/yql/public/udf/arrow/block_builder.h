@@ -309,18 +309,6 @@ private:
     size_t CurrLen = 0;
 };
 
-namespace {
-template<typename T>
-T FromUnboxedValuePodDefault(TUnboxedValuePod uv) {
-    return uv.Get<T>(); 
-};
-
-template<typename T>
-T FromBlockItemDefault(TBlockItem item) {
-    return item.Get<T>(); 
-};
-}
-
 template<typename TLayout, bool Nullable, typename TDerived>
 class TFixedSizeArrayBuilderBase : public TArrayBuilderBase {
 public:

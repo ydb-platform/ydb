@@ -23,7 +23,7 @@ import (
 
 func TestDirent(t *testing.T) {
 	const (
-		direntBufSize   = 2048
+		direntBufSize   = 2048 // arbitrary? See https://go.dev/issue/37323.
 		filenameMinSize = 11
 	)
 
@@ -38,26 +38,38 @@ func TestDirent(t *testing.T) {
 		}
 	}
 
-	buf := bytes.Repeat([]byte("DEADBEAF"), direntBufSize/8)
+	names := make([]string, 0, 10)
+
 	fd, err := unix.Open(d, unix.O_RDONLY, 0)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
 	defer unix.Close(fd)
-	n, err := unix.ReadDirent(fd, buf)
-	if err != nil {
-		t.Fatalf("ReadDirent: %v", err)
-	}
-	buf = buf[:n]
 
-	names := make([]string, 0, 10)
-	for len(buf) > 0 {
-		var bc int
-		bc, _, names = unix.ParseDirent(buf, -1, names)
-		if bc == 0 && len(buf) > 0 {
-			t.Fatal("no progress")
+	buf := bytes.Repeat([]byte{0xCD}, direntBufSize)
+	for {
+		n, err := unix.ReadDirent(fd, buf)
+		if err == unix.EINVAL {
+			// On linux, 'man getdents64' says that EINVAL indicates result buffer is too small.
+			// Try a bigger buffer.
+			t.Logf("ReadDirent: %v; retrying with larger buffer", err)
+			buf = bytes.Repeat([]byte{0xCD}, len(buf)*2)
+			continue
 		}
-		buf = buf[bc:]
+		if err != nil {
+			t.Fatalf("ReadDirent: %v", err)
+		}
+		t.Logf("ReadDirent: read %d bytes", n)
+		if n == 0 {
+			break
+		}
+
+		var consumed, count int
+		consumed, count, names = unix.ParseDirent(buf[:n], -1, names)
+		t.Logf("ParseDirent: %d new name(s)", count)
+		if consumed != n {
+			t.Fatalf("ParseDirent: consumed %d bytes; expected %d", consumed, n)
+		}
 	}
 
 	sort.Strings(names)

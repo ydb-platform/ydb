@@ -264,6 +264,7 @@ struct TAstParseResult {
 
 struct TStmtParseInfo {
     bool KeepInCache = true;
+    TMaybe<TString> CommandTagName = {};
 };
 
 struct TAstPrintFlags {

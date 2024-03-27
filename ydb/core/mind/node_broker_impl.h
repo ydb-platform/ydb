@@ -301,7 +301,7 @@ private:
     TDynBitMap FreeIds;
     // Maps tenant to its slot indexes pool.
     std::unordered_map<TSubDomainKey, TSlotIndexesPool, THash<TSubDomainKey>> SlotIndexesPools;
-    bool EnableGenerateSlotNames = false;
+    bool EnableSlotNameGeneration = false;
     // Epoch info.
     TEpochInfo Epoch;
     // Current config.

@@ -64,7 +64,7 @@ void TNodeBroker::OnActivateExecutor(const TActorContext &ctx)
     MinDynamicId = Max(MaxStaticId + 1, (ui64)Min(appData->DynamicNameserviceConfig->MinDynamicNodeId, TActorId::MaxNodeId));
     MaxDynamicId = Max(MinDynamicId, (ui64)Min(appData->DynamicNameserviceConfig->MaxDynamicNodeId, TActorId::MaxNodeId));
 
-    EnableGenerateSlotNames = appData->FeatureFlags.GetEnableGenerateSlotNames();
+    EnableSlotNameGeneration = appData->FeatureFlags.GetEnableSlotNameGeneration();
 
     ClearState();
 
@@ -339,7 +339,7 @@ void TNodeBroker::FillNodeInfo(const TNodeInfo &node,
     info.SetAddress(node.Address);
     info.SetExpire(node.Expire.GetValue());
     node.Location.Serialize(info.MutableLocation(), false);
-    if (EnableGenerateSlotNames && node.SlotIndex.has_value()) {
+    if (EnableSlotNameGeneration && node.SlotIndex.has_value()) {
         const TString slotName = TStringBuilder() << "slot-" << node.SlotIndex;
         info.SetSlotName(slotName);
     }

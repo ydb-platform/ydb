@@ -1793,16 +1793,16 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
         }
 
-        //{
-        //    auto prepareResult = session.ExecuteQuery(R"(
-        //        CREATE TEMPORARY TABLE `/Root/Destination2` (
-        //            PRIMARY KEY (Col1)
-        //        )
-        //        AS SELECT Col2 As Col1, Col1 As Col2
-        //        FROM `/Root/Source`;
-        //    )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-        //    UNIT_ASSERT_C(!prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
-        //}
+        {
+            auto prepareResult = session.ExecuteQuery(R"(
+                CREATE TEMPORARY TABLE `/Root/Destination2` (
+                    PRIMARY KEY (Col1)
+                )
+                AS SELECT Col2 As Col1, Col1 As Col2
+                FROM `/Root/Source`;
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
 
         auto anotherSession = client.GetSession().GetValueSync().GetSession();
 

@@ -21,11 +21,6 @@
         }
     ],
     "test.test[action-evaluate_pure--Results]": [],
-    "test.test[action-file_cycle--Results]": [
-        {
-            "uri": "file://test.test_action-file_cycle--Results_/extracted"
-        }
-    ],
     "test.test[action-nested_eval-default.txt-Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",

@@ -20,13 +20,6 @@
             "uri": "https://{canondata_backend}/1900335/4871e48d29e4933514d3ed0c9c5d19de571eda1f/resource.tar.gz#test.test_action-evaluate_pure--Results_/results.txt"
         }
     ],
-    "test.test[action-file_cycle--Debug]": [],
-    "test.test[action-file_cycle--Plan]": [],
-    "test.test[action-file_cycle--Results]": [
-        {
-            "uri": "file://test.test_action-file_cycle--Results_/extracted"
-        }
-    ],
     "test.test[action-nested_eval-default.txt-Debug]": [
         {
             "checksum": "79af7d3cdd20c4123718aae10c3202d7",

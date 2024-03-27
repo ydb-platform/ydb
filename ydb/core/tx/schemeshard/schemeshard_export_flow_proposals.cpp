@@ -76,12 +76,35 @@ static NKikimrSchemeOp::TPathDescription GetTableDescription(TSchemeShard* ss, c
     opts.SetReturnPartitioningInfo(false);
     opts.SetReturnPartitionConfig(true);
     opts.SetReturnBoundaries(true);
-    opts.SetReturnSetVal(true);
 
     auto desc = DescribePath(ss, TlsActivationContext->AsActorContext(), pathId, opts);
     auto record = desc->GetRecord();
 
     return record.GetPathDescription();
+}
+
+void FillSetValForSequences(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& description,
+        const TPathId& exportItemPathId) {
+    NKikimrSchemeOp::TDescribeOptions opts;
+    opts.SetReturnSetVal(true);
+
+    auto pathDescription = DescribePath(ss, TlsActivationContext->AsActorContext(), exportItemPathId, opts);
+    auto tableDescription = pathDescription->GetRecord().GetPathDescription().GetTable();
+
+    THashMap<TString, NKikimrSchemeOp::TSequenceDescription::TSetVal> setValForSequences;
+
+    for (const auto& sequenceDescription : tableDescription.GetSequences()) {
+        if (sequenceDescription.HasSetVal()) {
+            setValForSequences[sequenceDescription.GetName()] = sequenceDescription.GetSetVal();
+        }
+    }
+
+    for (auto& sequenceDescription : *description.MutableSequences()) {
+        auto it = setValForSequences.find(sequenceDescription.GetName());
+        if (it != setValForSequences.end()) {
+            *sequenceDescription.MutableSetVal() = it->second;
+        }
+    }
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
@@ -107,11 +130,14 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     task.SetNeedToBill(!exportInfo->UserSID || !ss->SystemBackupSIDs.contains(*exportInfo->UserSID));
 
     const TPath sourcePath = TPath::Init(exportInfo->Items[itemIdx].SourcePathId, ss);
-    const TPath exportPathItem = exportPath.Child(ToString(itemIdx));
-    if (sourcePath.IsResolved() && exportPathItem.IsResolved()) {
-        auto exportDescription = GetTableDescription(ss, exportPathItem.Base()->PathId);
-        exportDescription.MutableTable()->SetName(sourcePath.LeafName());
-        task.MutableTable()->CopyFrom(exportDescription);
+    const TPath exportItemPath = exportPath.Child(ToString(itemIdx));
+    if (sourcePath.IsResolved() && exportItemPath.IsResolved()) {
+        auto sourceDescription = GetTableDescription(ss, sourcePath.Base()->PathId);
+        if (sourceDescription.HasTable()) {
+            FillSetValForSequences(
+                ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
+        }
+        task.MutableTable()->CopyFrom(sourceDescription);
     }
 
     task.SetSnapshotStep(exportInfo->SnapshotStep);

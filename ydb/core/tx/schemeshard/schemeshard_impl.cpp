@@ -6566,7 +6566,7 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
                     << ": path#d# " << childPathId
                     << ", name# " << childName);
                 auto info = Sequences.at(childPathId);
-                DescribeSequence(childPathId, childName, info, *tableDescr->MutableSequences()->Add());
+                DescribeSequence(childPathId, childName, info, *tableDescr->MutableSequences()->Add(), false);
                 break;
             }
 

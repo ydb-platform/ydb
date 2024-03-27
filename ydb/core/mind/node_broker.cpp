@@ -660,7 +660,7 @@ bool TNodeBroker::DbLoadState(TTransactionContext &txc,
 
             info.Lease = nodesRowset.GetValue<T::Lease>();
             info.Expire = expire;
-            info.ServicedSubDomain = TSubDomainKey(nodesRowset.GetValue<T::ServicedSubDomain>());
+            info.ServicedSubDomain = TSubDomainKey(nodesRowset.GetValueOrDefault<T::ServicedSubDomain>());
             if (nodesRowset.HaveValue<T::SlotIndex>()) {
                 info.SlotIndex = nodesRowset.GetValue<T::SlotIndex>();
             } 

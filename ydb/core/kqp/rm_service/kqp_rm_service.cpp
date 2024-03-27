@@ -174,6 +174,23 @@ public:
         }
     }
 
+    bool AllocateExecutionUnits(ui32 cnt) override {
+        i32 prev = ExecutionUnitsResource.fetch_sub(cnt);
+        if (prev <= 0) {
+            ExecutionUnitsResource.fetch_add(cnt);
+        }
+
+        return false;
+    }
+
+    void FreeExecutionUnits(ui32 cnt) override {
+        if (cnt == 0) {
+            return;
+        }
+
+        ExecutionUnitsResource.fetch_sub(cnt);
+    }
+
     bool AllocateResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources,
         TKqpNotEnoughResources* details = nullptr) override {
         if (resources.MemoryPool == EKqpMemoryPool::DataQuery) {
@@ -181,13 +198,12 @@ public:
             return true;
         }
         Y_ABORT_UNLESS(resources.MemoryPool == EKqpMemoryPool::ScanQuery);
-        if (Y_UNLIKELY(resources.Memory == 0 && resources.ExecutionUnits == 0)) {
+        if (Y_UNLIKELY(resources.Memory == 0)) {
             return true;
         }
 
         auto now = ActorSystem->Timestamp();
         bool hasScanQueryMemory = true;
-        bool hasExecutionUnits = true;
         ui64 queryMemoryLimit = 0;
 
         with_lock (Lock) {
@@ -200,11 +216,8 @@ public:
             }
 
             hasScanQueryMemory = ScanQueryMemoryResource.Has(resources.Memory);
-            hasExecutionUnits = ExecutionUnitsResource.Has(resources.ExecutionUnits);
-
-            if (hasScanQueryMemory && hasExecutionUnits) {
+            if (hasScanQueryMemory) {
                 ScanQueryMemoryResource.Acquire(resources.Memory);
-                ExecutionUnitsResource.Acquire(resources.ExecutionUnits);
                 queryMemoryLimit = Config.GetQueryMemoryLimit();
             }
         } // with_lock (Lock)
@@ -214,15 +227,6 @@ public:
             LOG_AS_N("TxId: " << txId << ", taskId: " << taskId << ". Not enough ScanQueryMemory, requested: " << resources.Memory);
             if (details) {
                 details->SetScanQueryMemory();
-            }
-            return false;
-        }
-
-        if (!hasExecutionUnits) {
-            Counters->RmNotEnoughComputeActors->Inc();
-            LOG_AS_N("TxId: " << txId << ", taskId: " << taskId << ". Not enough ExecutionUnits, requested: " << resources.ExecutionUnits);
-            if (details) {
-                details->SetExecutionUnits();
             }
             return false;
         }
@@ -239,7 +243,6 @@ public:
 
                     with_lock (Lock) {
                         ScanQueryMemoryResource.Release(resources.Memory);
-                        ExecutionUnitsResource.Release(resources.ExecutionUnits);
                     } // with_lock (Lock)
 
                     Counters->RmNotEnoughMemory->Inc();
@@ -261,7 +264,6 @@ public:
 
                 with_lock (Lock) {
                     ScanQueryMemoryResource.Release(resources.Memory);
-                    ExecutionUnitsResource.Release(resources.ExecutionUnits);
                 } // with_lock (Lock)
 
                 Counters->RmNotEnoughMemory->Inc();
@@ -276,14 +278,12 @@ public:
             auto& txState = txBucket.Txs[txId];
 
             txState.TxScanQueryMemory += resources.Memory;
-            txState.TxExecutionUnits += resources.ExecutionUnits;
             if (!txState.CreatedAt) {
                 txState.CreatedAt = now;
             }
 
             auto& taskState = txState.Tasks[taskId];
             taskState.ScanQueryMemory += resources.Memory;
-            taskState.ExecutionUnits += resources.ExecutionUnits;
             if (!taskState.CreatedAt) {
                 taskState.CreatedAt = now;
             }
@@ -299,7 +299,6 @@ public:
 
         LOG_AS_D("TxId: " << txId << ", taskId: " << taskId << ". Allocated " << resources.ToString());
 
-        Counters->RmComputeActors->Add(resources.ExecutionUnits);
         Counters->RmMemory->Add(resources.Memory);
         if (extraAlloc) {
             Counters->RmExtraMemAllocs->Inc();
@@ -340,20 +339,16 @@ public:
             }
 
             taskIt->second.ScanQueryMemory -= resources.Memory;
-            taskIt->second.ExecutionUnits -= resources.ExecutionUnits;
 
             bool reduced = ResourceBroker->ReduceTaskResourcesInstant(
                 taskIt->second.ResourceBrokerTaskId, {0, resources.Memory}, SelfId);
             Y_DEBUG_ABORT_UNLESS(reduced);
 
             txIt->second.TxScanQueryMemory -= resources.Memory;
-            txIt->second.TxExecutionUnits -= resources.ExecutionUnits;
 
             ScanQueryMemoryResource.Release(resources.Memory);
-            ExecutionUnitsResource.Release(resources.ExecutionUnits);
         }
 
-        Counters->RmComputeActors->Sub(resources.ExecutionUnits);
         Counters->RmMemory->Sub(resources.Memory);
 
         Y_DEBUG_ABORT_UNLESS(Counters->RmComputeActors->Val() >= 0);
@@ -364,7 +359,6 @@ public:
 
     void FreeResources(ui64 txId, ui64 taskId) override {
         ui64 releaseScanQueryMemory = 0;
-        ui32 releaseExecutionUnits = 0;
         ui32 remainsTasks = 0;
 
         auto& txBucket = TxBucket(txId);
@@ -389,7 +383,6 @@ public:
             }
 
             releaseScanQueryMemory = taskIt->second.ScanQueryMemory;
-            releaseExecutionUnits = taskIt->second.ExecutionUnits;
 
             bool finished = ResourceBroker->FinishTaskInstant(
                 TEvResourceBroker::TEvFinishTask(taskIt->second.ResourceBrokerTaskId), SelfId);
@@ -402,20 +395,17 @@ public:
             } else {
                 txIt->second.Tasks.erase(taskIt);
                 txIt->second.TxScanQueryMemory -= releaseScanQueryMemory;
-                txIt->second.TxExecutionUnits -= releaseExecutionUnits;
             }
         } // with_lock (txBucket.Lock)
 
         with_lock (Lock) {
             ScanQueryMemoryResource.Release(releaseScanQueryMemory);
-            ExecutionUnitsResource.Release(releaseExecutionUnits);
         } // with_lock (Lock)
 
         LOG_AS_D("TxId: " << txId << ", taskId: " << taskId << ". Released resources, "
-            << "ScanQueryMemory: " << releaseScanQueryMemory << ", ExecutionUnits: " << releaseExecutionUnits << ". "
+            << "ScanQueryMemory: " << releaseScanQueryMemory << ". "
             << "Remains " << remainsTasks << " tasks in this tx.");
 
-        Counters->RmComputeActors->Sub(releaseExecutionUnits);
         Counters->RmMemory->Sub(releaseScanQueryMemory);
 
         Y_DEBUG_ABORT_UNLESS(Counters->RmComputeActors->Val() >= 0);
@@ -426,7 +416,6 @@ public:
 
     void FreeResources(ui64 txId) override {
         ui64 releaseScanQueryMemory = 0;
-        ui32 releaseExecutionUnits = 0;
 
         auto& txBucket = TxBucket(txId);
 
@@ -450,21 +439,17 @@ public:
             }
 
             releaseScanQueryMemory = txIt->second.TxScanQueryMemory;
-            releaseExecutionUnits = txIt->second.TxExecutionUnits;
 
             txBucket.Txs.erase(txIt);
         } // with_lock (txBucket.Lock)
 
         with_lock (Lock) {
             ScanQueryMemoryResource.Release(releaseScanQueryMemory);
-            ExecutionUnitsResource.Release(releaseExecutionUnits);
         } // with_lock (Lock)
 
         LOG_AS_D("TxId: " << txId << ". Released resources, "
-            << "ScanQueryMemory: " << releaseScanQueryMemory << ", ExecutionUnits: " << releaseExecutionUnits << ". "
-            << "Tx completed.");
+            << "ScanQueryMemory: " << releaseScanQueryMemory << ", ExecutionUnits: " << "Tx completed.");
 
-        Counters->RmComputeActors->Sub(releaseExecutionUnits);
         Counters->RmMemory->Sub(releaseScanQueryMemory);
 
         Y_DEBUG_ABORT_UNLESS(Counters->RmComputeActors->Val() >= 0);
@@ -695,7 +680,7 @@ public:
     TAdaptiveLock Lock;
 
     // limits (guarded by Lock)
-    TLimitedResource<ui32> ExecutionUnitsResource;
+    std::atomic<i32> ExecutionUnitsResource;
     TLimitedResource<ui64> ScanQueryMemoryResource;
     ui64 ExternalDataQueryMemory = 0;
 

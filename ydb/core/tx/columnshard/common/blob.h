@@ -191,8 +191,30 @@ struct TBlobRange {
     ui32 Offset;
     ui32 Size;
 
+    bool operator<(const TBlobRange& br) const {
+        if (BlobId != br.BlobId) {
+            return BlobId.Hash() < br.BlobId.Hash();
+        } else if (Offset != br.Offset) {
+            return Offset < br.Offset;
+        } else {
+            return Size < br.Size;
+        }
+    }
+
     const TUnifiedBlobId& GetBlobId() const {
         return BlobId;
+    }
+
+    bool IsNextRangeFor(const TBlobRange& br) const {
+        return BlobId == br.BlobId && br.Offset + br.Size == Offset;
+    }
+
+    bool TryGlueWithNext(const TBlobRange& br) {
+        if (!br.IsNextRangeFor(*this)) {
+            return false;
+        }
+        Size += br.Size;
+        return true;
     }
 
     TBlobRangeLink16 BuildLink(const TBlobRangeLink16::TLinkId idx) const {

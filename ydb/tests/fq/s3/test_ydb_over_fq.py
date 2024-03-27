@@ -70,7 +70,6 @@ class TestYdbOverFq(TestYdsBase):
     def put_s3_object(self, client, rows: typing.List[typing.Dict[str, typing.Any]], path: str):
         client.put_object(Body=to_csv(rows), Bucket="fbucket", Key=path, ContentType="text/plain")
 
-
     """
     Since this test relies on being isolated (all the tables should be created by it exclusively),
         we want to run each instance (v1/v2) in a separate yq folder. Folders should also
@@ -204,17 +203,6 @@ class TestYdbOverFq(TestYdsBase):
                 raises(ydb.issues.InternalError, "Error while reading file"),
             )
 
-    # @yq_all
-    # @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    # def test_list_directory_empty(self, kikimr, s3, client, unique_prefix):
-    #     kikimr.control_plane.wait_bootstrap()
-
-    #     driver = self.make_yq_driver(kikimr.endpoint(), client.folder_id, "root@builtin")
-
-    #     ls_res = driver.scheme_client.list_directory("/")
-    #     assert ls_res.is_directory()
-    #     assert len(ls_res.children) == 0
-
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_explain_data_query(self, kikimr, s3, client, unique_prefix, yq_version):
@@ -252,10 +240,10 @@ class TestYdbOverFq(TestYdsBase):
         driver = self.make_yq_driver(kikimr.endpoint(), client.folder_id, "root@builtin")
         session = driver.table_client.session().create()
 
-        session.describe_table("BAD_PATH")
         assert_that(
             calling(session.describe_table).with_args("BAD_PATH"),
-            raises(ydb.issues.NotFound)
+            # didn't manage to make it find "couldn\'t"
+            raises(ydb.issues.NotFound, " find binding with matching name for BAD_PATH")
         )
 
         for path in [bind_name, "/path/to/" + bind_name]:

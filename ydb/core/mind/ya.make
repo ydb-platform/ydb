@@ -18,7 +18,6 @@ SRCS(
     node_broker.h
     node_broker_impl.h
     node_broker__extend_lease.cpp
-    node_broker__release_slot.cpp
     node_broker__init_scheme.cpp
     node_broker__load_state.cpp
     node_broker__register_node.cpp

@@ -134,7 +134,6 @@ private:
     class TTxUpdateConfig;
     class TTxUpdateConfigSubscription;
     class TTxUpdateEpoch;
-    class TTxReleaseSlot;
 
     ITransaction *CreateTxExtendLease(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev);
     ITransaction *CreateTxInitScheme();
@@ -146,7 +145,6 @@ private:
     ITransaction *CreateTxUpdateConfig(TEvNodeBroker::TEvSetConfigRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfigSubscription(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev);
     ITransaction *CreateTxUpdateEpoch();
-    ITransaction *CreateTxReleaseSlot(TEvNodeBroker::TEvReleaseSlot::TPtr &ev);
 
     void OnActivateExecutor(const TActorContext &ctx) override;
     void OnDetach(const TActorContext &ctx) override;
@@ -193,7 +191,6 @@ private:
             HFuncTraced(TEvNodeBroker::TEvCompactTables, Handle);
             HFuncTraced(TEvNodeBroker::TEvGetConfigRequest, Handle);
             HFuncTraced(TEvNodeBroker::TEvSetConfigRequest, Handle);
-            HFuncTraced(TEvNodeBroker::TEvReleaseSlot, Handle);
             HFuncTraced(TEvPrivate::TEvUpdateEpoch, Handle);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
@@ -292,8 +289,6 @@ private:
     void Handle(TEvNodeBroker::TEvSetConfigRequest::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev,
-                const TActorContext &ctx);
-    void Handle(TEvNodeBroker::TEvReleaseSlot::TPtr &ev,
                 const TActorContext &ctx);
 
     // All registered dynamic nodes.

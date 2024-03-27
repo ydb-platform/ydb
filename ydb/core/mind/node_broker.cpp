@@ -930,14 +930,6 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev,
     ProcessTx(nodeId, CreateTxExtendLease(ev), ctx);
 }
 
-void TNodeBroker::Handle(TEvNodeBroker::TEvReleaseSlot::TPtr &ev,
-                         const TActorContext &ctx)
-{
-    ui32 nodeId = ev->Get()->Record.GetNodeId();
-    ProcessTx(nodeId, CreateTxReleaseSlot(ev), ctx);
-}
-
-
 void TNodeBroker::Handle(TEvNodeBroker::TEvCompactTables::TPtr &ev,
                          const TActorContext &ctx)
 {

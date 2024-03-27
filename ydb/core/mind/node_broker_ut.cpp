@@ -570,15 +570,6 @@ void CheckLeaseExtension(TTestActorRuntime &runtime,
     }
 }
 
-void ReleaseSlot(TTestActorRuntime &runtime,
-                 TActorId sender,
-                 ui32 nodeId)
-{
-    std::unique_ptr<TEvNodeBroker::TEvReleaseSlot> event = std::make_unique<TEvNodeBroker::TEvReleaseSlot>();
-    event->Record.SetNodeId(nodeId);
-    runtime.SendToPipe(MakeNodeBrokerID(), sender, event.release(), 0, GetPipeConfigWithRetries());
-}
-
 void CheckResolveNode(TTestActorRuntime &runtime,
                       TActorId sender,
                       ui32 nodeId,
@@ -1444,45 +1435,6 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                           TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-0");
     }
 
-    Y_UNIT_TEST(SlotNameReuseGracefulRestart)
-    {
-        TTestBasicRuntime runtime(8, false);
-        Setup(runtime, 4, { "/dc-1/my-database" });
-        TActorId sender = runtime.AllocateEdgeActor();
-
-        auto epoch = GetEpoch(runtime, sender);
-
-        // Register nodes for my-database
-        CheckRegistration(runtime, sender, "host1", 19001, "/dc-1/my-database",
-                          TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-0");
-        CheckRegistration(runtime, sender, "host2", 19001, "/dc-1/my-database",
-                          TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-1");
-
-        // Graceful restart
-        ReleaseSlot(runtime, sender, NODE1);
-        CheckRegistration(runtime, sender, "host1", 19001, "/dc-1/my-database",
-                          TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-0");
-        ReleaseSlot(runtime, sender, NODE2);
-        CheckRegistration(runtime, sender, "host2", 19001, "/dc-1/my-database",
-                          TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-1");
-
-        // One more graceful restart in different order
-        ReleaseSlot(runtime, sender, NODE2);
-        CheckRegistration(runtime, sender, "host2", 19001, "/dc-1/my-database",
-                          TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-1");
-        ReleaseSlot(runtime, sender, NODE1);
-        CheckRegistration(runtime, sender, "host1", 19001, "/dc-1/my-database",
-                          TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-0");
-
-        // One more graceful restart in different order
-        ReleaseSlot(runtime, sender, NODE1);
-        ReleaseSlot(runtime, sender, NODE2);
-        CheckRegistration(runtime, sender, "host2", 19001, "/dc-1/my-database",
-                          TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-0");
-        CheckRegistration(runtime, sender, "host1", 19001, "/dc-1/my-database",
-                          TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-1");
-    }
-
     Y_UNIT_TEST(SlotNameReuseRestartWithHostChanges)
     {
         TTestBasicRuntime runtime(8, false);
@@ -1525,42 +1477,6 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                           TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-1");
     }
 
-    Y_UNIT_TEST(SlotNameReuseGracefulRestartWithHostChanges)
-    {
-        TTestBasicRuntime runtime(8, false);
-        Setup(runtime, 4, { "/dc-1/my-database" });
-        TActorId sender = runtime.AllocateEdgeActor();
-
-        auto epoch = GetEpoch(runtime, sender);
-
-        // Register nodes for my-database
-        CheckRegistration(runtime, sender, "host1", 19001, "/dc-1/my-database",
-                          TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-0");
-        CheckRegistration(runtime, sender, "host2", 19001, "/dc-1/my-database",
-                          TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-1");
-
-        // Graceful restart that caused the hosts to change
-        ReleaseSlot(runtime, sender, NODE1);
-        CheckRegistration(runtime, sender, "host3", 19001, "/dc-1/my-database",
-                          TStatus::OK, NODE3, epoch.GetNextEnd(), "slot-0");
-        ReleaseSlot(runtime, sender, NODE2);
-        CheckRegistration(runtime, sender, "host4", 19001, "/dc-1/my-database",
-                          TStatus::OK, NODE4, epoch.GetNextEnd(), "slot-1");
-
-        // Nodes are working as usually
-        epoch = WaitForEpochUpdate(runtime, sender);
-        CheckLeaseExtension(runtime, sender, NODE3, TStatus::OK, epoch);
-        CheckLeaseExtension(runtime, sender, NODE4, TStatus::OK, epoch);
-
-        // One more graceful restart that caused the hosts to change
-        ReleaseSlot(runtime, sender, NODE4);
-        CheckRegistration(runtime, sender, "host1", 19001, "/dc-1/my-database",
-                          TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-1");
-        ReleaseSlot(runtime, sender, NODE3);
-        CheckRegistration(runtime, sender, "host2", 19001, "/dc-1/my-database",
-                          TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-0");
-    }
-
     Y_UNIT_TEST(SlotNameWithDifferentTenants)
     {
         TTestBasicRuntime runtime(8, false);
@@ -1587,15 +1503,6 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckRegistration(runtime, sender, "host4", 19001, "/dc-1/my-database",
                           TStatus::OK, NODE4, epoch.GetNextEnd(), "slot-0");
         // Restart NODE1 to serve my-database
-        CheckRegistration(runtime, sender, "host1", 19001, "/dc-1/my-database",
-                          TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-2");
-
-        // Gracefully restart NODE1 to serve yet-another-database
-        ReleaseSlot(runtime, sender, NODE1);
-        CheckRegistration(runtime, sender, "host1", 19001, "/dc-1/yet-another-database",
-                          TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-1");
-        
-        // Restart NODE1 to serve my-database again
         CheckRegistration(runtime, sender, "host1", 19001, "/dc-1/my-database",
                           TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-2");
     }

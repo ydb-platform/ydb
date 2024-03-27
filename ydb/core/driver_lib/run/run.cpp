@@ -1672,18 +1672,6 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         ActorSystem->Send(new IEventHandle(NGRpcService::CreateGrpcPublisherServiceActorId(), {}, new TEvents::TEvPoisonPill));
     }
 
-    if (AppData->FeatureFlags.GetEnableReleaseSlotOnShutdown() && GracefulShutdownSupported && ActorSystem) {
-        Cerr << "Releasing slot" << Endl;
-        NTabletPipe::TClientConfig config(NTabletPipe::TClientRetryPolicy::WithRetries());
-        auto nodeBrokerPipe = ActorSystem->Register(NTabletPipe::CreateClient({}, MakeNodeBrokerID(), config));
-        auto request = std::make_unique<NNodeBroker::TEvNodeBroker::TEvReleaseSlot>();
-        request->Record.SetNodeId(ActorSystem->NodeId);
-        auto* ev = new IEventHandle(nodeBrokerPipe, {}, request.release());
-        ev->Rewrite(TEvTabletPipe::EvSend, nodeBrokerPipe);
-        ActorSystem->Send(ev);
-        Sleep(TDuration::MilliSeconds(100));
-    }
-
     TIntrusivePtr<TDrainProgress> drainProgress(new TDrainProgress());
     if (AppData->FeatureFlags.GetEnableDrainOnShutdown() && GracefulShutdownSupported && ActorSystem) {
         drainProgress->OnSend();

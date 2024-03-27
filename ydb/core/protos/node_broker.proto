@@ -118,7 +118,3 @@ message TSetConfigRequest {
 message TSetConfigResponse {
     optional TStatus Status = 1;
 }
-
-message TReleaseSlot {
-   optional uint32 NodeId = 1;
-}

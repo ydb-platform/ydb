@@ -115,13 +115,13 @@ CREATE TABLE my_table (
 {% endif %}
 
 {% if feature_temp_tables %}
-{% if feature_olap_tables %}#{%endif%}## Создание временных таблиц {#row-additional}
+{% if feature_olap_tables %}#{%endif%}## Создание временных таблиц {#temporary_tables}
 ```sql
 CREATE TEMPORARY TABLE table_name (
     ...
 );
 ```
-`TEMPORARY` / `TEMP` – временная таблица, которая автоматически удаляется при штатном завершении сессии, в противном случае она становится недоступна и удаляется по истечении некоторого времени. Если параметр не задан (оставлен пустым) – создается постоянная таблица.
+{% include [x](../../../../../_includes/temp_table_description.md) %}
 
 {% endif %}
 

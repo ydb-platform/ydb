@@ -2243,6 +2243,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         "CallableTypeComponents",
         "CallableArgument",
         "CallableTypeHandle",
+        "PgTypeName",
+        "PgTypeHandle",
         "WorldCode",
         "AtomCode",
         "ListCode",

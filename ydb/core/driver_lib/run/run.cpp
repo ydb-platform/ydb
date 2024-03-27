@@ -1716,10 +1716,6 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         SqsHttp->Shutdown();
     }
 
-    if (YdbDriver) {
-        YdbDriver->Stop(true);
-    }
-
     if (Monitoring) {
         Monitoring->Stop();
     }
@@ -1759,6 +1755,10 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         if (ModuleFactories->DataShardExportFactory) {
             ModuleFactories->DataShardExportFactory->Shutdown();
         }
+    }
+
+    if (YdbDriver) {
+        YdbDriver->Stop(true);
     }
 }
 

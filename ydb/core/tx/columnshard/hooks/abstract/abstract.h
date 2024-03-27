@@ -80,6 +80,12 @@ public:
     virtual bool IsTTLEnabled() const {
         return true;
     }
+    virtual bool NeedForceCompactionBacketsConstruction() const {
+        return false;
+    }
+    virtual ui64 GetSmallPortionSizeDetector(const ui64 def) const {
+        return def;
+    }
     virtual void OnExportFinished() {
 
     }
@@ -87,6 +93,9 @@ public:
 
     }
     virtual void OnActualizationRefreshTiering() {
+
+    }
+    virtual void AddPortionForActualizer(const i32 /*portionsCount*/) {
 
     }
 

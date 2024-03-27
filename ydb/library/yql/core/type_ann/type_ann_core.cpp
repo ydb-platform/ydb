@@ -12063,6 +12063,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgAnd"] = &PgBoolOpWrapper;
         Functions["PgOr"] = &PgBoolOpWrapper;
         Functions["PgNot"] = &PgBoolOpWrapper;
+        Functions["PgIsTrue"] = &PgBoolOpWrapper;
+        Functions["PgIsFalse"] = &PgBoolOpWrapper;
+        Functions["PgIsUnknown"] = &PgBoolOpWrapper;
         Functions["PgAggregationTraits"] = &PgAggregationTraitsWrapper;
         Functions["PgAggregationTraitsOverState"] = &PgAggregationTraitsWrapper;
         Functions["PgWindowTraits"] = &PgAggregationTraitsWrapper;
@@ -12128,6 +12131,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["CallableTypeComponents"] = &SplitTypeHandleWrapper<ETypeAnnotationKind::Callable>;
         Functions["CallableArgument"] = &CallableArgumentWrapper;
         Functions["CallableTypeHandle"] = &MakeTypeHandleWrapper<ETypeAnnotationKind::Callable>;
+        Functions["PgTypeHandle"] = &MakeTypeHandleWrapper<ETypeAnnotationKind::Pg>;
+        Functions["PgTypeName"] = &SplitTypeHandleWrapper<ETypeAnnotationKind::Pg>;
         Functions["LambdaArgumentsCount"] = LambdaArgumentsCountWrapper;
         Functions["LambdaOptionalArgumentsCount"] = LambdaOptionalArgumentsCountWrapper;
         Functions["FormatCode"] = &FormatCodeWrapper;
@@ -12279,6 +12284,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["PgResolvedCallCtx"] = &PgCallWrapper;
         ExtFunctions["PgOp"] = &PgOpWrapper;
         ExtFunctions["PgResolvedOp"] = &PgOpWrapper;
+        ExtFunctions["PgAnyOp"] = &PgArrayOpWrapper;
+        ExtFunctions["PgAllOp"] = &PgArrayOpWrapper;
+        ExtFunctions["PgAnyResolvedOp"] = &PgArrayOpWrapper;
+        ExtFunctions["PgAllResolvedOp"] = &PgArrayOpWrapper;
         ExtFunctions["PgSelect"] = &PgSelectWrapper;
         ExtFunctions["PgSetItem"] = &PgSetItemWrapper;
         ExtFunctions["PgValuesList"] = &PgValuesListWrapper;

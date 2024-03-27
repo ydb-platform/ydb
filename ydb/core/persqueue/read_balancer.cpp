@@ -1,4 +1,6 @@
 #include "read_balancer.h"
+#include "read_balancer__txpreinit.h"
+#include "read_balancer__txwrite.h"
 
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/counters_pq.pb.h>
@@ -12,8 +14,6 @@ namespace NKikimr {
 namespace NPQ {
 
 
-using namespace NTabletFlatExecutor;
-
 static constexpr TDuration ACL_SUCCESS_RETRY_TIMEOUT = TDuration::Seconds(30);
 static constexpr TDuration ACL_ERROR_RETRY_TIMEOUT = TDuration::Seconds(5);
 static constexpr TDuration ACL_EXPIRATION_TIMEOUT = TDuration::Minutes(5);
@@ -24,182 +24,6 @@ NKikimrPQ::EConsumerScalingSupport DefaultScalingSupport() {
                                                               : NKikimrPQ::EConsumerScalingSupport::NOT_SUPPORT;
 }
 
-bool TPersQueueReadBalancer::TTxPreInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
-    Y_UNUSED(ctx);
-    NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
-    return true;
-}
-
-void TPersQueueReadBalancer::TTxPreInit::Complete(const TActorContext& ctx) {
-    Self->Execute(new TTxInit(Self), ctx);
-}
-
-bool TPersQueueReadBalancer::TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
-    try {
-        Y_UNUSED(ctx); //read config
-        NIceDb::TNiceDb db(txc.DB);
-
-        auto dataRowset = db.Table<Schema::Data>().Range().Select();
-        auto partsRowset = db.Table<Schema::Partitions>().Range().Select();
-        auto groupsRowset = db.Table<Schema::Groups>().Range().Select();
-        auto tabletsRowset = db.Table<Schema::Tablets>().Range().Select();
-
-        if (!dataRowset.IsReady() || !partsRowset.IsReady() || !groupsRowset.IsReady() || !tabletsRowset.IsReady())
-            return false;
-
-        while (!dataRowset.EndOfSet()) { //found out topic info
-            Y_ABORT_UNLESS(!Self->Inited);
-            Self->PathId  = dataRowset.GetValue<Schema::Data::PathId>();
-            Self->Topic   = dataRowset.GetValue<Schema::Data::Topic>();
-            Self->Path    = dataRowset.GetValue<Schema::Data::Path>();
-            Self->Version = dataRowset.GetValue<Schema::Data::Version>();
-            Self->MaxPartsPerTablet = dataRowset.GetValueOrDefault<Schema::Data::MaxPartsPerTablet>(0);
-            Self->SchemeShardId = dataRowset.GetValueOrDefault<Schema::Data::SchemeShardId>(0);
-            Self->NextPartitionId = dataRowset.GetValueOrDefault<Schema::Data::NextPartitionId>(0);
-
-            ui64 subDomainPathId = dataRowset.GetValueOrDefault<Schema::Data::SubDomainPathId>(0);
-            if (subDomainPathId) {
-                Self->SubDomainPathId.emplace(Self->SchemeShardId, subDomainPathId);
-            }
-
-            TString config = dataRowset.GetValueOrDefault<Schema::Data::Config>("");
-            if (!config.empty()) {
-                bool res = Self->TabletConfig.ParseFromString(config);
-                Y_ABORT_UNLESS(res);
-
-                Migrate(Self->TabletConfig);
-                Self->Consumers.clear();
-
-                for (auto& consumer : Self->TabletConfig.GetConsumers()) {
-                    Self->Consumers[consumer.GetName()].ScalingSupport = consumer.HasScalingSupport() ? consumer.GetScalingSupport() : DefaultScalingSupport();
-                }
-
-                Self->PartitionGraph = MakePartitionGraph(Self->TabletConfig);
-            }
-            Self->Inited = true;
-            if (!dataRowset.Next())
-                return false;
-        }
-
-        while (!partsRowset.EndOfSet()) { //found out tablets for partitions
-            ++Self->NumActiveParts;
-            ui32 part = partsRowset.GetValue<Schema::Partitions::Partition>();
-            ui64 tabletId = partsRowset.GetValue<Schema::Partitions::TabletId>();
-
-            Self->PartitionsInfo[part] = {tabletId, EPartitionState::EPS_FREE, TActorId(), part + 1};
-            Self->AggregatedStats.AggrStats(part, partsRowset.GetValue<Schema::Partitions::DataSize>(), 
-                                            partsRowset.GetValue<Schema::Partitions::UsedReserveSize>());
-
-            if (!partsRowset.Next())
-                return false;
-        }
-
-        while (!groupsRowset.EndOfSet()) { //found out tablets for partitions
-            ui32 groupId = groupsRowset.GetValue<Schema::Groups::GroupId>();
-            ui32 partition = groupsRowset.GetValue<Schema::Groups::Partition>();
-            Y_ABORT_UNLESS(groupId > 0);
-            auto jt = Self->PartitionsInfo.find(partition);
-            Y_ABORT_UNLESS(jt != Self->PartitionsInfo.end());
-            jt->second.GroupId = groupId;
-
-            Self->NoGroupsInBase = false;
-
-            if (!groupsRowset.Next())
-                return false;
-        }
-
-        Y_ABORT_UNLESS(Self->ClientsInfo.empty());
-
-        for (auto& p : Self->PartitionsInfo) {
-            ui32 groupId = p.second.GroupId;
-            Self->GroupsInfo[groupId].push_back(p.first);
-
-        }
-        Self->TotalGroups = Self->GroupsInfo.size();
-
-
-        while (!tabletsRowset.EndOfSet()) { //found out tablets for partitions
-            ui64 tabletId = tabletsRowset.GetValue<Schema::Tablets::TabletId>();
-            TTabletInfo info;
-            info.Owner = tabletsRowset.GetValue<Schema::Tablets::Owner>();
-            info.Idx = tabletsRowset.GetValue<Schema::Tablets::Idx>();
-            Self->MaxIdx = Max(Self->MaxIdx, info.Idx);
-
-            Self->TabletsInfo[tabletId] = info;
-            if (!tabletsRowset.Next())
-                return false;
-        }
-
-        Self->Generation = txc.Generation;
-    } catch (const TNotReadyTabletException&) {
-        return false;
-    } catch (...) {
-       Y_ABORT("there must be no leaked exceptions");
-    }
-    return true;
-}
-
-void TPersQueueReadBalancer::TTxInit::Complete(const TActorContext& ctx) {
-    Self->SignalTabletActive(ctx);
-    if (Self->Inited)
-        Self->InitDone(ctx);
-}
-
-bool TPersQueueReadBalancer::TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
-    NIceDb::TNiceDb db(txc.DB);
-    TString config;
-    bool res = Self->TabletConfig.SerializeToString(&config);
-    Y_ABORT_UNLESS(res);
-    db.Table<Schema::Data>().Key(1).Update(
-        NIceDb::TUpdate<Schema::Data::PathId>(Self->PathId),
-        NIceDb::TUpdate<Schema::Data::Topic>(Self->Topic),
-        NIceDb::TUpdate<Schema::Data::Path>(Self->Path),
-        NIceDb::TUpdate<Schema::Data::Version>(Self->Version),
-        NIceDb::TUpdate<Schema::Data::MaxPartsPerTablet>(Self->MaxPartsPerTablet),
-        NIceDb::TUpdate<Schema::Data::SchemeShardId>(Self->SchemeShardId),
-        NIceDb::TUpdate<Schema::Data::NextPartitionId>(Self->NextPartitionId),
-        NIceDb::TUpdate<Schema::Data::Config>(config),
-        NIceDb::TUpdate<Schema::Data::SubDomainPathId>(Self->SubDomainPathId ? Self->SubDomainPathId->LocalPathId : 0));
-    for (auto& p : DeletedPartitions) {
-        db.Table<Schema::Partitions>().Key(p).Delete();
-    }
-    for (auto& p : NewPartitions) {
-        db.Table<Schema::Partitions>().Key(p.PartitionId).Update(
-            NIceDb::TUpdate<Schema::Partitions::TabletId>(p.TabletId)
-        );
-    }
-    for (auto & p : NewGroups) {
-        db.Table<Schema::Groups>().Key(p.first, p.second).Update();
-    }
-    for (auto& p : NewTablets) {
-        db.Table<Schema::Tablets>().Key(p.first).Update(
-            NIceDb::TUpdate<Schema::Tablets::Owner>(p.second.Owner),
-            NIceDb::TUpdate<Schema::Tablets::Idx>(p.second.Idx));
-    }
-    for (auto& p : ReallocatedTablets) {
-        db.Table<Schema::Tablets>().Key(p.first).Update(
-            NIceDb::TUpdate<Schema::Tablets::Owner>(p.second.Owner),
-            NIceDb::TUpdate<Schema::Tablets::Idx>(p.second.Idx));
-    }
-    return true;
-}
-
-void TPersQueueReadBalancer::TTxWrite::Complete(const TActorContext &ctx) {
-    for (auto& actor : Self->WaitingResponse) {
-        THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
-        res->Record.SetStatus(NKikimrPQ::OK);
-        res->Record.SetTxId(Self->TxId);
-        res->Record.SetOrigin(Self->TabletID());
-        ctx.Send(actor, res.Release());
-    }
-    Self->WaitingResponse.clear();
-
-    Self->NoGroupsInBase = false;
-    if (!Self->Inited) {
-        Self->Inited = true;
-        Self->InitDone(ctx);
-    }
-}
 
 struct TPersQueueReadBalancer::TTxWritePartitionStats : public ITransaction {
     TPersQueueReadBalancer * const Self;
@@ -232,6 +56,89 @@ struct TPersQueueReadBalancer::TTxWritePartitionStats : public ITransaction {
 
     void Complete(const TActorContext&) override {};
 };
+
+void TPersQueueReadBalancer::Die(const TActorContext& ctx) {
+    StopFindSubDomainPathId();
+    StopWatchingSubDomainPathId();
+
+    for (auto& pipe : TabletPipes) {
+        NTabletPipe::CloseClient(ctx, pipe.second.PipeActor);
+    }
+    TabletPipes.clear();
+    TActor<TPersQueueReadBalancer>::Die(ctx);
+}
+
+void TPersQueueReadBalancer::OnActivateExecutor(const TActorContext &ctx) {
+    ResourceMetrics = Executor()->GetResourceMetrics();
+    Become(&TThis::StateWork);
+    if (Executor()->GetStats().IsFollower)
+        Y_ABORT("is follower works well with Balancer?");
+    else
+        Execute(new TTxPreInit(this), ctx);
+}
+
+void TPersQueueReadBalancer::OnDetach(const TActorContext &ctx) {
+    Die(ctx);
+}
+
+void TPersQueueReadBalancer::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext &ctx) {
+    Die(ctx);
+}
+
+void TPersQueueReadBalancer::DefaultSignalTabletActive(const TActorContext &) {
+    // must be empty
+}
+
+void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
+    if (SubDomainPathId) {
+        StartWatchingSubDomainPathId();
+    } else {
+        StartFindSubDomainPathId(true);
+    }
+
+    StartPartitionIdForWrite = NextPartitionIdForWrite = rand() % TotalGroups;
+
+    TStringBuilder s;
+    s << "BALANCER INIT DONE for " << Topic << ": ";
+    for (auto& p : PartitionsInfo) {
+        s << "(" << p.first << ", " << p.second.TabletId << ") ";
+    }
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, s);
+    for (auto& [_, clientInfo] : ClientsInfo) {
+        for (auto& [_, groupInfo] : clientInfo.ClientGroupsInfo) {
+            groupInfo.Balance(ctx);
+        }
+    }
+
+    for (auto &ev : UpdateEvents) {
+        ctx.Send(ctx.SelfID, ev.Release());
+    }
+    UpdateEvents.clear();
+
+    for (auto &ev : RegisterEvents) {
+        ctx.Send(ctx.SelfID, ev.Release());
+    }
+    RegisterEvents.clear();
+
+    auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
+    ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
+
+    ctx.Send(ctx.SelfID, new TEvPersQueue::TEvUpdateACL());
+}
+
+void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext &ctx) {
+    LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, TStringBuilder() << "TPersQueueReadBalancer::HandleWakeup");
+
+    GetStat(ctx); //TODO: do it only on signals from outerspace right now
+
+    auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
+    ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
+}
+
+void TPersQueueReadBalancer::HandleUpdateACL(TEvPersQueue::TEvUpdateACL::TPtr&, const TActorContext &ctx) {
+    GetACL(ctx);
+}
+
 
 bool TPersQueueReadBalancer::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) {
     if (!ev) {
@@ -1767,8 +1674,8 @@ struct TTxWriteSubDomainPathId : public ITransaction {
 
     bool Execute(TTransactionContext& txc, const TActorContext&) {
         NIceDb::TNiceDb db(txc.DB);
-        db.Table<TPersQueueReadBalancer::Schema::Data>().Key(1).Update(
-            NIceDb::TUpdate<TPersQueueReadBalancer::Schema::Data::SubDomainPathId>(Self->SubDomainPathId->LocalPathId));
+        db.Table<Schema::Data>().Key(1).Update(
+            NIceDb::TUpdate<Schema::Data::SubDomainPathId>(Self->SubDomainPathId->LocalPathId));
         return true;
     }
 

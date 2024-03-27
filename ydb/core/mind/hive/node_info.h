@@ -69,6 +69,7 @@ public:
     std::unordered_map<TTabletInfo::EVolatileState, std::unordered_set<TTabletInfo*>> Tablets;
     std::unordered_map<TTabletTypes::EType, std::unordered_set<TTabletInfo*>> TabletsRunningByType;
     std::unordered_map<TFullObjectId, std::unordered_set<TTabletInfo*>> TabletsOfObject;
+    std::vector<TFullTabletId> FrozenTablets;
     TResourceRawValues ResourceValues; // accumulated resources from tablet metrics
     TResourceRawValues ResourceTotalValues; // actual used resources from the node (should be greater or equal one above)
     NMetrics::TAverageValue<TResourceRawValues, 20> AveragedResourceTotalValues;
@@ -86,6 +87,7 @@ public:
     THashSet<TLeaderTabletInfo*> LockedTablets;
     mutable TInstant LastResourceChangeReaction;
     NKikimrHive::TNodeStatistics Statistics;
+    bool DeletionScheduled = false;
 
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;

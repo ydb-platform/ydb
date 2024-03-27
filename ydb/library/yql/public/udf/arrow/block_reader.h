@@ -506,12 +506,16 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
         case NUdf::EDataSlot::Date:
             return MakeFixedSizeBlockReaderImpl<TTraits, ui16>(isOptional);
         case NUdf::EDataSlot::Int32:
+        case NUdf::EDataSlot::Date32:
             return MakeFixedSizeBlockReaderImpl<TTraits, i32>(isOptional);
         case NUdf::EDataSlot::Uint32:
         case NUdf::EDataSlot::Datetime:
             return MakeFixedSizeBlockReaderImpl<TTraits, ui32>(isOptional);
         case NUdf::EDataSlot::Int64:
         case NUdf::EDataSlot::Interval:
+        case NUdf::EDataSlot::Interval64:
+        case NUdf::EDataSlot::Datetime64:
+        case NUdf::EDataSlot::Timestamp64:
             return MakeFixedSizeBlockReaderImpl<TTraits, i64>(isOptional);
         case NUdf::EDataSlot::Uint64:
         case NUdf::EDataSlot::Timestamp:

@@ -2,6 +2,7 @@
 
 #include "defs.h"
 
+#include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h>
 #include <ydb/core/blobstorage/base/utility.h>
@@ -37,6 +38,6 @@ IActor* CreateSkeletonVPatchActor(TActorId leaderId, const TBlobStorageGroupType
         const ::NMonitoring::TDynamicCounters::TCounterPtr &vPatchResMsgsPtr,
         const NVDiskMon::TLtcHistoPtr &getHistogram, const NVDiskMon::TLtcHistoPtr &putHistogram,
         const TIntrusivePtr<TVPatchCtx> &vPatchCtx, const TString &vDiskLogPrefix, ui64 incarnationGuid,
-        const std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup);
+        const TIntrusivePtr<TVDiskContext>& vCtx);
 
 } // NKikimr

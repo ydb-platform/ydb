@@ -1,9 +1,7 @@
 #include "event_helpers.h"
 #include "mirrorer.h"
-#include "partition_log.h"
 #include "partition_util.h"
 #include "partition.h"
-#include "read.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
@@ -332,8 +330,9 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
     }
     Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateIdle);
 
-    if (ManageWriteTimestampEstimate)
+    if (ManageWriteTimestampEstimate) {
         WriteTimestampEstimate = now;
+    }
 
     THolder <TEvKeyValue::TEvRequest> request = MakeHolder<TEvKeyValue::TEvRequest>();
     bool haveChanges = CleanUp(request.Get(), ctx);
@@ -348,7 +347,7 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
         TopicQuotaWaitTimeForCurrentBlob = TDuration::Zero();
         PartitionQuotaWaitTimeForCurrentBlob = TDuration::Zero();
         WritesTotal.Inc();
-        Become(&TThis::StateWrite);
+        BecomeWrite();
         AddMetaKey(request.Get());
         ctx.Send(Tablet, request.Release());
     }
@@ -363,6 +362,18 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     meta.SetStartOffset(StartOffset);
     meta.SetEndOffset(Max(NewHead.GetNextOffset(), EndOffset));
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
+
+    if (IsSupportive()) {
+        auto* counterData = meta.MutableCounterData();
+        counterData->SetMessagesWrittenGrpc(MsgsWrittenGrpc.Value());
+        counterData->SetMessagesWrittenTotal(MsgsWrittenTotal.Value());
+        counterData->SetBytesWrittenGrpc(BytesWrittenGrpc.Value());
+        counterData->SetBytesWrittenTotal(BytesWrittenTotal.Value());
+        counterData->SetBytesWrittenUncompressed(BytesWrittenUncompressed.Value());
+        for(const auto& v : MessageSize.GetValues()) {
+            counterData->AddMessagesSizes(v);
+        }
+    }
 
     TString out;
     Y_PROTOBUF_SUPPRESS_NODISCARD meta.SerializeToString(&out);
@@ -956,7 +967,7 @@ void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx
 }
 
 void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& ctx) {
-    if (ClosedInternalPartition || CurrentStateFunc() != &TThis::StateIdle || !Requests.empty()) {
+    if (ClosedInternalPartition || WaitingForPreviousBlobQuota() || (CurrentStateFunc() != &TThis::StateIdle) || !Requests.empty()) {
         auto* response = new TEvPQ::TEvGetWriteInfoError(Partition.InternalPartitionId,
                                                        "Write info requested while writes are not complete");
         ctx.Send(ev->Sender, response);
@@ -971,7 +982,19 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorCon
     ui32 rcount = 0, rsize = 0;
     ui64 insideHeadOffset = 0;
 
-    response->BlobsFromHead = std::move(GetReadRequestFromHead(0, 0, std::numeric_limits<ui32>::max(), std::numeric_limits<ui32>::max(), 0, &rcount, &rsize, &insideHeadOffset, 0));
+    response->BlobsFromHead = std::move(GetReadRequestFromHead(0, 0, std::numeric_limits<ui32>::max(),
+                                                               std::numeric_limits<ui32>::max(), 0, &rcount, &rsize,
+                                                               &insideHeadOffset, 0));
+
+
+    response->BytesWrittenGrpc = BytesWrittenGrpc.Value();
+    response->BytesWrittenUncompressed = BytesWrittenUncompressed.Value();
+    response->BytesWrittenTotal = BytesWrittenTotal.Value();
+
+    response->MessagesWrittenTotal = MsgsWrittenTotal.Value();
+    response->MessagesWrittenGrpc = MsgsWrittenGrpc.Value();
+    response->MessagesSizes = std::move(MessageSize.GetValues());
+
     ctx.Send(ev->Sender, response);
 }
 
@@ -1370,7 +1393,8 @@ void TPartition::Handle(NReadQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TAct
             userInfo->LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_BYTES].Set(quota);
         }
     }
-    PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_BYTES].Set(ev->Get()->UpdatedTotalPartitionReadQuota);
+    if (PartitionCountersLabeled)
+        PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_BYTES].Set(ev->Get()->UpdatedTotalPartitionReadQuota);
 }
 
 void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
@@ -1432,8 +1456,9 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         }
         diskIsOk = diskIsOk && CheckDiskStatus(res.GetStatusFlags());
     }
-    if (response.GetStatusResultSize())
+    if (response.GetStatusResultSize()) {
         DiskIsFull = !diskIsOk;
+    }
 
     if (response.HasCookie()) {
         OnProcessTxsAndUserActsWriteComplete(response.GetCookie(), ctx);
@@ -1900,9 +1925,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorC
 
     ProcessTxsAndUserActs(ctx);
 
-    if (ChangeConfig && CurrentStateFunc() == &TThis::StateIdle) {
-        HandleWrites(ctx);
-    }
+    HandleRequests(ctx);
 }
 
 void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
@@ -2521,8 +2544,14 @@ void TPartition::ScheduleUpdateAvailableSize(const TActorContext& ctx) {
     ctx.Schedule(UPDATE_AVAIL_SIZE_INTERVAL, new TEvPQ::TEvUpdateAvailableSize());
 }
 
-void TPartition::BecomeIdle(const TActorContext&) {
+void TPartition::BecomeIdle()
+{
     Become(&TThis::StateIdle);
+}
+
+void TPartition::BecomeWrite()
+{
+    Become(&TThis::StateWrite);
 }
 
 void TPartition::ClearOldHead(const ui64 offset, const ui16 partNo, TEvKeyValue::TEvRequest* request) {
@@ -2570,21 +2599,20 @@ void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorConte
 
     // Search for proper request
     Y_ABORT_UNLESS(TopicQuotaRequestCookie == cookie);
+    ConsumeBlobQuota();
     TopicQuotaRequestCookie = 0;
-    TopicQuotaConsumedCookie = cookie;
-    Y_ASSERT(!WaitingForPreviousBlobQuota());
-    Y_ABORT_UNLESS(PendingWriteRequest);
-    WritePendingBlob();
+    RemoveQuotaWaitingRequests();
 
     // Metrics
     TopicQuotaWaitTimeForCurrentBlob = ev->Get()->AccountQuotaWaitTime;
     PartitionQuotaWaitTimeForCurrentBlob = ev->Get()->PartitionQuotaWaitTime;
+
     if (TopicWriteQuotaWaitCounter) {
         TopicWriteQuotaWaitCounter->IncFor(TopicQuotaWaitTimeForCurrentBlob.MilliSeconds());
     }
 
-    if (CurrentStateFunc() == &TThis::StateIdle)
-        HandleWrites(ctx);
+    RequestBlobQuota();
+    HandleRequests(ctx);
 }
 
 void TPartition::Handle(NReadQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const TActorContext& ctx) {
@@ -2593,7 +2621,7 @@ void TPartition::Handle(NReadQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, co
             ctx, NKikimrServices::PERSQUEUE,
             "Got TEvQuotaCountersUpdated for write counters, this is unexpected. Event ignored");
         return;
-    } else {
+    } else if (PartitionCountersLabeled) {
         PartitionCountersLabeled->GetCounters()[METRIC_READ_INFLIGHT_LIMIT_THROTTLED].Set(ev->Get()->AvgInflightLimitThrottledMicroseconds);
     }
 }
@@ -2645,9 +2673,7 @@ void TPartition::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext
         );
 
         if (!SubDomainOutOfSpace) {
-            if (CurrentStateFunc() == &TThis::StateIdle) {
-                HandleWrites(ctx);
-            }
+            HandlePendingRequests(ctx);
         }
     }
 }

@@ -161,13 +161,33 @@ public:
         }
 
         writer.OnBeginMap();
-            NCommon::WriteStatistics(writer, totalOnly, State_->Statistics, false);
+            NCommon::WriteStatistics(writer, totalOnly, State_->Statistics, false, false);
+            writer.OnKeyedItem("HybridTotal");
+            writer.OnBeginMap();
+            for (const auto& [subFolder, stats] : State_->HybridStatistics) {
+                if (subFolder.empty()) {
+                    NCommon::WriteStatistics(writer, totalOnly, {{0, stats}}, false, false);
+                } else {
+                    writer.OnKeyedItem(subFolder);
+                    NCommon::WriteStatistics(writer, totalOnly, {{0, stats}}, false);
+                }
+            }
+            writer.OnEndMap();
             writer.OnKeyedItem("Hybrid");
             writer.OnBeginMap();
-                for (const auto& [opName, stats] : State_->HybridStatistics) {
-                    writer.OnKeyedItem(opName);
-                    NCommon::WriteStatistics(writer, totalOnly, {{0, stats}});
+            for (const auto& [opName, hybridStats] : State_->HybridOpStatistics) {
+                writer.OnKeyedItem(opName);
+                writer.OnBeginMap();
+                for (const auto& [subFolder, stats] : hybridStats) {
+                    if (subFolder.empty()) {
+                        NCommon::WriteStatistics(writer, totalOnly, {{0, stats}}, false, false);
+                    } else {
+                        writer.OnKeyedItem(subFolder);
+                        NCommon::WriteStatistics(writer, totalOnly, {{0, stats}}, false);
+                    }
                 }
+                writer.OnEndMap();
+            }
             writer.OnEndMap();
         writer.OnEndMap();
 

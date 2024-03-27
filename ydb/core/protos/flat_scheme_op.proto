@@ -1019,6 +1019,9 @@ message TS3Settings {
     optional uint32 RequestTimeoutMs = 101;
     optional uint32 HttpRequestTimeoutMs = 102;
     optional uint32 ConnectionTimeoutMs = 103;
+
+    optional uint32 ExecutorThreadsCount = 104 [default = 32];
+    optional uint32 MaxConnectionsCount = 105 [default = 32];
 };
 
 message TTaskCleaner {
@@ -1590,6 +1593,12 @@ message TModifyScheme {
     optional TViewDescription CreateView = 64;
 
     optional NActorsProto.TActorId TempTableOwnerActorId = 65;
+
+    optional TCopySequence CopySequence = 66;
+}
+
+message TCopySequence {
+    optional string CopyFrom = 1;
 }
 
 // "Script", used by client to parse text files with multiple DDL commands

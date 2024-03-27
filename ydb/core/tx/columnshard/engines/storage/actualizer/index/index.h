@@ -25,7 +25,7 @@ public:
     void Start();
     TGranuleActualizationIndex(const ui64 pathId, const TVersionedIndex& versionedIndex);
 
-    void BuildActualizationTasks(TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext) const;
+    void ExtractActualizationTasks(TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext) const;
 
     void RefreshTiering(const std::optional<TTiering>& info, const TAddExternalContext& context);
     void RefreshScheme(const TAddExternalContext& context);

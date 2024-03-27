@@ -22,6 +22,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPartLarge) {
 
         NPage::TConf conf{ true, 7 * 1024 };
         conf.WriteBTreeIndex = true;
+        conf.WriteFlatIndex = true;
 
         TPartCook cook(lay, conf);
         
@@ -52,6 +53,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPartLarge) {
 
         NPage::TConf conf{ true, 7 * 1024 };
         conf.WriteBTreeIndex = true;
+        conf.WriteFlatIndex = true;
 
         TPartCook cook(lay, conf);
         
@@ -82,6 +84,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPartLarge) {
 
         NPage::TConf conf{ true, 7 * 1024 };
         conf.WriteBTreeIndex = true;
+        conf.WriteFlatIndex = true;
 
         TPartCook cook(lay, conf);
         
@@ -114,6 +117,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPartLarge) {
 
         NPage::TConf conf{ true, 7 * 1024 };
         conf.WriteBTreeIndex = true;
+        conf.WriteFlatIndex = true;
 
         TPartCook cook(lay, conf);
         
@@ -145,6 +149,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPartLarge) {
         NPage::TConf conf{ true, 7 * 1024 };
         conf.Group(1).PageSize = 7 * 1024;
         conf.WriteBTreeIndex = true;
+        conf.WriteFlatIndex = true;
 
         TPartCook cook(lay, conf);
         
@@ -175,6 +180,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPartLarge) {
 
         NPage::TConf conf{ true, 7 * 1024 };
         conf.WriteBTreeIndex = true;
+        conf.WriteFlatIndex = true;
 
         TPartCook cook(lay, conf);
         

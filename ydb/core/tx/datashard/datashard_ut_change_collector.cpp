@@ -3,6 +3,7 @@
 
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/library/uuid/uuid.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 namespace NKikimr {
@@ -106,7 +107,27 @@ auto GetChangeRecordsWithDetails(TTestActorRuntime& runtime, const TActorId& sen
     return result;
 }
 
-using TStructKey = TVector<std::pair<TString, ui32>>;
+struct TUuidHolder {
+    TString Uuid;
+
+    TUuidHolder(const TString& uuid) : Uuid(uuid) {}
+
+    bool operator==(const TUuidHolder& rhs) const {
+        return Uuid == rhs.Uuid;
+    }
+
+    IOutputStream& operator<<(IOutputStream& os) const {
+        os << Uuid;
+        return os;
+    }
+
+    void Out(IOutputStream& out) const {
+        out << Uuid;
+    }
+};
+
+template <typename V>
+using TStructKey = TVector<std::pair<TString, V>>;
 using TStructValue = THashMap<TString, ui32>;
 constexpr ui32 Null = 0;
 
@@ -115,26 +136,36 @@ static void OutKvContainer(IOutputStream& out, const C& c) {
     out << "{";
     for (const auto& [k, v] : c) {
         out << " (" << k << ": ";
-        if (v == Null) {
-            out << "null";
-        } else {
+
+        bool isUintNull = false;
+
+        if constexpr (std::is_same_v<C, ui32>) {
+            if (v == Null) {
+                isUintNull = true;
+                out << "null";
+            }
+        }
+
+        if (!isUintNull) {
             out << v;
         }
+
         out << ")";
     }
     out << " }";
 }
 
-struct TStructRecord {
+template <typename SK>
+struct TStructRecordBase {
     NTable::ERowOp Rop;
-    TStructKey Key;
+    TStructKey<SK> Key;
     TStructValue Update;
     TStructValue OldImage;
     TStructValue NewImage;
 
-    TStructRecord() = default;
+    TStructRecordBase() = default;
 
-    TStructRecord(NTable::ERowOp rop, const TStructKey& key,
+    TStructRecordBase(NTable::ERowOp rop, const TStructKey<SK>& key,
             const TStructValue& update = {},
             const TStructValue& oldImage = {},
             const TStructValue& newImage = {})
@@ -146,7 +177,7 @@ struct TStructRecord {
     {
     }
 
-    bool operator==(const TStructRecord& rhs) const {
+    bool operator==(const TStructRecordBase<SK>& rhs) const {
         return Rop == rhs.Rop
             && Key == rhs.Key
             && Update == rhs.Update
@@ -164,19 +195,19 @@ struct TStructRecord {
         << " }";
     }
 
-    static TStructRecord Parse(const NKikimrChangeExchange::TDataChange& proto,
+    static TStructRecordBase<SK> Parse(const NKikimrChangeExchange::TDataChange& proto,
             const THashMap<NTable::TTag, TString>& tagToName)
     {
-        TStructRecord record;
+        TStructRecordBase<SK> record;
 
-        Parse(proto.GetKey(), tagToName, [&record](const TString& name, ui32 value) {
+        Parse<SK>(proto.GetKey(), tagToName, [&record](const TString& name, SK value) {
             record.Key.emplace_back(name, value);
         });
 
         switch (proto.GetRowOperationCase()) {
         case NKikimrChangeExchange::TDataChange::kUpsert:
             record.Rop = NTable::ERowOp::Upsert;
-            Parse(proto.GetUpsert(), tagToName, [&record](const TString& name, ui32 value) {
+            Parse<ui32>(proto.GetUpsert(), tagToName, [&record](const TString& name, ui32 value) {
                 record.Update.emplace(name, value);
             });
             break;
@@ -189,13 +220,13 @@ struct TStructRecord {
         }
 
         if (proto.HasOldImage()) {
-            Parse(proto.GetOldImage(), tagToName, [&record](const TString& name, ui32 value) {
+            Parse<ui32>(proto.GetOldImage(), tagToName, [&record](const TString& name, ui32 value) {
                 record.OldImage.emplace(name, value);
             });
         }
 
         if (proto.HasNewImage()) {
-            Parse(proto.GetNewImage(), tagToName, [&record](const TString& name, ui32 value) {
+            Parse<ui32>(proto.GetNewImage(), tagToName, [&record](const TString& name, ui32 value) {
                 record.NewImage.emplace(name, value);
             });
         }
@@ -203,17 +234,19 @@ struct TStructRecord {
         return record;
     }
 
-    static TStructRecord Parse(const TString& serializedProto, const THashMap<NTable::TTag, TString>& tagToName) {
+    static TStructRecordBase<SK> Parse(const TString& serializedProto, const THashMap<NTable::TTag, TString>& tagToName) {
         NKikimrChangeExchange::TDataChange proto;
         Y_PROTOBUF_SUPPRESS_NODISCARD proto.ParseFromArray(serializedProto.data(), serializedProto.size());
         return Parse(proto, tagToName);
     }
 
 private:
-    using TInserter = std::function<void(const TString&, ui32)>;
+    template <typename T>
+    using TInserter = std::function<void(const TString&, T)>;
 
+    template <typename T>
     static void Parse(const NKikimrChangeExchange::TDataChange::TSerializedCells& proto,
-            const THashMap<NTable::TTag, TString>& tagToName, TInserter inserter)
+            const THashMap<NTable::TTag, TString>& tagToName, TInserter<T> inserter)
     {
         TSerializedCellVec serialized;
         UNIT_ASSERT(TSerializedCellVec::TryParse(proto.GetData(), serialized));
@@ -231,20 +264,34 @@ private:
             const auto& cell = cells.at(i);
 
             if (cell.IsNull()) {
-                inserter(name, Null);
+                if constexpr (std::is_same_v<T, ui32>) {
+                    inserter(name, Null);
+                } else if constexpr (std::is_same_v<T, TUuidHolder>) {
+                    inserter(name, TUuidHolder("null"));
+                }
             } else {
-                inserter(name, cell.AsValue<ui32>());
+                if constexpr (std::is_same_v<T, ui32>) {
+                    inserter(name, cell.AsValue<ui32>());
+                } else if constexpr (std::is_same_v<T, TUuidHolder>) {
+                    TStringStream ss;
+                    NUuid::UuidBytesToString(cell.Data(), ss);
+                    inserter(name, TUuidHolder(ss.Str()));
+                }
             }
         }
     }
 };
 
-using TStructRecords = THashMap<TString, TVector<TStructRecord>>;
+using TStructRecord = TStructRecordBase<ui32>;
+
+template <typename SK>
+using TStructRecords = THashMap<TString, TVector<TStructRecordBase<SK>>>;
 
 } // anonymous
 
 Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
-    void Run(const TString& path, const TShardedTableOptions& opts, const TVector<TString>& queries, const TStructRecords& expectedRecords) {
+    template <typename SK>
+    void Run(const TString& path, const TShardedTableOptions& opts, const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords) {
         const auto pathParts = SplitPath(path);
         UNIT_ASSERT(pathParts.size() > 1);
 
@@ -309,13 +356,14 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
 
             UNIT_ASSERT_VALUES_EQUAL(expected.size(), actual.size());
             for (size_t i = 0; i < expected.size(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecord::Parse(actual.at(i)->GetBody(), tagToName));
-                UNIT_ASSERT_VALUES_EQUAL(actual.at(i)->Get<TChangeRecord>()->GetSchemaVersion(), entry.TableId.SchemaVersion);
+                UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecordBase<SK>::Parse(actual.at(i)->GetBody(), tagToName));
+                UNIT_ASSERT_VALUES_EQUAL(actual.at(i)->template Get<TChangeRecord>()->GetSchemaVersion(), entry.TableId.SchemaVersion);
             }
         }
     }
 
-    void Run(const TString& path, const TShardedTableOptions& opts, const TString& query, const TStructRecords& expectedRecords) {
+    template <typename SK>
+    void Run(const TString& path, const TShardedTableOptions& opts, const TString& query, const TStructRecords<SK>& expectedRecords) {
         Run(path, opts, TVector<TString>(1, query), expectedRecords);
     }
 
@@ -331,13 +379,13 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     }
 
     Y_UNIT_TEST(InsertSingleRow) {
-        Run("/Root/path", SimpleTable(), "INSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);", {
+        Run<ui32>("/Root/path", SimpleTable(), "INSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);", {
             {"by_ikey", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}})}},
         });
     }
 
     Y_UNIT_TEST(InsertManyRows) {
-        Run("/Root/path", SimpleTable(), "INSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10), (2, 20);", {
+        Run<ui32>("/Root/path", SimpleTable(), "INSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10), (2, 20);", {
             {"by_ikey", {
                 TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}),
                 TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 20}, {"pkey", 2}}),
@@ -346,13 +394,13 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     }
 
     Y_UNIT_TEST(UpsertSingleRow) {
-        Run("/Root/path", SimpleTable(), "UPSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);", {
+        Run<ui32>("/Root/path", SimpleTable(), "UPSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);", {
             {"by_ikey", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}})}},
         });
     }
 
     Y_UNIT_TEST(UpsertManyRows) {
-        Run("/Root/path", SimpleTable(), "UPSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10), (2, 20);", {
+        Run<ui32>("/Root/path", SimpleTable(), "UPSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10), (2, 20);", {
             {"by_ikey", {
                 TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}),
                 TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 20}, {"pkey", 2}}),
@@ -361,7 +409,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     }
 
     Y_UNIT_TEST(UpsertToSameKey) {
-        Run("/Root/path", SimpleTable(), "UPSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10), (1, 20);", {
+        Run<ui32>("/Root/path", SimpleTable(), "UPSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10), (1, 20);", {
             {"by_ikey", {
                 TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}),
                 TStructRecord(NTable::ERowOp::Erase,  {{"ikey", 10}, {"pkey", 1}}),
@@ -371,11 +419,11 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     }
 
     Y_UNIT_TEST(DeleteNothing) {
-        Run("/Root/path", SimpleTable(), "DELETE FROM `/Root/path` WHERE pkey = 1;", {});
+        Run<ui32>("/Root/path", SimpleTable(), "DELETE FROM `/Root/path` WHERE pkey = 1;", {});
     }
 
     Y_UNIT_TEST(DeleteSingleRow) {
-        Run("/Root/path", SimpleTable(), TVector<TString>{
+        Run<ui32>("/Root/path", SimpleTable(), TVector<TString>{
             "UPSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);",
             "DELETE FROM `/Root/path` WHERE pkey = 1;",
         }, {
@@ -400,14 +448,14 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     }
 
     Y_UNIT_TEST(MultiIndexedTableInsertSingleRow) {
-        Run("/Root/path", MultiIndexedTable(), "INSERT INTO `/Root/path` (pkey, ikey1, ikey2) VALUES (1, 10, 100);", {
+        Run<ui32>("/Root/path", MultiIndexedTable(), "INSERT INTO `/Root/path` (pkey, ikey1, ikey2) VALUES (1, 10, 100);", {
             {"by_ikey1", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey1", 10},  {"pkey", 1}})}},
             {"by_ikey2", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey2", 100}, {"pkey", 1}})}},
         });
     }
 
     Y_UNIT_TEST(MultiIndexedTableUpdateOneIndexedColumn) {
-        Run("/Root/path", MultiIndexedTable(), TVector<TString>{
+        Run<ui32>("/Root/path", MultiIndexedTable(), TVector<TString>{
             "INSERT INTO `/Root/path` (pkey, ikey1, ikey2) VALUES (1, 10, 100);",
             "UPDATE `/Root/path` SET ikey1 = 20 WHERE pkey = 1;",
         }, {
@@ -423,7 +471,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     }
 
     Y_UNIT_TEST(MultiIndexedTableReplaceSingleRow) {
-        Run("/Root/path", MultiIndexedTable(), TVector<TString>{
+        Run<ui32>("/Root/path", MultiIndexedTable(), TVector<TString>{
             "INSERT INTO `/Root/path` (pkey, ikey1, ikey2) VALUES (1, 10, 100);",
             "REPLACE INTO `/Root/path` (pkey, ikey1) VALUES (1, 20);",
         }, {
@@ -452,13 +500,13 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     }
 
     Y_UNIT_TEST(IndexedPrimaryKeyInsertSingleRow) {
-        Run("/Root/path", IndexedPrimaryKey(), "INSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);", {
+        Run<ui32>("/Root/path", IndexedPrimaryKey(), "INSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);", {
             {"by_ikey_pkey", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}})}},
         });
     }
 
     Y_UNIT_TEST(IndexedPrimaryKeyDeleteSingleRow) {
-        Run("/Root/path", IndexedPrimaryKey(), TVector<TString>{
+        Run<ui32>("/Root/path", IndexedPrimaryKey(), TVector<TString>{
             "UPSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);",
             "DELETE FROM `/Root/path` WHERE pkey = 1;",
         }, {
@@ -482,7 +530,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     }
 
     Y_UNIT_TEST(CoveredIndexUpdateCoveredColumn) {
-        Run("/Root/path", CoveredIndex(), TVector<TString>{
+        Run<ui32>("/Root/path", CoveredIndex(), TVector<TString>{
             "INSERT INTO `/Root/path` (pkey, ikey, value) VALUES (1, 10, 100);",
             "UPDATE `/Root/path` SET value = 200 WHERE pkey = 1;",
         }, {
@@ -494,7 +542,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     }
 
     Y_UNIT_TEST(CoveredIndexUpsert) {
-        Run("/Root/path", CoveredIndex(), TVector<TString>{
+        Run<ui32>("/Root/path", CoveredIndex(), TVector<TString>{
             "INSERT INTO `/Root/path` (pkey, ikey, value) VALUES (1, 10, 100);",
             "UPSERT INTO `/Root/path` (pkey, ikey, value) VALUES (1, 10, 200);",
         }, {
@@ -516,7 +564,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
                 {"by_b", {"b"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
             });
 
-        Run("/Root/path", schema, TVector<TString>{
+        Run<ui32>("/Root/path", schema, TVector<TString>{
             "UPSERT INTO `/Root/path` (a, b) VALUES (1, 10);",
             "UPSERT INTO `/Root/path` (a, b) VALUES (1, 20);",
             "UPSERT INTO `/Root/path` (a, b) VALUES (1, 10);",
@@ -542,7 +590,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
                 {"by_c", {"c"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
             });
 
-        Run("/Root/path", schema, TVector<TString>{
+        Run<ui32>("/Root/path", schema, TVector<TString>{
             "UPSERT INTO `/Root/path` (a, b, d) VALUES (1, 10, 10000);",
             "UPSERT INTO `/Root/path` (a, b, c) VALUES (1, 10, 1000);",
         }, {
@@ -567,7 +615,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
                 {"by_d", {"d"}, {"c"}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
             });
 
-        Run("/Root/path", schema, TVector<TString>{
+        Run<ui32>("/Root/path", schema, TVector<TString>{
             "UPSERT INTO `/Root/path` (a, b, c, d) VALUES (1, 10, 100, 1000);",
         }, {
             {"by_bc", {
@@ -590,7 +638,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
                 {"by_b", {"b"}, {"c"}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
             });
 
-        Run("/Root/path", schema, TVector<TString>{
+        Run<ui32>("/Root/path", schema, TVector<TString>{
             "UPSERT INTO `/Root/path` (a, b, c) VALUES (1, 10, 100);",
             "UPSERT INTO `/Root/path` (a, b) VALUES (1, 20);",
         }, {
@@ -618,9 +666,10 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         return pqConfig;
     }
 
+    template <typename SK>
     void Run(const NFake::TCaches& cacheParams, const TString& path,
             const TShardedTableOptions& opts, const TVector<TCdcStream>& streams,
-            const TVector<TString>& queries, const TStructRecords& expectedRecords)
+            const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
     {
         const auto pathParts = SplitPath(path);
         UNIT_ASSERT(pathParts.size() > 1);
@@ -635,7 +684,8 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             .SetDomainName(domainName)
             .SetUseRealThreads(false)
             .SetEnableDataColumnForIndexTable(true)
-            .SetCacheParams(cacheParams);
+            .SetCacheParams(cacheParams)
+            .SetEnableUuidAsPrimaryKey(true);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -710,7 +760,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
             UNIT_ASSERT_VALUES_EQUAL(expected.size(), actual.size());
             for (size_t i = 0; i < expected.size(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecord::Parse(actual.at(i)->GetBody(), tagToName));
+                UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecordBase<SK>::Parse(actual.at(i)->GetBody(), tagToName));
                 UNIT_ASSERT_VALUES_EQUAL(actual.at(i)->Get<TChangeRecord>()->GetSchemaVersion(), entry.TableId.SchemaVersion);
             }
         }
@@ -726,20 +776,30 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         return params;
     }
 
+    template <typename SK>
     void Run(const TString& path, const TShardedTableOptions& opts, const TVector<TCdcStream>& streams,
-            const TVector<TString>& queries, const TStructRecords& expectedRecords)
+            const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
     {
         Run(DefaultCacheParams(), path, opts, streams, queries, expectedRecords);
     }
 
+    template <typename SK>
     void Run(const TString& path, const TShardedTableOptions& opts, const TCdcStream& stream,
-            const TString& query, const TStructRecords& expectedRecords)
+            const TString& query, const TStructRecords<SK>& expectedRecords)
     {
         Run(path, opts, TVector<TCdcStream>(1, stream), TVector<TString>(1, query), expectedRecords);
     }
 
     TShardedTableOptions SimpleTable() {
         return TShardedTableOptions();
+    }
+
+    TShardedTableOptions UuidTable() {
+        return TShardedTableOptions()
+            .Columns({
+                {"key", "Uuid", true, false},
+                {"value", "Uint32", false, false},
+            });
     }
 
     TCdcStream KeysOnly() {
@@ -783,19 +843,25 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     Y_UNIT_TEST(InsertSingleRow) {
-        Run("/Root/path", SimpleTable(), KeysOnly(), "INSERT INTO `/Root/path` (key, value) VALUES (1, 10);", {
+        Run<ui32>("/Root/path", SimpleTable(), KeysOnly(), "INSERT INTO `/Root/path` (key, value) VALUES (1, 10);", {
             {"keys_stream", {TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}})}},
         });
     }
 
+    Y_UNIT_TEST(InsertSingleUuidRow) {
+        Run<TUuidHolder>("/Root/path", UuidTable(), KeysOnly(), "INSERT INTO `/Root/path` (key, value) VALUES (Uuid(\"65df1ec1-a97d-47b2-ae56-3c023da6ee8c\"), 10);", {
+            {"keys_stream", {TStructRecordBase<TUuidHolder>(NTable::ERowOp::Upsert, {{"key", TUuidHolder("65df1ec1-a97d-47b2-ae56-3c023da6ee8c")}})}},
+        });
+    }
+
     Y_UNIT_TEST(DeleteNothing) {
-        Run("/Root/path", SimpleTable(), KeysOnly(), "DELETE FROM `/Root/path` WHERE key = 1;", {
+        Run<ui32>("/Root/path", SimpleTable(), KeysOnly(), "DELETE FROM `/Root/path` WHERE key = 1;", {
             {"keys_stream", {TStructRecord(NTable::ERowOp::Erase, {{"key", 1}})}},
         });
     }
 
     Y_UNIT_TEST(UpsertManyRows) {
-        Run("/Root/path", SimpleTable(), Updates(), "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10), (2, 20);", {
+        Run<ui32>("/Root/path", SimpleTable(), Updates(), "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10), (2, 20);", {
             {"updates_stream", {
                 TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {{"value", 10}}),
                 TStructRecord(NTable::ERowOp::Upsert, {{"key", 2}}, {{"value", 20}}),
@@ -804,7 +870,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     Y_UNIT_TEST(UpsertToSameKey) {
-        Run("/Root/path", SimpleTable(), Updates(), "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10), (1, 20);", {
+        Run<ui32>("/Root/path", SimpleTable(), Updates(), "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10), (1, 20);", {
             {"updates_stream", {
                 TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {{"value", 10}}),
                 TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {{"value", 20}}),
@@ -813,7 +879,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     Y_UNIT_TEST(UpsertToSameKeyWithImages) {
-        Run("/Root/path", SimpleTable(), NewAndOldImages(), "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10), (1, 20);", {
+        Run<ui32>("/Root/path", SimpleTable(), NewAndOldImages(), "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10), (1, 20);", {
             {"new_and_old_images", {
                 TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {}, {}, {{"value", 10}}),
                 TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {}, {{"value", 10}}, {{"value", 20}}),
@@ -822,7 +888,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     Y_UNIT_TEST(UpsertIntoTwoStreams) {
-        Run("/Root/path", SimpleTable(), TVector<TCdcStream>{Updates(), NewAndOldImages()}, TVector<TString>{
+        Run<ui32>("/Root/path", SimpleTable(), TVector<TCdcStream>{Updates(), NewAndOldImages()}, TVector<TString>{
             "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10), (1, 20);",
         }, {
             {"updates_stream", {
@@ -837,7 +903,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     Y_UNIT_TEST(DeleteSingleRow) {
-        Run("/Root/path", SimpleTable(), TVector<TCdcStream>{NewAndOldImages()}, TVector<TString>{
+        Run<ui32>("/Root/path", SimpleTable(), TVector<TCdcStream>{NewAndOldImages()}, TVector<TString>{
             "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10);",
             "DELETE FROM `/Root/path` WHERE key = 1;",
         }, {
@@ -849,7 +915,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     Y_UNIT_TEST(UpsertModifyDelete) {
-        Run("/Root/path", SimpleTable(), TVector<TCdcStream>{NewAndOldImages()}, TVector<TString>{
+        Run<ui32>("/Root/path", SimpleTable(), TVector<TCdcStream>{NewAndOldImages()}, TVector<TString>{
             "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10);",
             "UPSERT INTO `/Root/path` (key, value) VALUES (1, 20);",
             "DELETE FROM `/Root/path` WHERE key = 1;",
@@ -874,7 +940,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     Y_UNIT_TEST(IndexAndStreamUpsert) {
-        Run("/Root/path", IndexedTable(), Updates(), "INSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);", {
+        Run<ui32>("/Root/path", IndexedTable(), Updates(), "INSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);", {
             {"by_ikey", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}})}},
             {"updates_stream", {TStructRecord(NTable::ERowOp::Upsert, {{"pkey", 1}}, {{"ikey", 10}})}},
         });
@@ -904,7 +970,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         expectedRecords.push_back(TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {}, {{"value", 1}}, {{"value", 10}}));
         expectedRecords.push_back(TStructRecord(NTable::ERowOp::Upsert, {{"key", 1000}}, {}, {{"value", 1000}}, {{"value", 10000}}));
 
-        Run(TinyCacheParams(), "/Root/path", TinyCacheTable(), TVector<TCdcStream>{NewAndOldImages()}, TVector<TString>{
+        Run<ui32>(TinyCacheParams(), "/Root/path", TinyCacheTable(), TVector<TCdcStream>{NewAndOldImages()}, TVector<TString>{
             bigUpsert,
             "COMPACT TABLE `/Root/path`;",
             "SELECT * FROM `/Root/path` WHERE key = 1;",
@@ -922,7 +988,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
                 {"c", "Uint32", false, false},
             });
 
-        Run("/Root/path", schema, TVector<TCdcStream>{NewImage()}, TVector<TString>{
+        Run<ui32>("/Root/path", schema, TVector<TCdcStream>{NewImage()}, TVector<TString>{
             "INSERT INTO `/Root/path` (a, b) values (1, 2)",
             "DELETE FROM `/Root/path` WHERE a = 1;",
         }, {
@@ -941,7 +1007,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
                 {"c", "Uint32", false, false},
             });
 
-        Run("/Root/path", schema, TVector<TCdcStream>{OldImage()}, TVector<TString>{
+        Run<ui32>("/Root/path", schema, TVector<TCdcStream>{OldImage()}, TVector<TString>{
             "INSERT INTO `/Root/path` (a, b) values (1, 2)",
             "DELETE FROM `/Root/path` WHERE a = 1;",
         }, {
@@ -960,8 +1026,20 @@ Y_DECLARE_OUT_SPEC(inline, NKikimr::TStructRecord, out, value) {
     return value.Out(out);
 }
 
-Y_DECLARE_OUT_SPEC(inline, NKikimr::TStructKey, out, value) {
-    return NKikimr::OutKvContainer(out, value);
+Y_DECLARE_OUT_SPEC(inline, NKikimr::TStructRecordBase<NKikimr::TUuidHolder>, out, value) {
+    return value.Out(out);
+}
+
+Y_DECLARE_OUT_SPEC(inline, NKikimr::TUuidHolder, out, value) {
+    return value.Out(out);
+}
+
+Y_DECLARE_OUT_SPEC(inline, NKikimr::TStructKey<ui32>, out, value) {
+    return NKikimr::OutKvContainer<NKikimr::TStructKey<ui32>>(out, value);
+}
+
+Y_DECLARE_OUT_SPEC(inline, NKikimr::TStructKey<NKikimr::TUuidHolder>, out, value) {
+    return NKikimr::OutKvContainer<NKikimr::TStructKey<NKikimr::TUuidHolder>>(out, value);
 }
 
 Y_DECLARE_OUT_SPEC(inline, NKikimr::TStructValue, out, value) {

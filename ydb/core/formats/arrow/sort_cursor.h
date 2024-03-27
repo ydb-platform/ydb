@@ -165,7 +165,7 @@ public:
         Build(0);
     }
 
-    bool IsValid() const { return Tree[0] != -1; }
+    bool IsValid() const { return !Tree.empty() && Tree[0] != -1; }
     TSortCursor& Current() { return Cursors[Tree[0]]; }
 
     void Next() {
@@ -181,11 +181,13 @@ public:
     }
 
     void ReplaceTop(TSortCursor&& new_top) {
+        Y_ABORT_UNLESS(IsValid());
         Current() = new_top;
         UpdateTop();
     }
 
     void RemoveTop() {
+        Y_ABORT_UNLESS(IsValid());
         int32_t top = Tree[0];
         Tree[0] = -1;
         Update(top, -1);

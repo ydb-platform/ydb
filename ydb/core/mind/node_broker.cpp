@@ -913,7 +913,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
             LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER, "Finished resolving tenant"
                 << ": request# " << Ev->Get()->Record.ShortDebugString()
                 << ": scope id# " << ScopeIdToString(ScopeId)
-                << ": serviced domain# " << ServicedSubDomain);
+                << ": serviced subdomain# " << ServicedSubDomain);
 
             Self->ProcessTx(Self->CreateTxRegisterNode(Ev, ScopeId, ServicedSubDomain), ctx);
             Die(ctx);

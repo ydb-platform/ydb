@@ -249,11 +249,6 @@
         "size": 41,
         "uri": "https://{canondata_backend}/1903280/3ff85c4c6811db6314d1d647940de590bdf29c9c/resource.tar.gz#test.test_udf-two_regexps-_/results.txt"
     },
-    "test.test[weak_field-weak_field-]": {
-        "checksum": "ed9f4d5af5a642f3b5f26f08e6d4f199",
-        "size": 784,
-        "uri": "https://{canondata_backend}/1903280/3ff85c4c6811db6314d1d647940de590bdf29c9c/resource.tar.gz#test.test_weak_field-weak_field-_/results.txt"
-    },
     "test.test[window-win_func_auto_arg_selective_rank-default.txt]": {
         "checksum": "9412f9a7013f5555956db42592df175e",
         "size": 981,

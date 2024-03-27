@@ -114,11 +114,6 @@
         "size": 168,
         "uri": "https://{canondata_backend}/1942671/a63a3a5f5d184134abeff7f49c90e7245037bda0/resource.tar.gz#test.test_datetime-date_diff_sub-default.txt_/results.txt"
     },
-    "test.test[expr-current_tz-default.txt]": {
-        "checksum": "ec14561ab651b1f453342f98e54450d9",
-        "size": 234,
-        "uri": "https://{canondata_backend}/1903280/068b1dcdddc0295143202616ad130b9d109bb4f1/resource.tar.gz#test.test_expr-current_tz-default.txt_/results.txt"
-    },
     "test.test[expr-distinct_from-default.txt]": {
         "checksum": "731b64e78bf905e25c2f122b2583fdca",
         "size": 80,

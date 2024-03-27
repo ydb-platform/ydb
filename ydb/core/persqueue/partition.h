@@ -265,7 +265,6 @@ private:
     void ProcessDistrTx(const TActorContext& ctx);
 
     void AddImmediateTx(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> event);
-    void RemoveImmediateTx();
     void ProcessImmediateTxs(const TActorContext& ctx);
     void ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
                             const TActorContext& ctx);
@@ -601,6 +600,8 @@ private:
     void RemovePendingRequests(TMessageQueue& requests);
     void RemoveQuotaWaitingRequests();
 
+    bool FirstEvent = true;
+
 private:
     ui64 TabletID;
     ui32 TabletGeneration;
@@ -671,9 +672,9 @@ private:
 
     template <class T> void EnsureUserActionAndTransactionEventsFrontIs() const;
 
-    bool ProcessUserActionOrTransaction(TEvPQ::TEvSetClientInfo& event, const TActorContext& ctx);
-    bool ProcessUserActionOrTransaction(const TEvPersQueue::TEvProposeTransaction& event, const TActorContext& ctx);
-    bool ProcessUserActionOrTransaction(TTransaction& tx, const TActorContext& ctx);
+    EProcessResult ProcessUserActionOrTransaction(TEvPQ::TEvSetClientInfo& event, const TActorContext& ctx);
+    EProcessResult ProcessUserActionOrTransaction(const TEvPersQueue::TEvProposeTransaction& event, const TActorContext& ctx);
+    EProcessResult ProcessUserActionOrTransaction(TTransaction& tx, const TActorContext& ctx);
 
     //
     // user actions and transactions

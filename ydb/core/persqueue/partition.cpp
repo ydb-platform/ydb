@@ -1614,10 +1614,7 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
     request->Record.SetCookie(SET_OFFSET_COOKIE);
 
-    if (TxIdHasChanged) {
-        AddCmdWriteTxMeta(request->Record,
-                          *PlanStep, *TxId);
-    }
+    AddCmdWriteTxMeta(request->Record);
     AddCmdWriteUserInfos(request->Record);
     AddCmdWriteConfig(request->Record);
 
@@ -2401,14 +2398,20 @@ void TPartition::AddCmdWrite(NKikimrClient::TKeyValueRequest& request,
     write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
 }
 
-void TPartition::AddCmdWriteTxMeta(NKikimrClient::TKeyValueRequest& request,
-                                   ui64 step, ui64 txId)
+void TPartition::AddCmdWriteTxMeta(NKikimrClient::TKeyValueRequest& request)
 {
+    if (!TxIdHasChanged) {
+        return;
+    }
+
+    Y_ABORT_UNLESS(PlanStep.Defined());
+    Y_ABORT_UNLESS(TxId.Defined());
+
     TKeyPrefix ikey(TKeyPrefix::TypeTxMeta, Partition);
 
     NKikimrPQ::TPartitionTxMeta meta;
-    meta.SetPlanStep(step);
-    meta.SetTxId(txId);
+    meta.SetPlanStep(*PlanStep);
+    meta.SetTxId(*TxId);
 
     TString out;
     Y_PROTOBUF_SUPPRESS_NODISCARD meta.SerializeToString(&out);

@@ -140,7 +140,7 @@ private:
     ITransaction *CreateTxLoadState();
     ITransaction *CreateTxRegisterNode(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                                        const NActors::TScopeId& scopeId,
-                                       const TSubDomainKey& servicedDomain);
+                                       const TSubDomainKey& servicedSubDomain);
     ITransaction *CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfig(TEvNodeBroker::TEvSetConfigRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfigSubscription(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev);

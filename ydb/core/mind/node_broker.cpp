@@ -493,7 +493,7 @@ void TNodeBroker::DbAddNode(const TNodeInfo &node,
                 << " location=" << node.Location.ToString()
                 << " lease=" << node.Lease
                 << " expire=" << node.ExpirationString()
-                << " serviceddomain=" << node.ServicedSubDomain
+                << " servicedsubdomain=" << node.ServicedSubDomain
                 << " slotindex= " << node.SlotIndex);
 
     NIceDb::TNiceDb db(txc.DB);

@@ -896,7 +896,7 @@ public:
         }
     }
 
-    NThreading::TFuture<TGenericResult> ResetTemporary(const TString& src, const TString& cluster) override {
+    NThreading::TFuture<TGenericResult> ResetTemporary(const TString&, const TString&) override {
         try {
             YQL_ENSURE(false, "gateway doesn't implement reset temporary");
         } catch (yexception& e) {

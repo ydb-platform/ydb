@@ -829,7 +829,7 @@ public:
         schemeTx.SetWorkingDir(pathPair.first);
 
         auto& alterOp = *schemeTx.MutableAlterTable();
-        alterOp.SetName(GetTableName(dst));
+        alterOp.SetName(GetTableName(src));
         alterOp.SetTemporary(false);
 
         if (IsPrepare()) {
@@ -842,7 +842,7 @@ public:
             result.SetSuccess();
             renameTablePromise.SetValue(result);
         } else {
-            if (temporary && !force) {
+            if (temporary) {
                 auto code = Ydb::StatusIds::BAD_REQUEST;
                 auto error = TStringBuilder() << "Not allowed to rename temp table";
                 IKqpGateway::TGenericResult errResult;
@@ -850,7 +850,7 @@ public:
                 errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
                 renameTablePromise.SetValue(errResult);
             }
-            return Gateway->ModifyScheme(schemeTx);
+            return Gateway->ModifyScheme(std::move(schemeTx));
         }
 
         return renameTablePromise.GetFuture();

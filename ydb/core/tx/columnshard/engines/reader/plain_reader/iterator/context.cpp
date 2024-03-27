@@ -14,6 +14,7 @@ ui64 TSpecialReadContext::GetMemoryForSources(const std::map<ui32, std::shared_p
         AFL_VERIFY(i.second->GetIntervalsCount());
         result += fetchingPlan->PredictRawBytes(i.second) / i.second->GetIntervalsCount();
     }
+    AFL_VERIFY(result);
     return result;
 }
 

@@ -178,11 +178,11 @@ class TS3Writer
             RequestInFlight = nullptr;
         }
 
-        if (IdentityWritten && !Finished) {
-            Send(Worker, new TEvWorker::TEvPoll());
-        } else if (!Finished) {
+        if (!IdentityWritten) {
             IdentityWritten = true;
             Send(Worker, new TEvWorker::TEvHandshake());
+        } else if (!Finished) {
+            Send(Worker, new TEvWorker::TEvPoll());
         } else {
             Send(Worker, new TEvWorker::TEvGone(TEvWorker::TEvGone::DONE));
         }

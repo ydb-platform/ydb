@@ -166,7 +166,7 @@ namespace NYql {
         }
 
         void KikimrBackTrace() {
-            KikimrBackTraceFormatImpl(&Cerr);
+            FormatBackTrace(&Cerr);
         }
 
         void KikimrBackTraceFormatImpl(IOutputStream* out) {

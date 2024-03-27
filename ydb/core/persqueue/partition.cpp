@@ -1574,18 +1574,6 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
     ContinueProcessTxsAndUserActs(ctx);
 }
 
-namespace {
-
-template <class T>
-struct TIsSimpleSharedPtr : std::false_type {
-};
-
-template <class U>
-struct TIsSimpleSharedPtr<TSimpleSharedPtr<U>> : std::true_type {
-};
-
-}
-
 void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(!UsersInfoWriteInProgress);

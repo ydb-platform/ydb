@@ -34,6 +34,16 @@ void UuidBytesToString(const TString& in, IOutputStream& out) {
     NUuid::UuidToString(dw, out);
 }
 
+void UuidHalfsToString(ui64 low, ui64 hi, IOutputStream& out) {
+    union {
+        ui16 dw[8];
+        ui64 half[2];
+    } buf;
+    buf.half[0] = low;
+    buf.half[1] = hi;
+    NUuid::UuidToString(buf.dw, out);
+}
+
 void UuidToString(ui16 dw[8], IOutputStream& out) {
     WriteHex(dw[1], out);
     WriteHex(dw[0], out);

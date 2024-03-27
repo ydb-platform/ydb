@@ -1019,6 +1019,9 @@ message TS3Settings {
     optional uint32 RequestTimeoutMs = 101;
     optional uint32 HttpRequestTimeoutMs = 102;
     optional uint32 ConnectionTimeoutMs = 103;
+
+    optional uint32 ExecutorThreadsCount = 104 [default = 32];
+    optional uint32 MaxConnectionsCount = 105 [default = 32];
 };
 
 message TTaskCleaner {

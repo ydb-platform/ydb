@@ -6,9 +6,8 @@
 #include <library/cpp/svnversion/svnversion.h>
 
 #include <util/stream/file.h>
-#include <util/system/shellcommand.h>
-#include <util/folder/tempdir.h>
 #include <util/folder/path.h>
+#include <util/string/split.h>
 #include <util/generic/yexception.h>
 
 #include <sstream>
@@ -17,23 +16,11 @@
 
 using namespace NYql;
 
-std::string CalculateDiff(const TFsPath& oldPath, const TFsPath& newPath) {
-    TFileInput oldIn(oldPath);
-    TFileInput newIn(newPath);
+std::string CalculateDiff(const TString& oldAst, const TString& newAst) {
+    auto oldLines = StringSplitter(oldAst).Split('\n').ToList<std::string>();
+    auto newLines = StringSplitter(newAst).Split('\n').ToList<std::string>();
 
-    std::vector<std::string> oldLines;
-    std::vector<std::string> newLines;
-    TString line;
-    while (oldIn.ReadLine(line)) {
-        oldLines.push_back(std::move(line));
-        line = {};
-    }
-    while (newIn.ReadLine(line)) {
-        newLines.push_back(std::move(line));
-        line = {};
-    }
-
-    dtl::Diff<std::string, std::vector<std::string>> d(oldLines, newLines);
+    dtl::Diff<std::string, TVector<std::string>> d(oldLines, newLines);
     d.compose();
     d.composeUnifiedHunks();
     
@@ -62,7 +49,9 @@ int Main(int argc, const char *argv[])
     }
 
     const TString fileOne(argv[1]), fileTwo(argv[2]);
-    const auto progOne(ParseAst(TFileInput(fileOne).ReadAll())), progTwo(ParseAst(TFileInput(fileTwo).ReadAll()));
+    const TString progOneAst = TFileInput(fileOne).ReadAll();
+    const TString progTwoAst = TFileInput(fileTwo).ReadAll();
+    const auto progOne(ParseAst(progOneAst)), progTwo(ParseAst(progTwoAst));
 
     if (!(progOne.IsOk() && progTwo.IsOk())) {
         if (!progOne.IsOk()) {

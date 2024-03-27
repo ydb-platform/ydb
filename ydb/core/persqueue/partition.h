@@ -93,6 +93,7 @@ private:
 private:
     struct THasDataReq;
     struct THasDataDeadline;
+    using TMessageQueue = std::deque<TMessage>;
 
     bool IsActive() const;
     bool CanWrite() const;
@@ -121,7 +122,7 @@ private:
     void FailBadClient(const TActorContext& ctx);
     void FillReadFromTimestamps(const TActorContext& ctx);
     void FilterDeadlinedWrites(const TActorContext& ctx);
-    void FilterDeadlinedWrites(const TActorContext& ctx, std::deque<TMessage>& requests);
+    void FilterDeadlinedWrites(const TActorContext& ctx, TMessageQueue& requests);
 
     void Handle(NReadQuoterEvents::TEvAccountQuotaCountersUpdated::TPtr& ev, const TActorContext& ctx);
     void Handle(NReadQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const TActorContext& ctx);
@@ -219,7 +220,7 @@ private:
     void UpdateUserInfoEndOffset(const TInstant& now);
     void UpdateWriteBufferIsFullState(const TInstant& now);
     void CancelReserveRequests(const TActorContext& ctx);
-    void CancelRequests(const TActorContext& ctx, std::deque<TMessage>& requests);
+    void CancelRequests(const TActorContext& ctx, TMessageQueue& requests);
 
     TInstant GetWriteTimeEstimate(ui64 offset) const;
     bool AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx,
@@ -572,7 +573,7 @@ private:
     }
 
 private:
-    enum class ProcessResult {
+    enum class EProcessResult {
         Continue,
         Abort,
         Break
@@ -590,13 +591,13 @@ private:
         bool HeadCleared;
     };
 
-    ProcessResult ProcessRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& parameters);
-    ProcessResult ProcessRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters& parameters);
-    ProcessResult ProcessRequest(TSplitMessageGroupMsg& msg, ProcessParameters& parameters);
-    ProcessResult ProcessRequest(TWriteMsg& msg, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
+    EProcessResult ProcessRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& parameters);
+    EProcessResult ProcessRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters& parameters);
+    EProcessResult ProcessRequest(TSplitMessageGroupMsg& msg, ProcessParameters& parameters);
+    EProcessResult ProcessRequest(TWriteMsg& msg, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
 
-    static void RemoveMessages(std::deque<TMessage>& src, std::deque<TMessage>& dst);
-    void RemovePendingRequests(std::deque<TMessage>& requests);
+    static void RemoveMessages(TMessageQueue& src, TMessageQueue& dst);
+    void RemovePendingRequests(TMessageQueue& requests);
     void RemoveQuotaWaitingRequests();
 
 private:
@@ -634,10 +635,10 @@ private:
     TActorId Tablet;
     TActorId BlobCache;
 
-    std::deque<TMessage> PendingRequests;
-    std::deque<TMessage> QuotaWaitingRequests;
-    std::deque<TMessage> Requests;
-    std::deque<TMessage> Responses;
+    TMessageQueue PendingRequests;
+    TMessageQueue QuotaWaitingRequests;
+    TMessageQueue Requests;
+    TMessageQueue Responses;
 
     THead Head;
     THead NewHead;
@@ -664,7 +665,10 @@ private:
     TMaybe<TUsersInfoStorage> UsersInfoStorage;
 
     template <class T> T& GetUserActionAndTransactionEventsFront();
-    template <class T> bool UserActionAndTransactionEventsFrontIs() const;
+    template <class T> T& GetCurrentEvent();
+    TTransaction& GetCurrentTransaction();
+
+    template <class T> void EnsureUserActionAndTransactionEventsFrontIs() const;
 
     bool ProcessUserActionOrTransaction(TEvPQ::TEvSetClientInfo& event, const TActorContext& ctx);
     bool ProcessUserActionOrTransaction(const TEvPersQueue::TEvProposeTransaction& event, const TActorContext& ctx);
@@ -676,7 +680,7 @@ private:
     using TUserActionAndTransactionEvent =
         std::variant<TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>,             // user actions
                      TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>, // immediate transaction
-                     TSimpleSharedPtr<TTransaction>>;                       // distributed transaction or update config
+                     TTransaction>;                                         // distributed transaction or update config
     std::deque<TUserActionAndTransactionEvent> UserActionAndTransactionEvents;
     size_t ImmediateTxCount = 0;
     THashMap<TString, size_t> UserActCount;

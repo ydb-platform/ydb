@@ -107,10 +107,10 @@ Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(co
     if (settings.HasHttpRequestTimeoutMs()) {
         config.httpRequestTimeoutMs = settings.GetHttpRequestTimeoutMs();
     }
-    config.executor = std::make_shared<Aws::Utils::Threading::PooledThreadExecutor>(1);
+    config.executor = std::make_shared<Aws::Utils::Threading::PooledThreadExecutor>(settings.GetExecutorThreadsCount());
     config.enableTcpKeepAlive = true;
     //    config.lowSpeedLimit = 0;
-    config.maxConnections = 5;
+    config.maxConnections = settings.HasMaxConnectionsCount() ? settings.GetMaxConnectionsCount() : settings.GetExecutorThreadsCount();
     config.caPath = "/etc/ssl/certs";
 
     switch (settings.GetScheme()) {

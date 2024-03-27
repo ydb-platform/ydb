@@ -1388,9 +1388,22 @@
 
 - Java
 
-  Чтение с заданной позиции в текущей версии SDK отсутствует.
+  Чтение с заданного оффсета в Java возможно только в асинхронном читателе.
+  В обработчике событий `StartPartitionSessionEvent` можно при ответе серверу задать позицию, с которой следует начинать чтение.
+  Для этого в метод `confirm` следует передать настройки `StartPartitionSessionSettings` с указанным оффсетом через `setReadOffset`.
+  Также вызовом `setCommitOffset` можно указать оффсет, который следует считать закоммиченным.
 
-  Поддерживается настройка читателя `setReadFrom` для чтения событий с отметками времени записи не меньше данной.
+  ```java
+  @Override
+  public void onStartPartitionSession(StartPartitionSessionEvent event) {
+      event.confirm(StartPartitionSessionSettings.newBuilder()
+              .setReadOffset(lastReadOffset)
+              .setCommitOffset(lastCommitOffset)
+              .build());
+  }
+  ```
+
+  Также поддерживается настройка читателя `setReadFrom` для чтения событий с отметками времени записи не меньше данной.
 
 {% endlist %}
 

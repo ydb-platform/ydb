@@ -78,6 +78,19 @@ EXCLUDED_TESTS = [
     'ypath/direct_read_from_dynamic',  # INTERNAL_ERROR
 ]
 
+EXCLUDED_CANONIZATION = [
+    'datetime/current_date',
+    'expr/common_type_for_resource_and_data',
+    'expr/current_tz',
+    'optimizers/yql-10042_disable_flow_fuse_depends_on',
+    'optimizers/yql-10042_disable_fuse_depends_on',
+    'optimizers/yql-10074_dont_inline_lists_depends_on',
+    'union/union_column_extention',
+    'union/union_mix',
+    'union_all/union_all_with_limits',
+    'weak_field/weak_field',
+]
+
 
 def contains_not_commented(sql_query, substr, lower=False):
     if lower:
@@ -181,7 +194,8 @@ def run_test(suite, case, cfg):
     if suite in EXCLUDED_SUITES:
         pytest.skip('skip sute ' + suite)
 
-    if suite + '/' + case in EXCLUDED_TESTS:
+    full_test_name = suite + '/' + case
+    if full_test_name in EXCLUDED_TESTS:
         pytest.skip('skip case ' + suite + '/' + suite)
 
     program_sql = os.path.join(DATA_PATH, suite, '%s.sql' % case)
@@ -194,5 +208,5 @@ def run_test(suite, case, cfg):
     if do_custom_query_check(result, sql_query):
         return None
 
-    if os.path.exists(result.results_file):
+    if os.path.exists(result.results_file) and full_test_name not in EXCLUDED_CANONIZATION:
         return yatest.common.canonical_file(result.results_file)

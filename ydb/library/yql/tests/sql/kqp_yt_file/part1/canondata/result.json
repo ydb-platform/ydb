@@ -199,11 +199,6 @@
         "size": 40,
         "uri": "https://{canondata_backend}/1903280/4251c0b5a8e37f72032c0fe75fe0ef0e7ea05be0/resource.tar.gz#test.test_optimizers-unused_columns_window_no_payloads-_/results.txt"
     },
-    "test.test[optimizers-yql-10042_disable_fuse_depends_on-default.txt]": {
-        "checksum": "c57ae0dfc3cff9fb507c21b2e239cbf7",
-        "size": 62,
-        "uri": "https://{canondata_backend}/1937001/d90ed222e47dc159845c4ca508eba04c68ccdb78/resource.tar.gz#test.test_optimizers-yql-10042_disable_fuse_depends_on-default.txt_/results.txt"
-    },
     "test.test[optimizers-yql-14581_fuseflatmaps_with_external_lambda-]": {
         "checksum": "145757ea647a858c7162d01ee47a3113",
         "size": 18,

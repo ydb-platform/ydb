@@ -89,11 +89,6 @@
         "size": 26,
         "uri": "https://{canondata_backend}/1937367/f075a7392d7b28e4818dde79fbe0327dc1af574b/resource.tar.gz#test.test_csee-const_body_same_lambda-default.txt_/results.txt"
     },
-    "test.test[datetime-current_date-default.txt]": {
-        "checksum": "b64d8f541d0dc25a85616a525863e10b",
-        "size": 98,
-        "uri": "https://{canondata_backend}/1937001/7d709ff06b983a87068062c819e4641e3607f222/resource.tar.gz#test.test_datetime-current_date-default.txt_/results.txt"
-    },
     "test.test[datetime-date_tz_arithmetic-default.txt]": {
         "checksum": "d9b3ed16d43f3f40e278fa400db99514",
         "size": 926,

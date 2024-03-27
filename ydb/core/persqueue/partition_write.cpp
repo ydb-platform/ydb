@@ -1489,9 +1489,9 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx) {
     UpdateWriteBufferIsFullState(ctx.Now());
 }
 
-void TPartition::FilterDeadlinedWrites(const TActorContext& ctx, std::deque<TMessage>& requests)
+void TPartition::FilterDeadlinedWrites(const TActorContext& ctx, TMessageQueue& requests)
 {
-    std::deque<TMessage> newRequests;
+    TMessageQueue newRequests;
     for (auto& w : requests) {
         if (!w.IsWrite() || w.GetWrite().Msg.IgnoreQuotaDeadline) {
             newRequests.emplace_back(std::move(w));
@@ -1519,7 +1519,7 @@ void TPartition::CancelReserveRequests(const TActorContext& ctx)
     ReserveRequests.clear();
 }
 
-void TPartition::CancelRequests(const TActorContext& ctx, std::deque<TMessage>& requests)
+void TPartition::CancelRequests(const TActorContext& ctx, TMessageQueue& requests)
 {
     for(const auto& r : requests) {
         ReplyError(ctx, r.GetCookie(), InactivePartitionErrorCode,
@@ -1528,7 +1528,7 @@ void TPartition::CancelRequests(const TActorContext& ctx, std::deque<TMessage>& 
     requests.clear();
 }
 
-void TPartition::RemoveMessages(std::deque<TMessage>& src, std::deque<TMessage>& dst)
+void TPartition::RemoveMessages(TMessageQueue& src, TMessageQueue& dst)
 {
     for (auto& r : src) {
         dst.push_back(std::move(r));
@@ -1536,7 +1536,7 @@ void TPartition::RemoveMessages(std::deque<TMessage>& src, std::deque<TMessage>&
     src.clear();
 }
 
-void TPartition::RemovePendingRequests(std::deque<TMessage>& requests)
+void TPartition::RemovePendingRequests(TMessageQueue& requests)
 {
     RemoveMessages(PendingRequests, requests);
 }

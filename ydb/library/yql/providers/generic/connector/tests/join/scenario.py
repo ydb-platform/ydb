@@ -1,33 +1,32 @@
-from pathlib import Path
-import utils.postgresql
-
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
+from ydb.library.yql.providers.generic.connector.tests.utils.comparator import data_outs_equal
+from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
+from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
+from ydb.library.yql.providers.generic.connector.tests.utils.runner import Runner
 
-from utils.comparator import data_outs_equal
-from utils.log import make_logger
-from utils.runner import Runner
-from utils.settings import Settings
+from ydb.library.yql.providers.generic.connector.tests.utils.clients.clickhouse import Client as ClickHouseClient
+import ydb.library.yql.providers.generic.connector.tests.utils.scenario.clickhouse as clickhouse_scenario
+from ydb.library.yql.providers.generic.connector.tests.utils.clients.postgresql import Client as PostgreSQLClient
+import ydb.library.yql.providers.generic.connector.tests.utils.scenario.postgresql as postgresql_scenario
 
-import clickhouse
-import postgresql
-import test_cases.join
+from test_case import TestCase
 
 LOGGER = make_logger(__name__)
 
 
 def join(
     test_name: str,
-    test_case: test_cases.join.TestCase,
+    test_case: TestCase,
     settings: Settings,
     runner: Runner,
-    clickhouse_client: clickhouse.Client,
-    postgresql_client: utils.postgresql.Client,
+    clickhouse_client: ClickHouseClient,
+    postgresql_client: PostgreSQLClient,
 ):
     # prepare tables
     for data_source in test_case.data_sources:
         match data_source.kind:
             case EDataSourceKind.CLICKHOUSE:
-                clickhouse.prepare_table(
+                clickhouse_scenario.prepare_table(
                     test_name=test_name,
                     client=clickhouse_client,
                     database=data_source.database,
@@ -36,7 +35,7 @@ def join(
                     schema=data_source.table.schema,
                 )
             case EDataSourceKind.POSTGRESQL:
-                postgresql.prepare_table(
+                postgresql_scenario.prepare_table(
                     test_name=test_name,
                     client=postgresql_client,
                     database=data_source.database,

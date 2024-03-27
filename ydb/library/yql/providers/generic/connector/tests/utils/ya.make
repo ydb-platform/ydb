@@ -4,7 +4,6 @@ STYLE_PYTHON()
 
 PY_SRCS(
     artifacts.py
-    clickhouse.py
     comparator.py
     data_source_kind.py
     database.py
@@ -13,7 +12,6 @@ PY_SRCS(
     generate.py
     kqprun.py
     log.py
-    postgresql.py
     runner.py
     schema.py
     settings.py
@@ -21,9 +19,16 @@ PY_SRCS(
 )
 
 PEERDIR(
+    contrib/python/Jinja2
+    contrib/python/PyYAML
     ydb/library/yql/providers/generic/connector/api/common
+    ydb/library/yql/providers/generic/connector/tests/utils/types
     ydb/public/api/protos
     yt/python/yt/yson
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    types
+)

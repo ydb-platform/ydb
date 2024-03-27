@@ -6,9 +6,9 @@ from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 impo
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
-from utils.settings import Settings
-import ydb.library.yql.providers.generic.connector.tests.utils.clickhouse as clickhouse
-import ydb.library.yql.providers.generic.connector.tests.utils.postgresql as postgresql
+from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
+import ydb.library.yql.providers.generic.connector.tests.utils.types.clickhouse as clickhouse
+import ydb.library.yql.providers.generic.connector.tests.utils.types.postgresql as postgresql
 from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
 from ydb.library.yql.providers.generic.connector.tests.utils.data_source_kind import data_source_kind_alias
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
@@ -138,7 +138,7 @@ class Factory:
         ),
     ]
 
-    def make_simple_test_cases(self) -> Sequence[TestCase]:
+    def __make_simple_test_cases(self) -> Sequence[TestCase]:
         tables: Sequence[TestCase] = [
             Table(
                 name='example_1',
@@ -215,7 +215,7 @@ class Factory:
 
         return test_cases
 
-    def make_inner_join_test_case(self) -> Sequence[TestCase]:
+    def __make_inner_join_test_case(self) -> Sequence[TestCase]:
         ch_table = Table(
             name='test_1',
             schema=Schema(
@@ -269,4 +269,4 @@ class Factory:
         ]
 
     def make_test_cases(self) -> Sequence[TestCase]:
-        return self.make_simple_test_cases() + self.make_inner_join_test_case()
+        return self.__make_simple_test_cases() + self.__make_inner_join_test_case()

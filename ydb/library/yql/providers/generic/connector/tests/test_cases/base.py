@@ -7,7 +7,6 @@ import functools
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
-from ydb.library.yql.providers.generic.connector.tests.utils.data_source_kind import data_source_kind_alias
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import GenericSettings
 
 
@@ -20,7 +19,7 @@ class BaseTestCase:
 
     @property
     def name(self) -> str:
-        return f'{self.name_}_{data_source_kind_alias(self.data_source_kind)}_{EProtocol.Name(self.protocol)}'
+        return f'{self.name_}_{EProtocol.Name(self.protocol)}'
 
     @property
     def database(self) -> Database:

@@ -8,23 +8,18 @@ TestCase = BaseTestCase
 
 
 class Factory:
-    def make_test_cases(self) -> List[TestCase]:
-        data_source_kinds = (
-            EDataSourceKind.CLICKHOUSE,
-            EDataSourceKind.POSTGRESQL,
+    def make_test_cases(self, data_source_kind: EDataSourceKind) -> List[TestCase]:
+        test_cases = []
+
+        test_case_name = 'missing_database'
+
+        test_case = TestCase(
+            name_=test_case_name,
+            data_source_kind=data_source_kind,
+            protocol=EProtocol.NATIVE,
+            pragmas=dict(),
         )
 
-        test_cases = []
-        for data_source_kind in data_source_kinds:
-            test_case_name = 'missing_database'
-
-            test_case = TestCase(
-                name_=test_case_name,
-                data_source_kind=data_source_kind,
-                protocol=EProtocol.NATIVE,
-                pragmas=dict(),
-            )
-
-            test_cases.append(test_case)
+        test_cases.append(test_case)
 
         return test_cases

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Optional, Sequence
+import pathlib
 
 import yatest.common
 
@@ -48,41 +49,59 @@ class Settings:
     postgresql: PostgreSQL
 
     @classmethod
-    def from_env(cls) -> 'Settings':
-        docker_compose_file = yatest.common.source_path(
-            'ydb/library/yql/providers/generic/connector/tests/docker-compose.yml'
-        )
-        endpoint_determiner = EndpointDeterminer(docker_compose_file)
+    def from_env(cls, docker_compose_dir: pathlib.Path, data_source_kinds: Sequence[EDataSourceKind]) -> 'Settings':
+        docker_compose_file_relative_path = str(docker_compose_dir / 'docker-compose.yml')
+        docker_compose_file_abs_path = yatest.common.source_path(docker_compose_file_relative_path)
+        endpoint_determiner = EndpointDeterminer(docker_compose_file_abs_path)
+
+        data_sources = dict()
+
+        for data_source_kind in data_source_kinds:
+            match data_source_kind:
+                case EDataSourceKind.CLICKHOUSE:
+                    data_sources[data_source_kind] = cls.ClickHouse(
+                        cluster_name='clickhouse_integration_test',
+                        host_external='0.0.0.0',
+                        # This hack is due to https://st.yandex-team.ru/YQ-3003.
+                        # Previously we used container names instead of container ips:
+                        # host_internal=docker_compose_file['services']['clickhouse']['container_name'],
+                        host_internal=endpoint_determiner.get_internal_ip('clickhouse'),
+                        http_port_external=endpoint_determiner.get_external_port('clickhouse', 8123),
+                        native_port_external=endpoint_determiner.get_external_port('clickhouse', 9000),
+                        http_port_internal=8123,
+                        native_port_internal=9000,
+                        username='user',
+                        password='password',
+                        protocol='native',
+                    )
+                case EDataSourceKind.POSTGRESQL:
+                    data_sources[data_source_kind] = cls.PostgreSQL(
+                        cluster_name='postgresql_integration_test',
+                        host_external='0.0.0.0',
+                        # This hack is due to https://st.yandex-team.ru/YQ-3003.
+                        # Previously we used container names instead of container ips:
+                        # host_internal=docker_compose_file['services']['postgresql']['container_name'],
+                        host_internal=endpoint_determiner.get_internal_ip('postgresql'),
+                        port_external=endpoint_determiner.get_external_port('postgresql', 5432),
+                        port_internal=5432,
+                        dbname='db',
+                        username='user',
+                        password='password',
+                    )
+                case _:
+                    raise Exception(f'invalid data source: {data_source_kind}')
+
+        print("CRAB", data_sources)
 
         return cls(
             connector=cls.Connector(
                 grpc_host='localhost',
-                grpc_port=endpoint_determiner.get_port('fq-connector-go', 2130),
+                grpc_port=endpoint_determiner.get_external_port('fq-connector-go', 2130),
                 paging_bytes_per_page=4 * 1024 * 1024,
                 paging_prefetch_queue_capacity=2,
             ),
-            clickhouse=cls.ClickHouse(
-                cluster_name='clickhouse_integration_test',
-                host_external='localhost',
-                host_internal='clickhouse',
-                http_port_external=endpoint_determiner.get_port('clickhouse', 8123),
-                native_port_external=endpoint_determiner.get_port('clickhouse', 9000),
-                http_port_internal=8123,
-                native_port_internal=9000,
-                username='user',
-                password='password',
-                protocol='native',
-            ),
-            postgresql=cls.PostgreSQL(
-                cluster_name='postgresql_integration_test',
-                host_external='localhost',
-                host_internal='postgresql',
-                port_external=endpoint_determiner.get_port('postgresql', 5432),
-                port_internal=5432,
-                dbname='db',
-                username='user',
-                password='password',
-            ),
+            clickhouse=data_sources.get(EDataSourceKind.CLICKHOUSE),
+            postgresql=data_sources.get(EDataSourceKind.POSTGRESQL),
         )
 
     def get_cluster_name(self, data_source_kind: EDataSourceKind) -> str:

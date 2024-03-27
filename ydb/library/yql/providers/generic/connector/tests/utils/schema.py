@@ -8,8 +8,8 @@ import ydb.public.api.protos.ydb_value_pb2 as ydb_value
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
 from ydb.public.api.protos.ydb_value_pb2 import Type, OptionalType
 
-import ydb.library.yql.providers.generic.connector.tests.utils.clickhouse as clickhouse
-import ydb.library.yql.providers.generic.connector.tests.utils.postgresql as postgresql
+import ydb.library.yql.providers.generic.connector.tests.utils.types.clickhouse as clickhouse
+import ydb.library.yql.providers.generic.connector.tests.utils.types.postgresql as postgresql
 
 YsonList: TypeAlias = yson.yson_types.YsonList
 

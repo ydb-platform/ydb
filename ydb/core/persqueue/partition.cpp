@@ -20,6 +20,18 @@
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
 
+namespace {
+
+template <class T>
+struct TIsSimpleSharedPtr : std::false_type {
+};
+
+template <class U>
+struct TIsSimpleSharedPtr<TSimpleSharedPtr<U>> : std::true_type {
+};
+
+}
+
 namespace NKikimr::NPQ {
 
 static const TDuration WAKE_TIMEOUT = TDuration::Seconds(5);
@@ -1560,18 +1572,6 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
     Y_ABORT_UNLESS(AffectedUsers.empty());
 
     ContinueProcessTxsAndUserActs(ctx);
-}
-
-namespace {
-
-template <class T>
-struct TIsSimpleSharedPtr : std::false_type {
-};
-
-template <class U>
-struct TIsSimpleSharedPtr<TSimpleSharedPtr<U>> : std::true_type {
-};
-
 }
 
 void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)

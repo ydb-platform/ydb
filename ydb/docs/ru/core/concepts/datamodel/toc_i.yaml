@@ -6,3 +6,4 @@ items:
 - { name: Секреты,                                href: secrets.md }
 - { name: Внешние источники данных,               href: external_data_source.md }
 - { name: Внешние таблицы,                        href: external_table.md }
+- { name: Представления,                          href: view.md }

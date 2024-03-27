@@ -72,10 +72,10 @@ public:
         ui64 MaxRawMemory = 0;
     public:
         virtual ui64 AddPortion(const TPortionInfo& portionInfo) override {
-            if (MaxRawMemory < portionInfo.GetRawBytes()) {
-                MaxRawMemory = portionInfo.GetRawBytes();
+            if (MaxRawMemory < portionInfo.GetTotalRawBytes()) {
+                MaxRawMemory = portionInfo.GetTotalRawBytes();
             }
-            SumBlobsMemory += portionInfo.GetBlobBytes();
+            SumBlobsMemory += portionInfo.GetTotalBlobBytes();
             return SumBlobsMemory + MaxRawMemory;
         }
     };

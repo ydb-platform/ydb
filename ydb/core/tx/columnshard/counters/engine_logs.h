@@ -13,12 +13,16 @@ namespace NKikimr::NColumnShard {
 
 class TBaseGranuleDataClassSummary {
 protected:
-    i64 PortionsSize = 0;
+    i64 ColumnPortionsSize = 0;
+    i64 TotalPortionsSize = 0;
     i64 PortionsCount = 0;
     i64 RecordsCount = 0;
 public:
-    i64 GetPortionsSize() const {
-        return PortionsSize;
+    i64 GetColumnPortionsSize() const {
+        return ColumnPortionsSize;
+    }
+    i64 GetTotalPortionsSize() const {
+        return TotalPortionsSize;
     }
     i64 GetRecordsCount() const {
         return RecordsCount;
@@ -28,12 +32,15 @@ public:
     }
 
     TString DebugString() const {
-        return TStringBuilder() << "size:" << PortionsSize << ";count:" << PortionsCount << ";";
+        return TStringBuilder() << "columns_size:" << ColumnPortionsSize << ";total_size:" << TotalPortionsSize << ";count:" << PortionsCount << ";";
     }
 
     TBaseGranuleDataClassSummary operator+(const TBaseGranuleDataClassSummary& item) const {
         TBaseGranuleDataClassSummary result;
-        result.PortionsSize = PortionsSize + item.PortionsSize;
+        result.TotalPortionsSize = TotalPortionsSize + item.TotalPortionsSize;
+        result.ColumnPortionsSize = ColumnPortionsSize + item.ColumnPortionsSize;
+        AFL_VERIFY(result.TotalPortionsSize >= 0);
+        AFL_VERIFY(result.ColumnPortionsSize >= 0);
         result.PortionsCount = PortionsCount + item.PortionsCount;
         result.RecordsCount = RecordsCount + item.RecordsCount;
         return result;
@@ -53,7 +60,7 @@ public:
     }
 
     void OnPortionsInfo(const TBaseGranuleDataClassSummary& dataInfo) const {
-        PortionsSize->SetValue(dataInfo.GetPortionsSize());
+        PortionsSize->SetValue(dataInfo.GetTotalPortionsSize());
         PortionsCount->SetValue(dataInfo.GetPortionsCount());
     }
 };

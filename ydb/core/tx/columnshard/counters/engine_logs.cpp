@@ -86,7 +86,7 @@ void TEngineLogsCounters::TPortionsInfoGuard::OnNewPortion(const std::shared_ptr
         BlobGuards[producedId]->Add(i.GetBlobRange().Size, i.GetBlobRange().Size);
     }
     PortionRecordCountGuards[producedId]->Add(portion->GetRecordsCount(), 1);
-    PortionSizeGuards[producedId]->Add(portion->GetBlobBytes(), 1);
+    PortionSizeGuards[producedId]->Add(portion->GetTotalBlobBytes(), 1);
 }
 
 void TEngineLogsCounters::TPortionsInfoGuard::OnDropPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) const {
@@ -99,7 +99,7 @@ void TEngineLogsCounters::TPortionsInfoGuard::OnDropPortion(const std::shared_pt
         BlobGuards[producedId]->Sub(i.GetBlobRange().Size, i.GetBlobRange().Size);
     }
     PortionRecordCountGuards[producedId]->Sub(portion->GetRecordsCount(), 1);
-    PortionSizeGuards[producedId]->Sub(portion->GetBlobBytes(), 1);
+    PortionSizeGuards[producedId]->Sub(portion->GetTotalBlobBytes(), 1);
 }
 
 }

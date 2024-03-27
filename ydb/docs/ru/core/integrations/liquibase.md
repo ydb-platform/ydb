@@ -257,51 +257,52 @@ Liquibase command 'update' was executed successfully.
 Содержимое сгенерированного changelog.xml:
 
 ```xml
-        <createTable tableName="all_types_table">
-            <column name="id" type="INT32">
-                <constraints nullable="false" primaryKey="true"/>
-            </column>
-            <column name="bool_column" type="BOOL"/>
-            <column name="bigint_column" type="INT64"/>
-            <column name="smallint_column" type="INT16"/>
-            <column name="tinyint_column" type="INT8"/>
-            <column name="float_column" type="FLOAT"/>
-            <column name="double_column" type="DOUBLE"/>
-            <column name="decimal_column" type="DECIMAL(22, 9)"/>
-            <column name="uint8_column" type="UINT8"/>
-            <column name="uint16_column" type="UINT16"/>
-            <column name="unit32_column" type="UINT32"/>
-            <column name="unit64_column" type="UINT64"/>
-            <column name="text_column" type="TEXT"/>
-            <column name="binary_column" type="BYTES"/>
-            <column name="json_column" type="JSON"/>
-            <column name="jsondocument_column" type="JSONDOCUMENT"/>
-            <column name="date_column" type="DATE"/>
-            <column name="datetime_column" type="DATETIME"/>
-            <column name="timestamp_column" type="TIMESTAMP"/>
-            <column name="interval_column" type="INTERVAL"/>
-        </createTable>
-    </changeSet>
-    <changeSet author="kurdyukov-kir (generated)" id="1711556283305-2">
-        <createTable tableName="episodes">
-            <column name="series_id" type="INT64">
-                <constraints nullable="false" primaryKey="true"/>
-            </column>
-            <column name="season_id" type="INT64">
-                <constraints nullable="false" primaryKey="true"/>
-            </column>
-            <column name="episode_id" type="INT64">
-                <constraints nullable="false" primaryKey="true"/>
-            </column>
-            <column name="title" type="TEXT"/>
-            <column name="air_date" type="DATE"/>
-        </createTable>
-    </changeSet>
-    <changeSet author="kurdyukov-kir (generated)" id="1711556283305-3">
-        <createIndex indexName="title_index" tableName="episodes">
-            <column name="title"/>
-        </createIndex>
-    </changeSet>
+<changeSet author="kurdyukov-kir (generated)" id="1711556283305-1">
+    <createTable tableName="all_types_table">
+        <column name="id" type="INT32">
+            <constraints nullable="false" primaryKey="true"/>
+        </column>
+        <column name="bool_column" type="BOOL"/>
+        <column name="bigint_column" type="INT64"/>
+        <column name="smallint_column" type="INT16"/>
+        <column name="tinyint_column" type="INT8"/>
+        <column name="float_column" type="FLOAT"/>
+        <column name="double_column" type="DOUBLE"/>
+        <column name="decimal_column" type="DECIMAL(22, 9)"/>
+        <column name="uint8_column" type="UINT8"/>
+        <column name="uint16_column" type="UINT16"/>
+        <column name="unit32_column" type="UINT32"/>
+        <column name="unit64_column" type="UINT64"/>
+        <column name="text_column" type="TEXT"/>
+        <column name="binary_column" type="BYTES"/>
+        <column name="json_column" type="JSON"/>
+        <column name="jsondocument_column" type="JSONDOCUMENT"/>
+        <column name="date_column" type="DATE"/>
+        <column name="datetime_column" type="DATETIME"/>
+        <column name="timestamp_column" type="TIMESTAMP"/>
+        <column name="interval_column" type="INTERVAL"/>
+    </createTable>
+</changeSet>
+<changeSet author="kurdyukov-kir (generated)" id="1711556283305-2">
+    <createTable tableName="episodes">
+        <column name="series_id" type="INT64">
+            <constraints nullable="false" primaryKey="true"/>
+        </column>
+        <column name="season_id" type="INT64">
+            <constraints nullable="false" primaryKey="true"/>
+        </column>
+        <column name="episode_id" type="INT64">
+            <constraints nullable="false" primaryKey="true"/>
+        </column>
+        <column name="title" type="TEXT"/>
+        <column name="air_date" type="DATE"/>
+    </createTable>
+</changeSet>
+<changeSet author="kurdyukov-kir (generated)" id="1711556283305-3">
+    <createIndex indexName="title_index" tableName="episodes">
+        <column name="title"/>
+    </createIndex>
+</changeSet>
 ```
 
 Затем нужно синхронизировать сгенерированный changelog.xml файл, делается это командой `liquibase changelog-sync --changelog-file=dbchangelog.xml`.

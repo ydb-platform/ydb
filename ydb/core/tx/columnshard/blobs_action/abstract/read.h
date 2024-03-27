@@ -93,8 +93,8 @@ protected:
     void StartReading(std::vector<TBlobRange>&& ranges);
 public:
 
-    const THashSet<TBlobRange>& GetRangesForRead() const {
-        return RangesForRead;
+    const THashMap<TBlobRange, std::vector<TBlobRange>>& GetGroups() const {
+        return Groups;
     }
 
     void Merge(const std::shared_ptr<IBlobsReadingAction>& action) {

@@ -406,11 +406,14 @@ struct TBinaryKernelExec {
     }
 };
 
-template <typename TDerived, size_t Argc>
+template <typename TDerived, size_t Argc, size_t OptArgc = 0>
 struct TGenericKernelExec {
+    static_assert(OptArgc <= Argc, "Wrong optional arguments count");
     static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         auto& state = dynamic_cast<TUdfKernelState&>(*ctx->state());
-        Y_ENSURE(batch.num_values() == Argc);
+        size_t nvalues = batch.num_values();
+        Y_ENSURE(nvalues <= Argc);
+        Y_ENSURE(nvalues >= Argc - OptArgc);
         // XXX: Since Arrow arrays ought to have the valid length value, use
         // this constant to check whether all the arrays in the given batch have
         // the same length and also as an indicator whether there is no array
@@ -426,7 +429,11 @@ struct TGenericKernelExec {
         std::array<bool, Argc> needUpdate;
         needUpdate.fill(false);
 
-        for (size_t k = 0; k < Argc; k++) {
+        // Initialize the omitted tail of the argument tuple.
+        for (size_t k = nvalues; k < Argc; k++) {
+            args[k] = TBlockItem();
+        }
+        for (size_t k = 0; k < nvalues; k++) {
             auto& arg = batch[k];
             Y_ENSURE(arg.is_scalar() || arg.is_array());
             if (arg.is_scalar()) {
@@ -442,7 +449,7 @@ struct TGenericKernelExec {
         // Specialize the case, when all given arguments are scalar.
         if (alength == arrow::Datum::kUnknownLength) {
             auto& builder = state.GetScalarBuilder();
-            for (size_t k = 0; k < Argc; k++) {
+            for (size_t k = 0; k < nvalues; k++) {
                 args[k] = state.GetReader(k).GetScalarItem(*batch[k].scalar());
             }
             TDerived::Process(items, [&](TBlockItem out) {
@@ -454,7 +461,7 @@ struct TGenericKernelExec {
             Y_ENSURE(maxBlockLength > 0);
             TVector<std::shared_ptr<arrow::ArrayData>> outputArrays;
             // Initialize all scalar arguments before the main "process" loop.
-            for (size_t k = 0; k < Argc; k++) {
+            for (size_t k = 0; k < nvalues; k++) {
                 if (needUpdate[k]) {
                     continue;
                 }
@@ -463,7 +470,7 @@ struct TGenericKernelExec {
             for (int64_t i = 0; i < alength;) {
                 for (size_t j = 0; j < maxBlockLength && i < alength; ++j, ++i) {
                     // Update array arguments and call the Process routine.
-                    for (size_t k = 0; k < Argc; k++) {
+                    for (size_t k = 0; k < nvalues; k++) {
                         if (!needUpdate[k]) {
                             continue;
                         }

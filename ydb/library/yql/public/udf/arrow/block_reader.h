@@ -32,16 +32,8 @@ struct TBlockItemSerializeProps {
     bool IsFixed = true;      // true if each block item takes fixed size
 };
 
-namespace {
-    template<typename T>
-    TBlockItem DefaultToBlockItem(T val) {
-        return TBlockItem(val);
-    }
-}
-
-template<typename T, bool Nullable, 
-TBlockItem ToBlockItem(T) = DefaultToBlockItem<T>>
-class TFixedSizeBlockReader final : public IBlockReader {
+template<typename T, bool Nullable, typename TDerived> 
+class TFixedSizeBlockReaderBase : public IBlockReader {
 public:
     TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
         if constexpr (Nullable) {
@@ -49,17 +41,21 @@ public:
                 return {};
             }
         }
-        return ToBlockItem(data.GetValues<T>(1)[index]);
+        return static_cast<TDerived*>(this)->MakeBlockItem(data.GetValues<T>(1)[index]);
     }
 
     TBlockItem GetScalarItem(const arrow::Scalar& scalar) final {
+        using namespace arrow::internal;
+
         if constexpr (Nullable) {
             if (!scalar.is_valid) {
                 return {};
             }
         }
 
-        return ToBlockItem(*static_cast<const T*>(arrow::internal::checked_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data()));
+        return static_cast<TDerived*>(this)->MakeBlockItem(
+            *static_cast<const T*>(checked_cast<const PrimitiveScalarBase&>(scalar).data())
+        );
     }
 
     ui64 GetDataWeight(const arrow::ArrayData& data) const final {
@@ -104,16 +100,23 @@ public:
     }
 };
 
-namespace {
-    TBlockItem ConvertToBlockItemResource(TUnboxedValuePod pod) {
+template<typename T, bool Nullable>
+class TFixedSizeBlockReader : public TFixedSizeBlockReaderBase<T, Nullable, TFixedSizeBlockReader<T, Nullable>> {
+public:
+    TBlockItem MakeBlockItem(const T& item) const {
+        return TBlockItem(item);
+    }
+};
+
+template<bool Nullable>
+class TResourceBlockReader : public TFixedSizeBlockReaderBase<TUnboxedValuePod, Nullable, TResourceBlockReader<Nullable>> {
+public:
+    TBlockItem MakeBlockItem(const TUnboxedValuePod& pod) const {
         TBlockItem item;
         std::memcpy(item.GetRawPtr(), pod.GetRawPtr(), sizeof(TBlockItem));
         return item;
     }
-}
-
-template<bool Nullable>
-using TResourceBlockReader = TFixedSizeBlockReader<TUnboxedValuePod, Nullable, ConvertToBlockItemResource>;
+};
 
 template<typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot TOriginal = NKikimr::NUdf::EDataSlot::String>
 class TStringBlockReader final : public IBlockReader {

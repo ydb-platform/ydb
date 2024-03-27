@@ -48,7 +48,7 @@ bool TBlobsFetchingStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& so
 
 ui64 TBlobsFetchingStep::DoPredictRawBytes(const std::shared_ptr<IDataSource>& source) const {
     if (Columns) {
-        return source->GetRawBytes(Columns->GetColumnIds());
+        return source->GetColumnRawBytes(Columns->GetColumnIds());
     } else {
         AFL_VERIFY(Indexes);
         return source->GetIndexRawBytes(Indexes->GetIndexIdsSet());

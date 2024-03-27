@@ -21,6 +21,7 @@ private:
     TActorId ResourceSubscribeActorId;
     TActorId ReadCoordinatorActorId;
     const std::shared_ptr<IStoragesManager> StoragesManager;
+    std::optional<TMonotonic> StartInstant;
 public:
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::KQP_OLAP_SCAN;
@@ -63,8 +64,6 @@ private:
     // Returns true if it was able to produce new batch
     bool ProduceResults() noexcept;
 
-    void ContinueProcessingStep();
-
     void ContinueProcessing();
 
     void HandleScan(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) noexcept;
@@ -106,7 +105,7 @@ private:
 
     void SendAbortExecution(TString reason = {});
 
-    void Finish();
+    void Finish(const NColumnShard::TScanCounters::EStatusFinish status);
 
     void ReportStats();
 

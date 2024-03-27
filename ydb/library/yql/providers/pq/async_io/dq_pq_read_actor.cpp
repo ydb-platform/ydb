@@ -491,8 +491,9 @@ private:
         }
 
         void operator()(NYdb::NTopic::TSessionClosedEvent& ev) {
-            ythrow yexception() << "SessionId: " << Self.GetSessionId() << " Read session to topic \"" << Self.SourceParams.GetTopicPath()
-                << "\" was closed: " << ev.DebugString();
+            const auto& LogPrefix = Self.LogPrefix;
+            SRC_LOG_E("SessionId: " << Self.GetSessionId() << " Read session to topic \"" << Self.SourceParams.GetTopicPath() << "\" was closed: " << ev.DebugString());
+            Self.Send(Self.ComputeActorId, new TEvAsyncInputError(Self.InputIndex, ev.GetIssues(), NYql::NDqProto::StatusIds::BAD_REQUEST));
         }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent&) { }

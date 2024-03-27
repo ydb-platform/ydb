@@ -1580,17 +1580,21 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
     Y_ABORT_UNLESS(!UsersInfoWriteInProgress);
     Y_ABORT_UNLESS(!TxInProgress);
 
+    THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+    request->Record.SetCookie(SET_OFFSET_COOKIE);
+
     if (!UserActionAndTransactionEvents.empty()) {
-        auto visitor = [this, &ctx](auto& event) {
+        auto visitor = [this, &ctx, &request](auto& event) {
             using T = std::decay_t<decltype(event)>;
             if constexpr (TIsSimpleSharedPtr<T>::value) {
-                return this->ProcessUserActionOrTransaction(*event, ctx);
+                return this->ProcessUserActionOrTransaction(*event, request.Get(), ctx);
             } else {
-                return this->ProcessUserActionOrTransaction(event, ctx);
+                return this->ProcessUserActionOrTransaction(event, request.Get(), ctx);
             }
         };
 
         FirstEvent = true;
+        HaveWriteMsg = false;
         for (bool stop = false; !stop && !UserActionAndTransactionEvents.empty(); ) {
             auto& front = UserActionAndTransactionEvents.front();
 
@@ -1611,15 +1615,18 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
         }
     }
 
-    THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
-    request->Record.SetCookie(SET_OFFSET_COOKIE);
+    if (HaveWriteMsg) {
+        EndAppendHeadWithNewWrites(request.Get(), ctx);
+        EndProcessWrites(request.Get(), ctx);
+        EndHandleRequests(request.Get(), ctx);
+    }
 
     AddCmdWriteTxMeta(request->Record);
     AddCmdWriteUserInfos(request->Record);
     AddCmdWriteConfig(request->Record);
 
     DBGTRACE_LOG("send TEvKeyValue::TEvRequest");
-    ctx.Send(Tablet, request.Release());
+    ctx.Send(HaveWriteMsg ? BlobCache : Tablet, request.Release());
     UsersInfoWriteInProgress = true;
 }
 
@@ -1633,8 +1640,11 @@ void TPartition::RemoveDistrTx()
 }
 
 TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(TTransaction& t,
+                                                                      TEvKeyValue::TEvRequest* request,
                                                                       const TActorContext& ctx)
 {
+    Y_UNUSED(request);
+
     DBGTRACE("TPartition::ProcessUserActionOrTransaction");
     Y_ABORT_UNLESS(!TxInProgress);
 
@@ -2036,8 +2046,11 @@ void TPartition::ResendPendingEvents(const TActorContext& ctx)
 }
 
 TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(const TEvPersQueue::TEvProposeTransaction& event,
+                                                                      TEvKeyValue::TEvRequest* request,
                                                                       const TActorContext& ctx)
 {
+    Y_UNUSED(request);
+
     if (AffectedUsers.size() >= MAX_USERS) {
         return EProcessResult::Break;
     }
@@ -2098,8 +2111,11 @@ void TPartition::ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
 }
 
 TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(TEvPQ::TEvSetClientInfo& act,
+                                                                      TEvKeyValue::TEvRequest* request,
                                                                       const TActorContext& ctx)
 {
+    Y_UNUSED(request);
+
     if (AffectedUsers.size() >= MAX_USERS) {
         return EProcessResult::Break;
     }
@@ -2108,6 +2124,38 @@ TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(TEvPQ::TEv
     RemoveUserAct();
 
     return EProcessResult::Continue;
+}
+
+TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(TMessage& msg,
+                                                                      TEvKeyValue::TEvRequest* request,
+                                                                      const TActorContext& ctx)
+{
+    if (!HaveWriteMsg) {
+        BeginHandleRequests(request, ctx);
+        BeginProcessWrites(ctx);
+        BeginAppendHeadWithNewWrites(ctx);
+
+        HaveWriteMsg = true;
+    }
+
+    auto result = EProcessResult::Continue;
+    if (msg.IsWrite()) {
+        result = ProcessRequest(msg.GetWrite(), *Parameters, request, ctx);
+    } else if (msg.IsRegisterMessageGroup()) {
+        result = ProcessRequest(msg.GetRegisterMessageGroup(), *Parameters);
+    } else if (msg.IsDeregisterMessageGroup()) {
+        result = ProcessRequest(msg.GetDeregisterMessageGroup(), *Parameters);
+    } else if (msg.IsSplitMessageGroup()) {
+        result = ProcessRequest(msg.GetSplitMessageGroup(), *Parameters);
+    } else {
+        Y_ABORT_UNLESS(msg.IsOwnership());
+    }
+
+    if (result == EProcessResult::Continue) {
+        EmplaceResponse(std::move(msg), ctx);
+    }
+
+    return result;
 }
 
 void TPartition::ProcessUserAct(TEvPQ::TEvSetClientInfo& act,

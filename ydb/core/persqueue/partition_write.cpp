@@ -1588,6 +1588,168 @@ void TPartition::HandlePendingRequests(const TActorContext& ctx)
     HandleRequests(ctx);
 }
 
+void TPartition::BeginHandleRequests(TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
+{
+    Y_ABORT_UNLESS(Head.PackedSize + NewHead.PackedSize <= 2 * MaxSizeCheck);
+
+    TInstant now = ctx.Now();
+    WriteCycleStartTime = now;
+
+    HaveData = false;
+    HaveCheckDisk = false;
+
+    if (!DiskIsFull) {
+        return;
+    }
+
+    CancelAllWritesOnIdle(ctx);
+    AddCheckDiskRequest(request, NumChannels);
+    HaveCheckDisk = true;
+}
+
+void TPartition::EndHandleRequests(TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
+{
+    HaveDrop = CleanUp(request, ctx);
+
+    ProcessReserveRequests(ctx);
+    if (!HaveData && !HaveDrop && !HaveCheckDisk) { //no data writed/deleted
+        //AnswerCurrentWrites(ctx); //in case if all writes are already done - no answer will be called on kv write, no kv write at all
+        BecomeIdle();
+        return;
+    }
+
+    WritesTotal.Inc();
+
+    UpdateAfterWriteCounters(false);
+    Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateWrite);
+
+    AddMetaKey(request);
+    WriteStartTime = TActivationContext::Now();
+}
+
+void TPartition::BeginProcessWrites(const TActorContext& ctx)
+{
+    SourceIdBatch.ConstructInPlace(SourceManager.CreateModificationBatch(ctx));
+
+    HeadCleared = false;
+}
+
+void TPartition::EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
+{
+    if (HeadCleared) {
+        Y_ABORT_UNLESS(!CompactedKeys.empty() || Head.PackedSize == 0);
+        for (ui32 i = 0; i < TotalLevels; ++i) {
+            DataKeysHead[i].Clear();
+        }
+    }
+
+    if (NewHead.PackedSize == 0) { //nothing added to head - just compaction or tmp part blobs writed
+        if (!SourceIdBatch->HasModifications()) {
+            HaveData = request->Record.CmdWriteSize() > 0
+                || request->Record.CmdRenameSize() > 0
+                || request->Record.CmdDeleteRangeSize() > 0;
+            return;
+        } else {
+            SourceIdBatch->FillRequest(request);
+            HaveData = true;
+            return;
+        }
+    }
+
+    SourceIdBatch->FillRequest(request);
+
+    std::pair<TKey, ui32> res = GetNewWriteKey(HeadCleared);
+    const auto& key = res.first;
+
+    LOG_DEBUG_S(
+            ctx, NKikimrServices::PERSQUEUE,
+            "Add new write blob: topic '" << TopicName() << "' partition " << Partition
+                << " compactOffset " << key.GetOffset() << "," << key.GetCount()
+                << " HeadOffset " << Head.Offset << " endOffset " << EndOffset << " curOffset "
+                << NewHead.GetNextOffset() << " " << key.ToString()
+                << " size " << res.second << " WTime " << ctx.Now().MilliSeconds()
+    );
+    AddNewWriteBlob(res, request, HeadCleared, ctx);
+
+    HaveData = true;
+}
+
+void TPartition::BeginAppendHeadWithNewWrites(const TActorContext& ctx)
+{
+    Parameters.ConstructInPlace(*SourceIdBatch);
+    Parameters->CurOffset = PartitionedBlob.IsInited() ? PartitionedBlob.GetOffset() : EndOffset;
+
+    WriteCycleSize = 0;
+    WriteNewSize = 0;
+    WriteNewSizeUncompressed = 0;
+    WriteNewMessages = 0;
+    UpdateWriteBufferIsFullState(ctx.Now());
+    CurrentTimestamp = ctx.Now();
+
+    NewHead.Offset = EndOffset;
+    NewHead.PartNo = 0;
+    NewHead.PackedSize = 0;
+
+    Y_ABORT_UNLESS(NewHead.Batches.empty());
+
+    Parameters->OldPartsCleared = false;
+    Parameters->HeadCleared = (Head.PackedSize == 0);
+}
+
+void TPartition::EndAppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
+{
+    if (const auto heartbeat = SourceIdBatch->CanEmitHeartbeat()) {
+        if (heartbeat->Version > LastEmittedHeartbeat) {
+            LOG_INFO_S(
+                    ctx, NKikimrServices::PERSQUEUE,
+                    "Topic '" << TopicName() << "' partition " << Partition
+                        << " emit heartbeat " << heartbeat->Version
+            );
+
+            auto hbMsg = TWriteMsg{Max<ui64>() /* cookie */, Nothing(), TEvPQ::TEvWrite::TMsg{
+                .SourceId = NSourceIdEncoding::EncodeSimple(ToString(TabletID)),
+                .SeqNo = 0, // we don't use SeqNo because we disable deduplication
+                .PartNo = 0,
+                .TotalParts = 1,
+                .TotalSize = static_cast<ui32>(heartbeat->Data.size()),
+                .CreateTimestamp = CurrentTimestamp.MilliSeconds(),
+                .ReceiveTimestamp = CurrentTimestamp.MilliSeconds(),
+                .DisableDeduplication = true,
+                .WriteTimestamp = CurrentTimestamp.MilliSeconds(),
+                .Data = heartbeat->Data,
+                .UncompressedSize = 0,
+                .PartitionKey = {},
+                .ExplicitHashKey = {},
+                .External = false,
+                .IgnoreQuotaDeadline = true,
+                .HeartbeatVersion = std::nullopt,
+            }, std::nullopt};
+
+            WriteInflightSize += heartbeat->Data.size();
+            auto result = ProcessRequest(hbMsg, *Parameters, request, ctx);
+            Y_ABORT_UNLESS(result == EProcessResult::Continue);
+
+            LastEmittedHeartbeat = heartbeat->Version;
+        }
+    }
+
+
+    UpdateWriteBufferIsFullState(ctx.Now());
+
+    if (!NewHead.Batches.empty() && !NewHead.Batches.back().Packed) {
+        NewHead.Batches.back().Pack();
+        NewHead.PackedSize += NewHead.Batches.back().GetPackedSize(); //add real packed size for this blob
+
+        NewHead.PackedSize -= GetMaxHeaderSize(); //instead of upper bound
+        NewHead.PackedSize -= NewHead.Batches.back().GetUnpackedSize();
+    }
+
+    Y_ABORT_UNLESS((Parameters->HeadCleared ? 0 : Head.PackedSize) + NewHead.PackedSize <= MaxBlobSize); //otherwise last PartitionedBlob.Add must compact all except last cl
+    MaxWriteResponsesSize = Max<ui32>(MaxWriteResponsesSize, Responses.size());
+
+    HeadCleared = Parameters->HeadCleared;
+}
+
 void TPartition::HandleRequests(const TActorContext& ctx)
 {
     if (!CanWrite()) {

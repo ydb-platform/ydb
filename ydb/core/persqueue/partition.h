@@ -600,8 +600,6 @@ private:
     void RemovePendingRequests(TMessageQueue& requests);
     void RemoveQuotaWaitingRequests();
 
-    bool FirstEvent = true;
-
 private:
     ui64 TabletID;
     ui32 TabletGeneration;
@@ -672,9 +670,34 @@ private:
 
     template <class T> void EnsureUserActionAndTransactionEventsFrontIs() const;
 
-    EProcessResult ProcessUserActionOrTransaction(TEvPQ::TEvSetClientInfo& event, const TActorContext& ctx);
-    EProcessResult ProcessUserActionOrTransaction(const TEvPersQueue::TEvProposeTransaction& event, const TActorContext& ctx);
-    EProcessResult ProcessUserActionOrTransaction(TTransaction& tx, const TActorContext& ctx);
+    EProcessResult ProcessUserActionOrTransaction(TEvPQ::TEvSetClientInfo& event,
+                                                  TEvKeyValue::TEvRequest* request,
+                                                  const TActorContext& ctx);
+    EProcessResult ProcessUserActionOrTransaction(const TEvPersQueue::TEvProposeTransaction& event,
+                                                  TEvKeyValue::TEvRequest* request,
+                                                  const TActorContext& ctx);
+    EProcessResult ProcessUserActionOrTransaction(TTransaction& tx,
+                                                  TEvKeyValue::TEvRequest* request,
+                                                  const TActorContext& ctx);
+    EProcessResult ProcessUserActionOrTransaction(TMessage& msg,
+                                                  TEvKeyValue::TEvRequest* request,
+                                                  const TActorContext& ctx);
+
+    bool FirstEvent = true;
+    bool HaveWriteMsg = false;
+    bool HaveData = false;
+    bool HaveCheckDisk = false;
+    bool HaveDrop = false;
+    bool HeadCleared = false;
+    TMaybe<TPartitionSourceManager::TModificationBatch> SourceIdBatch;
+    TMaybe<ProcessParameters> Parameters;
+
+    void BeginHandleRequests(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
+    void EndHandleRequests(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
+    void BeginProcessWrites(const TActorContext& ctx);
+    void EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
+    void BeginAppendHeadWithNewWrites(const TActorContext& ctx);
+    void EndAppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
 
     //
     // user actions and transactions
@@ -682,7 +705,8 @@ private:
     using TUserActionAndTransactionEvent =
         std::variant<TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>,             // user actions
                      TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>, // immediate transaction
-                     TTransaction>;                                         // distributed transaction or update config
+                     TTransaction,                                          // distributed transaction or update config
+                     TMessage>;
     std::deque<TUserActionAndTransactionEvent> UserActionAndTransactionEvents;
     size_t ImmediateTxCount = 0;
     THashMap<TString, size_t> UserActCount;

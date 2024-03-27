@@ -145,26 +145,28 @@ private:
 
 
 /// Allows to fetch data from multiple sort cursors in sorted order (merging sorted data stream).
-/// TODO: Replace with "Loser Tree", see https://en.wikipedia.org/wiki/K-way_merge_algorithm
-class TSortingHeap {
+/// Replaced with "Loser Tree", see https://en.wikipedia.org/wiki/K-way_merge_algorithm
+class TLoserTree {
 public:
-    TSortingHeap() = default;
+    TLoserTree() = default;
 
     template <typename TCursors>
-    TSortingHeap(TCursors& cursors, bool notNull) {
-        Queue.reserve(cursors.size());
-        for (auto& cur : cursors) {
-            if (!cur.Empty()) {
-                Queue.emplace_back(TSortCursor(&cur, notNull));
-            }
-        }
-        std::make_heap(Queue.begin(), Queue.end());
+    TLoserTree(TCursors& tCursors, bool notNull) {
+        Cursors.reserve(tCursors.size());
+        for (auto & cur : tCursors)
+            if (!cur.Empty())
+                Cursors.emplace_back(SortCursor(&cur, not_null));
+
+        while (DataSize < Cursors.size())
+            DataSize *= 2;
+
+        Tree.resize(DataSize, -1);
+        Tree.shrink_to_fit();
+        Build(0);
     }
 
-    bool IsValid() const { return !Queue.empty(); }
-    TSortCursor& Current() { return Queue.front(); }
-    size_t Size() { return Queue.size(); }
-    TSortCursor& NextChild() { return Queue[NextChildIndex()]; }
+    bool IsValid() const { return Tree[0] != -1; }
+    TSortCursor& Current() { return Cursors[Tree[0]]; }
 
     void Next() {
         Y_ABORT_UNLESS(IsValid());
@@ -184,78 +186,69 @@ public:
     }
 
     void RemoveTop() {
-        std::pop_heap(Queue.begin(), Queue.end());
-        Queue.pop_back();
-        NextIdx = 0;
-    }
-
-    void Push(TSortCursor&& cursor) {
-        Queue.emplace_back(cursor);
-        std::push_heap(Queue.begin(), Queue.end());
-        NextIdx = 0;
+        int32_t top = Tree[0];
+        Tree[0] = -1;
+        Update(top, -1);
     }
 
 private:
-    std::vector<TSortCursor> Queue;
-    /// Cache comparison between first and second child if the order in queue has not been changed.
-    size_t NextIdx = 0;
+    std::vector<TSortCursor> Cursors;
+    std::vector<int32_t> Tree;
 
-    size_t NextChildIndex() {
-        if (NextIdx == 0) {
-            NextIdx = 1;
-            if (Queue.size() > 2 && Queue[1] < Queue[2]) {
-                ++NextIdx;
-            }
+    size_t DataSize{1};
+
+    int32_t Build(size_t v) {
+        if (v == 0) {
+            Tree[v] = Build(1);
+            return 0;
         }
-
-        return NextIdx;
+        if (v >= DataSize) {
+            v -= DataSize;
+            if (v >= Cursors.size())
+                return -1;
+            return v;
+        }
+        int32_t left = Build(2 * v);
+        int32_t right = Build(2 * v + 1);
+        if (left == -1) {
+            Tree[v] = left;
+            return right;
+        }
+        if (right == -1) {
+            Tree[v] = right;
+            return left;
+        }
+        if (Cursors[right] < Cursors[left]) {
+            Tree[v] = right;
+            return left;
+        }
+        else {
+            Tree[v] = left;
+            return right;
+        }
     }
 
-    /// This is adapted version of the function __sift_down from libc++.
-    /// Why cannot simply use std::priority_queue?
-    /// - because it doesn't support updating the top element and requires pop and push instead.
-    /// Also look at "Boost.Heap" library.
     void UpdateTop() {
-        size_t size = Queue.size();
-        if (size < 2)
-            return;
+        if (Tree[0] != -1)
+            Update(Tree[0], Tree[0]);
+    }
 
-        auto begin = Queue.begin();
-
-        size_t child_idx = NextChildIndex();
-        auto child_it = begin + child_idx;
-
-        /// Check if we are in order.
-        if (*child_it < *begin)
-            return;
-
-        NextIdx = 0;
-
-        auto curr_it = begin;
-        auto top(std::move(*begin));
-        do {
-            /// We are not in heap-order, swap the parent with it's largest child.
-            *curr_it = std::move(*child_it);
-            curr_it = child_it;
-
-            // recompute the child based off of the updated parent
-            child_idx = 2 * child_idx + 1;
-
-            if (child_idx >= size)
-                break;
-
-            child_it = begin + child_idx;
-
-            if ((child_idx + 1) < size && *child_it < *(child_it + 1))
-            {
-                /// Right child exists and is greater than left child.
-                ++child_it;
-                ++child_idx;
+    void Update(size_t index, int32_t value) {
+        for (index += DataSize; index != 1;) {
+            size_t parent = index / 2;
+            if (value == -1) {
+                std::swap(Tree[parent], value);
             }
-
-            /// Check if we are in order.
-        } while (!(*child_it < top));
-        *curr_it = std::move(top);
+            else if (Tree[parent] == -1) {
+                // Do nothing
+            }
+            else {
+                if (Cursors[value] < Cursors[Tree[parent]])
+                    std::swap(Tree[parent], value);
+            }
+            index = parent;
+        }
+        Tree[0] = value;
     }
 };
 

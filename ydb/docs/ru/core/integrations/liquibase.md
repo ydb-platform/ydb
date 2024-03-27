@@ -1,106 +1,151 @@
-# Поддержка диалекта YDB в инструменте миграции Liquibase 
+# Поддержка диалекта YDB в инструменте миграции Liquibase
 
-## Введение {#overview}
+## Введение {#introduction}
 
-Liquibase – это библиотека с открытым исходным кодом для отслеживания, управления и применения изменений схемы базы данных. Liquibase расширяется диалектами для различных СУБД.
+Liquibase – это библиотека с открытым исходным кодом для отслеживания, управления и применения изменений схемы базы
+данных. Liquibase расширяется диалектами для различных СУБД.
 
-Диалект - это основная сущность в фреймворке Liquibase, которая помогают формировать SQL запросы к базе данных, учитывая специфику той или иной СУБД.
+Диалект - это основная сущность в фреймворке Liquibase, которая помогают формировать SQL запросы к базе данных, учитывая
+специфику той или иной СУБД.
 
-## Возможности диалекта YDB {#ydb-dialect}
+## Возможности диалекта {{ ydb-short-name }} {#ydb-dialect}
 
-Основной функциональностью Liquibase является абстрактное описание схемы базы данных в форматах `.xml`, `.json`, `.yaml`. Что обеспечивает переносимость при смене одной СУБД на другую.
+Основной функциональностью Liquibase является абстрактное описание схемы базы данных в
+форматах `.xml`, `.json`, `.yaml`. Что обеспечивает переносимость при смене одной СУБД на другую.
 
-В диалекте поддержаны основные конструкции стандарта описания миграций (changeset), например:
+В диалекте поддержаны основные конструкции стандарта описания миграций (changeset).
 
-1. `createTable` создание таблицы. Описание типов из SQL стандарта сопоставляется с примитивными типами YDB. К примеру тип bigint будет конвертирован в Int64. Также можно явно указывать оригинальное название, например, такие типы как Int32, Json, JsonDocument, Bytes, Interval. Но в таком случае теряется переносимость схемы.
-2. `dropTable`, `alterTable`, `createIndex`, `addColumn`. Соответственно удаление таблицы, изменение, создание индексов и добавление колонки.
-3. `loadData`, `loadUpdateData`. Загрузка данных из CSV файлов.
+### Создание таблицы
 
-Чтобы понять, какие SQL-конструкции может выполнять YDB, ознакомьтесь с документацией по языку запросов [YQL](https://ydb.tech/docs/ru/yql/reference/).
+Changeset `createTable` отвечает за создание таблицы. Описание типов из SQL стандарта сопоставляется с примитивными
+типами YDB. К примеру тип bigint будет конвертирован в Int64.
+
+{% note info %}
+
+Также можно явно указывать оригинальное название, например, такие типы как Int32, Json, JsonDocument, Bytes, Interval.
+Но в таком случае теряется переносимость схемы.
+
+{% endnote %}
+
+Таблица сопоставления описания типов Liquibase
+с [табличными типами](https://ydb.tech/docs/ru/yql/reference/types/primitive) YDB:
+
+| Типы liquibase                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Тип в YDB                  |
+|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------|
+| `boolean`, `java.sql.Types.BOOLEAN`, `java.lang.Boolean`, `bit`, `bool`                                                                                                                                                                                                                                                                                                                                                                                                                                       | `Bool`                     |
+| `blob`, `longblob`, `longvarbinary`, `String`, `java.sql.Types.BLOB`, `java.sql.Types.LONGBLOB`, `java.sql.Types.LONGVARBINARY`, `java.sql.Types.VARBINARY`,`java.sql.Types.BINARY`, `varbinary`, `binary`, `image`, `tinyblob`, `mediumblob`, `long binary`, `long varbinary`                                                                                                                                                                                                                                | `Bytes` (синоним `String`) |
+| `java.sql.Types.DATE`, `smalldatetime`, `date`                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `Date`                     |
+| `decimal`, `java.sql.Types.DECIMAL`, `java.math.BigDecimal`                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `Decimal(22,9)`            |
+| `double`, `java.sql.Types.DOUBLE`, `java.lang.Double`                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `Double`                   |
+| `float`, `java.sql.Types.FLOAT`, `java.lang.Float`, `real`, `java.sql.Types.REAL`                                                                                                                                                                                                                                                                                                                                                                                                                             | `Float`                    |
+| `int`, `integer`, `java.sql.Types.INTEGER`, `java.lang.Integer`, `int4`, `int32`                                                                                                                                                                                                                                                                                                                                                                                                                              | `Int32`                    |
+| `bigint`, `java.sql.Types.BIGINT`, `java.math.BigInteger`, `java.lang.Long`, `integer8`, `bigserial`, `long`                                                                                                                                                                                                                                                                                                                                                                                                  | `Int64`                    |
+| `java.sql.Types.SMALLINT`, `int2`, `smallserial`, `smallint`                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `Int16`                    |
+| `java.sql.Types.TINYINT`, `tinyint`                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `Int8`                     |
+| `char`, `java.sql.Types.CHAR`, `bpchar`, `character`, `nchar`, `java.sql.Types.NCHAR`, `nchar2`, `text`, `varchar`, `java.sql.Types.VARCHAR`, `java.lang.String`, `varchar2`, `character varying`, `nvarchar`, `java.sql.Types.NVARCHAR`, `nvarchar2`, `national`, `clob`, `longvarchar`, `longtext`, `java.sql.Types.LONGVARCHAR`, `java.sql.Types.CLOB`, `nclob`, `longnvarchar`, `ntext`, `java.sql.Types.LONGNVARCHAR`, `java.sql.Types.NCLOB`, `tinytext`, `mediumtext`, `long varchar`, `long nvarchar` | `Text`                     |
+| `timestamp`, `java.sql.Types.TIMESTAMP`, `java.sql.TIMESTAMP`                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `Timestamp`                |
+| `java.util.Date`, `time`, `java.sql.Types.TIME`, `java.sql.Time`                                                                                                                                                                                                                                                                                                                                                                                                                                              | `Datetime`                 |
+
+{% note info %}
+
+Регистр типа данных не имеет значения.
+
+{% endnote %}
+
+### Изменение структуры таблицы
+
+`dropTable` - удаление таблицы. Пример: `<dropTable tableName="episodes"/>`
+
+`addColumn` - добавление колонки. Пример:
+
+```xml
+
+<addColumn tableName="seasons">
+    <column name="is_deleted" type="bool"/>
+</addColumn>
+```
+
+`createIndex` - создание индекса. Пример:
+
+```xml
+
+<createIndex tableName="episodes" indexName="episodes_index" unique="false">
+    <column name="title"/>
+</createIndex>
+```
+
+{% note info %}
+
+Создание асинхронных индексов нужно делать через нативные SQL миграции.
+
+{% endnote %}
+
+`dropIndex` - удаление индекса. Пример: `<dropIndex tableName="series" indexName="series_index"/>`
+
+### Вставка данных в таблицу
+
+`loadData`, `loadUpdateData` - загрузка данных из CSV файлов. loadUpdate загружает командой UPSERT. Данные будут
+автоматически приведены к нужным типам, учитывая строгую типизацию YDB.
+
+`insert` - changeset, который осуществляет единичный insert в таблицу. Значение можно объявлять в поле value,
+например `<column name="timestamp_column" value="2023-07-31T17:00:00.123123Z"/>`.
+
+{% note warning %}
+
+Чтобы понять, какие SQL-конструкции может выполнять YDB, ознакомьтесь с документацией по языку
+запросов [YQL](https://ydb.tech/docs/ru/yql/reference/).
+
+{% endnote %}
+
+{% note tip %}
 
 Важно отметить, что кастомные инструкции YQL можно применять через нативные SQL запросы.
+
+{% endnote %}
 
 ## Как воспользоваться? {#using}
 
 Есть два способа:
 
-* программно из Java / Kotlin приложения 
-* liquibase CLI
+{% list tabs %}
 
-Как воспользоваться из Java / Kotlin подробно описано в [README](https://github.com/ydb-platform/ydb-java-dialects/tree/main/liquibase-dialect) проекта, там же есть ссылка на пример Spring Boot приложения.
+- Программно из Java / Kotlin приложения
 
-### Пример использования диалекта {#example}
+  Как воспользоваться из Java / Kotlin подробно описано
+  в [README](https://github.com/ydb-platform/ydb-java-dialects/tree/main/liquibase-dialect) проекта, там же есть ссылка
+  на пример Spring Boot приложения.
 
-Для начала нужно установить саму утилиту liquibase [существующими способами](https://docs.liquibase.com/start/install/home.html). Затем нужно подложить актуальные .jar архивы [YDB JDBC драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases) и Liquibase [диалекта YDB](https://github.com/ydb-platform/ydb-java-dialects/tree/main/liquibase-dialect).
+- liquibase CLI
 
-```bash
-cp ydb-jdbc-driver-shaded-2.0.7.jar ./liquibase/internal/lib/
-cp liquibase-ydb-dialect-0.9.6.jar ./liquibase/internal/lib/
-```
+  Для начала нужно установить саму утилиту
+  liquibase [любым из рекомендуемых способов](https://docs.liquibase.com/start/install/home.html).
+  Затем нужно подложить актуальные .jar
+  архивы [YDB JDBC драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases) и
+  Liquibase [диалекта YDB](https://mvnrepository.com/artifact/tech.ydb.dialects/liquibase-ydb-dialect/0.9.7).
 
-Более подробное описание в разделе [Manual library management](https://docs.liquibase.com/start/install/home.html). Теперь liquibase утилитой можно пользоваться стандартными способами.
-Напишем простенький liquibase.properties:
+  ```bash
+  # $(which liquibase)
+  cd ./internal/lib/
+  
+  # you may need to sudo
+  # set an actual versions .jar files
+  curl -L -o ydb-jdbc-driver.jar https://repo1.maven.org/maven2/tech/ydb/jdbc/ydb-jdbc-driver-shaded/2.0.7/ydb-jdbc-driver-shaded-2.0.7.jar
+  curl -L -o liquibase-ydb-dialect.jar https://repo1.maven.org/maven2/tech/ydb/dialects/liquibase-ydb-dialect/1.0.0/liquibase-ydb-dialect-1.0.0.jar
+  ```
 
-```properties
-changelog-file=changelogs.xml
-url=jdbc:ydb:grpc://localhost:2136/local
-```
+  Более подробное описание в разделе [Manual library management](https://docs.liquibase.com/start/install/home.html).
+  Теперь liquibase утилитой можно пользоваться стандартными способами.
 
-Теперь перейдем к миграции схемы данных.
+{% endlist %}
 
-Создадим первую таблицу series и добавим туда две записи:
+## Сценарии использования liquibase
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<databaseChangeLog
-        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
-        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
-                      http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+### Инициализация liquibase на пустой YDB
 
-    <changeSet id="series" author="kurdyukov-kir">
-        <comment>Table series.</comment>
+Основной командой является `liquibase update`, которая применяет миграции, если текущая схема {{ ydb-short-name }}
+отстает от пользовательского описания.
 
-        <createTable tableName="series">
-            <column name="series_id" type="Int64">
-                <constraints primaryKey="true"/>
-            </column>
-
-            <column name="title" type="text"/>
-            <column name="series_info" type="text"/>
-            <column name="release_date" type="date"/>
-        </createTable>
-
-        <createIndex tableName="series" indexName="series_index" unique="false">
-            <column name="title"/>
-        </createIndex>
-
-        <rollback>
-            <dropTable tableName="series"/>
-            <dropIndex tableName="series" indexName="series_index"/>
-        </rollback>
-    </changeSet>
-
-    <changeSet id="added_data_into_series" author="kurdyukov-kir">
-        <insert tableName="series">
-            <column name="series_id" valueNumeric="1"/>
-            <column name="title" value="IT Crowd"/>
-            <column name="series_info"
-                    value="The IT Crowd is a British sitcom produced by Channel 4, written by Graham Linehan, produced by Ash Atalla and starring Chris O'Dowd, Richard Ayoade, Katherine Parkinson, and Matt Berry."/>
-            <column name="release_date" valueDate="2006-02-03"/>
-        </insert>
-        <insert tableName="series">
-            <column name="series_id" valueNumeric="2"/>
-            <column name="title" value="Silicon Valley"/>
-            <column name="series_info"
-                    value="Silicon Valley is an American comedy television series created by Mike Judge, John Altschuler and Dave Krinsky. The series focuses on five young men who founded a startup company in Silicon Valley."/>
-            <column name="release_date" valueDate="2014-04-06"/>
-        </insert>
-    </changeSet>
-</databaseChangeLog>
-```
-
-Содержимое файла changelogs.xml:
+Применим к пустой базе данных следующий changeset:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -109,98 +154,6 @@ url=jdbc:ydb:grpc://localhost:2136/local
         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
                       http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
-
-    <include file="/migration/series.xml" relativeToChangelogFile="true"/>
-</databaseChangeLog>
-```
-
-После исполнения `liquibase update` Liquibase напечатает лог исполненных миграций:
-
-```bash
-i113855673:liquibase kurdyukov-kir$ liquibase update
-мар. 07, 2024 6:42:34 PM tech.ydb.jdbc.YdbDriver register
-INFO: YDB JDBC Driver registered: tech.ydb.jdbc.YdbDriver@4b45dcb8
-SLF4J: Failed to load class "org.slf4j.impl.StaticLoggerBinder".
-SLF4J: Defaulting to no-operation (NOP) logger implementation
-SLF4J: See http://www.slf4j.org/codes.html#StaticLoggerBinder for further details.
-###################################
-##   _     _             _ _                      ##
-##  | |   (_)           (_) |                     ##
-##  | |    _  __ _ _   _ _| |__   __ _ ___  ___   ##
-##  | |   | |/ _` | | | | | '_ \ / _` / __|/ _ \  ##
-##  | |___| | (_| | |_| | | |_) | (_| \__ \  __/  ##
-##  \_____/_|\__, |\__,_|_|_.__/ \__,_|___/\___|  ##
-##              | |                               ##
-##              |_|                               ##
-##                                                ## 
-##  Get documentation at docs.liquibase.com       ##
-##  Get certified courses at learn.liquibase.com  ## 
-##                                                ##
-###################################
-Starting Liquibase at 18:42:35 (version 4.25.1 #690 built at 2023-12-18 16:29+0000)
-Liquibase Version: 4.25.1
-Liquibase Open Source 4.25.1 by Liquibase
-Running Changeset: migration/series.xml::series::kurdyukov-kir
-Running Changeset: migration/series.xml::added_data_into_series::kurdyukov-kir
-
-UPDATE SUMMARY
-Run:                          2
-Previously run:               0
-Filtered out:                 0
--------------------------------
-Total change sets:            2
-
-Liquibase: Update has been successful. Rows affected: 4
-Liquibase command 'update' was executed successfully.
-```
-
-Далее в своей базе данных можно увидеть созданные Liquibase две системные таблицы: DATABASECHANGELOG, DATABASECHANGELOGLOCK.
-
-Записи DATABASECHANGELOG:
-
-| AUTHOR | COMMENTS | CONTEXTS | DATEEXECUTED | DEPLOYMENT\_ID | DESCRIPTION | EXECTYPE | FILENAME | ID | LABELS | LIQUIBASE | MD5SUM | ORDEREXECUTED | TAG |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| kurdyukov-kir |  | null | 15:42:40 | 9826159656 | insert tableName=series; insert tableName=series | EXECUTED | migration/series.xml | added\_data\_into\_series | null | 4.25.1 | 9:cb49879b530528bc2555422bb7db58da | 2 | null |
-| kurdyukov-kir | Table series. | null | 15:42:40 | 9826159656 | createTable tableName=series; createIndex indexName=series\_index, tableName=series | EXECUTED | migration/series.xml | series | null | 4.25.1 | 9:5809802102bcd74f1d8bc0f1d874463f | 1 | null |
-
-
-Далее допустим, что наша схема базы данных нуждается в дополнительных миграциях. Создадим таблицы seasons и episodes:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<databaseChangeLog
-        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
-        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
-                      http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
-
-    <changeSet id="seasons" author="kurdyukov-kir">
-        <comment>Table seasons.</comment>
-
-        <createTable tableName="seasons">
-            <column name="series_id" type="bigint">
-                <constraints primaryKey="true"/>
-            </column>
-            <column name="season_id" type="bigint">
-                <constraints primaryKey="true"/>
-            </column>
-
-            <column name="title" type="text"/>
-            <column name="first_aired" type="datetime"/>
-            <column name="last_aired" type="datetime"/>
-        </createTable>
-
-        <insert tableName="seasons">
-            <column name="series_id" valueNumeric="1"/>
-            <column name="season_id" valueNumeric="1"/>
-            <column name="title" value="Season 1"/>
-            <column name="first_aired" valueDate="2019-09-16T10:00:00"/>
-            <column name="last_aired" valueDate="2023-09-16T12:30:00"/>
-        </insert>
-        <rollback>
-            <dropTable tableName="seasons"/>
-        </rollback>
-    </changeSet>
 
     <changeSet id="episodes" author="kurdyukov-kir">
         <comment>Table episodes.</comment>
@@ -219,55 +172,158 @@ Liquibase command 'update' was executed successfully.
             <column name="title" type="text"/>
             <column name="air_date" type="timestamp"/>
         </createTable>
+        <rollback>
+            <dropTable tableName="episodes"/>
+        </rollback>
+    </changeSet>
+    <changeSet id="index_episodes_title" author="kurdyukov-kir">
+        <createIndex tableName="episodes" indexName="index_episodes_title" unique="false">
+            <column name="title"/>
+        </createIndex>
     </changeSet>
 </databaseChangeLog>
 ```
 
-Загрузим из .csv файла данные в таблицу episodes:
+После исполнения команды `liquibase update`, liquibase напечатает следующий лог:
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<databaseChangeLog
-        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
-        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
-                      http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+```bash
+UPDATE SUMMARY
+Run:                          2
+Previously run:               0
+Filtered out:                 0
+-------------------------------
+Total change sets:            2
 
-    <changeSet id="episodes-from-csv" author="kurdyukov-kir" context="all">
-        <loadData tableName="episodes" file="./csv/episodes.csv" relativeToChangelogFile="true"/>
-    </changeSet>
-</databaseChangeLog>
+Liquibase: Update has been successful. Rows affected: 2
+Liquibase command 'update' was executed successfully.
 ```
 
-Создание YDB топика:
+После применения миграций схемы данных выглядит следующим образом:
+
+![../_assets/liquibase-step-1.png](../_assets/liquibase-step-1.png)
+
+Можно увидеть, что Liquibase создал две служебные таблицы DATABASECHANGELOG - лог миграций, DATABASECHANGELOGLOCK -
+таблица для взятия распределенной блокировки.
+
+Содержимое таблицы DATABASECHANGELOG:
+
+| AUTHOR        | COMMENTS        | CONTEXTS | DATEEXECUTED | DEPLOYMENT_ID | DESCRIPTION                                                    | EXECTYPE | FILENAME               | ID                   | LABELS | LIQUIBASE | MD5SUM                             | ORDEREXECUTED | TAG |
+|:--------------|:----------------|:---------|:-------------|:--------------|:---------------------------------------------------------------|:---------|:-----------------------|:---------------------|:-------|:----------|:-----------------------------------|:--------------|:----|
+| kurdyukov-kir | Table episodes. |          | 12:53:27     | 1544007500    | createTable tableName=episodes                                 | EXECUTED | migration/episodes.xml | episodes             |        | 4.25.1    | 9:4067056a5ab61db09b379a93625870ca | 1             |
+| kurdyukov-kir | ""              |          | 12:53:28     | 1544007500    | createIndex indexName=index_episodes_title, tableName=episodes | EXECUTED | migration/episodes.xml | index_episodes_title |        | 4.25.1    | 9:49b8b0b22d18c7fd90a3d6b2c561455d | 2             |
+
+### Эволюция схемы базы данных
+
+Допустим нам нужно создать YDB топик и выключить авто партиционирования таблицы. Это можно сделать нативным SQL скриптом:
 
 ```sql
 --liquibase formatted sql
 
 --changeset kurdyukov-kir:10
-CREATE TOPIC `my_topic` (
+CREATE
+TOPIC `my_topic` (
     CONSUMER my_consumer
     ) WITH (retention_period = Interval('P1D')
 );
+
+--changeset kurdyukov-kir:auto-partitioning-disabled
+ALTER TABLE episodes SET (AUTO_PARTITIONING_BY_SIZE = DISABLED);
 ```
 
-Содержимое changelogs.xml:
+Также добавим новую колонку `is_deleted` и удалим индекс `index_episodes_title`:
 
 ```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<databaseChangeLog
-        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
-        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
-                      http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
 
-    <include file="/migration/series.xml" relativeToChangelogFile="true"/>
-    <include file="/migration/seasons_and_episodes.xml" relativeToChangelogFile="true"/>
-    <include file="/migration/load_episodes_data.xml" relativeToChangelogFile="true"/>
-    <include file="/migration/sql/topic.sql" relativeToChangelogFile="true"/>
-</databaseChangeLog>
+<changeSet id="alter-episodes" author="kurdyukov-kir">
+    <comment>Alter table episodes.</comment>
+
+    <dropIndex tableName="episodes" indexName="index_episodes_title"/>
+
+    <addColumn tableName="episodes">
+        <column name="is_deleted" type="bool"/>
+    </addColumn>
+</changeSet>
+<include file="/migration/sql/yql.sql" relativeToChangelogFile="true"/>
 ```
 
 После исполнения `liquibase update` схема базы успешно обновится.
 
-![YDB UI после применения всех миграций](../_assets/liquibase-result-example.png =450x)
+```bash
+UPDATE SUMMARY
+Run:                          3
+Previously run:               2
+Filtered out:                 0
+-------------------------------
+Total change sets:            5
+
+Liquibase: Update has been successful. Rows affected: 3
+Liquibase command 'update' was executed successfully.
+```
+
+Результатом будет удаление индекса, добавление колонки `is_deleted`, выключение настройки авто партиционирования, а также создание топика:
+
+![../_assets/liquibase-step-2.png](../_assets/liquibase-step-2.png)
+
+### Инициализация liquibase в проекте с непустой схемой данных
+
+Предположим, что я имею существующий проект с текущей схемой базы данных:
+
+![../_assets/liquibase-step-3.png](../_assets/liquibase-step-3.png)
+
+Чтобы начать использовать liquibase, требуется выполнить `liquibase generate-changelog --changelog-file=changelog.xml`.
+
+Содержимое сгенерированного changelog.xml:
+
+```xml
+        <createTable tableName="all_types_table">
+            <column name="id" type="INT32">
+                <constraints nullable="false" primaryKey="true"/>
+            </column>
+            <column name="bool_column" type="BOOL"/>
+            <column name="bigint_column" type="INT64"/>
+            <column name="smallint_column" type="INT16"/>
+            <column name="tinyint_column" type="INT8"/>
+            <column name="float_column" type="FLOAT"/>
+            <column name="double_column" type="DOUBLE"/>
+            <column name="decimal_column" type="DECIMAL(22, 9)"/>
+            <column name="uint8_column" type="UINT8"/>
+            <column name="uint16_column" type="UINT16"/>
+            <column name="unit32_column" type="UINT32"/>
+            <column name="unit64_column" type="UINT64"/>
+            <column name="text_column" type="TEXT"/>
+            <column name="binary_column" type="BYTES"/>
+            <column name="json_column" type="JSON"/>
+            <column name="jsondocument_column" type="JSONDOCUMENT"/>
+            <column name="date_column" type="DATE"/>
+            <column name="datetime_column" type="DATETIME"/>
+            <column name="timestamp_column" type="TIMESTAMP"/>
+            <column name="interval_column" type="INTERVAL"/>
+        </createTable>
+    </changeSet>
+    <changeSet author="kurdyukov-kir (generated)" id="1711556283305-2">
+        <createTable tableName="episodes">
+            <column name="series_id" type="INT64">
+                <constraints nullable="false" primaryKey="true"/>
+            </column>
+            <column name="season_id" type="INT64">
+                <constraints nullable="false" primaryKey="true"/>
+            </column>
+            <column name="episode_id" type="INT64">
+                <constraints nullable="false" primaryKey="true"/>
+            </column>
+            <column name="title" type="TEXT"/>
+            <column name="air_date" type="DATE"/>
+        </createTable>
+    </changeSet>
+    <changeSet author="kurdyukov-kir (generated)" id="1711556283305-3">
+        <createIndex indexName="title_index" tableName="episodes">
+            <column name="title"/>
+        </createIndex>
+    </changeSet>
+```
+
+Затем нужно синхронизировать сгенерированный changelog.xml файл, делается это командой `liquibase changelog-sync --changelog-file=dbchangelog.xml`.
+
+Результатом будет синхронизация liquibase в вашем проекте:
+
+![../_assets/liquibase-step-4.png](../_assets/liquibase-step-4.png)

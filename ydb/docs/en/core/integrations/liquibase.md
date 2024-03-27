@@ -1,6 +1,6 @@
 # Support for the YDB dialect in the Liquibase migration tool. 
 
-## Introduction 
+## Introduction {#introductuin}
 
 In today's world of software development, database schema versioning is a critical task to ensure consistency and the ability to roll back changes. Database migration tools, such as Liquibase, provide tools for versioning, tracking, and applying changes to the schema. 
 
@@ -8,11 +8,11 @@ However, the emergence of new database management systems (DBMS) has made it nec
 
 We will discuss the results of integrating DB dialect with Liquibase in this article.
 
-## Features of the YDB Dialect 
+## Features of the {{ ydb-short-name }} Dialect {#ydb-dialect}
 
-Liquibase's main functionality is the abstract description of database schemas in `.xml`, `.json`, and `.yaml` formats. This ensures portability when switching between different database management systems (DBMS).
+Liquibase's main functionality is the abstract description of database schemas in `.xml`, `.json`, or `.yaml` format. This ensures portability when switching between different database management systems (DBMS).
 
-The following basic features are supported in the YDB dialect:
+The following basic features are supported in the {{ ydb-short-name }} dialect:
 
 1. `createTable`: table creation. The types described in the SQL standards are compared to the primitive types in YDB. For example, bigint will be converted to Int64, and you can specify the original table name (such as Int32 or Json). However, portability is lost in this case.
 
@@ -22,11 +22,11 @@ The following basic features are supported in the YDB dialect:
 
 To learn more about which SQL features YDB supports, please refer to the [YQL](https://ydb.tech/docs/en/yql/reference/) documentation. It is important to note that YQL custom queries can be executed through native SQL. 
 
-## How to use it? 
+## How to use it? {#using}
 
 There are two ways: programmatically from a Java / Kotlin application or via the Liquibase CLI. Using Java / Kotlin is described in detail in the [README](https://github.com/ydb-platform/ydb-java-dialects/tree/main/liquibase-dialect) of the project; there's also a link to an example Spring Boot app.
 
-### Example of using a dialect 
+### Example of using a dialect {#example}
 
 First, you need to install the Liquibase utility itself using [existing methods](https://docs.liquibase.com/start/install/home.html). Then, you need to place the actual .jar archives for the [JDBC driver](https://github.com/ydb-platform/ydb-jdbc-driver) and YDB [dialect](https://github.com/ydb-platform/ydb-java-dialects/tree/main/liquibase-dialect) for Liquibase.
 

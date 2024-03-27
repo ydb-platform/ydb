@@ -896,6 +896,14 @@ public:
         }
     }
 
+    NThreading::TFuture<TGenericResult> ResetTemporary(const TString& src, const TString& cluster) override {
+        try {
+            YQL_ENSURE(false, "gateway doesn't implement reset temporary");
+        } catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
     TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster, const bool force) override {
         Y_UNUSED(force);
         using TRequest = TEvTxUserProxy::TEvProposeTransaction;

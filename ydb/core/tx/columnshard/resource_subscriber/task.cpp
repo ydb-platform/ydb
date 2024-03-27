@@ -33,6 +33,7 @@ TResourcesGuard::TResourcesGuard(const ui64 taskId, const TString& externalTaskI
     , Memory(task.GetMemoryAllocation())
     , Cpu(task.GetCPUAllocation())
     , Context(context)
+    , Priority(task.GetPriority())
 {
     AFL_VERIFY(taskId || (!Memory && !Cpu));
     Context.GetCounters()->GetBytesAllocated()->Add(Memory);
@@ -49,7 +50,7 @@ void TResourcesGuard::Update(const ui64 memNew) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "update_resources")("task_id", TaskId)("external_task_id", ExternalTaskId)("mem", memNew)("cpu", Cpu)("mem_old", Memory);
     Memory = memNew;
     auto ev = std::make_unique<IEventHandle>(NKikimr::NResourceBroker::MakeResourceBrokerID(), Sender, new NKikimr::NResourceBroker::TEvResourceBroker::TEvUpdateTask(TaskId, {{Cpu, Memory}},
-        Context.GetTypeName(), 1000));
+        Context.GetTypeName(), Priority));
     NActors::TActorContext::AsActorContext().Send(std::move(ev));
     Context.GetCounters()->GetBytesAllocated()->Add(Memory);
 }

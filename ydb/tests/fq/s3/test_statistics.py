@@ -55,6 +55,9 @@ class TestS3(object):
     @pytest.mark.parametrize("format2", ["json_list", "json_each_row", "csv_with_names", "parquet"])
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_convert(self, kikimr, s3, client, format1, format2, yq_version, unique_prefix):
+        if yq_version == 'v1':
+            pytest.skip("Tiket: YQ-3004")
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,

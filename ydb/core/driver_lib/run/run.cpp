@@ -60,7 +60,6 @@
 #include <ydb/core/protos/datashard_config.pb.h>
 
 #include <ydb/core/mind/local.h>
-#include <ydb/core/mind/node_broker.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/base/hive.h>
 

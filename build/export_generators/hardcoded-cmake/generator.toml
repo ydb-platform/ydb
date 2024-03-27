@@ -43,7 +43,6 @@ copy=[
 [attrs.root]
 project_name="str"
 project_language_list="list"
-platform_flags="list"
 platform_cmakelists="list"
 platform_vars="list"
 includes="sorted_set"

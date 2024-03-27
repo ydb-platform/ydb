@@ -71,11 +71,16 @@ SRCS(
     system/thread_ut.cpp
     system/tls_ut.cpp
     system/types_ut.cpp
-    system/type_name_ut.cpp
     system/user_ut.cpp
     system/unaligned_mem_ut.cpp
     system/yassert_ut.cpp
 )
+
+IF (NOT USE_STL_SYSTEM)
+    SRCS(
+        system/type_name_ut.cpp
+    )
+ENDIF()
 
 IF (OS_WINDOWS)
     SRCS(

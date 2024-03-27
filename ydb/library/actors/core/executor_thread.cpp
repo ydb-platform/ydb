@@ -767,4 +767,6 @@ namespace NActors {
         statsCopy.Aggregate(SharedStats[poolId]);
     }
 
+    TGenericExecutorThreadCtx::~TGenericExecutorThreadCtx()
+    {}
 }

@@ -82,11 +82,14 @@ template <class TSettings>
 Aws::Client::ClientConfiguration ConfigFromSettings(const TSettings& settings) {
     Aws::Client::ClientConfiguration config;
 
+    // get default value from proto
+    auto threadsCount = NKikimrSchemeOp::TS3Settings::default_instance().GetExecutorThreadsCount();
+
     config.endpointOverride = settings.endpoint();
-    config.executor = std::make_shared<Aws::Utils::Threading::PooledThreadExecutor>(1);
+    config.executor = std::make_shared<Aws::Utils::Threading::PooledThreadExecutor>(threadsCount);
     config.verifySSL = false;
     config.connectTimeoutMs = 10000;
-    config.maxConnections = 5;
+    config.maxConnections = threadsCount;
 
     switch (settings.scheme()) {
         case TSettings::HTTP:

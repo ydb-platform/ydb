@@ -777,6 +777,8 @@ class StaticConfigGenerator(object):
                     + [
                         "--dx",
                         fail_domain_type,
+                        # "--ringdx",
+                        # fail_domain_type,
                     ]
                 )
 

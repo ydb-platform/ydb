@@ -314,7 +314,7 @@ def deduce_nodes_from_args(args):
         sys.exit("unable to deduce hosts")
 
     logger.info("use nodes '%s'", result)
-    return nodes.Nodes(result, args.dry_run)
+    return nodes.Nodes(result, cluster_hosts, args.dry_run)
 
 
 def ya_build(arcadia_root, artifact, opts, dry_run):
@@ -1153,6 +1153,7 @@ def main():
         logging.getLogger('ya.test').setLevel(logging.WARNING)
         logging.getLogger('kubernetes').setLevel(logging.ERROR)
         logging.getLogger('urllib3').setLevel(logging.ERROR)
+        logging.getLogger('asyncio').setLevel(logging.WARNING)
 
         parser = argparse.ArgumentParser(
             formatter_class=argparse.RawTextHelpFormatter,

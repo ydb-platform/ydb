@@ -114,10 +114,6 @@ public:
 
     bool ExtractColumnChunks(const ui32 columnId, std::vector<const TColumnRecord*>& records, std::vector<std::shared_ptr<IPortionDataChunk>>& chunks);
 
-    ui64 GetSize() const {
-        return PortionInfo.BlobsBytes();
-    }
-
     void FillStatistics(const TIndexInfo& index);
 
     static TPortionInfoWithBlobs BuildByBlobs(std::vector<TSplittedBlob>&& chunks,

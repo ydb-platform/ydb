@@ -64,36 +64,44 @@ std::shared_ptr<arrow::Scalar> TPortionInfo::MaxValue(ui32 columnId) const {
     return result;
 }
 
-ui64 TPortionInfo::GetRawBytes(const std::vector<ui32>& columnIds) const {
+ui64 TPortionInfo::GetColumnRawBytes(const std::vector<ui32>& columnIds) const {
     ui64 sum = 0;
-    const ui32 numRows = NumRows();
+    const ui32 recordsCount = GetRecordsCount();
     for (auto&& i : columnIds) {
+        bool found = false;
         if (TIndexInfo::IsSpecialColumn(i)) {
-            sum += numRows * TIndexInfo::GetSpecialColumnByteWidth(i);
+            sum += recordsCount * TIndexInfo::GetSpecialColumnByteWidth(i);
+            found = true;
         } else {
             for (auto&& r : Records) {
                 if (r.ColumnId == i) {
                     sum += r.GetMeta().GetRawBytesVerified();
+                    found = true;
                 }
             }
         }
+        AFL_VERIFY(found)("event", "id_not_found")("column_id", i);
     }
     return sum;
 }
 
-ui64 TPortionInfo::GetRawBytes(const std::set<ui32>& entityIds) const {
+ui64 TPortionInfo::GetColumnRawBytes(const std::set<ui32>& entityIds) const {
     ui64 sum = 0;
-    const ui32 numRows = NumRows();
+    const ui32 recordsCount = GetRecordsCount();
+    std::set<ui32> readyIds;
     for (auto&& i : TIndexInfo::GetSpecialColumnIds()) {
         if (entityIds.contains(i)) {
-            sum += numRows * TIndexInfo::GetSpecialColumnByteWidth(i);
+            sum += recordsCount * TIndexInfo::GetSpecialColumnByteWidth(i);
+            readyIds.emplace(i);
         }
     }
     for (auto&& r : Records) {
         if (entityIds.contains(r.ColumnId)) {
             sum += r.GetMeta().GetRawBytesVerified();
+            readyIds.emplace(r.ColumnId);
         }
     }
+    AFL_VERIFY(readyIds.size() == entityIds.size())("requested", JoinSeq(",", entityIds))("found", JoinSeq(",", readyIds));
     return sum;
 }
 
@@ -110,6 +118,16 @@ ui64 TPortionInfo::GetIndexRawBytes(const std::set<ui32>& entityIds) const {
     return sum;
 }
 
+ui64 TPortionInfo::GetIndexRawBytes() const {
+    ui64 sum = 0;
+    std::set<ui32> readyIndexes;
+    for (auto&& r : Indexes) {
+        sum += r.GetRawBytes();
+        readyIndexes.emplace(r.GetIndexId());
+    }
+    return sum;
+}
+
 TString TPortionInfo::DebugString(const bool withDetails) const {
     TStringBuilder sb;
     sb << "(portion_id:" << Portion << ";" <<
@@ -123,7 +141,8 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
             "to:" << IndexKeyEnd().DebugString() << ";";
     }
     sb <<
-        "size:" << BlobsBytes() << ";" <<
+        "column_size:" << GetColumnBlobBytes() << ";" <<
+        "index_size:" << GetIndexBlobBytes() << ";" <<
         "meta:(" << Meta.DebugString() << ");";
     if (RemoveSnapshot.Valid()) {
         sb << "remove_snapshot:(" << RemoveSnapshot.DebugString() << ");";

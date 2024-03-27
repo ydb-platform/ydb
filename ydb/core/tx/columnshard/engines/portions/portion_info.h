@@ -432,26 +432,24 @@ public:
         Y_ABORT_UNLESS(!wasValid || RemoveSnapshot.Valid());
     }
 
-    std::pair<ui32, ui32> BlobsSizes() const {
-        ui32 sum = 0;
-        ui32 max = 0;
-        for (const auto& rec : Records) {
-            sum += rec.BlobRange.Size;
-            max = Max(max, rec.BlobRange.Size);
-        }
-        return {sum, max};
-    }
-
-    ui64 GetBlobBytes() const noexcept {
+    ui64 GetIndexBlobBytes() const noexcept {
         ui64 sum = 0;
-        for (const auto& rec : Records) {
-            sum += rec.BlobRange.Size;
+        for (const auto& rec : Indexes) {
+            sum += rec.GetBlobRange().Size;
         }
         return sum;
     }
 
-    ui64 BlobsBytes() const noexcept {
-        return GetBlobBytes();
+    ui64 GetColumnBlobBytes() const noexcept {
+        ui64 sum = 0;
+        for (const auto& rec : Records) {
+            sum += rec.GetBlobRange().Size;
+        }
+        return sum;
+    }
+
+    ui64 GetTotalBlobBytes() const noexcept {
+        return GetIndexBlobBytes() + GetColumnBlobBytes();
     }
 
     bool IsVisible(const TSnapshot& snapshot) const {
@@ -541,10 +539,11 @@ public:
     }
 
     ui64 GetIndexRawBytes(const std::set<ui32>& columnIds) const;
+    ui64 GetIndexRawBytes() const;
 
-    ui64 GetRawBytes(const std::vector<ui32>& columnIds) const;
-    ui64 GetRawBytes(const std::set<ui32>& columnIds) const;
-    ui64 GetRawBytes() const {
+    ui64 GetColumnRawBytes(const std::vector<ui32>& columnIds) const;
+    ui64 GetColumnRawBytes(const std::set<ui32>& columnIds) const;
+    ui64 GetColumnRawBytes() const {
         ui64 result = 0;
         for (auto&& i : Records) {
             result += i.GetMeta().GetRawBytesVerified();
@@ -552,10 +551,9 @@ public:
         return result;
     }
 
-    ui64 RawBytesSum() const {
-        return GetRawBytes();
+    ui64 GetTotalRawBytes() const {
+        return GetColumnRawBytes() + GetIndexRawBytes();
     }
-
 public:
     class TAssembleBlobInfo {
     private:

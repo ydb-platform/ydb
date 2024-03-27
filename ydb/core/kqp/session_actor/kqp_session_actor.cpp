@@ -1585,7 +1585,7 @@ public:
 
         FillStats(record);
 
-        if (!QueryState->GetCommandTagName()) {
+        if (QueryState->GetCommandTagName()) {
             response->SetCommandTag(*QueryState->GetCommandTagName());
         }
 

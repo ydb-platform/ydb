@@ -136,6 +136,8 @@ public:
     ui32 StatementResultIndex = 0;
     ui32 StatementResultSize = 0;
 
+    TMaybe<TString> CommandTagName;
+
     NKikimrKqp::EQueryAction GetAction() const {
         return RequestEv->GetAction();
     }
@@ -403,15 +405,6 @@ public:
 
     bool ProcessingLastStatement() const {
         return CurrentStatementId + 1 >= Statements.size();
-    }
-
-    TMaybe<TString> GetCommandTagName() {
-        if (!Statements && !CompileResult) {
-            return Nothing();
-        }
-        return Statements ?
-            Statements[CurrentStatementId].CommandTagName :
-            CompileResult->CommandTagName;
     }
 
     void PrepareCurrentStatement() {

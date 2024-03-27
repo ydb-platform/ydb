@@ -131,6 +131,9 @@ bool TKqpQueryState::SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev) {
     if (ev->ReplayMessage) {
         ReplayMessage = *ev->ReplayMessage;
     }
+    if (!CommandTagName) {
+        CommandTagName = CompileResult->CommandTagName;
+    }
     return true;
 }
 
@@ -138,6 +141,7 @@ bool TKqpQueryState::SaveAndCheckParseResult(TEvKqp::TEvParseResponse&& ev) {
     Statements = std::move(ev.AstStatements);
     CurrentStatementId = 0;
     Orbit = std::move(ev.Orbit);
+    CommandTagName = Statements.back().CommandTagName;
     return true;
 }
 

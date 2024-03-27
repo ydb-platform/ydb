@@ -412,13 +412,16 @@ public:
                 const auto& txControl = QueryState->GetTxControl();
                 QueryState->Commit = txControl.commit_tx();
                 BeginTx(txControl.begin_tx());
+                QueryState->CommandTagName = "BEGIN";
                 ReplySuccess();
                 return;
             }
             case NKikimrKqp::QUERY_ACTION_ROLLBACK_TX: {
+                QueryState->CommandTagName = "ROLLBACK";
                 return RollbackTx();
             }
             case NKikimrKqp::QUERY_ACTION_COMMIT_TX:
+                QueryState->CommandTagName = "COMMIT";
                 return CommitTx();
 
             // not supported yet
@@ -1586,8 +1589,8 @@ public:
 
         FillStats(record);
 
-        if (QueryState->GetCommandTagName()) {
-            response->SetCommandTag(*QueryState->GetCommandTagName());
+        if (QueryState->CommandTagName) {
+            response->SetCommandTag(*QueryState->CommandTagName);
         }
 
         if (QueryState->TxCtx) {

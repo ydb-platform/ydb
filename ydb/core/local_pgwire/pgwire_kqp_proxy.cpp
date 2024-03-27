@@ -87,6 +87,7 @@ protected:
         // HACK
         TString q(ToUpperASCII(query.substr(0, 20)));
         if (q.StartsWith("BEGIN")) {
+            Response_->Tag = "BEGIN";
             if (Connection_.Transaction.Status == 'I') {
                 auto event = MakeKqpRequest();
                 NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
@@ -103,6 +104,7 @@ protected:
                 return {};
             }
         } else if (q.StartsWith("COMMIT") || q.StartsWith("END")) {
+            Response_->Tag = "COMMIT";
             if (Connection_.Transaction.Status == 'T') {
                 // in transaction
                 auto event = MakeKqpRequest();
@@ -122,6 +124,7 @@ protected:
                 return {};
             }
         } else if (q.StartsWith("ROLLBACK")) {
+            Response_->Tag = "ROLLBACK";
             if (Connection_.Transaction.Status == 'T') {
                 // in transaction
                 auto event = MakeKqpRequest();

@@ -953,11 +953,11 @@ TUsedColumns GatherUsedColumns(const TExprNode::TPtr& result, const TExprNode::T
                 Y_ENSURE(join->Child(1)->Content() == "using", "Supported only USING clause there");
                 for (ui32 col = 0; col < join->Child(3)->ChildrenSize(); ++col) {
                     auto lr = join->Child(3)->Child(col);
+                    usedColumns.erase(TString(join->Child(2)->Child(col)->Content()));
                     if (lr->Child(0)->IsAtom()) {
                         usedColumns.insert(std::make_pair(TString(lr->Child(0)->Content()), std::make_pair(Max<ui32>(), TString())));
                     }
                     usedColumns.insert(std::make_pair(TString(lr->Child(1)->Content()), std::make_pair(Max<ui32>(), TString())));
-                    usedColumns.erase(TString(join->Child(2)->Child(col)->Content()));
                     joinUsingColumns.emplace_back(ToString(groupNo), join->Child(2)->Child(col)->Content());
                 }
                 continue;

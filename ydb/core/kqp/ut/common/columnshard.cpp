@@ -44,10 +44,10 @@ namespace NKqp {
         return Session;
     }
 
-    void TTestHelper::CreateTable(const TColumnTableBase& table) {
+    void TTestHelper::CreateTable(const TColumnTableBase& table, const EStatus expectedStatus) {
         std::cerr << (table.BuildQuery()) << std::endl;
         auto result = Session.ExecuteSchemeQuery(table.BuildQuery()).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString());
     }
 
     void TTestHelper::CreateTier(const TString& tierName) {

@@ -1,9 +1,9 @@
 #pragma once
 
 #include <ydb/core/base/defs.h>
+#include <ydb/core/wrappers/s3_storage_config.h>
 
 #include <util/generic/string.h>
-#include <ydb/core/wrappers/s3_storage_config.h>
 
 namespace NKikimr::NReplication::NService {
 

@@ -631,8 +631,6 @@ message AlterTableRequest {
         string set_tiering = 22;
         google.protobuf.Empty drop_tiering = 23;
     }
-    // Remove temporary flag (only for internal use)
-    google.protobuf.Empty reset_temporary = 24;
 }
 
 message AlterTableResponse {

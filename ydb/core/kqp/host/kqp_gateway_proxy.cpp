@@ -746,6 +746,12 @@ public:
     TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req,
         const TMaybe<TString>& requestType, ui64 flags, NKikimrIndexBuilder::TIndexBuildSettings&& buildSettings) override
     {
+        auto prepareFuture = PrepareAlterTable(cluster, std::move(req), requestType, flags, std::move(buildSettings));
+        return AlterTableImpl(cluster, requestType, std::move(prepareFuture));
+    }
+
+    TFuture<TGenericResult> AlterTableImpl(const TString& cluster, const TMaybe<TString>& requestType, TFuture<TGenericResult>&& prepareFuture)
+    {
         CHECK_PREPARED_DDL(AlterTable);
 
         auto tablePromise = NewPromise<TGenericResult>();
@@ -767,7 +773,6 @@ public:
             }
         }
 
-        auto prepareFuture = PrepareAlterTable(cluster, std::move(req), requestType, flags, std::move(buildSettings));
         if (IsPrepare())
             return prepareFuture;
 
@@ -802,14 +807,6 @@ public:
         return tablePromise.GetFuture();
     }
 
-    TString GetTableName(const TString& path) {
-        auto splitPos = path.find_last_of('/');
-        if (splitPos == path.npos || splitPos + 1 == path.size()) {
-            ythrow yexception() << "wrong path format '" << path << "'" ;
-        }
-        return path.substr(splitPos + 1);
-    }
-
     NThreading::TFuture<TGenericResult> ResetTemporary(const TString& src, const TString& cluster) override {
         CHECK_PREPARED_DDL(RenameTable);
 
@@ -821,39 +818,21 @@ public:
             return MakeFuture(ResultFromError<TGenericResult>(error));
         }
 
-        auto temporary = metadata->Temporary;
-        auto renameTablePromise = NewPromise<TGenericResult>();
+        auto &phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+        auto &phyTx = *phyQuery.AddTransactions();
+        phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
 
-        NKikimrSchemeOp::TModifyScheme schemeTx;
+        NKikimrSchemeOp::TModifyScheme& schemeTx = *phyTx.MutableSchemeOperation()->MutableAlterTable();
         schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
         schemeTx.SetWorkingDir(pathPair.first);
 
         auto& alterOp = *schemeTx.MutableAlterTable();
-        alterOp.SetName(GetTableName(src));
+        alterOp.SetName(pathPair.second);
         alterOp.SetTemporary(false);
 
-        if (IsPrepare()) {
-            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
-            auto& phyTx = *phyQuery.AddTransactions();
-            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
-
-            phyTx.MutableSchemeOperation()->MutableAlterTable()->Swap(&schemeTx);
-            TGenericResult result;
-            result.SetSuccess();
-            renameTablePromise.SetValue(result);
-        } else {
-            if (temporary) {
-                auto code = Ydb::StatusIds::BAD_REQUEST;
-                auto error = TStringBuilder() << "Not allowed to rename temp table";
-                IKqpGateway::TGenericResult errResult;
-                errResult.AddIssue(NYql::TIssue(error));
-                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
-                renameTablePromise.SetValue(errResult);
-            }
-            return Gateway->ModifyScheme(std::move(schemeTx));
-        }
-
-        return renameTablePromise.GetFuture();
+        TGenericResult result;
+        result.SetSuccess();
+        return AlterTableImpl(cluster, Nothing(), MakeFuture<TGenericResult>(result));
     }
 
     TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) override {

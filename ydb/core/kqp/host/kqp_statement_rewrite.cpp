@@ -18,6 +18,7 @@ namespace {
         NYql::TExprNode::TPtr CreateTable = nullptr;
         NYql::TExprNode::TPtr ReplaceInto = nullptr;
         NYql::TExprNode::TPtr AlterTable = nullptr;
+        NYql::TExprNode::TPtr MoveTable = nullptr;
     };
 
     bool IsOlapTable(const NYql::NNodes::TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& tableSettings) {
@@ -261,15 +262,38 @@ namespace {
                         exprCtx.NewAtom(pos, "actions"),
                         exprCtx.NewList(pos, {
                             exprCtx.NewList(pos, {
-                                exprCtx.NewAtom(pos, "setTableSettings"),
-                                exprCtx.NewList(pos, {
-                                    exprCtx.NewList(pos, {
-                                        exprCtx.NewAtom(pos, "resetTemporary")
-                                    }),
-                                }),
+                                exprCtx.NewAtom(pos, "resetTemporary"),
                             }),
+                        }),
+                    }),
+                }),
+            });
+
+            result.MoveTable = exprCtx.NewCallable(pos, "Write!", {
+                exprCtx.NewWorld(pos),
+                exprCtx.NewCallable(pos, "DataSink", {
+                    exprCtx.NewAtom(pos, "kikimr"),
+                    exprCtx.NewAtom(pos, "db"),
+                }),
+                exprCtx.NewCallable(pos, "Key", {
+                    exprCtx.NewList(pos, {
+                        exprCtx.NewAtom(pos, "tablescheme"),
+                        exprCtx.NewCallable(pos, "String", {
+                            exprCtx.NewAtom(pos, createTableName),
+                        }),
+                    }),
+                }),
+                exprCtx.NewCallable(pos, "Void", {}),
+                exprCtx.NewList(pos, {
+                    exprCtx.NewList(pos, {
+                        exprCtx.NewAtom(pos, "mode"),
+                        exprCtx.NewAtom(pos, "alter"),
+                    }),
+                    exprCtx.NewList(pos, {
+                        exprCtx.NewAtom(pos, "actions"),
+                        exprCtx.NewList(pos, {
                             exprCtx.NewList(pos, {
-                                exprCtx.NewAtom(pos, "forceRenameTo"),
+                                exprCtx.NewAtom(pos, "renameTo"),
                                 exprCtx.NewAtom(pos, tableName),
                             }),
                         }),
@@ -300,6 +324,8 @@ TVector<NYql::TExprNode::TPtr> RewriteExpression(
                 result.push_back(rewriteResult->ReplaceInto);
                 if (rewriteResult->AlterTable) {
                     result.push_back(rewriteResult->AlterTable);
+                    YQL_ENSURE(rewriteResult->MoveTable);
+                    result.push_back(rewriteResult->MoveTable);
                 }
             }
         }

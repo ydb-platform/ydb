@@ -133,6 +133,10 @@ protected:
             auto& userDataBlock = (crutches[TUserDataKey::File(TStringBuf("/home/geodata6.bin"))] = TUserDataBlock{EUserDataType::URL, {}, *defaultGeobase, {}, {}});
             userDataBlock.Usage.Set(EUserDataBlockUsage::Path);
         }
+        if (const auto& geobaseConfig = settings->GeobaseConfigUrl.Get(usedCluster)) {
+            auto& userDataBlock = (crutches[TUserDataKey::File(TStringBuf("/home/geodata.conf"))] = TUserDataBlock{EUserDataType::URL, {}, *geobaseConfig, {}, {}});
+            userDataBlock.Usage.Set(EUserDataBlockUsage::Path);
+        }
 
         bool hasNonDeterministicFunctions = false;
         if (const auto status = PeepHoleOptimizeBeforeExec(optimizedInput, optimizedInput, State_, hasNonDeterministicFunctions, ctx); status.Level != IGraphTransformer::TStatus::Ok) {

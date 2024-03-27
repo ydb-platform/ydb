@@ -787,17 +787,22 @@ bool FillUsedFilesImpl(
         }
 
         if (moduleName == TStringBuf("Geo")) {
-            const auto geobase = TUserDataKey::File(TStringBuf("/home/geodata6.bin"));
-            if (const auto block = types.UserDataStorage->FindUserDataBlock(geobase)) {
-                files.emplace(geobase, *block).first->second.Usage.Set(EUserDataBlockUsage::Path);
-            } else {
-                const auto it = crutches.find(geobase);
-                if (crutches.cend() != it) {
-                    auto pragma = it->second;
-                    types.UserDataStorage->AddUserDataBlock(geobase, pragma);
-                    files.emplace(geobase, pragma).first->second.Usage.Set(EUserDataBlockUsage::Path);
+            auto datafileProcessing = [&](TStringBuf filename) -> void {
+                const auto fileKey = TUserDataKey::File(filename);
+                if (const auto block = types.UserDataStorage->FindUserDataBlock(fileKey)) {
+                    files.emplace(fileKey, *block).first->second.Usage.Set(EUserDataBlockUsage::Path);
+                } else {
+                    const auto it = crutches.find(fileKey);
+                    if (crutches.cend() != it) {
+                        auto pragma = it->second;
+                        types.UserDataStorage->AddUserDataBlock(fileKey, pragma);
+                        files.emplace(fileKey, pragma).first->second.Usage.Set(EUserDataBlockUsage::Path);
+                    }
                 }
-            }
+            };
+
+            datafileProcessing("/home/geodata6.bin");
+            datafileProcessing("/home/geodata.conf");
         }
 
         if (addSysModule) {

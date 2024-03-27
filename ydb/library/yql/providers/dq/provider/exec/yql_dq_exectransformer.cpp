@@ -689,16 +689,25 @@ private:
                         }
 
                         if (moduleName == TStringBuf("Geo")) {
-                            TString fileName = "/home/geodata6.bin";
-                            auto block = TUserDataStorage::FindUserDataBlock(files, fileName);
-                            MKQL_ENSURE(block, "File not found: " << fileName);
-                            auto f = IDqGateway::TFileResource();
-                            f.SetLocalPath(block->FrozenFile->GetPath().GetPath());
-                            f.SetName(fileName);
-                            f.SetObjectId(block->FrozenFile->GetMd5());
-                            f.SetObjectType(IDqGateway::TFileResource::EUSER_FILE);
-                            f.SetSize(block->FrozenFile->GetSize());
-                            uploadList->emplace(f);
+                            auto datafileProcessing = [&](const TString& filename, bool throwIfNotExist = false) -> void {
+                                if (auto block = TUserDataStorage::FindUserDataBlock(files, filename)) {
+                                    auto f = IDqGateway::TFileResource();
+                                    f.SetLocalPath(block->FrozenFile->GetPath().GetPath());
+                                    f.SetName(filename);
+                                    f.SetObjectId(block->FrozenFile->GetMd5());
+                                    f.SetObjectType(IDqGateway::TFileResource::EUSER_FILE);
+                                    f.SetSize(block->FrozenFile->GetSize());
+                                    uploadList->emplace(f);
+                                } else if (throwIfNotExist) {
+                                    THROW yexception() << "File not found: " << filename;
+                                }
+                            };
+
+                            const TString dataFileName = "/home/geodata6.bin";
+                            datafileProcessing(dataFileName, /* throwIfNotExist */ true);
+
+                            const TString configFileName = "/home/geodata.conf";
+                            datafileProcessing(configFileName);
                         }
                     }
                 }

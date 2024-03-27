@@ -332,6 +332,9 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName name) {
                     if (const auto fileInfo = ExecCtx_.UserFiles_->GetFile("/home/geodata6.bin")) {
                         AddFile("./geodata6.bin", *fileInfo);
                     }
+                    if (const auto fileInfo = ExecCtx_.UserFiles_->GetFile("/home/geodata.conf")) {
+                        AddFile("./geodata.conf", *fileInfo);
+                    }
                 }
 
                 return TRuntimeNode(&callable, false);

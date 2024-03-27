@@ -173,6 +173,7 @@ struct TYtSettings {
     NCommon::TConfSetting<TString, true> TableContentTmpFolder;
     NCommon::TConfSetting<bool, true> TableContentColumnarStatistics;
     NCommon::TConfSetting<TString, true> GeobaseDownloadUrl;
+    NCommon::TConfSetting<TString, true> GeobaseConfigUrl;
     NCommon::TConfSetting<ui32, true> MaxSpeculativeJobCountPerTask;
     NCommon::TConfSetting<NSize::TSize, true> LLVMMemSize;
     NCommon::TConfSetting<NSize::TSize, true> LLVMPerNodeMemSize;

@@ -313,6 +313,7 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, MaxReplicationFactorToFuseOperations).Lower(1.0);
     REGISTER_SETTING(*this, MaxOperationFiles).Lower(2).Upper(1000);
     REGISTER_SETTING(*this, GeobaseDownloadUrl);
+    REGISTER_SETTING(*this, GeobaseConfigUrl);
     REGISTER_SETTING(*this, MinPublishedAvgChunkSize);
     REGISTER_SETTING(*this, MinTempAvgChunkSize);
     REGISTER_SETTING(*this, TopSortMaxLimit);

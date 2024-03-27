@@ -198,7 +198,7 @@ namespace NYql {
                 auto yqlCoreFlags = GatewaysConfig_.GetYqlCore().GetFlags();
                 GatewaysConfig_.MutableYqlCore()->ClearFlags();
                 for (auto flag : yqlCoreFlags) {
-                    if (flag.GetName() != "GeobaseDownloadUrl") {
+                    if ((flag.GetName() != "GeobaseDownloadUrl") && (flag.GetName() != "GeobaseConfigUrl")) {
                         *GatewaysConfig_.MutableYqlCore()->AddFlags() = flag;
                     }
                 }

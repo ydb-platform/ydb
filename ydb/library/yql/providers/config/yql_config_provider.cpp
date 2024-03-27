@@ -802,6 +802,12 @@ namespace {
                 auto& userDataBlock = (Types.UserDataStorageCrutches[TUserDataKey::File(TStringBuf("/home/geodata6.bin"))] = TUserDataBlock{EUserDataType::URL, {}, TString(args[0]), {}, {}});
                 userDataBlock.Usage.Set(EUserDataBlockUsage::Path);
             }
+            else if (name == "GeobaseConfigUrl") {
+                if (args.size() == 1) {
+                    auto& userDataBlock = (Types.UserDataStorageCrutches[TUserDataKey::File(TStringBuf("/home/geodata.conf"))] = TUserDataBlock{EUserDataType::URL, {}, TString(args[0]), {}, {}});
+                    userDataBlock.Usage.Set(EUserDataBlockUsage::Path);
+                }
+            }
             else if (name == "JsonQueryReturnsJsonDocument" || name == "DisableJsonQueryReturnsJsonDocument") {
                 if (args.size() != 0) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));

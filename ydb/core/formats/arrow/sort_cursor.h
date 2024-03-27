@@ -155,7 +155,7 @@ public:
         Cursors.reserve(tCursors.size());
         for (auto & cur : tCursors)
             if (!cur.Empty())
-                Cursors.emplace_back(SortCursor(&cur, not_null));
+                Cursors.emplace_back(TSortCursor(&cur, notNull));
 
         while (DataSize < Cursors.size())
             DataSize *= 2;

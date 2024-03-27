@@ -121,7 +121,7 @@ CREATE TEMPORARY TABLE table_name (
 );
 ```
 
-{% include [x](../../../../../_includes/temp_table_description.md) %}
+{% include [../../../../../_includes/temp_table_description.md](../../../../../_includes/temp_table_description.md) %}
 
 {% endif %}
 

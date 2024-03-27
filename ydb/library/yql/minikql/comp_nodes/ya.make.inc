@@ -128,6 +128,7 @@ SET(ORIG_SOURCES
     mkql_wide_top_sort.cpp
     mkql_withcontext.cpp
     mkql_zip.cpp
+    mkql_simple_codegen.cpp
 )
 
 ADDINCL(

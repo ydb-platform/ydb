@@ -2,6 +2,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/library/actors/core/log.h>
+
 #include <util/generic/serialized_enum.h>
 
 namespace NKikimr::NColumnShard {
@@ -100,6 +102,17 @@ void TEngineLogsCounters::TPortionsInfoGuard::OnDropPortion(const std::shared_pt
     }
     PortionRecordCountGuards[producedId]->Sub(portion->GetRecordsCount(), 1);
     PortionSizeGuards[producedId]->Sub(portion->GetTotalBlobBytes(), 1);
+}
+
+NKikimr::NColumnShard::TBaseGranuleDataClassSummary TBaseGranuleDataClassSummary::operator+(const TBaseGranuleDataClassSummary& item) const {
+    TBaseGranuleDataClassSummary result;
+    result.TotalPortionsSize = TotalPortionsSize + item.TotalPortionsSize;
+    result.ColumnPortionsSize = ColumnPortionsSize + item.ColumnPortionsSize;
+    AFL_VERIFY(result.TotalPortionsSize >= 0);
+    AFL_VERIFY(result.ColumnPortionsSize >= 0);
+    result.PortionsCount = PortionsCount + item.PortionsCount;
+    result.RecordsCount = RecordsCount + item.RecordsCount;
+    return result;
 }
 
 }

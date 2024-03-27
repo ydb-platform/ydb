@@ -35,16 +35,7 @@ public:
         return TStringBuilder() << "columns_size:" << ColumnPortionsSize << ";total_size:" << TotalPortionsSize << ";count:" << PortionsCount << ";";
     }
 
-    TBaseGranuleDataClassSummary operator+(const TBaseGranuleDataClassSummary& item) const {
-        TBaseGranuleDataClassSummary result;
-        result.TotalPortionsSize = TotalPortionsSize + item.TotalPortionsSize;
-        result.ColumnPortionsSize = ColumnPortionsSize + item.ColumnPortionsSize;
-        AFL_VERIFY(result.TotalPortionsSize >= 0);
-        AFL_VERIFY(result.ColumnPortionsSize >= 0);
-        result.PortionsCount = PortionsCount + item.PortionsCount;
-        result.RecordsCount = RecordsCount + item.RecordsCount;
-        return result;
-    }
+    TBaseGranuleDataClassSummary operator+(const TBaseGranuleDataClassSummary& item) const;
 };
 
 class TDataClassCounters {

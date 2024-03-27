@@ -810,7 +810,7 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> ResetTemporary(const TString& src, const TString& cluster) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster, const bool force = false) = 0;
+    virtual NThreading::TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropTable(const TString& cluster, const TDropTableSettings& settings) = 0;
 

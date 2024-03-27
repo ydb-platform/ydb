@@ -856,7 +856,7 @@ public:
         return renameTablePromise.GetFuture();
     }
 
-    TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster, const bool force) override {
+    TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) override {
         CHECK_PREPARED_DDL(RenameTable);
 
         auto metadata = SessionCtx->Tables().GetTable(cluster, src).Metadata;
@@ -889,7 +889,7 @@ public:
             result.SetSuccess();
             renameTablePromise.SetValue(result);
         } else {
-            if (temporary && !force) {
+            if (temporary) {
                 auto code = Ydb::StatusIds::BAD_REQUEST;
                 auto error = TStringBuilder() << "Not allowed to rename temp table";
                 IKqpGateway::TGenericResult errResult;

@@ -4,13 +4,12 @@ from typing import Sequence, Optional
 from random import choice
 from string import ascii_lowercase, digits
 
-from utils.settings import GenericSettings
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
-import ydb.library.yql.providers.generic.connector.tests.utils.clickhouse as clickhouse
-import ydb.library.yql.providers.generic.connector.tests.utils.postgresql as postgresql
+from ydb.library.yql.providers.generic.connector.tests.utils.settings import GenericSettings
+import ydb.library.yql.providers.generic.connector.tests.utils.types.postgresql as postgresql
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     Schema,
     Column,
@@ -51,19 +50,19 @@ class Factory:
                 Column(
                     name='COL1',
                     ydb_type=Type.INT32,
-                    data_source_type=DataSourceType(ch=clickhouse.Int32(), pg=postgresql.Int4()),
+                    data_source_type=DataSourceType(pg=postgresql.Int4()),
                 ),
                 Column(
                     name='col2',
                     ydb_type=Type.INT32,
-                    data_source_type=DataSourceType(ch=clickhouse.Int32(), pg=postgresql.Int4()),
+                    data_source_type=DataSourceType(pg=postgresql.Int4()),
                 ),
             )
         )
 
         select_what = SelectWhat.asterisk(column_list=schema.columns)
 
-        test_case_name = f'select_with_schema_{select_what}'
+        test_case_name = f'select_positive_with_schema_{select_what}'
 
         test_case = TestCase(
             name_=test_case_name,

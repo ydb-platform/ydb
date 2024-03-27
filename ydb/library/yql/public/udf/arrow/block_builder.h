@@ -339,7 +339,8 @@ public:
     void DoAdd(NUdf::TUnboxedValuePod value) final {
         if constexpr (Nullable) {
             if (!value) {
-                return DoAddDefault();
+                DoAddNull();
+                return;
             }
         }
         static_cast<TDerived*>(this)->DoAddNotNull(value);
@@ -348,10 +349,19 @@ public:
     void DoAdd(TBlockItem value) final {
         if constexpr (Nullable) {
             if (!value) {
-                return DoAddDefault();
+                DoAddNull();
+                return;
             }
+            NullPtr[GetCurrLen()] = 1;
         }
         static_cast<TDerived*>(this)->DoAddNotNull(value);
+    }
+    
+    void DoAddNull() {
+        if constexpr (Nullable) {
+            NullPtr[GetCurrLen()] = 0;
+            PlaceItem(TLayout{});
+        }
     }
 
     void DoAdd(TBlockItem value, size_t count) final {
@@ -370,10 +380,11 @@ public:
     void DoAdd(TInputBuffer &input) final {
         if constexpr (Nullable) {
             if (!input.PopChar()) {
-                return DoAddDefault();
+                DoAddNull();
+                return;
             }
         }
-        PlaceItem(input.PopNumber<TLayout>());
+        static_cast<TDerived*>(this)->DoAddNotNull(input);
     }
 
     void DoAddDefault() final {
@@ -449,7 +460,6 @@ public:
         }
         return result;
     }
-    
 protected:
     void PlaceItem(TLayout&& value)  {
         ::new(DataPtr + GetCurrLen()) TLayout(std::move(value));
@@ -486,11 +496,17 @@ public:
     TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen)
         : TFixedSizeArrayBuilderBase<TLayout, Nullable, TDerived>(typeInfoHelper, type, pool, maxLen)
     {}
+
     void DoAddNotNull(TUnboxedValuePod value) {
-        this->PlaceItem(value.Get<TLayout>());
+        this->DoAdd(TBlockItem(value.Get<TLayout>()));
     }
+
     void DoAddNotNull(TBlockItem value) {
         this->PlaceItem(value.Get<TLayout>());
+    }
+    
+    void DoAddNotNull(TInputBuffer& input) {
+        this->DoAdd(TBlockItem(input.PopNumber<TLayout>()));
     }
 
     void DoAddNotNull(TBlockItem value, size_t count) {
@@ -522,6 +538,10 @@ public:
 
     void DoAddNotNull(TBlockItem item) {
         this->PlaceItem(FromBlockItem(item));
+    }
+
+    void DoAddNotNull(TInputBuffer& input) {
+        this->DoAdd(input.PopNumber<TUnboxedValuePod>());
     }
 
     void DoAddNotNull(TBlockItem item, size_t count) {

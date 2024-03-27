@@ -151,7 +151,7 @@ private:
                 ui64 Count;
             };
             union {
-                ui64 Pad;
+                ui64 FullMeta;
                 struct {
                     ui8 Reserved[7];
                     ui8 Meta;
@@ -169,7 +169,7 @@ private:
             const TBlockItem* Value;
         } Tuple;
 
-        explicit operator bool() const { return Simple.Meta | Simple.Count; }
+        explicit operator bool() const { return Simple.FullMeta | Simple.Count; }
     } Raw;
 };
 

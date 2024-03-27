@@ -4129,20 +4129,22 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                     for (ui32 colIdx = 0; colIdx < inp->ChildrenSize(); ++colIdx) {
                                         auto name = inp->Child(colIdx)->Content();
                                         TExprNode::TListType lrNames(2);
-                                        auto pos = groupInputs[0].Type->FindItemI(name);
+                                        auto& leftInput = groupInputs[groupInputs.size() - 2];
+                                        auto& rightInput = groupInputs.back();
+                                        auto pos = leftInput.Type->FindItemI(name);
                                         if (!pos) {
                                             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Can't find column: " << name));
                                             return IGraphTransformer::TStatus::Error;
                                         }
                                         lrNames[0] = groupInputs.size() > 2
                                                 ? ctx.Expr.NewList(inp->Pos(), {ctx.Expr.NewAtom(inp->Pos(), repeatedColumnsInUsing[to_lower(TString(name))])})
-                                                : ctx.Expr.NewAtom(inp->Pos(), MakeAliasedColumn(groupInputs[groupInputs.size() - 2].Alias, groupInputs[0].Type->GetItems()[*pos]->GetName()));
-                                        pos = groupInputs[1].Type->FindItemI(name);
+                                                : ctx.Expr.NewAtom(inp->Pos(), MakeAliasedColumn(leftInput.Alias, leftInput.Type->GetItems()[*pos]->GetName()));
+                                        pos = rightInput.Type->FindItemI(name);
                                         if (!pos) {
                                             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Can't find column: " << name));
                                             return IGraphTransformer::TStatus::Error;
                                         }
-                                        lrNames[1] = ctx.Expr.NewAtom(inp->Pos(), MakeAliasedColumn(groupInputs.back().Alias, groupInputs[1].Type->GetItems()[*pos]->GetName()));
+                                        lrNames[1] = ctx.Expr.NewAtom(inp->Pos(), MakeAliasedColumn(rightInput.Alias, rightInput.Type->GetItems()[*pos]->GetName()));
                                         nodes[colIdx] = ctx.Expr.NewList(inp->Pos(), std::move(lrNames));
                                     }
                                     TExprNode::TListType newJoin(4);

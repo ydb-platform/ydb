@@ -5,3 +5,4 @@ This section describes the entities that {{ ydb-short-name }} uses within DBs. T
 * [Directory](../dir.md)
 * [Table](../table.md)
 * [Topic](../../topic.md)
+* [View](../view.md)

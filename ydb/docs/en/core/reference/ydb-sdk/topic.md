@@ -1382,7 +1382,19 @@ When reading starts, the client code must transmit the starting consumer offset 
 
 - Java
 
-  Setting the starting offset for reading is not supported in the current state of Java SDK.
+  Starting offset for reading in Java can be set only for AsyncReader.
+  In `StartPartitionSessionEvent` callback `StartPartitionSessionSettings` with desired ReadOffset can be passed to `confirm` method.
+  Offset that should be considered as committed could also be set with `setCommittedOffset`.
+
+  ```java
+  @Override
+  public void onStartPartitionSession(StartPartitionSessionEvent event) {
+      event.confirm(StartPartitionSessionSettings.newBuilder()
+              .setReadOffset(lastReadOffset)
+              .setCommitOffset(lastCommitOffset)
+              .build());
+  }
+  ```
 
   The `setReadFrom` setting is used for reading only messages with write timestamps no less than the given one.
 

@@ -65,7 +65,7 @@ public:
     }
 
     static ui64 GetMemSize(const std::shared_ptr<TPortionInfo>& portion) {
-        return portion->GetRawBytes();
+        return portion->GetTotalRawBytes();
     }
 
     static bool CheckPortion(const TPortionInfo& portionInfo) {

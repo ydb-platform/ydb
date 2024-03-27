@@ -73,6 +73,7 @@ public:
     void SetIsReady();
 
     void Finalize() {
+        TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT");
         StageResult = std::make_unique<TFetchedResult>(std::move(StageData));
     }
 
@@ -109,7 +110,7 @@ public:
         ++IntervalsCount;
     }
 
-    virtual ui64 GetRawBytes(const std::set<ui32>& columnIds) const = 0;
+    virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnIds) const = 0;
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const = 0;
 
     bool IsMergingStarted() const {
@@ -217,12 +218,12 @@ public:
         return Portion->DecodeBlobAddresses(std::move(blobsOriginal), Schema->GetIndexInfo());
     }
 
-    virtual ui64 GetRawBytes(const std::set<ui32>& columnIds) const override {
-        return Portion->GetRawBytes(columnIds);
+    virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnsIds) const override {
+        return Portion->GetColumnRawBytes(columnsIds);
     }
 
-    virtual ui64 GetIndexRawBytes(const std::set<ui32>& columnIds) const override {
-        return Portion->GetIndexRawBytes(columnIds);
+    virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const override {
+        return Portion->GetIndexRawBytes(indexIds);
     }
 
     const TPortionInfo& GetPortionInfo() const {
@@ -282,7 +283,7 @@ public:
         return false;
     }
 
-    virtual ui64 GetRawBytes(const std::set<ui32>& /*columnIds*/) const override {
+    virtual ui64 GetColumnRawBytes(const std::set<ui32>& /*columnIds*/) const override {
         return CommittedBlob.GetBlobRange().Size;
     }
 

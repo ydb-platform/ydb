@@ -393,7 +393,7 @@ private:
         YQL_ENSURE(readIt != Reads.end(), "Unexpected readId: " << ev->Get()->ReadId);
         auto& read = readIt->second;
         
-        if (read.LastSeqNo <= ev->Get()->LastSeqNo) {
+        if (read.State == EReadState::Running && read.LastSeqNo <= ev->Get()->LastSeqNo) {
             if (ev->Get()->InstantStart) {
                 read.SetFinished();
                 auto requests = StreamLookupWorker->RebuildRequest(read.Id, read.FirstUnprocessedQuery, read.LastProcessedKey, ReadId);

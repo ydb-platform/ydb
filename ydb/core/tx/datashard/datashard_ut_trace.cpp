@@ -7,6 +7,7 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/tx_proxy/upload_rows.h>
 #include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -106,7 +107,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         );
 
         UNIT_ASSERT(uploader->BuildTraceTrees());
-        UNIT_ASSERT_EQUAL(1, uploader->Traces.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, uploader->Traces.size());
 
         TFakeWilsonUploader::Trace &trace = uploader->Traces.begin()->second;
 
@@ -114,11 +115,11 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         UNIT_ASSERT(deSpan);
 
         auto dsTxSpans = deSpan->get().FindAll("Datashard.Transaction");
-        UNIT_ASSERT_EQUAL(2, dsTxSpans.size()); // Two shards, each executes a user transaction.
+        UNIT_ASSERT_VALUES_EQUAL(2, dsTxSpans.size()); // Two shards, each executes a user transaction.
 
         for (auto dsTxSpan : dsTxSpans) {
             auto tabletTxs = dsTxSpan.get().FindAll("Tablet.Transaction");
-            UNIT_ASSERT_EQUAL(2, tabletTxs.size()); // Each shard executes a proposal tablet tx and a progress tablet tx.
+            UNIT_ASSERT_VALUES_EQUAL(2, tabletTxs.size()); // Each shard executes a proposal tablet tx and a progress tablet tx.
 
             auto propose = tabletTxs[0];
             // Note: when volatile transactions are enabled propose doesn't persist anything
@@ -164,7 +165,8 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
 
     Y_UNIT_TEST(TestTraceDistributedSelect) {
         auto [runtime, server, sender] = TestCreateServer();
-
+        bool bTreeIndex = runtime.GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
+        
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
     
         TFakeWilsonUploader *uploader = new TFakeWilsonUploader();
@@ -215,7 +217,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         );
 
         UNIT_ASSERT(uploader->BuildTraceTrees());
-        UNIT_ASSERT_EQUAL(1, uploader->Traces.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, uploader->Traces.size());
 
         TFakeWilsonUploader::Trace &trace = uploader->Traces.begin()->second;
 
@@ -225,7 +227,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
             UNIT_ASSERT(readActorSpan);
 
             auto dsReads = readActorSpan->get().FindAll("Datashard.Read"); // Read actor sends EvRead to each shard.
-            UNIT_ASSERT_EQUAL(dsReads.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(dsReads.size(), 2);
 
             canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) , (LiteralExecuter) "
                 ", (DataExecuter -> [(WaitForTableResolve) , (WaitForShardsResolve) , (WaitForSnapshot) , (ComputeActor) "
@@ -238,27 +240,40 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
                 ", (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit)]) , (Tablet.Transaction.Wait) "
                 ", (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog "
                 "-> [(Tablet.WriteLog.LogEntry)])])])])])])])";
+
+            if (bTreeIndex) { // no index nodes (levels = 0)
+                canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) , (LiteralExecuter) "
+                ", (DataExecuter -> [(WaitForTableResolve) , (WaitForShardsResolve) , (WaitForSnapshot) , (ComputeActor) "
+                ", (RunTasks) , (KqpNode.SendTasks) , (ComputeActor -> [(ReadActor -> [(WaitForShardsResolve) , (Datashard.Read "
+                "-> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) "
+                ", (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit) "
+                ", (Datashard.Unit)]) , (Tablet.WriteLog -> [(Tablet.WriteLog.LogEntry)])])]) , (Datashard.Read -> [(Tablet.Transaction "
+                "-> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.Transaction.Wait) "
+                ", (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog "
+                "-> [(Tablet.WriteLog.LogEntry)])])])])])])])";
+            }
+
         } else {
             auto deSpan = trace.Root.BFSFindOne("DataExecuter");
             UNIT_ASSERT(deSpan);
 
             auto dsTxSpans = deSpan->get().FindAll("Datashard.Transaction");
-            UNIT_ASSERT_EQUAL(2, dsTxSpans.size()); // Two shards, each executes a user transaction.
+            UNIT_ASSERT_VALUES_EQUAL(2, dsTxSpans.size()); // Two shards, each executes a user transaction.
 
             for (auto dsTxSpan : dsTxSpans) {
                 auto tabletTxs = dsTxSpan.get().FindAll("Tablet.Transaction");
-                UNIT_ASSERT_EQUAL(1, tabletTxs.size());
+                UNIT_ASSERT_VALUES_EQUAL(1, tabletTxs.size());
 
                 auto propose = tabletTxs[0];
                 CheckTxHasWriteLog(propose);
 
                 // Blobs are loaded from BS.
-                UNIT_ASSERT_EQUAL(2, propose.get().FindAll("Tablet.Transaction.Wait").size());
-                UNIT_ASSERT_EQUAL(2, propose.get().FindAll("Tablet.Transaction.Enqueued").size());
+                UNIT_ASSERT_VALUES_EQUAL(2, propose.get().FindAll("Tablet.Transaction.Wait").size());
+                UNIT_ASSERT_VALUES_EQUAL(2, propose.get().FindAll("Tablet.Transaction.Enqueued").size());
 
                 // We execute tx multiple times, because we have to load data for it to execute.
                 auto executeSpans = propose.get().FindAll("Tablet.Transaction.Execute");
-                UNIT_ASSERT_EQUAL(3, executeSpans.size());
+                UNIT_ASSERT_VALUES_EQUAL(3, executeSpans.size());
 
                 CheckExecuteHasDatashardUnits(executeSpans[0], 3);
                 CheckExecuteHasDatashardUnits(executeSpans[1], 1);
@@ -319,7 +334,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         );
 
         UNIT_ASSERT(uploader->BuildTraceTrees());
-        UNIT_ASSERT_EQUAL(1, uploader->Traces.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, uploader->Traces.size());
 
         TFakeWilsonUploader::Trace& trace = uploader->Traces.begin()->second;
 
@@ -327,7 +342,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         UNIT_ASSERT(readActorSpan);
 
         auto dsReads = readActorSpan->get().FindAll("Datashard.Read"); // Read actor sends EvRead to each shard.
-        UNIT_ASSERT_EQUAL(dsReads.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(dsReads.size(), 2);
 
         std::string canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) , "
             "(DataExecuter -> [(WaitForTableResolve) , (WaitForShardsResolve) , (WaitForSnapshot) , (ComputeActor) , "
@@ -362,7 +377,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         UNIT_ASSERT_C(resultRecord.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED, "Status: " << resultRecord.GetStatus() << " Issues: " << resultRecord.GetIssues());
 
         UNIT_ASSERT(uploader->BuildTraceTrees());
-        UNIT_ASSERT_EQUAL(1, uploader->Traces.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, uploader->Traces.size());
 
         TFakeWilsonUploader::Trace &trace = uploader->Traces.begin()->second;
         
@@ -370,7 +385,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         UNIT_ASSERT(wtSpan);
         
         auto tabletTxs = wtSpan->get().FindAll("Tablet.Transaction");
-        UNIT_ASSERT_EQUAL(1, tabletTxs.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, tabletTxs.size());
         auto writeTx = tabletTxs[0];
 
         CheckTxHasWriteLog(writeTx); 

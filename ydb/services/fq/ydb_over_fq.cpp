@@ -51,7 +51,10 @@ MakeIntrusive<TGRpcRequest<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response
     ->Run();
 
     ADD_REQUEST(ExecuteDataQuery)
+    ADD_REQUEST(ExplainDataQuery)
     ADD_REQUEST(CreateSession)
+    ADD_REQUEST(KeepAlive)
+    ADD_REQUEST(DescribeTable)
 
 #undef ADD_REQUEST
 }

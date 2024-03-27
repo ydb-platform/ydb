@@ -39,13 +39,13 @@ public:
     void AddPortion(const std::shared_ptr<TPortionInfo>& p) {
         RecordsCount->Add(p->NumRows());
         Count->Add(1);
-        Bytes->Add(p->GetBlobBytes());
+        Bytes->Add(p->GetTotalBlobBytes());
     }
 
     void RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
         RecordsCount->Remove(p->NumRows());
         Count->Remove(1);
-        Bytes->Remove(p->GetBlobBytes());
+        Bytes->Remove(p->GetTotalBlobBytes());
     }
 };
 

@@ -186,10 +186,10 @@ struct TDqSettings {
 
     TDqSettings::TPtr WithFillSettings(const IDataProvider::TFillSettings& fillSettings) const {
         auto copy = std::make_shared<TDqSettings>(*this);
-        if (fillSettings.RowsLimitPerWrite) {
+        if (fillSettings.RowsLimitPerWrite && !copy->_RowsLimitPerWrite.Get()) {
             copy->_RowsLimitPerWrite = *fillSettings.RowsLimitPerWrite;
         }
-        if (fillSettings.AllResultsBytesLimit) {
+        if (fillSettings.AllResultsBytesLimit && !copy->_AllResultsBytesLimit.Get()) {
             copy->_AllResultsBytesLimit = *fillSettings.AllResultsBytesLimit;
         }
 

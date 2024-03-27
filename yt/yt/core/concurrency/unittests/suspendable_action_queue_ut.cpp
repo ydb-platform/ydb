@@ -32,8 +32,11 @@ protected:
         TDelayedExecutor::WaitForDuration(RandomDuration(TDuration::MilliSeconds(15)));
     }
 
-    void EnsureRunning() {
-        WaitFor(BIND([] {}).AsyncVia(Invoker_).Run()).ThrowOnError();
+    void EnsureRunning()
+    {
+        WaitFor(BIND([] {})
+            .AsyncVia(Invoker_).Run())
+            .ThrowOnError();
     }
 
     struct TLooper
@@ -50,11 +53,13 @@ protected:
             });
         }
 
-        void Start() {
+        void Start()
+        {
             Invoker->Invoke(MakeCallback());
         }
 
-        TFuture<void> Stop() {
+        TFuture<void> Stop()
+        {
             StopPromise = NewPromise<void>();
             StopRespawning->store(true);
             return StopPromise.ToFuture();

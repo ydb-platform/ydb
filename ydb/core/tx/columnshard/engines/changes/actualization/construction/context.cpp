@@ -55,14 +55,14 @@ bool TTieringProcessContext::AddPortion(const TPortionInfo& info, TPortionEvicti
     it->second.back().MutableTxWriteVolume() += info.GetTxVolume();
     if (features.GetTargetTierName() == NTiering::NCommon::DeleteTierName) {
         AFL_VERIFY(dWait);
-        Counters.OnPortionToDrop(info.GetBlobBytes(), *dWait);
+        Counters.OnPortionToDrop(info.GetTotalBlobBytes(), *dWait);
         it->second.back().GetTask()->PortionsToRemove.emplace(info.GetAddress(), info);
         AFL_VERIFY(!it->second.back().GetTask()->GetPortionsToEvictCount())("rw", features.GetRWAddress().DebugString())("f", it->first.DebugString());
     } else {
         if (!dWait) {
             AFL_VERIFY(features.GetCurrentScheme()->GetVersion() < features.GetTargetScheme()->GetVersion());
         } else {
-            Counters.OnPortionToEvict(info.GetBlobBytes(), *dWait);
+            Counters.OnPortionToEvict(info.GetTotalBlobBytes(), *dWait);
         }
         it->second.back().GetTask()->AddPortionToEvict(info, std::move(features));
         AFL_VERIFY(it->second.back().GetTask()->PortionsToRemove.empty())("rw", features.GetRWAddress().DebugString())("f", it->first.DebugString());

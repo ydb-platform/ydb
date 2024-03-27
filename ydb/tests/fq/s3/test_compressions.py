@@ -41,19 +41,20 @@ class TestS3Compressions:
         ("test.json.zst", "zstd"),
         ("test.json.xz", "xz")
     ])
-    def test_compression(self, kikimr, s3, client, filename, compression):
+    def test_compression(self, kikimr, s3, client, filename, compression, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        client.create_storage_connection("fruitbucket", "fbucket")
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
 
         sql = '''
             SELECT *
-            FROM fruitbucket.`{}`
+            FROM `{}`.`{}`
             WITH (format=json_each_row, compression="{}", SCHEMA (
                 id Int32 NOT NULL,
                 description String NOT NULL,
                 info String NOT NULL
             ));
-            '''.format(filename, compression)
+            '''.format(storage_connection_name, filename, compression)
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -64,7 +65,7 @@ class TestS3Compressions:
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_invalid_compression(self, kikimr, s3, client):
+    def test_invalid_compression(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -89,11 +90,12 @@ Pear,15,33'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
         kikimr.control_plane.wait_bootstrap(1)
 
-        client.create_storage_connection("fruitbucket", "fbucket")
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
 
-        sql = R'''
+        sql = fR'''
             SELECT *
-            FROM fruitbucket.`fruits.csv`
+            FROM `{storage_connection_name}`.`fruits.csv`
             WITH (format=csv_with_names, compression="some_compression", SCHEMA (
                 Fruit String,
                 Price Int,

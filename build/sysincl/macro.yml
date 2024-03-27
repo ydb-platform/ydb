@@ -881,6 +881,10 @@
   includes:
     - FT_CFF_DRIVER_H: contrib/libs/freetype/include/freetype/ftdriver.h
 
+- source_filter: "^contrib/restricted/xpdf/splash"
+  includes:
+    - FT_CFF_DRIVER_H: contrib/libs/freetype/include/freetype/ftdriver.h
+
 - source_filter: "^contrib/libs/nvidia/thrust"
   includes:
     - __THRUST_DEVICE_SYSTEM_ADJACENT_DIFFERENCE_HEADER:

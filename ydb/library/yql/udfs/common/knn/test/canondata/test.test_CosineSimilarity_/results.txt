@@ -23,7 +23,7 @@
                 "Data" = [
                     [
                         [
-                            "0.97463185"
+                            "0.9746319"
                         ]
                     ]
                 ]
@@ -54,131 +54,7 @@
                 "Data" = [
                     [
                         [
-                            "0.97463185"
-                        ]
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
-                        [
-                            [
-                                "column0";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        [
-                            "0.97463185"
-                        ]
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
-                        [
-                            [
-                                "column0";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        [
-                            "0.97463185"
-                        ]
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
-                        [
-                            [
-                                "column0";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        [
-                            "0.97463185"
-                        ]
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
-                        [
-                            [
-                                "column0";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        [
-                            "0.99999994"
+                            "1"
                         ]
                     ]
                 ]

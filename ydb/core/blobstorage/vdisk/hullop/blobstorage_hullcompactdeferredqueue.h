@@ -34,11 +34,13 @@ namespace NKikimr {
         bool Started = false;
         TRopeArena& Arena;
         const TBlobStorageGroupType GType;
+        const bool AddHeader;
 
     public:
-        TDeferredItemQueueBase(TRopeArena& arena, TBlobStorageGroupType gtype)
+        TDeferredItemQueueBase(TRopeArena& arena, TBlobStorageGroupType gtype, bool addHeader)
             : Arena(arena)
             , GType(gtype)
+            , AddHeader(addHeader)
         {}
 
         template<typename... TArgs>
@@ -91,7 +93,8 @@ namespace NKikimr {
             Y_ABORT_UNLESS(item.Merger.GetDiskBlob().GetParts() == item.PartsToStore);
 
             // get newly generated blob raw content and put it into writer queue
-            static_cast<TDerived&>(*this).ProcessItemImpl(item.PreallocatedLocation, item.Merger.CreateDiskBlob(Arena));
+            static_cast<TDerived&>(*this).ProcessItemImpl(item.PreallocatedLocation, item.Merger.CreateDiskBlob(Arena,
+                AddHeader));
         }
     };
 

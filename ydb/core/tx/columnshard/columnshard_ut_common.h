@@ -246,7 +246,7 @@ struct TTestSchema {
                 continue;
             }
             if (NOlap::NStatistics::NMax::TOperator::IsAvailableType(columns[i].GetType())) {
-                *schema->AddStatistics() = NOlap::NStatistics::TOperatorContainer(std::make_shared<NOlap::NStatistics::NMax::TOperator>(i + 1)).SerializeToProto();
+                *schema->AddStatistics() = NOlap::NStatistics::TOperatorContainer("MAX::" + columns[i].GetName(), std::make_shared<NOlap::NStatistics::NMax::TOperator>(i + 1)).SerializeToProto();
             }
         }
 

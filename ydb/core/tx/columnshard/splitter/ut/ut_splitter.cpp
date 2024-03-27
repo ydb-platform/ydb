@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
                         AFL_VERIFY(c->GetEntityId());
                         auto& v = entityChunks[c->GetEntityId()];
                         if (v.size()) {
-                            AFL_VERIFY(v.back()->GetChunkIdx() + 1 == c->GetChunkIdx());
+                            AFL_VERIFY(v.back()->GetChunkIdxVerified() + 1 == c->GetChunkIdxVerified());
                         }
                         entityChunks[c->GetEntityId()].emplace_back(c);
                     }

@@ -1,6 +1,6 @@
 SUBSCRIBER(g:util-subscribers)
 
-Y_BENCHMARK()
+G_BENCHMARK()
 
 PEERDIR(
     util/draft

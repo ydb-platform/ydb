@@ -216,7 +216,9 @@ private:
         RegisterSystemView<Schema::QueryMetrics>(QueryMetricsName);
 
         RegisterOlapStoreSystemView<Schema::PrimaryIndexStats>(StorePrimaryIndexStatsName);
+        RegisterOlapStoreSystemView<Schema::PrimaryIndexPortionStats>(StorePrimaryIndexPortionStatsName);
         RegisterColumnTableSystemView<Schema::PrimaryIndexStats>(TablePrimaryIndexStatsName);
+        RegisterColumnTableSystemView<Schema::PrimaryIndexPortionStats>(TablePrimaryIndexPortionStatsName);
 
         RegisterSystemView<Schema::TopPartitions>(TopPartitions1MinuteName);
         RegisterSystemView<Schema::TopPartitions>(TopPartitions1HourName);

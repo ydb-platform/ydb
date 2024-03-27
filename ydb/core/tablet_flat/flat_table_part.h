@@ -65,11 +65,23 @@ namespace NTable {
             }
 
             const TBtreeIndexMeta& GetBTree(TGroupId groupId) const noexcept {
-                return groupId.IsHistoric() ? BTreeHistoric[groupId.Index] : BTreeGroups[groupId.Index];
+                if (groupId.IsHistoric()) {
+                    Y_ABORT_UNLESS(groupId.Index < BTreeHistoric.size());
+                    return BTreeHistoric[groupId.Index];
+                } else {
+                    Y_ABORT_UNLESS(groupId.Index < BTreeGroups.size());
+                    return BTreeGroups[groupId.Index];
+                }
             }
 
             TPageId GetFlat(TGroupId groupId) const noexcept {
-                return groupId.IsHistoric() ? FlatHistoric[groupId.Index] : FlatGroups[groupId.Index];
+                if (groupId.IsHistoric()) {
+                    Y_ABORT_UNLESS(groupId.Index < FlatHistoric.size());
+                    return FlatHistoric[groupId.Index];
+                } else {
+                    Y_ABORT_UNLESS(groupId.Index < FlatGroups.size());
+                    return FlatGroups[groupId.Index];
+                }
             }
         };
 

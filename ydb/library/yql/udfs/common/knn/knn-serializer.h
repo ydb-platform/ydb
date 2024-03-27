@@ -4,13 +4,14 @@
 
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 
+#include <util/generic/array_ref.h>
 #include <util/generic/buffer.h>
 #include <util/stream/format.h>
 
 using namespace NYql;
 using namespace NYql::NUdf;
 
-enum EFormat : ui8 {
+enum EFormat : ui32 {
     FloatVector = 1
 };
 
@@ -20,12 +21,12 @@ public:
     static TUnboxedValue Serialize(const IValueBuilder* valueBuilder, const TUnboxedValue x) {
         auto serialize = [&x] (IOutputStream& outStream) {
             const EFormat format = EFormat::FloatVector;
-            outStream.Write(&format, 1);
+            outStream.Write(&format, sizeof(ui32));
             EnumerateVector(x,  [&outStream] (float element) { outStream.Write(&element, sizeof(float)); });
         };
 
         if (x.HasFastListLength()) {
-            auto str = valueBuilder->NewStringNotFilled(sizeof(ui8) + x.GetListLength() * sizeof(float));
+            auto str = valueBuilder->NewStringNotFilled(sizeof(ui32) + x.GetListLength() * sizeof(float));
             auto strRef = str.AsStringRef();
             TMemoryOutput memoryOutput(strRef.Data(), strRef.Size());
 
@@ -41,9 +42,9 @@ public:
     }
 
     static TUnboxedValue Deserialize(const IValueBuilder *valueBuilder, const TStringRef& str) {
-        //skip format byte, it was already read
-        const char* buf = str.Data() + 1;
-        const size_t len = str.Size() - 1;
+        //skip format header, it was already read
+        const char* buf = str.Data() + sizeof(ui32);
+        const size_t len = str.Size() - sizeof(ui32);
 
         if (len % sizeof(float) != 0)    
             return {};
@@ -63,6 +64,19 @@ public:
 
         return res.Release();
     }
+
+    static const TArrayRef<const float> GetArray(const TStringRef& str) {
+        //skip format header, it was already read
+        const char* buf = str.Data() + sizeof(ui32);
+        const size_t len = str.Size() - sizeof(ui32);
+
+        if (len % sizeof(float) != 0)    
+            return {};
+        
+        const ui32 count = len / sizeof(float);
+
+        return MakeArrayRef(reinterpret_cast<const float*>(buf), count);
+    }
 };
 
 
@@ -81,10 +95,23 @@ public:
         if (str.Size() == 0)
             return {};
 
-        ui8 formatByte = str.Data()[0];
-        switch (formatByte) {
+        const ui32* format = reinterpret_cast<const ui32*>(str.Data());
+        switch (*format) {
             case EFormat::FloatVector:
                 return TFloatVectorSerializer::Deserialize(valueBuilder, str);
+            default:
+                return {};
+        }
+    }
+
+    static const TArrayRef<const float> GetArray(const TStringRef& str) {
+        if (str.Size() == 0)
+            return {};
+
+        const ui32* format = reinterpret_cast<const ui32*>(str.Data());
+        switch (*format) {
+            case EFormat::FloatVector:
+                return TFloatVectorSerializer::GetArray(str);
             default:
                 return {};
         }

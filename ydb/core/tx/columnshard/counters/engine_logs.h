@@ -13,12 +13,16 @@ namespace NKikimr::NColumnShard {
 
 class TBaseGranuleDataClassSummary {
 protected:
-    i64 PortionsSize = 0;
+    i64 ColumnPortionsSize = 0;
+    i64 TotalPortionsSize = 0;
     i64 PortionsCount = 0;
     i64 RecordsCount = 0;
 public:
-    i64 GetPortionsSize() const {
-        return PortionsSize;
+    i64 GetColumnPortionsSize() const {
+        return ColumnPortionsSize;
+    }
+    i64 GetTotalPortionsSize() const {
+        return TotalPortionsSize;
     }
     i64 GetRecordsCount() const {
         return RecordsCount;
@@ -28,16 +32,10 @@ public:
     }
 
     TString DebugString() const {
-        return TStringBuilder() << "size:" << PortionsSize << ";count:" << PortionsCount << ";";
+        return TStringBuilder() << "columns_size:" << ColumnPortionsSize << ";total_size:" << TotalPortionsSize << ";count:" << PortionsCount << ";";
     }
 
-    TBaseGranuleDataClassSummary operator+(const TBaseGranuleDataClassSummary& item) const {
-        TBaseGranuleDataClassSummary result;
-        result.PortionsSize = PortionsSize + item.PortionsSize;
-        result.PortionsCount = PortionsCount + item.PortionsCount;
-        result.RecordsCount = RecordsCount + item.RecordsCount;
-        return result;
-    }
+    TBaseGranuleDataClassSummary operator+(const TBaseGranuleDataClassSummary& item) const;
 };
 
 class TDataClassCounters {
@@ -53,7 +51,7 @@ public:
     }
 
     void OnPortionsInfo(const TBaseGranuleDataClassSummary& dataInfo) const {
-        PortionsSize->SetValue(dataInfo.GetPortionsSize());
+        PortionsSize->SetValue(dataInfo.GetTotalPortionsSize());
         PortionsCount->SetValue(dataInfo.GetPortionsCount());
     }
 };
@@ -261,6 +259,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr PortionNoBorderCount;
     NMonitoring::TDynamicCounters::TCounterPtr PortionNoBorderBytes;
 
+    NMonitoring::TDynamicCounters::TCounterPtr GranuleOptimizerLocked;
+
     TAgentGranuleDataCounters GranuleDataAgent;
     std::vector<std::shared_ptr<TIncrementalHistogram>> BlobSizeDistribution;
     std::vector<std::shared_ptr<TIncrementalHistogram>> PortionSizeDistribution;
@@ -357,6 +357,10 @@ public:
     void OnPortionNoBorder(const ui64 size) const {
         PortionNoBorderCount->Add(1);
         PortionNoBorderBytes->Add(size);
+    }
+
+    void OnGranuleOptimizerLocked() const {
+        GranuleOptimizerLocked->Add(1);
     }
 
     TEngineLogsCounters();

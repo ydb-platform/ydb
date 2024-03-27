@@ -852,7 +852,7 @@ void TPartition::CancelAllWritesOnWrite(const TActorContext& ctx, TEvKeyValue::T
     WriteCycleSize = 0;
 }
 
-TPartition::ProcessResult TPartition::ProcessRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& parameters) {
+TPartition::EProcessResult TPartition::ProcessRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& parameters) {
     auto& body = msg.Body;
 
     TMaybe<TPartitionKeyRange> keyRange;
@@ -863,16 +863,16 @@ TPartition::ProcessResult TPartition::ProcessRequest(TRegisterMessageGroupMsg& m
     body.AssignedOffset = parameters.CurOffset;
     parameters.SourceIdBatch.RegisterSourceId(body.SourceId, body.SeqNo, parameters.CurOffset, CurrentTimestamp, std::move(keyRange));
 
-    return ProcessResult::Continue;
+    return EProcessResult::Continue;
 }
 
-TPartition::ProcessResult TPartition::ProcessRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters& parameters) {
+TPartition::EProcessResult TPartition::ProcessRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters& parameters) {
     parameters.SourceIdBatch.DeregisterSourceId(msg.Body.SourceId);
 
-    return ProcessResult::Continue;
+    return EProcessResult::Continue;
 }
 
-TPartition::ProcessResult TPartition::ProcessRequest(TSplitMessageGroupMsg& msg, ProcessParameters& parameters) {
+TPartition::EProcessResult TPartition::ProcessRequest(TSplitMessageGroupMsg& msg, ProcessParameters& parameters) {
     for (auto& body : msg.Deregistrations) {
         parameters.SourceIdBatch.DeregisterSourceId(body.SourceId);
     }
@@ -887,10 +887,10 @@ TPartition::ProcessResult TPartition::ProcessRequest(TSplitMessageGroupMsg& msg,
         parameters.SourceIdBatch.RegisterSourceId(body.SourceId, body.SeqNo, parameters.CurOffset, CurrentTimestamp, std::move(keyRange), true);
     }
 
-    return ProcessResult::Continue;
+    return EProcessResult::Continue;
 }
 
-TPartition::ProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request, const TActorContext& ctx) {
+TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request, const TActorContext& ctx) {
         ui64& curOffset = parameters.CurOffset;
         auto& sourceIdBatch = parameters.SourceIdBatch;
         auto sourceId = sourceIdBatch.GetSource(p.Msg.SourceId);
@@ -934,19 +934,19 @@ TPartition::ProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParame
             }
 
             TString().swap(p.Msg.Data);
-            return ProcessResult::Continue;
+            return EProcessResult::Continue;
         }
 
         if (const auto& hbVersion = p.Msg.HeartbeatVersion) {
             if (!sourceId.SeqNo()) {
                 CancelAllWritesOnWrite(ctx, request, TStringBuilder()
                     << "Cannot apply heartbeat on unknown sourceId: " << EscapeC(p.Msg.SourceId), p, sourceIdBatch);
-                return ProcessResult::Abort;
+                return EProcessResult::Abort;
             }
             if (!sourceId.Explicit()) {
                 CancelAllWritesOnWrite(ctx, request, TStringBuilder()
                     << "Cannot apply heartbeat on implcit sourceId: " << EscapeC(p.Msg.SourceId), p, sourceIdBatch);
-                return ProcessResult::Abort;
+                return EProcessResult::Abort;
             }
 
             LOG_DEBUG_S(
@@ -958,7 +958,7 @@ TPartition::ProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParame
 
             sourceId.Update(THeartbeat{*hbVersion, p.Msg.Data});
 
-            return ProcessResult::Continue;
+            return EProcessResult::Continue;
         }
 
         if (poffset < curOffset) { //too small offset
@@ -966,7 +966,7 @@ TPartition::ProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParame
                                     TStringBuilder() << "write message sourceId: " << EscapeC(p.Msg.SourceId) << " seqNo: " << p.Msg.SeqNo
                                         << " partNo: " << p.Msg.PartNo << " has incorrect offset " << poffset << ", must be at least " << curOffset,
                                         p, sourceIdBatch, NPersQueue::NErrorCode::EErrorCode::WRITE_ERROR_BAD_OFFSET);
-            return ProcessResult::Abort;
+            return EProcessResult::Abort;
         }
 
         Y_ABORT_UNLESS(poffset >= curOffset);
@@ -979,7 +979,7 @@ TPartition::ProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParame
                                             << " partNo: " << p.Msg.PartNo << " has gap inside partitioned message, incorrect offset "
                                             << poffset << ", must be " << curOffset,
                                             p, sourceIdBatch);
-                return ProcessResult::Abort;
+                return EProcessResult::Abort;
             }
             curOffset = poffset;
         }
@@ -1023,7 +1023,7 @@ TPartition::ProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParame
             //this must not be happen - client sends gaps, fail this client till the end
             CancelAllWritesOnWrite(ctx, request, s, p, sourceIdBatch);
             //now no changes will leak
-            return ProcessResult::Abort;
+            return EProcessResult::Abort;
         }
 
         WriteNewSize += p.Msg.SourceId.size() + p.Msg.Data.size();
@@ -1166,7 +1166,7 @@ TPartition::ProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParame
 
         TString().swap(p.Msg.Data);
 
-        return ProcessResult::Continue;
+        return EProcessResult::Continue;
 }
 
 bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx,
@@ -1203,7 +1203,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
         auto pp = Requests.front();
         Requests.pop_front();
 
-        ProcessResult result = ProcessResult::Continue;
+        auto result = EProcessResult::Continue;
         if (pp.IsWrite()) {
             result = ProcessRequest(pp.GetWrite(), parameters, request, ctx);
         } else if (pp.IsRegisterMessageGroup()) {
@@ -1217,13 +1217,13 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
         }
 
         switch (result) {
-            case ProcessResult::Abort:
+            case EProcessResult::Abort:
                 return false;
-            case ProcessResult::Break:
+            case EProcessResult::Break:
                 Requests.push_front(pp);
                 run = false;
                 break;
-            case ProcessResult::Continue:
+            case EProcessResult::Continue:
                 EmplaceResponse(std::move(pp), ctx);
                 break;
         }
@@ -1257,7 +1257,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
 
             WriteInflightSize += heartbeat->Data.size();
             auto result = ProcessRequest(hbMsg, parameters, request, ctx);
-            Y_ABORT_UNLESS(result == ProcessResult::Continue);
+            Y_ABORT_UNLESS(result == EProcessResult::Continue);
 
             LastEmittedHeartbeat = heartbeat->Version;
         }

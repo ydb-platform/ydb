@@ -34,13 +34,12 @@ using TOnResourcesSnapshotCallback = std::function<void(TVector<NKikimrKqp::TKqp
 
 /// resources request
 struct TKqpResourcesRequest {
-    ui32 ExecutionUnits = 0;
     EKqpMemoryPool MemoryPool = EKqpMemoryPool::Unspecified;
     ui64 Memory = 0;
 
     TString ToString() const {
         return TStringBuilder() << "TKqpResourcesRequest{ MemoryPool: " << (ui32) MemoryPool << ", Memory: " << Memory
-           << ", ExecutionUnits: " << ExecutionUnits << " }";
+           << " }";
     }
 };
 
@@ -49,16 +48,14 @@ struct TKqpNotEnoughResources {
     std::bitset<32> State;
 
     bool NotReady() const         { return State.test(0); }
-    bool ExecutionUnits() const   { return State.test(1); }
-    bool QueryMemoryLimit() const { return State.test(2); }
-    bool ScanQueryMemory() const  { return State.test(3); }
-    bool DataQueryMemory() const  { return State.test(4); }
+    bool QueryMemoryLimit() const { return State.test(1); }
+    bool ScanQueryMemory() const  { return State.test(2); }
+    bool DataQueryMemory() const  { return State.test(3); }
 
     void SetNotReady()         { State.set(0); }
-    void SetExecutionUnits()   { State.set(1); }
-    void SetQueryMemoryLimit() { State.set(2); }
-    void SetScanQueryMemory()  { State.set(3); }
-    void SetDataQueryMemory()  { State.set(4); }
+    void SetQueryMemoryLimit() { State.set(1); }
+    void SetScanQueryMemory()  { State.set(2); }
+    void SetDataQueryMemory()  { State.set(3); }
 };
 
 /// local resources snapshot
@@ -74,6 +71,9 @@ public:
 
     virtual bool AllocateResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources,
         TKqpNotEnoughResources* details = nullptr) = 0;
+
+    virtual bool AllocateExecutionUnits(ui32 cnt) = 0;
+    virtual void FreeExecutionUnits(ui32 cnt) = 0;
 
     using TResourcesAllocatedCallback = std::function<void(NActors::TActorSystem* as)>;
     using TNotEnoughtResourcesCallback = std::function<void(NActors::TActorSystem* as, const TString& reason, bool byTimeout)>;

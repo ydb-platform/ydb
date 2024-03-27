@@ -565,7 +565,7 @@ void KqpNode::NotEnoughComputeActors() {
         }
     }
 
-    AssertResourceBrokerSensors(0, 0, 0, 4, 0);
+    AssertResourceBrokerSensors(0, 0, 0, 0, 0);
 
     {
         NKikimr::TActorSystemStub stub;
@@ -598,6 +598,7 @@ void KqpNode::ResourceBrokerNotEnoughResources() {
         UNIT_ASSERT_VALUES_EQUAL(2, record.GetTxId());
         UNIT_ASSERT_VALUES_EQUAL(2, record.GetNotStartedTasks().size());
         for (auto& task : record.GetNotStartedTasks()) {
+            Cerr << TEvStartKqpTasksResponse_ENotStartedTaskReason_Name(task.GetReason()) << Endl;
             UNIT_ASSERT_EQUAL(NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY, task.GetReason());
         }
     }
@@ -667,6 +668,13 @@ void KqpNode::ExecuterLost() {
     for (auto& [taskId, computeActor] : CompFactory->Task2Actor) {
         auto abortEvent = Runtime->GrabEdgeEvent<TEvKqp::TEvAbortExecution>(computeActor.ActorId);
         UNIT_ASSERT_VALUES_EQUAL("executer lost", abortEvent->Get()->Record.GetLegacyMessage());
+    }
+
+    size_t iterations = 30;
+    while (KqpCounters->RmComputeActors->Val() != 0 && iterations > 0) {
+        Sleep(TDuration::MilliSeconds(300));
+        iterations--;
+        Cerr << "waiting compute actors to complete" << Endl;
     }
 
     UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmComputeActors->Val(), 0);

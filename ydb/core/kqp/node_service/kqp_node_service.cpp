@@ -62,6 +62,7 @@ NKqpNode::TState& GetStateBucketByTx(std::shared_ptr<TBucketArray> buckets, ui64
 void FinishKqpTask(ui64 txId, ui64 taskId, bool success, NKqpNode::TState& bucket, std::shared_ptr<NRm::IKqpResourceManager> ResourceManager) {
     auto ctx = bucket.RemoveTask(txId, taskId, success);
     if (ctx) {
+        ResourceManager->FreeExecutionUnits(1);
         if (ctx->ComputeActorsNumber == 0) {
             ResourceManager->FreeResources(txId);
         } else {
@@ -310,6 +311,16 @@ private:
             memoryPool = NRm::EKqpMemoryPool::Unspecified;
         }
 
+        size_t executionUnits = msg.GetTasks().size();
+        if (!ResourceManager()->AllocateExecutionUnits(executionUnits)) {
+            Counters->RmNotEnoughComputeActors->Inc();
+            TStringBuilder error;
+            error << "TxId: " << txId << ", NodeId: " << SelfId().NodeId() << ", not enough compute actors, requested " << msg.GetTasks().size();
+            LOG_N(error);
+            ReplyError(txId, request.Executer, msg, NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_EXECUTION_UNITS, error);
+            return;
+        }
+
         ui32 requestChannels = 0;
         for (auto& dqTask : *msg.MutableTasks()) {
             auto estimation = EstimateTaskResources(dqTask, Config, msg.GetTasks().size());
@@ -348,7 +359,6 @@ private:
         allocatedTasks.reserve(msg.GetTasks().size());
         for (auto& task : request.InFlyTasks) {
             NRm::TKqpResourcesRequest resourcesRequest;
-            resourcesRequest.ExecutionUnits = 1;
             resourcesRequest.MemoryPool = memoryPool;
 
             // !!!!!!!!!!!!!!!!!!!!!
@@ -359,14 +369,6 @@ private:
             if (!ResourceManager()->AllocateResources(txId, task.first, resourcesRequest, &resourcesResponse)) {
                 NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason failReason = NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR;
                 TStringBuilder error;
-
-                if (resourcesResponse.ExecutionUnits()) {
-                    error << "TxId: " << txId << ", NodeId: " << SelfId().NodeId() << ", not enough compute actors, requested " << msg.GetTasks().size();
-                    LOG_N(error);
-
-                    failReason = NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_EXECUTION_UNITS;
-                }
-
                 if (resourcesResponse.ScanQueryMemory()) {
                     error << "TxId: " << txId << ", NodeId: " << SelfId().NodeId() << ", not enough memory, requested " << task.second.Memory;
                     LOG_N(error);
@@ -384,6 +386,8 @@ private:
                 for (ui64 taskId : allocatedTasks) {
                     ResourceManager()->FreeResources(txId, taskId);
                 }
+
+                ResourceManager()->FreeExecutionUnits(executionUnits);
 
                 ReplyError(txId, request.Executer, msg, failReason, error);
                 return;
@@ -550,6 +554,7 @@ private:
             ResourceManager()->FreeResources(txId);
 
             for (const auto& tasksRequest: tasksToAbort) {
+                ResourceManager()->FreeExecutionUnits(tasksRequest.InFlyTasks.size());
                 for (const auto& [taskId, task] : tasksRequest.InFlyTasks) {
                     auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::UNSPECIFIED,
                         reason);

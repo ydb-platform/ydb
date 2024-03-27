@@ -188,6 +188,7 @@ void TNodeBroker::ClearState()
     Hosts.clear();
 
     RecomputeFreeIds();
+    RecomputeSlotIndexesPools();
 }
 
 void TNodeBroker::AddNode(const TNodeInfo &info)
@@ -245,7 +246,10 @@ void TNodeBroker::RecomputeFreeIds()
     for (auto &pr : BannedIds) {
         FreeIds.Reset(pr.first, pr.second + 1);
     }
+}
 
+void TNodeBroker::RecomputeSlotIndexesPools()
+{
     for (auto &[_, slotIndexesPool] : SlotIndexesPools) {
         slotIndexesPool.ReleaseAll();
     }

@@ -214,6 +214,7 @@ private:
     void ExtendLease(TNodeInfo &node);
     void FixNodeId(TNodeInfo &node);
     void RecomputeFreeIds();
+    void RecomputeSlotIndexesPools();
     bool IsBannedId(ui32 id) const;
 
     void AddDelayedListNodesRequest(ui64 epoch,

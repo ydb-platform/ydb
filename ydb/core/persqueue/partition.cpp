@@ -86,7 +86,7 @@ TTransaction& TPartition::GetCurrentTransaction()
 }
 
 template <class T>
-void TPartition::EnsureWhatUserActionAndTransactionEventsFrontIs() const
+void TPartition::EnsureUserActionAndTransactionEventsFrontIs() const
 {
     Y_ABORT_UNLESS(!UserActionAndTransactionEvents.empty());
     auto* ptr = get_if<T>(&UserActionAndTransactionEvents.front());
@@ -1532,7 +1532,7 @@ void TPartition::AddUserAct(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo> act)
 
 void TPartition::RemoveImmediateTx()
 {
-    EnsureWhatUserActionAndTransactionEventsFrontIs<TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>>();
+    EnsureUserActionAndTransactionEventsFrontIs<TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>>();
 
     UserActionAndTransactionEvents.pop_front();
     --ImmediateTxCount;
@@ -1627,7 +1627,7 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
 
 void TPartition::RemoveDistrTx()
 {
-    EnsureWhatUserActionAndTransactionEventsFrontIs<TTransaction>();
+    EnsureUserActionAndTransactionEventsFrontIs<TTransaction>();
 
     UserActionAndTransactionEvents.pop_front();
     PendingPartitionConfig = nullptr;

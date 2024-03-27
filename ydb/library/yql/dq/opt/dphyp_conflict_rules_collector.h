@@ -1,8 +1,10 @@
+#pragma once
+
 #include <ydb/library/yql/core/cbo/cbo_optimizer_new.h> 
 
 #include "dphyp_join_tree_node.h"
 
-namespace NYql::NDq {
+namespace NYql::NDq::NDphyp {
 
 template <typename TNodeSet>
 bool AreOverlaps(const TNodeSet& lhs, const TNodeSet& rhs) {
@@ -13,6 +15,8 @@ template <typename TNodeSet>
 bool IsSubset(const TNodeSet& lhs, const TNodeSet& rhs) {
     return (lhs & rhs) == lhs;
 }
+
+bool OperatorIsCommut(EJoinKind);
 
 bool OperatorsAreAssoc(EJoinKind, EJoinKind);
 

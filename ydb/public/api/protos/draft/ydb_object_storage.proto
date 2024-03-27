@@ -22,8 +22,8 @@ message ListingRequest {
     bytes continuation_token = 5;
     TypedValue start_after_key_suffix = 6; // A tuple representing key columns that succeed path column
     int32 max_keys = 7;
-    ListingFilter filter = 8;
-    repeated string columns_to_return = 9;
+    repeated string columns_to_return = 8;
+    ListingFilter filter = 9;
 }
 
 message ListingResponse {

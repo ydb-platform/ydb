@@ -827,10 +827,10 @@ message TEvObjectStorageListingRequest {
     repeated uint32 ColumnsToReturn = 6;
     optional uint32 MaxKeys = 7;
 
-    optional TObjectStorageListingFilter Filter = 8;
+    optional string LastCommonPrefix = 8;
+    optional string LastPath = 9;
 
-    optional string LastCommonPrefix = 9;
-    optional string LastPath = 10;
+    optional TObjectStorageListingFilter Filter = 10;
 }
 
 message TEvObjectStorageListingResponse {

@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
     TString DoS3Listing(ui16 grpcPort, ui64 bucket, const TString& pathPrefix, const TString& pathDelimiter, const TString& startAfter,
                     TString continuationToken,
                     const TVector<TString>& columnsToReturn, ui32 maxKeys,
-                    TVector<TString>& commonPrefixes, TVector<TString>& contents, bool filter = false;)
+                    TVector<TString>& commonPrefixes, TVector<TString>& contents, bool filter = false)
     {
         std::shared_ptr<grpc::Channel> channel;
         TStringBuilder endpoint;
@@ -922,7 +922,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
 
         TVector<TString> folders;
         TVector<TString> files;
-        DoS3Listing(GRPC_PORT, 100, "/Photos/", "/", nullptr, nullptr, {}, 1000, folders, files);
+        DoS3Listing(GRPC_PORT, 100, "/Photos/", "/", nullptr, nullptr, {}, 1000, folders, files, true);
 
         TVector<TString> expectedFolders = {"/Photos/games/", "/Photos/inner/", "/Photos/test/", "/Photos/test3/", "/Photos/test5/", "/Photos/test6/"};
         TVector<TString> expectedFiles = {"/Photos/a.jpg", "/Photos/c.jpg"};

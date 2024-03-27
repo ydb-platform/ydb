@@ -1,14 +1,16 @@
 #pragma once
 
+#include <ydb/public/sdk/cpp/client/ydb_topic/codecs/codecs.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/counters.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/executor.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/retry_policy.h>
+
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/codecs/codecs.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
 
-#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/logger/log.h>
-#include <library/cpp/retry/retry_policy.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
@@ -34,14 +36,6 @@ namespace NYdb {
 }
 
 namespace NYdb::NTopic {
-
-enum class ECodec : ui32 {
-    RAW = 1,
-    GZIP = 2,
-    LZOP = 3,
-    ZSTD = 4,
-    CUSTOM = 10000,
-};
 
 enum class EMeteringMode : ui32 {
     Unspecified = 0,
@@ -684,71 +678,6 @@ protected:
     }
 };
 
-struct TWriterCounters : public TThrRefBase {
-    using TSelf = TWriterCounters;
-    using TPtr = TIntrusivePtr<TSelf>;
-
-    explicit TWriterCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
-
-    ::NMonitoring::TDynamicCounters::TCounterPtr Errors;
-    ::NMonitoring::TDynamicCounters::TCounterPtr CurrentSessionLifetimeMs;
-
-    ::NMonitoring::TDynamicCounters::TCounterPtr BytesWritten;
-    ::NMonitoring::TDynamicCounters::TCounterPtr MessagesWritten;
-    ::NMonitoring::TDynamicCounters::TCounterPtr BytesWrittenCompressed;
-
-    ::NMonitoring::TDynamicCounters::TCounterPtr BytesInflightUncompressed;
-    ::NMonitoring::TDynamicCounters::TCounterPtr BytesInflightCompressed;
-    ::NMonitoring::TDynamicCounters::TCounterPtr BytesInflightTotal;
-    ::NMonitoring::TDynamicCounters::TCounterPtr MessagesInflight;
-
-    //! Histograms reporting % usage of memory limit in time.
-    //! Provides a histogram looking like: 10% : 100ms, 20%: 300ms, ... 50%: 200ms, ... 100%: 50ms
-    //! Which means that < 10% memory usage was observed for 100ms during the period and 50% usage was observed for 200ms
-    //! Used to monitor if the writer successfully deals with data flow provided. Larger values in higher buckets
-    //! mean that writer is close to overflow (or being overflown) for major periods of time
-    //! 3 histograms stand for:
-    //! Total memory usage:
-    ::NMonitoring::THistogramPtr TotalBytesInflightUsageByTime;
-    //! Memory usage by messages waiting for comression:
-    ::NMonitoring::THistogramPtr UncompressedBytesInflightUsageByTime;
-    //! Memory usage by compressed messages pending for write:
-    ::NMonitoring::THistogramPtr CompressedBytesInflightUsageByTime;
-};
-
-struct TReaderCounters: public TThrRefBase {
-    using TSelf = TReaderCounters;
-    using TPtr = TIntrusivePtr<TSelf>;
-
-    TReaderCounters() = default;
-    explicit TReaderCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
-
-    ::NMonitoring::TDynamicCounters::TCounterPtr Errors;
-    ::NMonitoring::TDynamicCounters::TCounterPtr CurrentSessionLifetimeMs;
-
-    ::NMonitoring::TDynamicCounters::TCounterPtr BytesRead;
-    ::NMonitoring::TDynamicCounters::TCounterPtr MessagesRead;
-    ::NMonitoring::TDynamicCounters::TCounterPtr BytesReadCompressed;
-
-    ::NMonitoring::TDynamicCounters::TCounterPtr BytesInflightUncompressed;
-    ::NMonitoring::TDynamicCounters::TCounterPtr BytesInflightCompressed;
-    ::NMonitoring::TDynamicCounters::TCounterPtr BytesInflightTotal;
-    ::NMonitoring::TDynamicCounters::TCounterPtr MessagesInflight;
-
-    //! Histograms reporting % usage of memory limit in time.
-    //! Provides a histogram looking like: 10% : 100ms, 20%: 300ms, ... 50%: 200ms, ... 100%: 50ms
-    //! Which means < 10% memory usage was observed for 100ms during the period and 50% usage was observed for 200ms.
-    //! Used to monitor if the read session successfully deals with data flow provided. Larger values in higher buckets
-    //! mean that read session is close to overflow (or being overflown) for major periods of time.
-    //!
-    //! Total memory usage.
-    ::NMonitoring::THistogramPtr TotalBytesInflightUsageByTime;
-    //! Memory usage by messages waiting that are ready to be received by user.
-    ::NMonitoring::THistogramPtr UncompressedBytesInflightUsageByTime;
-    //! Memory usage by compressed messages pending for decompression.
-    ::NMonitoring::THistogramPtr CompressedBytesInflightUsageByTime;
-};
-
 //! Partition session.
 struct TPartitionSession: public TThrRefBase, public TPrintable<TPartitionSession> {
     using TPtr = TIntrusivePtr<TPartitionSession>;
@@ -1147,74 +1076,6 @@ void TPrintable<TSessionClosedEvent>::DebugString(TStringBuilder& ret, bool prin
 
 TString DebugString(const TReadSessionEvent::TEvent& event);
 
-//! Retry policy.
-//! Calculates delay before next retry.
-//! Has several default implementations:
-//! - exponential backoff policy;
-//! - retries with fixed interval;
-//! - no retries.
-
-struct IRetryPolicy: ::IRetryPolicy<EStatus> {
-    //!
-    //! Default implementations.
-    //!
-
-    static TPtr GetDefaultPolicy(); // Exponential backoff with infinite retry attempts.
-    static TPtr GetNoRetryPolicy(); // Denies all kind of retries.
-
-    //! Randomized exponential backoff policy.
-    static TPtr GetExponentialBackoffPolicy(
-        TDuration minDelay = TDuration::MilliSeconds(10),
-        // Delay for statuses that require waiting before retry (such as OVERLOADED).
-        TDuration minLongRetryDelay = TDuration::MilliSeconds(200), TDuration maxDelay = TDuration::Seconds(30),
-        size_t maxRetries = std::numeric_limits<size_t>::max(), TDuration maxTime = TDuration::Max(),
-        double scaleFactor = 2.0, std::function<ERetryErrorClass(EStatus)> customRetryClassFunction = {});
-
-    //! Randomized fixed interval policy.
-    static TPtr GetFixedIntervalPolicy(TDuration delay = TDuration::MilliSeconds(100),
-                                       // Delay for statuses that require waiting before retry (such as OVERLOADED).
-                                       TDuration longRetryDelay = TDuration::MilliSeconds(300),
-                                       size_t maxRetries = std::numeric_limits<size_t>::max(),
-                                       TDuration maxTime = TDuration::Max(),
-                                       std::function<ERetryErrorClass(EStatus)> customRetryClassFunction = {});
-};
-
-class IExecutor: public TThrRefBase {
-public:
-    using TPtr = TIntrusivePtr<IExecutor>;
-    using TFunction = std::function<void()>;
-
-    // Is executor asynchronous.
-    virtual bool IsAsync() const = 0;
-
-    // Post function to execute.
-    virtual void Post(TFunction&& f) = 0;
-
-    // Start method.
-    // This method is idempotent.
-    // It can be called many times. Only the first one has effect.
-    void Start() {
-        with_lock(StartLock) {
-            if (!Started) {
-                DoStart();
-                Started = true;
-            }
-        }
-    }
-
-private:
-    virtual void DoStart() = 0;
-
-private:
-    bool Started = false;
-    TAdaptiveLock StartLock;
-};
-IExecutor::TPtr CreateThreadPoolExecutorAdapter(
-    std::shared_ptr<IThreadPool> threadPool); // Thread pool is expected to have been started.
-IExecutor::TPtr CreateThreadPoolExecutor(size_t threads);
-
-IExecutor::TPtr CreateSyncExecutor();
-
 //! Events for write session.
 struct TWriteSessionEvent {
 
@@ -1602,7 +1463,7 @@ public:
     }
 
     //! Message body.
-    const TStringBuf Data;
+    TStringBuf Data;
 
     //! Codec and original size for compressed message.
     //! Do not specify or change these options directly, use CompressedMessage()
@@ -1814,4 +1675,4 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
-} // namespace NYdb::NTopic
+}  // namespace NYdb::NTopic

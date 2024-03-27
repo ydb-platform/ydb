@@ -1240,7 +1240,7 @@ ECleanupStatus TPipeline::CleanupOutdated(NIceDb::TNiceDb& db, const TActorConte
 {
     const ui32 OUTDATED_BATCH_SIZE = 100;
     TVector<ui64> outdatedTxs;
-    auto status = Self->TransQueue.CleanupOutdated(db, outdatedStep, OUTDATED_BATCH_SIZE, outdatedTxs, replies);
+    auto status = Self->TransQueue.CleanupOutdated(db, outdatedStep, OUTDATED_BATCH_SIZE, outdatedTxs);
     switch (status) {
         case ECleanupStatus::None:
         case ECleanupStatus::Restart:
@@ -1256,8 +1256,10 @@ ECleanupStatus TPipeline::CleanupOutdated(NIceDb::TNiceDb& db, const TActorConte
     for (ui64 txId : outdatedTxs) {
         auto op = Self->TransQueue.FindTxInFly(txId);
         if (op && !op->IsExecutionPlanFinished()) {
+            op->OnCleanup(*Self, replies);
             GetExecutionUnit(op->GetCurrentUnit()).RemoveOperation(op);
         }
+        Self->TransQueue.RemoveTxInFly(txId, &replies);
 
         ForgetTx(txId);
         LOG_INFO(ctx, NKikimrServices::TX_DATASHARD,
@@ -1273,12 +1275,14 @@ ECleanupStatus TPipeline::CleanupOutdated(NIceDb::TNiceDb& db, const TActorConte
 bool TPipeline::CleanupVolatile(ui64 txId, const TActorContext& ctx,
         std::vector<std::unique_ptr<IEventHandle>>& replies)
 {
-    if (Self->TransQueue.CleanupVolatile(txId, replies)) {
+    if (Self->TransQueue.CleanupVolatile(txId)) {
         auto op = Self->TransQueue.FindTxInFly(txId);
         if (op && !op->IsExecutionPlanFinished()) {
+            op->OnCleanup(*Self, replies);
             GetExecutionUnit(op->GetCurrentUnit()).RemoveOperation(op);
         }
-        
+        Self->TransQueue.RemoveTxInFly(txId, &replies);
+
         ForgetTx(txId);
 
         Self->CheckDelayedProposeQueue(ctx);
@@ -1296,6 +1300,25 @@ bool TPipeline::CleanupVolatile(ui64 txId, const TActorContext& ctx,
     }
 
     return false;
+}
+
+size_t TPipeline::CleanupWaitingVolatile(const TActorContext& ctx, std::vector<std::unique_ptr<IEventHandle>>& replies)
+{
+    std::vector<ui64> cleanupTxs;
+    for (const auto& pr : Self->TransQueue.GetTxsInFly()) {
+        if (pr.second->HasVolatilePrepareFlag() && !pr.second->GetStep()) {
+            cleanupTxs.push_back(pr.first);
+        }
+    }
+
+    size_t cleaned = 0;
+    for (ui64 txId : cleanupTxs) {
+        if (CleanupVolatile(txId, ctx, replies)) {
+            ++cleaned;
+        }
+    }
+
+    return cleaned;
 }
 
 ui64 TPipeline::PlannedTxInFly() const

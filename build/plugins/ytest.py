@@ -43,10 +43,18 @@ def ontest_data(unit, *args):
     ymake.report_configure_error("TEST_DATA is removed in favour of DATA")
 
 
-def prepare_recipes(data):
+def format_recipes(data: str | None) -> str:
+    if not data:
+        return ""
+
     data = data.replace('"USE_RECIPE_DELIM"', "\n")
     data = data.replace("$TEST_RECIPES_VALUE", "")
-    return base64.b64encode(six.ensure_binary(data or ""))
+    return data
+
+
+def prepare_recipes(data: str | None) -> str:
+    formatted = format_recipes(data)
+    return base64.b64encode(six.ensure_binary(formatted))
 
 
 def prepare_env(data):

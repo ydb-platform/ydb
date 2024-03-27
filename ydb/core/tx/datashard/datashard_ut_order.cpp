@@ -2135,7 +2135,10 @@ Y_UNIT_TEST(TestPlannedTimeoutSplit) {
     // Wait for query to return an error
     {
         auto response = AwaitResponse(runtime, fWrite1);
-        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::UNAVAILABLE);
+        UNIT_ASSERT_C(
+            response.operation().status() == Ydb::StatusIds::ABORTED ||
+            response.operation().status() == Ydb::StatusIds::UNAVAILABLE,
+            "Status: " << response.operation().status());
     }
 }
 
@@ -2273,6 +2276,7 @@ Y_UNIT_TEST(TestPlannedHalfOverloadedSplit) {
     {
         auto response = AwaitResponse(runtime, fWrite1);
         UNIT_ASSERT_C(
+            response.operation().status() == Ydb::StatusIds::ABORTED ||
             response.operation().status() == Ydb::StatusIds::OVERLOADED ||
             response.operation().status() == Ydb::StatusIds::UNAVAILABLE,
             "Status: " << response.operation().status());

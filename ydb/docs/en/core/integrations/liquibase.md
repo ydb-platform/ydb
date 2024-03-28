@@ -118,7 +118,9 @@ There are two ways:
   curl -L -o liquibase-ydb-dialect.jar https://repo1.maven.org/maven2/tech/ydb/dialects/liquibase-ydb-dialect/1.0.0/liquibase-ydb-dialect-1.0.0.jar
   ```
   
-  For a more detailed description, see the [Manual library management](https://docs.liquibase.com/start/install/home.html ). Now the liquibase utility can be used in standard ways.
+  For a more detailed description, see the [Manual library management](https://docs.liquibase.com/start/install/home.html ). 
+ 
+  Now the liquibase utility can be used in standard ways.
 
 {% endlist %}
 

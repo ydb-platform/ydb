@@ -118,7 +118,9 @@ Changeset `createTable` отвечает за создание таблицы. �
   curl -L -o liquibase-ydb-dialect.jar https://repo1.maven.org/maven2/tech/ydb/dialects/liquibase-ydb-dialect/1.0.0/liquibase-ydb-dialect-1.0.0.jar
   ```
 
-  Более подробное описание в разделе [Manual library management](https://docs.liquibase.com/start/install/home.html). Теперь liquibase утилитой можно пользоваться стандартными способами.
+  Более подробное описание в разделе [Manual library management](https://docs.liquibase.com/start/install/home.html). 
+  
+  Теперь liquibase утилитой можно пользоваться стандартными способами.
 
 {% endlist %}
 

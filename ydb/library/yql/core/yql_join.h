@@ -110,6 +110,9 @@ bool AreSameJoinKeys(const TExprNode& joins, const TStringBuf& table1, const TSt
 // returns (is required side + allow skip nulls);
 std::pair<bool, bool> IsRequiredSide(const TExprNode::TPtr& joinTree, const TJoinLabels& labels, ui32 inputIndex);
 
+//returns left join from join tree
+TExprNode::TPtr IsRightSideForLeftJoin(const TExprNode::TPtr& joinTree, const TJoinLabels& labels, ui32 inputIndex);
+
 TMaybe<bool> IsFilteredSide(const TExprNode::TPtr& joinTree, const TJoinLabels& labels, ui32 inputIndex);
 
 void AppendEquiJoinRenameMap(TPositionHandle pos, const TMap<TStringBuf, TVector<TStringBuf>>& newRenameMap,

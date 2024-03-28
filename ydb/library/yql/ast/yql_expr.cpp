@@ -2753,6 +2753,7 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, u
     TConvertToAstSettings settings;
     settings.AnnotationFlags = annotationFlags;
     settings.RefAtoms = refAtoms;
+    settings.AllowFreeArgs = true;
     return ConvertToAst(root, exprContext, settings);
 }
 

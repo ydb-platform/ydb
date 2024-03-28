@@ -674,6 +674,13 @@ namespace {
                 }
 
                 Types.PullUpFlatMapOverJoin = (name == "PullUpFlatMapOverJoin");
+            } else if (name == "DisableRightSidePushdownForLeftJoin" || name == "RightSidePushdownForLeftJoin") {
+                if (args.size() != 0) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                    return false;
+                }
+
+                Types.RightSidePushdownForLeftJoin = (name == "RightSidePushdownForLeftJoin");
             }
             else if (name == "SQL") {
                 if (args.size() > 1) {

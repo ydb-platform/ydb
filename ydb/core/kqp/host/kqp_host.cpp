@@ -1774,6 +1774,8 @@ private:
                 || settingName == "Warning"
                 || settingName == "UseBlocks"
                 || settingName == "BlockEngine"
+                || settingName == "RightSidePushdownForLeftJoin"
+                || settingName == "DisableRightSidePushdownForLeftJoin"
                 ;
         };
         auto configProvider = CreateConfigProvider(*TypesCtx, gatewaysConfig, {}, allowSettings);

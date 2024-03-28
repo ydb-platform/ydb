@@ -252,7 +252,7 @@ struct TAstParseResult {
     TAstNode* Root = nullptr;
     TIssues Issues;
     TMaybe<THashMap<TString, Ydb::TypedValue>> PgAutoParamValues = Nothing();
-    ESyntaxType ActualSyntaxType = ESyntaxType::YQLv0;
+    ESyntaxType ActualSyntaxType = ESyntaxType::YQLv1;
 
     inline bool IsOk() const {
         return !!Root;

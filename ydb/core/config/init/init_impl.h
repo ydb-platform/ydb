@@ -13,6 +13,8 @@
 #include <ydb/core/protos/alloc.pb.h>
 #include <ydb/core/protos/resource_broker.pb.h>
 #include <ydb/core/protos/http_config.pb.h>
+#include <ydb/core/protos/local.pb.h>
+#include <ydb/core/protos/tablet.pb.h>
 #include <ydb/core/protos/tenant_pool.pb.h>
 #include <ydb/core/protos/compile_service_config.pb.h>
 #include <ydb/core/protos/cms.pb.h>
@@ -44,11 +46,16 @@ extern TAutoPtr<NKikimrConfig::TActorSystemConfig> DummyActorSystemConfig();
 extern TAutoPtr<NKikimrConfig::TAllocatorConfig> DummyAllocatorConfig();
 
 using namespace NYdb::NConsoleClient;
+using namespace NKikimrTabletBase;
 
 namespace NKikimr::NConfig {
 
 constexpr TStringBuf NODE_KIND_YDB = "ydb";
 constexpr TStringBuf NODE_KIND_YQ = "yq";
+
+constexpr TStringBuf WORKLOAD_HYBRID = "hybrid";
+constexpr TStringBuf WORKLOAD_ANALYTICAL = "analytical";
+constexpr TStringBuf WORKLOAD_OPERATIONAL = "operational";
 
 constexpr static ui32 DefaultLogLevel = NActors::NLog::PRI_WARN; // log settings
 constexpr static ui32 DefaultLogSamplingLevel = NActors::NLog::PRI_DEBUG; // log settings
@@ -323,6 +330,7 @@ struct TCommonAppOptions {
     bool SysLogEnabled = false;
     bool TcpEnabled = false;
     bool SuppressVersionCheck = false;
+    TString Workload = TString(WORKLOAD_HYBRID); 
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {
         opts.AddLongOption("cluster-name", "which cluster this node belongs to")
@@ -413,6 +421,10 @@ struct TCommonAppOptions {
 
         opts.AddLongOption("tiny-mode", "Start in a tiny mode")
             .NoArgument().SetFlag(&TinyMode);
+
+        opts.AddLongOption("workload", Sprintf("Workload to be served by this node, allowed values are {'%s', '%s', '%s'}",
+                           WORKLOAD_HYBRID.data(), WORKLOAD_ANALYTICAL.data(), WORKLOAD_OPERATIONAL.data()))
+            .RequiredArgument("NAME").StoreResult(&Workload);
     }
 
     void ApplyFields(NKikimrConfig::TAppConfig& appConfig, IEnv& env, IConfigUpdateTracer& ConfigUpdateTracer) const {
@@ -625,6 +637,64 @@ struct TCommonAppOptions {
                 ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::FederatedQueryConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
             }
         }
+
+        if (TenantName) {
+            if (Workload == WORKLOAD_OPERATIONAL) {
+                ApplyDisableColumnShards(appConfig, ConfigUpdateTracer);
+            } else if (Workload == WORKLOAD_ANALYTICAL) {
+                ApplyEnableOnlyColumnShards(appConfig, ConfigUpdateTracer);
+            } else if (Workload == WORKLOAD_HYBRID) {
+                // default
+            } else {
+                ythrow yexception() << "wrong '--workload' value '" << Workload
+                                    << "', allowed values are {'"
+                                    << WORKLOAD_HYBRID << "', '"
+                                    << WORKLOAD_ANALYTICAL << "', '"
+                                    << WORKLOAD_OPERATIONAL << "'}";
+            }
+        }
+    }
+
+    void ApplyDisableColumnShards(NKikimrConfig::TAppConfig& appConfig, IConfigUpdateTracer& configUpdateTracer) const {
+        std::unordered_map<TTabletTypes::EType, NKikimrLocal::TTabletAvailability> tabletAvailabilities;
+        for (const auto& availability : appConfig.GetDynamicNodeConfig().GetTabletAvailability()) {
+            tabletAvailabilities.emplace(availability.GetType(), availability);
+        }
+
+        tabletAvailabilities[TTabletTypes::ColumnShard].SetType(TTabletTypes::ColumnShard);
+        tabletAvailabilities[TTabletTypes::ColumnShard].SetMaxCount(0);
+
+        appConfig.MutableDynamicNodeConfig()->MutableTabletAvailability()->Clear();
+        for (const auto& [_, tabletAvailability] : tabletAvailabilities) {
+            appConfig.MutableDynamicNodeConfig()->MutableTabletAvailability()->Add()->CopyFrom(tabletAvailability);
+        }
+
+        configUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::DynamicNodeConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+    }
+
+    void ApplyEnableOnlyColumnShards(NKikimrConfig::TAppConfig& appConfig, IConfigUpdateTracer& configUpdateTracer) const {
+        std::unordered_map<TTabletTypes::EType, NKikimrLocal::TTabletAvailability> tabletAvailabilities;
+        for (const auto& availability : appConfig.GetDynamicNodeConfig().GetTabletAvailability()) {
+            tabletAvailabilities.emplace(availability.GetType(), availability);
+        }
+
+        for (int i = TTabletTypes::EType_MIN; i < TTabletTypes::EType_MAX; ++i) {
+            TTabletTypes::EType type = static_cast<TTabletTypes::EType>(i);
+            tabletAvailabilities[type].SetType(type);
+            if (type == TTabletTypes::ColumnShard) {
+                tabletAvailabilities[type].ClearMaxCount(); // default is big enough
+                tabletAvailabilities[type].SetPriority(std::numeric_limits<i32>::max());
+            } else {
+                tabletAvailabilities[type].SetMaxCount(0);
+            }
+        }
+
+        appConfig.MutableDynamicNodeConfig()->MutableTabletAvailability()->Clear();
+        for (const auto& [_, tabletAvailability] : tabletAvailabilities) {
+            appConfig.MutableDynamicNodeConfig()->MutableTabletAvailability()->Add()->CopyFrom(tabletAvailability);
+        }
+
+        configUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::DynamicNodeConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
     }
 
     ui32 DeduceNodeId(const NKikimrConfig::TAppConfig& appConfig, IEnv& env) const {

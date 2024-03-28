@@ -8,10 +8,17 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
 
 {% list tabs %}
 
+- C++
+
+  [Reader example on GitHub](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/topic_reader)
+
+- Go
+
+  [Examples on GitHub](https://github.com/ydb-platform/ydb-go-sdk/tree/master/examples/topic)
+
 - Java
 
   [Examples on GitHub](https://github.com/ydb-platform/ydb-java-examples/tree/master/ydb-cookbook/src/main/java/tech/ydb/examples/topic)
-
 
 {% endlist %}
 
@@ -745,16 +752,16 @@ If, on other hand, you want to ensure deduplication is enabled, you can specify 
 
 {% endlist %}
 
-### Using message metadata feature
+### Using message metadata feature {#messagemeta}
 
 You can provide some metadata for any particular message when writing. This metadata can be a list of up to 100 key-value pairs per message.
-All the metadata provided when writing a message is returned to a consumer with the message during reading.
+All the metadata provided when writing a message is sent to a consumer with the message during reading.
 
 {% list tabs %}
 
 - C++
 
- To take advantage of message metadata feature, use the `Write()` method with `TWriteMessage`argument as below:
+  To take advantage of message metadata feature, use the `Write()` method with `TWriteMessage`argument as below:
 
   ```cpp
   auto settings = TWriteSessionSettings()
@@ -775,6 +782,74 @@ All the metadata provided when writing a message is returned to a consumer with 
   };
 
   ```
+
+- Java
+
+  To take advantage of message metadata feature, build messages with builder. You can add `MetadataItem` to a message or set a `List` of `MetadataItem`s. Each item consists of a key of type `String` and a value of type `byte[]`:
+
+  ```java
+  writer.send(
+          Message.newBuilder()
+                  .addMetadataItem(new MetadataItem("meta-key", "meta-value".getBytes()))
+                  .addMetadataItem(new MetadataItem("another-key", "value".getBytes()))
+                  .build()
+  ```
+
+  While reading, metadata can be received from a `Message` with `getMetadataItems()` method:
+
+  ```java
+  Message message = reader.receive();
+  List<MetadataItem> metadata = message.getMetadataItems();
+  ```
+
+{% endlist %}
+
+### Write in transaction {#write-tx}
+
+{% list tabs %}
+
+- Java (sync)
+
+  Transaction can be set in `SendSettings` of `send` method while sending a message.
+  Such message will be written on transaction commit.
+
+  ```java
+  // creating session in table service
+  Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
+  if (!sessionResult.isSuccess()) {
+      logger.error("Couldn't get session from pool: {}", sessionResult);
+      return; // retry or shutdown
+  }
+  Session session = sessionResult.getValue();
+  // creating transaction in table service
+  // this transaction is not yet active and has no id
+  TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+
+  // do something else in transaction
+  transaction.executeDataQuery("SELECT 1").join();
+  // now transaction is active and has id
+  // analyzeQueryResultIfNeeded();
+
+  writer.send(
+          Message.newBuilder()
+                  .setData(messageString.getBytes())
+                  .build(),
+          SendSettings.newBuilder()
+                  .setTransaction(transaction)
+                  .build(),
+          timeoutSeconds,
+          TimeUnit.SECONDS
+  );
+
+  // flush to wait until all messages reach server
+  writer.flush();
+
+  Status commitStatus = transaction.commit().join();
+  analyzeCommitStatus(commitStatus);
+  ```
+
+  Transaction requirements:
+  It should be an active transaction (that has id) from one of YDB services. I.e. Table or Query.
 
 {% endlist %}
 
@@ -1015,7 +1090,7 @@ Information about which messages have already been processed can be [saved on th
 
 - C++
 
-Reading messages one-by-one is not supported in the C++ SDK. Class `TDataReceivedEvent` represents a batch of read messages.
+  Reading messages one-by-one is not supported in the C++ SDK. Class `TDataReceivedEvent` represents a batch of read messages.
 
 - Go
 
@@ -1135,7 +1210,7 @@ For example, if messages 1, 2, 3 are received from the server, the program proce
 
 - C++
 
-Reading messages one-by-one is not supported in the C++ SDK. Class `TDataReceivedEvent` represents a batch of read messages.
+  Reading messages one-by-one is not supported in the C++ SDK. Class `TDataReceivedEvent` represents a batch of read messages.
 
 - Go
 
@@ -1319,11 +1394,121 @@ When reading starts, the client code must transmit the starting consumer offset 
 
 - Java
 
-  Setting the starting offset for reading is not supported in the current state of Java SDK.
+  Starting offset for reading in Java can be set only for AsyncReader.
+  In `StartPartitionSessionEvent` callback `StartPartitionSessionSettings` with desired ReadOffset can be passed to `confirm` method.
+  Offset that should be considered as committed can be set with `setCommittedOffset`.
+
+  ```java
+  @Override
+  public void onStartPartitionSession(StartPartitionSessionEvent event) {
+      event.confirm(StartPartitionSessionSettings.newBuilder()
+              .setReadOffset(lastReadOffset)
+              .setCommitOffset(lastCommitOffset)
+              .build());
+  }
+  ```
 
   The `setReadFrom` setting is used for reading only messages with write timestamps no less than the given one.
 
 {% endlist %}
+
+### Reading without a Consumer {#no-consumer}
+Usually reading progress is saved on server within each Consumer. Though such progres can not be saved if a reader is created without a `Consumer`
+
+{% list tabs %}
+
+- Java
+
+  To read without a Consumer, `withoutConsumer()` method should be called explicitly on `ReaderSettings` Builder:
+
+  ```java
+  ReaderSettings settings = ReaderSettings.newBuilder()
+          .withoutConsumer()
+          .addTopic(TopicReadSettings.newBuilder()
+                  .setPath(TOPIC_NAME)
+                  .build())
+          .build();
+  ```
+  In this case reading progress on server will be lost on PartitionSession restart.
+  To avoid reading from the beginning each time, starting offsets should be set each time on `PartitionSession` start:
+
+  ```java
+  @Override
+  public void onStartPartitionSession(StartPartitionSessionEvent event) {
+      event.confirm(StartPartitionSessionSettings.newBuilder()
+              .setReadOffset(lastReadOffset) // last offset read by client
+              .build());
+  }
+  ```
+
+{% endlist %}
+
+### Reading in transaction {#read-tx}
+
+{% list tabs %}
+
+- Java (sync)
+
+  Transaction can be set in `ReceiveSettings` for `receive` method:
+
+  ```java
+  Message message = reader.receive(ReceiveSettings.newBuilder()
+          .setTransaction(transaction)
+          .build());
+  ```
+  Such received message will be committed with this transaction. And shouldn't be committed directly.
+  `receive` method sends `sendUpdateOffsetsInTransaction` request on server to link message offset with this transaction and blocks until response is received.
+
+  Transaction requirements:
+  It should be an active transaction (that has id) from one of YDB services. I.e. Table or Query.
+
+- Java (async)
+
+  In `onMessages` callback one or more messages can be linked with transaction.
+  To do that request `reader.updateOffsetsInTransaction` should be called. And transaction should not be committed untill response is received.
+  This method needs partition offsets list as a parameter.
+  Such list can be constructed manually or using helper method `getPartitionOffsets()` that `Message` and `DataReceivedEvent` both provide.
+
+  ```java
+  @Override
+        public void onMessages(DataReceivedEvent event) {
+            for (Message message : event.getMessages()) {
+                // creating session in table service
+                Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
+                if (!sessionResult.isSuccess()) {
+                    logger.error("Couldn't get session from pool: {}", sessionResult);
+                    return; // retry or shutdown
+                }
+                Session session = sessionResult.getValue();
+                // creating transaction in table service
+                // this transaction is not yet active and has no id
+                TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+
+                // do something else in transaction
+                transaction.executeDataQuery("SELECT 1").join();
+                // now transaction is active and has id
+                // analyzeQueryResultIfNeeded();
+
+                Status updateStatus = reader.updateOffsetsInTransaction(transaction,
+                                message.getPartitionOffsets(), new UpdateOffsetsInTransactionSettings.Builder().build())
+                        // Do not commit transaction without waiting for updateOffsetsInTransaction result to avoid race condition
+                        .join();
+                if (!updateStatus.isSuccess()) {
+                    logger.error("Couldn't update offsets in transaction: {}", updateStatus);
+                    return; // retry or shutdown
+                }
+
+                Status commitStatus = transaction.commit().join();
+                analyzeCommitStatus(commitStatus);
+            }
+        }
+  ```
+
+  Transaction requirements:
+  It should be an active transaction (that has id) from one of YDB services. I.e. Table or Query.
+
+{% endlist %}
+
 
 ### Processing a server read interrupt {#stop}
 

@@ -9,10 +9,17 @@
 
 {% list tabs %}
 
+- C++
+
+  [Пример читателя на GitHub](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/topic_reader)
+
+- Go
+
+  [Примеры на GitHub](https://github.com/ydb-platform/ydb-go-sdk/tree/master/examples/topic)
+
 - Java
 
   [Примеры на GitHub](https://github.com/ydb-platform/ydb-java-examples/tree/master/ydb-cookbook/src/main/java/tech/ydb/examples/topic)
-
 
 {% endlist %}
 
@@ -773,6 +780,75 @@
 
   ```
 
+- Java
+
+  При конструировании сообщения для записи с помощью Builder'а, ему можно передать объект `MetadataItem` с парой ключ типа `String` + значение типа `byte[]`:
+
+  ```java
+  writer.send(
+          Message.newBuilder()
+                  .addMetadataItem(new MetadataItem("meta-key", "meta-value".getBytes()))
+                  .addMetadataItem(new MetadataItem("another-key", "value".getBytes()))
+                  .build()
+  );
+  ```
+
+  При чтении эти метаданные сообщения получить, вызвав на нём метод `getMetadataItems()`:
+
+  ```java
+  Message message = reader.receive();
+  List<MetadataItem> metadata = message.getMetadataItems();
+  ```
+
+{% endlist %}
+
+### Запись в транзакции {#write-tx}
+
+{% list tabs %}
+
+- Java (sync)
+
+  В настройках `SendSettings` метода `send` можно указать транзакцию.
+  Тогда сообщение будет записано вместе с коммитом этой транзакцией.
+
+  ```java
+  // creating session in table service
+  Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
+  if (!sessionResult.isSuccess()) {
+      logger.error("Couldn't get session from pool: {}", sessionResult);
+      return; // retry or shutdown
+  }
+  Session session = sessionResult.getValue();
+  // creating transaction in table service
+  // this transaction is not yet active and has no id
+  TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+
+  // do something else in transaction
+  transaction.executeDataQuery("SELECT 1").join();
+  // now transaction is active and has id
+  // analyzeQueryResultIfNeeded();
+
+  writer.send(
+          Message.newBuilder()
+                  .setData(messageString.getBytes())
+                  .build(),
+          SendSettings.newBuilder()
+                  .setTransaction(transaction)
+                  .build(),
+          timeoutSeconds,
+          TimeUnit.SECONDS
+  );
+
+  // flush to wait until all messages reach server
+  writer.flush();
+
+  Status commitStatus = transaction.commit().join();
+  analyzeCommitStatus(commitStatus);
+  ```
+
+  Требование к транзакции:
+  Это должна быть активная (имеющая идентификатор) транзакция в одном из сервисов YDB. Например, Table или Query.
+
 {% endlist %}
 
 
@@ -1324,9 +1400,54 @@
 
 - Java
 
-  Чтение с заданной позиции в текущей версии SDK отсутствует.
+  Чтение с заданного оффсета в Java возможно только в асинхронном читателе.
+  В обработчике событий `StartPartitionSessionEvent` можно при ответе серверу задать позицию, с которой следует начинать чтение.
+  Для этого в метод `confirm` следует передать настройки `StartPartitionSessionSettings` с указанным оффсетом через `setReadOffset`.
+  Также вызовом `setCommitOffset` можно указать оффсет, который следует считать закоммиченным.
 
-  Поддерживается настройка читателя `setReadFrom` для чтения событий с отметками времени записи не меньше данной.
+  ```java
+  @Override
+  public void onStartPartitionSession(StartPartitionSessionEvent event) {
+      event.confirm(StartPartitionSessionSettings.newBuilder()
+              .setReadOffset(lastReadOffset)
+              .setCommitOffset(lastCommitOffset)
+              .build());
+  }
+  ```
+
+  Также поддерживается настройка читателя `setReadFrom` для чтения событий с отметками времени записи не меньше данной.
+
+{% endlist %}
+
+### Чтение без указания Consumer'а {#no-consumer}
+
+Обычно прогресс чтения топика сохраняется на сервере в каждом `Consumer`е. Но можно не хранить такой прогресс на сервере и при создании читателя явно указать, что чтение будет происходить без `Consumer`а.
+
+{% list tabs %}
+
+- Java
+
+  Для чтения без `Consumer`а следует в настройках читателя `ReaderSettings` это явно указать, вызвав `withoutConsumer()`:
+
+  ```java
+  ReaderSettings settings = ReaderSettings.newBuilder()
+          .withoutConsumer()
+          .addTopic(TopicReadSettings.newBuilder()
+                  .setPath(TOPIC_NAME)
+                  .build())
+          .build();
+  ```
+
+  В таком случае нужно учитывать, что при переустановке соединения прогресс на сервере будет сброшен. Поэтому, чтобы не начинать чтение сначала, в SDK следует передавать offset начала чтения при каждом старте сессии чтения партиции:
+
+  ```java
+  @Override
+  public void onStartPartitionSession(StartPartitionSessionEvent event) {
+      event.confirm(StartPartitionSessionSettings.newBuilder()
+              .setReadOffset(lastReadOffset) // last offset read by client
+              .build());
+  }
+  ```
 
 {% endlist %}
 
@@ -1359,11 +1480,7 @@
       auto commitResult = Transaction.Commit(commitSettings).GetValueSync();
   ```
 
-{% note warning %}
-
   При обработке событий `events` не нужно явно подтверждать обработку для событий типа `TDataReceivedEvent`.
-
-{% endnote %}
 
   Подтверждение обработки события `TStopPartitionSessionEvent` надо делать после вызова `Commit`.
 
@@ -1388,17 +1505,64 @@
       }
   ```
 
-- Go
+- Java (sync)
 
-  Функциональность находится в разработке.
+  В настройках `ReceiveSettings` метода `receive` можно указать транзакцию:
 
-- Python
+  ```java
+  Message message = reader.receive(ReceiveSettings.newBuilder()
+          .setTransaction(transaction)
+          .build());
+  ```
+  Тогда полученное сообщение будет закоммичено вместе с транзакцией. Коммитить его отдельно не нужно.
+  Метод `receive` свяжет на сервере оффсеты сообщения с транзакцией вызовом `sendUpdateOffsetsInTransaction` и вернёт управление, когда получит ответ на него.
 
-  Функциональность находится в разработке.
+  Требование к транзакции:
+  Это должна быть активная (имеющая идентификатор) транзакция в одном из сервисов YDB. Например, Table или Query.
 
-- Java
+- Java (async)
 
-  Функциональность находится в разработке.
+  После получения сообщения в обработчике `onMessages` можно связать одно или несколько сообщений с транзакцией.
+  Для этого нужно вызвать отдельный метод `reader.updateOffsetsInTransaction` и дождаться его выполнения на сервере.
+  Этот метод принимает параметром список оффсетов. Для удобства у `Message` и `DataReceivedEvent` есть метод `getPartitionOffsets()`, возвращающий такой список.
+
+  ```java
+  @Override
+        public void onMessages(DataReceivedEvent event) {
+            for (Message message : event.getMessages()) {
+                // creating session in table service
+                Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
+                if (!sessionResult.isSuccess()) {
+                    logger.error("Couldn't get session from pool: {}", sessionResult);
+                    return; // retry or shutdown
+                }
+                Session session = sessionResult.getValue();
+                // creating transaction in table service
+                // this transaction is not yet active and has no id
+                TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+
+                // do something else in transaction
+                transaction.executeDataQuery("SELECT 1").join();
+                // now transaction is active and has id
+                // analyzeQueryResultIfNeeded();
+
+                Status updateStatus = reader.updateOffsetsInTransaction(transaction,
+                                message.getPartitionOffsets(), new UpdateOffsetsInTransactionSettings.Builder().build())
+                        // Do not commit transaction without waiting for updateOffsetsInTransaction result to avoid race condition
+                        .join();
+                if (!updateStatus.isSuccess()) {
+                    logger.error("Couldn't update offsets in transaction: {}", updateStatus);
+                    return; // retry or shutdown
+                }
+
+                Status commitStatus = transaction.commit().join();
+                analyzeCommitStatus(commitStatus);
+            }
+        }
+  ```
+
+  Требование к транзакции:
+  Это должна быть активная (имеющая идентификатор) транзакция в одном из сервисов YDB. Например, Table или Query.
 
 {% endlist %}
 

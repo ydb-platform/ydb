@@ -20,6 +20,7 @@ message TNodeInfo {
     optional string Address = 5;
     optional NActorsInterconnect.TNodeLocation Location = 6;
     optional uint64 Expire = 7;
+    optional string SlotName = 8;
 }
 
 message TEpoch {

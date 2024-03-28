@@ -204,11 +204,11 @@ message ReceiveMessageResponse {
 }
 
 message Message {
-    optional map<string, string> attributes = 1;
+    map<string, string> attributes = 1;
     optional string body = 2;
     optional string md5_of_body = 3;
     optional string  md5_of_message_attributes = 4;
-    optional map<string, MessageAttribute>  message_attributes = 5;
+    map<string, MessageAttribute>  message_attributes = 5;
     optional string  message_id = 6;
     optional string receipt_handle = 7;
 
@@ -221,7 +221,7 @@ message ReceiveMessageResult {
 message SendMessageRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     optional int32 delay_seconds = 2;
-    optional map<string, MessageAttribute> message_attributes = 3;
+    map<string, MessageAttribute> message_attributes = 3;
     string message_body = 4;
     optional string message_deduplication_id = 5;
     optional string message_group_id = 6;

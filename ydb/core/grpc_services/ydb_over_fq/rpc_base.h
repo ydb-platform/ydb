@@ -103,7 +103,7 @@ protected:
                 ", current status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(result.status()));
             auto delay = WaitRetryState_->GetNextRetryDelay(result.status());
             if (!delay) {
-                TBase::Reply(Ydb::StatusIds_StatusCode_INTERNAL_ERROR,
+                TBase::Reply(Ydb::StatusIds_StatusCode_TIMEOUT,
                     TStringBuilder{} << "Created query " << QueryId_ << ", couldn't wait for finish, final status: " <<
                     FederatedQuery::QueryMeta::ComputeStatus_Name(result.status()), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
                 return;
@@ -146,7 +146,7 @@ protected:
             errorMsg << ", issues: " << issues.ToOneLineString());
         issues.AddIssue(errorMsg);
 
-        TBase::Reply(Ydb::StatusIds_StatusCode_INTERNAL_ERROR, operation.issues(), ctx);
+        TBase::Reply(Ydb::StatusIds_StatusCode_INTERNAL_ERROR, issues, ctx);
         return true;
     }
 

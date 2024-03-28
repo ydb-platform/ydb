@@ -82,6 +82,8 @@ class TPartition : public TActorBootstrapped<TPartition> {
 
     friend TPartitionSourceManager;
 
+    friend class TPartitionTestWrapper;
+
 public:
     const TString& TopicName() const;
 
@@ -91,6 +93,7 @@ private:
 private:
     struct THasDataReq;
     struct THasDataDeadline;
+    using TMessageQueue = std::deque<TMessage>;
 
     bool IsActive() const;
     bool CanWrite() const;
@@ -119,6 +122,7 @@ private:
     void FailBadClient(const TActorContext& ctx);
     void FillReadFromTimestamps(const TActorContext& ctx);
     void FilterDeadlinedWrites(const TActorContext& ctx);
+    void FilterDeadlinedWrites(const TActorContext& ctx, TMessageQueue& requests);
 
     void Handle(NReadQuoterEvents::TEvAccountQuotaCountersUpdated::TPtr& ev, const TActorContext& ctx);
     void Handle(NReadQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const TActorContext& ctx);
@@ -201,15 +205,22 @@ private:
     void UpdateAvailableSize(const TActorContext& ctx);
 
     void AddMetaKey(TEvKeyValue::TEvRequest* request);
-    void BecomeIdle(const TActorContext& ctx);
+    void BecomeIdle();
+    void BecomeWrite();
     void CheckHeadConsistency() const;
-    void HandleWrites(const TActorContext& ctx);
+    void HandlePendingRequests(const TActorContext& ctx);
+    void HandleQuotaWaitingRequests(const TActorContext& ctx);
+    void HandleRequests(const TActorContext& ctx);
     void RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie);
-    void RequestBlobQuota();
-    void WritePendingBlob();
-
+    bool RequestBlobQuota();
+    void RequestBlobQuota(size_t quotaSize);
+    void ConsumeBlobQuota();
+    void WritePendingBlob(THolder<TEvKeyValue::TEvRequest> request);
+    void UpdateAfterWriteCounters(bool writeComplete);
     void UpdateUserInfoEndOffset(const TInstant& now);
     void UpdateWriteBufferIsFullState(const TInstant& now);
+    void CancelReserveRequests(const TActorContext& ctx);
+    void CancelRequests(const TActorContext& ctx, TMessageQueue& requests);
 
     TInstant GetWriteTimeEstimate(ui64 offset) const;
     bool AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx,
@@ -329,9 +340,9 @@ private:
     void Initialize(const TActorContext& ctx);
 
     template <typename T>
-    void EmplaceRequest(T&& body, const TActorContext& ctx) {
+    void EmplacePendingRequest(T&& body, const TActorContext& ctx) {
         const auto now = ctx.Now();
-        Requests.emplace_back(body, now - TInstant::Zero());
+        PendingRequests.emplace_back(body, now - TInstant::Zero());
     }
     void EmplaceResponse(TMessage&& message, const TActorContext& ctx);
 
@@ -562,7 +573,7 @@ private:
     }
 
 private:
-    enum class ProcessResult {
+    enum class EProcessResult {
         Continue,
         Abort,
         Break
@@ -580,10 +591,14 @@ private:
         bool HeadCleared;
     };
 
-    ProcessResult ProcessRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& parameters);
-    ProcessResult ProcessRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters& parameters);
-    ProcessResult ProcessRequest(TSplitMessageGroupMsg& msg, ProcessParameters& parameters);
-    ProcessResult ProcessRequest(TWriteMsg& msg, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
+    EProcessResult ProcessRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& parameters);
+    EProcessResult ProcessRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters& parameters);
+    EProcessResult ProcessRequest(TSplitMessageGroupMsg& msg, ProcessParameters& parameters);
+    EProcessResult ProcessRequest(TWriteMsg& msg, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
+
+    static void RemoveMessages(TMessageQueue& src, TMessageQueue& dst);
+    void RemovePendingRequests(TMessageQueue& requests);
+    void RemoveQuotaWaitingRequests();
 
 private:
     ui64 TabletID;
@@ -620,8 +635,10 @@ private:
     TActorId Tablet;
     TActorId BlobCache;
 
-    std::deque<TMessage> Requests;
-    std::deque<TMessage> Responses;
+    TMessageQueue PendingRequests;
+    TMessageQueue QuotaWaitingRequests;
+    TMessageQueue Requests;
+    TMessageQueue Responses;
 
     THead Head;
     THead NewHead;
@@ -648,7 +665,10 @@ private:
     TMaybe<TUsersInfoStorage> UsersInfoStorage;
 
     template <class T> T& GetUserActionAndTransactionEventsFront();
-    template <class T> bool UserActionAndTransactionEventsFrontIs() const;
+    template <class T> T& GetCurrentEvent();
+    TTransaction& GetCurrentTransaction();
+
+    template <class T> void EnsureUserActionAndTransactionEventsFrontIs() const;
 
     bool ProcessUserActionOrTransaction(TEvPQ::TEvSetClientInfo& event, const TActorContext& ctx);
     bool ProcessUserActionOrTransaction(const TEvPersQueue::TEvProposeTransaction& event, const TActorContext& ctx);
@@ -660,7 +680,7 @@ private:
     using TUserActionAndTransactionEvent =
         std::variant<TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>,             // user actions
                      TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>, // immediate transaction
-                     TSimpleSharedPtr<TTransaction>>;                       // distributed transaction or update config
+                     TTransaction>;                                         // distributed transaction or update config
     std::deque<TUserActionAndTransactionEvent> UserActionAndTransactionEvents;
     size_t ImmediateTxCount = 0;
     THashMap<TString, size_t> UserActCount;
@@ -743,23 +763,27 @@ private:
     TInstant WriteTimestampEstimate;
     bool ManageWriteTimestampEstimate = true;
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteLagMs;
+
+    //ToDo - counters.
     THolder<TPercentileCounter> InputTimeLag;
-    THolder<TPercentileCounter> MessageSize;
+    TPartitionHistogramWrapper MessageSize;
     TPercentileCounter WriteLatency;
 
     NKikimr::NPQ::TMultiCounter SLIBigLatency;
     NKikimr::NPQ::TMultiCounter WritesTotal;
-    NKikimr::NPQ::TMultiCounter BytesWrittenTotal;
-    NKikimr::NPQ::TMultiCounter BytesWrittenGrpc;
-    NKikimr::NPQ::TMultiCounter BytesWrittenUncompressed;
+
+    TPartitionCounterWrapper BytesWrittenTotal;
+
+    TPartitionCounterWrapper BytesWrittenGrpc;
+    TPartitionCounterWrapper BytesWrittenUncompressed;
     NKikimr::NPQ::TMultiCounter BytesWrittenComp;
-    NKikimr::NPQ::TMultiCounter MsgsWrittenTotal;
-    NKikimr::NPQ::TMultiCounter MsgsWrittenGrpc;;
+    TPartitionCounterWrapper MsgsWrittenTotal;
+    TPartitionCounterWrapper MsgsWrittenGrpc;
 
     // Writing blob with topic quota variables
     ui64 TopicQuotaRequestCookie = 0;
     ui64 NextTopicWriteQuotaRequestCookie = 1;
-    ui64 TopicQuotaConsumedCookie = 0;
+    ui64 BlobQuotaSize = 0;
 
     // Wait topic quota metrics
     ui64 TotalPartitionWriteSpeed = 0;
@@ -767,10 +791,6 @@ private:
     TInstant WriteStartTime;
     TDuration TopicQuotaWaitTimeForCurrentBlob;
     TDuration PartitionQuotaWaitTimeForCurrentBlob;
-
-    //Pending request
-    THolder<TEvKeyValue::TEvRequest> PendingWriteRequest;
-
 
     TDeque<NKikimrPQ::TStatusResponse::TErrorMessage> Errors;
 

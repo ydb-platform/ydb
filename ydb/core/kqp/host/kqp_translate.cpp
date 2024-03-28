@@ -145,20 +145,22 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
     }
 
     settings.ApplicationName = ApplicationName;
+    settings.GUCSettings = GUCSettings;
 
     return settings;
 }
 
 NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui16>& sqlVersion, bool& deprecatedSQL,
-        NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder) {
+        NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder, bool& keepInCache) {
     NYql::TAstParseResult astRes;
     settingsBuilder.SetSqlVersion(sqlVersion);
     if (isSql) {
         auto settings = settingsBuilder.Build(ctx);
-        ui16 actualSyntaxVersion = 0;
-        auto ast = NSQLTranslation::SqlToYql(queryText, settings, nullptr, &actualSyntaxVersion);
-        deprecatedSQL = (actualSyntaxVersion == 0);
-        sqlVersion = actualSyntaxVersion;
+        NYql::TStmtParseInfo stmtParseInfo;
+        auto ast = NSQLTranslation::SqlToYql(queryText, settings, nullptr, &stmtParseInfo);
+        deprecatedSQL = (ast.ActualSyntaxType == NYql::ESyntaxType::YQLv0);
+        sqlVersion = ast.ActualSyntaxType == NYql::ESyntaxType::YQLv1 ? 1 : 0;
+        keepInCache = stmtParseInfo.KeepInCache;
         return std::move(ast);
     } else {
         sqlVersion = {};
@@ -172,14 +174,15 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
 
 TQueryAst ParseQuery(const TString& queryText, const TMaybe<Ydb::Query::Syntax>& syntax, bool isSql, TKqpTranslationSettingsBuilder& settingsBuilder) {
     bool deprecatedSQL;
+    bool keepInCache;
     TMaybe<ui16> sqlVersion;
     if (syntax && *syntax == Ydb::Query::Syntax::SYNTAX_PG) {
         settingsBuilder.SetUsePgParser(true);
     }
 
     NYql::TExprContext ctx;
-    auto astRes = ParseQuery(queryText, isSql, sqlVersion, deprecatedSQL, ctx, settingsBuilder);
-    return TQueryAst(std::make_shared<NYql::TAstParseResult>(std::move(astRes)), sqlVersion, deprecatedSQL);
+    auto astRes = ParseQuery(queryText, isSql, sqlVersion, deprecatedSQL, ctx, settingsBuilder, keepInCache);
+    return TQueryAst(std::make_shared<NYql::TAstParseResult>(std::move(astRes)), sqlVersion, deprecatedSQL, keepInCache);
 }
 
 TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<ui16>& sqlVersion, bool& deprecatedSQL,
@@ -190,16 +193,18 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
     if (isSql) {
         auto settings = settingsBuilder.Build(ctx);
         ui16 actualSyntaxVersion = 0;
-        auto astStatements = NSQLTranslation::SqlToAstStatements(queryText, settings, nullptr, &actualSyntaxVersion);
+        TVector<NYql::TStmtParseInfo> stmtParseInfo;
+        auto astStatements = NSQLTranslation::SqlToAstStatements(queryText, settings, nullptr, &actualSyntaxVersion, &stmtParseInfo);
         deprecatedSQL = (actualSyntaxVersion == 0);
         sqlVersion = actualSyntaxVersion;
-        for (auto&& ast : astStatements) {
-            result.push_back({std::make_shared<NYql::TAstParseResult>(std::move(ast)), sqlVersion, (actualSyntaxVersion == 0)});
+        YQL_ENSURE(astStatements.size() == stmtParseInfo.size());
+        for (size_t i = 0; i < astStatements.size(); ++i) {
+            result.push_back({std::make_shared<NYql::TAstParseResult>(std::move(astStatements[i])), sqlVersion, (actualSyntaxVersion == 0), stmtParseInfo[i].KeepInCache});
         }
         return result;
     } else {
         sqlVersion = {};
-        return {{std::make_shared<NYql::TAstParseResult>(NYql::ParseAst(queryText)), sqlVersion, true}};
+        return {{std::make_shared<NYql::TAstParseResult>(NYql::ParseAst(queryText)), sqlVersion, true, true}};
     }
 }
 

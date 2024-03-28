@@ -22,7 +22,7 @@ namespace NTestUtils {
         appCfg.MutableFeatureFlags()->SetEnableExternalDataSources(true);
 
         auto kikimr = NKikimr::NKqp::NFederatedQueryTest::MakeKikimrRunner(
-            NYql::IHTTPGateway::Make(),
+            true,
             NYql::NConnector::MakeClientGRPC(clientCfg),
             nullptr,
             appCfg);

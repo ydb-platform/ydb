@@ -1007,7 +1007,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             "$to_delete = (\n"
                 "SELECT * FROM `" JOBS_TABLE_NAME "`\n"
                 "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id\n"
-                "ORDER BY `" JOB_ID_COLUMN_NAME "`\n"
+                "ORDER BY `" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME  "`, `" JOB_ID_COLUMN_NAME "`\n"
                 "LIMIT $max_count_jobs, 1\n"
             ");\n"
         );

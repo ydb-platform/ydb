@@ -37,6 +37,7 @@ namespace NBoot {
         THashMap<ui32, NTable::TRowVersionRanges> RemovedRowVersions;
 
         TVector<TIntrusivePtr<TPrivatePageCache::TInfo>> PageCaches;
+        bool ShouldSnapshotScheme = false;
     };
 }
 

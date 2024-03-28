@@ -1778,6 +1778,11 @@
         }
     ],
     "test.test[pg-join_using_case_insensetive1-default.txt-Results]": [],
+    "test.test[pg-join_using_table_used_order2--Results]": [
+        {
+            "uri": "file://test.test_pg-join_using_table_used_order2--Results_/extracted"
+        }
+    ],
     "test.test[pg-long_ident-default.txt-Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",

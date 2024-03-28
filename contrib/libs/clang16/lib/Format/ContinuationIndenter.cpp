@@ -280,6 +280,12 @@ LineState ContinuationIndenter::getInitialState(unsigned FirstIndent,
 bool ContinuationIndenter::canBreak(const LineState &State) {
   const FormatToken &Current = *State.NextToken;
   const FormatToken &Previous = *Current.Previous;
+
+  // Breaking after a comma should always be allowed.
+  if (Previous.is(tok::comma)) {
+    return true;
+  }
+
   const auto &CurrentState = State.Stack.back();
   assert(&Previous == Current.Previous);
   if (!Current.CanBreakBefore && !(CurrentState.BreakBeforeClosingBrace &&

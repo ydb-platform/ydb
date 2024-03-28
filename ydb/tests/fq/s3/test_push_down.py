@@ -35,7 +35,7 @@ class TestS3PushDown:
 
     @yq_all
     @pytest.mark.parametrize('client', [{'folder_id': 'my_folder'}], indirect=True)
-    def test_simple_case(self, kikimr, s3, client, yq_version):
+    def test_simple_case(self, kikimr, s3, client, yq_version, unique_prefix):
         file_head = 'Fruit,Price,Weight\n'
         file_rows = [file_head]
         for i in range(0, 10_000):
@@ -47,11 +47,12 @@ class TestS3PushDown:
         s3_client.put_object(Body=file_content, Bucket=BUCKET_NAME, Key='fruits.csv')
 
         kikimr.control_plane.wait_bootstrap(1)
-        client.create_storage_connection('fruitbucket', 'fbucket')
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, 'fbucket')
 
-        sql = '''
+        sql = f'''
             select *
-            from fruitbucket.`fruits.csv`
+            from `{storage_connection_name}`.`fruits.csv`
             with (format=csv_with_names, schema (
                 Fruit String not null,
                 Price Int not null,

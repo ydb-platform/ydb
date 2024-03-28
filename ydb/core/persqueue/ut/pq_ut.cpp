@@ -28,6 +28,7 @@ Y_UNIT_TEST(TestDirectReadHappyWay) {
         activeZone = false;
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
         tc.Runtime->SetScheduledLimit(1000);
         tc.Runtime->RegisterService(MakePQDReadCacheServiceActorId(), tc.Runtime->Register(
                 CreatePQDReadCacheService(new NMonitoring::TDynamicCounters()))
@@ -42,6 +43,7 @@ Y_UNIT_TEST(TestDirectReadHappyWay) {
         TString user = "user1";
         TPQCmdSettings sessionSettings{0, user, sessionId};
         sessionSettings.PartitionSessionId = 1;
+        sessionSettings.KeepPipe = true;
 
         TPQCmdReadSettings readSettings{sessionId, 0, 0, 1, 99999, 1};
         readSettings.PartitionSessionId = 1;
@@ -49,6 +51,7 @@ Y_UNIT_TEST(TestDirectReadHappyWay) {
         readSettings.User = user;
 
         activeZone = false;
+        Cerr << "Create session\n";
         auto pipe = CmdCreateSession(sessionSettings, tc);
         TCmdDirectReadSettings publishSettings{0, sessionId, 1, 1, pipe, false};
         readSettings.Pipe = pipe;
@@ -80,6 +83,7 @@ Y_UNIT_TEST(DirectReadBadSessionOrPipe) {
         TString user = "user2";
         TPQCmdSettings sessionSettings{0, user, sessionId};
         sessionSettings.PartitionSessionId = 1;
+        sessionSettings.KeepPipe = true;
 
         TPQCmdReadSettings readSettings(sessionId, 0, 0, 1, 99999, 1);
         readSettings.PartitionSessionId = 1;
@@ -132,6 +136,7 @@ Y_UNIT_TEST(DirectReadOldPipe) {
         TString user = "user2";
         TPQCmdSettings sessionSettings{0, user, sessionId};
         sessionSettings.PartitionSessionId = 1;
+        sessionSettings.KeepPipe = true;
 
         TPQCmdReadSettings readSettings(sessionId, 0, 0, 1, 99999, 1);
         readSettings.PartitionSessionId = 1;

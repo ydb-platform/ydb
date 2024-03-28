@@ -15,7 +15,7 @@ class TestS3(TestYdsBase):
     @yq_all
     @pytest.mark.parametrize("limit", [5, 10, 15, 20, 100, 1000])
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_size_limit(self, kikimr, s3, client, limit):
+    def test_size_limit(self, kikimr, s3, client, limit, unique_prefix):
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -36,19 +36,20 @@ class TestS3(TestYdsBase):
         info = "Да и ты, читатель, разве ты не Ничья Рыба и одновременно разве не Рыба на Лине?"
         s3_client.put_object(Body=info, Bucket='fbucket', Key='info.txt', ContentType='text/plain')
         kikimr.control_plane.wait_bootstrap(1)
-        client.create_storage_connection("test-connection", "fbucket")
+        storage_connection_name = unique_prefix + "test-connection"
+        client.create_storage_connection(storage_connection_name, "fbucket")
 
         sql = R'''
                 SELECT
                     data
                 FROM
-                    `test-connection`.`info.txt`
+                    `{}`.`info.txt`
                 WITH(
                 read_max_bytes="{}",
                 format=raw,
                 SCHEMA (data String,
                     ))
-            '''.format(limit)
+            '''.format(storage_connection_name, limit)
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)

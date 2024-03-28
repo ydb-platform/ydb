@@ -145,6 +145,10 @@ private:
         NMonitoring::TDynamicCounters::TCounterPtr PotentialMaxThreadCount;
         NMonitoring::TDynamicCounters::TCounterPtr DefaultThreadCount;
         NMonitoring::TDynamicCounters::TCounterPtr MaxThreadCount;
+        NMonitoring::TDynamicCounters::TCounterPtr CurrentThreadCountPercent;
+        NMonitoring::TDynamicCounters::TCounterPtr PotentialMaxThreadCountPercent;
+        NMonitoring::TDynamicCounters::TCounterPtr DefaultThreadCountPercent;
+        NMonitoring::TDynamicCounters::TCounterPtr MaxThreadCountPercent;
         NMonitoring::TDynamicCounters::TCounterPtr IsNeedy;
         NMonitoring::TDynamicCounters::TCounterPtr IsStarved;
         NMonitoring::TDynamicCounters::TCounterPtr IsHoggish;
@@ -212,6 +216,12 @@ private:
             PotentialMaxThreadCount = PoolGroup->GetCounter("PotentialMaxThreadCount", false);
             DefaultThreadCount = PoolGroup->GetCounter("DefaultThreadCount", false);
             MaxThreadCount = PoolGroup->GetCounter("MaxThreadCount", false);
+
+            CurrentThreadCountPercent = PoolGroup->GetCounter("CurrentThreadCountPercent", false);
+            PotentialMaxThreadCountPercent  = PoolGroup->GetCounter("PotentialMaxThreadCountPercent", false);
+            DefaultThreadCountPercent  = PoolGroup->GetCounter("DefaultThreadCountPercent", false);
+            MaxThreadCountPercent  = PoolGroup->GetCounter("MaxThreadCountPercent", false);
+
             IsNeedy = PoolGroup->GetCounter("IsNeedy", false);
             IsStarved = PoolGroup->GetCounter("IsStarved", false);
             IsHoggish = PoolGroup->GetCounter("IsHoggish", false);
@@ -272,6 +282,13 @@ private:
             *PotentialMaxThreadCount = poolStats.PotentialMaxThreadCount;
             *DefaultThreadCount = poolStats.DefaultThreadCount;
             *MaxThreadCount = poolStats.MaxThreadCount;
+
+
+            *CurrentThreadCountPercent = poolStats.CurrentThreadCount * 100;
+            *PotentialMaxThreadCountPercent = poolStats.PotentialMaxThreadCount * 100;
+            *DefaultThreadCountPercent = poolStats.DefaultThreadCount * 100;
+            *MaxThreadCountPercent = poolStats.MaxThreadCount * 100;
+
             *IsNeedy = poolStats.IsNeedy;
             *IsStarved = poolStats.IsStarved;
             *IsHoggish = poolStats.IsHoggish;

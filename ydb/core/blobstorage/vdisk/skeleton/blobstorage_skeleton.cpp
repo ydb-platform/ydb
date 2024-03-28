@@ -410,7 +410,7 @@ namespace NKikimr {
         {
             Y_DEBUG_ABORT_UNLESS(info.HullStatus.Status == NKikimrProto::OK);
             info.Buffer = TDiskBlob::Create(info.BlobId.BlobSize(), info.BlobId.PartId(), Db->GType.TotalPartCount(),
-                std::move(info.Buffer), *Arena);
+                std::move(info.Buffer), *Arena, HullCtx->AddHeader);
             UpdatePDiskWriteBytes(info.Buffer.GetSize());
             return std::make_unique<TEvHullWriteHugeBlob>(sender, cookie, info.BlobId, info.Ingress,
                     std::move(info.Buffer), ignoreBlock, handleClass, std::move(res), &info.ExtraBlockChecks);
@@ -1964,8 +1964,8 @@ namespace NKikimr {
                 DbBirthLsn = ev->Get()->DbBirthLsn;
                 SkeletonIsUpAndRunning(ctx, Config->RunRepl);
                 if (Config->RunRepl) {
-                    auto replCtx = std::make_shared<TReplCtx>(VCtx, PDiskCtx, HugeBlobCtx, Hull->GetHullDs(), GInfo,
-                        SelfId(), Config, PDiskWriteBytes, Config->ReplPausedAtStart);
+                    auto replCtx = std::make_shared<TReplCtx>(VCtx, HullCtx, PDiskCtx, HugeBlobCtx, Hull->GetHullDs(),
+                        GInfo, SelfId(), Config, PDiskWriteBytes, Config->ReplPausedAtStart);
                     Db->ReplID.Set(ctx.Register(CreateReplActor(replCtx)));
                     ActiveActors.Insert(Db->ReplID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
                     if (CommenceRepl) {

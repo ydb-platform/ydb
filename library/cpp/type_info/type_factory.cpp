@@ -217,6 +217,38 @@ namespace NTi {
         return TUuidType::InstanceRaw();
     }
 
+    TDate32TypePtr ITypeFactory::Date32() {
+        return TDate32Type::Instance();
+    }
+
+    const TDate32Type* IPoolTypeFactory::Date32Raw() {
+        return TDate32Type::InstanceRaw();
+    }
+
+    TDatetime64TypePtr ITypeFactory::Datetime64() {
+        return TDatetime64Type::Instance();
+    }
+
+    const TDatetime64Type* IPoolTypeFactory::Datetime64Raw() {
+        return TDatetime64Type::InstanceRaw();
+    }
+
+    TTimestamp64TypePtr ITypeFactory::Timestamp64() {
+        return TTimestamp64Type::Instance();
+    }
+
+    const TTimestamp64Type* IPoolTypeFactory::Timestamp64Raw() {
+        return TTimestamp64Type::InstanceRaw();
+    }
+
+    TInterval64TypePtr ITypeFactory::Interval64() {
+        return TInterval64Type::Instance();
+    }
+
+    const TInterval64Type* IPoolTypeFactory::Interval64Raw() {
+        return TInterval64Type::InstanceRaw();
+    }
+
     TOptionalTypePtr ITypeFactory::Optional(TTypePtr item) {
         return TOptionalType::Create(*this, std::move(item));
     }

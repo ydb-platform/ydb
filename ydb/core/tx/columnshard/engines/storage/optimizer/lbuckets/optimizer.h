@@ -43,12 +43,12 @@ public:
     }
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& p) {
-        Bytes += p->GetBlobBytes();
+        Bytes += p->GetTotalBlobBytes();
         Count += 1;
         RecordsCount += p->NumRows();
     }
     void RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
-        Bytes -= p->GetBlobBytes();
+        Bytes -= p->GetTotalBlobBytes();
         Count -= 1;
         RecordsCount -= p->NumRows();
         AFL_VERIFY(Bytes >= 0);
@@ -201,21 +201,38 @@ private:
     }
 
 public:
+    void InitRuntimeFeature() const {
+        for (auto&& f : Futures) {
+            for (auto&& p : f.second) {
+                p.second->RemoveRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized);
+            }
+        }
+        for (auto&& i : PreActuals) {
+            i.second->RemoveRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized);
+        }
+        for (auto&& i : Actuals) {
+            i.second->RemoveRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized);
+        }
+    }
+
     bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
         for (auto&& f : Futures) {
             for (auto&& p : f.second) {
-                if (dataLocksManager->IsLocked(*p.second)) {
+                if (auto lockInfo = dataLocksManager->IsLocked(*p.second)) {
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "optimization_locked")("reason", *lockInfo);
                     return true;
                 }
             }
         }
         for (auto&& i : PreActuals) {
-            if (dataLocksManager->IsLocked(*i.second)) {
+            if (auto lockInfo = dataLocksManager->IsLocked(*i.second)) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "optimization_locked")("reason", *lockInfo);
                 return true;
             }
         }
         for (auto&& i : Actuals) {
-            if (dataLocksManager->IsLocked(*i.second)) {
+            if (auto lockInfo = dataLocksManager->IsLocked(*i.second)) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "optimization_locked")("reason", *lockInfo);
                 return true;
             }
         }
@@ -401,6 +418,7 @@ public:
     }
 
     void Add(const std::shared_ptr<TPortionInfo>& portion, const TInstant now) {
+        portion->RemoveRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized);
         auto portionMaxSnapshotInstant = TInstant::MilliSeconds(portion->RecordSnapshotMax().GetPlanStep());
         if (now - portionMaxSnapshotInstant < FutureDetector) {
             AFL_VERIFY(AddFuture(portion));
@@ -415,6 +433,7 @@ public:
     }
 
     bool Remove(const std::shared_ptr<TPortionInfo>& portion) Y_WARN_UNUSED_RESULT {
+        portion->AddRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized);
         if (RemovePreActual(portion)) {
             return true;
         }
@@ -537,7 +556,7 @@ public:
 /*
         const ui64 count = BucketInfo.GetCount() + ((mainPortion && !isFinal) ? 1 : 0);
         //        const ui64 recordsCount = BucketInfo.GetRecordsCount() + ((mainPortion && !isFinal) ? mainPortion->GetRecordsCount() : 0);
-        const ui64 sumBytes = BucketInfo.GetBytes() + ((mainPortion && !isFinal) ? mainPortion->GetBlobBytes() : 0);
+        const ui64 sumBytes = BucketInfo.GetBytes() + ((mainPortion && !isFinal) ? mainPortion->GetTotalBlobBytes() : 0);
         if (count <= 1) {
             return 0;
         }
@@ -554,7 +573,7 @@ public:
 /*
         const ui64 count = BucketInfo.GetCount() + ((mainPortion && !isFinal) ? 1 : 0);
         //        const ui64 recordsCount = BucketInfo.GetRecordsCount() + ((mainPortion && !isFinal) ? mainPortion->GetRecordsCount() : 0);
-        const ui64 sumBytes = BucketInfo.GetBytes() + ((mainPortion && !isFinal) ? mainPortion->GetBlobBytes() : 0);
+        const ui64 sumBytes = BucketInfo.GetBytes() + ((mainPortion && !isFinal) ? mainPortion->GetTotalBlobBytes() : 0);
         if (count > 1 && (sumBytes > 32 * 1024 * 1024 || !isFinal || count > 100)) {
             return (10000000000.0 * count - sumBytes) * (isFinal ? 1 : 10);
         } else {
@@ -564,7 +583,7 @@ public:
 
         const ui64 count = BucketInfo.GetCount() + ((mainPortion && !isFinal) ? 1 : 0);
         const ui64 recordsCount = BucketInfo.GetRecordsCount() + ((mainPortion && !isFinal) ? mainPortion->GetRecordsCount() : 0);
-        const ui64 sumBytes = BucketInfo.GetBytes() + ((mainPortion && !isFinal) ? mainPortion->GetBlobBytes() : 0);
+        const ui64 sumBytes = BucketInfo.GetBytes() + ((mainPortion && !isFinal) ? mainPortion->GetTotalBlobBytes() : 0);
         if (NYDBTest::TControllers::GetColumnShardController()->GetCompactionControl() == NYDBTest::EOptimizerCompactionWeightControl::Disable) {
             return 0;
         }
@@ -620,6 +639,15 @@ private:
     bool Validate() const {
         return Others.Validate(MainPortion);
     }
+
+    void RebuildOptimizedFeature(const TInstant currentInstant) const {
+        Others.InitRuntimeFeature();
+        if (!MainPortion) {
+            return;
+        }
+        MainPortion->InitRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized, Others.IsEmpty() && currentInstant > MainPortion->RecordSnapshotMax().GetPlanInstant() +
+            NYDBTest::TControllers::GetColumnShardController()->GetLagForCompactionBeforeTierings(TDuration::Minutes(60)));
+    }
 public:
     class TModificationGuard: TNonCopyable {
     private:
@@ -655,8 +683,11 @@ public:
     };
 
     bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
-        if (MainPortion && dataLocksManager->IsLocked(*MainPortion)) {
-            return true;
+        if (MainPortion) {
+            if (auto lockInfo = dataLocksManager->IsLocked(*MainPortion)) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "optimization_locked")("reason", *lockInfo);
+                return true;
+            }
         }
         return Others.IsLocked(dataLocksManager);
     }
@@ -782,7 +813,7 @@ public:
         AFL_VERIFY(portions.size() > 1);
         ui64 size = 0;
         for (auto&& i : portions) {
-            size += i->GetBlobBytes();
+            size += i->GetTotalBlobBytes();
             if (locksManager->IsLocked(*i)) {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("info", Others.DebugString())("event", "skip_optimization")("reason", "busy");
                 return nullptr;
@@ -839,6 +870,7 @@ public:
     void Actualize(const TInstant currentInstant) {
         auto gChartsThis = StartModificationGuard();
         Others.Actualize(currentInstant);
+        RebuildOptimizedFeature(currentInstant);
     }
 
     void SplitOthersWith(TPortionsBucket& dest) {
@@ -994,7 +1026,7 @@ public:
     }
 
     void RemovePortion(const std::shared_ptr<TPortionInfo>& portion) {
-        if (portion->GetBlobBytes() < SmallPortionDetectSizeLimit) {
+        if (portion->GetTotalBlobBytes() < NYDBTest::TControllers::GetColumnShardController()->GetSmallPortionSizeDetector(SmallPortionDetectSizeLimit)) {
             Counters->SmallPortions->RemovePortion(portion);
         }
         if (!RemoveBucket(portion)) {
@@ -1028,7 +1060,7 @@ public:
     }
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& portion, const TInstant now) {
-        if (portion->GetBlobBytes() < SmallPortionDetectSizeLimit) {
+        if (portion->GetTotalBlobBytes() < NYDBTest::TControllers::GetColumnShardController()->GetSmallPortionSizeDetector(SmallPortionDetectSizeLimit)) {
             Counters->SmallPortions->AddPortion(portion);
             AddOther(portion, now);
             return;
@@ -1043,8 +1075,14 @@ public:
         } else {
             if (itFrom == Buckets.end()) {
                 const TDuration freshness = now - TInstant::MilliSeconds(portion->RecordSnapshotMax().GetPlanStep());
-                if (freshness < GetCommonFreshnessCheckDuration() || portion->GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
-                    AddOther(portion, now);
+                if (Y_LIKELY(!NYDBTest::TControllers::GetColumnShardController()->NeedForceCompactionBacketsConstruction())) {
+                    if (freshness < GetCommonFreshnessCheckDuration() || portion->GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
+                        AddOther(portion, now);
+                        return;
+                    }
+                }
+                if (Buckets.empty()) {
+                    AddBucket(portion);
                     return;
                 }
             }
@@ -1106,6 +1144,7 @@ protected:
     virtual void DoActualize(const TInstant currentInstant) override {
         Buckets.Actualize(currentInstant);
     }
+
     virtual TOptimizationPriority DoGetUsefulMetric() const override {
         if (Buckets.GetWeight()) {
             return TOptimizationPriority::Critical(Buckets.GetWeight());

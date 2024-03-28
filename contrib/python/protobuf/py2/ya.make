@@ -66,6 +66,8 @@ PY_SRCS(
     google/protobuf/util/__init__.py
 )
 
+NO_LTO()
+
 CFLAGS(
     -DPYTHON_PROTO2_CPP_IMPL_V2
 )

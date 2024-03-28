@@ -32,6 +32,8 @@ CFLAGS(
     -DHAVE_ZLIB=1
 )
 
+NO_LTO()
+
 IF (OS_ANDROID)
     EXTRALIBS(log)
 ENDIF()

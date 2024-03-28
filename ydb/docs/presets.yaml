@@ -4,6 +4,7 @@ default:
   backend_name_lower: ydb
   ydb: true
   example_cluster: ydbtest
+  feature_codegen: true
   feature_secondary_index: true
   feature_changefeed: true
   feature_replace: true

@@ -722,8 +722,23 @@ protected:
             TRACE_CONFIG_CHANGE_INPLACE_T(TenantPoolConfig, UpdateExplicitly);
         }
 
-        if (config.ParseResult->Has("tenant") && InterconnectPort != DefaultInterconnectPort) {
-            AppConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostAndICPort());
+        if (config.ParseResult->Has("tenant")) {
+            if (AppConfig.GetDynamicNodeConfig().GetNodeInfo().HasSlotName()) {
+                const TString& slotName = AppConfig.GetDynamicNodeConfig().GetNodeInfo().GetSlotName();
+                AppConfig.MutableMonitoringConfig()->SetHostLabelOverride(slotName);
+                TRACE_CONFIG_CHANGE_INPLACE_T(MonitoringConfig, UpdateExplicitly);
+            } else if (InterconnectPort != DefaultInterconnectPort) {
+                AppConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostAndICPort());
+                TRACE_CONFIG_CHANGE_INPLACE_T(MonitoringConfig, UpdateExplicitly);
+            }
+        }
+
+        if (config.ParseResult->Has("tenant")) {
+            if (InterconnectPort == DefaultInterconnectPort) {
+                AppConfig.MutableMonitoringConfig()->SetProcessLocation(Host());
+            } else {
+                AppConfig.MutableMonitoringConfig()->SetProcessLocation(HostAndICPort());
+            }
             TRACE_CONFIG_CHANGE_INPLACE_T(MonitoringConfig, UpdateExplicitly);
         }
 
@@ -989,11 +1004,18 @@ protected:
         ShuffleRange(addrs);
     }
 
-    TString HostAndICPort() {
+    TString HostAndICPort() const {
+        auto hostname = Host();
+        if (!hostname) {
+            return "";
+        }
+        return TStringBuilder() << hostname << ":" << InterconnectPort;
+    }
+
+    TString Host() const {
         try {
             auto hostname = to_lower(HostName());
-            hostname = hostname.substr(0, hostname.find('.'));
-            return TStringBuilder() << hostname << ":" << InterconnectPort;
+            return hostname.substr(0, hostname.find('.'));
         } catch (TSystemError& error) {
             return "";
         }
@@ -1052,6 +1074,7 @@ protected:
                 nodeInfo->SetAddress(node.Address);
                 nodeInfo->SetExpire(node.Expire);
                 CopyNodeLocation(nodeInfo->MutableLocation(), node.Location);
+                nodeInfo->SetSlotName(result.GetSlotName());
             } else {
                 auto &info = *nsConfig.AddNode();
                 info.SetNodeId(node.NodeId);

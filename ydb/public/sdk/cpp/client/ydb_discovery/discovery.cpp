@@ -86,6 +86,7 @@ TNodeRegistrationResult::TNodeRegistrationResult(TStatus&& status, const Ydb::Di
     , Expire_(proto.expire())
     , ScopeTableId_(proto.has_scope_tablet_id() ? std::make_optional(proto.scope_tablet_id()) : std::nullopt)
     , ScopePathId_(proto.has_scope_path_id() ? std::make_optional(proto.scope_path_id()) : std::nullopt)
+    , SlotName_(proto.slot_name())
 {
     const auto& nodes = proto.nodes();
     Nodes_.reserve(nodes.size());
@@ -120,6 +121,10 @@ const ui64& TNodeRegistrationResult::GetScopePathId() const {
 
 bool TNodeRegistrationResult::HasScopePathId() const {
     return ScopePathId_.value();
+}
+
+const TString& TNodeRegistrationResult::GetSlotName() const {
+    return SlotName_;
 }
 
 const TVector<TNodeInfo>& TNodeRegistrationResult::GetNodes() const {

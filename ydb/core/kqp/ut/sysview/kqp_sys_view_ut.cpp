@@ -191,6 +191,24 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.back().GetId().data()
         }
 
         {
+
+            auto result = sessionsSet.back().ExecuteQuery(Sprintf(R"(--!syntax_v1
+$date_format = DateTime::Format("%s");
+select SessionId, QueryStartAt from `/Root/.sys/query_sessions`
+where
+SessionId LIKE Utf8("%s") and
+StartsWith($date_format(SessionStartAt), cast(DateTime::GetYear(CurrentUtcTimestamp()) as utf8)) and
+StartsWith($date_format(StateChangeAt), cast(DateTime::GetYear(CurrentUtcTimestamp()) as utf8))
+order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data()), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(Sprintf(R"([
+                [["%s"];#]
+            ])", sessionsSet.front().GetId().data()), FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
             auto result = sessionsSet.back().ExecuteQuery(Sprintf(R"(
                 --!syntax_v1
                 select SessionId

@@ -2454,6 +2454,9 @@ public:
         if (varName == "standard_conforming_strings"){
             return "on";
         }
+        if (varName == "transaction_isolation"){
+            return "serializable";
+        }
         return {};
     }
 

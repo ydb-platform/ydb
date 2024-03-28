@@ -5178,6 +5178,37 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
 Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
+    Y_UNIT_TEST(DropTable) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id_second").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32),
+            TTestHelper::TColumnSchema().SetName("created_at").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false)
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable
+            .SetName("/Root/ColumnTableTest")
+            .SetPrimaryKey({ "id", "id_second" })
+            .SetSharding({ "id" })
+            .SetMinPartitionsCount(16)
+            .SetSchema(schema);
+        testHelper.CreateTable(testTable);
+        auto sender = testHelper.GetRuntime().AllocateEdgeActor();
+        auto tabletIds = GetColumnTableShards(&testHelper.GetKikimr().GetTestServer(), sender, "/Root/ColumnTableTest");
+        for (auto tablet: tabletIds) {
+            UNIT_ASSERT_C(testHelper.GetKikimr().GetTestClient().TabletExistsInHive(&testHelper.GetRuntime(), tablet), ToString(tablet) + " not alive");
+        }
+        testHelper.DropTable("/Root/ColumnTableTest");
+        for (auto tablet: tabletIds) {
+            UNIT_ASSERT_C(!testHelper.GetKikimr().GetTestClient().TabletExistsInHive(&testHelper.GetRuntime(), tablet), ToString(tablet) + " is alive");
+        }
+    }
+
     Y_UNIT_TEST(AddColumnLongPk) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;

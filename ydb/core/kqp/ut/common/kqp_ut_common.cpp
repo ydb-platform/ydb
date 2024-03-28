@@ -1310,6 +1310,18 @@ TVector<ui64> GetTableShards(Tests::TServer* server,
     return shards;
 }
 
+TVector<ui64> GetColumnTableShards(Tests::TServer* server,
+                                   TActorId sender,
+                                   const TString &path)
+{
+    TVector<ui64> shards;
+    auto lsResult = DescribeTable(server, sender, path);
+    for (auto &part : lsResult.GetPathDescription().GetColumnTableDescription().GetSharding().GetColumnShards())
+        shards.push_back(part);
+
+    return shards;
+}
+
 TVector<ui64> GetTableShards(Tests::TServer::TPtr server,
                                 TActorId sender,
                                 const TString &path) {

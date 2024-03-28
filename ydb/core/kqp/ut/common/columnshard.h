@@ -71,6 +71,7 @@ namespace NKqp {
         TTestActorRuntime& GetRuntime();
         NYdb::NTable::TSession& GetSession();
         void CreateTable(const TColumnTableBase& table, const NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS);
+        void DropTable(const TString& tableName);
         void CreateTier(const TString& tierName);
         TString CreateTieringRule(const TString& tierName, const TString& columnName);
         void SetTiering(const TString& tableName, const TString& ruleName);

@@ -203,9 +203,15 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
     }
     Ctx.IncrementMonCounter("sql_features", SqlIntoModeStr);
 
+    auto options = BuildIntoTableOptions(pos, eraseColumns, tableHints);
+
+    if (node.HasBlock5()) {
+        options = options->L(options, ReturningList(node.GetBlock5().GetRule_returning_columns_list1()));
+    }
+
     return BuildWriteColumns(pos, Ctx.Scoped, table,
                              ToWriteColumnsMode(SqlIntoMode), std::move(values),
-                             BuildIntoTableOptions(pos, eraseColumns, tableHints));
+                             options);
 }
 
 bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const TTableRef& table,

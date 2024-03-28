@@ -4552,4 +4552,67 @@ bool TSqlTranslation::ParseViewQuery(std::map<TString, TDeferredAtom>& features,
     return true;
 }
 
+class TReturningListColumns : public INode {
+public:
+    TReturningListColumns(TPosition pos)
+        : INode(pos)
+    {
+    }
+
+    TReturningListColumns(TPosition pos, TNodePtr)
+        :INode(pos)
+    {
+    }
+
+    void SetStar() {
+        ColumnNames.clear();
+        Star = true;
+    }
+
+    void AddColumn(const NSQLv1Generated::TRule_an_id & rule, TTranslation& ctx) {
+        ColumnNames.push_back(NSQLTranslationV1::Id(rule, ctx));
+    }
+    
+    bool DoInit(TContext& ctx, ISource* source) override {
+        Node = Y();
+        if (Star) {
+            Node->Add(Y("ReturningStar"));
+        } else {
+            for (auto&& column : ColumnNames) {
+                Node->Add(Y("ReturningListItem", Q(column)));
+            }
+        }
+        Node = Q(Y(Q("returning"), Q(Node)));
+        return Node->Init(ctx, source);
+    }
+
+    TNodePtr DoClone() const override {
+        return new TReturningListColumns(Pos, Node->Clone());
+    }
+
+    TAstNode* Translate(TContext& ctx) const override {
+        return Node->Translate(ctx);
+    }
+
+private:
+    TNodePtr Node;
+    TVector<TString> ColumnNames;
+    bool Star = false;
+};
+
+TNodePtr TSqlTranslation::ReturningList(const ::NSQLv1Generated::TRule_returning_columns_list& columns) {
+    auto result = MakeHolder<TReturningListColumns>(Ctx.Pos());
+
+    if (columns.GetBlock2().Alt_case() == TRule_returning_columns_list_TBlock2::AltCase::kAlt1) {
+        result->SetStar();
+    } else if (columns.GetBlock2().Alt_case() == TRule_returning_columns_list_TBlock2::AltCase::kAlt2) {
+        result->AddColumn(columns.GetBlock2().alt2().GetRule_an_id1(), *this);
+        for (auto& block : columns.GetBlock2().alt2().GetBlock2()) {
+            result->AddColumn(block.GetRule_an_id2(), *this);
+        }
+    }
+
+    return result.Release();
+}
+
 } // namespace NSQLTranslationV1

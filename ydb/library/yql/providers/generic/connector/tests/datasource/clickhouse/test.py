@@ -11,9 +11,9 @@ import ydb.library.yql.providers.generic.connector.tests.utils.scenario.clickhou
 from conftest import configure_runner, docker_compose_dir
 from collection import Collection
 
-import ydb.library.yql.providers.generic.connector.tests.test_cases.select_missing_database as select_missing_database
-import ydb.library.yql.providers.generic.connector.tests.test_cases.select_missing_table as select_missing_table
-import ydb.library.yql.providers.generic.connector.tests.test_cases.select_positive_common as select_positive_common
+import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_database as select_missing_database
+import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_table as select_missing_table
+import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_positive_common as select_positive_common
 
 
 # Global collection of test cases dependent on environment

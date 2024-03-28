@@ -12,9 +12,9 @@ from ydb.library.yql.providers.generic.connector.tests.utils.runner import Runne
 from ydb.library.yql.providers.generic.connector.tests.utils.sql import format_values_for_bulk_sql_insert
 from ydb.library.yql.providers.generic.connector.tests.utils.clients.clickhouse import Client
 
-import ydb.library.yql.providers.generic.connector.tests.test_cases.select_missing_database as tc_select_missing_database
-import ydb.library.yql.providers.generic.connector.tests.test_cases.select_missing_table as tc_select_missing_table
-import ydb.library.yql.providers.generic.connector.tests.test_cases.select_positive_common as tc_select_positive_common
+import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_database as tc_select_missing_database
+import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_table as tc_select_missing_table
+import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_positive_common as tc_select_positive_common
 
 LOGGER = make_logger(__name__)
 

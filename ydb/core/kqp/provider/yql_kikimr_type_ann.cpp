@@ -1257,8 +1257,6 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             auto name = action.Name().Value();
             if (name == "renameTo") {
                 YQL_ENSURE(action.Value().Cast<TCoAtom>().Value());
-            } else if (name == "resetTemporary") {
-                // nothing
             } else if (name == "addColumns") {
                 auto listNode = action.Value().Cast<TExprList>();
                 for (size_t i = 0; i < listNode.Size(); ++i) {
@@ -1417,7 +1415,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                     && name != "setTableSettings"
                     && name != "addChangefeed"
                     && name != "dropChangefeed"
-                    && name != "renameIndexTo")
+                    && name != "renameIndexTo"
+                    && name != "resetTemporary")
             {
                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                     TStringBuilder() << "Unknown alter table action: " << name));

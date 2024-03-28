@@ -5,7 +5,6 @@
 
 #include <google/protobuf/io/zero_copy_stream.h>
 #include <google/protobuf/arena.h>
-#include <ydb/library/actors/protos/actors.pb.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/deque.h>
 #include <util/system/context.h>
@@ -17,6 +16,10 @@
 
 // enable only when patch with this macro was successfully deployed
 #define USE_EXTENDED_PAYLOAD_FORMAT 0
+
+namespace NActorsProto {
+    class TActorId;
+} // NActorsProto
 
 namespace NActors {
 
@@ -642,13 +645,7 @@ namespace NActors {
         }
     };
 
-    inline TActorId ActorIdFromProto(const NActorsProto::TActorId& actorId) {
-        return TActorId(actorId.GetRawX1(), actorId.GetRawX2());
-    }
+    TActorId ActorIdFromProto(const NActorsProto::TActorId& actorId);
+    void ActorIdToProto(const TActorId& src, NActorsProto::TActorId* dest);
 
-    inline void ActorIdToProto(const TActorId& src, NActorsProto::TActorId* dest) {
-        Y_DEBUG_ABORT_UNLESS(dest);
-        dest->SetRawX1(src.RawX1());
-        dest->SetRawX2(src.RawX2());
-    }
 }

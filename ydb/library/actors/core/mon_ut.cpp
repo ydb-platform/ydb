@@ -1,5 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/actors/core/mon.h>
+#include <ydb/library/actors/protos/actors.pb.h>
 
 using namespace NActors;
 using namespace NMon;

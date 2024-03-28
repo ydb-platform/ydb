@@ -1,6 +1,8 @@
 #include "event.h"
 #include "event_pb.h"
 
+#include <ydb/library/actors/protos/actors.pb.h>
+
 namespace NActors {
 
     const TScopeId TScopeId::LocallyGenerated{

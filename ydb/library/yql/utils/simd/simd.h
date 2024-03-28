@@ -162,6 +162,19 @@ struct Perfomancer {
             FallbackMergeColumns(result, data, sizes, length, i);
         }
 
+        void Transponation(i8* data, i8* storage[4], size_t sizes[4], size_t length) {
+            Trait masks[20];
+            GetMasks(masks, sizes);
+            //size_t pack = (sizes[0] + sizes[1] + sizes[2] + sizes[3]);
+            i8* align_ptr = data;
+            while((align_ptr - data) < (length - 32)) {
+                align_ptr = Iteration(sizes, data, align_ptr, storage, masks);
+            }
+            //memcopy...
+        }
+
+
+
         ~Algo() = default;
     
     private:
@@ -285,7 +298,7 @@ struct Perfomancer {
             reg[0] = reg[4].Blend(reg[5], mask[6]);
             //2323
             reg[1] = reg[6].Blend(reg[7], mask[7]);
-
+            
             //shuffle to blend
             reg[12] = reg[8].template Shuffle<false>(mask[0]);
             reg[13] = reg[9].template Shuffle<false>(mask[1]);
@@ -336,6 +349,138 @@ struct Perfomancer {
                 }
                 ind++;
             }
+        }
+
+        void GetMasks(Trait masks[20], size_t sizes[4]) {
+            MaskForCollector(masks, sizes); // 0 1 2 3 masks
+            masks[4] = ShuffleBack(sizes); // 4 masks
+            SimpleBlendMask(sizes, masks); // 5 6 7 8 masks
+            MaskForRightOrder(masks, sizes); // 9 10 11 12
+        }
+
+        void MaskForCollector(Trait masks[20], size_t sizes[4]) {
+            size_t prefsums[4]{sizes[0], 0, 0, 0};
+            for (int i = 1; i < 4; ++i) {
+            prefsums[i] = prefsums[i - 1] + sizes[i];
+            }
+            i8 res[4][Trait::SIZE];
+            for (int k = 0; k < 4; ++k) {
+                for (int i = 0; i < Trait::SIZE; ++i) {
+                    res[k][i] = 0x80;
+                }
+            }
+            for (int k = 0; k < 4; ++k) {
+                int cnt = 0;
+                for (int i = 0; i < Trait::SIZE; ++i) {
+                    res[k][(cnt++) % Trait::SIZE] = ((i - sizes[k] + Trait::SIZE) % Trait::SIZE);
+                }
+            }
+            for (int i = 0; i < 4; ++i) {
+                masks[i].Get(res[i]);
+            }
+        }
+
+
+        Trait ShuffleBack(size_t sizes[4]) {
+            i8 res[Trait::SIZE];
+            size_t pack = (sizes[0] + sizes[1] + sizes[2] + sizes[3]);
+            size_t num = Trait::SIZE / pack;
+            size_t prefsums[4]{0, sizes[0], sizes[0] + sizes[1], sizes[0] + sizes[1] + sizes[2]};
+            int cnt = 0;
+            for (size_t k = 0; k < 4; ++k) {
+                for (size_t i = 0; i < num; ++i) {
+                    for (size_t j = 0; j < sizes[k]; ++j) {
+                        res[cnt++] = prefsums[k] + j + i * pack;
+                    }
+                }
+            }
+            Trait reg;
+            reg.SetMask(res);
+            return reg;
+        }
+
+        void MaskForRightOrder(Trait masks[20], size_t sizes[4]) {
+            size_t pack = (sizes[0] + sizes[1] + sizes[2] + sizes[3]);
+            size_t number_of_regs = Trait::SIZE / (Trait::SIZE / pack * sizes[3]);
+            size_t prefsums[4]{0, 0, 0, 0};
+            
+            for (int i = 1; i < 4; ++i) {
+                prefsums[i] = prefsums[i - 1] + sizes[i - 1];
+            }
+            
+            i8 res[4][Trait::SIZE];
+            
+            for (int k = 0; k < 4; ++k) {
+                for (int i = 0; i < Trait::SIZE; ++i) {
+                    res[k][i] = 0x80;
+                }
+            }
+            
+            for (int k = 0; k < 4; ++k) {
+                int cnt = 0;
+                int start = (prefsums[k] + number_of_regs * sizes[k]) % Trait::SIZE;
+                for (int i = 0; i < Trait::SIZE; ++i) {
+                    res[k][(cnt++) % Trait::SIZE] = (start-- + Trait::SIZE) % Trait::SIZE;
+                }
+            }
+            
+            for (int i = 9; i < 13; ++i) {
+                masks[i].Get(res[i - 9]);
+            }
+        }
+        void SimpleBlendMask(size_t sizes[4], Trait masks[20]) {
+            size_t prefsums[5]{0, 0, 0, 0, 0};
+            
+            for (int i = 1; i < 5; ++i) {
+                prefsums[i] = prefsums[i - 1] + sizes[i - 1];
+            }
+            
+            i8 res[4][Trait::SIZE];
+            
+            for (size_t i = 5; i < 9; ++i) { // cnt of columns == cnt of blend masks
+                for (size_t j = 0; j < Trait::SIZE; ++j) {
+                    res[i - 5][j] = 0xFF;
+                }
+                for (size_t j = prefsums[i - 5]; j < prefsums[i - 4]; ++j) {
+                    res[i - 5][j] = 0x00;
+                }
+            }
+
+            for (int i = 5; i < 9; ++i) {
+                masks[i].SetMask(res[i - 5]);
+            }
+        }
+        i8* RevertIteration(size_t sizes[4], i8* data, i8* align_ptr, i8* storage[4], Trait masks[20]) {
+            size_t pack = (sizes[0] + sizes[1] + sizes[2] + sizes[3]);
+            size_t cnt = Trait::SIZE / pack;
+            size_t number_of_regs = Trait::SIZE / (Trait::SIZE / pack * sizes[3]);
+
+            Trait collectors[4];
+            Trait reg[number_of_regs * 2];
+            
+            for (size_t i = 0; i < number_of_regs; ++i) {
+                reg[i].Get(align_ptr + i * (cnt * pack));
+            }
+
+            for (size_t i = 0; i < number_of_regs; ++i) {
+                reg[i + number_of_regs] = reg[i].template Shuffle<false>(masks[4]);
+            }
+
+            for (size_t k = 0; k < 4; ++k) {
+                for (size_t i = number_of_regs; i < number_of_regs * 2; ++i) {
+                    Trait copy = reg[i].Blend(collectors[k], masks[5 + k]);
+                    collectors[k] = copy.template Shuffle<false>(masks[k]);
+                }
+            }
+
+            size_t shift = (align_ptr - data) / pack;
+
+            for (size_t k = 0; k < 4; ++k) {
+                Trait copy = collectors[k].template Shuffle<false>(masks[9 + k]);
+                copy.Store(storage[k] + shift * sizes[k]);
+            }
+
+            return align_ptr + number_of_regs * (Trait::SIZE / pack * pack);
         }
     };
 

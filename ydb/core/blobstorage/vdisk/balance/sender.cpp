@@ -10,6 +10,12 @@
 namespace NKikimr {
 namespace NBalancing {
 namespace {
+    struct TPart {
+        TLogoBlobID Key;
+        NMatrix::TVectorType PartsMask;
+        TVector<TRope> PartsData;
+    };
+
     class TReader {
     private:
         const size_t BatchSize;
@@ -42,12 +48,13 @@ namespace {
                 Parts.pop();
                 Result[i] = TPart{
                     .Key=item.Key,
-                    .Ingress=item.Ingress
+                    .PartsMask=item.PartsMask,
                 };
                 std::visit(TOverloaded{
                     [&](const TRope& data) {
                         // part is already in memory, no need to read it from disk
-                        Result[i].PartData = data;
+                        Y_DEBUG_ABORT_UNLESS(item.PartsMask.CountBits() == 1);
+                        Result[i].PartsData = {data};
                         ++Responses;
                     },
                     [&](const TDiskPart& diskPart) {
@@ -90,8 +97,14 @@ namespace {
             ui64 i = reinterpret_cast<ui64>(msg->Cookie);
             const auto& key = Result[i].Key;
             auto data = TRope(msg->Data.ToString());
-            auto diskBlob = TDiskBlob(&data, Result[i].Ingress.LocalParts(GType), GType, key);
-            Result[i].PartData = diskBlob.GetPart(key.PartId() - 1, &Result[i].PartData);
+            auto localParts = Result[i].PartsMask;
+            auto diskBlob = TDiskBlob(&data, localParts, GType, key);
+
+            for (ui8 partIdx = localParts.FirstPosition(); partIdx < localParts.GetSize(); partIdx = localParts.NextPosition(partIdx)) {
+                TRope result;
+                result = diskBlob.GetPart(partIdx, &result);
+                Result[i].PartsData.emplace_back(std::move(result));
+            }
         }
     };
 
@@ -140,21 +153,26 @@ namespace {
             STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB11, VDISKP(Ctx->VCtx, "Sending parts"), (BatchSize, batch.size()));
 
             for (const auto& part: batch) {
-                auto vDiskId = GetMainReplicaVDiskId(*GInfo, part.Key);
-                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB12, VDISKP(Ctx->VCtx, "Sending"), (LogoBlobId, part.Key.ToString()),
-                    (To, GInfo->GetTopology().GetOrderNumber(TVDiskIdShort(vDiskId))), (DataSize, part.PartData.size()));
+                auto localParts = part.PartsMask;
+                for (ui8 partIdx = localParts.FirstPosition(), i = 0; partIdx < localParts.GetSize(); partIdx = localParts.NextPosition(partIdx), ++i) {
+                    auto key = TLogoBlobID(part.Key, partIdx + 1);
+                    const auto& data = part.PartsData[i];
+                    auto vDiskId = GetMainReplicaVDiskId(*GInfo, key);
+                    STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB12, VDISKP(Ctx->VCtx, "Sending"), (LogoBlobId, key.ToString()),
+                        (To, GInfo->GetTopology().GetOrderNumber(TVDiskIdShort(vDiskId))), (DataSize, data.size()));
 
-                auto& queue = (*QueueActorMapPtr)[TVDiskIdShort(vDiskId)];
-                auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(
-                    part.Key, part.PartData, vDiskId,
-                    true, nullptr,
-                    TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob
-                );
-                TReplQuoter::QuoteMessage(
-                    Ctx->VCtx->ReplNodeRequestQuoter,
-                    std::make_unique<IEventHandle>(queue, SelfId(), ev.release()),
-                    part.PartData.size()
-                );
+                    auto& queue = (*QueueActorMapPtr)[TVDiskIdShort(vDiskId)];
+                    auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(
+                        key, data, vDiskId,
+                        true, nullptr,
+                        TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob
+                    );
+                    TReplQuoter::QuoteMessage(
+                        Ctx->VCtx->ReplNodeRequestQuoter,
+                        std::make_unique<IEventHandle>(queue, SelfId(), ev.release()),
+                        data.size()
+                    );
+                }
             }
         }
 

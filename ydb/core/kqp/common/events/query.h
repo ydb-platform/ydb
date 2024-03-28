@@ -341,7 +341,7 @@ private:
     const ::Ydb::Table::QueryStatsCollection::Mode CollectStats = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
     const ::Ydb::Table::QueryCachePolicy* QueryCachePolicy = nullptr;
     const bool HasOperationParams = false;
-    const TQueryRequestSettings QuerySettings;
+    const TQueryRequestSettings QuerySettings = TQueryRequestSettings();
     TDuration OperationTimeout;
     TDuration CancelAfter;
     TIntrusivePtr<TUserRequestContext> UserRequestContext;

@@ -1785,6 +1785,7 @@ namespace NKikimr {
 
             // check status
             if (ev->Get()->Status == NKikimrProto::OK) {
+                IFaceMonGroup->MinHugeBlobInBytes(HugeBlobCtx->MinREALHugeBlobInBytes);
                 // handle special case when donor disk starts and finds out that it has been wiped out
                 if (ev->Get()->LsnMngr->GetOriginallyRecoveredLsn() == 0 && Config->BaseInfo.DonorMode) {
                     // send drop donor cmd to NodeWarden

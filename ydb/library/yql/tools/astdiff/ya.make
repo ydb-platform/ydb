@@ -6,7 +6,6 @@ SRCS(
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/resource
     library/cpp/svnversion
     ydb/library/yql/ast
     ydb/library/yql/utils/backtrace

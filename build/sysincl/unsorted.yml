@@ -136,9 +136,6 @@
   - xmlparse/xmlparse.h
   - xmltok/xmlparse.h
   - yca/yca.h
-  #if CONTRIB && defined(_HAVE_LIBIDSA)
-  - idsa.h
-  #endif
   - prof.h
   - ll_alloc_hook.c
   - cpptl/config.h
@@ -150,12 +147,6 @@
   - value.h
   - sljit/sljitLir.c
   - pcre_printint.c
-  #ifdef defined(emacs) && CONTRIB && TRASH
-  - blockinput.h
-  #endif
-  #if defined(__atmos__) && CONTRIB
-  - kernel.h
-  #endif
   #if defined(_LIBC) && CONTRIB && TRASH
   - not-cancel.h
   - local-setxid.h
@@ -305,9 +296,6 @@
   #endif
   #if defined(HAVE_ALTIVEC)
   - altivec.h
-  #endif
-  #if defined(HAVE_CONFIG_H) && TODO
-  - config_auto.h
   #endif
   #if defined(_TRASH_) && TODO
   - gcrypt.h
